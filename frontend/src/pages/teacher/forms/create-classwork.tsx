@@ -27,6 +27,9 @@ import type {
   TeacherLesson,
 } from "@/types/classwork";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { ActivityRubricEditor } from "@/components/activity-rubric-editor";
+import { activityRubricMaximum, defaultActivityRubric, validateActivityRubric } from "@/lib/classwork-utils";
+import type { ActivityRubricLevel } from "@/types/classwork";
 
 interface CreateClassworkModalProps {
   selectedType: ClassworkKind;
@@ -68,6 +71,9 @@ export default function CreateClassworkModal({
   const [isLessonLoading, setIsLessonLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState("");
+  const [rubricLevels, setRubricLevels] = useState<ActivityRubricLevel[]>(() =>
+    defaultActivityRubric.map((level) => ({ ...level })),
+  );
 
   const setFormError = (msg: string) => {
     setCreateError(msg);
@@ -147,6 +153,10 @@ export default function CreateClassworkModal({
     if (!draft.subject_id) return "Choose a subject.";
     if (!draft.title.trim()) return "Topic title is required.";
     if (!isReadingType(selectedType)) {
+      if (selectedType === "ACTIVITY") {
+        const rubricError = validateActivityRubric(rubricLevels);
+        if (rubricError) return rubricError;
+      }
       const points = Number(draft.total_points);
       if (draft.total_points && (!Number.isFinite(points) || points <= 0)) {
         return "Total points must be greater than zero.";
@@ -270,8 +280,9 @@ export default function CreateClassworkModal({
     setCreateError("");
     try {
       const isReading = isReadingType(selectedType);
-      const totalPoints =
-        !isReading && draft.total_points ? Number(draft.total_points) : null;
+      const totalPoints = selectedType === "ACTIVITY"
+        ? activityRubricMaximum(rubricLevels)
+        : !isReading && draft.total_points ? Number(draft.total_points) : null;
       const formData = new FormData();
       formData.append("title", draft.title.trim());
       formData.append("description", draft.description.trim());
@@ -285,6 +296,9 @@ export default function CreateClassworkModal({
       }
       if (totalPoints !== null) {
         formData.append("total_points", String(totalPoints));
+      }
+      if (selectedType === "ACTIVITY") {
+        formData.append("rubric_payload", JSON.stringify(rubricLevels));
       }
       formData.append("subject_id", String(draft.subject_id));
       formData.append("is_published", String(draft.is_published));
@@ -531,7 +545,7 @@ export default function CreateClassworkModal({
                     </Field>
                   )}
 
-                  <Field label="Total points">
+                  {selectedType !== "ACTIVITY" && <Field label="Total points">
                     <Input
                       type="number"
                       min="1"
@@ -547,7 +561,7 @@ export default function CreateClassworkModal({
                       disabled={isCreating}
                       className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
                     />
-                  </Field>
+                  </Field>}
                 </div>
               )}
 
@@ -635,6 +649,14 @@ export default function CreateClassworkModal({
                   </div>
                 )}
               </Field>
+
+              {selectedType === "ACTIVITY" && (
+                <ActivityRubricEditor
+                  levels={rubricLevels}
+                  onChange={setRubricLevels}
+                  disabled={isCreating}
+                />
+              )}
             </div>
           )}
 

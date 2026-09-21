@@ -109,6 +109,42 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
         for lesson in (getattr(cw, "lessons", None) or [])
     ]
 
+    submissions = [
+        submission
+        for assignment in (getattr(cw, "assignments", None) or [])
+        for submission in (getattr(assignment, "submissions", None) or [])
+    ]
+    stored_rubric = list(getattr(cw, "rubric_levels", None) or [])
+    rubric_levels = [
+        {
+            "rubric_level_id": level.rubric_level_id,
+            "level_name": level.level_name,
+            "description": level.description,
+            "points": float(level.points),
+            "display_order": level.display_order,
+        }
+        for level in stored_rubric
+    ]
+    if cw.classwork_type == "ACTIVITY" and not rubric_levels:
+        maximum = float(cw.total_points or 100)
+        defaults = [
+            ("Excellent", 1.0, "Displays all required components clearly and accurately."),
+            ("Good", 0.8, "Most components are present with minor errors."),
+            ("Fair", 0.6, "Some required parts are missing or unclear."),
+            ("Needs Improvement", 0.4, "Many required elements are missing."),
+            ("Poor", 0.2, "Work is incomplete or not submitted."),
+        ]
+        rubric_levels = [
+            {
+                "rubric_level_id": None,
+                "level_name": name,
+                "description": description,
+                "points": round(maximum * multiplier, 2),
+                "display_order": index,
+            }
+            for index, (name, multiplier, description) in enumerate(defaults)
+        ]
+
     return ClassworkResponse(
         classwork_id=cw.classwork_id,
         title=cw.title,
@@ -133,4 +169,10 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
         linked_lessons=linked_lessons,
         created_at=cw.created_at,
         updated_at=cw.updated_at,
+        rubric_levels=rubric_levels,
+        has_submissions=bool(submissions),
+        has_graded_submissions=any(
+            submission.status == "graded" or submission.grade is not None
+            for submission in submissions
+        ),
     )

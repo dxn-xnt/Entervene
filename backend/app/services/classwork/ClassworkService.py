@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 from typing import Any, Optional, cast
 from app.schemas.Notification import NotificationType
 
@@ -18,6 +19,7 @@ from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
 from app.models.classwork.ClassworkLesson import ClassworkLesson
+from app.models.classwork.ActivityRubricLevel import ActivityRubricLevel
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.schemas.Classwork import (
@@ -27,6 +29,8 @@ from app.schemas.Classwork import (
     ClassworkCreate,
     ClassworkResponse,
     ClassworkUpdate,
+    ActivityRubricLevelInput,
+    validate_activity_rubric,
 )
 from app.schemas.Quiz import QuizBuilderUpsert
 from app.services.classwork.ClassworkAccessService import (
@@ -160,7 +164,12 @@ def notify_students_for_classwork(
 
 def create_classwork_record(body: ClassworkCreate, staff_id: str, db: Session) -> ClassworkResponse:
     classwork_type = normalize_classwork_type(body.classwork_type)
-    total_points = None if is_reading_type(classwork_type) else body.total_points
+    rubric_levels = body.rubric_levels if classwork_type == "ACTIVITY" else None
+    total_points = (
+        max(level.points for level in rubric_levels)
+        if rubric_levels
+        else (None if is_reading_type(classwork_type) else body.total_points)
+    )
     validate_classwork_values(total_points=total_points)
     ensure_subject_owner(db, staff_id, body.subject_id)
     lesson_ids = dedupe_ids(body.lesson_ids)
@@ -183,6 +192,7 @@ def create_classwork_record(body: ClassworkCreate, staff_id: str, db: Session) -
     try:
         db.add(classwork)
         db.flush()
+        _replace_activity_rubric(db, classwork, rubric_levels)
         if is_reading_type(classwork_type):
             classwork.total_points = None
         for lesson_id in lesson_ids:
@@ -215,12 +225,16 @@ async def create_classwork_wizard_record(
     allow_late_submissions: bool,
     max_attempts: Optional[int],
     quiz_payload: Optional[str],
+    rubric_payload: Optional[str],
     files: Optional[list[UploadFile]],
     staff_id: str,
     db: Session,
     save_file_func=save_file,
 ) -> ClassworkResponse:
     normalized_type = normalize_classwork_type(classwork_type)
+    rubric_levels = _parse_rubric_payload(rubric_payload, normalized_type)
+    if rubric_levels:
+        total_points = max(level.points for level in rubric_levels)
     total_points = None if is_reading_type(normalized_type) else total_points
     max_attempts = max_attempts if is_quiz_type(normalized_type) else None
     selected_class_ids = parse_id_list(class_ids, "class_ids")
@@ -276,6 +290,8 @@ async def create_classwork_wizard_record(
         )
         db.add(classwork)
         db.flush()
+
+        _replace_activity_rubric(db, classwork, rubric_levels)
 
         for lesson_id in selected_lesson_ids:
             db.add(ClassworkLesson(classwork_id=classwork.classwork_id, lesson_id=lesson_id))
@@ -357,6 +373,46 @@ def _parse_quiz_payload(raw_payload: Optional[str], normalized_type: str) -> Qui
         ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid quiz payload") from exc
+
+
+def _parse_rubric_payload(
+    raw_payload: Optional[str], normalized_type: str
+) -> list[ActivityRubricLevelInput] | None:
+    if normalized_type != "ACTIVITY":
+        return None
+    if not raw_payload:
+        return None
+    try:
+        raw_levels = json.loads(raw_payload)
+        levels = [ActivityRubricLevelInput.model_validate(level) for level in raw_levels]
+        return validate_activity_rubric(levels)
+    except (ValueError, TypeError, ValidationError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid scoring rubric: {exc}") from exc
+
+
+def _replace_activity_rubric(
+    db: Session,
+    classwork: Classwork,
+    levels: list[ActivityRubricLevelInput] | None,
+) -> None:
+    if classwork.classwork_type != "ACTIVITY" or levels is None:
+        return
+    existing = {level.rubric_level_id: level for level in classwork.rubric_levels}
+    retained_ids: set[int] = set()
+    for index, level in enumerate(sorted(levels, key=lambda item: -item.points)):
+        row = existing.get(level.rubric_level_id) if level.rubric_level_id else None
+        if row is None:
+            row = ActivityRubricLevel()
+            classwork.rubric_levels.append(row)
+        row.level_name = level.level_name.strip()
+        row.description = level.description.strip()
+        row.points = level.points
+        row.display_order = index
+        if row.rubric_level_id:
+            retained_ids.add(row.rubric_level_id)
+    for rubric_id, row in existing.items():
+        if rubric_id not in retained_ids:
+            classwork.rubric_levels.remove(row)
 
 
 def check_and_notify_post_deadline_summaries(db: Session, staff_id: str):
@@ -507,11 +563,32 @@ def update_classwork_record(
     if not classwork:
         raise HTTPException(status_code=404, detail="Classwork not found or not yours")
     values = body.model_dump(exclude_unset=True)
+    rubric_levels = values.pop("rubric_levels", None)
+    confirm_rubric_change = values.pop("confirm_rubric_change", False)
     if "classwork_type" in values and values["classwork_type"]:
         values["classwork_type"] = normalize_classwork_type(values["classwork_type"])
     if is_reading_type(values.get("classwork_type", classwork.classwork_type)):
         values["is_graded"] = False
         values["total_points"] = None
+    target_type = values.get("classwork_type", classwork.classwork_type)
+    if rubric_levels is not None:
+        if target_type != "ACTIVITY":
+            raise HTTPException(status_code=400, detail="Rubrics are only supported for Activity classwork")
+        submissions = [
+            submission
+            for assignment in classwork.assignments
+            for submission in assignment.submissions
+        ]
+        if submissions and not confirm_rubric_change:
+            detail = (
+                "This activity already has graded submissions. Updating the rubric will not change previously recorded grades."
+                if any(s.status == "graded" or s.grade is not None for s in submissions)
+                else "This activity already has student submissions. Rubric changes will apply when these submissions are graded."
+            )
+            raise HTTPException(status_code=409, detail=detail)
+        parsed_levels = [ActivityRubricLevelInput.model_validate(level) for level in rubric_levels]
+        parsed_levels = validate_activity_rubric(parsed_levels)
+        values["total_points"] = max(level.points for level in parsed_levels)
     validate_classwork_values(total_points=values.get("total_points"))
     lesson_ids = values.pop("lesson_ids", None)
     if lesson_ids is not None:
@@ -520,6 +597,8 @@ def update_classwork_record(
     try:
         for field, value in values.items():
             setattr(classwork, field, value)
+        if rubric_levels is not None:
+            _replace_activity_rubric(db, classwork, parsed_levels)
         if lesson_ids is not None:
             db.query(ClassworkLesson).filter(ClassworkLesson.classwork_id == classwork_id).delete()
             for lesson_id in lesson_ids:

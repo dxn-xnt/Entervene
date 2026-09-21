@@ -17,10 +17,13 @@ import {
   maxClassworkMaterialSize,
 } from "@/lib/classwork-utils";
 import type {
+  ActivityRubricLevel,
   ClassworkAttachment,
   EditDraft,
   TeacherClasswork,
 } from "@/types/classwork";
+import { ActivityRubricEditor } from "@/components/activity-rubric-editor";
+import { activityRubricMaximum, defaultActivityRubric, validateActivityRubric } from "@/lib/classwork-utils";
 
 export interface EditClassworkModalProps {
   classwork: TeacherClasswork;
@@ -43,6 +46,9 @@ export default function EditClassworkModal({
   const [editMaterials, setEditMaterials] = useState<File[]>([]);
   const [removingAttachmentId, setRemovingAttachmentId] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [rubricLevels, setRubricLevels] = useState<ActivityRubricLevel[]>(() =>
+    classwork.rubric_levels?.map((level) => ({ ...level })) ?? defaultActivityRubric.map((level) => ({ ...level })),
+  );
 
   const setFormError = (msg: string) => {
     setError(msg);
@@ -55,6 +61,10 @@ export default function EditClassworkModal({
     setCurrentClasswork(classwork);
     setEditDraft(classworkToEditDraft(classwork));
     setEditMaterials([]);
+    setRubricLevels(
+      classwork.rubric_levels?.map((level) => ({ ...level })) ??
+        defaultActivityRubric.map((level) => ({ ...level })),
+    );
     setError("");
   }, [classwork, isOpen]);
 
@@ -136,8 +146,10 @@ export default function EditClassworkModal({
     if (!currentClasswork || !editDraft) return;
 
     const isReading = isReadingType(editDraft.classwork_type);
-    const totalPoints =
-      !isReading && editDraft.total_points
+    const isActivity = editDraft.classwork_type === "ACTIVITY";
+    const totalPoints = isActivity
+      ? activityRubricMaximum(rubricLevels)
+      : !isReading && editDraft.total_points
         ? Number(editDraft.total_points)
         : null;
     if (!editDraft.title.trim()) {
@@ -151,6 +163,13 @@ export default function EditClassworkModal({
       setFormError("Total points must be greater than zero.");
       return;
     }
+    if (isActivity) {
+      const rubricError = validateActivityRubric(rubricLevels);
+      if (rubricError) {
+        setFormError(rubricError);
+        return;
+      }
+    }
     const attempts = Number(editDraft.max_attempts);
     if (
       isQuizType(editDraft.classwork_type) &&
@@ -158,6 +177,15 @@ export default function EditClassworkModal({
     ) {
       setFormError("Allowed attempts must be a positive whole number.");
       return;
+    }
+
+    const originalRubric = classwork.rubric_levels ?? [];
+    const rubricChanged = isActivity && JSON.stringify(rubricLevels) !== JSON.stringify(originalRubric);
+    if (rubricChanged && (currentClasswork.has_submissions || currentClasswork.has_graded_submissions)) {
+      const message = currentClasswork.has_graded_submissions
+        ? "This activity already has graded submissions. Updating the rubric will not change previously recorded grades. Continue?"
+        : "This activity already has student submissions. Rubric changes will apply when these submissions are graded. Continue?";
+      if (!window.confirm(message)) return;
     }
 
     setIsSavingEdit(true);
@@ -176,6 +204,8 @@ export default function EditClassworkModal({
             classwork_category: editDraft.classwork_category || null,
             exam_subtype: editDraft.exam_subtype || null,
             total_points: totalPoints,
+            rubric_levels: isActivity && rubricChanged ? rubricLevels : undefined,
+            confirm_rubric_change: rubricChanged && Boolean(currentClasswork.has_submissions),
             is_published: editDraft.is_published,
             show_scores: editDraft.show_scores,
           }),
@@ -434,7 +464,7 @@ export default function EditClassworkModal({
                   </Select>
                 </label>
               )}
-              {!isReadingType(editDraft.classwork_type) && (
+              {!isReadingType(editDraft.classwork_type) && editDraft.classwork_type !== "ACTIVITY" && (
                 <label className="block text-xs font-bold">
                   Total points
                   <Input
@@ -491,6 +521,14 @@ export default function EditClassworkModal({
                 </span>
               </label>
             </div>
+
+            {editDraft.classwork_type === "ACTIVITY" && (
+              <ActivityRubricEditor
+                levels={rubricLevels}
+                onChange={setRubricLevels}
+                disabled={isSavingEdit}
+              />
+            )}
 
             <Card className="block w-full border-black p-3 shadow-none transition-none hover:shadow-none">
               <p className="mb-3 text-xs font-bold">Assignment settings</p>
