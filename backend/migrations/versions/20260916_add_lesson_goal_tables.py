@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "20260916_add_lesson_goals"
-down_revision = "20260916_unified_prediction_risk"
+down_revision = "20260913_api_usage_guard"
 branch_labels = None
 depends_on = None
 

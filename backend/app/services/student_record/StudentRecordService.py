@@ -33,6 +33,13 @@ from app.services.grading.ComponentMapper import (
     classify_classwork_component,
     classify_template_component_name,
 )
+from app.services.grading.ExaminationCalculator import (
+    DEFAULT_EXAM_SUBSPLIT,
+    ExamSubsplitWeights,
+    ExaminationObservation,
+    categorize_exam_subtype,
+    compute_examination_component,
+)
 from app.schemas.StudentRecord import (
     BulkSendGradesRequest,
     BulkSendGradesToAdviserResponse,
@@ -451,42 +458,13 @@ def _categorize_assignment(assignment: ClassworkAssignment) -> str:
     return "performanceTask"
 
 
-@dataclass
-class ExamSubsplitWeights:
-    sum1_weight: float = 0.30
-    sum2_weight: float = 0.30
-    term_weight: float = 0.40
-
-
-DEFAULT_EXAM_SUBSPLIT = ExamSubsplitWeights(
-    sum1_weight=0.30,
-    sum2_weight=0.30,
-    term_weight=0.40,
-)
-
-
 def _categorize_exam_subtype(assignment: ClassworkAssignment) -> str:
     cw = assignment.classwork
-    subtype = (getattr(cw, "exam_subtype", None) or "").upper().strip()
-    if subtype in ("SUMMATIVE_1", "SUMMATIVE_2", "TERM_EXAM"):
-        return subtype
-
-    title = (cw.title or "").upper()
-    cat = (cw.classwork_category or "").upper()
-
-    # 1. Explicit Summative 1
-    if any(k in title or k in cat for k in ("SUMMATIVE 1", "SUMMATIVE_1", "SUMMATIVE ASSESSMENT 1", "SUMMATIVE TEST 1", "SUMMATIVE-1")):
-        return "SUMMATIVE_1"
-
-    # 2. Explicit Summative 2
-    if any(k in title or k in cat for k in ("SUMMATIVE 2", "SUMMATIVE_2", "SUMMATIVE ASSESSMENT 2", "SUMMATIVE TEST 2", "SUMMATIVE-2")):
-        return "SUMMATIVE_2"
-
-    # 3. Explicit Term Exam / Periodical Exam
-    if any(k in title or k in cat for k in ("TERM EXAM", "PERIODICAL EXAM", "QUARTERLY EXAM", "QUARTER EXAM", "TERM_EXAM", "PERIODICAL_EXAM", "FINAL EXAM")):
-        return "TERM_EXAM"
-
-    return "UNSPECIFIED_EXAM"
+    return categorize_exam_subtype(
+        getattr(cw, "exam_subtype", None),
+        getattr(cw, "title", None),
+        getattr(cw, "classwork_category", None),
+    )
 
 
 def _compute_exam_ps(
@@ -502,72 +480,23 @@ def _compute_exam_ps(
     if not exam_assignments:
         return None, None, None, None
 
-    sum1_pairs: list[tuple[float | None, ClassworkAssignment]] = []
-    sum2_pairs: list[tuple[float | None, ClassworkAssignment]] = []
-    term_pairs: list[tuple[float | None, ClassworkAssignment]] = []
-    unspecified_pairs: list[tuple[float | None, ClassworkAssignment]] = []
-
-    for score, asgn in zip(exam_scores, exam_assignments):
-        st = _categorize_exam_subtype(asgn)
-        if st == "SUMMATIVE_1":
-            sum1_pairs.append((score, asgn))
-        elif st == "SUMMATIVE_2":
-            sum2_pairs.append((score, asgn))
-        elif st == "TERM_EXAM":
-            term_pairs.append((score, asgn))
-        else:
-            unspecified_pairs.append((score, asgn))
-
-    # Chronological / sequence fallback for unclassified items
-    if unspecified_pairs:
-        for score, asgn in unspecified_pairs:
-            title = (asgn.classwork.title or "").upper()
-            if "SUMMATIVE" in title:
-                if not sum1_pairs:
-                    sum1_pairs.append((score, asgn))
-                elif not sum2_pairs:
-                    sum2_pairs.append((score, asgn))
-                else:
-                    sum2_pairs.append((score, asgn))
-            elif any(k in title for k in ("EXAM", "PERIODIC", "QUARTER", "TERM")):
-                term_pairs.append((score, asgn))
-            else:
-                # Chronological order: 1st created -> Summative 1 (30%), 2nd -> Summative 2 (30%), 3rd+ -> Term Exam (40%)
-                if not sum1_pairs:
-                    sum1_pairs.append((score, asgn))
-                elif not sum2_pairs:
-                    sum2_pairs.append((score, asgn))
-                else:
-                    term_pairs.append((score, asgn))
-
-    ps_sum1 = _category_ps([s for s, _ in sum1_pairs], [a for _, a in sum1_pairs]) if sum1_pairs else None
-    ps_sum2 = _category_ps([s for s, _ in sum2_pairs], [a for _, a in sum2_pairs]) if sum2_pairs else None
-    ps_term = _category_ps([s for s, _ in term_pairs], [a for _, a in term_pairs]) if term_pairs else None
-
-    if ps_sum1 is None and ps_sum2 is None and ps_term is None:
-        return ps_sum1, ps_sum2, ps_term, None
-
-    # Dynamic normalization based on assigned exam components
-    active_weight = 0.0
-    weighted_sum = 0.0
-
-    if ps_sum1 is not None and sum1_pairs:
-        active_weight += subsplit.sum1_weight
-        weighted_sum += subsplit.sum1_weight * ps_sum1
-
-    if ps_sum2 is not None and sum2_pairs:
-        active_weight += subsplit.sum2_weight
-        weighted_sum += subsplit.sum2_weight * ps_sum2
-
-    if ps_term is not None and term_pairs:
-        active_weight += subsplit.term_weight
-        weighted_sum += subsplit.term_weight * ps_term
-
-    if active_weight <= 0:
-        return ps_sum1, ps_sum2, ps_term, None
-
-    composite_ps = round(weighted_sum / active_weight, 2)
-    return ps_sum1, ps_sum2, ps_term, composite_ps
+    observations = [
+        ExaminationObservation(
+            score=score,
+            possible=float(asgn.classwork.total_points or 0),
+            exam_subtype=getattr(asgn.classwork, "exam_subtype", None),
+            title=getattr(asgn.classwork, "title", None),
+            category=getattr(asgn.classwork, "classwork_category", None),
+        )
+        for score, asgn in zip(exam_scores, exam_assignments)
+    ]
+    result = compute_examination_component(observations, subsplit=subsplit)
+    return (
+        result.subtype_percentages["SUMMATIVE_1"],
+        result.subtype_percentages["SUMMATIVE_2"],
+        result.subtype_percentages["TERM_EXAM"],
+        result.examination_percent,
+    )
 
 
 
