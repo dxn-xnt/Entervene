@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -16,12 +16,33 @@ class AIPrediction(Base):
             "data_status IN ('SUFFICIENT', 'INSUFFICIENT_DATA', 'COLD_START')",
             name="ck_ai_prediction_data_status",
         ),
+        CheckConstraint("revision > 0", name="ck_ai_prediction_revision_positive"),
+        CheckConstraint(
+            "risk_assessment_status IN ('EVALUATED', 'NOT_EVALUATED_FOR_CURRENT_PERIOD_MODEL', 'NOT_EVALUATED_FOR_UNIFIED_MODEL', 'INSUFFICIENT_RISK_EVIDENCE')",
+            name="ck_ai_prediction_risk_assessment_status",
+        ),
+        CheckConstraint(
+            "intervention_level IS NULL OR intervention_level IN ('LOW_RISK', 'NEEDS_MONITORING', 'MODERATE_RISK', 'HIGH_RISK')",
+            name="ck_ai_prediction_intervention_level",
+        ),
         Index("ix_ai_prediction_student_id", "student_id"),
         Index("ix_ai_prediction_class_id", "class_id"),
         Index("ix_ai_prediction_subject_id", "subject_id"),
         Index("ix_ai_prediction_source_period_id", "source_period_id"),
         Index("ix_ai_prediction_target_period_id", "target_period_id"),
         Index("ix_ai_prediction_model_version_id", "model_version_id"),
+        Index(
+            "uq_prediction_scope_revision",
+            "student_id", "class_id", "subject_id", "source_period_id", "target_period_id", "model_version_id", "revision",
+            unique=True,
+        ),
+        Index(
+            "uq_prediction_legacy_scope_revision",
+            "student_id", "class_id", "subject_id", "source_period_id", "target_period_id", "revision",
+            unique=True,
+            postgresql_where=text("model_version_id IS NULL"),
+            sqlite_where=text("model_version_id IS NULL"),
+        ),
     )
 
     prediction_id = Column(Integer, primary_key=True, autoincrement=True)
@@ -32,8 +53,12 @@ class AIPrediction(Base):
     target_period_id = Column(Integer, ForeignKey("academic_period.academic_period_id", ondelete="CASCADE"), nullable=False)
     predicted_period_grade = Column(Numeric(6, 2), nullable=True)
     risk_score = Column(Numeric(8, 4), nullable=True)
-    risk_level = Column(String(30), nullable=False)
-    data_status = Column(String(30), nullable=False)
+    risk_level = Column(String(30), nullable=True)
+    data_status = Column(String(30), nullable=True)
+    intervention_level = Column(String(30), nullable=True)
+    intervention_basis = Column(String(80), nullable=True)
+    revision = Column(Integer, nullable=False, server_default="1")
+    risk_assessment_status = Column(String(60), nullable=False, server_default="EVALUATED")
     model_version_id = Column(Integer, ForeignKey("ai_model_version.model_version_id", ondelete="RESTRICT"), nullable=True)
     # Null is retained for legacy predictions. New audited generation will save
     # a versioned evidence payload in a later Phase-1 service change.

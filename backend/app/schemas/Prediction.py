@@ -39,7 +39,7 @@ class PredictionPreviewResponse(BaseModel):
     algorithm: str
     predicted_period_grade: float | None
     risk_level: str
-    risk_score: float
+    risk_score: float | None
     data_status: str
     reasons: list[str] = Field(default_factory=list)
     recommended_action: str | None = None

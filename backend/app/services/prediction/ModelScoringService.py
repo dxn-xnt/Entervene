@@ -9,7 +9,8 @@ import joblib
 import pandas as pd
 from sqlalchemy.orm import Session
 
-from app.models.ai.AIModelVersion import AIModelVersion
+from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
+from app.services.prediction.ModelRegistryExceptions import ActiveModelNotFound, UnsupportedModelPurpose
 from app.services.prediction.FeatureCatalog import (
     DISPLAY_ONLY,
     GRADE_MODEL_INPUT,
@@ -78,6 +79,19 @@ def get_active_model_version(
     )
     if version is None:
         raise LookupError(f"No active {model_type} model version found for model_name={model_name}.")
+    return version
+
+
+def get_active_model_version_by_purpose(db: Session, purpose: ModelPurpose | str) -> AIModelVersion:
+    purpose_value = purpose.value if isinstance(purpose, ModelPurpose) else purpose
+    if purpose_value not in {member.value for member in ModelPurpose}:
+        raise UnsupportedModelPurpose(f"Unsupported model purpose: {purpose_value}")
+    version = db.query(AIModelVersion).filter(
+        AIModelVersion.model_purpose == purpose_value,
+        AIModelVersion.is_active.is_(True),
+    ).one_or_none()
+    if version is None:
+        raise ActiveModelNotFound(f"No active model version found for purpose={purpose_value}.")
     return version
 
 

@@ -180,6 +180,7 @@ def dashboard_context():
     model_ver = AIModelVersion(
         model_name="risk_classifier",
         model_type="CLASSIFIER",
+        model_purpose="NEXT_PERIOD_BASELINE_FORECAST",
         algorithm="RandomForest",
         is_active=True,
     )

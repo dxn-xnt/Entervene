@@ -4,7 +4,6 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
-  Layers,
   ArrowUpRight,
   TrendingUp,
   Sparkles,
@@ -12,7 +11,6 @@ import {
   AlertCircle,
   FileText,
   School,
-  Users,
 } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
@@ -157,6 +155,12 @@ export default function Dashboard() {
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-5 border-t-2 border-border px-3 py-4 sm:px-4 sm:py-5 md:px-6 pb-12">
+              {error && (
+                <div role="alert" className="flex items-center gap-2 border-2 border-red-700 bg-red-50 p-3 text-sm text-red-800">
+                  <AlertCircle className="size-4 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
               {/* 1. Top KPI Summary Cards */}
               <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
                 {isLoading && !data
