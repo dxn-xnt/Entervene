@@ -9,6 +9,7 @@ from app.core.RequestLimits import RequestLimitsMiddleware
 from fastapi.responses import JSONResponse
 from app.db.Session import get_db
 from app.api.v1.routes.Predictions import router as predictions_router
+from app.api.v1.routes.DevelopmentCurrentTermPredictions import router as development_current_term_router
 from app.api.v1.routes.Auth import router as auth_router
 from app.api.v1.routes.Students import router as students_router
 from app.api.v1.routes.Classworks import router as classworks_router
@@ -79,6 +80,7 @@ app.add_middleware(
 app.include_router(auth_router,        prefix="/api/v1/auth",                 tags=["Auth"])
 app.include_router(users_router,       prefix="/api/v1",                      tags=["Users"])
 app.include_router(predictions_router, prefix="/api/v1/predictions",           tags=["Predictions"])
+app.include_router(development_current_term_router, prefix="/api/v1/development", tags=["Development Predictions"])
 app.include_router(students_router,    prefix="/api/v1/students",              tags=["Students"])
 app.include_router(
     classworks_router,

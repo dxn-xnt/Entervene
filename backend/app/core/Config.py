@@ -11,6 +11,8 @@ class Settings(BaseSettings):
 
     app_name: str = "ENTERVENE"
     debug: bool = False
+    app_environment: str = "production"
+    development_prediction_api_enabled: bool = False
     database_url: str = Field(..., min_length=1)
     frontend_url: str = "http://localhost:5173"
     mobile_app_url: str = "http://localhost:8081"

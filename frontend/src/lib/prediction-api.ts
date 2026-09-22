@@ -7,6 +7,63 @@
 
 import { apiFetch } from "./api";
 
+export type DevelopmentInterventionLevel = "HIGH_RISK" | "MODERATE_RISK" | "NEEDS_MONITORING" | "LOW_RISK";
+
+export interface DevelopmentCurrentTermScope {
+  student_id: string;
+  class_id: number;
+  subject_id: number;
+  source_period_id: number;
+}
+
+export interface DevelopmentCurrentTermResponse {
+  persisted: boolean;
+  prediction_id?: number;
+  revision?: number;
+  prediction_status: string;
+  projected_final_term_grade?: number;
+  intervention_level: DevelopmentInterventionLevel | "INTERVENTION_NOT_ASSESSED";
+  intervention_basis?: string;
+  reason_codes?: string[];
+  readiness_status: string;
+  readiness_level?: string | null;
+  readiness_reason_codes: string[];
+  source_period_id: number;
+  target_period_id: number;
+  prediction_purpose: "CURRENT_TERM_FINAL_GRADE_PROJECTION";
+  model_name: string;
+  model_version_id: number;
+  lifecycle_status: "DEVELOPMENT";
+  development_status: "DEVELOPMENT_ONLY";
+  generated_at?: string;
+}
+
+export function developmentPredictionsAvailable(role: string | null): boolean {
+  return import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEVELOPMENT_PREDICTIONS === "true" && role === "admin";
+}
+
+export async function generateDevelopmentCurrentTermPrediction(
+  scope: DevelopmentCurrentTermScope,
+  role: string | null,
+): Promise<DevelopmentCurrentTermResponse> {
+  if (!developmentPredictionsAvailable(role)) {
+    throw new Error("Development predictions are unavailable in this frontend environment.");
+  }
+  const response = await apiFetch("/api/v1/development/current-term-predictions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(scope),
+  });
+  if (!response.ok) {
+    throw new Error(response.status === 404
+      ? "The development prediction endpoint is unavailable. Check the backend development settings."
+      : response.status === 403
+        ? "Your account is not authorized to generate development predictions."
+        : "Unable to generate a development prediction. Please try again.");
+  }
+  return (await response.json()) as DevelopmentCurrentTermResponse;
+}
+
 // ---- Types ----
 
 export type TeacherStatusLabel =

@@ -3,6 +3,9 @@ import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { OverviewCard } from "@/components/overview-cards";
 import { Button } from "@/components/retroui/Button";
+import { Tabs } from "@/components/retroui/Tabs";
+import { useAuth } from "@/context/AuthContext";
+import DevelopmentCurrentTermPanel from "@/components/predictions/development-current-term-panel";
 import { cn } from "@/lib/utils";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
@@ -20,6 +23,7 @@ import {
   fetchDashboardAtRisk,
   fetchDashboardFilters,
   fetchDashboardGradeSummaries,
+  developmentPredictionsAvailable,
 } from "@/lib/prediction-api";
 
 const EMPTY_SUMMARY: RiskSummary = {
@@ -60,6 +64,9 @@ const RISK_CARDS = [
 ];
 
 export default function PredictionsDashboard() {
+  const { role } = useAuth();
+  const canUseDevelopment = developmentPredictionsAvailable(role);
+  const [view, setView] = useState<"legacy" | "development">("legacy");
   const { selectedPeriodId } = useAcademicPeriod();
   // ── State ──
   const [data, setData] = useState<DashboardAtRiskResponse | null>(null);
@@ -213,6 +220,12 @@ export default function PredictionsDashboard() {
               <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1>
             </header>
 
+            {canUseDevelopment && <Tabs tabs={[{ id: "legacy", label: "AI Predictions" }, { id: "development", label: "Current-Term Development" }]} activeTab={view} onTabChange={setView} />}
+
+            {canUseDevelopment && view === "development" ? (
+              <DevelopmentCurrentTermPanel periodId={selectedPeriodId} termName={filters?.terms.find((item) => item.academic_period_id === selectedPeriodId)?.term_label || "Current Term"} role="admin" />
+            ) : (
+
             <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {/* ── Risk Summary Cards ── */}
               <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-4">
@@ -337,16 +350,17 @@ export default function PredictionsDashboard() {
                 </div>
               </div>
             </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* ── Detail Sheet ── */}
-      <PredictionDetailSheet
+      {(!canUseDevelopment || view === "legacy") && <PredictionDetailSheet
         predictionId={selectedPrediction}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
-      />
+      />}
     </AppLayout>
   );
 }
