@@ -1,7 +1,33 @@
 # app/schemas/Classwork.py
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional
 from datetime import datetime
+
+
+class ActivityRubricLevelInput(BaseModel):
+    rubric_level_id: Optional[int] = None
+    level_name: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1)
+    points: float = Field(ge=0)
+    display_order: int = Field(ge=0)
+
+
+class ActivityRubricLevelResponse(ActivityRubricLevelInput):
+    rubric_level_id: Optional[int] = None
+
+
+def validate_activity_rubric(levels: Optional[list[ActivityRubricLevelInput]]):
+    if levels is None:
+        return levels
+    if not levels:
+        raise ValueError("Activity rubric must contain at least one performance level")
+    names = [level.level_name.strip().casefold() for level in levels]
+    points = [level.points for level in levels]
+    if len(names) != len(set(names)):
+        raise ValueError("Activity rubric level names must be unique")
+    if len(points) != len(set(points)):
+        raise ValueError("Activity rubric point values must be unique")
+    return sorted(levels, key=lambda level: (-level.points, level.display_order))
 
 
 class ClassworkCreate(BaseModel):
@@ -18,6 +44,12 @@ class ClassworkCreate(BaseModel):
     is_published: Optional[bool] = False
     show_scores: Optional[bool] = True
     lesson_ids: Optional[list[int]] = None
+    rubric_levels: Optional[list[ActivityRubricLevelInput]] = None
+
+    @model_validator(mode="after")
+    def validate_rubric(self):
+        self.rubric_levels = validate_activity_rubric(self.rubric_levels)
+        return self
 
 
 class ClassworkUpdate(BaseModel):
@@ -33,6 +65,13 @@ class ClassworkUpdate(BaseModel):
     is_published: Optional[bool] = None
     show_scores: Optional[bool] = None
     lesson_ids: Optional[list[int]] = None
+    rubric_levels: Optional[list[ActivityRubricLevelInput]] = None
+    confirm_rubric_change: bool = False
+
+    @model_validator(mode="after")
+    def validate_rubric(self):
+        self.rubric_levels = validate_activity_rubric(self.rubric_levels)
+        return self
 
 
 class ClassworkAttachmentResponse(BaseModel):
@@ -106,6 +145,9 @@ class ClassworkResponse(BaseModel):
     linked_lessons: list[LinkedLessonResponse] = []
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
+    rubric_levels: list[ActivityRubricLevelResponse] = []
+    has_submissions: bool = False
+    has_graded_submissions: bool = False
 
 
 class ClassworkAssignRequest(BaseModel):
