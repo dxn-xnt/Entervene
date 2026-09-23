@@ -1,13 +1,16 @@
+import os
+
 from dotenv import load_dotenv
 
-load_dotenv()
+ENV_FILE = os.getenv("ENV_FILE", ".env")
+load_dotenv(ENV_FILE)
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
+    model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore", case_sensitive=False)
 
     app_name: str = "ENTERVENE"
     debug: bool = False

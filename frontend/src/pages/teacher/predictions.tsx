@@ -25,6 +25,13 @@ import {
   fetchDashboardGradeSummaries,
   developmentPredictionsAvailable,
 } from "@/lib/prediction-api";
+import {
+  buildCurrentTermDashboard,
+  buildCurrentTermGradeSummaries,
+  currentTermRiskSummary,
+  loadAuthorizedCurrentTermPredictions,
+  type AuthorizedCurrentTermRow,
+} from "@/components/predictions/current-term-dashboard-adapter";
 
 const EMPTY_SUMMARY: RiskSummary = {
   HIGH_RISK: 0,
@@ -48,7 +55,7 @@ const RISK_CARDS = [
   },
   {
     key: "NEEDS_MONITORING" as const,
-    label: "Monitoring",
+    label: "Needs Monitoring",
     activeClass: "bg-yellow-200 ring-2 ring-black",
   },
   {
@@ -64,6 +71,11 @@ const RISK_CARDS = [
 ];
 
 export default function PredictionsDashboard() {
+  const { role } = useAuth();
+  return role === "teacher" ? <TeacherCurrentTermDashboard /> : <LegacyPredictionsDashboard />;
+}
+
+function LegacyPredictionsDashboard() {
   const { role } = useAuth();
   const canUseDevelopment = developmentPredictionsAvailable(role);
   const [view, setView] = useState<"legacy" | "development">("legacy");
@@ -223,7 +235,11 @@ export default function PredictionsDashboard() {
             {canUseDevelopment && <Tabs tabs={[{ id: "legacy", label: "AI Predictions" }, { id: "development", label: "Current-Term Development" }]} activeTab={view} onTabChange={setView} />}
 
             {canUseDevelopment && view === "development" ? (
-              <DevelopmentCurrentTermPanel periodId={selectedPeriodId} termName={filters?.terms.find((item) => item.academic_period_id === selectedPeriodId)?.term_label || "Current Term"} role="admin" />
+              <DevelopmentCurrentTermPanel
+                periodId={selectedPeriodId}
+                termName={filters?.terms.find((item) => item.academic_period_id === selectedPeriodId)?.term_label || "Current Term"}
+                role={role === "admin" ? "admin" : "teacher"}
+              />
             ) : (
 
             <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
@@ -363,4 +379,73 @@ export default function PredictionsDashboard() {
       />}
     </AppLayout>
   );
+}
+
+function TeacherCurrentTermDashboard() {
+  const { selectedPeriodId } = useAcademicPeriod();
+  const [rows, setRows] = useState<AuthorizedCurrentTermRow[]>([]);
+  const [filters, setFilters] = useState<DashboardFilters | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [gradeLevel, setGradeLevel] = useState<number | undefined>();
+  const [classId, setClassId] = useState<number | undefined>();
+  const [subjectId, setSubjectId] = useState<number | undefined>();
+  const [riskLevel, setRiskLevel] = useState<string | undefined>();
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
+
+  useEffect(() => {
+    if (!selectedPeriodId) return;
+    let cancelled = false;
+    Promise.resolve().then(() => { if (!cancelled) setLoading(true); });
+    loadAuthorizedCurrentTermPredictions(selectedPeriodId)
+      .then((result) => { if (!cancelled) { setRows(result.rows); setFilters(result.filters); } })
+      .catch(() => { if (!cancelled) setRows([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedPeriodId]);
+
+  const scopedRows = rows.filter((row) =>
+    (gradeLevel === undefined || row.grade_level === gradeLevel)
+    && (classId === undefined || row.class_id === classId)
+    && (subjectId === undefined || row.subject_id === subjectId));
+  const data = buildCurrentTermDashboard(scopedRows, { search, interventionLevel: riskLevel, limit: Math.max(10, scopedRows.length) });
+  const summary = currentTermRiskSummary(scopedRows);
+  const gradeSummaries = buildCurrentTermGradeSummaries(rows);
+  const filtered = gradeLevel !== undefined || classId !== undefined || subjectId !== undefined || riskLevel !== undefined || search.trim() !== "";
+
+  return <AppLayout>
+    <div className="flex flex-1 flex-col">
+      <header className="flex items-center gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6"><SidebarTrigger className="shrink-0 md:hidden" /><h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1></header>
+      <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+        <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+          {RISK_CARDS.filter((card) => card.key !== "INSUFFICIENT_DATA").map((card) => <button key={card.key} type="button" onClick={() => setRiskLevel(riskLevel === card.key ? undefined : card.key)} className="w-full cursor-pointer text-left"><OverviewCard title={card.label} count={String(summary[card.key])} className={cn("w-full border-2 border-black shadow-[4px_4px_0px_#000]", riskLevel === card.key && card.activeClass)} /></button>)}
+        </div>
+        <div className="flex flex-col gap-4">
+          <PredictionFilters
+            filters={filters}
+            gradeLevel={gradeLevel}
+            classId={classId}
+            subjectId={subjectId}
+            academicPeriodId={selectedPeriodId ?? undefined}
+            riskLevel={riskLevel}
+            search={search}
+            hidePeriodFilter
+            riskSummary={summary}
+            onGradeChange={setGradeLevel}
+            onClassChange={setClassId}
+            onSubjectChange={setSubjectId}
+            onRiskChange={setRiskLevel}
+            onSearchChange={setSearch}
+            onClearAll={() => { setGradeLevel(undefined); setClassId(undefined); setSubjectId(undefined); setRiskLevel(undefined); setSearch(""); }}
+          />
+          {loading ? <div className="py-20 text-center font-semibold text-gray-500">Loading current-term projections...</div> : filtered ? <PredictionTable
+            items={data.items} total={data.total} limit={Math.max(10, data.total)} offset={0} currentTerm hidePagination
+            onSort={() => undefined} onPageChange={() => undefined}
+            onRowClick={(predictionId) => setSelected(rows.find((row) => row.prediction_id === predictionId) || null)}
+          /> : <div className="flex flex-col gap-3"><h2 className="text-xl font-black">Grade Cohort Summaries</h2>{gradeSummaries.length ? <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{gradeSummaries.map((group) => <PredictionGradeSection key={group.grade_level} group={group} />)}</div> : <div className="border-2 border-black bg-white p-6 text-center font-semibold">No current-term projections are available for this scope.</div>}</div>}
+        </div>
+      </div>
+    </div>
+    <PredictionDetailSheet predictionId={selected?.prediction_id ?? null} currentTermPrediction={selected} open={selected !== null} onOpenChange={(open) => { if (!open) setSelected(null); }} />
+  </AppLayout>;
 }

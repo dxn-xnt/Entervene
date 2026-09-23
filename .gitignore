@@ -3,7 +3,15 @@
 backend/venv/
 backend/app/__pycache__/
 backend/*.pyc
+# Local environment files (commit placeholder-only examples).
+.env
+.env.*
+!.env.example
+!.env.*.example
 backend/.env
+backend/.env.*
+!backend/.env.example
+!backend/.env.*.example
 backend/data/
 backend/**/*.pkl
 backend\app\core\Config.py
@@ -17,6 +25,13 @@ backend/data/normalized_eclass_records/
 
 # Private traceability files
 **/PRIVATE_source_student_identity_map.csv
+
+# Local databases and database dumps
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.backup
 
 # Python cache
 __pycache__/
@@ -34,10 +49,16 @@ package-lock.json
 
 # React / Vite
 frontend/.env
+frontend/.env.*
+!frontend/.env.example
+!frontend/.env.*.example
 frontend/dist/
 
 # mobile-app
 mobile-app/.env
+mobile-app/.env.*
+!mobile-app/.env.example
+!mobile-app/.env.*.example
 mobile-app/dist/
 
 

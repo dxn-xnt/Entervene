@@ -22,8 +22,19 @@ import {
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import {
+  buildCurrentTermDashboard,
+  buildCurrentTermGradeSummaries,
+  loadAuthorizedCurrentTermPredictions,
+  type AuthorizedCurrentTermRow,
+} from "@/components/predictions/current-term-dashboard-adapter";
 
 export default function GradePredictions() {
+  const { role } = useAuth();
+  return role === "teacher" ? <TeacherCurrentTermGradePredictions /> : <LegacyGradePredictions />;
+}
+
+function LegacyGradePredictions() {
   const { role } = useAuth();
   const baseRole = role === "admin" ? "admin" : "teacher";
   const { grade } = useParams<{ grade: string }>();
@@ -271,4 +282,52 @@ export default function GradePredictions() {
       />
     </AppLayout>
   );
+}
+
+function TeacherCurrentTermGradePredictions() {
+  const { grade } = useParams<{ grade: string }>();
+  const { selectedPeriodId } = useAcademicPeriod();
+  const numericGrade = grade ? Number(grade) : undefined;
+  const [rows, setRows] = useState<AuthorizedCurrentTermRow[]>([]);
+  const [filters, setFilters] = useState<DashboardFilters | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [classId, setClassId] = useState<number | undefined>();
+  const [subjectId, setSubjectId] = useState<number | undefined>();
+  const [riskLevel, setRiskLevel] = useState<string | undefined>();
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
+
+  useEffect(() => {
+    if (!selectedPeriodId || numericGrade === undefined) return;
+    let cancelled = false;
+    Promise.resolve().then(() => { if (!cancelled) setLoading(true); });
+    loadAuthorizedCurrentTermPredictions(selectedPeriodId, { gradeLevel: numericGrade })
+      .then((result) => { if (!cancelled) { setRows(result.rows); setFilters(result.filters); } })
+      .catch(() => { if (!cancelled) setRows([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [numericGrade, selectedPeriodId]);
+
+  const scopedRows = rows.filter((row) => (classId === undefined || row.class_id === classId) && (subjectId === undefined || row.subject_id === subjectId));
+  const data = buildCurrentTermDashboard(scopedRows, { search, interventionLevel: riskLevel, limit: Math.max(10, scopedRows.length) });
+  const gradeSummary = buildCurrentTermGradeSummaries(rows)[0];
+
+  return <AppLayout>
+    <div className="flex flex-1 flex-col">
+      <header className="flex items-center gap-3 bg-background px-4 py-4 md:px-6"><SidebarTrigger className="md:hidden" /><Breadcrumb><Breadcrumb.List><Breadcrumb.Item><Breadcrumb.Link asChild><Link to="/teacher/predictions">AI Predictions</Link></Breadcrumb.Link></Breadcrumb.Item><Breadcrumb.Separator /><Breadcrumb.Item><Breadcrumb.Page>Grade {grade}</Breadcrumb.Page></Breadcrumb.Item></Breadcrumb.List></Breadcrumb></header>
+      <div className="-mt-[1px] border-t-2 border-border px-4 py-4 md:px-6">
+        <div className="flex flex-col items-start gap-5 lg:flex-row">
+          <div className="flex min-w-0 flex-1 flex-col gap-4">
+            <PredictionFilters filters={filters} gradeLevel={numericGrade} classId={classId} subjectId={subjectId} academicPeriodId={selectedPeriodId ?? undefined} riskLevel={riskLevel} search={search} hideGradeFilter hidePeriodFilter riskSummary={data.risk_summary} onClassChange={setClassId} onSubjectChange={setSubjectId} onRiskChange={setRiskLevel} onSearchChange={setSearch} onClearAll={() => { setClassId(undefined); setSubjectId(undefined); setRiskLevel(undefined); setSearch(""); }} />
+            {loading ? <div className="py-20 text-center font-semibold text-gray-500">Loading Grade {grade} projections...</div> : <PredictionTable items={data.items} total={data.total} limit={Math.max(10, data.total)} offset={0} currentTerm hidePagination onSort={() => undefined} onPageChange={() => undefined} onRowClick={(predictionId) => setSelected(rows.find((row) => row.prediction_id === predictionId) || null)} />}
+          </div>
+          <Card className="w-full shrink-0 border-2 border-black bg-white p-4 shadow-[4px_4px_0px_#000] lg:w-80">
+            <Text as="h4" className="mb-3 border-b-2 border-black pb-2 font-head text-base font-bold">Grade {grade} Sections</Text>
+            <div className="flex flex-col gap-2">{gradeSummary?.sections.map((section) => <Link key={section.class_id} to={`/teacher/predictions/${grade}/${section.class_id}`} className="flex items-center justify-between border-2 border-black bg-yellow-50 p-2.5 hover:bg-yellow-100"><span className="font-bold">{section.section_name}</span><Badge size="sm" variant="surface">{section.total_students} projections</Badge></Link>)}</div>
+          </Card>
+        </div>
+      </div>
+    </div>
+    <PredictionDetailSheet predictionId={selected?.prediction_id ?? null} currentTermPrediction={selected} open={selected !== null} onOpenChange={(open) => { if (!open) setSelected(null); }} />
+  </AppLayout>;
 }

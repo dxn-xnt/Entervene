@@ -10,6 +10,8 @@ const api = vi.hoisted(() => ({
   getSubjects: vi.fn(),
   getClassStudents: vi.fn(),
   generate: vi.fn(),
+  fetchPersisted: vi.fn(),
+  fetchFilters: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -17,7 +19,11 @@ vi.mock("@/lib/api", () => ({
   getSubjects: api.getSubjects,
   getClassStudents: api.getClassStudents,
 }));
-vi.mock("@/lib/prediction-api", () => ({ generateDevelopmentCurrentTermPrediction: api.generate }));
+vi.mock("@/lib/prediction-api", () => ({
+  generateDevelopmentCurrentTermPrediction: api.generate,
+  fetchDevelopmentCurrentTermPredictions: api.fetchPersisted,
+  fetchDashboardFilters: api.fetchFilters,
+}));
 vi.mock("@/components/ui/sheet", () => ({
   Sheet: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? <div>{children}</div> : null,
   SheetContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -71,12 +77,41 @@ const result = {
   development_status: "DEVELOPMENT_ONLY",
   generated_at: "2026-09-22T10:00:00Z",
 };
+const persisted = {
+  prediction_id: 44,
+  revision: 3,
+  student_id: "student-1",
+  student_name: "Rivera, Alex",
+  class_id: 7,
+  class_name: "Archimedes",
+  subject_id: 5,
+  subject_name: "Science",
+  subject_codename: "SCI",
+  academic_period_id: 3,
+  period_name: "Term 1",
+  projected_final_term_grade: 89.69,
+  intervention_level: "NEEDS_MONITORING",
+  intervention_basis: "RULE_BASED_FROM_PROJECTED_FINAL_TERM_GRADE",
+  readiness_status: "READY",
+  readiness_level: "STANDARD_READY",
+  model_version_id: 62,
+  model_name: "entervene_current_term_development_rf_v3",
+  lifecycle_status: "DEVELOPMENT",
+  generated_at: "2026-09-22T10:00:00Z",
+};
 
 beforeEach(() => {
   api.getClasses.mockResolvedValue({ classes: [scope] });
   api.getSubjects.mockResolvedValue({ subjects: [{ subject_id: 5, subject_name: "Science", academic_level: { academic_level_id: 9 } }] });
   api.getClassStudents.mockResolvedValue({ students: [{ student_id: "student-1", full_name: "Alex Rivera" }] });
   api.generate.mockResolvedValue(result);
+  api.fetchPersisted.mockResolvedValue({ items: [], total: 0 });
+  api.fetchFilters.mockResolvedValue({
+    grades: [{ grade_level: 9, level_name: "Grade 9" }],
+    classes: [{ class_id: 7, section_name: "Archimedes", grade_level: 9 }],
+    subjects: [{ subject_id: 5, subject_name: "Science", subject_codename: "SCI" }],
+    terms: [{ term_number: 1, term_label: "Term 1", academic_period_id: 3 }],
+  });
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -90,23 +125,183 @@ async function selectScope() {
   fireEvent.change(screen.getByLabelText("Student"), { target: { value: "student-1" } });
 }
 
+async function selectReadScope() {
+  render(<DevelopmentCurrentTermPanel periodId={3} termName="Term 1" role="admin" />);
+  await waitFor(() => expect(screen.getByLabelText("Class").querySelectorAll("option")).toHaveLength(2));
+  fireEvent.change(screen.getByLabelText("Class"), { target: { value: "7" } });
+  await waitFor(() => expect(screen.getByLabelText("Subject").querySelectorAll("option")).toHaveLength(2));
+  fireEvent.change(screen.getByLabelText("Subject"), { target: { value: "5" } });
+}
+
+async function selectTeacherScope() {
+  render(<DevelopmentCurrentTermPanel periodId={3} termName="Term 1" role="teacher" />);
+  await waitFor(() => expect(screen.getByLabelText("Academic term").querySelectorAll("option")).toHaveLength(2));
+  await waitFor(() => expect(screen.getByLabelText("Class").querySelectorAll("option")).toHaveLength(2));
+  fireEvent.change(screen.getByLabelText("Class"), { target: { value: "7" } });
+  await waitFor(() => expect(screen.getByLabelText("Subject").querySelectorAll("option")).toHaveLength(2));
+  fireEvent.change(screen.getByLabelText("Subject"), { target: { value: "5" } });
+}
+
 describe("development current-term predictions", () => {
+  it("gives teachers an assigned-load read-only view", async () => {
+    api.fetchPersisted.mockResolvedValue({ items: [persisted], total: 1 });
+    await selectTeacherScope();
+
+    await waitFor(() => expect(screen.getByText("Rivera, Alex")).toBeTruthy());
+    expect(api.fetchFilters).toHaveBeenCalledWith({ class_id: 7, academic_period_id: 3 });
+    expect(api.fetchPersisted).toHaveBeenCalledWith(
+      { class_id: 7, subject_id: 5, academic_period_id: 3 },
+      "teacher",
+    );
+    expect(screen.getByText("Archimedes")).toBeTruthy();
+    expect(screen.getByText("Science")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Generate Projection" })).toBeNull();
+    expect(screen.queryByLabelText("Student")).toBeNull();
+    expect(screen.getByText("Projected Final Term Grade")).toBeTruthy();
+    expect(screen.getByText("Intervention Level")).toBeTruthy();
+    expect(screen.queryByText(/risk score|probability|confidence/i)).toBeNull();
+    expect(api.getClasses).not.toHaveBeenCalled();
+    expect(api.getSubjects).not.toHaveBeenCalled();
+    expect(api.getClassStudents).not.toHaveBeenCalled();
+    expect(api.generate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "View Details" }));
+    expect(screen.getByText("Current-Term Projection")).toBeTruthy();
+    expect(screen.getByText("Revision").nextSibling?.textContent).toBe("3");
+  });
+
+  it("shows teacher authorization failures instead of an empty success", async () => {
+    api.fetchPersisted.mockRejectedValue(new Error("Your account is not authorized to view development predictions."));
+    await selectTeacherScope();
+
+    await waitFor(() => expect(screen.getByText("Your account is not authorized to view development predictions.")).toBeTruthy());
+    expect(screen.queryByText("No current-term projections available for this scope.")).toBeNull();
+  });
+
+  it("does not expose a scope when the teacher has no assigned loads", async () => {
+    api.fetchFilters.mockResolvedValue({ grades: [], classes: [], subjects: [], terms: [] });
+    render(<DevelopmentCurrentTermPanel periodId={3} termName="Term 1" role="teacher" />);
+
+    await waitFor(() => expect(api.fetchFilters).toHaveBeenCalledTimes(1));
+    expect(screen.getByLabelText("Class").querySelectorAll("option")).toHaveLength(1);
+    expect(screen.getByLabelText("Subject").querySelectorAll("option")).toHaveLength(1);
+    expect(api.fetchPersisted).not.toHaveBeenCalled();
+  });
+
+  it("shows teacher loading and neutral empty states", async () => {
+    let resolveRead!: (value: { items: never[]; total: number }) => void;
+    api.fetchPersisted.mockReturnValue(new Promise((resolve) => { resolveRead = resolve; }));
+    await selectTeacherScope();
+
+    expect(screen.getByLabelText("Loading current-term projections")).toBeTruthy();
+    expect(screen.queryByText("No current-term projections available for this scope.")).toBeNull();
+    await act(async () => resolveRead({ items: [], total: 0 }));
+    await waitFor(() => expect(screen.getByText("No current-term projections available for this scope.")).toBeTruthy());
+    expect(screen.queryByText(/on track/i)).toBeNull();
+  });
+
   it("uses the grade and intervention contract, not a risk score", async () => {
+    api.fetchPersisted.mockResolvedValue({ items: [persisted], total: 1 });
     await selectScope();
     expect(screen.getByText("Development model, not yet production validated.")).toBeTruthy();
     expect(screen.getByText("All Intervention Levels")).toBeTruthy();
-    expect(screen.getByText("No current-term projections available")).toBeTruthy();
     expect(screen.queryByText(/on track/i)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Generate Projection" }));
     await waitFor(() => expect(screen.getByText("89.69")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Generate Projection" }));
+    await waitFor(() => expect(api.fetchPersisted).toHaveBeenCalledTimes(2));
     expect(api.generate).toHaveBeenCalledWith({ student_id: "student-1", class_id: 7, subject_id: 5, source_period_id: 3 }, "admin");
     expect(screen.getByText("Projected Final Term Grade")).toBeTruthy();
     expect(screen.getByText("Intervention Level")).toBeTruthy();
     expect(screen.getAllByText("Needs Monitoring")).toHaveLength(2);
     expect(screen.queryByText("Risk Score")).toBeNull();
+    expect(screen.queryByText(/probability|confidence/i)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "View Details" }));
     expect(screen.getByText("Current-Term Projection")).toBeTruthy();
     expect(screen.getByText(/assigned separately using the school's grade-based intervention rules/)).toBeTruthy();
+  });
+
+  it("loads persisted latest-revision rows for the selected scope", async () => {
+    api.fetchPersisted.mockResolvedValue({ items: [persisted], total: 1 });
+    await selectReadScope();
+
+    await waitFor(() => expect(screen.getByText("Rivera, Alex")).toBeTruthy());
+    expect(api.fetchPersisted).toHaveBeenCalledWith({ class_id: 7, subject_id: 5, academic_period_id: 3 }, "admin");
+    fireEvent.click(screen.getByRole("button", { name: "View Details" }));
+    expect(screen.getByText("Revision").nextSibling?.textContent).toBe("3");
+  });
+
+  it("fetches persisted results again after the panel remounts", async () => {
+    api.fetchPersisted.mockResolvedValue({ items: [persisted], total: 1 });
+    await selectReadScope();
+    await waitFor(() => expect(api.fetchPersisted).toHaveBeenCalledTimes(1));
+    cleanup();
+
+    await selectReadScope();
+    await waitFor(() => expect(api.fetchPersisted).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Rivera, Alex")).toBeTruthy();
+  });
+
+  it("reloads an authorized teacher's persisted result after remount", async () => {
+    api.fetchPersisted.mockResolvedValue({ items: [persisted], total: 1 });
+    await selectTeacherScope();
+    await waitFor(() => expect(api.fetchPersisted).toHaveBeenCalledTimes(1));
+    cleanup();
+
+    await selectTeacherScope();
+    await waitFor(() => expect(api.fetchPersisted).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Rivera, Alex")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Generate Projection" })).toBeNull();
+  });
+
+  it("refetches when the selected academic period changes", async () => {
+    const view = render(<DevelopmentCurrentTermPanel periodId={3} termName="Term 1" role="admin" />);
+    await waitFor(() => expect(screen.getByLabelText("Class").querySelectorAll("option")).toHaveLength(2));
+    fireEvent.change(screen.getByLabelText("Class"), { target: { value: "7" } });
+    await waitFor(() => expect(screen.getByLabelText("Subject").querySelectorAll("option")).toHaveLength(2));
+    fireEvent.change(screen.getByLabelText("Subject"), { target: { value: "5" } });
+    await waitFor(() => expect(api.fetchPersisted).toHaveBeenCalledWith(
+      { class_id: 7, subject_id: 5, academic_period_id: 3 },
+      "admin",
+    ));
+
+    view.rerender(<DevelopmentCurrentTermPanel periodId={4} termName="Term 2" role="admin" />);
+
+    await waitFor(() => expect(api.fetchPersisted).toHaveBeenCalledWith(
+      { class_id: 7, subject_id: 5, academic_period_id: 4 },
+      "admin",
+    ));
+  });
+
+  it("refetches authoritative persisted rows after successful generation", async () => {
+    api.fetchPersisted
+      .mockResolvedValueOnce({ items: [], total: 0 })
+      .mockResolvedValueOnce({ items: [{ ...persisted, revision: 4, projected_final_term_grade: 91.25 }], total: 1 });
+    await selectScope();
+    await waitFor(() => expect(api.fetchPersisted).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate Projection" }));
+
+    await waitFor(() => expect(screen.getByText("91.25")).toBeTruthy());
+    expect(api.fetchPersisted).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "View Details" }));
+    expect(screen.getByText("Revision").nextSibling?.textContent).toBe("4");
+  });
+
+  it("shows loading, read error, and neutral empty states", async () => {
+    let rejectRead!: (reason: Error) => void;
+    api.fetchPersisted.mockReturnValue(new Promise((_resolve, reject) => { rejectRead = reject; }));
+    await selectReadScope();
+    expect(screen.getByLabelText("Loading current-term projections")).toBeTruthy();
+    expect(screen.queryByText("No current-term projections available")).toBeNull();
+
+    await act(async () => rejectRead(new Error("Persisted projections could not be loaded.")));
+    await waitFor(() => expect(screen.getByText("Persisted projections could not be loaded.")).toBeTruthy());
+    expect(screen.queryByText("No current-term projections available")).toBeNull();
+
+    cleanup();
+    api.fetchPersisted.mockResolvedValue({ items: [], total: 0 });
+    await selectReadScope();
+    await waitFor(() => expect(screen.getByText("No current-term projections available for this scope.")).toBeTruthy());
+    expect(screen.queryByText(/on track/i)).toBeNull();
   });
 
   it("prevents duplicate generation while pending", async () => {

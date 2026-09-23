@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
@@ -11,9 +11,13 @@ from app.core.Dependencies import require_role
 from app.db.Session import get_db
 from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
 from app.services.prediction import DevelopmentCurrentTermPredictionPersistenceService as persistence
+from app.services.prediction import DevelopmentCurrentTermPredictionReadService as read_service
 from app.services.prediction import DevelopmentCurrentTermPredictionService as prediction
 from app.services.prediction import DevelopmentCurrentTermRiskService as intervention
 from app.services.prediction import DevelopmentCurrentTermScoringService as scorer
+from app.services.prediction.V3PredictionScopeAuthorizationService import (
+    authorize_v3_prediction_view,
+)
 
 
 router = APIRouter()
@@ -91,3 +95,27 @@ def generate_development_current_term_prediction(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     result.pop("risk_score", None)
     return result
+
+
+@router.get("/current-term-predictions", dependencies=[Depends(require_development_prediction_api)])
+def list_development_current_term_predictions(
+    class_id: int = Query(..., gt=0),
+    subject_id: int = Query(..., gt=0),
+    academic_period_id: int = Query(..., gt=0),
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    db: Session = Depends(get_db),
+) -> dict:
+    access = authorize_v3_prediction_view(
+        db,
+        current_user,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=academic_period_id,
+    )
+    return read_service.list_latest_development_current_term_predictions(
+        db,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=academic_period_id,
+        require_active_enrollment=access.require_active_enrollment,
+    )
