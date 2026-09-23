@@ -17,12 +17,13 @@ interface PredictionTableProps {
   onSort: (column: string) => void;
   onPageChange: (newOffset: number) => void;
   onRowClick: (predictionId: number) => void;
+  currentTerm?: boolean;
 }
 
 const RISK_BADGE_VARIANTS: Record<string, { bg: string; text: string }> = {
   HIGH_RISK: { bg: "bg-red-500 text-white border-2 border-black font-extrabold", text: "High Risk" },
   MODERATE_RISK: { bg: "bg-amber-500 text-white border-2 border-black font-extrabold", text: "Moderate" },
-  NEEDS_MONITORING: { bg: "bg-yellow-400 text-black border-2 border-black font-extrabold", text: "Monitoring" },
+  NEEDS_MONITORING: { bg: "bg-yellow-400 text-black border-2 border-black font-extrabold", text: "Needs Monitoring" },
   LOW_RISK: { bg: "bg-emerald-500 text-white border-2 border-black font-extrabold", text: "Low Risk" },
   INSUFFICIENT_DATA: { bg: "bg-gray-300 text-black border-2 border-black font-extrabold", text: "Insufficient Data" },
 };
@@ -74,10 +75,11 @@ export default function PredictionTable({
   onSort,
   onPageChange,
   onRowClick,
+  currentTerm = false,
 }: PredictionTableProps) {
   const currentPage = Math.floor(offset / limit) + 1;
   const totalPages = Math.ceil(total / limit) || 1;
-  const colSpanCount = 4 + (!hideClass ? 1 : 0) + (!hideSubject ? 1 : 0);
+  const colSpanCount = (currentTerm ? 3 : 4) + (!hideClass ? 1 : 0) + (!hideSubject ? 1 : 0);
 
   return (
     <div className="flex flex-col">
@@ -99,15 +101,15 @@ export default function PredictionTable({
             {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">Term</Table.Head> */}
             <Table.Head className="font-extrabold text-black whitespace-nowrap">
               <SortableHeader
-                label="Predicted Grade"
+                label={currentTerm ? "Projected Final Term Grade" : "Predicted Grade"}
                 column="predicted_period_grade"
                 sortBy={sortBy}
                 sortOrder={sortOrder}
                 onSort={onSort}
               />
             </Table.Head>
-            <Table.Head className="font-extrabold text-black whitespace-nowrap">Risk Level</Table.Head>
-            <Table.Head className="font-extrabold text-black whitespace-nowrap">
+            <Table.Head className="font-extrabold text-black whitespace-nowrap">{currentTerm ? "Intervention Level" : "Risk Level"}</Table.Head>
+            {!currentTerm && <Table.Head className="font-extrabold text-black whitespace-nowrap">
               <SortableHeader
                 label="Risk Score"
                 column="risk_score"
@@ -115,7 +117,7 @@ export default function PredictionTable({
                 sortOrder={sortOrder}
                 onSort={onSort}
               />
-            </Table.Head>
+            </Table.Head>}
             {/* <Table.Head className="w-16">
 
             </Table.Head> */}
@@ -132,9 +134,9 @@ export default function PredictionTable({
                   <div className="size-12 rounded-full bg-yellow-300 border-2 border-black flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                     <Eye className="size-6 text-black" />
                   </div>
-                  <span className="font-extrabold text-sm text-black uppercase">No At-Risk Students Found</span>
+                  <span className="font-extrabold text-sm text-black uppercase">No prediction results available</span>
                   <span className="text-xs text-gray-600 font-semibold max-w-sm">
-                    No predictions match the selected filters. All students in this query scope are currently on track.
+                    No current-term projections are available for this scope.
                   </span>
                 </div>
               </Table.Cell>
@@ -175,11 +177,11 @@ export default function PredictionTable({
                       {riskMeta.text}
                     </Badge>
                   </Table.Cell>
-                  <Table.Cell className="font-bold text-gray-900 whitespace-nowrap">
+                  {!currentTerm && <Table.Cell className="font-bold text-gray-900 whitespace-nowrap">
                     {item.risk_level === "INSUFFICIENT_DATA" || item.risk_score === null
                       ? "—"
                       : item.risk_score.toFixed(1)}
-                  </Table.Cell>
+                  </Table.Cell>}
                   {/* <Table.Cell className="text-right whitespace-nowrap">
                     <Button
                       size="sm"

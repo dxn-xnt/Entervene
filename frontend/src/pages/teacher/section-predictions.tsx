@@ -19,8 +19,18 @@ import {
   fetchDashboardFilters,
 } from "@/lib/prediction-api";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import {
+  buildCurrentTermDashboard,
+  loadAuthorizedCurrentTermPredictions,
+  type AuthorizedCurrentTermRow,
+} from "@/components/predictions/current-term-dashboard-adapter";
 
 export default function SectionPredictions() {
+  const { role } = useAuth();
+  return role === "teacher" ? <TeacherCurrentTermSectionPredictions /> : <LegacySectionPredictions />;
+}
+
+function LegacySectionPredictions() {
   const { role } = useAuth();
   const baseRole = role === "admin" ? "admin" : "teacher";
   const { grade, classId: classSlug } = useParams<{ grade: string; classId: string }>();
@@ -345,4 +355,81 @@ export default function SectionPredictions() {
       />
     </AppLayout>
   );
+}
+
+function TeacherCurrentTermSectionPredictions() {
+  const { grade, classId: classSlug } = useParams<{ grade: string; classId: string }>();
+  const { selectedPeriodId } = useAcademicPeriod();
+  const resolvedClassId = classSlug && !Number.isNaN(Number(classSlug)) ? Number(classSlug) : undefined;
+  const [rows, setRows] = useState<AuthorizedCurrentTermRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [subjectId, setSubjectId] = useState<number | undefined>();
+  const [riskLevel, setRiskLevel] = useState<string | undefined>();
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
+
+  useEffect(() => {
+    if (!selectedPeriodId || !resolvedClassId) return;
+    let cancelled = false;
+    Promise.resolve().then(() => { if (!cancelled) setLoading(true); });
+    loadAuthorizedCurrentTermPredictions(selectedPeriodId, { classId: resolvedClassId })
+      .then(({ rows: loaded }) => { if (!cancelled) setRows(loaded); })
+      .catch(() => { if (!cancelled) setRows([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [resolvedClassId, selectedPeriodId]);
+
+  const subjects = useMemo(() => [...new Map(rows.map((row) => [row.subject_id, { subject_id: row.subject_id, subject_name: row.subject_name }])).values()], [rows]);
+  const effectiveSubjectId = subjects.some((item) => item.subject_id === subjectId) ? subjectId : subjects[0]?.subject_id;
+  const scopedRows = rows.filter((row) => effectiveSubjectId === undefined || row.subject_id === effectiveSubjectId);
+  const data = buildCurrentTermDashboard(scopedRows, { search, interventionLevel: riskLevel, limit: Math.max(10, scopedRows.length) });
+  const sectionName = rows[0]?.class_name || `Section ${classSlug}`;
+
+  return <AppLayout>
+    <div className="flex flex-1 flex-col">
+      <header className="flex items-center gap-3 bg-background px-4 py-4 md:px-6">
+        <SidebarTrigger className="md:hidden" />
+        <Breadcrumb><Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
+          <Breadcrumb.Item><Breadcrumb.Link asChild><Link to="/teacher/predictions">AI Predictions</Link></Breadcrumb.Link></Breadcrumb.Item>
+          <Breadcrumb.Separator />
+          <Breadcrumb.Item><Breadcrumb.Link asChild><Link to={`/teacher/predictions/${grade}`}>Grade {grade}</Link></Breadcrumb.Link></Breadcrumb.Item>
+          <Breadcrumb.Separator />
+          <Breadcrumb.Item><Breadcrumb.Page>{sectionName}</Breadcrumb.Page></Breadcrumb.Item>
+        </Breadcrumb.List></Breadcrumb>
+      </header>
+      <div className="-mt-[1px] border-t-2 border-border px-4 py-4 md:px-6">
+        <div className="flex flex-col gap-4">
+          <PredictionFilters
+            filters={null}
+            gradeLevel={grade ? Number(grade) : undefined}
+            classId={resolvedClassId}
+            subjectId={effectiveSubjectId}
+            academicPeriodId={selectedPeriodId ?? undefined}
+            riskLevel={riskLevel}
+            search={search}
+            hideClassFilter hideGradeFilter hideSubjectFilter hidePeriodFilter
+            riskSummary={data.risk_summary}
+            onSubjectChange={setSubjectId}
+            onRiskChange={setRiskLevel}
+            onSearchChange={setSearch}
+            onClearAll={() => { setRiskLevel(undefined); setSearch(""); }}
+          />
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            {subjects.map((subject) => <button key={subject.subject_id} type="button" onClick={() => setSubjectId(subject.subject_id)} className={cn("whitespace-nowrap rounded-md border-2 px-4 py-1.5 text-sm font-bold", effectiveSubjectId === subject.subject_id ? "border-black bg-yellow-400 shadow-[2px_2px_0px_#000]" : "border-transparent bg-white hover:border-black")}>{subject.subject_name}</button>)}
+          </div>
+          {loading ? <div className="py-20 text-center font-semibold text-gray-500">Loading current-term projections...</div> : <PredictionTable
+            items={data.items}
+            total={data.total}
+            limit={Math.max(10, data.total)}
+            offset={0}
+            hideClass hideSubject hidePagination currentTerm
+            onSort={() => undefined}
+            onPageChange={() => undefined}
+            onRowClick={(predictionId) => setSelected(rows.find((row) => row.prediction_id === predictionId) || null)}
+          />}
+        </div>
+      </div>
+    </div>
+    <PredictionDetailSheet predictionId={selected?.prediction_id ?? null} currentTermPrediction={selected} open={selected !== null} onOpenChange={(open) => { if (!open) setSelected(null); }} />
+  </AppLayout>;
 }

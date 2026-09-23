@@ -38,15 +38,121 @@ export interface DevelopmentCurrentTermResponse {
   generated_at?: string;
 }
 
+export interface DevelopmentCurrentTermListParams {
+  class_id: number;
+  subject_id: number;
+  academic_period_id: number;
+}
+
+export interface DevelopmentCurrentTermListItem {
+  prediction_id: number;
+  revision: number;
+  student_id: string;
+  student_name: string | null;
+  class_id: number;
+  class_name: string;
+  subject_id: number;
+  subject_name: string;
+  subject_codename: string | null;
+  academic_period_id: number;
+  period_name: string;
+  projected_final_term_grade: number | null;
+  intervention_level: DevelopmentInterventionLevel;
+  intervention_basis: string | null;
+  readiness_status: string | null;
+  readiness_level: string | null;
+  readiness_label: string;
+  academic_evidence: {
+    written_works: DevelopmentAcademicComponent;
+    performance_tasks: DevelopmentAcademicComponent;
+    examination: DevelopmentAcademicComponent;
+    overall: {
+      graded_activity_count: number;
+      performance_percent: number | null;
+      observed_component_weight_percent: number | null;
+    };
+  };
+  participation_context: {
+    attendance: {
+      recorded_days: number;
+      attendance_rate: number | null;
+      present: number;
+      absent: number;
+      late: number;
+      excused: number;
+    };
+    submissions: {
+      assigned_count: number;
+      submitted_count: number;
+      missing_count: number;
+      late_count: number;
+      upcoming_count: number;
+      completion_rate: number | null;
+    };
+  };
+  term_context: {
+    start_date: string;
+    end_date: string;
+    evidence_cutoff_date: string;
+    progress_percent: number;
+    days_remaining: number;
+    is_active: boolean;
+  };
+  official_final_grade_available: boolean;
+  model_version_id: number;
+  model_name: string;
+  lifecycle_status: "DEVELOPMENT";
+  generated_at: string | null;
+}
+
+export interface DevelopmentAcademicComponent {
+  graded_count: number;
+  performance_percent: number | null;
+}
+
+export interface DevelopmentCurrentTermListResponse {
+  items: DevelopmentCurrentTermListItem[];
+  total: number;
+}
+
 export function developmentPredictionsAvailable(role: string | null): boolean {
-  return import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEVELOPMENT_PREDICTIONS === "true" && role === "admin";
+  return import.meta.env.DEV
+    && import.meta.env.VITE_ENABLE_DEVELOPMENT_PREDICTIONS === "true"
+    && (role === "admin" || role === "teacher");
+}
+
+export function developmentPredictionGenerationAvailable(role: string | null): boolean {
+  return developmentPredictionsAvailable(role) && role === "admin";
+}
+
+export async function fetchDevelopmentCurrentTermPredictions(
+  params: DevelopmentCurrentTermListParams,
+  role: string | null,
+): Promise<DevelopmentCurrentTermListResponse> {
+  if (!developmentPredictionsAvailable(role)) {
+    throw new Error("Development predictions are unavailable in this frontend environment.");
+  }
+  const query = new URLSearchParams({
+    class_id: String(params.class_id),
+    subject_id: String(params.subject_id),
+    academic_period_id: String(params.academic_period_id),
+  });
+  const response = await apiFetch(`/api/v1/development/current-term-predictions?${query.toString()}`);
+  if (!response.ok) {
+    throw new Error(response.status === 404
+      ? "The development prediction endpoint is unavailable. Check the backend development settings."
+      : response.status === 403
+        ? "Your account is not authorized to view development predictions."
+        : "Unable to load development predictions. Please try again.");
+  }
+  return (await response.json()) as DevelopmentCurrentTermListResponse;
 }
 
 export async function generateDevelopmentCurrentTermPrediction(
   scope: DevelopmentCurrentTermScope,
   role: string | null,
 ): Promise<DevelopmentCurrentTermResponse> {
-  if (!developmentPredictionsAvailable(role)) {
+  if (!developmentPredictionGenerationAvailable(role)) {
     throw new Error("Development predictions are unavailable in this frontend environment.");
   }
   const response = await apiFetch("/api/v1/development/current-term-predictions", {
