@@ -8,6 +8,7 @@ Endpoints:
 """
 
 from fastapi import APIRouter, Depends
+from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.Dependencies import require_role
@@ -162,6 +163,7 @@ def fetch_academic_periods(
             "id": p.academic_period_id,
             "period": p.period_name,
             "period_sequence": p.period_sequence,
+            "period_type": p.period_type,
             "total_periods": p.total_periods_in_year or 3,
             "academicyear": y.year_label,
             "academic_year_id": p.academic_year_id,
@@ -193,7 +195,7 @@ def set_active_academic_year(
         y.is_active = (y.academic_year_id == academic_year_id)
 
     # Sync setting
-    user_id = current_user.get("sub") or current_user.get("user_id")
+    user_id = UUID(str(current_user.get("sub") or current_user.get("user_id")))
     update_setting(db=db, key="current_school_year", value=target_year.year_label, user_id=user_id)
 
     db.commit()
@@ -220,7 +222,7 @@ def set_active_academic_period(
         p.is_active = (p.academic_period_id == academic_period_id)
 
     # Sync setting
-    user_id = current_user.get("sub") or current_user.get("user_id")
+    user_id = UUID(str(current_user.get("sub") or current_user.get("user_id")))
     update_setting(db=db, key="active_term", value=str(target_period.period_sequence), user_id=user_id)
 
     db.commit()
@@ -239,5 +241,5 @@ def update_single_setting(
     db: Session = Depends(get_db),
 ):
     """Admin only — update a setting value with strict type validation."""
-    user_id = current_user.get("sub") or current_user.get("user_id")
+    user_id = UUID(str(current_user.get("sub") or current_user.get("user_id")))
     return update_setting(db=db, key=key, value=payload.value, user_id=user_id)

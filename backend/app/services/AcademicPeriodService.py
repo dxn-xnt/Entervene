@@ -23,6 +23,10 @@ def compute_period_progress_ratio(period_sequence: int, total_periods: int) -> D
 
 
 def normalize_academic_period_values(period: object) -> None:
+    start_date = getattr(period, "start_date", None)
+    end_date = getattr(period, "end_date", None)
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise ValueError("Start date cannot be after end date for an academic period")
     period_type = (getattr(period, "period_type", None) or "TERM").upper()
     if period_type not in PERIOD_TOTALS:
         raise ValueError("period_type must be one of TERM, QUARTER, or SEMESTER")

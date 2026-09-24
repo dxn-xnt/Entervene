@@ -1,0 +1,12 @@
+{
+  "model_name": "entervene_current_term_official_target_rf_candidate",
+  "model_purpose": "CURRENT_TERM_FINAL_GRADE_PROJECTION",
+  "target_column": "target_final_period_grade",
+  "lifecycle": "DEVELOPMENT",
+  "is_active": false,
+  "production_validated": false,
+  "independent_three_term_validation": false,
+  "artifact_sha256": "f9e9fa20d617e73ccfde292c0dfc729456a4d844f86216fbf530eee9e21a94cc",
+  "feature_order_sha256": "6b3ff7c43c9e98ce77763b73edacdf2e0411bb641262d2238cbc3ff255e203aa",
+  "dataset_sha256": "789879391162415bf2df25630e7bd65be0838a0b73b3e3cc62579e9e0019f5a1"
+}

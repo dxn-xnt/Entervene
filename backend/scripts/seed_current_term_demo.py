@@ -88,6 +88,7 @@ def write_demo_environment(database_url: str) -> None:
     (BACKEND_DIR / ".env.demo").write_text(
         "APP_ENVIRONMENT=development\n"
         "DEVELOPMENT_PREDICTION_API_ENABLED=true\n"
+        "DEVELOPMENT_CURRENT_TERM_MODEL_NAME=entervene_current_term_official_target_rf_candidate\n"
         f"DATABASE_URL={rendered_url}\n"
         "SECRET_KEY=entervene-demo-only-secret-key-2026-local\n"
         "FRONTEND_URL=http://localhost:5173\n"
@@ -196,8 +197,31 @@ def seed(database_url: str) -> dict:
     engine = create_engine(database_url, pool_pre_ping=True)
     with Session(engine) as session:
         if session.scalar(select(UserAccount).where(UserAccount.email == ADMIN_EMAIL)) is not None:
+            from app.services.prediction.RegisterCorrectedCurrentTermModel import register_corrected_development_model
+            from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
+            from app.services.prediction.DevelopmentCurrentTermPredictionPersistenceService import generate_and_persist_development_current_term
+            corrected_id = register_corrected_development_model(session)[0].model_version_id
+            legacy_scopes = {
+                (row.student_id, row.class_id, row.subject_id, row.source_period_id)
+                for row in session.query(DevelopmentCurrentTermPrediction).filter(
+                    DevelopmentCurrentTermPrediction.model_version_id != corrected_id,
+                ).all()
+            }
+            session.commit()
+            session.close()
+            results = [
+                generate_and_persist_development_current_term(
+                    *scope, model_version_id=corrected_id, bind=engine,
+                )
+                for scope in sorted(legacy_scopes, key=lambda scope: tuple(map(str, scope)))
+            ]
+            summary = read_summary(database_url)
+            summary["selected_model_name"] = "entervene_current_term_official_target_rf_candidate"
+            summary["corrected_model_version_id"] = corrected_id
+            summary["corrected_prediction_count"] = sum(result["prediction_status"] == "DEVELOPMENT_PREDICTION_AVAILABLE" for result in results)
+            SUMMARY_PATH.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
             engine.dispose()
-            return read_summary(database_url)
+            return summary
 
         roles = [Role(role_id=1, role_name="Admin"), Role(role_id=2, role_name="Teacher"), Role(role_id=3, role_name="Student")]
         admin = UserAccount(user_id=_uuid("admin"), email=ADMIN_EMAIL, password_hash=hash_password(ADMIN_PASSWORD), account_status="active", email_status="verified")
@@ -270,7 +294,9 @@ def seed(database_url: str) -> dict:
                 status = "submitted" if score is None else ("late" if is_late else "graded")
                 session.add(StudentSubmission(student_id=student.student_id, classwork_assignment_id=assignment.classwork_assignment_id, submitted_at=_utc(ACTIVITIES[activity_index][5], 13 if is_late else 8), status=status, grade=score, attempt_count=1, graded_at=_utc(ACTIVITIES[activity_index][5] + 1) if score is not None else None, graded_by_staff_id=teacher.staff_id if score is not None else None))
 
-        model_version_id = _register_v3(session)
+        _register_v3(session)
+        from app.services.prediction.RegisterCorrectedCurrentTermModel import register_corrected_development_model
+        model_version_id = register_corrected_development_model(session)[0].model_version_id
         session.commit()
         scope = {"class_id": class_.class_id, "subject_id": subject.subject_id, "academic_period_id": period.academic_period_id}
         student_records = [(student.student_id, student.first_name + " " + student.last_name, profile) for student, _, profile in students]
@@ -320,6 +346,8 @@ def seed(database_url: str) -> dict:
 
     summary = {
         "database": DEMO_DATABASE,
+        "selected_model_name": "entervene_current_term_official_target_rf_candidate",
+        "corrected_model_version_id": model_version_id,
         "admin_email": ADMIN_EMAIL,
         "teacher_email": TEACHER_EMAIL,
         "class": "Demo Archimedes",

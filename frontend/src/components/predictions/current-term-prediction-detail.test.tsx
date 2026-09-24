@@ -30,8 +30,9 @@ const prediction: DevelopmentCurrentTermListItem = {
     attendance: { recorded_days: 10, attendance_rate: 90, present: 8, absent: 1, late: 1, excused: 0 },
     submissions: { assigned_count: 4, submitted_count: 3, missing_count: 1, late_count: 1, upcoming_count: 1, completion_rate: 75 },
   },
-  term_context: { start_date: "2026-08-10", end_date: "2026-10-30", evidence_cutoff_date: "2026-09-23", progress_percent: 54, days_remaining: 37, is_active: true },
+  term_context: { start_date: "2026-08-10", end_date: "2026-10-30", evidence_cutoff_date: "2026-09-23", progress_percent: 54, days_remaining: 37, is_active: true, scheduled_end_passed_while_active: false },
   official_final_grade_available: false,
+  official_final_grade: null,
 };
 
 afterEach(cleanup);
@@ -49,5 +50,29 @@ describe("current-term prediction detail", () => {
     expect(screen.queryByText("STANDARD_READY")).toBeNull();
     expect(screen.queryByText("DEVELOPMENT")).toBeNull();
     expect(screen.queryByText(/probability|confidence|risk score/i)).toBeNull();
+  });
+
+  it("shows an actual final grade separately from the earlier projection", () => {
+    render(<PredictionDetailSheet predictionId={41} currentTermPrediction={{
+      ...prediction,
+      official_final_grade_available: true,
+      official_final_grade: 87,
+      term_context: { ...prediction.term_context, progress_percent: 100, scheduled_end_passed_while_active: true },
+    }} open onOpenChange={() => undefined} />);
+
+    expect(screen.getByText("Final Grade: 87.00")).toBeTruthy();
+    expect(screen.getByText("Earlier Projected Final Term Grade: 86.25")).toBeTruthy();
+    expect(screen.getByText("Earlier Projection")).toBeTruthy();
+    expect(screen.getByText(/scheduled end date has passed; this term remains active/i)).toBeTruthy();
+    expect(screen.getByText("100.0%")).toBeTruthy();
+  });
+
+  it("marks an inactive period's projection as historical even without a final grade", () => {
+    render(<PredictionDetailSheet predictionId={41} currentTermPrediction={{
+      ...prediction,
+      term_context: { ...prediction.term_context, is_active: false },
+    }} open onOpenChange={() => undefined} />);
+    expect(screen.getByText(/term is no longer active/i)).toBeTruthy();
+    expect(screen.getByText("Earlier Projection")).toBeTruthy();
   });
 });

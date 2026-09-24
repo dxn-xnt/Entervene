@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import json
+import math
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
 import joblib
 import pandas as pd
 
+from app.services.prediction.DevelopmentCurrentTermModelSelection import (
+    LEGACY_MODEL_NAME, artifact_path, schema_path, require_development_model_name,
+)
 
-MODEL_NAME = "entervene_current_term_development_rf_v3"
+
+MODEL_NAME = LEGACY_MODEL_NAME
 MODELS_DIR = Path(__file__).resolve().parents[3] / "data" / "models"
 MODEL_PATH = MODELS_DIR / f"{MODEL_NAME}.joblib"
 SCHEMA_PATH = MODELS_DIR / f"{MODEL_NAME}_feature_schema.json"
@@ -24,8 +30,8 @@ FORBIDDEN_INPUT_FIELDS = {
 }
 
 
-def load_development_current_term_schema() -> dict[str, Any]:
-    return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+def load_development_current_term_schema(model_name: str = MODEL_NAME) -> dict[str, Any]:
+    return json.loads(schema_path(model_name).read_text(encoding="utf-8"))
 
 
 def required_feature_columns(schema: dict[str, Any]) -> list[str]:
@@ -85,9 +91,22 @@ def prepare_development_current_term_frame(
     return frame
 
 
-def score_development_current_term(features: dict[str, Any]) -> float:
-    schema = load_development_current_term_schema()
+def score_development_current_term(features: dict[str, Any], model_name: str = MODEL_NAME) -> float:
+    require_development_model_name(model_name)
+    schema = load_development_current_term_schema(model_name)
     frame = prepare_development_current_term_frame(features, schema)
-    artifact = joblib.load(MODEL_PATH)
+    path = artifact_path(model_name)
+    if not path.is_file():
+        raise ValueError("Development model artifact unavailable.")
+    artifact = joblib.load(path)
+    if not isinstance(artifact, dict) or artifact.get("model_name") != model_name or artifact.get("target_column") != "target_final_period_grade" or artifact.get("feature_columns") != required_feature_columns(schema) or artifact.get("lifecycle") not in (None, "DEVELOPMENT") or artifact.get("is_active") is True or artifact.get("production_validated") is True or artifact.get("independent_three_term_validation") is True:
+        raise ValueError("Development model artifact metadata does not match its schema.")
+    if model_name != MODEL_NAME:
+        expected = sha256(json.dumps(required_feature_columns(schema), separators=(",", ":")).encode()).hexdigest()
+        if artifact.get("feature_schema_sha256") != expected:
+            raise ValueError("Development model feature order hash mismatch.")
     model = artifact["pipeline"] if isinstance(artifact, dict) and "pipeline" in artifact else artifact
-    return float(model.predict(frame)[0])
+    value = float(model.predict(frame)[0])
+    if not math.isfinite(value):
+        raise ValueError("Development model produced a non-finite prediction.")
+    return value

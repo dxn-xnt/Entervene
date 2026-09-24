@@ -19,6 +19,7 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.prediction.CurrentPeriodFeatureBuilderService import build_current_period_features_from_records
+from app.services.prediction.DevelopmentCurrentTermPredictionPersistenceService import generate_and_persist_development_current_term
 from scripts.seed_current_term_demo import DEMO_DATABASE, read_summary, require_demo_database, seed
 
 
@@ -101,8 +102,12 @@ def test_revision_history_and_development_isolation(demo_engine):
     summary = read_summary(DEMO_URL)
     with Session(demo_engine) as session:
         predictions = session.scalars(select(DevelopmentCurrentTermPrediction).order_by(DevelopmentCurrentTermPrediction.prediction_id)).all()
-        revisions = [row for row in predictions if str(row.student_id) == str(session.scalar(select(Student.student_id).where(Student.first_name == "Demo Avery")))]
+        legacy_id = session.scalar(select(AIModelVersion.model_version_id).where(AIModelVersion.model_name == "entervene_current_term_development_rf_v3"))
+        revisions = [row for row in predictions if row.model_version_id == legacy_id and str(row.student_id) == str(session.scalar(select(Student.student_id).where(Student.first_name == "Demo Avery")))]
         assert [row.revision for row in revisions] == [1, 2]
+        corrected = [row for row in predictions if row.model_version_id == summary["corrected_model_version_id"]]
+        assert len(corrected) == summary["corrected_prediction_count"] == 9
+        assert all(row.revision == 1 for row in corrected)
         assert revisions[0].prediction_id != revisions[1].prediction_id
         assert summary["revision_example"]["revision_1"]["projected_final_term_grade"] != summary["revision_example"]["revision_2"]["projected_final_term_grade"]
         assert session.scalar(select(func.count()).select_from(AIPrediction)) == 0
@@ -111,3 +116,20 @@ def test_revision_history_and_development_isolation(demo_engine):
         assert model.production_validated is False
         assert model.independent_three_term_validation is False
         assert model.is_active is False
+
+
+def test_demo_repeat_generation_reuses_latest_revision(demo_engine):
+    scope = read_summary(DEMO_URL)["scope"]
+    with Session(demo_engine) as session:
+        student_id = session.scalar(select(Student.student_id).where(Student.first_name == "Demo Avery"))
+        model_version_id = session.scalar(select(AIModelVersion.model_version_id))
+        before = session.scalar(select(func.count()).select_from(DevelopmentCurrentTermPrediction))
+    result = generate_and_persist_development_current_term(
+        student_id, scope["class_id"], scope["subject_id"], scope["academic_period_id"],
+        model_version_id=model_version_id, bind=demo_engine,
+    )
+    with Session(demo_engine) as session:
+        after = session.scalar(select(func.count()).select_from(DevelopmentCurrentTermPrediction))
+    assert result["unchanged"] is True
+    assert result["revision"] == 2
+    assert before == after

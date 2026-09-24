@@ -742,6 +742,13 @@ function CurrentTermTeacherDetail({ prediction }: { prediction: DevelopmentCurre
   const risk = RISK_LABELS[prediction.intervention_level] || prediction.intervention_level;
 
   return <div className="flex flex-col gap-5 p-4 text-sm">
+    {prediction.official_final_grade_available && <div role="status" className="border-2 border-blue-700 bg-blue-50 p-3">
+      <p className="font-black">Final Grade: {prediction.official_final_grade?.toFixed(2) ?? "Not available"}</p>
+      <p>Earlier Projected Final Term Grade: {prediction.projected_final_term_grade?.toFixed(2) ?? "Not available"}</p>
+      <p>This projection was generated before the official final grade. It is historical and is no longer the current outcome.</p>
+    </div>}
+    {!term.is_active && !prediction.official_final_grade_available && <p role="status" className="border border-blue-700 bg-blue-50 p-3">This term is no longer active. The projection shown here is historical.</p>}
+    {term.scheduled_end_passed_while_active && <p role="status" className="border border-amber-700 bg-amber-50 p-3">Scheduled end date has passed; this term remains active.</p>}
     <section aria-labelledby="student-overview-heading">
       <h2 id="student-overview-heading" className="mb-2 text-base font-black">Student Overview</h2>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-2 border-black bg-yellow-50 p-3">
@@ -753,7 +760,7 @@ function CurrentTermTeacherDetail({ prediction }: { prediction: DevelopmentCurre
     </section>
 
     <section aria-labelledby="current-projection-heading">
-      <h2 id="current-projection-heading" className="mb-2 text-base font-black">Current Projection</h2>
+      <h2 id="current-projection-heading" className="mb-2 text-base font-black">{prediction.official_final_grade_available || !term.is_active ? "Earlier Projection" : "Current Projection"}</h2>
       <div className="grid grid-cols-2 gap-3">
         <div className="border-2 border-black p-3"><p className="text-xs text-gray-600">Projected Final Term Grade</p><p className="text-2xl font-black">{prediction.projected_final_term_grade?.toFixed(2) ?? "Not available"}</p></div>
         <div className="border-2 border-black p-3"><p className="text-xs text-gray-600">Intervention Level</p><Badge size="sm" variant="surface" className="mt-2 border-2 border-black font-bold">{risk}</Badge></div>

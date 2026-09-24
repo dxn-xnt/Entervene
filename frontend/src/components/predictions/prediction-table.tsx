@@ -164,7 +164,10 @@ export default function PredictionTable({
                   {!hideSubject && <Table.Cell className="font-normal whitespace-nowrap">{item.subject_name}</Table.Cell>}
                   {/* <Table.Cell className="font-normal whitespace-nowrap">{item.term_label}</Table.Cell> */}
                   <Table.Cell className="font-black text-base whitespace-nowrap">
-                    {item.risk_level === "INSUFFICIENT_DATA" || item.predicted_period_grade === null
+                    {currentTerm && item.historical_projection ? <div>
+                      {item.official_final_grade != null && <p>Final Grade: {item.official_final_grade.toFixed(2)}</p>}
+                      <p className="text-xs font-normal">Earlier projection: {item.predicted_period_grade?.toFixed(2) ?? "Not available"}</p>
+                    </div> : item.risk_level === "INSUFFICIENT_DATA" || item.predicted_period_grade === null
                       ? "—"
                       : item.predicted_period_grade.toFixed(2)}
                   </Table.Cell>
@@ -174,7 +177,7 @@ export default function PredictionTable({
                       variant="surface"
                       className="whitespace-nowrap"
                     >
-                      {riskMeta.text}
+                      {currentTerm && item.historical_projection ? "Historical projection" : riskMeta.text}
                     </Badge>
                   </Table.Cell>
                   {!currentTerm && <Table.Cell className="font-bold text-gray-900 whitespace-nowrap">

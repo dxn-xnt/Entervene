@@ -15,11 +15,13 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
+from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.services.prediction import DevelopmentCurrentTermPredictionService as prediction_service
 from app.services.prediction import DevelopmentCurrentTermRiskService as intervention_service
 from app.services.prediction import DevelopmentCurrentTermScoringService as scorer
+from app.services.prediction.DevelopmentCurrentTermModelSelection import MODEL_NAMES, artifact_path, require_development_model_name
 from app.services.prediction.CurrentPeriodFeatureBuilderService import build_current_period_features_from_records
 from app.services.prediction.PredictionGenerationTransaction import run_prediction_generation_transaction
 
@@ -39,7 +41,7 @@ def _require_development_model(db: Session, model_version_id: int | None) -> AIM
     if version is None:
         raise ValueError("The development model version was not found.")
     if (
-        version.model_name != scorer.MODEL_NAME
+        version.model_name not in MODEL_NAMES
         or version.model_type != "REGRESSOR"
         or version.model_purpose != ModelPurpose.CURRENT_TERM_FINAL_GRADE_PROJECTION.value
         or version.target_column != MODEL_TARGET_COLUMN
@@ -57,11 +59,12 @@ def _require_development_model(db: Session, model_version_id: int | None) -> AIM
         or metadata.get("period_semantics") != "SOURCE_EQUALS_TARGET_SAME_TERM"
     ):
         raise ValueError("The model version's effective development domain does not match Task 3H.")
-    schema = scorer.load_development_current_term_schema()
+    require_development_model_name(version.model_name)
+    schema = scorer.load_development_current_term_schema(version.model_name)
     if version.feature_schema_json != schema or metadata.get("feature_schema_sha256") != _digest_json(schema):
         raise ValueError("The model version's feature schema does not match the V3 scorer.")
     artifact = (Path(__file__).resolve().parents[3] / version.artifact_path).resolve()
-    if artifact != scorer.MODEL_PATH.resolve() or not artifact.is_file():
+    if artifact != artifact_path(version.model_name).resolve() or not artifact.is_file():
         raise ValueError("The model version's artifact path does not match the V3 scorer.")
     if metadata.get("artifact_sha256") != sha256(artifact.read_bytes()).hexdigest():
         raise ValueError("The model version's artifact hash does not match the V3 scorer.")
@@ -109,14 +112,23 @@ def _persist_successful_result(
         StudentPeriodGrade.final_period_grade.isnot(None),
     ).first() is not None:
         raise ValueError("A finalized same-term grade exists; development prediction was not persisted.")
+    period = db.query(AcademicPeriod).filter(
+        AcademicPeriod.academic_period_id == period_id
+    ).with_for_update(read=True).one_or_none()
+    if period is None or not period.is_active:
+        raise ValueError("The academic period is no longer active; development prediction was not persisted.")
+
+    scope_result = prediction_service.resolve_v3_scope(db, student_id, class_id, subject_id)
+    if not scope_result["supported"]:
+        raise ValueError("The academic scope is no longer supported by V3.")
 
     built = build_current_period_features_from_records(
         db, student_id, class_id, subject_id, period_id, cutoff_at=cutoff_at,
     )
     if not built["ready"]:
         raise ValueError("Current-term evidence is no longer ready for persistence.")
-    features = built["features"]
-    contract = scorer.compare_feature_contract(features)
+    features = prediction_service.canonicalize_v3_features(built["features"], scope_result)
+    contract = scorer.compare_feature_contract(features, model_version.feature_schema_json)
     if contract["missing_features"] or contract["unexpected_features"] or contract["type_mismatches"]:
         raise ValueError("Current-term features no longer match the V3 schema.")
     if (
@@ -169,6 +181,39 @@ def _persist_successful_result(
         DevelopmentCurrentTermPrediction.target_period_id == period_id,
         DevelopmentCurrentTermPrediction.model_version_id == model_version.model_version_id,
     )
+    latest = db.query(DevelopmentCurrentTermPrediction).filter(*scope).order_by(
+        DevelopmentCurrentTermPrediction.revision.desc()
+    ).first()
+    if latest is not None and isinstance(latest.evidence_snapshot, dict):
+        old = latest.evidence_snapshot
+        if (
+            old.get("model_features") == snapshot["model_features"]
+            and old.get("feature_schema_sha256") == snapshot["feature_schema_sha256"]
+            and old.get("artifact_sha256") == snapshot["artifact_sha256"]
+            and old.get("training_dataset_version") == snapshot["training_dataset_version"]
+        ):
+            return {
+                "persisted": False,
+                "unchanged": True,
+                "prediction_id": latest.prediction_id,
+                "model_version_id": latest.model_version_id,
+                "revision": latest.revision,
+                "prediction_status": prediction["status"],
+                "projected_final_term_grade": float(latest.predicted_period_grade),
+                "intervention_level": latest.intervention_level,
+                "intervention_basis": latest.intervention_basis,
+                "risk_score": None,
+                "readiness_status": "READY",
+                "readiness_level": old.get("readiness", {}).get("level"),
+                "readiness_reason_codes": list(old.get("readiness", {}).get("reason_codes") or []),
+                "source_period_id": period_id,
+                "target_period_id": period_id,
+                "prediction_purpose": prediction["prediction_purpose"],
+                "model_name": model_version.model_name,
+                "lifecycle_status": model_version.lifecycle_status,
+                "development_status": prediction["model_development_status"],
+                "generated_at": latest.generated_at,
+            }
     revision = (db.query(func.max(DevelopmentCurrentTermPrediction.revision)).filter(*scope).scalar() or 0) + 1
     row = DevelopmentCurrentTermPrediction(
         student_id=student_id,
@@ -234,6 +279,7 @@ def generate_and_persist_development_current_term(
         version = _require_development_model(db, model_version_id)
         prediction = prediction_service.predict_development_current_term(
             db, student_id, class_id, subject_id, period_id, cutoff_at=cutoff,
+            model_name=version.model_name,
         )
         intervention = intervention_service.assess_development_current_term_intervention(
             prediction, supporting_context=supporting_context,
@@ -269,7 +315,7 @@ def generate_and_persist_development_current_term(
 
     for attempt in range(3):
         try:
-            return run_prediction_generation_transaction(scope, scorer.MODEL_NAME, operation, bind=bind)
+            return run_prediction_generation_transaction(scope, str(model_version_id), operation, bind=bind)
         except DBAPIError as exc:
             code = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
             constraint = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
