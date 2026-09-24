@@ -82,8 +82,11 @@ export type TeacherLesson = {
 export type TrackingStudent = {
   student_id: string;
   student_name: string;
+  student_lrn?: string | null;
+  email?: string | null;
   status: string;
   submission_id?: number | null;
+  submitted_at?: string | null;
   grade?: number | null;
   attachment_count?: number;
 };

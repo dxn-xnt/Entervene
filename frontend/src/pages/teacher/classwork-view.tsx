@@ -3,8 +3,9 @@ import {
   FileText,
   Pencil,
   X,
+  AlertTriangle,
 } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AttachmentDisplay from "@/components/attachment-display";
 import { API_URL, apiFetch } from "@/lib/api";
@@ -35,6 +36,7 @@ import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
+import DeadlineSummaryModal from "@/components/teacher/deadline-summary-modal";
 
 export type ClassworkViewProps = {
   classwork?: TeacherClasswork;
@@ -51,6 +53,7 @@ export default function ClassworkView({
 }: ClassworkViewProps = {}) {
   const navigate = useNavigate();
   const params = useParams<{ classworkId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isStandalone = !classwork;
 
   const [selected, setSelected] = useState<TeacherClasswork | null>(classwork ?? null);
@@ -66,6 +69,10 @@ export default function ClassworkView({
   const [isArchiving, setIsArchiving] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [isDeadlineSummaryOpen, setIsDeadlineSummaryOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "graded" | "on_time" | "late" | "missing"
+  >("all");
   const [detailError, setDetailError] = useState("");
   const [submissionSort, setSubmissionSort] = useState<"name" | "score">(
     "name",
@@ -81,6 +88,26 @@ export default function ClassworkView({
   const [feedbackDraft, setFeedbackDraft] = useState("");
   const [isPostingGrade, setIsPostingGrade] = useState(false);
   const [gradeSuccess, setGradeSuccess] = useState("");
+
+  useEffect(() => {
+    if (searchParams.get("focus") === "deadline_summary") {
+      setIsDeadlineSummaryOpen(true);
+    }
+  }, [searchParams]);
+
+  const handleCloseDeadlineSummary = () => {
+    setIsDeadlineSummaryOpen(false);
+    if (searchParams.has("focus")) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("focus");
+      setSearchParams(nextParams, { replace: true });
+    }
+  };
+
+  const handleSelectStudentFromSummary = (student: TrackingStudent) => {
+    handleCloseDeadlineSummary();
+    void openStudentSubmission(student);
+  };
 
   // Sync internal selected state when prop changes or fetch if standalone
   useEffect(() => {
@@ -338,6 +365,54 @@ export default function ClassworkView({
     });
   }, [submissionSort, tracking]);
 
+  const filterCounts = useMemo(() => {
+    const all = [...(tracking?.submitted ?? []), ...(tracking?.missing ?? [])];
+    const graded = all.filter(
+      (s) => (s.grade !== null && s.grade !== undefined) || s.status === "graded",
+    ).length;
+    const onTime = all.filter((s) => s.status === "submitted").length;
+    const late = all.filter((s) => s.status === "late").length;
+    const missing = all.filter(
+      (s) =>
+        s.status === "not_submitted" ||
+        !s.submission_id ||
+        !["submitted", "late", "graded"].includes(s.status),
+    ).length;
+    return {
+      all: all.length,
+      graded,
+      on_time: onTime,
+      late,
+      missing,
+    };
+  }, [tracking]);
+
+  const filteredTrackingRows = useMemo(() => {
+    return trackingRows.filter((student) => {
+      if (statusFilter === "all") return true;
+      if (statusFilter === "graded") {
+        return (
+          (student.grade !== null && student.grade !== undefined) ||
+          student.status === "graded"
+        );
+      }
+      if (statusFilter === "on_time") {
+        return student.status === "submitted";
+      }
+      if (statusFilter === "late") {
+        return student.status === "late";
+      }
+      if (statusFilter === "missing") {
+        return (
+          student.status === "not_submitted" ||
+          !student.submission_id ||
+          !["submitted", "late", "graded"].includes(student.status)
+        );
+      }
+      return true;
+    });
+  }, [statusFilter, trackingRows]);
+
   if (isClassworkLoading) {
     const loadingContent = (
       <main className="flex flex-1 items-center justify-center p-8">
@@ -546,7 +621,20 @@ export default function ClassworkView({
                 />
                 <div className="space-y-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <h2 className="text-xl font-bold">Submissions</h2>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h2 className="text-xl font-bold">Submissions</h2>
+                      {(filterCounts.late > 0 || filterCounts.missing > 0) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsDeadlineSummaryOpen(true)}
+                          className="h-7 gap-1 px-2.5 text-xs font-bold border-black bg-[#F6E9B2] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#F6E9B2]/80"
+                        >
+                          <AlertTriangle className="size-3.5" />
+                          <span>Deadline Summary</span>
+                        </Button>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <label className="text-sm font-semibold">
                         Sort by
@@ -568,6 +656,42 @@ export default function ClassworkView({
                     </div>
                   </div>
 
+                  {/* Status Filter Chips */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1 pb-1">
+                    {[
+                      { id: "all" as const, label: "All", count: filterCounts.all },
+                      { id: "graded" as const, label: "Graded", count: filterCounts.graded },
+                      { id: "on_time" as const, label: "On Time", count: filterCounts.on_time },
+                      { id: "late" as const, label: "Late", count: filterCounts.late },
+                      { id: "missing" as const, label: "Missing", count: filterCounts.missing },
+                    ].map((chip) => {
+                      const isActive = statusFilter === chip.id;
+                      return (
+                        <button
+                          key={chip.id}
+                          type="button"
+                          onClick={() => setStatusFilter(chip.id)}
+                          className={`flex items-center gap-1.5 rounded border-2 border-black px-3 py-1 text-xs font-bold transition-all cursor-pointer ${
+                            isActive
+                              ? "bg-primary text-primary-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5"
+                              : "bg-background text-foreground hover:bg-muted shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                          }`}
+                        >
+                          <span>{chip.label}</span>
+                          <span
+                            className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                              isActive
+                                ? "bg-black/20 text-current"
+                                : "bg-muted-foreground/15 text-muted-foreground font-semibold"
+                            }`}
+                          >
+                            {chip.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
                   <Table wrapperClassName="border-black">
                     <Table.Header className="border-black">
                       <Table.Row>
@@ -587,8 +711,8 @@ export default function ClassworkView({
                             </Alert>
                           </Table.Cell>
                         </Table.Row>
-                      ) : trackingRows.length > 0 ? (
-                        trackingRows.map((student) => {
+                      ) : filteredTrackingRows.length > 0 ? (
+                        filteredTrackingRows.map((student) => {
                           const isGraded =
                             student.grade !== null &&
                             student.grade !== undefined;
@@ -645,7 +769,9 @@ export default function ClassworkView({
                             colSpan={3}
                             className="py-6 text-center text-sm font-semibold text-gray-500"
                           >
-                            No submissions found for this classwork yet.
+                            {statusFilter === "all"
+                              ? "No submissions found for this classwork yet."
+                              : `No students match the "${statusFilter.replace("_", " ")}" filter.`}
                           </Table.Cell>
                         </Table.Row>
                       )}
@@ -737,6 +863,18 @@ export default function ClassworkView({
           }}
         />
       )}
+
+      {/* Deadline Summary Modal */}
+      <DeadlineSummaryModal
+        isOpen={isDeadlineSummaryOpen}
+        onClose={handleCloseDeadlineSummary}
+        tracking={tracking}
+        isLoading={_isTrackingLoading}
+        classworkTitle={selected?.title}
+        dueDate={selected?.assignments?.[0]?.due_date}
+        totalPoints={selected?.total_points}
+        onSelectStudent={handleSelectStudentFromSummary}
+      />
     </main>
   );
 

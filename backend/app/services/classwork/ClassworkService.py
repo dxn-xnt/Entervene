@@ -477,7 +477,7 @@ def check_and_notify_post_deadline_summaries(db: Session, staff_id: str):
                     notification_type="assignment_due",
                     title=title_tag,
                     body=f"{subject_name} — Classwork '{cw.title}' deadline has passed. {submitted_students}/{total_students} students turned in their work.",
-                    action_url=f"/teacher/classworks/{cw.classwork_id}",
+                    action_url=f"/teacher/classworks/{cw.classwork_id}?focus=deadline_summary",
                 ),
             )
     except Exception as err:
