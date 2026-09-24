@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import date
 from types import SimpleNamespace
 
 import pytest
@@ -8,6 +9,9 @@ from app.services.AcademicPeriodService import (
     compute_period_progress_ratio,
     normalize_academic_period_values,
 )
+from app.api.v1.routes.Settings import set_active_academic_period
+from app.models.settings.Setting import Setting, SettingType
+from tests.test_current_period_live_feature_builder import current_period_context
 
 
 def test_academic_period_model_defaults_to_term_values():
@@ -89,3 +93,27 @@ def test_normalize_rejects_sequence_exceeding_custom_total():
     with pytest.raises(ValueError, match="TERM period_sequence must be between 1 and 2"):
         normalize_academic_period_values(period)
 
+
+def test_period_dates_must_be_ordered_when_provided():
+    period = SimpleNamespace(period_type="TERM", period_sequence=1, total_periods_in_year=3,
+                             start_date=date(2026, 9, 2), end_date=date(2026, 9, 1))
+    with pytest.raises(ValueError, match="Start date cannot be after end date"):
+        normalize_academic_period_values(period)
+
+
+def test_admin_activation_switches_the_period_flag_without_using_scheduled_dates(current_period_context):
+    ctx = current_period_context
+    ctx["db"].add(Setting(key="active_term", value="1", type=SettingType.INTEGER, group="academic"))
+    ctx["period"].end_date = date(2020, 8, 31)
+    ctx["period"].start_date = date(2020, 6, 1)
+    ctx["db"].commit()
+    assert ctx["period"].is_active is True
+    set_active_academic_period(
+        ctx["next_period"].academic_period_id,
+        current_user={"sub": str(ctx["staff"].user_id)},
+        db=ctx["db"],
+    )
+    ctx["db"].refresh(ctx["period"])
+    ctx["db"].refresh(ctx["next_period"])
+    assert ctx["period"].is_active is False
+    assert ctx["next_period"].is_active is True

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from datetime import date, timedelta
 
 import pytest
 
@@ -65,6 +66,34 @@ def test_ready_supported_scope_scores_development_prediction(current_period_cont
     assert result["model_development_status"] == service.MODEL_DEVELOPMENT_STATUS
     assert result["prediction_purpose"] == service.PREDICTION_PURPOSE
     assert captured["features"]["subject"] == "SCIENCE"
+
+
+@pytest.mark.parametrize("scheduled_end_offset", [-30, 30])
+def test_admin_active_period_allows_generation_on_either_side_of_scheduled_end(
+    current_period_context, monkeypatch, scheduled_end_offset
+):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    ctx["period"].start_date = date.today() - timedelta(days=60)
+    ctx["period"].end_date = date.today() + timedelta(days=scheduled_end_offset)
+    ctx["db"].commit()
+    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", lambda _features: 84.6)
+
+    assert _predict(ctx)["status"] == service.STATUS_DEVELOPMENT_PREDICTION_AVAILABLE
+
+
+def test_inactive_period_blocks_before_scoring(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    ctx["period"].is_active = False
+    ctx["db"].commit()
+    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", lambda _features: pytest.fail("Scorer called"))
+
+    result = _predict(ctx)
+    assert result["status"] == service.STATUS_PERIOD_NOT_ACTIVE
+    assert result["readiness_reason_codes"] == ["PERIOD_NOT_ACTIVE"]
 
 
 def test_insufficient_evidence_returns_without_scoring(current_period_context, monkeypatch):

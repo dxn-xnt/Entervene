@@ -11,14 +11,16 @@ import { LoadingPanel } from "@/components/loading-panel";
 import { Dialog } from "@/components/retroui/Dialog";
 import ViewPreviousPeriodsModal from "./forms/view-previous-periods";
 import { API_URL } from "@/lib/api";
-import { useSettings } from "@/context/SettingsContext";
-import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
+import { overdueActivePeriodNotice } from "@/lib/academic-periods";
 import { Card } from "@/components/retroui/Card";
 
 type DBPeriodItem = {
   id: number;
   period: string;
   period_sequence: number;
+  period_type: string;
+  academic_year_id: number;
   academicyear: string;
   startDate: string | null;
   endDate: string | null;
@@ -27,14 +29,16 @@ type DBPeriodItem = {
 };
 
 export default function AdminAcademicPeriods() {
-  const { getSetting } = useSettings();
+  const navigate = useNavigate();
   const [isLoading, setIsLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState(false);
 
   // Dynamic periods fetched directly from the database
   const [periods, setPeriods] = React.useState<DBPeriodItem[]>([]);
 
   const fetchPeriodsFromDB = React.useCallback(async () => {
     setIsLoading(true);
+    setLoadError(false);
     try {
       const res = await fetch(`${API_URL}/api/v1/settings/academic-periods`, {
         credentials: "include",
@@ -46,51 +50,18 @@ export default function AdminAcademicPeriods() {
         throw new Error("Failed to load academic periods");
       }
     } catch {
-      // Fallback if API fails
-      setPeriods([
-        {
-          id: 1,
-          period: "Term 1",
-          period_sequence: 1,
-          academicyear: getSetting("current_school_year", "2025-2026"),
-          startDate: "2025-06-02",
-          endDate: "2025-08-22",
-          is_active: true,
-          status: "Active",
-        },
-        {
-          id: 2,
-          period: "Term 2",
-          period_sequence: 2,
-          academicyear: getSetting("current_school_year", "2025-2026"),
-          startDate: "2025-09-01",
-          endDate: "2025-11-28",
-          is_active: false,
-          status: "Upcoming",
-        },
-        {
-          id: 3,
-          period: "Term 3",
-          period_sequence: 3,
-          academicyear: getSetting("current_school_year", "2025-2026"),
-          startDate: "2025-12-01",
-          endDate: "2026-03-15",
-          is_active: false,
-          status: "Upcoming",
-        },
-      ]);
+      setPeriods([]);
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
-  }, [getSetting]);
+  }, []);
 
   React.useEffect(() => {
     fetchPeriodsFromDB();
   }, [fetchPeriodsFromDB]);
 
-  const handleMarkComplete = () => {
-    toast.success("Active academic period marked as complete");
-  };
+  const overdue = overdueActivePeriodNotice(periods);
 
   function GracefulDateDisplay({ dateString }: { dateString: string | null | undefined }) {
     if (!dateString) {
@@ -141,13 +112,20 @@ export default function AdminAcademicPeriods() {
                   </Text>
                 </Card.Title>
                 <div className="flex items-center gap-4">
-                  <Button size="sm" onClick={handleMarkComplete} className="whitespace-nowrap">
-                    Mark as Complete
+                  <Button size="sm" onClick={() => navigate("/admin/settings")} className="whitespace-nowrap">
+                    Manage Active Term
                   </Button>
                 </div>
               </Card.Header>
 
               <Card.Content className="flex flex-col gap-4">
+                {loadError && <p role="alert" className="border border-red-500 bg-red-50 p-3 text-sm font-semibold">Academic periods could not be loaded. Try again later.</p>}
+                {overdue && <div role="status" className="border-2 border-amber-600 bg-amber-50 p-3 text-sm">
+                  <p className="font-bold">Scheduled end date has passed. {overdue.active.period} is still active.</p>
+                  <p>{overdue.next
+                    ? `Review the current term and consider activating ${overdue.next.period} when current-term activities are complete.`
+                    : "No next period is configured. Review the current term when activities are complete."}</p>
+                </div>}
                 {isLoading ? (
                   <LoadingPanel label="Loading academic periods from database..." />
                 ) : (

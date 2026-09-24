@@ -7,9 +7,16 @@ import {
   type DashboardPredictionItem,
   type DevelopmentCurrentTermListItem,
   type RiskSummary,
+  CurrentTermPredictionLoadError,
 } from "@/lib/prediction-api";
 
 export type AuthorizedCurrentTermRow = DevelopmentCurrentTermListItem & { grade_level: number | null };
+
+export function currentTermPredictionErrorMessage(error: unknown): string {
+  return error instanceof CurrentTermPredictionLoadError
+    ? error.message
+    : "Current-term projections could not be loaded. Please try again.";
+}
 
 export async function loadAuthorizedCurrentTermPredictions(
   academicPeriodId: number,
@@ -37,8 +44,9 @@ export async function loadAuthorizedCurrentTermPredictions(
 }
 
 export function currentTermRiskSummary(rows: AuthorizedCurrentTermRow[]): RiskSummary {
-  const summary: RiskSummary = { HIGH_RISK: 0, MODERATE_RISK: 0, NEEDS_MONITORING: 0, LOW_RISK: 0, INSUFFICIENT_DATA: 0, total: rows.length };
-  rows.forEach((row) => { summary[row.intervention_level] += 1; });
+  const actionable = rows.filter((row) => !row.official_final_grade_available && row.term_context.is_active);
+  const summary: RiskSummary = { HIGH_RISK: 0, MODERATE_RISK: 0, NEEDS_MONITORING: 0, LOW_RISK: 0, INSUFFICIENT_DATA: 0, total: actionable.length };
+  actionable.forEach((row) => { summary[row.intervention_level] += 1; });
   return summary;
 }
 
@@ -59,6 +67,8 @@ export function toDashboardPrediction(row: AuthorizedCurrentTermRow): DashboardP
     risk_score: null,
     data_status: row.readiness_status || "READY",
     generated_at: row.generated_at,
+    official_final_grade: row.official_final_grade,
+    historical_projection: row.official_final_grade_available || !row.term_context.is_active,
   };
 }
 
@@ -68,7 +78,7 @@ export function buildCurrentTermDashboard(
 ): DashboardAtRiskResponse {
   const search = options.search?.trim().toLowerCase() || "";
   const filtered = rows.filter((row) =>
-    (!options.interventionLevel || row.intervention_level === options.interventionLevel)
+    (!options.interventionLevel || (!row.official_final_grade_available && row.term_context.is_active && row.intervention_level === options.interventionLevel))
     && (!search || (row.student_name || row.student_id).toLowerCase().includes(search)));
   const offset = options.offset ?? 0;
   const limit = options.limit ?? 10;
@@ -97,12 +107,12 @@ export function buildCurrentTermGradeSummaries(rows: AuthorizedCurrentTermRow[])
     }
     grade.total_students += 1;
     section.total_students += 1;
-    if (row.intervention_level !== "LOW_RISK") {
+    if (!row.official_final_grade_available && row.term_context.is_active && row.intervention_level !== "LOW_RISK") {
       grade.at_risk_count += 1;
       section.at_risk_count += 1;
     }
-    if (row.intervention_level === "HIGH_RISK") section.high_risk_count += 1;
-    if (row.intervention_level === "MODERATE_RISK" || row.intervention_level === "NEEDS_MONITORING") section.moderate_risk_count += 1;
+    if (!row.official_final_grade_available && row.term_context.is_active && row.intervention_level === "HIGH_RISK") section.high_risk_count += 1;
+    if (!row.official_final_grade_available && row.term_context.is_active && (row.intervention_level === "MODERATE_RISK" || row.intervention_level === "NEEDS_MONITORING")) section.moderate_risk_count += 1;
   });
   return [...grades.values()].sort((a, b) => a.grade_level - b.grade_level);
 }
