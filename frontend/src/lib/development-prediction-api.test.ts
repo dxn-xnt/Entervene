@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { developmentPredictionsAvailable, generateDevelopmentCurrentTermPrediction } from "./prediction-api";
+import {
+  developmentPredictionGenerationAvailable,
+  developmentPredictionsAvailable,
+  fetchDevelopmentCurrentTermPredictions,
+  generateDevelopmentCurrentTermPrediction,
+} from "./prediction-api";
 
 const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock("./api", () => ({ apiFetch }));
@@ -24,14 +29,21 @@ describe("development prediction API guard", () => {
     expect(apiFetch).not.toHaveBeenCalled();
   });
 
-  it("rejects teacher and anonymous callers before HTTP", async () => {
+  it("allows teacher reads but rejects teacher generation and anonymous callers", async () => {
     vi.stubEnv("DEV", true);
     vi.stubEnv("VITE_ENABLE_DEVELOPMENT_PREDICTIONS", "true");
-    for (const role of ["teacher", null]) {
-      expect(developmentPredictionsAvailable(role)).toBe(false);
-      await expect(generateDevelopmentCurrentTermPrediction(scope, role)).rejects.toThrow("unavailable");
-    }
-    expect(apiFetch).not.toHaveBeenCalled();
+    apiFetch.mockResolvedValue({ ok: true, json: async () => ({ items: [], total: 0 }) });
+
+    expect(developmentPredictionsAvailable("teacher")).toBe(true);
+    expect(developmentPredictionGenerationAvailable("teacher")).toBe(false);
+    await fetchDevelopmentCurrentTermPredictions({ class_id: 7, subject_id: 5, academic_period_id: 3 }, "teacher");
+    await expect(generateDevelopmentCurrentTermPrediction(scope, "teacher")).rejects.toThrow("unavailable");
+    expect(developmentPredictionsAvailable(null)).toBe(false);
+    await expect(fetchDevelopmentCurrentTermPredictions(
+      { class_id: 7, subject_id: 5, academic_period_id: 3 },
+      null,
+    )).rejects.toThrow("unavailable");
+    expect(apiFetch).toHaveBeenCalledTimes(1);
   });
 
   it("sends only scope IDs for an enabled admin", async () => {
@@ -46,5 +58,28 @@ describe("development prediction API guard", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(scope),
     });
+  });
+
+  it("loads persisted predictions with the required scope filters", async () => {
+    vi.stubEnv("DEV", true);
+    vi.stubEnv("VITE_ENABLE_DEVELOPMENT_PREDICTIONS", "true");
+    apiFetch.mockResolvedValue({ ok: true, json: async () => ({ items: [], total: 0 }) });
+
+    await fetchDevelopmentCurrentTermPredictions({ class_id: 7, subject_id: 5, academic_period_id: 3 }, "admin");
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/v1/development/current-term-predictions?class_id=7&subject_id=5&academic_period_id=3",
+    );
+  });
+
+  it("applies the development role guard to reads", async () => {
+    vi.stubEnv("DEV", true);
+    vi.stubEnv("VITE_ENABLE_DEVELOPMENT_PREDICTIONS", "true");
+
+    await expect(fetchDevelopmentCurrentTermPredictions(
+      { class_id: 7, subject_id: 5, academic_period_id: 3 },
+      "student",
+    )).rejects.toThrow("unavailable");
+    expect(apiFetch).not.toHaveBeenCalled();
   });
 });

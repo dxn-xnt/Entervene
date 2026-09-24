@@ -18,10 +18,6 @@ Both your backend (uvicorn) and frontend (npm run dev) are already running in yo
 
 Open your browser: Go to http://localhost:5173
 
-Log in with the seeded Teacher account:
-
-Email: teacher.acceptance@school.edu.ph
-Password: Password123! (Or log in as Admin: admin.acceptance@school.edu.ph / Password123!)
-Go to AI Predictions:
-
-Click AI Predictions in the left sidebar (or go to http://localhost:5173/teacher/predictions).
+Credentials:
+- Admin: demo-admin@example.com / DemoAdmin!2026
+- Teacher: demo-teacher@example.com / DemoTeacher!2026

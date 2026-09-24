@@ -22,6 +22,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import type {
+  DevelopmentCurrentTermListItem,
   PredictionDetail,
   PredictionSuggestionItem,
   TeacherReview,
@@ -40,6 +41,7 @@ interface PredictionDetailSheetProps {
   predictionId: number | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  currentTermPrediction?: DevelopmentCurrentTermListItem | null;
 }
 
 const RISK_BADGE_STYLES: Record<string, string> = {
@@ -53,7 +55,7 @@ const RISK_BADGE_STYLES: Record<string, string> = {
 const RISK_LABELS: Record<string, string> = {
   HIGH_RISK: "High Risk",
   MODERATE_RISK: "Moderate",
-  NEEDS_MONITORING: "Monitoring",
+  NEEDS_MONITORING: "Needs Monitoring",
   LOW_RISK: "Low Risk",
   INSUFFICIENT_DATA: "Insufficient Data",
 };
@@ -85,6 +87,7 @@ export default function PredictionDetailSheet({
   predictionId,
   open,
   onOpenChange,
+  currentTermPrediction = null,
 }: PredictionDetailSheetProps) {
   const { user } = useAuth();
   const isTeacher = user?.role === "teacher";
@@ -106,7 +109,7 @@ export default function PredictionDetailSheet({
   const [interventionError, setInterventionError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!predictionId || !open) return;
+    if (!predictionId || !open || currentTermPrediction) return;
     setLoading(true);
     setLoadError(null);
     setReviewSuccess(false);
@@ -127,7 +130,7 @@ export default function PredictionDetailSheet({
         setLoadError("Unable to load this prediction detail. Please try again.");
       })
       .finally(() => setLoading(false));
-  }, [predictionId, open]);
+  }, [currentTermPrediction, predictionId, open]);
 
   const handleAssignIntervention = async () => {
     if (!predictionId || !interventionTitle.trim()) return;
@@ -148,9 +151,9 @@ export default function PredictionDetailSheet({
       ]);
       setDetail(updatedDetail);
       setSuggestions(updatedSuggestions);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setInterventionError(err.message || "Failed to assign intervention");
+      setInterventionError(err instanceof Error ? err.message : "Failed to assign intervention");
     } finally {
       setAssigningIntervention(false);
     }
@@ -190,7 +193,9 @@ export default function PredictionDetailSheet({
           <SheetTitle className="text-lg">Prediction Detail</SheetTitle>
         </SheetHeader>
 
-        {loading ? (
+        {currentTermPrediction ? (
+          <CurrentTermTeacherDetail prediction={currentTermPrediction} />
+        ) : loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="animate-spin text-gray-400" size={28} />
           </div>
@@ -571,7 +576,7 @@ export default function PredictionDetailSheet({
                   <div className="flex items-center gap-2">
                     <Select
                       value={interventionPriority}
-                      onValueChange={(v: any) => setInterventionPriority(v)}
+                      onValueChange={(value: string) => setInterventionPriority(value as "LOW" | "NORMAL" | "HIGH" | "URGENT")}
                     >
                       <Select.Trigger className="w-[140px] h-8 text-xs font-bold border-2 border-black bg-white shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                         <Select.Value placeholder="Priority" />
@@ -715,4 +720,95 @@ export default function PredictionDetailSheet({
       </SheetContent>
     </Sheet>
   );
+}
+
+function formatPercent(value: number | null): string {
+  return value === null ? "Not yet available" : `${value.toFixed(1)}%`;
+}
+
+function formatDate(value: string): string {
+  return new Date(`${value}T00:00:00`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function CurrentTermTeacherDetail({ prediction }: { prediction: DevelopmentCurrentTermListItem }) {
+  const academic = prediction.academic_evidence;
+  const attendance = prediction.participation_context.attendance;
+  const submissions = prediction.participation_context.submissions;
+  const term = prediction.term_context;
+  const risk = RISK_LABELS[prediction.intervention_level] || prediction.intervention_level;
+
+  return <div className="flex flex-col gap-5 p-4 text-sm">
+    <section aria-labelledby="student-overview-heading">
+      <h2 id="student-overview-heading" className="mb-2 text-base font-black">Student Overview</h2>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-2 border-black bg-yellow-50 p-3">
+        <dt className="text-gray-600">Student</dt><dd className="font-bold">{prediction.student_name || prediction.student_id}</dd>
+        <dt className="text-gray-600">Class / Section</dt><dd>{prediction.class_name}</dd>
+        <dt className="text-gray-600">Subject</dt><dd>{prediction.subject_name}</dd>
+        <dt className="text-gray-600">Academic Term</dt><dd>{prediction.period_name}</dd>
+      </dl>
+    </section>
+
+    <section aria-labelledby="current-projection-heading">
+      <h2 id="current-projection-heading" className="mb-2 text-base font-black">Current Projection</h2>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="border-2 border-black p-3"><p className="text-xs text-gray-600">Projected Final Term Grade</p><p className="text-2xl font-black">{prediction.projected_final_term_grade?.toFixed(2) ?? "Not available"}</p></div>
+        <div className="border-2 border-black p-3"><p className="text-xs text-gray-600">Intervention Level</p><Badge size="sm" variant="surface" className="mt-2 border-2 border-black font-bold">{risk}</Badge></div>
+      </div>
+      <p className="mt-2 font-semibold">{prediction.readiness_label}</p>
+      <p className="mt-1 text-xs text-gray-600">The intervention level is assigned from the projected grade using the school's configured thresholds.</p>
+    </section>
+
+    <section aria-labelledby="academic-evidence-heading">
+      <h2 id="academic-evidence-heading" className="mb-1 text-base font-black">Academic Evidence Used for Projection</h2>
+      <p className="mb-3 text-xs text-gray-600">These graded academic records were available when this projection was generated.</p>
+      <div className="space-y-2">
+        <EvidenceRow label="Written Works" count={academic.written_works.graded_count} percent={academic.written_works.performance_percent} />
+        <EvidenceRow label="Performance Tasks" count={academic.performance_tasks.graded_count} percent={academic.performance_tasks.performance_percent} />
+        <EvidenceRow label="Examination" count={academic.examination.graded_count} percent={academic.examination.performance_percent} />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 border-t-2 border-black pt-3">
+        <div><p className="text-xs text-gray-600">Academic performance so far</p><p className="font-black">{formatPercent(academic.overall.performance_percent)}</p></div>
+        <div><p className="text-xs text-gray-600">Grade components observed</p><p className="font-black">{formatPercent(academic.overall.observed_component_weight_percent)}</p></div>
+      </div>
+    </section>
+
+    <section aria-labelledby="classroom-context-heading" className="border-t-2 border-black pt-4">
+      <h2 id="classroom-context-heading" className="mb-1 text-base font-black">Additional Classroom Context</h2>
+      <p className="mb-3 text-xs text-gray-600">These participation indicators provide classroom context. They are not inputs to the current grade-projection model.</p>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="border border-black p-3">
+          <p className="font-bold">Attendance</p>
+          <p className="text-lg font-black">{formatPercent(attendance.attendance_rate)}</p>
+          <p className="text-xs text-gray-600">{attendance.absent} absent, {attendance.late} late across {attendance.recorded_days} recorded days</p>
+        </div>
+        <div className="border border-black p-3">
+          <p className="font-bold">Submissions</p>
+          <p className="text-lg font-black">{formatPercent(submissions.completion_rate)}</p>
+          <p className="text-xs text-gray-600">{submissions.submitted_count} of {submissions.assigned_count} submitted, {submissions.missing_count} missing, {submissions.late_count} late</p>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="term-progress-heading" className="border-t-2 border-black pt-4">
+      <h2 id="term-progress-heading" className="mb-2 text-base font-black">Term Progress</h2>
+      <dl className="grid grid-cols-2 gap-y-2">
+        <dt className="text-gray-600">Term dates</dt><dd>{formatDate(term.start_date)} - {formatDate(term.end_date)}</dd>
+        <dt className="text-gray-600">Evidence available through</dt><dd>{formatDate(term.evidence_cutoff_date)}</dd>
+        <dt className="text-gray-600">Term progress</dt><dd>{term.progress_percent.toFixed(1)}%</dd>
+        <dt className="text-gray-600">Days remaining</dt><dd>{term.days_remaining}</dd>
+        <dt className="text-gray-600">Still upcoming</dt><dd>{submissions.upcoming_count} assigned item{submissions.upcoming_count === 1 ? "" : "s"}</dd>
+      </dl>
+    </section>
+  </div>;
+}
+
+function EvidenceRow({ label, count, percent }: { label: string; count: number; percent: number | null }) {
+  return <div className="flex items-center justify-between border border-black px-3 py-2">
+    <div><p className="font-bold">{label}</p><p className="text-xs text-gray-600">{count} graded record{count === 1 ? "" : "s"}</p></div>
+    <p className="font-black">{formatPercent(percent)}</p>
+  </div>;
 }

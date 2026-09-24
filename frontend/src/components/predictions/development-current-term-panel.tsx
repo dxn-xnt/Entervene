@@ -1,10 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Eye, Search } from "lucide-react";
 import { getClasses, getClassStudents, getSubjects } from "@/lib/api";
 import type { ClassListItem, ClassStudentListItem } from "@/types/adminClasses";
 import type { SubjectListItem } from "@/lib/api";
 import {
   generateDevelopmentCurrentTermPrediction,
+  fetchDevelopmentCurrentTermPredictions,
+  fetchDashboardFilters,
+  type DashboardClassOption,
+  type DashboardSubjectOption,
+  type DashboardTermOption,
+  type DevelopmentCurrentTermListItem,
   type DevelopmentCurrentTermResponse,
   type DevelopmentInterventionLevel,
 } from "@/lib/prediction-api";
@@ -16,17 +22,8 @@ import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BLOCKED_MESSAGES, INTERVENTION_LABELS } from "./development-current-term-contract";
-
-type GeneratedRow = {
-  result: DevelopmentCurrentTermResponse;
-  studentId: string;
-  studentName: string;
-  className: string;
-  subjectName: string;
-  gradeLevel: string;
-  termName: string;
-};
 
 function InterventionBadge({ level }: { level: DevelopmentInterventionLevel }) {
   const colors: Record<DevelopmentInterventionLevel, string> = {
@@ -38,9 +35,13 @@ function InterventionBadge({ level }: { level: DevelopmentInterventionLevel }) {
   return <Badge size="sm" variant="surface" className={`${colors[level]} border-2 border-black font-bold`}>{INTERVENTION_LABELS[level]}</Badge>;
 }
 
-export default function DevelopmentCurrentTermPanel({ periodId, termName, role }: { periodId: number | null; termName: string; role: "admin" }) {
+export default function DevelopmentCurrentTermPanel({ periodId, termName, role }: { periodId: number | null; termName: string; role: "admin" | "teacher" }) {
   const [classes, setClasses] = useState<ClassListItem[]>([]);
   const [subjects, setSubjects] = useState<SubjectListItem[]>([]);
+  const [teacherClasses, setTeacherClasses] = useState<DashboardClassOption[]>([]);
+  const [teacherSubjects, setTeacherSubjects] = useState<DashboardSubjectOption[]>([]);
+  const [teacherTerms, setTeacherTerms] = useState<DashboardTermOption[]>([]);
+  const [teacherPeriodId, setTeacherPeriodId] = useState<number | null>(periodId);
   const [students, setStudents] = useState<ClassStudentListItem[]>([]);
   const [classId, setClassId] = useState<number | null>(null);
   const [subjectId, setSubjectId] = useState<number | null>(null);
@@ -48,31 +49,64 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
   const [studentLookup, setStudentLookup] = useState("");
   const [search, setSearch] = useState("");
   const [levelFilter, setLevelFilter] = useState<DevelopmentInterventionLevel | "all">("all");
-  const [rows, setRows] = useState<GeneratedRow[]>([]);
-  const [selected, setSelected] = useState<GeneratedRow | null>(null);
+  const [rows, setRows] = useState<DevelopmentCurrentTermListItem[]>([]);
+  const [selected, setSelected] = useState<DevelopmentCurrentTermListItem | null>(null);
   const [blocked, setBlocked] = useState<DevelopmentCurrentTermResponse | null>(null);
   const [error, setError] = useState("");
   const [loadingScope, setLoadingScope] = useState(true);
   const [loadingStudents, setLoadingStudents] = useState(false);
+  const [loadingSubjects, setLoadingSubjects] = useState(false);
+  const [loadingPredictions, setLoadingPredictions] = useState(false);
+  const [readError, setReadError] = useState("");
   const [generating, setGenerating] = useState(false);
   const inFlight = useRef(false);
+  const readRequestId = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getClasses(), getSubjects({ status: "active" })])
-      .then(([classData, subjectData]) => {
-        if (!cancelled) {
-          setClasses(classData.classes);
-          setSubjects(subjectData.subjects);
-        }
-      })
+    const request = role === "admin"
+      ? Promise.all([getClasses(), getSubjects({ status: "active" })]).then(([classData, subjectData]) => {
+          if (!cancelled) {
+            setClasses(classData.classes);
+            setSubjects(subjectData.subjects);
+          }
+        })
+      : fetchDashboardFilters().then((scope) => {
+          if (!cancelled) {
+            setTeacherClasses(scope.classes);
+            setTeacherTerms(scope.terms);
+            setTeacherPeriodId((current) => {
+              const preferred = current ?? periodId;
+              return preferred !== null && scope.terms.some((item) => item.academic_period_id === preferred)
+                ? preferred
+                : null;
+            });
+          }
+        });
+    request
       .catch((cause: unknown) => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Unable to load prediction scope."); })
       .finally(() => { if (!cancelled) setLoadingScope(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [periodId, role]);
+
+  const activePeriodId = role === "teacher" ? teacherPeriodId : periodId;
 
   useEffect(() => {
-    if (classId === null) { setStudents([]); return; }
+    if (role !== "teacher" || classId === null || activePeriodId === null) {
+      setTeacherSubjects([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingSubjects(true);
+    fetchDashboardFilters({ class_id: classId, academic_period_id: activePeriodId })
+      .then((scope) => { if (!cancelled) setTeacherSubjects(scope.subjects); })
+      .catch((cause: unknown) => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Unable to load assigned subjects."); })
+      .finally(() => { if (!cancelled) setLoadingSubjects(false); });
+    return () => { cancelled = true; };
+  }, [activePeriodId, classId, role]);
+
+  useEffect(() => {
+    if (role !== "admin" || classId === null) { setStudents([]); return; }
     let cancelled = false;
     const timer = setTimeout(() => {
       setLoadingStudents(true);
@@ -82,19 +116,64 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
         .finally(() => { if (!cancelled) setLoadingStudents(false); });
     }, 250);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [classId, studentLookup]);
+  }, [classId, role, studentLookup]);
 
-  const chosenClass = classes.find((item) => item.class_id === classId);
-  const chosenSubject = subjects.find((item) => item.subject_id === subjectId);
-  const chosenStudent = students.find((item) => item.student_id === studentId);
-  const availableSubjects = subjects.filter((item) => item.academic_level.academic_level_id === chosenClass?.academic_level.academic_level_id);
+  const loadPredictions = useCallback(async () => {
+    if (classId === null || subjectId === null || activePeriodId === null) return;
+    const requestId = ++readRequestId.current;
+    setLoadingPredictions(true);
+    setReadError("");
+    try {
+      const response = await fetchDevelopmentCurrentTermPredictions({
+        class_id: classId,
+        subject_id: subjectId,
+        academic_period_id: activePeriodId,
+      }, role);
+      if (readRequestId.current === requestId) setRows(response.items);
+    } catch (cause) {
+      if (readRequestId.current === requestId) {
+        setRows([]);
+        setReadError(cause instanceof Error ? cause.message : "Unable to load development predictions.");
+      }
+    } finally {
+      if (readRequestId.current === requestId) setLoadingPredictions(false);
+    }
+  }, [activePeriodId, classId, role, subjectId]);
+
+  useEffect(() => {
+    if (classId === null || subjectId === null || activePeriodId === null) {
+      readRequestId.current += 1;
+      setRows([]);
+      setReadError("");
+      setLoadingPredictions(false);
+      return;
+    }
+    void loadPredictions();
+    return () => { readRequestId.current += 1; };
+  }, [activePeriodId, classId, loadPredictions, subjectId]);
+
+  const chosenAdminClass = classes.find((item) => item.class_id === classId);
+  const chosenSubject = role === "admin"
+    ? subjects.find((item) => item.subject_id === subjectId)
+    : teacherSubjects.find((item) => item.subject_id === subjectId);
+  const classOptions = role === "admin" ? classes : teacherClasses;
+  const availableSubjects = role === "admin"
+    ? subjects.filter((item) => item.academic_level.academic_level_id === chosenAdminClass?.academic_level.academic_level_id)
+    : teacherSubjects;
+  const selectedTeacherClass = teacherClasses.find((item) => item.class_id === classId);
+  const gradeLevelName = role === "admin"
+    ? chosenAdminClass?.academic_level.level_name
+    : selectedTeacherClass?.grade_level ? `Grade ${selectedTeacherClass.grade_level}` : undefined;
+  const activeTermName = role === "teacher"
+    ? teacherTerms.find((item) => item.academic_period_id === activePeriodId)?.term_label || "Current Term"
+    : termName;
   const visibleRows = useMemo(() => rows.filter((row) =>
-    (levelFilter === "all" || row.result.intervention_level === levelFilter) &&
-    (row.studentName.toLowerCase().includes(search.trim().toLowerCase()) || row.studentId.toLowerCase().includes(search.trim().toLowerCase()))
+    (levelFilter === "all" || row.intervention_level === levelFilter) &&
+    ((row.student_name || row.student_id).toLowerCase().includes(search.trim().toLowerCase()) || row.student_id.toLowerCase().includes(search.trim().toLowerCase()))
   ), [rows, levelFilter, search]);
 
   async function generate() {
-    if (inFlight.current || generating || !studentId || !classId || !subjectId || !periodId || !chosenClass || !chosenSubject) return;
+    if (role !== "admin" || inFlight.current || generating || !studentId || !classId || !subjectId || !activePeriodId || !chosenAdminClass || !chosenSubject) return;
     inFlight.current = true;
     setGenerating(true);
     setError("");
@@ -104,21 +183,13 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
         student_id: studentId,
         class_id: classId,
         subject_id: subjectId,
-        source_period_id: periodId,
+        source_period_id: activePeriodId,
       }, role);
       if (!result.persisted) {
         setBlocked(result);
         return;
       }
-      setRows((previous) => [{
-        result,
-        studentId,
-        studentName: chosenStudent?.full_name || studentId,
-        className: chosenClass.section_name,
-        subjectName: chosenSubject.subject_name,
-        gradeLevel: chosenClass.academic_level.level_name,
-        termName,
-      }, ...previous]);
+      await loadPredictions();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to generate a development prediction.");
     } finally {
@@ -136,39 +207,49 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
       </div>
 
       <div className="flex flex-wrap items-end gap-3 border-b-2 border-border pb-5">
+        {role === "teacher" && <div className="w-full sm:w-44">
+          <label className="mb-1 block text-xs font-bold" htmlFor="dev-period">Academic term</label>
+          <Select value={teacherPeriodId === null ? "none" : String(teacherPeriodId)} onValueChange={(value) => {
+            setTeacherPeriodId(value === "none" ? null : Number(value)); setClassId(null); setSubjectId(null); setSelected(null);
+          }}>
+            <Select.Trigger id="dev-period" className="w-full bg-white"><Select.Value placeholder="Select term" /></Select.Trigger>
+            <Select.Content><Select.Item value="none">Select term</Select.Item>{teacherTerms.map((item) => <Select.Item key={item.academic_period_id} value={String(item.academic_period_id)}>{item.term_label}</Select.Item>)}</Select.Content>
+          </Select>
+        </div>}
         <div className="w-full sm:w-44">
           <label className="mb-1 block text-xs font-bold" htmlFor="dev-class">Class</label>
           <Select value={classId === null ? "none" : String(classId)} onValueChange={(value) => {
             setClassId(value === "none" ? null : Number(value)); setSubjectId(null); setStudentId(""); setStudentLookup(""); setBlocked(null);
-          }}>
+          }} disabled={role === "teacher" && activePeriodId === null}>
             <Select.Trigger id="dev-class" className="w-full bg-white"><Select.Value placeholder="Select class" /></Select.Trigger>
-            <Select.Content><Select.Item value="none">Select class</Select.Item>{classes.map((item) => <Select.Item key={item.class_id} value={String(item.class_id)}>{item.section_name}</Select.Item>)}</Select.Content>
+            <Select.Content><Select.Item value="none">Select class</Select.Item>{classOptions.map((item) => <Select.Item key={item.class_id} value={String(item.class_id)}>{item.section_name}</Select.Item>)}</Select.Content>
           </Select>
         </div>
         <div className="w-full sm:w-48">
           <label className="mb-1 block text-xs font-bold" htmlFor="dev-subject">Subject</label>
-          <Select value={subjectId === null ? "none" : String(subjectId)} onValueChange={(value) => { setSubjectId(value === "none" ? null : Number(value)); setBlocked(null); }} disabled={!classId}>
+          <Select value={subjectId === null ? "none" : String(subjectId)} onValueChange={(value) => { setSubjectId(value === "none" ? null : Number(value)); setBlocked(null); }} disabled={!classId || loadingSubjects}>
             <Select.Trigger id="dev-subject" className="w-full bg-white"><Select.Value placeholder="Select subject" /></Select.Trigger>
             <Select.Content><Select.Item value="none">Select subject</Select.Item>{availableSubjects.map((item) => <Select.Item key={item.subject_id} value={String(item.subject_id)}>{item.subject_name}</Select.Item>)}</Select.Content>
           </Select>
         </div>
-        <div className="w-full sm:w-48">
+        {role === "admin" && <div className="w-full sm:w-48">
           <label className="mb-1 block text-xs font-bold" htmlFor="dev-student-search">Find student</label>
           <Input id="dev-student-search" value={studentLookup} onChange={(event) => { setStudentLookup(event.target.value); setStudentId(""); }} disabled={!classId} placeholder="Search class students" />
-        </div>
-        <div className="w-full sm:w-52">
+        </div>}
+        {role === "admin" && <div className="w-full sm:w-52">
           <label className="mb-1 block text-xs font-bold" htmlFor="dev-student">Student</label>
           <Select value={studentId || "none"} onValueChange={(value) => { setStudentId(value === "none" ? "" : value); setBlocked(null); }} disabled={!classId || loadingStudents}>
             <Select.Trigger id="dev-student" className="w-full bg-white"><Select.Value placeholder="Select student" /></Select.Trigger>
             <Select.Content><Select.Item value="none">Select student</Select.Item>{students.map((item) => <Select.Item key={item.student_id} value={item.student_id}>{item.full_name}</Select.Item>)}</Select.Content>
           </Select>
-        </div>
-        <Button onClick={generate} disabled={loadingScope || generating || !classId || !subjectId || !studentId || !periodId} className="shrink-0">
+        </div>}
+        {role === "admin" && <Button onClick={generate} disabled={loadingScope || generating || !classId || !subjectId || !studentId || !activePeriodId} className="shrink-0">
           {generating ? "Generating..." : "Generate Projection"}
-        </Button>
+        </Button>}
       </div>
-      {!periodId && <p className="text-sm text-muted-foreground">Select an academic term to generate a projection.</p>}
+      {!activePeriodId && <p className="text-sm text-muted-foreground">Select an academic term to view current-term projections.</p>}
       {error && <Alert status="error" className="flex items-center gap-2 p-3 text-sm"><AlertCircle className="size-4 shrink-0" />{error}</Alert>}
+      {readError && <Alert status="error" className="flex items-center gap-2 p-3 text-sm"><AlertCircle className="size-4 shrink-0" />{readError}</Alert>}
       {blocked && <Alert status="warning" className="flex items-start gap-2 p-3 text-sm"><AlertCircle className="mt-0.5 size-4 shrink-0" /><span><strong>{BLOCKED_MESSAGES[blocked.prediction_status] || "This projection could not be assessed."}</strong>{blocked.reason_codes?.length ? ` (${blocked.reason_codes.join(", ")})` : ""}</span></Alert>}
 
       <div className="flex flex-wrap items-center gap-3">
@@ -179,15 +260,21 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
         </Select>
       </div>
 
-      {visibleRows.length === 0 ? (
-        <EmptyStateCard icon={<Eye className="size-7" />} title="No current-term projections available" description="No development predictions match the current scope or filters. Only projections generated in this session appear here." />
+      {loadingPredictions ? (
+        <div aria-label="Loading current-term projections" className="space-y-2">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </div>
+      ) : readError ? null : visibleRows.length === 0 ? (
+        <EmptyStateCard icon={<Eye className="size-7" />} title="No current-term projections available" description="No current-term projections available for this scope." />
       ) : (
         <Table wrapperClassName="rounded-none shadow-[3px_3px_0px_#000]" className="min-w-[620px]">
           <Table.Header><Table.Row className="bg-yellow-400 hover:bg-yellow-400"><Table.Head>Student</Table.Head><Table.Head>Projected Final Term Grade</Table.Head><Table.Head>Intervention Level</Table.Head><Table.Head>Action</Table.Head></Table.Row></Table.Header>
-          <Table.Body>{visibleRows.map((row) => <Table.Row key={row.result.prediction_id}>
-            <Table.Cell className="font-semibold">{row.studentName}</Table.Cell>
-            <Table.Cell className="font-bold">{row.result.projected_final_term_grade?.toFixed(2)}</Table.Cell>
-            <Table.Cell><InterventionBadge level={row.result.intervention_level as DevelopmentInterventionLevel} /></Table.Cell>
+          <Table.Body>{visibleRows.map((row) => <Table.Row key={row.prediction_id}>
+            <Table.Cell className="font-semibold">{row.student_name || row.student_id}</Table.Cell>
+            <Table.Cell className="font-bold">{row.projected_final_term_grade?.toFixed(2)}</Table.Cell>
+            <Table.Cell><InterventionBadge level={row.intervention_level} /></Table.Cell>
             <Table.Cell><Button size="sm" variant="outline" onClick={() => setSelected(row)}><Eye className="size-4" />View Details</Button></Table.Cell>
           </Table.Row>)}</Table.Body>
         </Table>
@@ -199,18 +286,18 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
           {selected && <div className="space-y-4 p-5 text-sm">
             <Badge size="sm" variant="surface">Development</Badge>
             <dl className="grid grid-cols-2 gap-3">
-              <dt className="text-muted-foreground">Student</dt><dd className="font-semibold">{selected.studentName}</dd>
-              <dt className="text-muted-foreground">Subject</dt><dd>{selected.subjectName}</dd>
-              <dt className="text-muted-foreground">Section/Class</dt><dd>{selected.className}</dd>
-              <dt className="text-muted-foreground">Grade level</dt><dd>{selected.gradeLevel}</dd>
-              <dt className="text-muted-foreground">Academic term</dt><dd>{selected.termName}</dd>
-              <dt className="text-muted-foreground">Projected Final Term Grade</dt><dd className="font-bold">{selected.result.projected_final_term_grade?.toFixed(2)}</dd>
-              <dt className="text-muted-foreground">Intervention Level</dt><dd><InterventionBadge level={selected.result.intervention_level as DevelopmentInterventionLevel} /></dd>
-              <dt className="text-muted-foreground">Readiness</dt><dd>{selected.result.readiness_level || selected.result.readiness_status}</dd>
-              <dt className="text-muted-foreground">Generated</dt><dd>{selected.result.generated_at ? new Date(selected.result.generated_at).toLocaleString() : "Not available"}</dd>
-              <dt className="text-muted-foreground">Revision</dt><dd>{selected.result.revision}</dd>
+              <dt className="text-muted-foreground">Student</dt><dd className="font-semibold">{selected.student_name || selected.student_id}</dd>
+              <dt className="text-muted-foreground">Subject</dt><dd>{selected.subject_name}</dd>
+              <dt className="text-muted-foreground">Section/Class</dt><dd>{selected.class_name}</dd>
+              <dt className="text-muted-foreground">Grade level</dt><dd>{gradeLevelName || "Not available"}</dd>
+              <dt className="text-muted-foreground">Academic term</dt><dd>{selected.period_name || activeTermName}</dd>
+              <dt className="text-muted-foreground">Projected Final Term Grade</dt><dd className="font-bold">{selected.projected_final_term_grade?.toFixed(2)}</dd>
+              <dt className="text-muted-foreground">Intervention Level</dt><dd><InterventionBadge level={selected.intervention_level} /></dd>
+              <dt className="text-muted-foreground">Readiness</dt><dd>{selected.readiness_level || selected.readiness_status}</dd>
+              <dt className="text-muted-foreground">Generated</dt><dd>{selected.generated_at ? new Date(selected.generated_at).toLocaleString() : "Not available"}</dd>
+              <dt className="text-muted-foreground">Revision</dt><dd>{selected.revision}</dd>
             </dl>
-            <p>The projected final term grade is estimated from the student's available current-term academic evidence.</p>
+            <p>The Random Forest projects the student's final term grade from available current-term academic evidence.</p>
             <p>The intervention level is assigned separately using the school's grade-based intervention rules.</p>
           </div>}
         </SheetContent>

@@ -181,6 +181,7 @@ const TeacherGradeView = () => {
   const activePeriodId = activeTab.startsWith("term-") ? Number(activeTab.split("-")[1]) : null;
   const currentPeriod = periods.find((p) => p.academic_period_id === activePeriodId);
   const timingGate = getTimingGateInfo(currentPeriod);
+  const summaryGradeLabel = periods.some((period) => period.is_active) ? "Current Grade" : "Final Grade";
 
   const handleSendStudentGrade = async (student: StudentGradebookRow, force = false) => {
     if (!section || !subject || !activePeriodId) return;
@@ -213,7 +214,8 @@ const TeacherGradeView = () => {
         });
       }
       fetchGradebook();
-    } catch (err: any) {
+    } catch (error: unknown) {
+      const err = error as { status?: number; message?: string; data?: { conflict?: boolean; recomputed_transmuted_grade?: number; expected_transmuted_grade?: number; detail?: { recomputed_transmuted_grade?: number } } };
       if (err.status === 409 || err.data?.conflict) {
         setConflictData({
           studentId: student.student_id,
@@ -268,7 +270,8 @@ const TeacherGradeView = () => {
       setShowBulkConfirm(false);
       setBulkSendSummary(res);
       fetchGradebook();
-    } catch (err: any) {
+    } catch (error: unknown) {
+      const err = error as { status?: number; message?: string; data?: { conflict?: boolean } };
       setShowBulkConfirm(false);
       if (err.status === 409 || err.data?.conflict) {
         setConflictData({
@@ -357,9 +360,9 @@ const TeacherGradeView = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       setToastMessage({ type: "success", text: "Full Year Class Record Workbook (.xlsx) exported successfully." });
-    } catch (err: any) {
-      console.error("Export workbook error:", err);
-      setToastMessage({ type: "error", text: err?.message || "Failed to export class record workbook. Please try again." });
+    } catch (error: unknown) {
+      console.error("Export workbook error:", error);
+      setToastMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to export class record workbook. Please try again." });
     } finally {
       setIsExporting(false);
     }
@@ -368,7 +371,7 @@ const TeacherGradeView = () => {
   const handleExportCurrent = async () => {
     if (activeTab === "summary") {
       if (!termSummary) return;
-      const headers = ["Gender", "Learner's Name", ...periods.map((p) => p.period_name), "Final Grade", "Remarks"];
+      const headers = ["Gender", "Learner's Name", ...periods.map((p) => p.period_name), summaryGradeLabel, "Remarks"];
       const { males, females } = groupStudentsByGender(termSummary.students);
       const rows = [
         ...males.map((s) => [
@@ -417,9 +420,9 @@ const TeacherGradeView = () => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         setToastMessage({ type: "success", text: "DepEd Class Record (.xlsx) exported successfully." });
-      } catch (err: any) {
-        console.error("Export error:", err);
-        setToastMessage({ type: "error", text: err?.message || "Failed to export class record. Please try again." });
+      } catch (error: unknown) {
+        console.error("Export error:", error);
+        setToastMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to export class record. Please try again." });
       } finally {
         setIsExporting(false);
       }
@@ -487,7 +490,7 @@ const TeacherGradeView = () => {
                 {p.period_name}
               </Table.Head>
             ))}
-            <Table.Head className="w-[12%] text-center font-black text-black">Final Grade</Table.Head>
+            <Table.Head className="w-[12%] text-center font-black text-black">{summaryGradeLabel}</Table.Head>
             <Table.Head className="w-[12%] text-center font-black text-black">Remarks</Table.Head>
           </Table.Row>
         </Table.Header>
