@@ -209,7 +209,7 @@ const StoryBoard = () => {
 
                 {/* Right column: Week Streak + To do Card (Moved upward to top right) */}
                 <div className="flex w-full min-w-0 flex-col gap-4 xl:col-span-1">
-                  <Card className="block w-full border-black bg-white shadow-md hover:shadow-none">
+                  <Card className="block w-full border-border bg-white shadow-md hover:shadow-none">
                     <Card.Content className="">
                       <div className="flex flex-col gap-1">
                         <div className="flex flex-row gap-2 items-center">
@@ -255,7 +255,7 @@ const StoryBoard = () => {
                     </Card.Content>
                   </Card>
 
-                  <Card className="block w-full border-black bg-white shadow-md hover:shadow-none">
+                  <Card className="block w-full border-border bg-white shadow-md hover:shadow-none">
                     <Card.Content>
                       <div className="flex items-center justify-between mb-4">
                         <Card.Title className="mb-0 text-2xl md:text-3xl">
@@ -264,10 +264,10 @@ const StoryBoard = () => {
 
                         <Button
                           type="button"
-                          variant="outline"
-                          size="icon"
+                          variant="secondary"
+                          size="sm"
                           onClick={() => navigate(routes.student.todo)}
-                          className="border-black bg-background"
+                          className="shadow-none px-1"
                           aria-label="View all to-do items"
                         >
                           <ArrowUpRight size={18} />
@@ -310,7 +310,7 @@ const StoryBoard = () => {
                                 }}
                                 role="button"
                                 tabIndex={0}
-                                className="flex w-full cursor-pointer shadow-none items-center gap-3 border-black bg-background p-3 hover:-translate-y-1 hover:bg-accent! hover:text-foreground!"
+                                className="flex w-full cursor-pointer shadow-none items-center gap-3 border-border bg-background p-3 hover:-translate-y-1 hover:bg-accent! hover:text-foreground!"
                               >
                                 <IconComponent
                                   size={20}

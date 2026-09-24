@@ -1,16 +1,44 @@
 import { cn } from "@/lib/utils";
+import { cva, type VariantProps } from "class-variance-authority";
 import { type HTMLAttributes } from "react";
 
-interface ICardProps extends HTMLAttributes<HTMLDivElement> {
+export const cardVariants = cva(
+  "inline-block gap-2 rounded border-2 border-border p-4 shadow-md transition-all hover:shadow-none",
+  {
+    variants: {
+      variant: {
+        default: "bg-card text-card-foreground",
+        background: "bg-background text-foreground",
+        accent: "bg-accent text-accent-foreground",
+        primary: "bg-primary text-primary-foreground",
+        secondary: "bg-secondary text-secondary-foreground",
+        muted: "bg-muted text-muted-foreground",
+        squares: "bg-card text-card-foreground retro-card-squares overflow-hidden",
+        pattern: "bg-card text-card-foreground retro-card-squares overflow-hidden",
+        retro: "bg-card text-card-foreground retro-card-squares overflow-hidden",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  },
+);
+
+interface ICardProps
+  extends HTMLAttributes<HTMLDivElement>,
+  VariantProps<typeof cardVariants> {
   className?: string;
+  squares?: boolean;
+  pattern?: boolean;
 }
 
-const Card = ({ className, ...props }: ICardProps) => {
+const Card = ({ className, variant, squares, pattern, ...props }: ICardProps) => {
   return (
     <div
       data-slot="card"
       className={cn(
-        "inline-block gap-2 rounded border-2 border-black bg-card p-4 shadow-md transition-all hover:shadow-none",
+        cardVariants({ variant }),
+        (squares || pattern) && "retro-card-squares overflow-hidden",
         className,
       )}
       {...props}

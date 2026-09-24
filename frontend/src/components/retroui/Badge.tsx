@@ -7,7 +7,7 @@ const badgeVariants = cva("inline-flex items-center rounded! font-semibold", {
     variant: {
       default: "bg-muted text-muted-foreground",
       secondary: "outline-2 bg-primary text-foreground ",
-      outline: "outline-2 outline-foreground text-foreground bg-background",
+      outline: "outline-2 outline-border text-foreground bg-background",
       solid: "bg-foreground text-background",
       surface: "outline-2 bg-primary text-primary-foreground",
       success: "outline-2 outline-success bg-success text-black",
@@ -15,7 +15,7 @@ const badgeVariants = cva("inline-flex items-center rounded! font-semibold", {
       ghost: "bg-transparent text-muted-foreground border border-transparent",
     },
     size: {
-      sm: "px-2 py-1 text-xs",
+      sm: "px-2 py-0.5 text-xs",
       md: "px-2.5 py-1.5 text-sm",
       lg: "px-3 py-2 text-base",
     },
