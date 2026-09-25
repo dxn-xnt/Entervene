@@ -26,7 +26,7 @@ from app.services.prediction.CurrentPeriodFeatureBuilderService import build_cur
 from app.services.prediction.PredictionGenerationTransaction import run_prediction_generation_transaction
 
 
-EVIDENCE_SNAPSHOT_VERSION = "CURRENT_TERM_V3_EVIDENCE_V1"
+EVIDENCE_SNAPSHOT_VERSION = "CURRENT_TERM_V3_EVIDENCE_V2"
 MODEL_TARGET_COLUMN = "target_final_period_grade"
 
 
@@ -167,6 +167,7 @@ def _persist_successful_result(
             "reason_codes": list(prediction["readiness_reason_codes"]),
         },
         "model_features": [{"name": name, "value": features[name]} for name in columns],
+        "examination_presentation": built["evidence_summary"]["examination"]["presentation"],
         "intervention_reason_codes": list(intervention["triggered_reasons"]),
         "supporting_context": {
             "role": intervention_service.SUPPORTING_CONTEXT_ROLE,
@@ -188,6 +189,7 @@ def _persist_successful_result(
         old = latest.evidence_snapshot
         if (
             old.get("model_features") == snapshot["model_features"]
+            and old.get("examination_presentation") == snapshot["examination_presentation"]
             and old.get("feature_schema_sha256") == snapshot["feature_schema_sha256"]
             and old.get("artifact_sha256") == snapshot["artifact_sha256"]
             and old.get("training_dataset_version") == snapshot["training_dataset_version"]

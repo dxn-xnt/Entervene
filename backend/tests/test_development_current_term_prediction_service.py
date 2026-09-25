@@ -7,7 +7,9 @@ import pytest
 
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
+from app.services.prediction import DevelopmentCurrentTermModelSelection as selection
 from app.services.prediction import DevelopmentCurrentTermPredictionService as service
+from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME, LEGACY_MODEL_NAME
 from tests.test_current_period_live_feature_builder import add_activity, current_period_context
 
 
@@ -31,7 +33,7 @@ def _make_ready(ctx) -> None:
     add_activity(ctx, "PERFORMANCE_TASK", 17, 20)
 
 
-def _predict(ctx, *, target_period_id=None):
+def _predict(ctx, *, target_period_id=None, model_name=None):
     return service.predict_development_current_term(
         ctx["db"],
         ctx["student"].student_id,
@@ -39,22 +41,29 @@ def _predict(ctx, *, target_period_id=None):
         ctx["subject"].subject_id,
         ctx["period"].academic_period_id,
         target_period_id,
+        model_name=model_name,
     )
 
 
-def test_ready_supported_scope_scores_development_prediction(current_period_context, monkeypatch):
+@pytest.mark.parametrize("model_name", [None, CORRECTED_MODEL_NAME, LEGACY_MODEL_NAME])
+def test_ready_supported_scope_scores_development_prediction(current_period_context, monkeypatch, model_name):
     ctx = current_period_context
     _set_weights(ctx)
     _make_ready(ctx)
+    if model_name is None:
+        monkeypatch.setattr(selection.settings, "development_current_term_model_name", CORRECTED_MODEL_NAME)
+    expected_model_name = model_name or CORRECTED_MODEL_NAME
     captured = {}
 
-    def fake_score(features):
+    def fake_score(features, *args, **kwargs):
         captured["features"] = dict(features)
+        captured["args"] = args
+        captured["kwargs"] = kwargs
         return 88.75
 
     monkeypatch.setattr(service.v3_scorer, "score_development_current_term", fake_score)
 
-    result = _predict(ctx)
+    result = _predict(ctx, model_name=model_name)
 
     assert result["status"] == service.STATUS_DEVELOPMENT_PREDICTION_AVAILABLE
     assert result["projected_final_term_grade"] == pytest.approx(88.75)
@@ -62,7 +71,9 @@ def test_ready_supported_scope_scores_development_prediction(current_period_cont
     assert result["target_period_id"] == ctx["period"].academic_period_id
     assert result["readiness_result"]["ready"] is True
     assert result["readiness_result"]["readiness_level"] == "STANDARD_READY"
-    assert result["model_name"] == service.v3_scorer.MODEL_NAME
+    assert result["model_name"] == expected_model_name
+    assert captured["args"] == ()
+    assert captured["kwargs"] == ({"model_name": CORRECTED_MODEL_NAME} if expected_model_name == CORRECTED_MODEL_NAME else {})
     assert result["model_development_status"] == service.MODEL_DEVELOPMENT_STATUS
     assert result["prediction_purpose"] == service.PREDICTION_PURPOSE
     assert captured["features"]["subject"] == "SCIENCE"
@@ -78,7 +89,7 @@ def test_admin_active_period_allows_generation_on_either_side_of_scheduled_end(
     ctx["period"].start_date = date.today() - timedelta(days=60)
     ctx["period"].end_date = date.today() + timedelta(days=scheduled_end_offset)
     ctx["db"].commit()
-    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", lambda _features: 84.6)
+    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", lambda _features, model_name=LEGACY_MODEL_NAME: 84.6)
 
     assert _predict(ctx)["status"] == service.STATUS_DEVELOPMENT_PREDICTION_AVAILABLE
 
@@ -119,7 +130,7 @@ def test_same_term_contract_accepts_same_period_and_rejects_different_target(cur
     ctx = current_period_context
     _set_weights(ctx)
     _make_ready(ctx)
-    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", lambda _features: 87.0)
+    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", lambda _features, model_name=LEGACY_MODEL_NAME: 87.0)
 
     same = _predict(ctx, target_period_id=ctx["period"].academic_period_id)
     different = _predict(ctx, target_period_id=ctx["next_period"].academic_period_id)
@@ -205,14 +216,27 @@ def test_leakage_fields_do_not_enter_scorer_payload(current_period_context, monk
         "initial_grade",
     }
 
-    def fake_score(features):
+    def fake_score(features, model_name=LEGACY_MODEL_NAME):
         captured["features"] = dict(features)
+        captured["model_name"] = model_name
         return 90.0
 
     monkeypatch.setattr(service.v3_scorer, "score_development_current_term", fake_score)
 
-    result = _predict(ctx)
+    result = _predict(ctx, model_name=CORRECTED_MODEL_NAME)
 
     assert result["status"] == service.STATUS_DEVELOPMENT_PREDICTION_AVAILABLE
     assert forbidden.isdisjoint(captured["features"])
     assert len(captured["features"]) == 31
+    assert captured["model_name"] == CORRECTED_MODEL_NAME
+
+
+def test_invalid_model_selector_rejected_before_scoring(current_period_context, monkeypatch):
+    ctx = current_period_context
+
+    def fail_score(*_args, **_kwargs):
+        pytest.fail("Scorer called for invalid model selector")
+
+    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", fail_score)
+    with pytest.raises(ValueError, match="Unknown development current-term model selector"):
+        _predict(ctx, model_name="unapproved-model")

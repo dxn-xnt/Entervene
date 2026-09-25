@@ -99,6 +99,20 @@ const persisted = {
   model_name: "entervene_current_term_development_rf_v3",
   lifecycle_status: "DEVELOPMENT",
   generated_at: "2026-09-22T10:00:00Z",
+  academic_evidence: {
+    written_works: { graded_count: 2, performance_percent: 82 },
+    performance_tasks: { graded_count: 1, performance_percent: 88 },
+    examination: {
+      graded_count: 0,
+      performance_percent: null,
+      presentation: {
+        status: "PARTIAL",
+        completed_count: 2,
+        components: { SUMMATIVE_1: 80, SUMMATIVE_2: 70, TERM_EXAM: null },
+      },
+    },
+    overall: { graded_activity_count: 3, performance_percent: 85, observed_component_weight_percent: 60 },
+  },
 };
 
 beforeEach(() => {
@@ -144,6 +158,27 @@ async function selectTeacherScope() {
 }
 
 describe("development current-term predictions", () => {
+  it.each(["admin", "teacher"] as const)("shows partial Examination evidence in the %s detail view", async (role) => {
+    api.fetchPersisted.mockResolvedValue({ items: [persisted], total: 1 });
+    if (role === "admin") await selectReadScope();
+    else await selectTeacherScope();
+
+    await waitFor(() => expect(screen.getByText("Rivera, Alex")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "View Details" }));
+    const exam = screen.getByLabelText("Examination evidence");
+    expect(exam.textContent).toContain("In progress");
+    expect(exam.textContent).toContain("2 of 3 graded");
+    expect(exam.textContent).toContain("Summative 1");
+    expect(exam.textContent).toContain("80.0%");
+    expect(exam.textContent).toContain("Summative 2");
+    expect(exam.textContent).toContain("70.0%");
+    expect(exam.textContent).toContain("Term Exam");
+    expect(exam.textContent).toContain("Not yet graded");
+    expect(exam.textContent).toContain("Final Examination component not yet available for prediction.");
+    expect(exam.textContent).not.toContain("75.0%");
+    expect(screen.queryByText("0.0%")).toBeNull();
+  });
+
   it.each(["admin", "teacher"] as const)("shows an unsupported-grade message for SHS %s without loading predictions", async (role) => {
     api.getClasses.mockResolvedValue({ classes: [{ ...scope, academic_level: { academic_level_id: 11, level_name: "Grade 11", grade_level: 11 } }] });
     api.getSubjects.mockResolvedValue({ subjects: [{ subject_id: 5, subject_name: "General Mathematics", academic_level: { academic_level_id: 11 } }] });

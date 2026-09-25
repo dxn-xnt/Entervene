@@ -66,7 +66,17 @@ export interface DevelopmentCurrentTermListItem {
   academic_evidence: {
     written_works: DevelopmentAcademicComponent;
     performance_tasks: DevelopmentAcademicComponent;
-    examination: DevelopmentAcademicComponent;
+    examination: DevelopmentAcademicComponent & {
+      presentation: {
+        status: "NOT_STARTED" | "PARTIAL" | "COMPLETE" | "AGGREGATE" | "DETAILS_UNAVAILABLE";
+        completed_count: number;
+        components: {
+          SUMMATIVE_1?: number | null;
+          SUMMATIVE_2?: number | null;
+          TERM_EXAM?: number | null;
+        };
+      };
+    };
     overall: {
       graded_activity_count: number;
       performance_percent: number | null;

@@ -24,6 +24,7 @@ import { EmptyStateCard } from "@/components/empty-state-card";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BLOCKED_MESSAGES, INTERVENTION_LABELS } from "./development-current-term-contract";
+import { ExaminationEvidence } from "./prediction-detail-sheet";
 
 function InterventionBadge({ level }: { level: DevelopmentInterventionLevel }) {
   const colors: Record<DevelopmentInterventionLevel, string> = {
@@ -316,6 +317,11 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
             </dl>
             <p>The Random Forest projects the student's final term grade from available current-term academic evidence.</p>
             <p>The intervention level is assigned separately using the school's grade-based intervention rules.</p>
+            {selected.academic_evidence?.examination && <section aria-label="Academic evidence at prediction time" className="space-y-2">
+              <p className="font-bold">Academic Evidence at Prediction Time</p>
+              <p>Partial Examination scores are shown for context only and do not count as a completed Examination model input.</p>
+              <ExaminationEvidence examination={selected.academic_evidence.examination} />
+            </section>}
           </div>}
         </SheetContent>
       </Sheet>

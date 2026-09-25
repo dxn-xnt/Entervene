@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
 
@@ -11,6 +12,7 @@ from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.services.prediction import DevelopmentCurrentTermPredictionPersistenceService as service
+from app.services.prediction.DevelopmentCurrentTermPredictionReadService import _academic_evidence
 from app.services.prediction import DevelopmentCurrentTermScoringService as scorer
 from app.services.prediction.DashboardPredictionService import get_dashboard_at_risk_predictions
 from tests.test_current_period_live_feature_builder import add_activity, current_period_context
@@ -48,7 +50,7 @@ def _register_test_model(ctx, **overrides):
     return row.model_version_id
 
 
-def _run(ctx, model_version_id, *, supporting_context=None):
+def _run(ctx, model_version_id, *, supporting_context=None, cutoff_at=None):
     student_id = ctx["student"].student_id
     class_id = ctx["class"].class_id
     subject_id = ctx["subject"].subject_id
@@ -58,6 +60,7 @@ def _run(ctx, model_version_id, *, supporting_context=None):
     return service.generate_and_persist_development_current_term(
         student_id, class_id, subject_id, period_id,
         model_version_id=model_version_id,
+        cutoff_at=cutoff_at,
         supporting_context=supporting_context,
         bind=bind,
     )
@@ -130,6 +133,55 @@ def test_identical_academic_evidence_reuses_latest_revision(current_period_conte
     assert third["persisted"] is True
     assert third["revision"] == 2
     assert ctx["db"].get(DevelopmentCurrentTermPrediction, first["prediction_id"]).evidence_snapshot == original_snapshot
+
+
+def test_partial_exam_change_creates_revision_without_changing_model_features(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    model_version_id = _register_test_model(ctx)
+    monkeypatch.setattr(scorer, "score_development_current_term", lambda _features: 84.6)
+
+    first = _run(ctx, model_version_id)
+    first_snapshot = json.loads(json.dumps(ctx["db"].get(DevelopmentCurrentTermPrediction, first["prediction_id"]).evidence_snapshot))
+    add_activity(ctx, "EXAMS", 24, 30, title="Summative 1", classwork_type="EXAM", exam_subtype="SUMMATIVE_1")
+    second = _run(ctx, model_version_id)
+    second_snapshot = ctx["db"].get(DevelopmentCurrentTermPrediction, second["prediction_id"]).evidence_snapshot
+
+    assert second["revision"] == 2
+    assert first_snapshot["model_features"] == second_snapshot["model_features"]
+    assert first_snapshot["examination_presentation"]["status"] == "NOT_STARTED"
+    assert second_snapshot["examination_presentation"]["status"] == "PARTIAL"
+    assert second_snapshot["examination_presentation"]["components"]["SUMMATIVE_1"] == 80.0
+
+
+def test_saved_exam_presentation_does_not_reconstruct_future_grade(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    model_version_id = _register_test_model(ctx)
+    cutoff = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    for category, score, total in (("WRITTEN_WORK", 8, 10), ("WRITTEN_WORK", 7, 10),
+                                   ("PERFORMANCE_TASK", 18, 20), ("PERFORMANCE_TASK", 17, 20)):
+        add_activity(ctx, category, score, total, graded_at=cutoff - timedelta(days=2))
+    add_activity(ctx, "EXAMS", 27, 30, title="Summative 1", classwork_type="EXAM", exam_subtype="SUMMATIVE_1", graded_at=cutoff - timedelta(days=1))
+    add_activity(ctx, "EXAMS", 21, 30, title="Summative 2", classwork_type="EXAM", exam_subtype="SUMMATIVE_2", graded_at=cutoff - timedelta(days=1))
+    add_activity(ctx, "EXAMS", 40, 40, title="Term Exam", classwork_type="EXAM", exam_subtype="TERM_EXAM", graded_at=cutoff + timedelta(days=1))
+    monkeypatch.setattr(scorer, "score_development_current_term", lambda _features: 84.6)
+
+    first = _run(ctx, model_version_id, cutoff_at=cutoff)
+    old_snapshot = json.loads(json.dumps(ctx["db"].get(DevelopmentCurrentTermPrediction, first["prediction_id"]).evidence_snapshot))
+    second = _run(ctx, model_version_id, cutoff_at=cutoff + timedelta(days=2))
+    new_snapshot = ctx["db"].get(DevelopmentCurrentTermPrediction, second["prediction_id"]).evidence_snapshot
+
+    assert first["revision"] == 1 and second["revision"] == 2
+    assert _academic_evidence(old_snapshot)["examination"]["presentation"] == {
+        "status": "PARTIAL", "completed_count": 2,
+        "components": {"SUMMATIVE_1": 90.0, "SUMMATIVE_2": 70.0, "TERM_EXAM": None},
+    }
+    assert _academic_evidence(old_snapshot)["examination"]["performance_percent"] is None
+    assert _academic_evidence(new_snapshot)["examination"]["presentation"]["status"] == "COMPLETE"
+    assert _academic_evidence(new_snapshot)["examination"]["performance_percent"] == 88.0
+    assert ctx["db"].get(DevelopmentCurrentTermPrediction, first["prediction_id"]).evidence_snapshot == old_snapshot
 
 
 def test_inactive_term_blocks_persistence_even_with_ready_evidence(current_period_context, monkeypatch):
