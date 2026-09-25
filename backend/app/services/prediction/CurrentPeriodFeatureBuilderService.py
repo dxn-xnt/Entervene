@@ -296,6 +296,16 @@ def build_current_period_features_from_records(
 
     exam_result = compute_examination_component(exam_observations, require_complete_for_percent=True)
     domain_warnings.extend(exam_result.warnings)
+    completed_exam_count = sum(percent is not None for percent in exam_result.subtype_percentages.values())
+    if exam_observations:
+        exam_status = "COMPLETE" if exam_result.complete else "PARTIAL" if completed_exam_count else "NOT_STARTED"
+    else:
+        exam_status = "AGGREGATE" if plain_qa.count else "NOT_STARTED"
+    exam_presentation = {
+        "status": exam_status,
+        "completed_count": completed_exam_count,
+        "components": exam_result.subtype_percentages,
+    }
     qa = ComponentAccumulator()
     if exam_observations:
         qa.over_hps_count = exam_result.score_over_hps_count
@@ -414,6 +424,7 @@ def build_current_period_features_from_records(
                 "complete": exam_result.complete,
                 "missing_subtypes": sorted(exam_result.missing_subtypes),
                 "unresolved_subtypes": sorted(exam_result.unresolved_subtypes),
+                "presentation": exam_presentation,
             },
         },
     }

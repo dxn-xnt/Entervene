@@ -297,8 +297,8 @@ def test_unrecorded_scores_return_none_not_default_ten():
     assert res.transmuted_grade is None
 
 
-def test_actual_zero_score_transmutes_to_ten():
-    """When student legitimately earned 0 score (score is 0.0, not None), initial grade is 0.0 and transmutes to 10.0."""
+def test_actual_zero_score_transmutes_to_sixty():
+    """A recorded zero uses the current ECR's 60-point Term Grade floor."""
     asgn_ww = _make_mock_assignment("Activity 1", 100, category="WRITTEN_WORK")
     asgn_pt = _make_mock_assignment("Performance 1", 100, category="PERFORMANCE_TASK")
     asgn_exam = _make_mock_assignment("Term Exam", 100, subtype="TERM_EXAM")
@@ -315,7 +315,7 @@ def test_actual_zero_score_transmutes_to_ten():
     assert res.ps_pt == 0.0
     assert res.ps_qa == 0.0
     assert res.initial_grade == 0.0
-    assert res.transmuted_grade == 10.0
+    assert res.transmuted_grade == 60.0
 
 
 

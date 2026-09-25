@@ -643,7 +643,7 @@ function GradesTab({ classId }: { classId: number }) {
             >
               <Table.Header>
                 <Table.Row className="bg-primary/20">
-                  <Table.Head className="min-w-[220px] font-black">
+                  <Table.Head className="min-w-[220px] font-head">
                     Learner's Name
                   </Table.Head>
                   {gradesData.subjects.map((subj) => (
@@ -659,10 +659,10 @@ function GradesTab({ classId }: { classId: number }) {
                       )}
                     </Table.Head>
                   ))}
-                  <Table.Head className="text-center min-w-[160px] font-black">
+                  <Table.Head className="text-center min-w-[160px] font-head">
                     General Average (GWA)
                   </Table.Head>
-                  <Table.Head className="text-center min-w-[120px] font-black">
+                  <Table.Head className="text-center min-w-[120px] font-head">
                     Status
                   </Table.Head>
                   <Table.Head className="text-center min-w-[90px] font-black">
@@ -684,7 +684,7 @@ function GradesTab({ classId }: { classId: number }) {
                     {students.map((student) => (
                       <Table.Row
                         key={student.student_id}
-                        className="border-b border-border text-xs hover:bg-muted/10"
+                        className="border-b border-border text-xs hover:bg-primary/50"
                       >
                         <Table.Cell className="font-semibold">
                           <div className="flex items-center gap-2">

@@ -18,6 +18,7 @@ export interface DevelopmentCurrentTermScope {
 
 export interface DevelopmentCurrentTermResponse {
   persisted: boolean;
+  unchanged?: boolean;
   prediction_id?: number;
   revision?: number;
   prediction_status: string;
@@ -65,7 +66,17 @@ export interface DevelopmentCurrentTermListItem {
   academic_evidence: {
     written_works: DevelopmentAcademicComponent;
     performance_tasks: DevelopmentAcademicComponent;
-    examination: DevelopmentAcademicComponent;
+    examination: DevelopmentAcademicComponent & {
+      presentation: {
+        status: "NOT_STARTED" | "PARTIAL" | "COMPLETE" | "AGGREGATE" | "DETAILS_UNAVAILABLE";
+        completed_count: number;
+        components: {
+          SUMMATIVE_1?: number | null;
+          SUMMATIVE_2?: number | null;
+          TERM_EXAM?: number | null;
+        };
+      };
+    };
     overall: {
       graded_activity_count: number;
       performance_percent: number | null;
@@ -97,8 +108,10 @@ export interface DevelopmentCurrentTermListItem {
     progress_percent: number;
     days_remaining: number;
     is_active: boolean;
+    scheduled_end_passed_while_active: boolean;
   };
   official_final_grade_available: boolean;
+  official_final_grade: number | null;
   model_version_id: number;
   model_name: string;
   lifecycle_status: "DEVELOPMENT";
@@ -125,12 +138,20 @@ export function developmentPredictionGenerationAvailable(role: string | null): b
   return developmentPredictionsAvailable(role) && role === "admin";
 }
 
+export class CurrentTermPredictionLoadError extends Error {
+  kind: "access" | "unavailable" | "failure";
+  constructor(message: string, kind: "access" | "unavailable" | "failure") {
+    super(message);
+    this.kind = kind;
+  }
+}
+
 export async function fetchDevelopmentCurrentTermPredictions(
   params: DevelopmentCurrentTermListParams,
   role: string | null,
 ): Promise<DevelopmentCurrentTermListResponse> {
   if (!developmentPredictionsAvailable(role)) {
-    throw new Error("Development predictions are unavailable in this frontend environment.");
+    throw new CurrentTermPredictionLoadError("Current-term projections are unavailable in this environment.", "unavailable");
   }
   const query = new URLSearchParams({
     class_id: String(params.class_id),
@@ -139,11 +160,13 @@ export async function fetchDevelopmentCurrentTermPredictions(
   });
   const response = await apiFetch(`/api/v1/development/current-term-predictions?${query.toString()}`);
   if (!response.ok) {
-    throw new Error(response.status === 404
-      ? "The development prediction endpoint is unavailable. Check the backend development settings."
-      : response.status === 403
-        ? "Your account is not authorized to view development predictions."
-        : "Unable to load development predictions. Please try again.");
+    if (response.status === 401 || response.status === 403) {
+      throw new CurrentTermPredictionLoadError("You do not have access to these current-term projections.", "access");
+    }
+    if (response.status === 404) {
+      throw new CurrentTermPredictionLoadError("Current-term projections are unavailable in this environment.", "unavailable");
+    }
+    throw new CurrentTermPredictionLoadError("Current-term projections could not be loaded. Please try again.", "failure");
   }
   return (await response.json()) as DevelopmentCurrentTermListResponse;
 }
@@ -198,6 +221,8 @@ export interface DashboardPredictionItem {
   risk_score: number | null;
   data_status: string;
   generated_at: string | null;
+  official_final_grade?: number | null;
+  historical_projection?: boolean;
 }
 
 export interface RiskSummary {

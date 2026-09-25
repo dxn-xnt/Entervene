@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
@@ -191,6 +192,7 @@ export default function PredictionDetailSheet({
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader className="pb-0">
           <SheetTitle className="text-lg">Prediction Detail</SheetTitle>
+          <SheetDescription className="sr-only">Student prediction, grade, and evidence details.</SheetDescription>
         </SheetHeader>
 
         {currentTermPrediction ? (
@@ -742,6 +744,13 @@ function CurrentTermTeacherDetail({ prediction }: { prediction: DevelopmentCurre
   const risk = RISK_LABELS[prediction.intervention_level] || prediction.intervention_level;
 
   return <div className="flex flex-col gap-5 p-4 text-sm">
+    {prediction.official_final_grade_available && <div role="status" className="border-2 border-blue-700 bg-blue-50 p-3">
+      <p className="font-black">Final Grade: {prediction.official_final_grade?.toFixed(2) ?? "Not available"}</p>
+      <p>Earlier Projected Final Term Grade: {prediction.projected_final_term_grade?.toFixed(2) ?? "Not available"}</p>
+      <p>This projection was generated before the official final grade. It is historical and is no longer the current outcome.</p>
+    </div>}
+    {!term.is_active && !prediction.official_final_grade_available && <p role="status" className="border border-blue-700 bg-blue-50 p-3">This term is no longer active. The projection shown here is historical.</p>}
+    {term.scheduled_end_passed_while_active && <p role="status" className="border border-amber-700 bg-amber-50 p-3">Scheduled end date has passed; this term remains active.</p>}
     <section aria-labelledby="student-overview-heading">
       <h2 id="student-overview-heading" className="mb-2 text-base font-black">Student Overview</h2>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-2 border-black bg-yellow-50 p-3">
@@ -753,7 +762,7 @@ function CurrentTermTeacherDetail({ prediction }: { prediction: DevelopmentCurre
     </section>
 
     <section aria-labelledby="current-projection-heading">
-      <h2 id="current-projection-heading" className="mb-2 text-base font-black">Current Projection</h2>
+      <h2 id="current-projection-heading" className="mb-2 text-base font-black">{prediction.official_final_grade_available || !term.is_active ? "Earlier Projection" : "Current Projection"}</h2>
       <div className="grid grid-cols-2 gap-3">
         <div className="border-2 border-black p-3"><p className="text-xs text-gray-600">Projected Final Term Grade</p><p className="text-2xl font-black">{prediction.projected_final_term_grade?.toFixed(2) ?? "Not available"}</p></div>
         <div className="border-2 border-black p-3"><p className="text-xs text-gray-600">Intervention Level</p><Badge size="sm" variant="surface" className="mt-2 border-2 border-black font-bold">{risk}</Badge></div>
@@ -763,12 +772,12 @@ function CurrentTermTeacherDetail({ prediction }: { prediction: DevelopmentCurre
     </section>
 
     <section aria-labelledby="academic-evidence-heading">
-      <h2 id="academic-evidence-heading" className="mb-1 text-base font-black">Academic Evidence Used for Projection</h2>
-      <p className="mb-3 text-xs text-gray-600">These graded academic records were available when this projection was generated.</p>
+      <h2 id="academic-evidence-heading" className="mb-1 text-base font-black">Academic Evidence at Prediction Time</h2>
+      <p className="mb-3 text-xs text-gray-600">Completed grade components can inform the projection. Partial Examination scores are shown for context only.</p>
       <div className="space-y-2">
         <EvidenceRow label="Written Works" count={academic.written_works.graded_count} percent={academic.written_works.performance_percent} />
         <EvidenceRow label="Performance Tasks" count={academic.performance_tasks.graded_count} percent={academic.performance_tasks.performance_percent} />
-        <EvidenceRow label="Examination" count={academic.examination.graded_count} percent={academic.examination.performance_percent} />
+        <ExaminationEvidence examination={academic.examination} />
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 border-t-2 border-black pt-3">
         <div><p className="text-xs text-gray-600">Academic performance so far</p><p className="font-black">{formatPercent(academic.overall.performance_percent)}</p></div>
@@ -810,5 +819,39 @@ function EvidenceRow({ label, count, percent }: { label: string; count: number; 
   return <div className="flex items-center justify-between border border-black px-3 py-2">
     <div><p className="font-bold">{label}</p><p className="text-xs text-gray-600">{count} graded record{count === 1 ? "" : "s"}</p></div>
     <p className="font-black">{formatPercent(percent)}</p>
+  </div>;
+}
+
+export function ExaminationEvidence({ examination }: { examination: DevelopmentCurrentTermListItem["academic_evidence"]["examination"] }) {
+  const detail = examination.presentation;
+  const labels = [
+    ["SUMMATIVE_1", "Summative 1"],
+    ["SUMMATIVE_2", "Summative 2"],
+    ["TERM_EXAM", "Term Exam"],
+  ] as const;
+  const statusLabel = {
+    NOT_STARTED: "Not yet graded",
+    PARTIAL: "In progress",
+    COMPLETE: formatPercent(examination.performance_percent),
+    AGGREGATE: formatPercent(examination.performance_percent),
+    DETAILS_UNAVAILABLE: examination.performance_percent === null ? "Status unknown" : formatPercent(examination.performance_percent),
+  }[detail.status];
+
+  return <div className="border border-black px-3 py-2" aria-label="Examination evidence">
+    <div className="flex items-center justify-between">
+      <p className="font-bold">Examination</p>
+      <p className="font-black">{statusLabel}</p>
+    </div>
+    {(detail.status === "PARTIAL" || detail.status === "COMPLETE" || detail.status === "NOT_STARTED") && <>
+      <p className="text-xs text-gray-600">{detail.completed_count} of 3 graded</p>
+      <dl className="mt-2 grid grid-cols-2 gap-y-1 text-xs">
+        {labels.map(([key, label]) => <div className="contents" key={key}>
+          <dt>{label}</dt><dd className="text-right">{detail.components[key] === null || detail.components[key] === undefined ? "Not yet graded" : formatPercent(detail.components[key])}</dd>
+        </div>)}
+      </dl>
+    </>}
+    {detail.status === "PARTIAL" && <p className="mt-2 text-xs text-gray-600">Final Examination component not yet available for prediction.</p>}
+    {detail.status === "AGGREGATE" && <p className="text-xs text-gray-600">Individual examination parts were not recorded for this assessment.</p>}
+    {detail.status === "DETAILS_UNAVAILABLE" && <p className="text-xs text-gray-600">Component details are unavailable for this saved prediction.</p>}
   </div>;
 }

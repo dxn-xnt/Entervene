@@ -885,7 +885,7 @@ export default function SubjectClassworkTab({
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto px-4 py-4">
+        <main className="retro-squares-bg retro-squares-contained flex-1 overflow-y-auto px-4 py-4">
           <div className="mx-auto max-w-6xl space-y-4">
             <Card className="block w-full border-black bg-white p-4 text-center shadow-md hover:shadow-none">
               <h1 className="text-2xl font-bold">

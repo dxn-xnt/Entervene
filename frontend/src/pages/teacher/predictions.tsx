@@ -30,6 +30,7 @@ import {
   buildCurrentTermGradeSummaries,
   currentTermRiskSummary,
   loadAuthorizedCurrentTermPredictions,
+  currentTermPredictionErrorMessage,
   type AuthorizedCurrentTermRow,
 } from "@/components/predictions/current-term-dashboard-adapter";
 
@@ -386,6 +387,7 @@ function TeacherCurrentTermDashboard() {
   const [rows, setRows] = useState<AuthorizedCurrentTermRow[]>([]);
   const [filters, setFilters] = useState<DashboardFilters | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [gradeLevel, setGradeLevel] = useState<number | undefined>();
   const [classId, setClassId] = useState<number | undefined>();
   const [subjectId, setSubjectId] = useState<number | undefined>();
@@ -394,12 +396,12 @@ function TeacherCurrentTermDashboard() {
   const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
 
   useEffect(() => {
-    if (!selectedPeriodId) return;
+    if (!selectedPeriodId) { Promise.resolve().then(() => setLoading(false)); return; }
     let cancelled = false;
-    Promise.resolve().then(() => { if (!cancelled) setLoading(true); });
+    Promise.resolve().then(() => { if (!cancelled) { setLoading(true); setLoadError(null); } });
     loadAuthorizedCurrentTermPredictions(selectedPeriodId)
       .then((result) => { if (!cancelled) { setRows(result.rows); setFilters(result.filters); } })
-      .catch(() => { if (!cancelled) setRows([]); })
+      .catch((error: unknown) => { if (!cancelled) { setRows([]); setLoadError(currentTermPredictionErrorMessage(error)); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [selectedPeriodId]);
@@ -438,7 +440,8 @@ function TeacherCurrentTermDashboard() {
             onSearchChange={setSearch}
             onClearAll={() => { setGradeLevel(undefined); setClassId(undefined); setSubjectId(undefined); setRiskLevel(undefined); setSearch(""); }}
           />
-          {loading ? <div className="py-20 text-center font-semibold text-gray-500">Loading current-term projections...</div> : filtered ? <PredictionTable
+          {loadError && <div role="alert" className="border-2 border-red-600 bg-red-50 p-4 font-semibold">{loadError}</div>}
+          {loading ? <div className="py-20 text-center font-semibold text-gray-500">Loading current-term projections...</div> : loadError ? null : !selectedPeriodId ? <div>Select an academic term to view projections.</div> : filtered ? <PredictionTable
             items={data.items} total={data.total} limit={Math.max(10, data.total)} offset={0} currentTerm hidePagination
             onSort={() => undefined} onPageChange={() => undefined}
             onRowClick={(predictionId) => setSelected(rows.find((row) => row.prediction_id === predictionId) || null)}

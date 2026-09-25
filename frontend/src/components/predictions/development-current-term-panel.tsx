@@ -21,9 +21,10 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
 import { EmptyStateCard } from "@/components/empty-state-card";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BLOCKED_MESSAGES, INTERVENTION_LABELS } from "./development-current-term-contract";
+import { ExaminationEvidence } from "./prediction-detail-sheet";
 
 function InterventionBadge({ level }: { level: DevelopmentInterventionLevel }) {
   const colors: Record<DevelopmentInterventionLevel, string> = {
@@ -52,6 +53,7 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
   const [rows, setRows] = useState<DevelopmentCurrentTermListItem[]>([]);
   const [selected, setSelected] = useState<DevelopmentCurrentTermListItem | null>(null);
   const [blocked, setBlocked] = useState<DevelopmentCurrentTermResponse | null>(null);
+  const [unchanged, setUnchanged] = useState(false);
   const [error, setError] = useState("");
   const [loadingScope, setLoadingScope] = useState(true);
   const [loadingStudents, setLoadingStudents] = useState(false);
@@ -90,6 +92,10 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
   }, [periodId, role]);
 
   const activePeriodId = role === "teacher" ? teacherPeriodId : periodId;
+  const selectedGrade = role === "admin"
+    ? classes.find((item) => item.class_id === classId)?.academic_level.grade_level
+    : teacherClasses.find((item) => item.class_id === classId)?.grade_level;
+  const unsupportedGrade = selectedGrade != null && (selectedGrade < 7 || selectedGrade > 10);
 
   useEffect(() => {
     if (role !== "teacher" || classId === null || activePeriodId === null) {
@@ -119,7 +125,7 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
   }, [classId, role, studentLookup]);
 
   const loadPredictions = useCallback(async () => {
-    if (classId === null || subjectId === null || activePeriodId === null) return;
+    if (classId === null || subjectId === null || activePeriodId === null || unsupportedGrade) return;
     const requestId = ++readRequestId.current;
     setLoadingPredictions(true);
     setReadError("");
@@ -138,10 +144,10 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
     } finally {
       if (readRequestId.current === requestId) setLoadingPredictions(false);
     }
-  }, [activePeriodId, classId, role, subjectId]);
+  }, [activePeriodId, classId, role, subjectId, unsupportedGrade]);
 
   useEffect(() => {
-    if (classId === null || subjectId === null || activePeriodId === null) {
+    if (classId === null || subjectId === null || activePeriodId === null || unsupportedGrade) {
       readRequestId.current += 1;
       setRows([]);
       setReadError("");
@@ -150,7 +156,7 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
     }
     void loadPredictions();
     return () => { readRequestId.current += 1; };
-  }, [activePeriodId, classId, loadPredictions, subjectId]);
+  }, [activePeriodId, classId, loadPredictions, subjectId, unsupportedGrade]);
 
   const chosenAdminClass = classes.find((item) => item.class_id === classId);
   const chosenSubject = role === "admin"
@@ -173,11 +179,12 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
   ), [rows, levelFilter, search]);
 
   async function generate() {
-    if (role !== "admin" || inFlight.current || generating || !studentId || !classId || !subjectId || !activePeriodId || !chosenAdminClass || !chosenSubject) return;
+    if (role !== "admin" || unsupportedGrade || inFlight.current || generating || !studentId || !classId || !subjectId || !activePeriodId || !chosenAdminClass || !chosenSubject) return;
     inFlight.current = true;
     setGenerating(true);
     setError("");
     setBlocked(null);
+    setUnchanged(false);
     try {
       const result = await generateDevelopmentCurrentTermPrediction({
         student_id: studentId,
@@ -185,6 +192,11 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
         subject_id: subjectId,
         source_period_id: activePeriodId,
       }, role);
+      if (result.unchanged) {
+        setUnchanged(true);
+        await loadPredictions();
+        return;
+      }
       if (!result.persisted) {
         setBlocked(result);
         return;
@@ -243,14 +255,16 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
             <Select.Content><Select.Item value="none">Select student</Select.Item>{students.map((item) => <Select.Item key={item.student_id} value={item.student_id}>{item.full_name}</Select.Item>)}</Select.Content>
           </Select>
         </div>}
-        {role === "admin" && <Button onClick={generate} disabled={loadingScope || generating || !classId || !subjectId || !studentId || !activePeriodId} className="shrink-0">
+        {role === "admin" && <Button onClick={generate} disabled={unsupportedGrade || loadingScope || generating || !classId || !subjectId || !studentId || !activePeriodId} className="shrink-0">
           {generating ? "Generating..." : "Generate Projection"}
         </Button>}
       </div>
       {!activePeriodId && <p className="text-sm text-muted-foreground">Select an academic term to view current-term projections.</p>}
+      {unsupportedGrade && <p role="status" className="border-2 border-blue-700 bg-blue-50 p-3 text-sm font-semibold">AI grade projection is not yet available for this grade level. This grade level requires additional validated grading and historical data.</p>}
       {error && <Alert status="error" className="flex items-center gap-2 p-3 text-sm"><AlertCircle className="size-4 shrink-0" />{error}</Alert>}
       {readError && <Alert status="error" className="flex items-center gap-2 p-3 text-sm"><AlertCircle className="size-4 shrink-0" />{readError}</Alert>}
       {blocked && <Alert status="warning" className="flex items-start gap-2 p-3 text-sm"><AlertCircle className="mt-0.5 size-4 shrink-0" /><span><strong>{BLOCKED_MESSAGES[blocked.prediction_status] || "This projection could not be assessed."}</strong>{blocked.reason_codes?.length ? ` (${blocked.reason_codes.join(", ")})` : ""}</span></Alert>}
+      {unchanged && <p role="status" className="border border-green-700 bg-green-50 p-3 text-sm">Academic evidence is unchanged. The latest projection was reused; no new revision was created.</p>}
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative w-full min-w-48 flex-1 sm:max-w-xs"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search generated students" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search student" className="pl-9" /></div>
@@ -260,7 +274,7 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
         </Select>
       </div>
 
-      {loadingPredictions ? (
+      {unsupportedGrade ? null : loadingPredictions ? (
         <div aria-label="Loading current-term projections" className="space-y-2">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-12 w-full" />
@@ -273,8 +287,10 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
           <Table.Header><Table.Row className="bg-yellow-400 hover:bg-yellow-400"><Table.Head>Student</Table.Head><Table.Head>Projected Final Term Grade</Table.Head><Table.Head>Intervention Level</Table.Head><Table.Head>Action</Table.Head></Table.Row></Table.Header>
           <Table.Body>{visibleRows.map((row) => <Table.Row key={row.prediction_id}>
             <Table.Cell className="font-semibold">{row.student_name || row.student_id}</Table.Cell>
-            <Table.Cell className="font-bold">{row.projected_final_term_grade?.toFixed(2)}</Table.Cell>
-            <Table.Cell><InterventionBadge level={row.intervention_level} /></Table.Cell>
+            <Table.Cell className="font-bold">{row.official_final_grade_available || row.term_context?.is_active === false
+              ? <>{row.official_final_grade_available && <p>Final Grade: {row.official_final_grade?.toFixed(2) ?? "Not available"}</p>}<p className="text-xs font-normal">Earlier projection: {row.projected_final_term_grade?.toFixed(2)}</p></>
+              : row.projected_final_term_grade?.toFixed(2)}</Table.Cell>
+            <Table.Cell>{row.official_final_grade_available || row.term_context?.is_active === false ? "Historical projection" : <InterventionBadge level={row.intervention_level} />}</Table.Cell>
             <Table.Cell><Button size="sm" variant="outline" onClick={() => setSelected(row)}><Eye className="size-4" />View Details</Button></Table.Cell>
           </Table.Row>)}</Table.Body>
         </Table>
@@ -282,8 +298,10 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
 
       <Sheet open={selected !== null} onOpenChange={(open) => { if (!open) setSelected(null); }}>
         <SheetContent className="overflow-y-auto">
-          <SheetHeader><SheetTitle>Current-Term Projection</SheetTitle></SheetHeader>
+          <SheetHeader><SheetTitle>Current-Term Projection</SheetTitle><SheetDescription className="sr-only">Student, projected grade, readiness, and academic evidence details.</SheetDescription></SheetHeader>
           {selected && <div className="space-y-4 p-5 text-sm">
+            {selected.official_final_grade_available && <div role="status" className="border border-blue-700 bg-blue-50 p-3"><strong>Final Grade: {selected.official_final_grade?.toFixed(2) ?? "Not available"}</strong><p>Earlier Projected Final Term Grade: {selected.projected_final_term_grade?.toFixed(2)}</p><p>This projection is historical and is no longer the current outcome.</p></div>}
+            {selected.term_context?.is_active === false && !selected.official_final_grade_available && <p role="status" className="border border-blue-700 bg-blue-50 p-3">This term is no longer active. The projection is historical.</p>}
             <Badge size="sm" variant="surface">Development</Badge>
             <dl className="grid grid-cols-2 gap-3">
               <dt className="text-muted-foreground">Student</dt><dd className="font-semibold">{selected.student_name || selected.student_id}</dd>
@@ -299,6 +317,11 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
             </dl>
             <p>The Random Forest projects the student's final term grade from available current-term academic evidence.</p>
             <p>The intervention level is assigned separately using the school's grade-based intervention rules.</p>
+            {selected.academic_evidence?.examination && <section aria-label="Academic evidence at prediction time" className="space-y-2">
+              <p className="font-bold">Academic Evidence at Prediction Time</p>
+              <p>Partial Examination scores are shown for context only and do not count as a completed Examination model input.</p>
+              <ExaminationEvidence examination={selected.academic_evidence.examination} />
+            </section>}
           </div>}
         </SheetContent>
       </Sheet>

@@ -82,4 +82,15 @@ describe("development prediction API guard", () => {
     )).rejects.toThrow("unavailable");
     expect(apiFetch).not.toHaveBeenCalled();
   });
+
+  it.each([
+    [401, "access"], [403, "access"], [404, "unavailable"], [503, "failure"],
+  ])("distinguishes HTTP %i from a successful empty response", async (status, kind) => {
+    vi.stubEnv("DEV", true);
+    vi.stubEnv("VITE_ENABLE_DEVELOPMENT_PREDICTIONS", "true");
+    apiFetch.mockResolvedValue({ ok: false, status });
+    await expect(fetchDevelopmentCurrentTermPredictions(
+      { class_id: 7, subject_id: 5, academic_period_id: 3 }, "teacher",
+    )).rejects.toMatchObject({ kind });
+  });
 });

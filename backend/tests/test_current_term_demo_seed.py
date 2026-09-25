@@ -19,18 +19,27 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.prediction.CurrentPeriodFeatureBuilderService import build_current_period_features_from_records
-from scripts.seed_current_term_demo import DEMO_DATABASE, read_summary, require_demo_database, seed
+from app.services.prediction.DevelopmentCurrentTermPredictionPersistenceService import generate_and_persist_development_current_term
+from scripts.seed_current_term_demo import DEMO_DATABASE, read_summary, require_demo_database, seed, write_demo_environment
 
 
 DEMO_URL = os.getenv("DEMO_DATABASE_URL")
 
 
-def test_demo_guard_accepts_only_exact_postgresql_demo_name():
+def test_demo_guard_accepts_only_local_postgresql_demo_names():
     assert require_demo_database("postgresql://user@localhost/Entervene_Demo").database == DEMO_DATABASE
-    with pytest.raises(ValueError, match="only 'Entervene_Demo'"):
+    assert require_demo_database("postgresql://user@localhost/Entervene_Demo_4M").database == "Entervene_Demo_4M"
+    assert require_demo_database("postgresql://user@localhost/Entervene_Demo_4N2").database == "Entervene_Demo_4N2"
+    with pytest.raises(ValueError, match="non-local or non-demo"):
         require_demo_database("postgresql://user@localhost/Entervene")
+    with pytest.raises(ValueError, match="non-local or non-demo"):
+        require_demo_database("postgresql://user@remote.example/Entervene_Demo_4M")
     with pytest.raises(ValueError, match="requires PostgreSQL"):
         require_demo_database("sqlite:///Entervene_Demo")
+    with pytest.raises(ValueError, match="keep existing demo environment files unchanged"):
+        write_demo_environment("postgresql://user@localhost/Entervene_Demo_4M")
+    with pytest.raises(ValueError, match="keep existing demo environment files unchanged"):
+        write_demo_environment("postgresql://user@localhost/Entervene_Demo_4N2")
 
 
 @pytest.fixture(scope="module")
@@ -101,8 +110,13 @@ def test_revision_history_and_development_isolation(demo_engine):
     summary = read_summary(DEMO_URL)
     with Session(demo_engine) as session:
         predictions = session.scalars(select(DevelopmentCurrentTermPrediction).order_by(DevelopmentCurrentTermPrediction.prediction_id)).all()
-        revisions = [row for row in predictions if str(row.student_id) == str(session.scalar(select(Student.student_id).where(Student.first_name == "Demo Avery")))]
-        assert [row.revision for row in revisions] == [1, 2]
+        corrected_id = session.scalar(select(AIModelVersion.model_version_id).where(AIModelVersion.model_name == "entervene_current_term_official_target_rf_candidate"))
+        revisions = [row for row in predictions if row.model_version_id == corrected_id and str(row.student_id) == str(session.scalar(select(Student.student_id).where(Student.first_name == "Demo Avery")))]
+        assert [row.revision for row in revisions][:2] == [1, 2]
+        corrected = [row for row in predictions if row.model_version_id == summary["corrected_model_version_id"]]
+        assert len(corrected) >= 10
+        assert summary["corrected_prediction_count"] == 9
+        assert [row.revision for row in corrected if row.student_id == revisions[0].student_id][:2] == [1, 2]
         assert revisions[0].prediction_id != revisions[1].prediction_id
         assert summary["revision_example"]["revision_1"]["projected_final_term_grade"] != summary["revision_example"]["revision_2"]["projected_final_term_grade"]
         assert session.scalar(select(func.count()).select_from(AIPrediction)) == 0
@@ -111,3 +125,21 @@ def test_revision_history_and_development_isolation(demo_engine):
         assert model.production_validated is False
         assert model.independent_three_term_validation is False
         assert model.is_active is False
+
+
+def test_demo_repeat_generation_reuses_latest_revision(demo_engine):
+    scope = read_summary(DEMO_URL)["scope"]
+    with Session(demo_engine) as session:
+        student_id = session.scalar(select(Student.student_id).where(Student.first_name == "Demo Avery"))
+        model_version_id = session.scalar(select(AIModelVersion.model_version_id).where(AIModelVersion.model_name == "entervene_current_term_official_target_rf_candidate"))
+        before = session.scalar(select(func.count()).select_from(DevelopmentCurrentTermPrediction))
+        latest_revision = session.scalar(select(func.max(DevelopmentCurrentTermPrediction.revision)).where(DevelopmentCurrentTermPrediction.student_id == student_id, DevelopmentCurrentTermPrediction.model_version_id == model_version_id))
+    result = generate_and_persist_development_current_term(
+        student_id, scope["class_id"], scope["subject_id"], scope["academic_period_id"],
+        model_version_id=model_version_id, bind=demo_engine,
+    )
+    with Session(demo_engine) as session:
+        after = session.scalar(select(func.count()).select_from(DevelopmentCurrentTermPrediction))
+    assert result["unchanged"] is True
+    assert result["revision"] == latest_revision
+    assert before == after

@@ -26,6 +26,7 @@ import {
   buildCurrentTermDashboard,
   buildCurrentTermGradeSummaries,
   loadAuthorizedCurrentTermPredictions,
+  currentTermPredictionErrorMessage,
   type AuthorizedCurrentTermRow,
 } from "@/components/predictions/current-term-dashboard-adapter";
 
@@ -291,6 +292,7 @@ function TeacherCurrentTermGradePredictions() {
   const [rows, setRows] = useState<AuthorizedCurrentTermRow[]>([]);
   const [filters, setFilters] = useState<DashboardFilters | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [classId, setClassId] = useState<number | undefined>();
   const [subjectId, setSubjectId] = useState<number | undefined>();
   const [riskLevel, setRiskLevel] = useState<string | undefined>();
@@ -298,12 +300,12 @@ function TeacherCurrentTermGradePredictions() {
   const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
 
   useEffect(() => {
-    if (!selectedPeriodId || numericGrade === undefined) return;
+    if (!selectedPeriodId || numericGrade === undefined) { Promise.resolve().then(() => setLoading(false)); return; }
     let cancelled = false;
-    Promise.resolve().then(() => { if (!cancelled) setLoading(true); });
+    Promise.resolve().then(() => { if (!cancelled) { setLoading(true); setLoadError(null); } });
     loadAuthorizedCurrentTermPredictions(selectedPeriodId, { gradeLevel: numericGrade })
       .then((result) => { if (!cancelled) { setRows(result.rows); setFilters(result.filters); } })
-      .catch(() => { if (!cancelled) setRows([]); })
+      .catch((error: unknown) => { if (!cancelled) { setRows([]); setLoadError(currentTermPredictionErrorMessage(error)); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [numericGrade, selectedPeriodId]);
@@ -319,7 +321,8 @@ function TeacherCurrentTermGradePredictions() {
         <div className="flex flex-col items-start gap-5 lg:flex-row">
           <div className="flex min-w-0 flex-1 flex-col gap-4">
             <PredictionFilters filters={filters} gradeLevel={numericGrade} classId={classId} subjectId={subjectId} academicPeriodId={selectedPeriodId ?? undefined} riskLevel={riskLevel} search={search} hideGradeFilter hidePeriodFilter riskSummary={data.risk_summary} onClassChange={setClassId} onSubjectChange={setSubjectId} onRiskChange={setRiskLevel} onSearchChange={setSearch} onClearAll={() => { setClassId(undefined); setSubjectId(undefined); setRiskLevel(undefined); setSearch(""); }} />
-            {loading ? <div className="py-20 text-center font-semibold text-gray-500">Loading Grade {grade} projections...</div> : <PredictionTable items={data.items} total={data.total} limit={Math.max(10, data.total)} offset={0} currentTerm hidePagination onSort={() => undefined} onPageChange={() => undefined} onRowClick={(predictionId) => setSelected(rows.find((row) => row.prediction_id === predictionId) || null)} />}
+            {loadError && <div role="alert" className="border-2 border-red-600 bg-red-50 p-4 font-semibold">{loadError}</div>}
+            {loading ? <div className="py-20 text-center font-semibold text-gray-500">Loading Grade {grade} projections...</div> : loadError ? null : <PredictionTable items={data.items} total={data.total} limit={Math.max(10, data.total)} offset={0} currentTerm hidePagination onSort={() => undefined} onPageChange={() => undefined} onRowClick={(predictionId) => setSelected(rows.find((row) => row.prediction_id === predictionId) || null)} />}
           </div>
           <Card className="w-full shrink-0 border-2 border-black bg-white p-4 shadow-[4px_4px_0px_#000] lg:w-80">
             <Text as="h4" className="mb-3 border-b-2 border-black pb-2 font-head text-base font-bold">Grade {grade} Sections</Text>

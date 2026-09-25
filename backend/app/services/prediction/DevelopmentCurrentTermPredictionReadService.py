@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from sqlalchemy import and_, func
@@ -83,6 +83,9 @@ def _as_utc(value: datetime) -> datetime:
 
 def _academic_evidence(snapshot: Any) -> dict[str, Any]:
     features = _snapshot_features(snapshot)
+    presentation = snapshot.get("examination_presentation") if isinstance(snapshot, dict) else None
+    if not isinstance(presentation, dict):
+        presentation = {"status": "DETAILS_UNAVAILABLE", "completed_count": 0, "components": {}}
     return {
         "written_works": {
             "graded_count": int(features.get("ww_available_activity_count") or 0),
@@ -96,6 +99,7 @@ def _academic_evidence(snapshot: Any) -> dict[str, Any]:
             "graded_count": int(features.get("qa_available_activity_count") or 0),
             "performance_percent": _to_float(features.get("qa_percent_so_far"))
             if features.get("qa_has_evidence") else None,
+            "presentation": presentation,
         },
         "overall": {
             "graded_activity_count": int(features.get("overall_available_activity_count") or 0),
@@ -116,6 +120,7 @@ def _term_context(period: AcademicPeriod, cutoff_at: datetime) -> dict[str, Any]
         "progress_percent": round(elapsed_days / total_days * 100, 1),
         "days_remaining": max(0, (period.end_date - cutoff_date).days),
         "is_active": bool(period.is_active),
+        "scheduled_end_passed_while_active": bool(period.is_active and date.today() > period.end_date),
     }
 
 
@@ -207,6 +212,7 @@ def list_latest_development_current_term_predictions(
     class_id: int,
     subject_id: int,
     academic_period_id: int,
+    model_version_id: int,
     require_active_enrollment: bool = False,
 ) -> dict[str, Any]:
     latest_revision = (
@@ -227,6 +233,7 @@ def list_latest_development_current_term_predictions(
             DevelopmentCurrentTermPrediction.target_period_id == academic_period_id,
             AIModelVersion.model_purpose == ModelPurpose.CURRENT_TERM_FINAL_GRADE_PROJECTION.value,
             AIModelVersion.lifecycle_status == "DEVELOPMENT",
+            DevelopmentCurrentTermPrediction.model_version_id == model_version_id,
         )
         .group_by(
             DevelopmentCurrentTermPrediction.student_id,
@@ -318,6 +325,7 @@ def list_latest_development_current_term_predictions(
             "participation_context": _participation_context(db, prediction, period, cutoff_at),
             "term_context": _term_context(period, cutoff_at),
             "official_final_grade_available": finalized_grade is not None,
+            "official_final_grade": _to_float(finalized_grade.final_period_grade) if finalized_grade else None,
             "model_version_id": prediction.model_version_id,
             "model_name": version.model_name,
             "lifecycle_status": version.lifecycle_status,

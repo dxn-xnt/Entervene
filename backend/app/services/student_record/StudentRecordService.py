@@ -33,6 +33,7 @@ from app.services.grading.ComponentMapper import (
     classify_classwork_component,
     classify_template_component_name,
 )
+from app.services.grading.CurrentThreeTermTransmutation import transmute_current_three_term_grade
 from app.services.grading.ExaminationCalculator import (
     DEFAULT_EXAM_SUBSPLIT,
     ExamSubsplitWeights,
@@ -640,37 +641,8 @@ def resolve_subject_grading_weights(
 
 
 def _deped_transmuted(initial_grade: float) -> float:
-    """
-    DepEd Transmutation Table (DO 8, s. 2015).
-    Transmuted Grade = ((IG - 60) / 40) × 40 + 60  when IG >= 60
-                     = (IG / 60) × 60               when IG < 60
-    Which simplifies to TG = IG for IG in [60, 100] and TG = IG for IG < 60
-    but the grade floor is 60 for passing marks.
-
-    The published DepEd transmutation table maps:
-      100 -> 100,  95 -> 98,  90 -> 95,  85 -> 91,  80 -> 87,
-       75 -> 83,   70 -> 79,  65 -> 75,  60 -> 70,  55 -> 65,
-       50 -> 60,   45 -> 55,  40 -> 50,  35 -> 45,  30 -> 40,
-       25 -> 35,   20 -> 30,  15 -> 25,  10 -> 20,   5 -> 15, 0 -> 10
-    We interpolate linearly between these breakpoints.
-    """
-    TABLE = [
-        (100, 100), (95, 98), (90, 95), (85, 91), (80, 87),
-        (75, 83), (70, 79), (65, 75), (60, 70), (55, 65),
-        (50, 60), (45, 55), (40, 50), (35, 45), (30, 40),
-        (25, 35), (20, 30), (15, 25), (10, 20), (5, 15), (0, 10),
-    ]
-    ig = max(0.0, min(100.0, initial_grade))
-    # Find the two surrounding rows
-    for i in range(len(TABLE) - 1):
-        ig_high, tg_high = TABLE[i]
-        ig_low, tg_low = TABLE[i + 1]
-        if ig_low <= ig <= ig_high:
-            if ig_high == ig_low:
-                return float(tg_high)
-            ratio = (ig - ig_low) / (ig_high - ig_low)
-            return round(tg_low + ratio * (tg_high - tg_low), 2)
-    return 10.0  # fallback for ig == 0
+    """Use the client current three-term ECR lookup for new grade calculations."""
+    return transmute_current_three_term_grade(initial_grade)
 
 
 # DepEd Order No. 015, s. 2026 (Memo 576, s. 2026) Performance Descriptors
