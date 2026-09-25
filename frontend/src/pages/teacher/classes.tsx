@@ -73,7 +73,7 @@ function SubjectClassCatalogCard({
 }) {
   return (
     <Card
-      className="group relative flex w-full min-w-[240px] flex-1 flex-col justify-between p-3 shadow-none hover:-translate-y-1 cursor-pointer"
+      className="retro-bg-squares group relative flex w-full min-w-[240px] flex-1 flex-col justify-between p-3 shadow-none hover:-translate-y-1 cursor-pointer"
       onClick={onClick}
     >
       <div className="flex flex-col items-start justify-between gap-2">
