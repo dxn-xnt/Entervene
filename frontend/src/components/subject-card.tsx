@@ -23,6 +23,7 @@ type SubjectCardProps = {
   latestActivityDue?: string;
   onClick?: () => void;
   className?: string;
+  showPattern?: boolean;
 };
 
 export function SubjectCard({
@@ -33,13 +34,14 @@ export function SubjectCard({
   latestActivityDue,
   onClick,
   className,
+  showPattern = true,
 }: SubjectCardProps) {
   const hasPending = (pendingCount ?? 0) > 0;
   const noClasswork = !latestActivityTitle && !hasPending;
 
   return (
     <Card
-      variant="squares"
+      variant={showPattern ? "squares" : "default"}
       className={`group relative flex min-w-0 flex-col justify-between p-3.5 shadow-none hover:-translate-y-1 cursor-pointer transition-all${className || ""}`}
       onClick={onClick}
     >
