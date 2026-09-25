@@ -10,9 +10,11 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { apiFetch, getTeacherAdvisoryClasses } from "@/lib/api";
 import type { TeacherAdvisoryClassListItem } from "@/types/adminClasses";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
-import { Progress } from "@/components/retroui/Progress";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { cn } from "@/lib/utils";
+import { SubjectCard, type ActiveClassworkInfo } from "@/components/subject-card";
+
+export type ActiveClassworkSummary = ActiveClassworkInfo;
 
 type TeacherClassLoad = {
   subject_load_id: number;
@@ -22,6 +24,10 @@ type TeacherClassLoad = {
   class_id: number;
   section_name: string;
   grade_level?: string;
+  student_count?: number;
+  total_classworks?: number;
+  progress?: number;
+  active_classwork?: ActiveClassworkSummary | null;
 };
 
 function AdvisoryCatalogCard({
@@ -57,69 +63,6 @@ function AdvisoryCatalogCard({
         <span className="col-span-2 font-semibold">
           {item.subject_count} subjects
         </span>
-      </div>
-    </Card>
-  );
-}
-
-function SubjectClassCatalogCard({
-  load,
-  isAdvisory,
-  onClick,
-}: {
-  load: TeacherClassLoad;
-  isAdvisory: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <Card
-      className="group relative flex w-full min-w-[240px] flex-1 flex-col justify-between p-3 shadow-none hover:-translate-y-1 cursor-pointer"
-      onClick={onClick}
-    >
-      <div className="flex flex-col items-start justify-between gap-2">
-        <div className="flex flex-row w-full items-center justify-between gap-2">
-          <p className="text-2xl font-bold">
-            {load.section_name}
-          </p>
-          {isAdvisory && (
-            <Badge size="sm" variant="solid">
-              Advisory
-            </Badge>
-          )}
-          <Badge size="sm" variant="secondary">
-            {load.grade_level}
-          </Badge>
-        </div>
-        <div className="flex flex-col w-full gap-1">
-          <p className="text-xs font-normal">Progress</p>
-          <div className="flex flex-row gap-1">
-            <Progress className="w-full" value={12} />
-            <p className="text-xs font-bold">12%</p>
-          </div>
-        </div>
-        <div className="flex flex-col w-full gap-1 mt-1">
-          <Card className="bg-primary w-full shadow-none py-2 px-3">
-            <div className="flex flex-col w-full gap-2">
-              <div className="flex flex-row justify-between ">
-                <p className="text-md font-semibold">Assignments 2</p>
-                <Button
-                  variant="secondary"
-                  className="shadow-none p-1"
-                  size="sm">
-                  <ArrowUpRight className="size-3" />
-                </Button>
-              </div>
-              <div className="flex flex-row gap-2 items-center">
-                <Badge size="sm" variant="outline">
-                  Ongoing
-                </Badge>
-                <Badge size="sm" variant="solid">
-                  Due in 2 days
-                </Badge>
-              </div>
-            </div>
-          </Card>
-        </div>
       </div>
     </Card>
   );
@@ -209,7 +152,14 @@ const TeacherClasses = () => {
           a.section_name.localeCompare(b.section_name)
         ),
       }))
-      .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
+      .sort((a, b) => {
+        const aMulti = a.loads.length > 1 ? 1 : 0;
+        const bMulti = b.loads.length > 1 ? 1 : 0;
+        if (aMulti !== bMulti) {
+          return bMulti - aMulti;
+        }
+        return a.subjectName.localeCompare(b.subjectName);
+      });
   }, [advisoryByClass, loads]);
 
   return (
@@ -264,14 +214,14 @@ const TeacherClasses = () => {
                               </h2>
                             </div>
                             <div className="flex shrink-0 flex-row items-center gap-3">
-                              <Badge variant="secondary">
+                              <Badge variant="secondary" size="sm">
                                 {group.loads.length} section{group.loads.length !== 1 ? "s" : ""}
                               </Badge>
 
                               <Button
                                 variant="secondary"
-                                className="shadow-none"
-                                size="icon"
+                                className="shadow-none px-1"
+                                size="sm"
                                 title={`View ${group.subjectName}`}
                                 onClick={() => {
                                   if (group.loads[0]) {
@@ -294,10 +244,19 @@ const TeacherClasses = () => {
                             )}
                           >
                             {group.loads.map((load) => (
-                              <SubjectClassCatalogCard
+                              <SubjectCard
                                 key={load.subject_load_id}
-                                load={load}
+                                variant="teacher"
+                                title={load.section_name}
+                                gradeLevel={load.grade_level}
                                 isAdvisory={advisoryByClass.has(load.class_id)}
+                                completionRate={load.progress ?? 0}
+                                activeClasswork={load.active_classwork}
+                                onClassworkClick={() => {
+                                  if (load.active_classwork) {
+                                    navigate(`/teacher/classworks/${load.active_classwork.classwork_id}`);
+                                  }
+                                }}
                                 onClick={() =>
                                   navigate(
                                     `/teacher/classes/${load.class_id}/${load.subject_id}`,

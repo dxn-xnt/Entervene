@@ -937,7 +937,13 @@ def classwork_assignment_detail(assignment_id: int, current_user: dict, db: Sess
 def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None = None) -> list[dict]:
     from app.models.academic.TeacherSubstitution import TeacherSubstitution
     from app.services.academic.SubstitutionService import SubstitutionService
-    from sqlalchemy import or_
+    from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+    from app.models.classwork.Classwork import Classwork
+    from app.models.submissions.StudentSubmission import StudentSubmission
+    from app.models.academic.StudentCLass import StudentClass
+    from datetime import datetime, timezone
+    from sqlalchemy import or_, func
+
     today_date = SubstitutionService.get_academic_date()
     active_subs = (
         db.query(TeacherSubstitution.subject_load_id)
@@ -969,8 +975,131 @@ def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None =
         query = query.filter(SubjectLoad.academic_period_id == academic_period_id)
     
     rows = query.all()
-    return [
-        {
+    if not rows:
+        return []
+
+    class_ids = list({class_.class_id for _, _, class_, _ in rows})
+    subject_ids = list({subject.subject_id for _, subject, _, _ in rows})
+
+    # Get student count per class
+    student_counts_raw = (
+        db.query(StudentClass.class_id, func.count(StudentClass.student_id))
+        .filter(
+            StudentClass.class_id.in_(class_ids),
+            StudentClass.enrollment_status == "enrolled",
+        )
+        .group_by(StudentClass.class_id)
+        .all()
+    )
+    student_counts = {cid: cnt for cid, cnt in student_counts_raw}
+
+    # Fetch all published classwork assignments for these classes and subjects
+    assignments_query = (
+        db.query(ClassworkAssignment, Classwork)
+        .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
+        .filter(
+            ClassworkAssignment.class_id.in_(class_ids),
+            Classwork.subject_id.in_(subject_ids),
+            Classwork.is_archived == False,
+            ClassworkAssignment.is_published == True,
+        )
+    )
+    if academic_period_id is not None:
+        assignments_query = assignments_query.filter(
+            or_(
+                ClassworkAssignment.academic_period_id == academic_period_id,
+                ClassworkAssignment.academic_period_id.is_(None),
+            )
+        )
+    assignments_rows = assignments_query.all()
+
+    class_subject_assignments: dict[tuple[int, int], list[tuple[ClassworkAssignment, Classwork]]] = {}
+    assignment_ids = []
+    for assignment, cw in assignments_rows:
+        key = (assignment.class_id, cw.subject_id)
+        if key not in class_subject_assignments:
+            class_subject_assignments[key] = []
+        class_subject_assignments[key].append((assignment, cw))
+        assignment_ids.append(assignment.classwork_assignment_id)
+
+    submission_counts: dict[int, int] = {}
+    if assignment_ids:
+        sub_counts_raw = (
+            db.query(StudentSubmission.classwork_assignment_id, func.count(StudentSubmission.submission_id))
+            .filter(
+                StudentSubmission.classwork_assignment_id.in_(assignment_ids),
+                StudentSubmission.status.in_(["submitted", "late", "graded"]),
+            )
+            .group_by(StudentSubmission.classwork_assignment_id)
+            .all()
+        )
+        submission_counts = {aid: cnt for aid, cnt in sub_counts_raw}
+
+    now = datetime.now(timezone.utc)
+
+    results = []
+    for subject_load, subject, class_, level in rows:
+        cid = class_.class_id
+        sid = subject.subject_id
+        total_students = student_counts.get(cid, 0)
+        c_assignments = class_subject_assignments.get((cid, sid), [])
+        total_cw = len(c_assignments)
+
+        total_expected = total_cw * total_students
+        total_submitted = sum(submission_counts.get(a.classwork_assignment_id, 0) for a, _ in c_assignments)
+        progress_pct = round((total_submitted / total_expected) * 100) if total_expected > 0 else 0
+
+        active_cw_info = None
+        if c_assignments:
+            def sort_key(item):
+                a, _ = item
+                if a.due_date:
+                    due = a.due_date if a.due_date.tzinfo else a.due_date.replace(tzinfo=timezone.utc)
+                    if due >= now:
+                        return (0, due.timestamp(), -a.classwork_assignment_id)
+                    else:
+                        return (2, -due.timestamp(), -a.classwork_assignment_id)
+                return (1, 0, -a.classwork_assignment_id)
+
+            sorted_assignments = sorted(c_assignments, key=sort_key)
+            featured_assignment, featured_cw = sorted_assignments[0]
+
+            due_label = "No due date"
+            cw_status = "ongoing"
+            if featured_assignment.due_date:
+                due = featured_assignment.due_date if featured_assignment.due_date.tzinfo else featured_assignment.due_date.replace(tzinfo=timezone.utc)
+                if due < now:
+                    cw_status = "past_due"
+                    due_label = f"Closed ({due.strftime('%b %d')})"
+                else:
+                    delta = due - now
+                    if delta.days == 0:
+                        cw_status = "due_soon"
+                        due_label = "Due today"
+                    elif delta.days == 1:
+                        cw_status = "due_soon"
+                        due_label = "Due tomorrow"
+                    elif delta.days <= 7:
+                        cw_status = "ongoing"
+                        due_label = f"Due in {delta.days} days"
+                    else:
+                        cw_status = "ongoing"
+                        due_label = f"Due {due.strftime('%b %d')}"
+
+            active_cw_info = {
+                "classwork_id": featured_cw.classwork_id,
+                "classwork_assignment_id": featured_assignment.classwork_assignment_id,
+                "title": featured_cw.title,
+                "classwork_type": featured_cw.classwork_type,
+                "classwork_category": featured_cw.classwork_category,
+                "due_date": featured_assignment.due_date.isoformat() if featured_assignment.due_date else None,
+                "submitted_count": submission_counts.get(featured_assignment.classwork_assignment_id, 0),
+                "total_students": total_students,
+                "status": cw_status,
+                "due_label": due_label,
+            }
+
+        results.append({
             "subject_load_id": subject_load.subject_load_id,
             "subject_id": subject.subject_id,
             "subject_name": subject.subject_name,
@@ -979,9 +1108,13 @@ def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None =
             "section_name": _class_section_name(class_),
             "grade_level": level.level_name if (level and level.level_name) else (f"Grade {level.grade_level}" if (level and level.grade_level) else "Grade 7"),
             "academic_period_id": subject_load.academic_period_id,
-        }
-        for subject_load, subject, class_, level in rows
-    ]
+            "student_count": total_students,
+            "total_classworks": total_cw,
+            "progress": progress_pct,
+            "active_classwork": active_cw_info,
+        })
+
+    return results
 
 
 def teacher_assignments_for_class_subject(

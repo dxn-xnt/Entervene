@@ -68,10 +68,12 @@ export function NotificationCard({
             </Card.Header>
             <Card.Content className="flex flex-col gap-1">
                 {description && <Text as="p" className="text-sm text-foreground break-words">{description}</Text>}
-                <Text as="p" className="text-xs text-muted-foreground/80 mt-1">
-                    {date}
-                    {user && user !== itemType ? ` • ${user}` : ""}
-                </Text>
+                {user && user !== itemType ? (
+                    <Text as="p" className="text-xs text-muted-foreground/80">
+                        {` • ${user}`}
+                    </Text>
+                ) : null}
+
             </Card.Content>
         </Card>
     );

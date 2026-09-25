@@ -88,19 +88,32 @@ const Notifications = () => {
   };
 
   const getNotificationType = (item: NotificationItem): string => {
-    if (
-      item.action_url?.toLowerCase().includes("tab=lesson") ||
-      item.action_url?.toLowerCase().includes("/lessons") ||
-      item.title.toLowerCase().includes("lesson") ||
-      item.body?.toLowerCase().includes("lesson")
-    ) {
-      return "Lesson";
+    // 1. Explicit notification types
+    if (item.notification_type === "risk_alert") {
+      return "Intervention";
+    }
+    if (item.notification_type === "announcement") {
+      return "Announcement";
     }
     if (
       item.notification_type === "assignment_due" ||
       item.notification_type === "submission_graded" ||
       item.notification_type === "grade_released" ||
-      item.action_url?.toLowerCase().includes("tab=classwork") ||
+      item.action_url?.toLowerCase().includes("tab=classwork")
+    ) {
+      return "Classwork";
+    }
+
+    // 2. Explicit lesson URL checks
+    if (
+      item.action_url?.toLowerCase().includes("tab=lesson") ||
+      item.action_url?.toLowerCase().includes("/lessons")
+    ) {
+      return "Lesson";
+    }
+
+    // 3. Keyword fallback matching in title/body
+    if (
       item.title.toLowerCase().includes("classwork") ||
       item.title.toLowerCase().includes("assignment") ||
       item.title.toLowerCase().includes("quiz") ||
@@ -108,12 +121,13 @@ const Notifications = () => {
     ) {
       return "Classwork";
     }
-    if (item.notification_type === "risk_alert") {
-      return "Intervention";
+    if (
+      item.title.toLowerCase().includes("lesson") ||
+      item.body?.toLowerCase().includes("lesson")
+    ) {
+      return "Lesson";
     }
-    if (item.notification_type === "announcement") {
-      return "Announcement";
-    }
+
     return "Classwork";
   };
 
