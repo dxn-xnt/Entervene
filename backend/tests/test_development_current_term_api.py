@@ -46,9 +46,10 @@ def _scope(ctx):
     }
 
 
-def _client(monkeypatch, db, *, role="admin", user_id=None, environment="test", enabled=True):
+def _client(monkeypatch, db, *, role="admin", user_id=None, environment="test", enabled=True, model_name="entervene_current_term_development_rf_v3"):
     monkeypatch.setattr(settings, "app_environment", environment)
     monkeypatch.setattr(settings, "development_prediction_api_enabled", enabled)
+    monkeypatch.setattr(settings, "development_current_term_model_name", model_name)
 
     def db_override():
         yield db
@@ -115,6 +116,31 @@ def _insert_development_prediction(
     ctx["db"].add(row)
     ctx["db"].commit()
     return row
+
+
+def test_selected_model_default_and_authorized_legacy_history(current_period_context, monkeypatch):
+    ctx = current_period_context
+    legacy_id = _register_test_model(ctx)
+    corrected = AIModelVersion(
+        model_name="entervene_current_term_official_target_rf_candidate",
+        model_type="REGRESSOR", model_purpose="CURRENT_TERM_FINAL_GRADE_PROJECTION",
+        algorithm="RandomForestRegressor", target_column="target_final_period_grade",
+        lifecycle_status="DEVELOPMENT", is_active=False, production_validated=False,
+        independent_three_term_validation=False,
+    )
+    ctx["db"].add(corrected)
+    ctx["db"].commit()
+    _insert_development_prediction(ctx, model_version_id=legacy_id, grade="81.00")
+    _insert_development_prediction(ctx, model_version_id=corrected.model_version_id, grade="89.00")
+    client = _client(monkeypatch, ctx["db"], model_name=corrected.model_name)
+    current = client.get(PATH, params=_read_params(ctx))
+    assert current.status_code == 200
+    assert current.json()["total"] == 1
+    assert current.json()["items"][0]["model_version_id"] == corrected.model_version_id
+    history = client.get(PATH, params=_read_params(ctx, model_version_id=legacy_id))
+    assert history.status_code == 200
+    assert history.json()["total"] == 1
+    assert history.json()["items"][0]["model_version_id"] == legacy_id
 
 
 def _add_student(ctx, first_name="Second", last_name="Learner", lrn="300000000002"):
@@ -224,6 +250,32 @@ def test_get_returns_latest_revisions_for_each_student(current_period_context, m
     assert returned[str(ctx["student"].student_id)]["revision"] == 2
     assert returned[str(ctx["student"].student_id)]["projected_final_term_grade"] == 91.25
     assert returned[str(other_student.student_id)]["prediction_id"] == other_latest.prediction_id
+
+
+def test_finalized_read_distinguishes_actual_grade_from_historical_projection(current_period_context, monkeypatch):
+    ctx = current_period_context
+    model_version_id = _register_test_model(ctx)
+    _insert_development_prediction(ctx, model_version_id=model_version_id, grade="84.60")
+    ctx["period"].start_date = date(2020, 1, 1)
+    ctx["period"].end_date = date(2020, 3, 1)
+    ctx["db"].add(StudentPeriodGrade(
+        student_id=ctx["student"].student_id,
+        class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        academic_period_id=ctx["period"].academic_period_id,
+        final_period_grade=Decimal("87.00"),
+        is_finalized=True,
+    ))
+    ctx["db"].commit()
+
+    response = _client(monkeypatch, ctx["db"]).get(PATH, params=_read_params(ctx))
+    assert response.status_code == 200, response.text
+    item = response.json()["items"][0]
+    assert item["projected_final_term_grade"] == 84.6
+    assert item["official_final_grade"] == 87.0
+    assert item["official_final_grade_available"] is True
+    assert item["term_context"]["progress_percent"] == 100.0
+    assert item["term_context"]["scheduled_end_passed_while_active"] is True
 
 
 def test_get_filters_by_required_scope(current_period_context, monkeypatch):

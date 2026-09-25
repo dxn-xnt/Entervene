@@ -24,6 +24,10 @@ sys.path.insert(0, str(BACKEND_DIR))
 load_dotenv(os.getenv("ENV_FILE", BACKEND_DIR / ".env.demo"))
 
 DEMO_DATABASE = "Entervene_Demo"
+ACCEPTANCE_DATABASE = "Entervene_Demo_4M"
+FINAL_ACCEPTANCE_DATABASE = "Entervene_Demo_4N"
+RETRY_ACCEPTANCE_DATABASE = "Entervene_Demo_4N2"
+ACCEPTANCE_DATABASES = frozenset({ACCEPTANCE_DATABASE.casefold(), FINAL_ACCEPTANCE_DATABASE.casefold(), RETRY_ACCEPTANCE_DATABASE.casefold()})
 ADMIN_EMAIL = "demo-admin@example.com"
 ADMIN_PASSWORD = "DemoAdmin!2026"
 TEACHER_EMAIL = "demo-teacher@example.com"
@@ -36,23 +40,37 @@ def require_demo_database(database_url: str) -> URL:
     url = make_url(database_url)
     if url.drivername.split("+")[0] != "postgresql":
         raise ValueError("The current-term demo requires PostgreSQL.")
-    if (url.database or "").casefold() != DEMO_DATABASE.casefold():
-        raise ValueError(f"Refusing to target {url.database!r}; only {DEMO_DATABASE!r} is allowed.")
+    if url.host not in {"localhost", "127.0.0.1"} or (url.database or "").casefold() not in {DEMO_DATABASE.casefold(), *ACCEPTANCE_DATABASES}:
+        raise ValueError("Refusing to target a non-local or non-demo database.")
     return url
+
+
+def summary_path(database_url: str) -> Path:
+    database = require_demo_database(database_url).database
+    if database.casefold() == DEMO_DATABASE.casefold():
+        return SUMMARY_PATH
+    suffix = database.casefold().removeprefix("entervene_demo_")
+    return SUMMARY_PATH.with_name(f"current-term-demo-{suffix}-summary.json")
 
 
 def recreate_database(database_url: str) -> None:
     url = require_demo_database(database_url)
+    database_name = url.database
     admin_url = url.set(database="postgres")
     engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
     try:
         with engine.connect() as connection:
+            if database_name.casefold() in ACCEPTANCE_DATABASES:
+                exists = connection.execute(text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": database_name}).scalar()
+                if exists:
+                    raise ValueError("Refusing to replace an existing acceptance database.")
             connection.execute(text(
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
                 "WHERE datname = :name AND pid <> pg_backend_pid()"
-            ), {"name": DEMO_DATABASE})
-            connection.exec_driver_sql(f'DROP DATABASE IF EXISTS "{DEMO_DATABASE}"')
-            connection.exec_driver_sql(f'CREATE DATABASE "{DEMO_DATABASE}"')
+            ), {"name": database_name})
+            if database_name.casefold() not in ACCEPTANCE_DATABASES:
+                connection.exec_driver_sql(f'DROP DATABASE IF EXISTS "{database_name}"')
+            connection.exec_driver_sql(f'CREATE DATABASE "{database_name}"')
     finally:
         engine.dispose()
 
@@ -84,10 +102,13 @@ def migrate(database_url: str) -> None:
 
 def write_demo_environment(database_url: str) -> None:
     url = require_demo_database(database_url)
+    if url.database.casefold() in ACCEPTANCE_DATABASES:
+        raise ValueError("Acceptance setup must keep existing demo environment files unchanged.")
     rendered_url = url.render_as_string(hide_password=False)
     (BACKEND_DIR / ".env.demo").write_text(
         "APP_ENVIRONMENT=development\n"
         "DEVELOPMENT_PREDICTION_API_ENABLED=true\n"
+        "DEVELOPMENT_CURRENT_TERM_MODEL_NAME=entervene_current_term_official_target_rf_candidate\n"
         f"DATABASE_URL={rendered_url}\n"
         "SECRET_KEY=entervene-demo-only-secret-key-2026-local\n"
         "FRONTEND_URL=http://localhost:5173\n"
@@ -196,8 +217,36 @@ def seed(database_url: str) -> dict:
     engine = create_engine(database_url, pool_pre_ping=True)
     with Session(engine) as session:
         if session.scalar(select(UserAccount).where(UserAccount.email == ADMIN_EMAIL)) is not None:
+            from app.services.prediction.RegisterCorrectedCurrentTermModel import register_corrected_development_model
+            from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
+            from app.services.prediction.DevelopmentCurrentTermPredictionPersistenceService import generate_and_persist_development_current_term
+            corrected_id = register_corrected_development_model(session)[0].model_version_id
+            legacy_scopes = {
+                (row.student_id, row.class_id, row.subject_id, row.source_period_id)
+                for row in session.query(DevelopmentCurrentTermPrediction).filter(
+                    DevelopmentCurrentTermPrediction.model_version_id != corrected_id,
+                ).all()
+            }
+            session.commit()
+            session.close()
+            results = [
+                generate_and_persist_development_current_term(
+                    *scope, model_version_id=corrected_id, bind=engine,
+                )
+                for scope in sorted(legacy_scopes, key=lambda scope: tuple(map(str, scope)))
+            ]
+            summary = read_summary(database_url)
+            summary["selected_model_name"] = "entervene_current_term_official_target_rf_candidate"
+            summary["corrected_model_version_id"] = corrected_id
+            with Session(engine) as count_session:
+                summary["corrected_prediction_count"] = count_session.scalar(
+                    select(func.count(func.distinct(DevelopmentCurrentTermPrediction.student_id))).where(
+                        DevelopmentCurrentTermPrediction.model_version_id == corrected_id
+                    )
+                )
+            summary_path(database_url).write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
             engine.dispose()
-            return read_summary(database_url)
+            return summary
 
         roles = [Role(role_id=1, role_name="Admin"), Role(role_id=2, role_name="Teacher"), Role(role_id=3, role_name="Student")]
         admin = UserAccount(user_id=_uuid("admin"), email=ADMIN_EMAIL, password_hash=hash_password(ADMIN_PASSWORD), account_status="active", email_status="verified")
@@ -270,7 +319,9 @@ def seed(database_url: str) -> dict:
                 status = "submitted" if score is None else ("late" if is_late else "graded")
                 session.add(StudentSubmission(student_id=student.student_id, classwork_assignment_id=assignment.classwork_assignment_id, submitted_at=_utc(ACTIVITIES[activity_index][5], 13 if is_late else 8), status=status, grade=score, attempt_count=1, graded_at=_utc(ACTIVITIES[activity_index][5] + 1) if score is not None else None, graded_by_staff_id=teacher.staff_id if score is not None else None))
 
-        model_version_id = _register_v3(session)
+        _register_v3(session)
+        from app.services.prediction.RegisterCorrectedCurrentTermModel import register_corrected_development_model
+        model_version_id = register_corrected_development_model(session)[0].model_version_id
         session.commit()
         scope = {"class_id": class_.class_id, "subject_id": subject.subject_id, "academic_period_id": period.academic_period_id}
         student_records = [(student.student_id, student.first_name + " " + student.last_name, profile) for student, _, profile in students]
@@ -319,7 +370,10 @@ def seed(database_url: str) -> dict:
             }
 
     summary = {
-        "database": DEMO_DATABASE,
+        "database": require_demo_database(database_url).database,
+        "selected_model_name": "entervene_current_term_official_target_rf_candidate",
+        "corrected_model_version_id": model_version_id,
+        "corrected_prediction_count": sum(result["prediction_status"] == "DEVELOPMENT_PREDICTION_AVAILABLE" for _, result in results),
         "admin_email": ADMIN_EMAIL,
         "teacher_email": TEACHER_EMAIL,
         "class": "Demo Archimedes",
@@ -331,18 +385,20 @@ def seed(database_url: str) -> dict:
         "insufficient_evidence": {"student": student_records[9][1], "behavioral_context": behavioral_context[str(student_records[9][0])], **blocked},
         "predictions": [{"student": record[1], "academic_profile": record[2], "behavioral_context": behavioral_context[str(record[0])], **result} for record, result in results],
     }
-    SUMMARY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SUMMARY_PATH.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
+    output_path = summary_path(database_url)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
     engine.dispose()
     return summary
 
 
 def read_summary(database_url: str) -> dict:
     require_demo_database(database_url)
-    if not SUMMARY_PATH.exists():
+    output_path = summary_path(database_url)
+    if not output_path.exists():
         raise ValueError("Demo summary not found; run setup first.")
-    summary = json.loads(SUMMARY_PATH.read_text(encoding="utf-8"))
-    if summary.get("database", "").casefold() != DEMO_DATABASE.casefold():
+    summary = json.loads(output_path.read_text(encoding="utf-8"))
+    if summary.get("database", "").casefold() != require_demo_database(database_url).database.casefold():
         raise ValueError("Demo summary belongs to an unexpected database.")
     return summary
 
@@ -351,13 +407,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("setup", "seed", "status"))
     parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"), required=os.getenv("DATABASE_URL") is None)
+    parser.add_argument("--no-write-environment", action="store_true", help="Keep existing demo environment files unchanged.")
     args = parser.parse_args()
-    require_demo_database(args.database_url)
+    database = require_demo_database(args.database_url).database
+    if args.action == "setup" and database.casefold() in ACCEPTANCE_DATABASES and not args.no_write_environment:
+        parser.error("Acceptance setup requires --no-write-environment.")
     if args.action == "setup":
         recreate_database(args.database_url)
         migrate(args.database_url)
         summary = seed(args.database_url)
-        write_demo_environment(args.database_url)
+        if not args.no_write_environment:
+            write_demo_environment(args.database_url)
     elif args.action == "seed":
         summary = seed(args.database_url)
     else:

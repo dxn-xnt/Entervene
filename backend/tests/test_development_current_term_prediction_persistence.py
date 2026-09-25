@@ -77,6 +77,7 @@ def test_append_only_revisions_snapshot_and_dashboard_isolation(current_period_c
     })
     first_row = ctx["db"].get(DevelopmentCurrentTermPrediction, first["prediction_id"])
     original_snapshot = json.loads(json.dumps(first_row.evidence_snapshot))
+    add_activity(ctx, "PERFORMANCE_TASK", 15, 20)
     second = _run(ctx, model_version_id)
     ctx["db"].expire_all()
     first_row = ctx["db"].get(DevelopmentCurrentTermPrediction, first["prediction_id"])
@@ -105,6 +106,46 @@ def test_append_only_revisions_snapshot_and_dashboard_isolation(current_period_c
     assert not any(term in json.dumps(original_snapshot).lower() for term in ("learner", "lrn", "email", "uploaded_file"))
     assert ctx["db"].query(AIPrediction).count() == 0
     assert get_dashboard_at_risk_predictions(ctx["db"])["items"] == []
+
+
+def test_identical_academic_evidence_reuses_latest_revision(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    model_version_id = _register_test_model(ctx)
+    monkeypatch.setattr(scorer, "score_development_current_term", lambda _features: 84.6)
+
+    first = _run(ctx, model_version_id)
+    original_snapshot = json.loads(json.dumps(ctx["db"].get(DevelopmentCurrentTermPrediction, first["prediction_id"]).evidence_snapshot))
+    second = _run(ctx, model_version_id)
+
+    assert second["persisted"] is False
+    assert second["unchanged"] is True
+    assert second["prediction_id"] == first["prediction_id"]
+    assert second["revision"] == 1
+    assert ctx["db"].query(DevelopmentCurrentTermPrediction).count() == 1
+
+    add_activity(ctx, "PERFORMANCE_TASK", 15, 20)
+    third = _run(ctx, model_version_id)
+    assert third["persisted"] is True
+    assert third["revision"] == 2
+    assert ctx["db"].get(DevelopmentCurrentTermPrediction, first["prediction_id"]).evidence_snapshot == original_snapshot
+
+
+def test_inactive_term_blocks_persistence_even_with_ready_evidence(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    model_version_id = _register_test_model(ctx)
+    ctx["period"].is_active = False
+    ctx["db"].commit()
+    monkeypatch.setattr(scorer, "score_development_current_term", lambda _features: 84.6)
+
+    result = _run(ctx, model_version_id)
+    assert result["prediction_status"] == "PERIOD_NOT_ACTIVE"
+    assert result["persisted"] is False
+    assert result["reason_codes"] == ["PERIOD_NOT_ACTIVE"]
+    assert ctx["db"].query(DevelopmentCurrentTermPrediction).count() == 0
 
 
 @pytest.mark.parametrize("blocker", ["insufficient", "subject", "weight", "finalized"])

@@ -12,5 +12,6 @@ export const BLOCKED_MESSAGES: Record<string, string> = {
   UNSUPPORTED_DEVELOPMENT_DOMAIN: "This subject or grading structure is not supported by the current development model.",
   INVALID_PERIOD_SCOPE: "This projection must use the same current academic term.",
   FINALIZED_GRADE_EXISTS: "A final term grade already exists, so a projection is no longer needed.",
+  PERIOD_NOT_ACTIVE: "This academic term is not active. An administrator must select the operational term before generating projections.",
   SCHEMA_CONTRACT_ERROR: "The current evidence could not be assessed by this development model.",
 };

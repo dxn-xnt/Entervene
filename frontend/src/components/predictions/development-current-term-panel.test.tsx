@@ -27,6 +27,7 @@ vi.mock("@/lib/prediction-api", () => ({
 vi.mock("@/components/ui/sheet", () => ({
   Sheet: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? <div>{children}</div> : null,
   SheetContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SheetDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
   SheetHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   SheetTitle: ({ children }: { children: React.ReactNode }) => <h3>{children}</h3>,
 }));
@@ -143,6 +144,24 @@ async function selectTeacherScope() {
 }
 
 describe("development current-term predictions", () => {
+  it.each(["admin", "teacher"] as const)("shows an unsupported-grade message for SHS %s without loading predictions", async (role) => {
+    api.getClasses.mockResolvedValue({ classes: [{ ...scope, academic_level: { academic_level_id: 11, level_name: "Grade 11", grade_level: 11 } }] });
+    api.getSubjects.mockResolvedValue({ subjects: [{ subject_id: 5, subject_name: "General Mathematics", academic_level: { academic_level_id: 11 } }] });
+    api.fetchFilters.mockImplementation(async (query?: { class_id?: number }) => ({
+      grades: [{ grade_level: 11, level_name: "Grade 11" }],
+      classes: [{ class_id: 7, section_name: "Archimedes", grade_level: 11 }],
+      subjects: query?.class_id ? [{ subject_id: 5, subject_name: "General Mathematics" }] : [],
+      terms: [{ term_number: 1, term_label: "Term 1", academic_period_id: 3 }],
+    }));
+    render(<DevelopmentCurrentTermPanel periodId={3} termName="Term 1" role={role} />);
+    await waitFor(() => expect(screen.getByLabelText("Class").querySelectorAll("option")).toHaveLength(2));
+    fireEvent.change(screen.getByLabelText("Class"), { target: { value: "7" } });
+    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("AI grade projection is not yet available for this grade level."));
+    expect(screen.queryByText("No current-term projections available")).toBeNull();
+    expect(api.fetchPersisted).not.toHaveBeenCalled();
+    if (role === "admin") expect(screen.getByRole("button", { name: "Generate Projection" }).hasAttribute("disabled")).toBe(true);
+  });
+
   it("gives teachers an assigned-load read-only view", async () => {
     api.fetchPersisted.mockResolvedValue({ items: [persisted], total: 1 });
     await selectTeacherScope();

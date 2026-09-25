@@ -22,6 +22,7 @@ import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import {
   buildCurrentTermDashboard,
   loadAuthorizedCurrentTermPredictions,
+  currentTermPredictionErrorMessage,
   type AuthorizedCurrentTermRow,
 } from "@/components/predictions/current-term-dashboard-adapter";
 
@@ -363,18 +364,19 @@ function TeacherCurrentTermSectionPredictions() {
   const resolvedClassId = classSlug && !Number.isNaN(Number(classSlug)) ? Number(classSlug) : undefined;
   const [rows, setRows] = useState<AuthorizedCurrentTermRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [subjectId, setSubjectId] = useState<number | undefined>();
   const [riskLevel, setRiskLevel] = useState<string | undefined>();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
 
   useEffect(() => {
-    if (!selectedPeriodId || !resolvedClassId) return;
+    if (!selectedPeriodId || !resolvedClassId) { Promise.resolve().then(() => setLoading(false)); return; }
     let cancelled = false;
-    Promise.resolve().then(() => { if (!cancelled) setLoading(true); });
+    Promise.resolve().then(() => { if (!cancelled) { setLoading(true); setLoadError(null); } });
     loadAuthorizedCurrentTermPredictions(selectedPeriodId, { classId: resolvedClassId })
       .then(({ rows: loaded }) => { if (!cancelled) setRows(loaded); })
-      .catch(() => { if (!cancelled) setRows([]); })
+      .catch((error: unknown) => { if (!cancelled) { setRows([]); setLoadError(currentTermPredictionErrorMessage(error)); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [resolvedClassId, selectedPeriodId]);
@@ -417,7 +419,8 @@ function TeacherCurrentTermSectionPredictions() {
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {subjects.map((subject) => <button key={subject.subject_id} type="button" onClick={() => setSubjectId(subject.subject_id)} className={cn("whitespace-nowrap rounded-md border-2 px-4 py-1.5 text-sm font-bold", effectiveSubjectId === subject.subject_id ? "border-black bg-yellow-400 shadow-[2px_2px_0px_#000]" : "border-transparent bg-white hover:border-black")}>{subject.subject_name}</button>)}
           </div>
-          {loading ? <div className="py-20 text-center font-semibold text-gray-500">Loading current-term projections...</div> : <PredictionTable
+          {loadError && <div role="alert" className="border-2 border-red-600 bg-red-50 p-4 font-semibold">{loadError}</div>}
+          {loading ? <div className="py-20 text-center font-semibold text-gray-500">Loading current-term projections...</div> : loadError ? null : <PredictionTable
             items={data.items}
             total={data.total}
             limit={Math.max(10, data.total)}
