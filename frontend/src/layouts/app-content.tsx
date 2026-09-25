@@ -17,7 +17,7 @@ export function AppContent({
   return (
     <main
       data-app-content
-      className="retro-squares-bg flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-y-auto"
+      className="retro-squares-bg flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-y-auto overflow-x-hidden"
       {...props}
     >
       {children}
