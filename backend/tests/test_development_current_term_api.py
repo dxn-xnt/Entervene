@@ -46,9 +46,10 @@ def _scope(ctx):
     }
 
 
-def _client(monkeypatch, db, *, role="admin", user_id=None, environment="test", enabled=True):
+def _client(monkeypatch, db, *, role="admin", user_id=None, environment="test", enabled=True, model_name="entervene_current_term_development_rf_v3"):
     monkeypatch.setattr(settings, "app_environment", environment)
     monkeypatch.setattr(settings, "development_prediction_api_enabled", enabled)
+    monkeypatch.setattr(settings, "development_current_term_model_name", model_name)
 
     def db_override():
         yield db
@@ -131,8 +132,7 @@ def test_selected_model_default_and_authorized_legacy_history(current_period_con
     ctx["db"].commit()
     _insert_development_prediction(ctx, model_version_id=legacy_id, grade="81.00")
     _insert_development_prediction(ctx, model_version_id=corrected.model_version_id, grade="89.00")
-    monkeypatch.setattr(settings, "development_current_term_model_name", corrected.model_name)
-    client = _client(monkeypatch, ctx["db"])
+    client = _client(monkeypatch, ctx["db"], model_name=corrected.model_name)
     current = client.get(PATH, params=_read_params(ctx))
     assert current.status_code == 200
     assert current.json()["total"] == 1

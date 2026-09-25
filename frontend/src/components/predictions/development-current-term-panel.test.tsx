@@ -27,6 +27,7 @@ vi.mock("@/lib/prediction-api", () => ({
 vi.mock("@/components/ui/sheet", () => ({
   Sheet: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? <div>{children}</div> : null,
   SheetContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SheetDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
   SheetHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   SheetTitle: ({ children }: { children: React.ReactNode }) => <h3>{children}</h3>,
 }));
