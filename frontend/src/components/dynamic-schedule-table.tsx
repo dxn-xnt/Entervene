@@ -1,3 +1,4 @@
+import { Table } from "@/components/retroui/Table";
 import { LoadingPanel } from "@/components/loading-panel";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { Badge } from "@/components/retroui/Badge";
@@ -93,67 +94,66 @@ export function DynamicScheduleTable({
   // ── 3. Render ─────────────────────────────────────────────────────────────
   // Orientation: days = top-row columns, time slots = left-column rows.
   return (
-    <div className="overflow-x-auto rounded border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-      <table className="w-full min-w-[640px] border-collapse bg-white text-sm">
+    <div className="min-w-0">
+      <Table className="w-full min-w-[640px] border-collapse bg-background text-sm">
         {/* ── Header row: corner + one column per day ── */}
-        <thead>
-          <tr>
+        <Table.Header>
+          <Table.Row>
             {/* Sticky time-label corner */}
-            <th className="sticky left-0 z-20 w-28 border-b-2 border-r-2 border-black bg-[#F6E9B2] px-3 py-2.5 text-left text-xs font-bold text-black">
+            <Table.Head className="sticky left-0 z-20 w-28 border-b-2 border-r-2 border-black bg-primary px-3 py-2.5 text-left text-xs font-bold text-black">
               Time
-            </th>
+            </Table.Head>
 
             {DAY_ORDER.map((day) => (
-              <th
+              <Table.Head
                 key={day}
-                className="border-b-2 border-r border-black bg-[#F6E9B2] px-3 py-2.5 text-center text-xs font-bold text-black whitespace-nowrap min-w-[120px]"
+                className="border-b-2 border-r border-black bg-primary px-3 py-2.5 text-center text-xs font-bold text-black whitespace-nowrap min-w-[120px]"
               >
                 <div>{DAY_LABELS[day]}</div>
-                <div className="text-[10px] font-mono text-gray-600">{day}</div>
-              </th>
+              </Table.Head>
             ))}
-          </tr>
-        </thead>
+          </Table.Row>
+        </Table.Header>
 
         {/* ── Body: one row per time slot ── */}
-        <tbody>
+        <Table.Body>
           {columns.map((slot, slotIdx) => {
             // Break slot → full-width separator row
             if (slot.isBreak) {
               return (
-                <tr key={slot.start_time} className="bg-amber-50/60">
-                  <td className="sticky left-0 z-10 border-r-2 border-t border-black bg-amber-100/70 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground whitespace-nowrap">
+                <Table.Row key={slot.start_time} className="bg-amber-50/60">
+                  <Table.Cell className="sticky left-0 z-10 border-r-2 border-t border-black bg-amber-100/70 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground whitespace-nowrap">
                     {slot.label}
-                  </td>
+                  </Table.Cell>
                   {DAY_ORDER.map((day) => (
-                    <td
+                    <Table.Cell
                       key={day}
                       className="border-r border-t border-black/20 bg-amber-50/50 px-1 py-1.5 text-center text-[10px] text-muted-foreground"
                     >
                       —
-                    </td>
+                    </Table.Cell>
                   ))}
-                </tr>
+                </Table.Row>
               );
             }
 
             // Class slot row
             return (
-              <tr
+              <Table.Row
                 key={slot.start_time}
-                className={slotIdx % 2 === 0 ? "bg-white" : "bg-gray-50/40"}
+                className={slotIdx % 2 === 0 ? "bg-background" : "bg-gray-50/40"}
               >
                 {/* Sticky time label */}
-                <td className="sticky left-0 z-10 border-r-2 border-t border-black bg-[#F6E9B2] px-3 py-2.5 align-middle whitespace-nowrap">
+                <Table.Cell className="sticky left-0 z-10 border-r-2 border-t border-black bg-[#F6E9B2] px-3 py-2.5 align-middle whitespace-nowrap">
                   <div className="text-xs font-bold text-black">{slot.time}</div>
-                </td>
+                </Table.Cell>
 
                 {/* One cell per day */}
                 {DAY_ORDER.map((day) => {
                   const entries = cellMap[day]?.[slot.start_time] ?? [];
 
                   return (
-                    <td
+                    <Table.Cell
                       key={day}
                       className="border-r border-t border-black/20 px-1.5 py-1.5 align-top"
                     >
@@ -231,14 +231,14 @@ export function DynamicScheduleTable({
                           ))}
                         </div>
                       )}
-                    </td>
+                    </Table.Cell>
                   );
                 })}
-              </tr>
+              </Table.Row>
             );
           })}
-        </tbody>
-      </table>
+        </Table.Body>
+      </Table>
     </div>
   );
 }
