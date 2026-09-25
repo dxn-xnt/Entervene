@@ -26,16 +26,22 @@ MANIFEST_PATH = Path(__file__).resolve().parent / "schemas" / f"{CORRECTED_MODEL
 
 def require_isolated_demo_database(db: Session) -> None:
     url = make_url(str(db.get_bind().url))
-    if settings.app_environment.lower() != "development" or (url.database or "").casefold() != "entervene_demo" or url.host not in {"localhost", "127.0.0.1"}:
-        raise ValueError("Corrected model registration requires local Entervene_Demo in development mode.")
+    if settings.app_environment.lower() != "development" or (url.database or "").casefold() not in {"entervene_demo", "entervene_demo_4m", "entervene_demo_4n", "entervene_demo_4n2"} or url.host not in {"localhost", "127.0.0.1"}:
+        raise ValueError("Corrected model registration requires a local isolated demo database in development mode.")
 
 
 def verified_corrected_package() -> tuple[dict, dict, str, str]:
     path = artifact_path(CORRECTED_MODEL_NAME)
+    if not path.is_file():
+        raise ValueError("Corrected development model artifact missing; provision the verified demo bundle before setup.")
+    if not REPORT_PATH.is_file():
+        raise ValueError("Corrected development model evaluation report missing; provision the verified demo bundle before setup.")
     schema = json.loads(schema_path(CORRECTED_MODEL_NAME).read_text(encoding="utf-8"))
     report = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     digest = sha256(path.read_bytes()).hexdigest()
+    if digest != manifest.get("artifact_sha256"):
+        raise ValueError("Corrected development model artifact checksum mismatch.")
     artifact = joblib.load(path)
     features = schema.get("feature_columns")
     ordered_hash = sha256(json.dumps(features, separators=(",", ":")).encode()).hexdigest()

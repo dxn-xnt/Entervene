@@ -21,7 +21,7 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
 import { EmptyStateCard } from "@/components/empty-state-card";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BLOCKED_MESSAGES, INTERVENTION_LABELS } from "./development-current-term-contract";
 
@@ -297,7 +297,7 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
 
       <Sheet open={selected !== null} onOpenChange={(open) => { if (!open) setSelected(null); }}>
         <SheetContent className="overflow-y-auto">
-          <SheetHeader><SheetTitle>Current-Term Projection</SheetTitle></SheetHeader>
+          <SheetHeader><SheetTitle>Current-Term Projection</SheetTitle><SheetDescription className="sr-only">Student, projected grade, readiness, and academic evidence details.</SheetDescription></SheetHeader>
           {selected && <div className="space-y-4 p-5 text-sm">
             {selected.official_final_grade_available && <div role="status" className="border border-blue-700 bg-blue-50 p-3"><strong>Final Grade: {selected.official_final_grade?.toFixed(2) ?? "Not available"}</strong><p>Earlier Projected Final Term Grade: {selected.projected_final_term_grade?.toFixed(2)}</p><p>This projection is historical and is no longer the current outcome.</p></div>}
             {selected.term_context?.is_active === false && !selected.official_final_grade_available && <p role="status" className="border border-blue-700 bg-blue-50 p-3">This term is no longer active. The projection is historical.</p>}

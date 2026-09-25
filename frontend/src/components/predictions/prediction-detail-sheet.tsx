@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
@@ -191,6 +192,7 @@ export default function PredictionDetailSheet({
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader className="pb-0">
           <SheetTitle className="text-lg">Prediction Detail</SheetTitle>
+          <SheetDescription className="sr-only">Student prediction, grade, and evidence details.</SheetDescription>
         </SheetHeader>
 
         {currentTermPrediction ? (

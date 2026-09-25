@@ -9,6 +9,7 @@ vi.mock("@/context/AuthContext", () => ({ useAuth: () => ({ user: { role: "teach
 vi.mock("@/components/ui/sheet", () => ({
   Sheet: ({ open, children }: { open: boolean; children: ReactNode }) => open ? <div>{children}</div> : null,
   SheetContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  SheetDescription: ({ children }: { children: ReactNode }) => <p>{children}</p>,
   SheetHeader: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   SheetTitle: ({ children }: { children: ReactNode }) => <h1>{children}</h1>,
 }));
