@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { Download, FileText, Loader2, Printer, X } from "lucide-react";
+import { Download, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import {
   getTeacherAdvisoryStudentSF9Data,
-  exportTeacherAdvisoryStudentSF9Docx,
   type TeacherAdvisoryStudentSF9Data,
 } from "@/lib/api";
 
@@ -26,7 +25,7 @@ export function SF9PreviewModal({
 }: SF9PreviewModalProps) {
   const [data, setData] = useState<TeacherAdvisoryStudentSF9Data | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isExportingDocx, setIsExportingDocx] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   // Teacher's comments state
   const [term1Comment, setTerm1Comment] = useState("");
@@ -60,168 +59,66 @@ export function SF9PreviewModal({
     };
   }, [isOpen, classId, studentId]);
 
-  const handleDownloadDocx = async () => {
+  const handleDownloadPdf = async () => {
+    if (!data) return;
+    const cardElement = document.getElementById("sf9-printable-card");
+    if (!cardElement) return;
+
     try {
-      setIsExportingDocx(true);
-      toast.info(`Preparing Word (.docx) report card for ${studentName || "student"}...`);
-      const { blob, filename } = await exportTeacherAdvisoryStudentSF9Docx(classId, studentId, {
-        term1: term1Comment,
-        term2: term2Comment,
-        term3: term3Comment,
+      setIsExportingPdf(true);
+      toast.info(`Generating official PDF report card for ${studentName || "student"}...`);
+
+      const { toPng } = await import("html-to-image");
+      const { jsPDF } = await import("jspdf");
+
+      // Render high-res image of the printable card
+      const imgDataUrl = await toPng(cardElement, {
+        quality: 0.98,
+        pixelRatio: 2.5,
+        backgroundColor: "#ffffff",
       });
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.setAttribute("download", filename);
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success("Word (.docx) report card downloaded. You can double-check and edit in Word before printing.");
+      // Standard Letter landscape (279.4 x 215.9 mm)
+      const pdf = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "letter",
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      const margin = 8; // mm margin
+      const maxW = pageWidth - margin * 2;
+      const maxH = pageHeight - margin * 2;
+
+      const imgProps = pdf.getImageProperties(imgDataUrl);
+      const imgRatio = imgProps.width / imgProps.height;
+
+      let renderW = maxW;
+      let renderH = maxW / imgRatio;
+
+      if (renderH > maxH) {
+        renderH = maxH;
+        renderW = maxH * imgRatio;
+      }
+
+      const x = margin + (maxW - renderW) / 2;
+      const y = margin + (maxH - renderH) / 2;
+
+      pdf.addImage(imgDataUrl, "PNG", x, y, renderW, renderH);
+
+      const cleanName = (data.student.student_lrn || data.student.full_name).replace(/[^a-zA-Z0-9_-]/g, "_");
+      const filename = `SF9_${cleanName}.pdf`;
+      pdf.save(filename);
+
+      toast.success("SF9 PDF report card downloaded successfully.");
     } catch (err) {
-      console.error("Docx export error:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to download Word document.");
+      console.error("PDF generation failed:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to generate PDF download.");
     } finally {
-      setIsExportingDocx(false);
+      setIsExportingPdf(false);
     }
-  };
-
-  const handlePrint = () => {
-    if (!data) return;
-
-    const printableElement = document.getElementById("sf9-printable-card");
-    if (!printableElement) return;
-
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      toast.error("Please allow popups to open the print view.");
-      return;
-    }
-
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>SF9_${data.student.student_lrn || data.student.full_name}</title>
-  <style>
-    @page {
-      size: letter landscape;
-      margin: 8mm;
-    }
-    * {
-      box-sizing: border-box;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    body {
-      font-family: Arial, Helvetica, sans-serif;
-      margin: 0;
-      padding: 0;
-      color: #000;
-      background: #fff;
-      font-size: 8pt;
-      line-height: 1.25;
-    }
-    .card-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      column-gap: 20px;
-      width: 100%;
-      height: 100%;
-    }
-    .left-col {
-      padding-right: 15px;
-      border-right: 1.5px solid #000;
-    }
-    .right-col {
-      padding-left: 5px;
-    }
-    .header-text {
-      text-align: center;
-      line-height: 1.2;
-    }
-    .header-gov {
-      font-style: italic;
-      font-size: 7.5pt;
-    }
-    .header-deped {
-      font-weight: bold;
-      font-size: 8.5pt;
-    }
-    .header-div {
-      font-weight: bold;
-      font-size: 8pt;
-    }
-    .report-title {
-      text-align: center;
-      font-weight: bold;
-      font-size: 10pt;
-      margin-top: 4px;
-      letter-spacing: 0.5px;
-    }
-    .meta-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 4px 0;
-      font-size: 7.5pt;
-    }
-    .meta-table td {
-      padding: 1.5px 2px;
-    }
-    .bordered-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 4px 0;
-      font-size: 7pt;
-    }
-    .bordered-table th, .bordered-table td {
-      border: 1px solid #000;
-      padding: 2px 3px;
-    }
-    .bordered-table th {
-      background-color: #E8EEF5;
-      font-weight: bold;
-      text-align: center;
-    }
-    .section-header-row td {
-      background-color: #f2f2f2;
-      font-weight: bold;
-    }
-    .text-center { text-align: center; }
-    .text-left { text-align: left; }
-    .text-right { text-align: right; }
-    .bold { font-weight: bold; }
-    .comment-box {
-      border: 1px solid #000;
-      padding: 4px 6px;
-      margin-bottom: 6px;
-      min-height: 52px;
-      font-size: 7pt;
-    }
-    .sig-line {
-      border-bottom: 1px solid #000;
-      display: inline-block;
-      min-width: 140px;
-    }
-  </style>
-</head>
-<body>
-  ${printableElement.innerHTML}
-  <script>
-    window.onload = function() {
-      window.print();
-      setTimeout(function() { window.close(); }, 500);
-    };
-  </script>
-</body>
-</html>
-    `;
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    printWindow.focus();
   };
 
   if (!isOpen) return null;
@@ -247,45 +144,25 @@ export function SF9PreviewModal({
 
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
-              size="sm"
-              disabled={isExportingDocx || !data}
-              onClick={handleDownloadDocx}
-              className="font-bold text-xs flex items-center gap-1.5 border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none"
-              title="Download Word (.docx) document to edit remarks and print in Word"
-            >
-              {isExportingDocx ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Download className="size-3.5 text-blue-700" />
-              )}
-              <span>{isExportingDocx ? "Exporting Word..." : "Download Word (.docx)"}</span>
-            </Button>
-
-            <Button
               variant="default"
               size="sm"
-              disabled={!data}
-              onClick={handlePrint}
+              disabled={isExportingPdf || !data}
+              onClick={handleDownloadPdf}
               className="font-bold text-xs flex items-center gap-1.5 border-2 border-black bg-primary text-primary-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none"
-              title="Print directly or save as PDF"
+              title="Download official PDF directly to your device"
             >
-              <Printer className="size-3.5" />
-              <span>Save as PDF / Print</span>
+              {isExportingPdf ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Download className="size-3.5" />
+              )}
+              <span>{isExportingPdf ? "Saving PDF..." : "Download PDF"}</span>
             </Button>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="ml-2 rounded border border-black p-1 hover:bg-muted"
-            >
-              <X className="size-4" />
-            </button>
           </div>
         </Dialog.Header>
 
         {/* Modal Scrollable Body */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-muted/40">
+        <div className="flex-1 overflow-auto p-4 md:p-6 bg-muted/40 [scrollbar-width:thin]">
           {isLoading && !data ? (
             <div className="flex flex-col items-center justify-center p-16 text-center text-muted-foreground">
               <Loader2 className="size-8 animate-spin text-primary mb-3" />
@@ -296,35 +173,57 @@ export function SF9PreviewModal({
               Unable to load report card details.
             </div>
           ) : (
-            <div className="mx-auto max-w-[1020px] bg-white text-black p-6 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-[11px] leading-tight">
+            <div className="mx-auto min-w-[960px] max-w-[1020px] bg-white text-black p-6 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-[11px] leading-tight">
               {/* Printable Card Area */}
-              <div id="sf9-printable-card" className="card-grid grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div id="sf9-printable-card" className="card-grid grid grid-cols-2 gap-6 bg-white text-black">
 
                 {/* ═════════════════════════════════════════════════════════ */}
                 {/* LEFT COLUMN: Learner's Performance Report */}
                 {/* ═════════════════════════════════════════════════════════ */}
-                <div className="left-col md:pr-6 md:border-r-2 md:border-black flex flex-col justify-between">
+                <div className="left-col pr-6 border-r-2 border-black flex flex-col justify-between">
                   <div>
-                    {/* Official Institutional Header */}
-                    <div className="header-text text-center mb-2">
-                      <p className="header-gov italic text-[10px] text-black/75">Republic of the Philippines</p>
-                      <p className="header-deped font-bold text-xs text-black">Department of Education</p>
-                      <p className="text-[10px] text-black font-medium">{data.school_info.region}</p>
-                      <p className="header-div font-bold text-[10px] uppercase text-black">
-                        SCHOOLS DIVISION OFFICE OF {data.school_info.division}
-                      </p>
-                      <p className="text-[10px] text-black">District {data.school_info.district}</p>
-                      <p className="text-[9.5px] text-black/80">{data.school_info.municipality}</p>
-
-                      <div className="mt-2 text-left text-[10.5px]">
-                        <span className="font-bold">School: </span>
-                        <span className="font-semibold underline">{data.school_info.school_name}</span>
+                    {/* Official Institutional Header with DepEd & School Logos */}
+                    <div className="header-logo-row flex items-start justify-between gap-2 mb-2">
+                      <div className="shrink-0 w-12 h-12 flex items-center justify-center pt-1.5">
+                        <img
+                          src="/assets/deped-logo.png"
+                          alt="Department of Education Logo"
+                          className="header-logo w-12 h-12 object-contain"
+                          crossOrigin="anonymous"
+                        />
                       </div>
 
-                      <h2 className="report-title font-bold text-[13px] uppercase mt-2">
+                      <div className="header-text text-center flex-1 leading-tight">
+                        <p className="header-gov italic text-[9.5px] text-black/75">Republic of the Philippines</p>
+                        <p className="header-deped font-bold text-xs text-black">Department of Education</p>
+                        <p className="text-[9.5px] text-black font-medium">{data.school_info.region}</p>
+                        <p className="header-div font-bold text-[9.5px] uppercase text-black">
+                          SCHOOLS DIVISION OFFICE OF {data.school_info.division}
+                        </p>
+                        <p className="text-[9.5px] text-black">District {data.school_info.district}</p>
+                        <p className="text-[9px] text-black/80">{data.school_info.municipality}</p>
+
+                        {/* Automatic School Name without "School:" label */}
+                        <p className="font-extrabold text-[10.5px] uppercase tracking-wide text-black mt-1">
+                          {data.school_info.school_name}
+                        </p>
+                      </div>
+
+                      <div className="shrink-0 w-12 h-12 flex items-center justify-center pt-1.5">
+                        <img
+                          src="/assets/school-logo.png"
+                          alt="School Official Logo"
+                          className="header-logo w-12 h-12 object-contain"
+                          crossOrigin="anonymous"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="text-center mt-1 mb-2">
+                      <h2 className="report-title font-bold text-[12.5px] uppercase">
                         LEARNER'S PERFORMANCE REPORT
                       </h2>
-                      <p className="text-[10.5px] font-bold">School Year {data.class_info.academic_year}</p>
+                      <p className="text-[10px] font-bold">School Year {data.class_info.academic_year}</p>
                     </div>
 
                     {/* Student Metadata Table */}
