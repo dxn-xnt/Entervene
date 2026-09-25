@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SubjectCard } from "../../components/subject-card";
-import { useNavigate } from "react-router-dom";
+
 import { routes } from "@/../routes";
 import { apiFetch } from "@/lib/api";
 import { LoadingPanel } from "@/components/loading-panel";
@@ -24,7 +24,7 @@ interface EnrolledSubject {
 }
 
 const Subjects = () => {
-  const navigate = useNavigate();
+
   const [subjects, setSubjects] = useState<EnrolledSubject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -48,13 +48,10 @@ const Subjects = () => {
     }
   };
 
-  const handleSubjectClick = (subject: EnrolledSubject) => {
-    navigate(
-      routes.student.subjectDetail
-        .replace(":classId", String(subject.class_id))
-        .replace(":subjectId", String(subject.subject_id)),
-    );
-  };
+  const subjectHref = (subject: EnrolledSubject): string =>
+    routes.student.subjectDetail
+      .replace(":classId", String(subject.class_id))
+      .replace(":subjectId", String(subject.subject_id));
 
   return (
     <AppLayout>
@@ -89,18 +86,17 @@ const Subjects = () => {
                   className="px-4 py-10 sm:px-6 sm:py-12"
                 />
               ) : (
-                <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+                <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
                   {subjects.map((subject) => (
                     <SubjectCard
-                      showPattern={false}
-                      className="shadow-md hover:shadow-none"
                       key={subject.subject_load_id}
                       title={subject.subject_name}
-                      onClick={() => handleSubjectClick(subject)}
+                      to={subjectHref(subject)}
                       teacher={subject.teacher_name}
-                      badges={[
-                        { label: subject.section_name || "Section", count: 0 },
-                      ]}
+                      subjectCode={subject.subject_codename}
+                      periodName={subject.period_name}
+                      yearLabel={subject.year_label}
+                      isCurrentPeriod={subject.is_current_period}
                     />
                   ))}
                 </div>
