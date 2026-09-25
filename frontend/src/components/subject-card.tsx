@@ -7,7 +7,7 @@ import { Progress } from "@/components/retroui/Progress";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, UserRound } from "lucide-react";
 
 type BadgeItem = {
   label: string;
@@ -24,6 +24,7 @@ type SubjectCardProps = {
   isCurrentPeriod?: boolean;
   title: string;
   teacher?: string;
+  teacherAvatar?: string;
   badges?: BadgeItem[];
   pendingCount?: number;
   completionRate?: number;
@@ -38,6 +39,7 @@ export function SubjectCard({
   title,
   to,
   teacher,
+  teacherAvatar,
   subjectCode,
   periodName,
   yearLabel,
@@ -51,32 +53,31 @@ export function SubjectCard({
   showPattern = true,
 }: SubjectCardProps) {
   if (to) {
-    const words = title.trim().split(/\s+/).filter(Boolean);
-    const initials = (words.length > 1
-      ? `${words[0][0]}${words[words.length - 1][0]}`
-      : (words[0] || "").slice(0, 2)).toUpperCase();
-
     return (
       <Link
         to={to}
-        aria-label={`Open ${title}`}
+        aria-label={`Open ${title}${teacher ? `, taught by ${teacher}` : ""}`}
         className="group block h-full min-w-0 text-card-foreground no-underline outline-offset-4 focus-visible:outline-3 focus-visible:outline-ring"
       >
         <Card variant="retro" className={cn("flex h-full min-h-60 min-w-0 flex-col gap-0 p-0", className)}>
           <div className="retro-theme-stripes h-20 shrink-0 border-b-2 border-black bg-primary p-2.5 transition-colors group-hover:bg-primary-hover">
             <div className="flex items-start justify-between gap-2">
               <Badge size="sm" variant="outline" className="min-w-0 max-w-[60%] break-words">
-                {subjectCode?.trim() || initials}
+                {subjectCode?.trim() || title}
               </Badge>
               {isCurrentPeriod && (
                 <Badge size="sm" variant="solid" className="shrink-0">Current term</Badge>
               )}
             </div>
           </div>
-          <div className="relative z-10 -mt-5 ml-3 w-fit -rotate-6" aria-hidden="true">
-            <Avatar className="size-10 rounded border-black bg-primary text-primary-foreground shadow-sm shadow-black">
-              <Avatar.Fallback className="rounded bg-primary text-base font-bold text-primary-foreground">
-                {initials}
+          <div className="relative z-10 -mt-5 ml-3 w-fit" aria-hidden="true">
+            <Avatar variant="teacher" className="size-15 rounded-full border-2 border-black">
+              <Avatar.Image
+                src={teacherAvatar || "/avatars/teacher-avatars/12.svg"}
+                alt=""
+              />
+              <Avatar.Fallback className="rounded-full bg-primary text-base font-bold text-primary-foreground">
+                <UserRound className="size-5" />
               </Avatar.Fallback>
             </Avatar>
           </div>

@@ -20,7 +20,7 @@ interface AuthContextType {
   acceptInvitation: (token: string, password: string, confirmPassword: string) => Promise<Role>;
   logout: () => Promise<void>;
   refresh: () => Promise<boolean>;
-  updateAvatar: (avatarPath: string) => void;
+  updateAvatar: (avatarPath: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -41,8 +41,25 @@ function userFromAuthResponse(data: {
     userId: data.user_id,
     fullName: data.full_name?.trim() || data.email?.split("@")[0] || "User",
     email: data.email ?? "",
-    avatar: storedAvatar || data.avatar || defaultAvatar,
+    avatar: data.avatar || storedAvatar || defaultAvatar,
   };
+}
+
+async function userWithSavedAvatar(data: Parameters<typeof userFromAuthResponse>[0]): Promise<AuthUser> {
+  const storedAvatar = localStorage.getItem(`avatar_${data.user_id}`);
+  if (!data.avatar && storedAvatar) {
+    try {
+      const res = await apiFetch("/api/v1/auth/me/avatar", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatar: storedAvatar }),
+      });
+      if (res.ok) data.avatar = storedAvatar;
+    } catch {
+      // The local avatar remains visible until it can be saved to the account.
+    }
+  }
+  return userFromAuthResponse(data);
 }
 
 function getErrorMessage(err: unknown): string {
@@ -72,7 +89,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const data = await res.json();
-    setUser(userFromAuthResponse(data));
+    setUser(await userWithSavedAvatar(data));
     return true;
   };
 
@@ -89,8 +106,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
         if (!cancelled && res.ok) {
           const meData = await res.json();
-          setUser(userFromAuthResponse(meData));
+          setUser(await userWithSavedAvatar(meData));
         }
+      } catch {
+        if (!cancelled) setUser(null);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -115,7 +134,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const data = await res.json();
-    const authUser = userFromAuthResponse(data);
+    const authUser = await userWithSavedAvatar(data);
     setUser(authUser);
     return authUser.role;
   };
@@ -140,7 +159,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const refreshed = await refresh();
     if (refreshed) return data.role;
 
-    const authUser = userFromAuthResponse(data);
+    const authUser = await userWithSavedAvatar(data);
     setUser(authUser);
     return authUser.role;
   };
@@ -153,10 +172,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const updateAvatar = (avatarPath: string) => {
+  const updateAvatar = async (avatarPath: string): Promise<void> => {
     if (user) {
+      const res = await apiFetch("/api/v1/auth/me/avatar", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatar: avatarPath }),
+      });
+      if (!res.ok) throw new Error("Unable to save avatar. Please try again.");
       localStorage.setItem(`avatar_${user.userId}`, avatarPath);
-      setUser({ ...user, avatar: avatarPath });
+      setUser((current) => current ? { ...current, avatar: avatarPath } : current);
     }
   };
 

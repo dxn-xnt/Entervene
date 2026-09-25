@@ -1,4 +1,5 @@
 import secrets
+import re
 import hashlib
 from app.core.RequestLimits import login_limiter
 from datetime import datetime, timezone
@@ -25,7 +26,7 @@ from app.models.auth.UserLoginLog import UserLoginLog
 from app.models.auth.UserRoles import UserRoles
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
-from app.schemas.Auth import LoginRequest, LoginResponse
+from app.schemas.Auth import AvatarUpdate, LoginRequest, LoginResponse
 
 router = APIRouter()
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -98,6 +99,7 @@ def _user_identity_query(db: Session):
         db.query(
             UserAccount.user_id,
             UserAccount.email,
+            UserAccount.avatar_path,
             UserAccount.password_hash,
             UserAccount.account_status,
             Role.role_name,
@@ -162,6 +164,7 @@ def login(body: LoginRequest, response: Response, db: Session = Depends(get_db))
         "email": result.email,
         "full_name": (result.full_name or "").strip() or "User",
         "login_log_id": log_entry.login_id,
+        "avatar": result.avatar_path,
     }
 
 
@@ -177,7 +180,27 @@ def get_me(current_user: dict = Depends(get_current_user), db: Session = Depends
         "full_name": (result.full_name or "").strip() or "User",
         "role": _role_name_to_client_role(result.role_name),
         "account_status": result.account_status,
+        "avatar": result.avatar_path,
     }
+
+
+@router.patch("/me/avatar")
+def update_my_avatar(
+    body: AvatarUpdate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    role = current_user.get("role")
+    avatar_range = "(?:1[2-9]|20)" if role in ("teacher", "admin") else "(?:[1-9]|1[01])"
+    avatar_group = "teacher-avatars" if role in ("teacher", "admin") else "student-avatars"
+    if not re.fullmatch(rf"/avatars/{avatar_group}/{avatar_range}\.svg", body.avatar):
+        raise HTTPException(status_code=422, detail="Invalid avatar choice")
+    account = db.get(UserAccount, current_user["sub"])
+    if account is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    account.avatar_path = body.avatar
+    db.commit()
+    return {"avatar": account.avatar_path}
 
 
 @router.post("/refresh", response_model=LoginResponse)
@@ -208,6 +231,7 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
         "email": result.email,
         "full_name": (result.full_name or "").strip() or "User",
         "login_log_id": 0,
+        "avatar": result.avatar_path,
     }
 
 

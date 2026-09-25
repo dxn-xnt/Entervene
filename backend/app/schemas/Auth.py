@@ -13,3 +13,8 @@ class LoginResponse(BaseModel):
     full_name: str
     email: str
     login_log_id: int
+    avatar: str | None = None
+
+
+class AvatarUpdate(BaseModel):
+    avatar: str

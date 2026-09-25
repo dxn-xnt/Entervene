@@ -5,14 +5,14 @@ import { SubjectCard } from "./subject-card";
 
 describe("Student Subjects catalog cards", () => {
   it.each([
-    ["Mathematics", "MA"], ["English", "EN"], ["Science", "SC"],
-    ["Computer Programming", "CP"],
-    ["Advanced Computer Programming and Software Development", "AD"],
-  ])("renders a descriptive link and initials for %s", (title, initials) => {
+    "Mathematics", "English", "Science",
+    "Computer Programming",
+    "Advanced Computer Programming and Software Development",
+  ])("renders a descriptive link without subject initials for %s", (title) => {
     const html = renderToStaticMarkup(<MemoryRouter><SubjectCard to="/student/subjects/7/5" title={title} /></MemoryRouter>);
     expect(html).toContain('href="/student/subjects/7/5"');
     expect(html).toContain(`aria-label="Open ${title}"`);
-    expect(html).toContain(`>${initials}</span>`);
+    expect(html).toContain("lucide-user-round");
     expect(html).toContain("focus-visible:outline-ring");
     expect(html).not.toContain("<button");
     expect(html).not.toContain("Completion");

@@ -16,6 +16,7 @@ interface EnrolledSubject {
   subject_name: string;
   subject_codename?: string;
   teacher_name: string;
+  teacher_avatar?: string | null;
   period_name: string;
   is_current_period: boolean;
   is_current_quarter: boolean;
@@ -93,6 +94,7 @@ const Subjects = () => {
                       title={subject.subject_name}
                       to={subjectHref(subject)}
                       teacher={subject.teacher_name}
+                      teacherAvatar={subject.teacher_avatar ?? undefined}
                       subjectCode={subject.subject_codename}
                       periodName={subject.period_name}
                       yearLabel={subject.year_label}

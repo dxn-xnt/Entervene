@@ -272,6 +272,7 @@ def test_student_subjects_return_current_period_alias(client, db, identity):
     )
     subject = Subject(subject_name="Computer Programming", academic_level_id=level.academic_level_id)
     staff = add_staff(db)
+    db.get(UserAccount, staff.user_id).avatar_path = "/avatars/teacher-avatars/17.svg"
     class_ = Class(
         section_name="Sapphire",
         academic_year_id=year.academic_year_id,
@@ -303,6 +304,7 @@ def test_student_subjects_return_current_period_alias(client, db, identity):
     assert body[0]["period_name"] == "Term 1"
     assert body[0]["is_current_period"] is True
     assert body[0]["is_current_quarter"] is True
+    assert body[0]["teacher_avatar"] == "/avatars/teacher-avatars/17.svg"
 
 
 def test_non_student_cannot_fetch_student_class(client, identity):
