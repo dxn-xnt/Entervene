@@ -1,6 +1,7 @@
 
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
+import { Dialog } from "@/components/retroui/Dialog";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { getMySchedule, type DynamicScheduleResponse } from "@/lib/api";
@@ -8,7 +9,7 @@ import { DynamicScheduleTable } from "@/components/dynamic-schedule-table";
 import { ProfileHeader } from "@/components/profile-header";
 import { useAuth } from "@/context/AuthContext";
 import { useEffect, useState } from "react";
-import { Pencil, X } from "lucide-react";
+import { Pencil } from "lucide-react";
 
 const TEACHER_AVATARS = [
   "/avatars/teacher-avatars/12.svg",
@@ -109,70 +110,61 @@ export default function TeacherProfile() {
         </div>
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
-          <div className="flex w-full max-w-md flex-col overflow-hidden rounded-none border-2 border-border bg-background text-foreground shadow-[4px_4px_0_#000]">
-            <div className="flex items-center justify-between border-b-2 border-border bg-primary px-4 py-3 text-primary-foreground">
-              <h2 className="font-bold text-lg">Edit Profile Avatar</h2>
-              <button
-                aria-label="Close modal"
-                className="rounded p-1 hover:bg-white/30 transition-colors cursor-pointer"
-                onClick={() => setIsModalOpen(false)}
-              >
-                <X className="size-5" />
-              </button>
-            </div>
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <Dialog.Content className="max-w-md">
+          <Dialog.Header>
+            <Dialog.Title className="text-lg font-bold">Edit Profile Avatar</Dialog.Title>
+          </Dialog.Header>
 
-            <div className="p-6 flex flex-col gap-6">
-              <div>
-                <p className="text-sm font-semibold text-black/70 mb-3">
-                  Select your profile picture:
-                </p>
-                <div className="grid grid-cols-3 gap-4">
+          <div className="min-h-0 overflow-y-auto px-5 py-4">
+            <p className="mb-3 text-sm font-semibold">
+              Select your profile picture:
+            </p>
+            <div className="grid grid-cols-3 gap-3 sm:gap-4">
                   {TEACHER_AVATARS.map((avatarPath) => {
                     const isSelected = tempSelectedAvatar === avatarPath;
                     return (
                       <button
                         key={avatarPath}
+                        type="button"
+                        aria-label={`Select teacher avatar ${TEACHER_AVATARS.indexOf(avatarPath) + 1}`}
+                        aria-pressed={isSelected}
                         onClick={() => setTempSelectedAvatar(avatarPath)}
-                        className={`aspect-square p-2 border-2 rounded transition-all duration-200 hover:scale-105 hover:bg-amber-50/50 cursor-pointer ${isSelected
-                          ? "border-[#79bd80] bg-amber-100 ring-2 ring-[#79bd80] ring-offset-2"
-                          : "border-black bg-white"
+                        className={`aspect-square cursor-pointer rounded border-2 p-2 transition-colors ${isSelected
+                          ? "border-primary bg-primary/20 ring-2 ring-primary ring-offset-2 ring-offset-background"
+                          : "border-border bg-card hover:bg-accent"
                           }`}
                       >
                         <img
                           src={avatarPath}
-                          alt="Teacher Avatar Option"
-                          className="w-full h-full object-contain"
+                          alt=""
+                          className="h-full w-full object-contain"
                         />
                       </button>
                     );
                   })}
-                </div>
-              </div>
-
-              <div className="flex flex-row justify-end gap-3 mt-2 border-t border-black/10 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-1.5"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={() => {
-                    updateAvatar(tempSelectedAvatar);
-                    setIsModalOpen(false);
-                  }}
-                  className="px-5 py-1.5 bg-[#79bd80] text-black border-2 border-black"
-                >
-                  Save
-                </Button>
-              </div>
             </div>
           </div>
-        </div>
-      )}
+
+          <Dialog.Footer className="mt-0">
+            <Button variant="outline" onClick={() => setIsModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                try {
+                  await updateAvatar(tempSelectedAvatar);
+                  setIsModalOpen(false);
+                } catch (error) {
+                  window.alert(error instanceof Error ? error.message : "Unable to save avatar.");
+                }
+              }}
+            >
+              Save
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
     </AppLayout>
   );
 }

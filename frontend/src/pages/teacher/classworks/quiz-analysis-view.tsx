@@ -1,3 +1,4 @@
+import { Table } from "@/components/retroui/Table";
 import { useState } from "react";
 import { Check, X, Pencil, BarChart3, HelpCircle, Users } from "lucide-react";
 import type { QuizAnalysis } from "./quiz-builder-types";
@@ -112,38 +113,38 @@ export default function QuizAnalysisView({
           <Card className="w-full border-2 border-black shadow-none mt-4">
             {activeTab === "overview" && (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm border-collapse">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="pb-3 font-medium text-gray-500 whitespace-nowrap pr-4">Learner's Name</th>
-                      <th className="pb-3 font-medium text-gray-500 text-center px-4">Points</th>
+                <Table className="w-full text-left text-sm border-collapse">
+                  <Table.Header>
+                    <Table.Row className="border-b border-border">
+                      <Table.Head className="pb-3 font-head text-primary-foreground whitespace-nowrap pr-4">Learner's Name</Table.Head>
+                      <Table.Head className="pb-3 font-head text-primary-foreground text-center px-4">Points</Table.Head>
                       {quizAnalysis.questions.map((q, i) => (
-                        <th key={q.quiz_question_id} className="pb-3 font-medium text-center px-2">
+                        <Table.Head key={q.quiz_question_id} className="pb-3 font-head text-center px-2">
                           <div className="text-xs text-gray-500">Q{i + 1}</div>
                           <div className="text-xs font-bold whitespace-nowrap text-green-600">{q.accuracy_percent ?? 0}%</div>
-                        </th>
+                        </Table.Head>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
                     {sortedStudents.map((student) => (
-                      <tr key={student.student_id} className="border-b border-gray-100 last:border-0">
-                        <td className="py-3 pr-4">
+                      <Table.Row key={student.student_id} className="border-b border-border last:border-0">
+                        <Table.Cell className="py-3 pr-4">
                           <div className="flex items-center gap-2">
                             <div className="grid h-8 w-8 place-items-center rounded-full border border-black bg-[#FFD08A] text-xs font-bold shrink-0">
                               {student.student_name.slice(0, 1)}
                             </div>
                             <span className="font-bold whitespace-nowrap">{student.student_name}</span>
                           </div>
-                        </td>
-                        <td className="py-3 px-4 text-center font-bold">
+                        </Table.Cell>
+                        <Table.Cell className="py-3 px-4 text-center font-bold">
                           {student.grade ?? 0} <span className="text-gray-500 font-normal">({student.score_percent ?? 0}%)</span>
-                        </td>
+                        </Table.Cell>
                         {quizAnalysis.questions.map((q) => {
                           const ans = student.answers?.find((a) => a.quiz_question_id === q.quiz_question_id);
                           const isCorrect = ans?.is_correct;
                           return (
-                            <td key={q.quiz_question_id} className="py-3 px-2 text-center">
+                            <Table.Cell key={q.quiz_question_id} className="py-3 px-2 text-center">
                               <div className="flex justify-center">
                                 {isCorrect === true ? (
                                   <div className="h-6 w-8 bg-[#8BCB88] border border-black rounded flex items-center justify-center">
@@ -157,13 +158,13 @@ export default function QuizAnalysisView({
                                   <div className="h-6 w-8 bg-gray-100 border border-black rounded" />
                                 )}
                               </div>
-                            </td>
+                            </Table.Cell>
                           );
                         })}
-                      </tr>
+                      </Table.Row>
                     ))}
-                  </tbody>
-                </table>
+                  </Table.Body>
+                </Table>
               </div>
             )}
 
@@ -268,23 +269,23 @@ export default function QuizAnalysisView({
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm border-collapse">
-                    <thead>
-                      <tr className="border-b-2 border-black">
-                        <th className="pb-3 font-medium text-gray-500 whitespace-nowrap pl-4">Learner's Name</th>
-                        <th className="pb-3 font-medium text-gray-500"></th>
-                        <th className="pb-3 font-medium text-gray-500 text-center px-4">Accuracy</th>
-                        <th className="pb-3 font-medium text-gray-500 text-center px-4">Points</th>
-                        <th className="pb-3 font-medium text-gray-500 text-center px-4">Score</th>
-                        <th className="pb-3 font-medium text-gray-500 text-right pr-4">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <Table className="w-full text-left text-sm border-collapse">
+                    <Table.Header>
+                      <Table.Row className="border-b-2 border-black">
+                        <Table.Head className="pb-3 font-head text-primary-foreground whitespace-nowrap pl-4">Learner's Name</Table.Head>
+                        <Table.Head className="pb-3 font-head text-primary-foreground"></Table.Head>
+                        <Table.Head className="pb-3 font-head text-primary-foreground text-center px-4">Accuracy</Table.Head>
+                        <Table.Head className="pb-3 font-head text-primary-foreground text-center px-4">Points</Table.Head>
+                        <Table.Head className="pb-3 font-head text-primary-foreground text-center px-4">Score</Table.Head>
+                        <Table.Head className="pb-3 font-head text-primary-foreground text-right pr-4">Action</Table.Head>
+                      </Table.Row>
+                    </Table.Header>
+                    <Table.Body>
                       {sortedStudents.map((student) => {
                         const corrects = student.answers?.filter(a => a.is_correct === true).length || 0;
                         return (
-                          <tr key={student.student_id} className="border-b border-gray-200 last:border-0">
-                            <td className="py-4 pl-4 pr-2">
+                          <Table.Row key={student.student_id} className="border-b border-border last:border-0">
+                            <Table.Cell className="py-4 pl-4 pr-2">
                               <div className="flex items-center gap-2">
                                 <div className="grid h-8 w-8 place-items-center rounded-full border border-black bg-[#FFD08A] text-xs font-bold shrink-0">
                                   {student.student_name.slice(0, 1)}
@@ -304,8 +305,8 @@ export default function QuizAnalysisView({
                                   </span>
                                 )}
                               </div>
-                            </td>
-                            <td className="py-4 px-2">
+                            </Table.Cell>
+                            <Table.Cell className="py-4 px-2">
                               <div className="flex items-center gap-2">
                                 <div className="flex gap-[2px]">
                                   {quizAnalysis.questions.map((q) => {
@@ -321,17 +322,17 @@ export default function QuizAnalysisView({
                                 </div>
                                 <span className="text-xs font-bold text-[#3A6D38] ml-2">{corrects} corrects <Check size={12} className="inline" /></span>
                               </div>
-                            </td>
-                            <td className="py-4 px-4 text-center font-bold text-lg">
+                            </Table.Cell>
+                            <Table.Cell className="py-4 px-4 text-center font-bold text-lg">
                               {student.score_percent ?? 0}<span className="text-xs font-normal text-gray-500">%</span>
-                            </td>
-                            <td className="py-4 px-4 text-center font-bold text-lg">
+                            </Table.Cell>
+                            <Table.Cell className="py-4 px-4 text-center font-bold text-lg">
                               {student.grade ?? 0}<span className="text-xs font-normal text-gray-500">/{totalPoints}</span>
-                            </td>
-                            <td className="py-4 px-4 text-center font-bold text-lg">
+                            </Table.Cell>
+                            <Table.Cell className="py-4 px-4 text-center font-bold text-lg">
                               {student.grade ?? 0}
-                            </td>
-                            <td className="py-4 pr-4 text-right">
+                            </Table.Cell>
+                            <Table.Cell className="py-4 pr-4 text-right">
                               {student.submission_id ? (
                                 <button
                                   type="button"
@@ -347,12 +348,12 @@ export default function QuizAnalysisView({
                               ) : (
                                 <span className="text-xs italic text-gray-400">No attempt</span>
                               )}
-                            </td>
-                          </tr>
+                            </Table.Cell>
+                          </Table.Row>
                         );
                       })}
-                    </tbody>
-                  </table>
+                    </Table.Body>
+                  </Table>
                 </div>
               </div>
             )}

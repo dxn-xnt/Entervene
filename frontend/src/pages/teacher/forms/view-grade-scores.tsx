@@ -65,7 +65,7 @@ export default function ViewGradeScoreModal({
     if (group.length === 0) return null;
     return (
       <>
-        <Table.Row className="border-y-2 border-black bg-yellow-50 hover:bg-yellow-100/70">
+        <Table.Row className="border-y-2 border-black bg-yellow-50 hover:bg-primary/50">
           <Table.Cell colSpan={2 + paginatedItems.length} className="py-1 font-black text-black">
             {label}
           </Table.Cell>
@@ -76,7 +76,7 @@ export default function ViewGradeScoreModal({
           const totalScore = student.scores.reduce<number>((sum, score) => sum + (score ?? 0), 0);
 
           return (
-            <Table.Row key={student.name} className="border-b border-black/10 hover:bg-yellow-50/50">
+            <Table.Row key={student.name} className="border-b border-black/10 hover:bg-primary/50">
               <Table.Cell className="whitespace-nowrap text-sm font-extrabold text-black">
                 {idx + 1}. {student.name}
               </Table.Cell>
@@ -127,11 +127,11 @@ export default function ViewGradeScoreModal({
 
         <Card className="w-full rounded border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <Table className="w-full border-collapse text-sm">
-            <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black">
+            <Table.Header className="border-b-2 border-black bg-primary text-xs font-head">
               <Table.Row>
-                <Table.Head className="min-w-[180px] font-black text-black">Learner's Name</Table.Head>
+                <Table.Head className="min-w-[180px] font-head text-black">Learner's Name</Table.Head>
                 {paginatedItems.map((item) => (
-                  <Table.Head key={item.id} className="min-w-[150px] px-3 py-3 text-center font-black text-black">
+                  <Table.Head key={item.id} className="min-w-[150px] px-3 py-3 text-center font-head text-black">
                     <div className="flex flex-col items-center justify-center gap-1">
                       <div className="flex items-center justify-center gap-1">
                         <span className="max-w-[160px] break-words text-center text-sm font-black leading-tight text-black" title={item.title}>
@@ -154,7 +154,7 @@ export default function ViewGradeScoreModal({
                     </div>
                   </Table.Head>
                 ))}
-                <Table.Head className="min-w-[100px] text-center font-black text-black">
+                <Table.Head className="min-w-[100px] text-center font-head text-black">
                   Total Score
                 </Table.Head>
               </Table.Row>

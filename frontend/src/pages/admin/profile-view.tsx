@@ -270,9 +270,13 @@ export default function AdminProfile() {
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => {
-                    updateAvatar(tempSelectedAvatar);
-                    setIsModalOpen(false);
+                  onClick={async () => {
+                    try {
+                      await updateAvatar(tempSelectedAvatar);
+                      setIsModalOpen(false);
+                    } catch (error) {
+                      window.alert(error instanceof Error ? error.message : "Unable to save avatar.");
+                    }
                   }}
                   className="px-5 py-1.5 bg-[#79bd80] text-black border-2 border-black"
                 >

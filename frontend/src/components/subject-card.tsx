@@ -1,10 +1,13 @@
 "use client";
 
+import { Link } from "react-router-dom";
+import { Avatar } from "@/components/retroui/Avatar";
+import { cn } from "@/lib/utils";
 import { Progress } from "@/components/retroui/Progress";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, UserRound } from "lucide-react";
 
 type BadgeItem = {
   label: string;
@@ -14,8 +17,14 @@ type BadgeItem = {
 };
 
 type SubjectCardProps = {
+  to?: string;
+  subjectCode?: string;
+  periodName?: string;
+  yearLabel?: string;
+  isCurrentPeriod?: boolean;
   title: string;
   teacher?: string;
+  teacherAvatar?: string;
   badges?: BadgeItem[];
   pendingCount?: number;
   completionRate?: number;
@@ -28,6 +37,13 @@ type SubjectCardProps = {
 
 export function SubjectCard({
   title,
+  to,
+  teacher,
+  teacherAvatar,
+  subjectCode,
+  periodName,
+  yearLabel,
+  isCurrentPeriod,
   pendingCount,
   completionRate = 0,
   latestActivityTitle,
@@ -36,6 +52,49 @@ export function SubjectCard({
   className,
   showPattern = true,
 }: SubjectCardProps) {
+  if (to) {
+    return (
+      <Link
+        to={to}
+        aria-label={`Open ${title}${teacher ? `, taught by ${teacher}` : ""}`}
+        className="group block h-full min-w-0 text-card-foreground no-underline outline-offset-4 focus-visible:outline-3 focus-visible:outline-ring"
+      >
+        <Card variant="retro" className={cn("flex h-full min-h-60 min-w-0 flex-col gap-0 p-0", className)}>
+          <div className="retro-theme-stripes h-20 shrink-0 border-b-2 border-black bg-primary p-2.5 transition-colors group-hover:bg-primary-hover">
+            <div className="flex items-start justify-between gap-2">
+              <Badge size="sm" variant="outline" className="min-w-0 max-w-[60%] break-words">
+                {subjectCode?.trim() || title}
+              </Badge>
+              {isCurrentPeriod && (
+                <Badge size="sm" variant="solid" className="shrink-0">Current term</Badge>
+              )}
+            </div>
+          </div>
+          <div className="relative z-10 -mt-5 ml-3 w-fit" aria-hidden="true">
+            <Avatar variant="teacher" className="size-15 rounded-full border-2 border-black">
+              <Avatar.Image
+                src={teacherAvatar || "/avatars/teacher-avatars/12.svg"}
+                alt=""
+              />
+              <Avatar.Fallback className="rounded-full bg-primary text-base font-bold text-primary-foreground">
+                <UserRound className="size-5" />
+              </Avatar.Fallback>
+            </Avatar>
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-1 px-3 pb-3 pt-2">
+            <Card.Title className="break-words text-lg font-bold leading-tight">{title}</Card.Title>
+            {teacher && <p className="break-words text-sm text-muted-foreground">{teacher}</p>}
+            {(periodName || yearLabel) && (
+              <div className="mt-auto flex min-w-0 flex-wrap items-center gap-2 pt-2">
+                {periodName && <Badge size="sm" variant="surface" className="max-w-full break-words whitespace-normal">{periodName}</Badge>}
+                {yearLabel && <span className="break-words text-xs text-muted-foreground">{yearLabel}</span>}
+              </div>
+            )}
+          </div>
+        </Card>
+      </Link>
+    );
+  }
   const hasPending = (pendingCount ?? 0) > 0;
   const noClasswork = !latestActivityTitle && !hasPending;
 
