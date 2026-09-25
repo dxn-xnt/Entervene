@@ -22,6 +22,7 @@ from app.schemas.Activity import (
     BulkScoreUpdateRequest,
     StudentActivityScoreItem,
 )
+from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
 
 
 def _verify_teacher_scope(
@@ -229,6 +230,10 @@ def bulk_update_activity_scores(
         .all()
     )
     sub_map = {str(sub.student_id): sub for sub in existing_subs}
+    original_grades = {
+        str(item.student_id): sub_map[str(item.student_id)].grade if str(item.student_id) in sub_map else None
+        for item in payload.scores
+    }
 
     now = datetime.now(timezone.utc)
 
@@ -257,6 +262,19 @@ def bulk_update_activity_scores(
             sub.status = "pending"
 
     db.commit()
+
+    changed_students = {
+        UUID(student_id)
+        for student_id, original in original_grades.items()
+        if (sub_map[student_id].grade if student_id in sub_map else None) != original
+    }
+    refresh_after_committed_grade_change(
+        db.get_bind(),
+        student_ids=changed_students,
+        class_id=assignment.class_id,
+        subject_id=classwork.subject_id,
+        period_id=assignment.academic_period_id,
+    )
 
     return get_activity_scores(db, staff_id, classwork.classwork_id, payload.class_id)
 

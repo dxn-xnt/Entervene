@@ -253,6 +253,7 @@ def test_qa_missing_and_actual_zero_are_distinct(current_period_context):
     assert missing_qa["qa_available_activity_count"] == 0
     assert missing_qa["qa_points_possible_so_far"] == 0
     assert missing_qa["qa_points_earned_so_far"] == 0
+    assert build_current(ctx)["evidence_summary"]["examination"]["presentation"]["status"] == "AGGREGATE"
     assert zero_qa["qa_has_evidence"] == 1
     assert zero_qa["qa_available_activity_count"] == 1
     assert zero_qa["qa_points_possible_so_far"] == 40
@@ -284,6 +285,28 @@ def test_partial_exam_components_do_not_create_fake_qa_evidence(current_period_c
     assert features["overall_weighted_score_so_far"] == pytest.approx(68)
     assert features["overall_partial_percent"] == pytest.approx(85)
     assert "QA_PARTIAL_COMPONENTS_AVAILABLE" in warning_codes
+    assert result["evidence_summary"]["examination"]["presentation"] == {
+        "status": "PARTIAL",
+        "completed_count": 2,
+        "components": {"SUMMATIVE_1": 90.0, "SUMMATIVE_2": 80.0, "TERM_EXAM": None},
+    }
+
+
+def test_exam_presentation_distinguishes_no_evidence_and_first_summative(current_period_context):
+    ctx = current_period_context
+    before = build_current(ctx)
+    assert before["evidence_summary"]["examination"]["presentation"]["status"] == "NOT_STARTED"
+    assert before["features"]["qa_has_evidence"] == 0
+
+    add_activity(ctx, "EXAMS", 24, 30, title="Summative 1", classwork_type="EXAM", exam_subtype="SUMMATIVE_1")
+    after = build_current(ctx)
+    assert after["evidence_summary"]["examination"]["presentation"] == {
+        "status": "PARTIAL",
+        "completed_count": 1,
+        "components": {"SUMMATIVE_1": 80.0, "SUMMATIVE_2": None, "TERM_EXAM": None},
+    }
+    assert after["features"]["qa_has_evidence"] == 0
+    assert after["features"]["qa_percent_so_far"] == 0
 
 
 def test_complete_exam_composite_becomes_one_model_compatible_qa_observation(current_period_context):
@@ -309,6 +332,11 @@ def test_complete_exam_composite_becomes_one_model_compatible_qa_observation(cur
     assert features["overall_available_activity_count"] == 5
     assert features["observed_component_weight_sum"] == 100
     assert not any(warning["code"] == "QA_PARTIAL_COMPONENTS_AVAILABLE" for warning in result["domain_warnings"])
+    assert result["evidence_summary"]["examination"]["presentation"] == {
+        "status": "COMPLETE",
+        "completed_count": 3,
+        "components": {"SUMMATIVE_1": 90.0, "SUMMATIVE_2": 70.0, "TERM_EXAM": 80.0},
+    }
 
 
 def test_complete_exam_composite_zero_is_low_performance_not_missing(current_period_context):
@@ -346,6 +374,8 @@ def test_future_exam_component_does_not_leak_into_current_qa_composite(current_p
     assert result["features"]["qa_has_evidence"] == 0
     assert result["features"]["qa_available_activity_count"] == 0
     assert "QA_PARTIAL_COMPONENTS_AVAILABLE" in {warning["code"] for warning in result["domain_warnings"]}
+    assert result["evidence_summary"]["examination"]["presentation"]["status"] == "PARTIAL"
+    assert result["evidence_summary"]["examination"]["presentation"]["components"]["TERM_EXAM"] is None
 
 
 def test_counts_use_only_graded_numeric_evidence(current_period_context):

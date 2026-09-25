@@ -28,6 +28,7 @@ from app.services.classwork.ClassworkShared import (
     aware_utc,
     is_quiz_type,
 )
+from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
 
 
 def get_student_quiz_attempt(
@@ -49,6 +50,7 @@ def start_student_quiz_attempt(
     _ensure_before_due(assignment)
 
     submission = _submission_for(db, student, assignment_id)
+    previous_grade = submission.grade if submission else None
     max_attempts = _max_attempts(db, assignment, classwork)
     if submission and submission.status != "pending" and submission.attempt_count >= max_attempts:
         raise HTTPException(status_code=403, detail="Maximum attempts reached")
@@ -70,6 +72,14 @@ def start_student_quiz_attempt(
         submission.graded_by_staff_id = None
     db.commit()
     db.refresh(submission)
+    if submission.grade != previous_grade:
+        refresh_after_committed_grade_change(
+            db.get_bind(),
+            student_ids=[student.student_id],
+            class_id=assignment.class_id,
+            subject_id=classwork.subject_id,
+            period_id=assignment.academic_period_id,
+        )
     return _attempt_response(db, assignment, classwork, quiz, submission)
 
 
@@ -81,6 +91,7 @@ def submit_student_quiz_attempt(
 ) -> QuizAttemptResponse:
     assignment, classwork, quiz = _student_quiz_scope(db, student, assignment_id)
     submission = _submission_for(db, student, assignment_id)
+    previous_grade = submission.grade if submission else None
     if not submission:
         _ensure_before_due(assignment)
         submission = StudentSubmission(
@@ -192,6 +203,14 @@ def submit_student_quiz_attempt(
         submission.graded_at = now
     db.commit()
     db.refresh(submission)
+    if submission.grade != previous_grade:
+        refresh_after_committed_grade_change(
+            db.get_bind(),
+            student_ids=[student.student_id],
+            class_id=assignment.class_id,
+            subject_id=classwork.subject_id,
+            period_id=assignment.academic_period_id,
+        )
     return _attempt_response(db, assignment, classwork, quiz, submission)
 
 

@@ -25,6 +25,7 @@ from app.schemas.Quiz import (
     TeacherQuizSubmissionDetailResponse,
 )
 from app.services.quiz.QuizBuilderService import get_teacher_quiz_classwork
+from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
 
 
 TURNED_IN_STATUSES = {"submitted", "late", "graded"}
@@ -332,6 +333,7 @@ def grade_teacher_quiz_submission(
     submission = db.query(StudentSubmission).filter(StudentSubmission.submission_id == submission_id).first()
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
+    previous_grade = submission.grade
 
     assignment = db.query(ClassworkAssignment).filter(
         ClassworkAssignment.classwork_assignment_id == submission.classwork_assignment_id
@@ -410,4 +412,12 @@ def grade_teacher_quiz_submission(
 
     db.commit()
     db.refresh(submission)
+    if submission.grade != previous_grade:
+        refresh_after_committed_grade_change(
+            db.get_bind(),
+            student_ids=[submission.student_id],
+            class_id=assignment.class_id,
+            subject_id=classwork.subject_id,
+            period_id=assignment.academic_period_id,
+        )
     return get_teacher_quiz_submission_detail(db, staff_id, submission_id)

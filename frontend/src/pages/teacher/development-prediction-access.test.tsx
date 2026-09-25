@@ -46,7 +46,7 @@ const row: AuthorizedCurrentTermRow = {
   academic_evidence: {
     written_works: { graded_count: 2, performance_percent: 70 },
     performance_tasks: { graded_count: 1, performance_percent: 75 },
-    examination: { graded_count: 0, performance_percent: null },
+    examination: { graded_count: 0, performance_percent: null, presentation: { status: "NOT_STARTED", completed_count: 0, components: { SUMMATIVE_1: null, SUMMATIVE_2: null, TERM_EXAM: null } } },
     overall: { graded_activity_count: 3, performance_percent: 72, observed_component_weight_percent: 60 },
   },
   participation_context: {
