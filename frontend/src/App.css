@@ -303,6 +303,35 @@ body:has([role="alertdialog"]) {
   mask-size: 600px 600px;
 }
 
+/* Keep the square field inside a specific section instead of the viewport. */
+.retro-squares-bg.retro-squares-contained::before {
+  position: absolute;
+}
+
+/* Move the repeating square field from the bottom-left toward the top-right. */
+.retro-squares-motion::before {
+  animation: retro-squares-up-right 24s linear infinite;
+  will-change: -webkit-mask-position, mask-position;
+}
+
+@keyframes retro-squares-up-right {
+  from {
+    -webkit-mask-position: 0 600px;
+    mask-position: 0 600px;
+  }
+
+  to {
+    -webkit-mask-position: 600px 0;
+    mask-position: 600px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .retro-squares-motion::before {
+    animation: none;
+  }
+}
+
 /* Card-scoped rotated squares background pattern */
 .retro-card-squares,
 .retro-squares-overlay {
