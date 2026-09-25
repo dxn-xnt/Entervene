@@ -1,4 +1,6 @@
+from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.Dependencies import get_staff_id, require_role
@@ -211,6 +213,116 @@ def get_teacher_advisory_class_grades(
         staff_id=staff_id,
         academic_period_id=academic_period_id,
     )
+
+
+@router.get("/teacher/advisory/{class_id}/students/{student_id}/sf9-data")
+def get_teacher_advisory_student_sf9_data(
+    class_id: int,
+    student_id: UUID,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    from app.services.export.SF9ExportService import gather_student_sf9_data
+    return gather_student_sf9_data(db=db, class_id=class_id, student_id=str(student_id), staff_id=staff_id)
+
+
+@router.get("/teacher/advisory/{class_id}/sf9-batch-data")
+def get_teacher_advisory_class_sf9_batch_data(
+    class_id: int,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    from app.services.export.SF9ExportService import gather_advisory_class_sf9_batch_data
+    return gather_advisory_class_sf9_batch_data(db=db, class_id=class_id, staff_id=staff_id)
+
+
+@router.get("/teacher/advisory/{class_id}/students/{student_id}/export-sf9")
+def export_teacher_advisory_student_sf9(
+    class_id: int,
+    student_id: UUID,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    from app.services.export.SF9ExportService import export_student_sf9
+    excel_stream = export_student_sf9(db=db, class_id=class_id, student_id=student_id, staff_id=staff_id)
+    filename = f"SF9_Student_{student_id}.xlsx"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(
+        excel_stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
+
+
+@router.get("/teacher/advisory/{class_id}/export-sf9-batch")
+def export_teacher_advisory_class_sf9_batch(
+    class_id: int,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    from app.services.export.SF9ExportService import export_advisory_class_sf9
+    excel_stream = export_advisory_class_sf9(db=db, class_id=class_id, staff_id=staff_id)
+    filename = f"SF9_Advisory_Class_{class_id}.xlsx"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(
+        excel_stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
+
+
+@router.get("/teacher/advisory/{class_id}/students/{student_id}/export-sf9-docx")
+def export_teacher_advisory_student_sf9_docx(
+    class_id: int,
+    student_id: UUID,
+    term1_comment: str | None = None,
+    term2_comment: str | None = None,
+    term3_comment: str | None = None,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    from app.services.export.SF9DocxExportService import export_student_sf9_docx
+    comments = {
+        "term1": term1_comment or "",
+        "term2": term2_comment or "",
+        "term3": term3_comment or "",
+    }
+    docx_stream = export_student_sf9_docx(
+        db=db,
+        class_id=class_id,
+        student_id=str(student_id),
+        staff_id=staff_id,
+        comments=comments,
+    )
+    filename = f"SF9_Student_{student_id}.docx"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(
+        docx_stream,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers=headers,
+    )
+
+
+@router.get("/teacher/advisory/{class_id}/export-sf9-batch-docx")
+def export_teacher_advisory_class_sf9_batch_docx(
+    class_id: int,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    from app.services.export.SF9DocxExportService import export_advisory_class_sf9_batch_docx
+    docx_stream = export_advisory_class_sf9_batch_docx(
+        db=db,
+        class_id=class_id,
+        staff_id=staff_id,
+    )
+    filename = f"SF9_Advisory_Class_{class_id}.docx"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(
+        docx_stream,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers=headers,
+    )
+
 
 
 @router.get("/{class_id}/transfer-options", response_model=ClassTransferOptionsResponse)
