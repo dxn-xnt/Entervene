@@ -18,7 +18,12 @@ import AttachmentDisplay from "@/components/attachment-display";
 import SubmissionForm from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
 import { StudentLessonDetailScreen } from "@/pages/student/lesson-view";
-import { API_URL, apiFetch, getLessonGoals, type LessonGoalItemResponse } from "@/lib/api";
+import {
+  API_URL,
+  apiFetch,
+  getLessonGoals,
+  type LessonGoalItemResponse,
+} from "@/lib/api";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { Card } from "@/components/retroui/Card";
@@ -159,11 +164,11 @@ interface QuizAttempt {
   can_submit: boolean;
   summary_available: boolean;
   summary_release_mode:
-  | "IMMEDIATE"
-  | "SCHEDULED"
-  | "AFTER_DUE_DATE"
-  | "NEVER"
-  | string;
+    | "IMMEDIATE"
+    | "SCHEDULED"
+    | "AFTER_DUE_DATE"
+    | "NEVER"
+    | string;
   summary_release_at?: string | null;
   summary_message?: string | null;
   questions: QuizAttemptQuestion[];
@@ -203,8 +208,6 @@ function getStatusBadge(status?: string | null, dueDate?: string | null) {
     return { label: "Due today", cls: "bg-orange-400 text-white" };
   return { label: `Due in ${diffDays} days`, cls: "bg-[#7ABA78] text-white" };
 }
-
-
 
 function isReadingType(value?: string | null) {
   return value?.toUpperCase() === "READING";
@@ -267,7 +270,9 @@ export default function SubjectLessonTab({
   onLessonSelect,
 }: SubjectLessonTabProps) {
   const { selectedPeriodId } = useAcademicPeriod();
-  const [curatedGoals, setCuratedGoals] = useState<LessonGoalItemResponse[] | undefined>(undefined);
+  const [curatedGoals, setCuratedGoals] = useState<
+    LessonGoalItemResponse[] | undefined
+  >(undefined);
 
   useEffect(() => {
     if (!classId || !subjectId) return;
@@ -277,7 +282,11 @@ export default function SubjectLessonTab({
 
     async function loadCuratedGoals() {
       try {
-        const data = await getLessonGoals(targetClassId, targetSubjectId, selectedPeriodId || undefined);
+        const data = await getLessonGoals(
+          targetClassId,
+          targetSubjectId,
+          selectedPeriodId || undefined,
+        );
         if (isMounted) {
           setCuratedGoals(data.items || []);
         }
@@ -668,9 +677,9 @@ export default function SubjectLessonTab({
       setSelectedClasswork((prev) =>
         prev
           ? {
-            ...prev,
-            submission_status: attempt.status,
-          }
+              ...prev,
+              submission_status: attempt.status,
+            }
           : null,
       );
       updateClassworkStatus(
@@ -843,9 +852,9 @@ export default function SubjectLessonTab({
       setSelectedClasswork((prev) =>
         prev
           ? {
-            ...prev,
-            submission_status: sub.status,
-          }
+              ...prev,
+              submission_status: sub.status,
+            }
           : null,
       );
       updateClassworkStatus(assignmentId, sub.status);
@@ -974,12 +983,13 @@ export default function SubjectLessonTab({
                         setQuizCurrentIndex(index);
                         setQuizReviewMode(false);
                       }}
-                      className={`relative h-8 min-w-8 rounded border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${index === quizCurrentIndex
-                        ? "bg-white"
-                        : hasQuizAnswer(question)
-                          ? "bg-[#F6E9B2]"
-                          : "bg-white"
-                        }`}
+                      className={`relative h-8 min-w-8 rounded border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${
+                        index === quizCurrentIndex
+                          ? "bg-white"
+                          : hasQuizAnswer(question)
+                            ? "bg-[#F6E9B2]"
+                            : "bg-white"
+                      }`}
                     >
                       {flaggedQuizQuestionIds.has(question.quiz_question_id) ? (
                         <span className="absolute -top-2 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-red-500" />
@@ -1021,7 +1031,11 @@ export default function SubjectLessonTab({
                         <h2 className="min-w-0 flex-1 break-words text-base font-bold">
                           {index + 1}. {question.question_text}
                         </h2>
-                        <Badge variant="outline" size="sm" className="shrink-0 rounded border border-gray-300 text-xs font-bold">
+                        <Badge
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0 rounded border border-gray-300 text-xs font-bold"
+                        >
                           {selectedClasswork.show_scores
                             ? `${question.points_awarded ?? 0}/${question.points} pts`
                             : `${question.points} pts`}
@@ -1038,14 +1052,15 @@ export default function SubjectLessonTab({
                             return (
                               <div
                                 key={option.option_id}
-                                className={`border px-3 py-2 text-sm ${isCorrect
-                                  ? "border-green-500 bg-green-50"
-                                  : isKnownWrongSelection
-                                    ? "border-red-400 bg-red-50"
-                                    : isSelected
-                                      ? "border-[#E0C15A] bg-[#FFFBEE]"
-                                      : "border-gray-200 bg-white"
-                                  }`}
+                                className={`border px-3 py-2 text-sm ${
+                                  isCorrect
+                                    ? "border-green-500 bg-green-50"
+                                    : isKnownWrongSelection
+                                      ? "border-red-400 bg-red-50"
+                                      : isSelected
+                                        ? "border-[#E0C15A] bg-[#FFFBEE]"
+                                        : "border-gray-200 bg-white"
+                                }`}
                               >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <span className="min-w-0 break-words">
@@ -1087,7 +1102,7 @@ export default function SubjectLessonTab({
                             </p>
                           ) : null}
                           {question.is_correct !== null &&
-                            question.is_correct !== undefined ? (
+                          question.is_correct !== undefined ? (
                             <p
                               className={
                                 question.is_correct
@@ -1129,7 +1144,11 @@ export default function SubjectLessonTab({
                       <span className="font-semibold">
                         Question {index + 1}
                       </span>
-                      <Badge variant="outline" size="sm" className="rounded border border-gray-300 text-[11px] font-semibold">
+                      <Badge
+                        variant="outline"
+                        size="sm"
+                        className="rounded border border-gray-300 text-[11px] font-semibold"
+                      >
                         {hasQuizAnswer(question)
                           ? "Answer Recorded"
                           : "No Answer"}
@@ -1167,12 +1186,13 @@ export default function SubjectLessonTab({
                     onClick={() =>
                       toggleQuizFlag(currentQuestion.quiz_question_id)
                     }
-                    className={`rounded border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${flaggedQuizQuestionIds.has(
-                      currentQuestion.quiz_question_id,
-                    )
-                      ? "bg-[#F6E9B2]"
-                      : "bg-white"
-                      }`}
+                    className={`rounded border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${
+                      flaggedQuizQuestionIds.has(
+                        currentQuestion.quiz_question_id,
+                      )
+                        ? "bg-[#F6E9B2]"
+                        : "bg-white"
+                    }`}
                   >
                     Flag Question
                   </Button>
@@ -1215,11 +1235,12 @@ export default function SubjectLessonTab({
                           }))
                         }
                         disabled={isQuizSubmitting}
-                        className={`min-h-24 rounded border-black px-4 py-3 text-lg font-bold shadow-md hover:shadow-none ${quizAnswers[currentQuestion.quiz_question_id]
-                          ?.selected_option_id === option.option_id
-                          ? "bg-success hover:bg-success"
-                          : "bg-white hover:bg-white"
-                          }`}
+                        className={`min-h-24 rounded border-black px-4 py-3 text-lg font-bold shadow-md hover:shadow-none ${
+                          quizAnswers[currentQuestion.quiz_question_id]
+                            ?.selected_option_id === option.option_id
+                            ? "bg-success hover:bg-success"
+                            : "bg-white hover:bg-white"
+                        }`}
                       >
                         {option.option_text}
                       </Button>
@@ -1273,8 +1294,6 @@ export default function SubjectLessonTab({
     return sortAsc ? da - db : db - da;
   });
 
-
-
   const { competencyGroups, unassignedLessons } = useMemo(() => {
     const groupsMap = new Map<
       string,
@@ -1319,7 +1338,8 @@ export default function SubjectLessonTab({
       (classwork) =>
         classwork.classwork_category !== "QUARTERLY_ASSESSMENT" &&
         (!isQuizType(classwork.classwork_type) ||
-          (classworkLessonCounts.get(classwork.classwork_assignment_id) ?? 0) <= 1),
+          (classworkLessonCounts.get(classwork.classwork_assignment_id) ?? 0) <=
+            1),
     );
 
     return (
@@ -1378,7 +1398,6 @@ export default function SubjectLessonTab({
           </Accordion.Header>
 
           <Accordion.Content className="p-3 border-t-2 border-black bg-white space-y-2">
-
             {classworkLoadingId === lesson.lesson_id ? (
               <div className="text-center py-4 text-sm text-gray-400">
                 Loading classworks...
@@ -1390,7 +1409,8 @@ export default function SubjectLessonTab({
             ) : (
               classworks.map((cw) => {
                 const badge = getStatusBadge(cw.submission_status, cw.due_date);
-                const isLoading = detailLoadingId === cw.classwork_assignment_id;
+                const isLoading =
+                  detailLoadingId === cw.classwork_assignment_id;
                 return (
                   <Card
                     key={cw.classwork_assignment_id}
@@ -1406,12 +1426,18 @@ export default function SubjectLessonTab({
                           </Card.Title>
                         </div>
                         <p className="mt-0.5 text-xs text-gray-600">
-                          {cw.due_date ? `Scheduled ${fmtDate(cw.due_date)}` : "No due date"}
+                          {cw.due_date
+                            ? `Scheduled ${fmtDate(cw.due_date)}`
+                            : "No due date"}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         {badge && (
-                          <Badge size="sm" variant="secondary" className={badge.cls}>
+                          <Badge
+                            size="sm"
+                            variant="secondary"
+                            className={badge.cls}
+                          >
                             {badge.label}
                           </Badge>
                         )}
@@ -1475,9 +1501,7 @@ export default function SubjectLessonTab({
     );
 
     if (classworkLoadingId === lesson.lesson_id) {
-      return (
-        <LoadingPanel label="Loading classworks..." className="py-6" />
-      );
+      return <LoadingPanel label="Loading classworks..." className="py-6" />;
     }
 
     if (classworks.length === 0) {
@@ -1581,7 +1605,13 @@ export default function SubjectLessonTab({
               </Card.Title>
               <p className="text-sm">{displayTeacherName}</p>
             </div>
-            <Button type="button" variant="ghost" size="icon" className="rounded shadow-none hover:bg-transparent hover:shadow-none" aria-label="Subject information">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="rounded shadow-none hover:bg-transparent hover:shadow-none"
+              aria-label="Subject information"
+            >
               <Info size={18} />
             </Button>
           </Card>
@@ -1610,7 +1640,8 @@ export default function SubjectLessonTab({
                       Exams
                     </h3>
                     <p className="text-xs font-medium text-gray-600">
-                      Periodical exams and summative assessments for this subject.
+                      Periodical exams and summative assessments for this
+                      subject.
                     </p>
                   </div>
                 </div>
@@ -1619,9 +1650,7 @@ export default function SubjectLessonTab({
                   className="px-3 py-1 text-xs font-bold shadow-sm"
                 >
                   {quarterlyAssessments.length}{" "}
-                  {quarterlyAssessments.length === 1
-                    ? "Exam"
-                    : "Exams"}
+                  {quarterlyAssessments.length === 1 ? "Exam" : "Exams"}
                 </Badge>
               </div>
 
@@ -1713,9 +1742,8 @@ export default function SubjectLessonTab({
 
                     return (
                       <Card
-                      // oten
                         key={group.key}
-                        className="flex w-full flex-col overflow-hidden border-destructive bg-white p-0 shadow-md hover:shadow-none"
+                        className="flex w-full flex-col overflow-hidden bg-white p-0 shadow-md hover:shadow-none"
                       >
                         {/* ── Competency Header Accordion Bar ── */}
                         <Card.Header
@@ -1733,11 +1761,18 @@ export default function SubjectLessonTab({
                         >
                           <div className="flex min-w-0 flex-1 items-center gap-2.5">
                             <div className="min-w-0 flex-1">
-                              <div className="mb-0.5 flex flex-wrap items-center gap-2">
-                                <Award size={18} className="text-black shrink-0" />
-                                <Card.Title className="truncate text-base font-bold text-gray-950 md:text-lg">
-                                  {group.competency_code || group.competency_statement}
-                                </Card.Title>
+                              <div className="mb-0.5 flex flex-wrap justify-between items-center gap-2">
+                                <div className="flex items-center gap-1">
+                                  <Award
+                                    size={18}
+                                    className="text-black shrink-0"
+                                  />
+                                  <Card.Title className="truncate text-base font-bold text-gray-950 md:text-lg">
+                                    {group.competency_code ||
+                                      group.competency_statement}
+                                  </Card.Title>
+                                </div>
+
                                 <Badge
                                   variant="secondary"
                                   size="sm"
@@ -1755,7 +1790,6 @@ export default function SubjectLessonTab({
                             </div>
                           </div>
                         </Card.Header>
-
                       </Card>
                     );
                   })}
@@ -1781,7 +1815,10 @@ export default function SubjectLessonTab({
                             className="mb-0 flex-row items-center justify-between border-b-2 border-black bg-primary px-4 py-3.5 text-left cursor-pointer"
                           >
                             <div className="flex items-center gap-2">
-                              <BookOpen size={16} className="text-black shrink-0" />
+                              <BookOpen
+                                size={16}
+                                className="text-black shrink-0"
+                              />
                               <Card.Title className="text-sm font-bold text-black">
                                 Unassigned Lessons
                               </Card.Title>
@@ -1794,7 +1831,6 @@ export default function SubjectLessonTab({
                               </Badge>
                             </div>
                           </Card.Header>
-
                         </>
                       ) : (
                         <Card.Content className="flex flex-col gap-3">
@@ -1812,7 +1848,9 @@ export default function SubjectLessonTab({
                 className="w-full min-w-0 lg:max-w-md lg:flex-1"
                 onClassworkClick={(_cwId, asgnId) => {
                   if (asgnId) {
-                    openClassworkDetail({ classwork_assignment_id: asgnId } as any);
+                    openClassworkDetail({
+                      classwork_assignment_id: asgnId,
+                    } as any);
                   }
                 }}
               />
@@ -1833,10 +1871,7 @@ export default function SubjectLessonTab({
           >
             <Dialog.Content size="3xl" className="max-h-[90vh] p-0">
               {/* Modal header */}
-              <Dialog.Header
-                position="fixed"
-                className="bg-primary text-black"
-              >
+              <Dialog.Header position="fixed" className="bg-primary text-black">
                 <div>
                   <p className="text-xs">Student classwork detail</p>
                   <h2 className="text-xl font-bold">
@@ -1875,8 +1910,8 @@ export default function SubjectLessonTab({
                         >
                           {statusLabel(
                             selectedQuizAttempt?.status ??
-                            selectedSubmission?.status ??
-                            selectedClasswork.submission_status,
+                              selectedSubmission?.status ??
+                              selectedClasswork.submission_status,
                           )}
                         </Badge>
                       </div>
@@ -1892,8 +1927,8 @@ export default function SubjectLessonTab({
                           <p className="font-bold">
                             {selectedClasswork.due_date
                               ? new Date(
-                                selectedClasswork.due_date,
-                              ).toLocaleString()
+                                  selectedClasswork.due_date,
+                                ).toLocaleString()
                               : "No due date"}
                           </p>
                         </Card>
@@ -1915,25 +1950,25 @@ export default function SubjectLessonTab({
                     {/* Description + instructions */}
                     {(selectedClasswork.description ||
                       selectedClasswork.instructions) && (
-                        <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
-                          {selectedClasswork.description && (
-                            <div>
-                              <h4 className="font-bold">Description</h4>
-                              <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
-                                {selectedClasswork.description}
-                              </p>
-                            </div>
-                          )}
-                          {selectedClasswork.instructions && (
-                            <div className="mt-4">
-                              <h4 className="font-bold">Instructions</h4>
-                              <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
-                                {selectedClasswork.instructions}
-                              </p>
-                            </div>
-                          )}
-                        </Card>
-                      )}
+                      <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
+                        {selectedClasswork.description && (
+                          <div>
+                            <h4 className="font-bold">Description</h4>
+                            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
+                              {selectedClasswork.description}
+                            </p>
+                          </div>
+                        )}
+                        {selectedClasswork.instructions && (
+                          <div className="mt-4">
+                            <h4 className="font-bold">Instructions</h4>
+                            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
+                              {selectedClasswork.instructions}
+                            </p>
+                          </div>
+                        )}
+                      </Card>
+                    )}
 
                     {/* Coverage Section (Linked Lessons, Topics & Reading Classworks) - Exclusive to Quizzes */}
                     {isQuizType(selectedClasswork.classwork_type) &&
@@ -1951,58 +1986,85 @@ export default function SubjectLessonTab({
                                 className="block w-full border-black bg-white p-3.5 shadow-none hover:shadow-none"
                               >
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs font-bold uppercase text-gray-500">Lesson:</span>
-                                  <p className="text-sm font-extrabold text-black">{lesson.title}</p>
+                                  <span className="text-xs font-bold uppercase text-gray-500">
+                                    Lesson:
+                                  </span>
+                                  <p className="text-sm font-extrabold text-black">
+                                    {lesson.title}
+                                  </p>
                                 </div>
                                 {lesson.description && (
                                   <div className="mt-1 flex items-start gap-2 text-xs">
-                                    <span className="shrink-0 font-bold uppercase text-gray-500">Topic:</span>
-                                    <p className="text-gray-700">{lesson.description}</p>
+                                    <span className="shrink-0 font-bold uppercase text-gray-500">
+                                      Topic:
+                                    </span>
+                                    <p className="text-gray-700">
+                                      {lesson.description}
+                                    </p>
                                   </div>
                                 )}
 
                                 {/* Specific Reading Classworks under this Lesson */}
-                                {lesson.readings && lesson.readings.length > 0 && (
-                                  <div className="mt-3 border-t border-black/10 pt-2.5">
-                                    <div className="mb-1.5 flex items-center gap-1 text-[11px] font-bold uppercase text-gray-600">
-                                      <BookOpen size={13} className="text-black" />
-                                      <span>Reading Materials ({lesson.readings.length})</span>
-                                    </div>
-                                    <div className="space-y-1.5">
-                                      {lesson.readings.map((reading) => (
-                                        <div
-                                          key={reading.classwork_id}
-                                          className="flex items-center gap-2 border border-black/15 bg-[#F6E9B2]/40 px-2.5 py-1.5 text-xs"
-                                        >
-                                          <BookOpen size={13} className="text-black shrink-0" />
-                                          <span className="font-bold text-black">{reading.title}</span>
-                                          {reading.description && (
-                                            <span className="text-gray-600 truncate text-[11px]">
-                                              — {reading.description}
+                                {lesson.readings &&
+                                  lesson.readings.length > 0 && (
+                                    <div className="mt-3 border-t border-black/10 pt-2.5">
+                                      <div className="mb-1.5 flex items-center gap-1 text-[11px] font-bold uppercase text-gray-600">
+                                        <BookOpen
+                                          size={13}
+                                          className="text-black"
+                                        />
+                                        <span>
+                                          Reading Materials (
+                                          {lesson.readings.length})
+                                        </span>
+                                      </div>
+                                      <div className="space-y-1.5">
+                                        {lesson.readings.map((reading) => (
+                                          <div
+                                            key={reading.classwork_id}
+                                            className="flex items-center gap-2 border border-black/15 bg-[#F6E9B2]/40 px-2.5 py-1.5 text-xs"
+                                          >
+                                            <BookOpen
+                                              size={13}
+                                              className="text-black shrink-0"
+                                            />
+                                            <span className="font-bold text-black">
+                                              {reading.title}
                                             </span>
-                                          )}
-                                        </div>
-                                      ))}
+                                            {reading.description && (
+                                              <span className="text-gray-600 truncate text-[11px]">
+                                                — {reading.description}
+                                              </span>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
                                     </div>
-                                  </div>
-                                )}
+                                  )}
 
                                 {/* Lesson Study File Attachments if any */}
-                                {lesson.attachments && lesson.attachments.length > 0 && (
-                                  <div className="mt-3 border-t border-black/10 pt-2.5">
-                                    <div className="mb-1.5 flex items-center gap-1 text-[11px] font-bold uppercase text-gray-600">
-                                      <Paperclip size={13} className="text-black" />
-                                      <span>Lesson Files ({lesson.attachments.length})</span>
+                                {lesson.attachments &&
+                                  lesson.attachments.length > 0 && (
+                                    <div className="mt-3 border-t border-black/10 pt-2.5">
+                                      <div className="mb-1.5 flex items-center gap-1 text-[11px] font-bold uppercase text-gray-600">
+                                        <Paperclip
+                                          size={13}
+                                          className="text-black"
+                                        />
+                                        <span>
+                                          Lesson Files (
+                                          {lesson.attachments.length})
+                                        </span>
+                                      </div>
+                                      <AttachmentDisplay
+                                        attachments={lesson.attachments}
+                                        type="lesson"
+                                        downloadUrl={(attachmentId) =>
+                                          `${API_URL}/api/v1/lessons/${lesson.lesson_id}/attachments/${attachmentId}/download`
+                                        }
+                                      />
                                     </div>
-                                    <AttachmentDisplay
-                                      attachments={lesson.attachments}
-                                      type="lesson"
-                                      downloadUrl={(attachmentId) =>
-                                        `${API_URL}/api/v1/lessons/${lesson.lesson_id}/attachments/${attachmentId}/download`
-                                      }
-                                    />
-                                  </div>
-                                )}
+                                  )}
                               </Card>
                             ))}
                           </div>
@@ -2010,21 +2072,22 @@ export default function SubjectLessonTab({
                       )}
 
                     {/* Classwork File Attachments (Only shown when files are directly attached) */}
-                    {selectedClasswork.attachments && selectedClasswork.attachments.length > 0 && (
-                      <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
-                        <div className="mb-3 flex items-center gap-2">
-                          <Paperclip size={18} />
-                          <h4 className="font-bold">Attached Files</h4>
-                        </div>
-                        <AttachmentDisplay
-                          attachments={selectedClasswork.attachments}
-                          type="classwork"
-                          downloadUrl={(attachmentId) =>
-                            `${API_URL}/api/v1/classwork-assignments/classwork/${selectedClasswork.classwork_id}/attachments/${attachmentId}/download`
-                          }
-                        />
-                      </Card>
-                    )}
+                    {selectedClasswork.attachments &&
+                      selectedClasswork.attachments.length > 0 && (
+                        <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
+                          <div className="mb-3 flex items-center gap-2">
+                            <Paperclip size={18} />
+                            <h4 className="font-bold">Attached Files</h4>
+                          </div>
+                          <AttachmentDisplay
+                            attachments={selectedClasswork.attachments}
+                            type="classwork"
+                            downloadUrl={(attachmentId) =>
+                              `${API_URL}/api/v1/classwork-assignments/classwork/${selectedClasswork.classwork_id}/attachments/${attachmentId}/download`
+                            }
+                          />
+                        </Card>
+                      )}
                   </div>
 
                   {/* Right: submission or quiz attempt */}
@@ -2050,28 +2113,36 @@ export default function SubjectLessonTab({
                     {isReadingType(selectedClasswork.classwork_type) ? (
                       <div className="space-y-3">
                         {selectedSubmission?.status === "submitted" ||
-                          selectedSubmission?.status === "graded" ||
-                          selectedClasswork.submission_status === "submitted" ||
-                          selectedClasswork.submission_status === "graded" ||
-                          selectedClasswork.submission_status === "completed" ? (
+                        selectedSubmission?.status === "graded" ||
+                        selectedClasswork.submission_status === "submitted" ||
+                        selectedClasswork.submission_status === "graded" ||
+                        selectedClasswork.submission_status === "completed" ? (
                           <div className="rounded border border-green-300 bg-green-50 p-3 text-sm font-semibold text-green-800 flex items-center gap-2">
                             <CheckCircle className="size-5 text-green-600 shrink-0" />
-                            <span>You have completed this reading material.</span>
+                            <span>
+                              You have completed this reading material.
+                            </span>
                           </div>
                         ) : (
                           <div className="space-y-3">
                             <p className="text-sm text-gray-600 font-medium">
-                              Review the content and reference files above. When finished, mark it as completed to update your progress.
+                              Review the content and reference files above. When
+                              finished, mark it as completed to update your
+                              progress.
                             </p>
                             <button
                               type="button"
                               onClick={() =>
-                                handleCompleteReading(selectedClasswork.classwork_assignment_id)
+                                handleCompleteReading(
+                                  selectedClasswork.classwork_assignment_id,
+                                )
                               }
                               disabled={isMarkingRead}
                               className="w-full rounded border border-black bg-[#7ABA78] hover:bg-[#68A866] text-black px-4 py-2 text-sm font-bold transition-colors disabled:opacity-50"
                             >
-                              {isMarkingRead ? "Marking as completed..." : "Mark as Completed"}
+                              {isMarkingRead
+                                ? "Marking as completed..."
+                                : "Mark as Completed"}
                             </button>
                           </div>
                         )}
@@ -2100,7 +2171,8 @@ export default function SubjectLessonTab({
                               </div>
                               <Card className="mt-2 flex w-full flex-wrap gap-2 border-black bg-white p-2 text-xs font-semibold text-gray-600 shadow-none hover:shadow-none">
                                 <span>
-                                  {selectedQuizAttempt.questions.length} questions
+                                  {selectedQuizAttempt.questions.length}{" "}
+                                  questions
                                 </span>
                                 <span>
                                   {selectedQuizAttempt.total_points ??
@@ -2110,12 +2182,13 @@ export default function SubjectLessonTab({
                                 </span>
                                 {selectedQuizAttempt.duration_minutes ? (
                                   <span>
-                                    {selectedQuizAttempt.duration_minutes} minutes
+                                    {selectedQuizAttempt.duration_minutes}{" "}
+                                    minutes
                                   </span>
                                 ) : null}
                               </Card>
                               {selectedQuizAttempt.grade !== null &&
-                                selectedQuizAttempt.grade !== undefined ? (
+                              selectedQuizAttempt.grade !== undefined ? (
                                 <p className="mt-2 text-sm font-bold">
                                   {selectedClasswork.show_scores ? (
                                     <>
@@ -2142,7 +2215,8 @@ export default function SubjectLessonTab({
                                       : selectedQuizAttempt.summary_message}
                                   </div>
                                 ) : null}
-                                {selectedQuizAttempt.status !== "not_started" ? (
+                                {selectedQuizAttempt.status !==
+                                "not_started" ? (
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -2160,7 +2234,7 @@ export default function SubjectLessonTab({
                                     {selectedQuizAttempt.summary_available
                                       ? "View Summary"
                                       : selectedQuizAttempt.summary_release_mode ===
-                                        "NEVER"
+                                          "NEVER"
                                         ? "Summary Not Available"
                                         : "Summary Scheduled"}
                                   </Button>
@@ -2230,7 +2304,8 @@ export default function SubjectLessonTab({
                           setSelectedSubmission(sub);
                         }}
                         isDeleting={
-                          deletingId === selectedClasswork.classwork_assignment_id
+                          deletingId ===
+                          selectedClasswork.classwork_assignment_id
                         }
                       />
                     ) : (
@@ -2259,5 +2334,3 @@ export default function SubjectLessonTab({
     </div>
   );
 }
-
-
