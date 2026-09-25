@@ -59,7 +59,7 @@ const LessonPlannerListPage = lazy(() => import("./pages/teacher/lesson-planner/
 const TeacherTOSPage = lazy(() => import("./pages/teacher/tos/teacher-tos-page"));
 
 // // Student pages
-const StudentBoard = lazy(() => import("./pages/student/storyboard"));
+const StudentBoard = lazy(() => import("./pages/student/studyboard"));
 const StudentProfile = lazy(() => import("./pages/student/student-profile"));
 const StudentSubjects = lazy(() => import("./pages/student/subjects"));
 const StudentSubjectDetail = lazy(() => import("./pages/student/student-subject-detail"));

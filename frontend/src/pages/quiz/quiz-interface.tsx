@@ -200,7 +200,7 @@ const StudentQuizTake = () => {
   // --------------------------------------------------
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="retro-squares-bg min-h-screen flex items-center justify-center px-4">
         <LoadingPanel label="Loading quiz..." className="w-full max-w-3xl" />
       </div>
     );
@@ -208,7 +208,7 @@ const StudentQuizTake = () => {
 
   if (error || !quiz || !currentQuestion) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-4">
+      <div className="retro-squares-bg min-h-screen flex flex-col items-center justify-center gap-3 px-4">
         <AlertCircle className="w-10 h-10 text-red-500" />
         <p className="text-lg font-bold text-center">{error || "Quiz not available."}</p>
         <Button autoIcon={false} onClick={() => navigate(-1)}>Go Back</Button>
@@ -223,7 +223,7 @@ const StudentQuizTake = () => {
   }
 
   return (
-    <div className="min-h-dvh min-w-0 px-3 py-3 sm:px-4 sm:py-4 md:px-6 md:py-5">
+    <div className="retro-squares-bg min-h-dvh min-w-0 px-3 py-3 sm:px-4 sm:py-4 md:px-6 md:py-5">
       {/* Top bar */}
       <div className="flex items-center justify-between mb-6">
         <button

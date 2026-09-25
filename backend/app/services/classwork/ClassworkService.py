@@ -87,12 +87,12 @@ def build_classwork_notification_details(
         lessons = db.query(Lesson.title).filter(Lesson.lesson_id.in_(lesson_ids)).all()
         titles = [l[0] for l in lessons if l[0]]
         if titles:
-            lesson_str = f" • Lesson: {', '.join(titles)}"
+            lesson_str = f"{', '.join(titles)}"
 
     due_str = f" • Due: {due_date.strftime('%b %d, %Y')}" if due_date else ""
 
     notif_title = f"{subject_name}: {classwork_title}"
-    notif_body = f"{action_type} classwork assigned by {teacher_name}{lesson_str}{due_str}."
+    notif_body = f"{action_type} classwork assigned by {teacher_name} attached to {lesson_str}{due_str}."
 
     return notif_title, notif_body
 
