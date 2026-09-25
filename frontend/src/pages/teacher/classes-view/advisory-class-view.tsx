@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
-import { Award, BookOpen, ChevronDown, Users } from "lucide-react";
+import { Award, BookOpen, ChevronDown, FileSpreadsheet, FileText, Loader2, Users } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
@@ -13,7 +14,11 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Table } from "@/components/retroui/Table";
 import { OverviewCard } from "@/components/overview-cards";
 import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
+import { SF9PreviewModal } from "@/components/teacher/sf9-preview-modal";
 import {
+  exportTeacherAdvisoryBatchSF9,
+  exportTeacherAdvisoryBatchSF9Docx,
+  exportTeacherAdvisoryStudentSF9,
   getClassSchedule,
   getTeacherAdvisoryClassDetail,
   getTeacherAdvisoryClassGrades,
@@ -402,6 +407,61 @@ function GradesTab({ classId }: { classId: number }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [isBatchExportingDocx, setIsBatchExportingDocx] = useState(false);
+  const [isBatchExportingXlsx, setIsBatchExportingXlsx] = useState(false);
+
+  const handleExportBatchSF9Docx = async () => {
+    try {
+      setIsBatchExportingDocx(true);
+      toast.info("Generating batch Word (.docx) report cards for advisory class...");
+      const { blob, filename } = await exportTeacherAdvisoryBatchSF9Docx(classId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.setAttribute("download", filename);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("Batch Word (.docx) SF9 report cards downloaded successfully.");
+    } catch (err) {
+      console.error("Batch SF9 Word export failed:", err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to export batch SF9 Word documents.",
+      );
+    } finally {
+      setIsBatchExportingDocx(false);
+    }
+  };
+
+  const handleExportBatchSF9Xlsx = async () => {
+    try {
+      setIsBatchExportingXlsx(true);
+      toast.info("Generating batch Excel (.xlsx) report cards for advisory class...");
+      const { blob, filename } = await exportTeacherAdvisoryBatchSF9(classId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.setAttribute("download", filename);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("Advisory class SF9 report cards exported successfully.");
+    } catch (err) {
+      console.error("Batch SF9 export failed:", err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to export advisory SF9 report cards.",
+      );
+    } finally {
+      setIsBatchExportingXlsx(false);
+    }
+  };
+
 
   useEffect(() => {
     let isMounted = true;
@@ -485,7 +545,7 @@ function GradesTab({ classId }: { classId: number }) {
 
   return (
     <div className="grid gap-4">
-      {/* Top Controls: Period selector & Search */}
+      {/* Top Controls: Period selector, Search & Batch SF9 Export */}
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -509,12 +569,44 @@ function GradesTab({ classId }: { classId: number }) {
             ))}
           </div>
 
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search students..."
-            className="w-full sm:w-64"
-          />
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search students..."
+              className="w-full sm:w-52"
+            />
+            <Button
+              variant="default"
+              size="sm"
+              disabled={isBatchExportingDocx || !gradesData.students.length}
+              onClick={handleExportBatchSF9Docx}
+              className="font-bold text-xs flex items-center gap-1.5 border-2 border-black bg-primary text-primary-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none transition-all shrink-0"
+              title="Export all students' SF9 report cards in a single Word (.docx) document with a page per student"
+            >
+              {isBatchExportingDocx ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <FileText className="size-3.5" />
+              )}
+              <span>{isBatchExportingDocx ? "Exporting Word..." : "Export All SF9 (.docx)"}</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isBatchExportingXlsx || !gradesData.students.length}
+              onClick={handleExportBatchSF9Xlsx}
+              className="font-bold text-xs flex items-center gap-1.5 border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none transition-all shrink-0"
+              title="Export all students' SF9 cards as a multi-sheet Excel workbook"
+            >
+              {isBatchExportingXlsx ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="size-3.5 text-emerald-700" />
+              )}
+              <span>{isBatchExportingXlsx ? "Exporting..." : "Excel (.xlsx)"}</span>
+            </Button>
+          </div>
         </div>
 
         {/* Metric Cards */}
@@ -573,6 +665,9 @@ function GradesTab({ classId }: { classId: number }) {
                   <Table.Head className="text-center min-w-[120px] font-black">
                     Status
                   </Table.Head>
+                  <Table.Head className="text-center min-w-[90px] font-black">
+                    SF9
+                  </Table.Head>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
@@ -580,7 +675,7 @@ function GradesTab({ classId }: { classId: number }) {
                   <Fragment key={gender}>
                     <Table.Row className="bg-muted/40 font-black border-y-2 border-black/30">
                       <Table.Cell
-                        colSpan={gradesData.subjects.length + 3}
+                        colSpan={gradesData.subjects.length + 4}
                         className="py-2 text-xs uppercase tracking-wider font-extrabold text-foreground"
                       >
                         {gender} ({students.length})
@@ -688,6 +783,14 @@ function GradesTab({ classId }: { classId: number }) {
                             </Badge>
                           )}
                         </Table.Cell>
+                        <Table.Cell className="text-center">
+                          <StudentSF9Button
+                            classId={classId}
+                            studentId={student.student_id}
+                            studentName={student.full_name}
+                            compact
+                          />
+                        </Table.Cell>
                       </Table.Row>
                     ))}
                   </Fragment>
@@ -698,6 +801,51 @@ function GradesTab({ classId }: { classId: number }) {
         </Card.Content>
       </Card>
     </div>
+  );
+}
+
+function StudentSF9Button({
+  classId,
+  studentId,
+  studentName,
+  compact = false,
+}: {
+  classId: number;
+  studentId: string;
+  studentName?: string;
+  compact?: boolean;
+}) {
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsPreviewOpen(true);
+        }}
+        className={`font-bold text-xs flex items-center gap-1.5 border-2 border-black bg-white hover:bg-muted shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none transition-all ${
+          compact ? "px-2 py-1 h-7" : ""
+        }`}
+        title={`View and export DepEd SF9 Report Card for ${studentName || "student"}`}
+      >
+        <FileText className="size-3.5 text-blue-700" />
+        {!compact && <span>Export SF9</span>}
+        {compact && <span className="sr-only">Export SF9</span>}
+      </Button>
+
+      {isPreviewOpen && (
+        <SF9PreviewModal
+          isOpen={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          classId={classId}
+          studentId={studentId}
+          studentName={studentName}
+        />
+      )}
+    </>
   );
 }
 
@@ -712,18 +860,25 @@ function StudentRow({
 }) {
   return (
     <div className="border-b-2 border-black bg-white px-3 py-2 text-sm last:border-b-0">
-      <div className="flex min-h-12 items-center gap-3">
-        <Avatar text={student.avatar_initial || student.full_name} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-semibold">
-            {student.full_name}
-          </span>
-          {student.student_lrn && (
-            <span className="block text-[10px] font-semibold text-black/55">
-              LRN {student.student_lrn}
+      <div className="flex min-h-12 items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <Avatar text={student.avatar_initial || student.full_name} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-semibold">
+              {student.full_name}
             </span>
-          )}
-        </span>
+            {student.student_lrn && (
+              <span className="block text-[10px] font-semibold text-black/55">
+                LRN {student.student_lrn}
+              </span>
+            )}
+          </span>
+        </div>
+        <StudentSF9Button
+          classId={classId}
+          studentId={student.student_id}
+          studentName={student.full_name}
+        />
       </div>
       <ManualSuggestionPanel
         classId={classId}
