@@ -9,6 +9,7 @@ from app.db.Session import get_db
 from app.api.v1.routes.Auth import get_current_user
 from app.models.people.Student import Student
 from app.models.people.AcademicStaff import AcademicStaff
+from app.models.auth.UserAccount import UserAccount
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Class_ import Class
 from app.models.academic.AcademicLevel import AcademicLevel
@@ -224,6 +225,7 @@ def get_my_subjects(
             Subject.subject_codename,
             AcademicStaff.first_name.label("teacher_first_name"),
             AcademicStaff.last_name.label("teacher_last_name"),
+            UserAccount.avatar_path.label("teacher_avatar"),
             AcademicPeriod.academic_period_id,
             AcademicPeriod.period_name,
             AcademicPeriod.is_active.label("is_current_period"),
@@ -236,6 +238,7 @@ def get_my_subjects(
         .join(SubjectLoad, SubjectLoad.class_id == Class.class_id)
         .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
         .join(AcademicStaff, AcademicStaff.staff_id == SubjectLoad.staff_id)
+        .outerjoin(UserAccount, UserAccount.user_id == AcademicStaff.user_id)
         .join(AcademicPeriod, AcademicPeriod.academic_period_id == SubjectLoad.academic_period_id)
         .join(AcademicYear, AcademicYear.academic_year_id == AcademicPeriod.academic_year_id)
         .filter(
@@ -258,6 +261,7 @@ def get_my_subjects(
             "subject_name":       row.subject_name,
             "subject_codename":   row.subject_codename,
             "teacher_name":       " ".join(part for part in [row.teacher_first_name, row.teacher_last_name] if part),
+            "teacher_avatar":     row.teacher_avatar or "/avatars/teacher-avatars/12.svg",
             "period_id":          row.academic_period_id,
             "period_name":        row.period_name,
             "is_current_period":  row.is_current_period,

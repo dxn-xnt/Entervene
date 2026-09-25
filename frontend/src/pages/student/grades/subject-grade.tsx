@@ -144,8 +144,15 @@ const SubjectGrade = ({
               </div>
               <Table
                 wrapperClassName="shadow-md transition-all hover:shadow-none"
-                className="table-fixed bg-white"
+                className="table-fixed bg-background"
               >
+                <Table.Header>
+                  <Table.Row>
+                    <Table.Head>Classwork</Table.Head>
+                    <Table.Head>Type</Table.Head>
+                    <Table.Head className="text-right">Score</Table.Head>
+                  </Table.Row>
+                </Table.Header>
                 <Table.Body>
                   {loading ? (
                     <Table.Row>
@@ -174,7 +181,7 @@ const SubjectGrade = ({
                           key={item.assignment_id}
                           className={
                             canNavigate
-                              ? "cursor-pointer hover:bg-muted/40 transition-colors"
+                              ? "cursor-pointer hover:bg-primary/50 transition-colors"
                               : "hover:bg-transparent"
                           }
                           onClick={() => {

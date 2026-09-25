@@ -558,3 +558,8 @@ textarea::placeholder,
   border: 0;
   box-shadow: none;
 }
+
+/* Reusable decorative header; follows the selected theme in both modes. */
+.retro-theme-stripes {
+  background-image: repeating-linear-gradient(135deg, transparent 0 12px, color-mix(in srgb, var(--primary-foreground) 9%, transparent) 12px 24px);
+}
