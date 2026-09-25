@@ -39,7 +39,8 @@ export function SubjectCard({
 
   return (
     <Card
-      className={`group relative flex min-w-0 flex-col justify-between p-3.5 shadow-none hover:-translate-y-1 cursor-pointer transition-all border-black bg-white ${className || ""}`}
+      variant="squares"
+      className={`group relative flex min-w-0 flex-col justify-between p-3.5 shadow-none hover:-translate-y-1 cursor-pointer transition-all${className || ""}`}
       onClick={onClick}
     >
       <div className="flex flex-col items-start justify-between gap-2.5">
@@ -47,8 +48,8 @@ export function SubjectCard({
           <p className="min-w-0 break-words text-xl font-bold sm:text-2xl">
             {title}
           </p>
-          {pendingCount !== undefined && (
-            <Badge size="sm" variant={hasPending ? "surface" : "secondary"} className="shrink-0">
+          {hasPending && (
+            <Badge size="sm" variant="surface" className="shrink-0">
               {pendingCount} {pendingCount === 1 ? "Pending Classwork" : "Pending Classworks"}
             </Badge>
           )}
@@ -72,8 +73,8 @@ export function SubjectCard({
             <Card className="bg-primary w-full shadow-none py-2 px-3">
               <div className="flex flex-col w-full gap-2 items-center text-center justify-center">
                 <div className="flex flex-row justify-between w-full text-center items-center justify-center">
-                  <p className="text-center text-xs text-foreground font-normal">
-                    Classworks Completed On-Time
+                  <p className="text-center text-xs font-normal text-black">
+                    No Classworks Assigned
                   </p>
                 </div>
               </div>
