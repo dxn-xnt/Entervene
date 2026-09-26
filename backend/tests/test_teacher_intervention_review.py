@@ -26,7 +26,8 @@ from app.models.people.AcademicStaff import AcademicStaff
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.suggestion.StudentSuggestion import StudentSuggestion
 from app.services.intervention.TeacherInterventionService import (
-    activate_teacher_candidate, get_teacher_candidate, list_teacher_candidates,
+    activate_teacher_candidate, get_teacher_active, get_teacher_candidate,
+    list_teacher_active, list_teacher_candidates,
 )
 from app.services.prediction import DevelopmentCurrentTermScoringService as scorer
 from tests.test_current_period_live_feature_builder import current_period_context
@@ -109,6 +110,66 @@ def test_teacher_http_contract_returns_scoped_candidate(candidate_context):
     assert detail.json()["diagnosis_snapshot"] == ctx["candidate"].diagnosis_snapshot
 
 
+def test_active_read_preserves_trigger_and_frozen_evidence(candidate_context):
+    ctx = candidate_context
+    frozen = deepcopy(ctx["candidate"].diagnosis_snapshot)
+    source_id = ctx["candidate"].source_prediction_id
+    assert list_teacher_active(ctx["db"], _staff(ctx)).total == 0
+    with pytest.raises(HTTPException) as missing:
+        get_teacher_active(ctx["db"], _staff(ctx), _id(ctx))
+    assert missing.value.status_code == 404
+
+    activated = activate_teacher_candidate(ctx["db"], _staff(ctx), _id(ctx))
+    assert activated.status == "ACTIVE"
+    assert list_teacher_candidates(ctx["db"], _staff(ctx)).total == 0
+    listed = list_teacher_active(ctx["db"], _staff(ctx))
+    assert listed.total == 1
+    assert listed.items[0].activated_at is not None
+    detail = get_teacher_active(ctx["db"], _staff(ctx), _id(ctx))
+    assert detail.source_prediction_id == source_id
+    assert detail.source_prediction_revision == 1
+    assert detail.triggering_predicted_grade == 84
+    assert detail.diagnosis_snapshot == frozen
+    assert detail.diagnosis_snapshot["lowest_supported_competencies"] == frozen["lowest_supported_competencies"]
+    assert detail.diagnosis_snapshot["manual_assessment_coverage"] == frozen["manual_assessment_coverage"]
+
+    row = ctx["db"].get(Intervention, _id(ctx))
+    row.status = "RESOLVED"
+    row.resolution_reason = "IMPROVED_PREDICTION"
+    row.resolved_at = datetime.now(timezone.utc)
+    ctx["db"].commit()
+    assert list_teacher_active(ctx["db"], _staff(ctx)).total == 0
+    with pytest.raises(HTTPException) as missing:
+        get_teacher_active(ctx["db"], _staff(ctx), _id(ctx))
+    assert missing.value.status_code == 404
+
+
+def test_active_http_scope_and_role_gate(candidate_context):
+    ctx = candidate_context
+    activate_teacher_candidate(ctx["db"], _staff(ctx), _id(ctx))
+    other = _other_staff(ctx)
+    assert list_teacher_active(ctx["db"], other.staff_id).total == 0
+    with pytest.raises(HTTPException) as missing:
+        get_teacher_active(ctx["db"], other.staff_id, _id(ctx))
+    assert missing.value.status_code == 404
+    with pytest.raises(HTTPException) as missing:
+        get_teacher_active(ctx["db"], other.staff_id, 999999)
+    assert missing.value.status_code == 404
+
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_db] = lambda: ctx["db"]
+    app.dependency_overrides[get_current_user] = lambda: {"role": "teacher", "sub": str(ctx["staff"].user_id)}
+    client = TestClient(app)
+    assert client.get("/active").json()["total"] == 1
+    assert client.get(f"/active/{_id(ctx)}").json()["diagnosis_snapshot"] == ctx["candidate"].diagnosis_snapshot
+    for role in ("admin", "student"):
+        app.dependency_overrides[get_current_user] = lambda role=role: {"role": role, "sub": str(ctx["staff"].user_id)}
+        client = TestClient(app)
+        assert client.get("/active").status_code == 403
+        assert client.get(f"/active/{_id(ctx)}").status_code == 403
+
+
 def test_other_teacher_and_cross_paired_loads_cannot_see_or_activate(candidate_context):
     ctx = candidate_context
     other = _other_staff(ctx)
@@ -150,6 +211,8 @@ def test_other_teacher_and_cross_paired_loads_cannot_see_or_activate(candidate_c
     ("get", "/candidates"),
     ("get", "/candidates/1"),
     ("post", "/candidates/1/activate"),
+    ("get", "/active"),
+    ("get", "/active/1"),
 ])
 def test_admin_is_forbidden_by_route_role(candidate_context, method, path):
     ctx = candidate_context
@@ -172,7 +235,8 @@ def test_account_with_admin_membership_cannot_use_teacher_token(candidate_contex
     app.dependency_overrides[get_db] = lambda: ctx["db"]
     client = TestClient(app)
     for method, path in (("get", "/candidates"), ("get", f"/candidates/{_id(ctx)}"),
-                         ("post", f"/candidates/{_id(ctx)}/activate")):
+                         ("post", f"/candidates/{_id(ctx)}/activate"),
+                         ("get", "/active"), ("get", f"/active/{_id(ctx)}")):
         assert getattr(client, method)(path).status_code == 403
 
 

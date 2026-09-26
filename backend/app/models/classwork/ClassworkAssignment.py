@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint, Index
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint, Index, CheckConstraint
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from uuid import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.Base import Base
@@ -14,6 +16,8 @@ class ClassworkAssignment(Base):
         UniqueConstraint("classwork_id", "class_id", name="uq_classwork_assignment"),
         Index("ix_classwork_assignment_class_published_due", "class_id", "is_published", "due_date"),
         Index("ix_classwork_assignment_classwork_id", "classwork_id"),
+        UniqueConstraint("remediation_request_id", name="uq_classwork_remediation_request"),
+        CheckConstraint("(recipient_student_id IS NULL AND source_intervention_id IS NULL AND remediation_request_id IS NULL) OR (recipient_student_id IS NOT NULL AND source_intervention_id IS NOT NULL AND remediation_request_id IS NOT NULL)", name="ck_classwork_targeted_pair"),
     )
 
     classwork_assignment_id: Mapped[int] = Column(Integer, primary_key=True, autoincrement=True)
@@ -26,6 +30,9 @@ class ClassworkAssignment(Base):
         ForeignKey("academic_period.academic_period_id", ondelete="RESTRICT"),
         nullable=True,
     )
+    recipient_student_id: Mapped[UUID | None] = Column(PG_UUID(as_uuid=True), ForeignKey("student.student_id", ondelete="RESTRICT"), nullable=True)
+    source_intervention_id: Mapped[int | None] = Column(Integer, ForeignKey("intervention.intervention_id", ondelete="RESTRICT"), nullable=True)
+    remediation_request_id: Mapped[UUID | None] = Column(PG_UUID(as_uuid=True), nullable=True)
     assigned_by_staff_id: Mapped[str] = Column(String(20), ForeignKey("academic_staff.staff_id"), nullable=False)
     publish_date: Mapped[datetime | None] = Column(DateTime(timezone=True))
     due_date: Mapped[datetime | None] = Column(DateTime(timezone=True))

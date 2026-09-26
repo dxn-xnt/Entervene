@@ -30,12 +30,17 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { ActivityRubricEditor } from "@/components/activity-rubric-editor";
 import { activityRubricMaximum, defaultActivityRubric, validateActivityRubric } from "@/lib/classwork-utils";
 import type { ActivityRubricLevel } from "@/types/classwork";
+import type { TeacherInterventionDetail } from "@/lib/teacher-interventions-api";
 
 interface CreateClassworkModalProps {
   selectedType: ClassworkKind;
   subjects: Array<{ id: number; name: string }>;
   loads: TeacherClassLoad[];
   initialSubjectId?: string;
+  initialTitle?: string;
+  initialInstructions?: string;
+  remediationDraft?: boolean;
+  remediationTarget?: TeacherInterventionDetail | null;
   onClose: () => void;
   onSuccess: () => void;
   onBack: () => void;
@@ -46,6 +51,10 @@ export default function CreateClassworkModal({
   subjects,
   loads,
   initialSubjectId,
+  initialTitle,
+  initialInstructions,
+  remediationDraft = false,
+  remediationTarget,
   onClose,
   onSuccess,
   onBack,
@@ -60,12 +69,21 @@ export default function CreateClassworkModal({
           : "";
     return {
       ...emptyClassworkDraft,
+      title: initialTitle || "",
+      instructions: initialInstructions || "",
+      is_published: remediationDraft ? false : emptyClassworkDraft.is_published,
       classwork_category: "WRITTEN_WORK",
       subject_id: preferredId,
     };
   });
+  useEffect(() => {
+    if (initialSubjectId && subjects.some((subject) => String(subject.id) === String(initialSubjectId))) {
+      setDraft((current) => current.subject_id ? current : { ...current, subject_id: String(initialSubjectId) });
+    }
+  }, [initialSubjectId, subjects]);
   const [materials, setMaterials] = useState<File[]>([]);
-  const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);
+  const [selectedClassIds, setSelectedClassIds] = useState<number[]>(remediationTarget ? [remediationTarget.class_id] : []);
+  const [remediationRequestId] = useState(() => crypto.randomUUID());
   const [availableLessons, setAvailableLessons] = useState<TeacherLesson[]>([]);
   const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>([]);
   const [isLessonLoading, setIsLessonLoading] = useState(false);
@@ -134,6 +152,7 @@ export default function CreateClassworkModal({
   };
 
   const toggleClass = (classId: number) => {
+    if (remediationTarget) return;
     setSelectedClassIds((current) =>
       current.includes(classId)
         ? current.filter((id) => id !== classId)
@@ -152,6 +171,7 @@ export default function CreateClassworkModal({
   const validateDetails = () => {
     if (!draft.subject_id) return "Choose a subject.";
     if (!draft.title.trim()) return "Topic title is required.";
+    if (remediationDraft && (draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && !draft.exam_subtype) return "Choose an Examination sub-type explicitly.";
     if (!isReadingType(selectedType)) {
       if (selectedType === "ACTIVITY") {
         const rubricError = validateActivityRubric(rubricLevels);
@@ -304,6 +324,10 @@ export default function CreateClassworkModal({
       formData.append("is_published", String(draft.is_published));
       formData.append("show_scores", String(draft.show_scores));
       formData.append("class_ids", JSON.stringify(selectedClassIds));
+      if (remediationTarget) {
+        formData.append("intervention_id", String(remediationTarget.intervention_id));
+        formData.append("remediation_request_id", remediationRequestId);
+      }
       formData.append("lesson_ids", JSON.stringify(selectedLessonIds));
       if (draft.due_date) {
         formData.append("due_date", new Date(draft.due_date).toISOString());
@@ -419,7 +443,7 @@ export default function CreateClassworkModal({
                     }));
                     setSelectedClassIds([]);
                   }}
-                  disabled={isCreating}
+                  disabled={isCreating || Boolean(remediationTarget)}
                 >
                   <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm font-medium">
                     <Select.Value placeholder="Choose subject" />
@@ -516,7 +540,7 @@ export default function CreateClassworkModal({
                   {(draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && (
                     <Field label="Exam Sub-type">
                       <Select
-                        value={draft.exam_subtype || "SUMMATIVE_1"}
+                        value={remediationDraft ? draft.exam_subtype : (draft.exam_subtype || "SUMMATIVE_1")}
                         onValueChange={(val) =>
                           setDraft((current) => ({
                             ...current,
@@ -764,6 +788,7 @@ export default function CreateClassworkModal({
               </div>
 
               <Field label="Assign to sections">
+                {remediationTarget && <p className="mb-3 rounded border p-3 text-sm">Remedial assignment for <strong>{remediationTarget.student_name}</strong> in {remediationTarget.class_name}. Only this student will receive this activity.</p>}
                 <div className="flex items-center justify-end -mt-8 mb-2">
                   <Button
                     variant="outline"
@@ -773,7 +798,7 @@ export default function CreateClassworkModal({
                         selectedSubjectLoads.map((load) => load.class_id),
                       )
                     }
-                    disabled={isCreating || selectedSubjectLoads.length === 0}
+                    disabled={isCreating || Boolean(remediationTarget) || selectedSubjectLoads.length === 0}
                   >
                     Select all
                   </Button>
@@ -787,7 +812,7 @@ export default function CreateClassworkModal({
                         key={load.subject_load_id}
                         type="button"
                         onClick={() => toggleClass(load.class_id)}
-                        disabled={isCreating}
+                        disabled={isCreating || Boolean(remediationTarget)}
                         className={`rounded text-center cursor-pointer transition shadow-md hover:bg-accent hover:translate-y-0.5 active:translate-y-1 ${isSelected ? "bg-primary" : "bg-white"
                           }`}
                       >

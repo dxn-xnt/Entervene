@@ -122,6 +122,8 @@ def get_curated_lesson_goal(
         elif it.item_type == "CLASSWORK" and it.classwork_id and it.classwork:
             if not it.classwork.is_archived:
                 asgn = asgn_map.get(it.classwork.classwork_id)
+                if student_obj and asgn and asgn.recipient_student_id is not None and str(asgn.recipient_student_id) != str(student_obj.student_id):
+                    continue
                 sub = sub_map.get(asgn.classwork_assignment_id) if asgn else None
                 sub_status = sub.status.lower() if sub and sub.status else None
                 due_str = asgn.due_date.isoformat() if asgn and asgn.due_date else None

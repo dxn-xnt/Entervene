@@ -31,12 +31,17 @@ import {
 } from "../classworks/quiz-builder-utils";
 import { exportQuizPdf, exportQuizDocx } from "@/lib/quiz-export";
 import AIQuizGeneratorModal from "./ai-quiz-generator-modal";
+import type { TeacherInterventionDetail } from "@/lib/teacher-interventions-api";
 
 interface CreateClassworkQuizModalProps {
     selectedType: ClassworkKind;
     subjects: Array<{ id: number; name: string }>;
     loads: TeacherClassLoad[];
     initialSubjectId?: string;
+    initialTitle?: string;
+    initialInstructions?: string;
+    remediationDraft?: boolean;
+    remediationTarget?: TeacherInterventionDetail | null;
     onClose: () => void;
     onSuccess: () => void;
     onBack: () => void;
@@ -47,6 +52,10 @@ export default function CreateClassworkQuizModal({
     subjects,
     loads,
     initialSubjectId,
+    initialTitle,
+    initialInstructions,
+    remediationDraft = false,
+    remediationTarget,
     onClose,
     onSuccess,
     onBack,
@@ -64,10 +73,18 @@ export default function CreateClassworkQuizModal({
                     : "";
         return {
             ...emptyClassworkDraft,
+            title: initialTitle || "",
+            instructions: initialInstructions || "",
+            is_published: remediationDraft ? false : emptyClassworkDraft.is_published,
             classwork_category: "WRITTEN_WORK",
             subject_id: preferredId,
         };
     });
+    useEffect(() => {
+        if (initialSubjectId && subjects.some((subject) => String(subject.id) === String(initialSubjectId))) {
+            setDraft((current) => current.subject_id ? current : { ...current, subject_id: String(initialSubjectId) });
+        }
+    }, [initialSubjectId, subjects]);
 
     const [quizQuestions, setQuizQuestions] = useState<QuizQuestionDraft[]>([
         createEmptyQuizQuestion(1),
@@ -84,7 +101,8 @@ export default function CreateClassworkQuizModal({
     const [isExporting, setIsExporting] = useState<"pdf" | "docx" | null>(null);
     const [includeExportAnswerKey, setIncludeExportAnswerKey] = useState(false);
 
-    const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);
+    const [selectedClassIds, setSelectedClassIds] = useState<number[]>(remediationTarget ? [remediationTarget.class_id] : []);
+    const [remediationRequestId] = useState(() => crypto.randomUUID());
     const [availableLessons, setAvailableLessons] = useState<TeacherLesson[]>([]);
     const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>([]);
     const [isLessonLoading, setIsLessonLoading] = useState(false);
@@ -306,6 +324,7 @@ export default function CreateClassworkQuizModal({
     };
 
     const toggleClass = (classId: number) => {
+        if (remediationTarget) return;
         setSelectedClassIds((current) =>
             current.includes(classId)
                 ? current.filter((id) => id !== classId)
@@ -324,6 +343,7 @@ export default function CreateClassworkQuizModal({
     const validateDetails = () => {
         if (!draft.subject_id) return "Choose a subject.";
         if (!draft.title.trim()) return "Topic title is required.";
+        if (remediationDraft && (draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && !draft.exam_subtype) return "Choose an Examination sub-type explicitly.";
         const points = Number(draft.total_points);
         if (!Number.isFinite(points) || points <= 0) {
             return "Total points must be greater than zero.";
@@ -603,6 +623,10 @@ export default function CreateClassworkQuizModal({
             formData.append("subject_id", String(draft.subject_id));
             formData.append("show_scores", String(draft.show_scores));
             formData.append("class_ids", JSON.stringify(selectedClassIds));
+            if (remediationTarget) {
+                formData.append("intervention_id", String(remediationTarget.intervention_id));
+                formData.append("remediation_request_id", remediationRequestId);
+            }
             formData.append("lesson_ids", JSON.stringify(selectedLessonIds));
             if (draft.due_date) {
                 formData.append("due_date", new Date(draft.due_date).toISOString());
@@ -836,7 +860,7 @@ export default function CreateClassworkQuizModal({
                                     }));
                                     setSelectedClassIds([]);
                                 }}
-                                disabled={isCreating}
+                                disabled={isCreating || Boolean(remediationTarget)}
                             >
                                 <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm font-medium">
                                     <Select.Value placeholder="Choose subject" />
@@ -947,7 +971,7 @@ export default function CreateClassworkQuizModal({
                                         Exam Sub-type
                                     </label>
                                     <Select
-                                        value={draft.exam_subtype || "SUMMATIVE_1"}
+                                        value={remediationDraft ? draft.exam_subtype : (draft.exam_subtype || "SUMMATIVE_1")}
                                         onValueChange={(val) =>
                                             setDraft((current) => ({
                                                 ...current,
@@ -1701,6 +1725,7 @@ export default function CreateClassworkQuizModal({
                                 <p className="text-xs font-bold text-gray-700">
                                     Assign to sections
                                 </p>
+                                {remediationTarget && <p className="rounded border p-2 text-xs">Remedial assignment for <strong>{remediationTarget.student_name}</strong> in {remediationTarget.class_name}. Only this student will receive this quiz.</p>}
                                 <Button
                                     type="button"
                                     variant="outline"
@@ -1710,7 +1735,7 @@ export default function CreateClassworkQuizModal({
                                             selectedSubjectLoads.map((load) => load.class_id),
                                         )
                                     }
-                                    disabled={isCreating || selectedSubjectLoads.length === 0}
+                                    disabled={isCreating || Boolean(remediationTarget) || selectedSubjectLoads.length === 0}
                                     className="px-2 py-1 text-xs border border-black rounded shadow-xs"
                                 >
                                     Select all
@@ -1725,7 +1750,7 @@ export default function CreateClassworkQuizModal({
                                             key={load.subject_load_id}
                                             type="button"
                                             onClick={() => toggleClass(load.class_id)}
-                                            disabled={isCreating}
+                                            disabled={isCreating || Boolean(remediationTarget)}
                                             className={`rounded border-2 border-black px-3 py-2 text-xs font-bold text-center cursor-pointer transition shadow-md hover:translate-y-0.5 active:translate-y-1 ${isSelected ? "bg-[#7ABA78]" : "bg-white"
                                                 }`}
                                         >

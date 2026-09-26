@@ -27,6 +27,7 @@ from app.services.classwork.ClassworkShared import (
     classwork_uses_attempt_limit,
     cleanup_saved_files,
 )
+from app.services.classwork.ClassworkAccessService import assignment_allows_student
 
 
 def user_id(current_user: dict):
@@ -61,6 +62,11 @@ def student_name(student: Student) -> str:
 
 def is_turned_in(status: Optional[str]) -> bool:
     return status in ("submitted", "late", "graded")
+
+
+def require_assignment_recipient(assignment: ClassworkAssignment, student: Student) -> None:
+    if not assignment_allows_student(assignment, student.student_id):
+        raise HTTPException(status_code=404, detail="Assignment not found")
 
 
 def teacher_owns_assignment(assignment_id: int, staff_id: str, db: Session, write_required: bool = False) -> ClassworkAssignment:
@@ -175,6 +181,7 @@ def assert_student_can_modify_submission(
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
     if not classwork or classwork.is_archived:
         raise HTTPException(status_code=404, detail="Classwork not found")
+    require_assignment_recipient(assignment, student)
     enrollment = db.query(StudentClass).filter(
         StudentClass.student_id == student.student_id,
         StudentClass.class_id == assignment.class_id,
@@ -234,6 +241,7 @@ async def submit_student_work(
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
     if not classwork or classwork.is_archived:
         raise HTTPException(status_code=404, detail="Classwork not found")
+    require_assignment_recipient(assignment, student)
     enrollment = db.query(StudentClass).filter(
         StudentClass.student_id == student.student_id,
         StudentClass.class_id == assignment.class_id,
@@ -358,6 +366,7 @@ def complete_reading_assignment(
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
     if not classwork or classwork.is_archived:
         raise HTTPException(status_code=404, detail="Classwork not found")
+    require_assignment_recipient(assignment, student)
     enrollment = db.query(StudentClass).filter(
         StudentClass.student_id == student.student_id,
         StudentClass.class_id == assignment.class_id,
@@ -413,6 +422,7 @@ def record_reading_focus(
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
     if not classwork or classwork.is_archived:
         raise HTTPException(status_code=404, detail="Classwork not found")
+    require_assignment_recipient(assignment, student)
     enrollment = db.query(StudentClass).filter(
         StudentClass.student_id == student.student_id,
         StudentClass.class_id == assignment.class_id,
@@ -519,13 +529,12 @@ def assignment_submissions(assignment_id: int, staff_id: str, db: Session) -> li
 def assignment_tracking(assignment_id: int, staff_id: str, db: Session) -> dict:
     assignment = teacher_owns_assignment(assignment_id, staff_id, db)
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
-    roster_rows = (
-        db.query(Student)
-        .join(StudentClass, StudentClass.student_id == Student.student_id)
-        .filter(StudentClass.class_id == assignment.class_id, StudentClass.enrollment_status == "enrolled")
-        .order_by(Student.last_name.asc(), Student.first_name.asc())
-        .all()
+    roster_query = db.query(Student).join(StudentClass, StudentClass.student_id == Student.student_id).filter(
+        StudentClass.class_id == assignment.class_id, StudentClass.enrollment_status == "enrolled",
     )
+    if assignment.recipient_student_id:
+        roster_query = roster_query.filter(Student.student_id == assignment.recipient_student_id)
+    roster_rows = roster_query.order_by(Student.last_name.asc(), Student.first_name.asc()).all()
     submissions = db.query(StudentSubmission).filter(
         StudentSubmission.classwork_assignment_id == assignment_id
     ).all()
@@ -601,6 +610,10 @@ def classwork_tracking(classwork_id: int, staff_id: str, db: Session) -> dict:
     all_submissions = db.query(StudentSubmission).filter(
         StudentSubmission.classwork_assignment_id.in_(assignment_ids)
     ).all()
+    assignment_by_id = {assignment.classwork_assignment_id: assignment for assignment in assignments}
+    all_submissions = [submission for submission in all_submissions if assignment_allows_student(
+        assignment_by_id[submission.classwork_assignment_id], submission.student_id,
+    )]
     subs_by_student = {str(submission.student_id): submission for submission in all_submissions}
 
     enrolled_rows = db.query(StudentClass).filter(
@@ -610,7 +623,9 @@ def classwork_tracking(classwork_id: int, staff_id: str, db: Session) -> dict:
     if not enrolled_rows:
         enrolled_rows = db.query(StudentClass).filter(StudentClass.class_id.in_(class_ids)).all()
 
-    roster_student_ids = list({str(row.student_id) for row in enrolled_rows})
+    recipients_by_class = {assignment.class_id: assignment.recipient_student_id for assignment in assignments}
+    roster_student_ids = list({str(row.student_id) for row in enrolled_rows
+        if recipients_by_class.get(row.class_id) is None or str(recipients_by_class[row.class_id]) == str(row.student_id)})
     all_student_ids = list(set(roster_student_ids) | set(subs_by_student.keys()))
     if not all_student_ids:
         return {
@@ -625,7 +640,7 @@ def classwork_tracking(classwork_id: int, staff_id: str, db: Session) -> dict:
 
     students = (
         db.query(Student)
-        .filter(Student.student_id.in_(all_student_ids))
+        .filter(Student.student_id.in_([UUID(student_id) for student_id in all_student_ids]))
         .order_by(Student.last_name.asc(), Student.first_name.asc())
         .all()
     )

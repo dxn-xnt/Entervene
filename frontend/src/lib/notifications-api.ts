@@ -11,7 +11,8 @@ export type NotificationItem = {
     | "grade_submission_window_opened"
     | "grade_submission_closing_soon"
     | "intervention_candidate"
-    | "intervention_resolved";
+    | "intervention_resolved"
+    | "intervention_reviewer_available";
   title: string;
   body: string | null;
   action_url: string | null;

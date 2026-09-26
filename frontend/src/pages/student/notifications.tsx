@@ -78,7 +78,7 @@ const Notifications = () => {
     }
 
     // 3. Fallback based on notification role / type
-    if (item.notification_type === "risk_alert") {
+    if (item.notification_type === "risk_alert" || item.notification_type === "intervention_reviewer_available") {
       navigate(routes.student.interventions);
       return;
     }
@@ -108,7 +108,7 @@ const Notifications = () => {
     ) {
       return "Classwork";
     }
-    if (item.notification_type === "risk_alert") {
+    if (item.notification_type === "risk_alert" || item.notification_type === "intervention_reviewer_available") {
       return "Intervention";
     }
     if (item.notification_type === "announcement") {

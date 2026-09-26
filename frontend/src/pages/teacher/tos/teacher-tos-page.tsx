@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/retroui/Button";
@@ -49,6 +50,8 @@ interface SavedTOSSummary {
 }
 
 export const TeacherTOSPage: React.FC = () => {
+  const [routeParams, setRouteParams] = useSearchParams();
+  const remediationSubject = routeParams.get("subject_id");
   const [exams, setExams] = useState<SavedTOSSummary[]>([]);
   const [subjects, setSubjects] = useState<SubjectOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -119,6 +122,19 @@ export const TeacherTOSPage: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (routeParams.get("remediation") !== "TOS" || !subjects.length) return;
+    const subject = subjects.find((item) => item.subject_id === Number(remediationSubject));
+    if (!subject) return;
+    setActiveSubject(subject);
+    setActiveCompetencies([]);
+    setActiveExamId(null);
+    setIsWizardOpen(true);
+    const next = new URLSearchParams(routeParams);
+    next.delete("remediation");
+    setRouteParams(next, { replace: true });
+  }, [subjects, remediationSubject, routeParams, setRouteParams]);
 
   const handleOpenExam = async (exam: SavedTOSSummary) => {
     setIsOpeningExam(true);
@@ -216,6 +232,7 @@ export const TeacherTOSPage: React.FC = () => {
           <div className="@container/main flex flex-1 flex-col">
             <div className="flex flex-1 flex-col">
               <TOSGeneratorScreen
+                initialTitle={routeParams.get("title") || undefined}
                 subjectId={activeSubject?.subject_id ?? 0}
                 subjectName={activeSubject?.subject_name ?? ""}
                 competencies={activeCompetencies}

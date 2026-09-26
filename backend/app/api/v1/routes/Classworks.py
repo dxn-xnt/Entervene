@@ -1,12 +1,14 @@
 # app/api/v1/routes/Classworks.py
 from datetime import datetime
 from typing import List, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.v1.routes.Auth import ACCESS_COOKIE_NAME
 from app.core.Dependencies import get_staff_id, get_student_record, require_role
+from app.api.v1.routes.Auth import get_current_user
 from app.core.FileUpload import delete_file, save_file
 from app.db.Session import get_db
 from app.schemas.Classwork import (
@@ -72,6 +74,9 @@ async def create_classwork_with_assignments(
     quiz_payload: Optional[str] = Form(None),
     rubric_payload: Optional[str] = Form(None),
     files: Optional[List[UploadFile]] = File(None),
+    intervention_id: Optional[int] = Form(None),
+    remediation_request_id: Optional[UUID] = Form(None),
+    current_user: dict = Depends(get_current_user),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
@@ -96,6 +101,9 @@ async def create_classwork_with_assignments(
         quiz_payload=quiz_payload,
         rubric_payload=rubric_payload,
         files=files,
+        intervention_id=intervention_id,
+        remediation_request_id=remediation_request_id,
+        current_user=current_user,
         staff_id=staff_id,
         db=db,
         save_file_func=save_file,
@@ -184,9 +192,10 @@ def assign_classwork(
     classwork_id: int,
     body: ClassworkAssignRequest,
     staff_id: str = Depends(get_staff_id),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return assign_classwork_to_classes(classwork_id, body, staff_id, db)
+    return assign_classwork_to_classes(classwork_id, body, staff_id, db, current_user)
 
 
 @router.get("/class/{class_id}/subject/{subject_id}", response_model=List[ClassworkAssignmentResponse])

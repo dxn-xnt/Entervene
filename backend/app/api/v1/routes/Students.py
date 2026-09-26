@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from app.db.Session import get_db
 from app.api.v1.routes.Auth import get_current_user
@@ -427,6 +427,7 @@ def get_my_todos(
         )
         .filter(
             ClassworkAssignment.class_id.in_(class_ids),
+            or_(ClassworkAssignment.recipient_student_id.is_(None), ClassworkAssignment.recipient_student_id == student.student_id),
             ClassworkAssignment.is_published == True,
             Classwork.is_archived == False,
         )

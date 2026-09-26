@@ -51,6 +51,7 @@ import {
 } from "@/lib/tos-export";
 
 export interface TOSGeneratorScreenProps {
+  initialTitle?: string;
   subjectId?: number;
   subjectName?: string;
   competencies?: CompetencyItem[];
@@ -71,6 +72,7 @@ type WizardStep =
   | "export";
 
 export function TOSGeneratorScreen({
+  initialTitle,
   subjectId = 0,
   subjectName = "",
   competencies = [],
@@ -100,7 +102,7 @@ export function TOSGeneratorScreen({
   const [deletingExamId, setDeletingExamId] = useState<number | null>(null);
 
   // Step 1: Exam Info & Test Parts
-  const [title, setTitle] = useState("Summative Assessment 1");
+  const [title, setTitle] = useState(initialTitle || "Summative Assessment 1");
   const [quarter, setQuarter] = useState("Term 1");
   const [testParts, setTestParts] = useState<TestPart[]>([
     { type: "MULTIPLE_CHOICE", count: 15 },
