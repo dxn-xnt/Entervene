@@ -175,7 +175,7 @@ const DialogContent = (inputProps: IDialogContentProps & { ref?: React.Ref<HTMLD
   );
 };
 
-interface IDialogDescriptionProps extends HTMLAttributes<HTMLDivElement> { }
+type IDialogDescriptionProps = HTMLAttributes<HTMLDivElement>;
 const DialogDescription = ({
   children,
   className,
@@ -189,7 +189,7 @@ const DialogDescription = ({
 };
 
 const dialogFooterVariants = cva(
-  "z-10 mt-4 flex shrink-0 flex-col-reverse items-stretch justify-end gap-2 border-t-2 bg-background px-5 py-4 sm:flex-row sm:items-center [&_[data-slot=button]]:h-10 [&_[data-slot=button]]:gap-2 [&_[data-slot=button]]:px-4 [&_[data-slot=button]]:py-2 [&_[data-slot=button]]:text-sm [&_[data-slot=button]]:font-bold [&_[data-slot=button]>svg]:mr-0 [&_[data-slot=button]>svg]:size-4 [&_[data-slot=button]>svg]:shrink-0",
+  "z-10 mt-4 flex shrink-0 flex-col-reverse items-stretch justify-end gap-2 border-t-2 bg-background px-5 py-4 sm:flex-row sm:flex-wrap sm:items-center [&_[data-slot=button]]:h-10 [&_[data-slot=button]]:shrink-0 [&_[data-slot=button]]:gap-2 [&_[data-slot=button]]:rounded-[var(--radius)] [&_[data-slot=button]]:px-4 [&_[data-slot=button]]:py-2 [&_[data-slot=button]]:text-sm [&_[data-slot=button]]:font-bold [&_[data-slot=button]>svg]:mr-0 [&_[data-slot=button]>svg]:size-4 [&_[data-slot=button]>svg]:shrink-0",
   {
     variants: {
       variant: {
