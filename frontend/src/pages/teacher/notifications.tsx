@@ -105,7 +105,7 @@ const Notifications = () => {
     if (activeTab === "all") return true;
     if (activeTab === "announcements") return n.notification_type === "announcement";
     if (activeTab === "submissions") return n.notification_type === "submission_graded" || n.notification_type === "assignment_due";
-    if (activeTab === "interventions") return n.notification_type === "risk_alert";
+    if (activeTab === "interventions") return n.notification_type === "risk_alert" || n.notification_type === "intervention_candidate" || n.notification_type === "intervention_resolved";
     return true;
   });
 

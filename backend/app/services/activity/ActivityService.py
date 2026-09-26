@@ -86,6 +86,10 @@ def create_activity(db: Session, staff_id: str, payload: ActivityCreateRequest):
     db.add(classwork)
     db.flush()
 
+    if payload.activity_mode == "MANUAL" and payload.lesson_ids:
+        from app.services.activity.ActivityCoverageService import add_initial_manual_coverage
+        add_initial_manual_coverage(db, staff_id, classwork, payload.academic_period_id, payload.lesson_ids)
+
     if payload.lesson_ids:
         from app.models.classwork.ClassworkLesson import ClassworkLesson
         for lid in payload.lesson_ids:
