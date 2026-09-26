@@ -159,13 +159,13 @@ export default function Dashboard() {
                     <Card key={i} className="@container/card animate-pulse">
                       <Card.Header>
                         <Card.Description className="h-4 w-24 bg-muted text-transparent">
-                            Loading
-                          </Card.Description>
+                          Loading
+                        </Card.Description>
                       </Card.Header>
                       <Card.Content className="space-y-2">
                         <Card.Title className="h-8 w-16 bg-muted text-transparent">
-                            0
-                          </Card.Title>
+                          0
+                        </Card.Title>
                         <p className="h-3 w-32 bg-muted text-transparent">Loading summary</p>
                       </Card.Content>
                     </Card>
@@ -211,14 +211,14 @@ export default function Dashboard() {
                             <Select.Value placeholder="Select a section" />
                           </Select.Trigger>
                           <Select.Content>
-                          {data.trend_chart.available_filters.map((f) => (
-                            <Select.Item
-                              key={`${f.class_id}-${f.subject_id}`}
-                              value={`${f.class_id}-${f.subject_id}`}
-                            >
-                              {f.section_name} · {f.subject_name}
-                            </Select.Item>
-                          ))}
+                            {data.trend_chart.available_filters.map((f) => (
+                              <Select.Item
+                                key={`${f.class_id}-${f.subject_id}`}
+                                value={`${f.class_id}-${f.subject_id}`}
+                              >
+                                {f.section_name} · {f.subject_name}
+                              </Select.Item>
+                            ))}
                           </Select.Content>
                         </Select>
                       </div>

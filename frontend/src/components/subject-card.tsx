@@ -8,8 +8,6 @@ import { Card, type cardVariants } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { ArrowUpRight, UserRound } from "lucide-react";
-import { ArrowUpRight } from "lucide-react";
-import { cn } from "@/lib/utils";
 import type { VariantProps } from "class-variance-authority";
 
 export type BadgeItem = {
@@ -35,7 +33,6 @@ export type ActiveClassworkInfo = {
 export type SubjectCardProps = {
   variant?: "student" | "teacher";
   cardVariant?: VariantProps<typeof cardVariants>["variant"];
-type SubjectCardProps = {
   to?: string;
   subjectCode?: string;
   periodName?: string;
