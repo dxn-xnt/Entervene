@@ -2,14 +2,11 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Calendar,
-  ArrowUpRight,
   AlertCircle,
   FileText,
 } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
-import { Badge } from "@/components/retroui/Badge";
-import { Progress } from "@/components/retroui/Progress";
 import { Select } from "@/components/retroui/Select";
 import { OverviewCard } from "@/components/overview-cards";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -20,6 +17,7 @@ import {
   getTeacherDashboardHealth,
   type TeacherDashboardHealthResponse,
   type OverviewCardData,
+  type TrendChartPoint,
 } from "@/lib/api";
 import {
   LineChart,
@@ -143,6 +141,15 @@ const defaultSubmissionsWeekday = [
   { day: "Th", count: 30 },
   { day: "F", count: 41, isHighlight: true },
   { day: "S", count: 9 },
+];
+
+const defaultTrendChartPoints: TrendChartPoint[] = [
+  { classwork_id: 1, title: "Classwork 1", category: "Classwork", due_date: null, label: "CW 1", short_label: "CW 1", avg_score_percent: 70, completion_rate_percent: 60, submitted_count: 22, total_enrolled: 36 },
+  { classwork_id: 2, title: "Classwork 2", category: "Classwork", due_date: null, label: "CW 2", short_label: "CW 2", avg_score_percent: 72, completion_rate_percent: 68, submitted_count: 24, total_enrolled: 36 },
+  { classwork_id: 3, title: "Classwork 3", category: "Classwork", due_date: null, label: "CW 3", short_label: "CW 3", avg_score_percent: 72, completion_rate_percent: 74, submitted_count: 27, total_enrolled: 36 },
+  { classwork_id: 4, title: "Classwork 4", category: "Classwork", due_date: null, label: "CW 4", short_label: "CW 4", avg_score_percent: 76, completion_rate_percent: 78, submitted_count: 28, total_enrolled: 36 },
+  { classwork_id: 5, title: "Classwork 5", category: "Classwork", due_date: null, label: "CW 5", short_label: "CW 5", avg_score_percent: 78, completion_rate_percent: 82, submitted_count: 30, total_enrolled: 36 },
+  { classwork_id: 6, title: "Classwork 6", category: "Classwork", due_date: null, label: "CW 6", short_label: "CW 6", avg_score_percent: 80, completion_rate_percent: 85, submitted_count: 31, total_enrolled: 36 },
 ];
 
 const defaultHardestQuestions = [
@@ -644,14 +651,7 @@ export default function Dashboard() {
                         data={
                           data?.trend_chart.points && data.trend_chart.points.length > 0
                             ? data.trend_chart.points
-                            : [
-                                { label: "CW 1", short_label: "CW 1", avg_score_percent: 70, completion_rate_percent: 60 },
-                                { label: "CW 2", short_label: "CW 2", avg_score_percent: 72, completion_rate_percent: 68 },
-                                { label: "CW 3", short_label: "CW 3", avg_score_percent: 72, completion_rate_percent: 74 },
-                                { label: "CW 4", short_label: "CW 4", avg_score_percent: 76, completion_rate_percent: 78 },
-                                { label: "CW 5", short_label: "CW 5", avg_score_percent: 78, completion_rate_percent: 82 },
-                                { label: "CW 6", short_label: "CW 6", avg_score_percent: 80, completion_rate_percent: 85 },
-                              ]
+                            : defaultTrendChartPoints
                         }
                         margin={{ top: 10, right: 15, left: -20, bottom: 0 }}
                       >

@@ -121,19 +121,11 @@ const Notifications = () => {
     ) {
       return "Classwork";
     }
-<<<<<<< HEAD
     if (
       item.title.toLowerCase().includes("lesson") ||
       item.body?.toLowerCase().includes("lesson")
     ) {
       return "Lesson";
-=======
-    if (item.notification_type === "risk_alert" || item.notification_type === "intervention_reviewer_available") {
-      return "Intervention";
-    }
-    if (item.notification_type === "announcement") {
-      return "Announcement";
->>>>>>> 40b39cb217aafe3759fc547cf7db97968ad54992
     }
 
     return "Classwork";
