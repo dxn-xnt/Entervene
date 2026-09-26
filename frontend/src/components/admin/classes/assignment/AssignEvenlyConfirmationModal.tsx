@@ -1,6 +1,6 @@
 import { useState } from "react";
+import { Button } from "@/components/retroui/Button";
 import type { DistributionMode } from "@/types/adminClasses";
-import { retroButton } from "../utils";
 
 export default function AssignEvenlyConfirmationModal({
   onCancel,
@@ -74,16 +74,16 @@ export default function AssignEvenlyConfirmationModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2">
-          <button className={retroButton()} onClick={onCancel}>
+        <div data-slot="dialog-footer" className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onCancel}>
             Cancel
-          </button>
-          <button
-            className={retroButton("bg-[#79bd80]")}
+          </Button>
+          <Button
+            type="button"
             onClick={() => onConfirm(mode)}
           >
             Assign Evenly
-          </button>
+          </Button>
         </div>
       </div>
     </div>

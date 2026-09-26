@@ -586,6 +586,13 @@ textarea::placeholder,
   flex-shrink: 0;
 }
 
+/* Modal actions share the same 6px system radius as page-header buttons.
+   Keep this after the form/dialog square-geometry rule so legacy form
+   descendants cannot flatten shared Button instances in action footers. */
+[data-slot="dialog-footer"] [data-slot="button"] {
+  border-radius: var(--radius);
+}
+
 [data-slot="dialog-content"]>div>form {
   display: contents;
 }
