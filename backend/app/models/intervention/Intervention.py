@@ -59,6 +59,7 @@ class Intervention(Base):
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="CANDIDATE", server_default="CANDIDATE")
     resolution_reason: Mapped[str | None] = mapped_column(String(80))
     diagnosis_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    remediation_plan: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     activated_by_staff_id: Mapped[str | None] = mapped_column(

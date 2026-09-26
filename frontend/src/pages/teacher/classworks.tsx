@@ -10,7 +10,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { apiFetch } from "@/lib/api";
@@ -34,6 +34,7 @@ import { DialogueSelect } from "@/components/dialogue-select";
 import { Select } from "@/components/retroui/Select";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
+import { getTeacherActive, type TeacherInterventionDetail } from "@/lib/teacher-interventions-api";
 
 const tabs: Array<TabItem<TabId>> = [
   { id: "all", label: "All", icon: ClipboardList },
@@ -84,6 +85,27 @@ const tabType: Partial<Record<TabId, string>> = {
 
 export default function Classworks() {
   const navigate = useNavigate();
+  const [routeParams, setRouteParams] = useSearchParams();
+  const remediationType = routeParams.get("remediation");
+  const remediationSubject = routeParams.get("subject_id");
+  const remediationTitle = routeParams.get("title") || undefined;
+  const remediationInstructions = routeParams.get("instructions") || undefined;
+  const interventionId = Number(routeParams.get("intervention_id"));
+  const [remediationTarget, setRemediationTarget] = useState<TeacherInterventionDetail | null>(null);
+  const [remediationError, setRemediationError] = useState("");
+  useEffect(() => {
+    if (!remediationType) return;
+    if (!Number.isInteger(interventionId) || interventionId <= 0) {
+      setRemediationError("Open remediation from an active Intervention.");
+      return;
+    }
+    setRemediationError("");
+    setRemediationTarget(null);
+    let live = true;
+    void getTeacherActive(interventionId).then((detail) => { if (live) setRemediationTarget(detail); })
+      .catch((error) => { if (live) setRemediationError(error instanceof Error ? error.message : "Unable to load intervention recipient."); });
+    return () => { live = false; };
+  }, [interventionId, remediationType]);
   const {
     classes: loads,
     isLoading: loadingClasses,
@@ -103,6 +125,12 @@ export default function Classworks() {
   const [selectedType, setSelectedType] = useState<ClassworkKind | null>(null);
   const [loadingItems, setLoadingItems] = useState(true);
   const [itemsError, setItemsError] = useState("");
+
+  useEffect(() => {
+    if (remediationType !== "QUIZ" && remediationType !== "CLASSWORK") return;
+    setSelectedType(remediationType === "QUIZ" ? "QUIZ" : "ASSIGNMENT");
+    setShowCreateWizard(true);
+  }, [remediationType]);
 
   const loadClassworks = useCallback(async () => {
     // Load real teacher-owned classworks scoped to the selected academic period
@@ -211,6 +239,11 @@ export default function Classworks() {
   const closeCreateWizard = () => {
     setShowCreateWizard(false);
     setSelectedType(null);
+    if (remediationType) {
+      const next = new URLSearchParams(routeParams);
+      next.delete("remediation"); next.delete("title"); next.delete("instructions");
+      setRouteParams(next, { replace: true });
+    }
   };
 
   const openClassworkDetail = (item: TeacherClasswork) => {
@@ -420,12 +453,18 @@ export default function Classworks() {
                         </Button>
                       </Dialog.Footer>
                     </Dialog.Content>
+                  ) : remediationType && (!remediationTarget || remediationError) ? (
+                    <Dialog.Content size="lg"><p className="p-5">{remediationError || "Loading intervention recipient..."}</p></Dialog.Content>
                   ) : isQuizType(selectedType) ? (
                     <CreateClassworkQuizModal
                       selectedType={selectedType}
                       subjects={subjects}
                       loads={loads as unknown as TeacherClassLoad[]}
-                      initialSubjectId={subjectFilter !== "all" ? subjectFilter : undefined}
+                      initialSubjectId={remediationTarget ? String(remediationTarget.subject_id) : remediationSubject || (subjectFilter !== "all" ? subjectFilter : undefined)}
+                      initialTitle={remediationTitle}
+                      initialInstructions={remediationInstructions}
+                      remediationDraft={Boolean(remediationType)}
+                      remediationTarget={remediationTarget}
                       onClose={closeCreateWizard}
                       onSuccess={async () => {
                         await Promise.all([loadClassworks(), refetchClasses()]);
@@ -438,7 +477,11 @@ export default function Classworks() {
                       selectedType={selectedType}
                       subjects={subjects}
                       loads={loads as unknown as TeacherClassLoad[]}
-                      initialSubjectId={subjectFilter !== "all" ? subjectFilter : undefined}
+                      initialSubjectId={remediationTarget ? String(remediationTarget.subject_id) : remediationSubject || (subjectFilter !== "all" ? subjectFilter : undefined)}
+                      initialTitle={remediationTitle}
+                      initialInstructions={remediationInstructions}
+                      remediationDraft={Boolean(remediationType)}
+                      remediationTarget={remediationTarget}
                       onClose={closeCreateWizard}
                       onSuccess={async () => {
                         await Promise.all([loadClassworks(), refetchClasses()]);

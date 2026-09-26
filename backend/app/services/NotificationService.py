@@ -20,7 +20,9 @@ from app.models.notifications.Notification import Notification
 from app.schemas.Notification import NotificationCreate, NotificationListResponse, NotificationResponse
 
 
-INTERVENTION_NOTIFICATION_TYPES = ("intervention_candidate", "intervention_resolved")
+INTERVENTION_NOTIFICATION_TYPES = (
+    "intervention_candidate", "intervention_resolved", "intervention_reviewer_available",
+)
 
 
 def _admin_account(db: Session, user_id: uuid.UUID) -> bool:

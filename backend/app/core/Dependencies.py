@@ -76,7 +76,10 @@ def get_student_record(
     db: Session = Depends(get_db),
 ) -> Student:
     """Resolve the Student ORM object from the JWT user_id."""
-    user_id = current_user["sub"]
+    try:
+        user_id = _uuid.UUID(str(current_user["sub"]))
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=403, detail="Student identity is invalid") from None
     student = db.query(Student).filter(Student.user_id == user_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student profile not found")

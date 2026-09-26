@@ -22,12 +22,12 @@ class TeacherInterventionSummary(BaseModel):
     triggering_predicted_grade: float
     triggering_intervention_level: str
     created_at: datetime
+    activated_at: datetime | None = None
     diagnosis_summary: dict[str, Any]
 
 
 class TeacherInterventionDetail(TeacherInterventionSummary):
     diagnosis_snapshot: dict[str, Any]
-    activated_at: datetime | None = None
     activated_by_staff_id: str | None = None
     resolved_at: datetime | None = None
     resolution_reason: str | None = None
