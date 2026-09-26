@@ -53,7 +53,6 @@ export function SubjectCard({
   variant = "student",
   cardVariant,
   title,
-  teacher,
   gradeLevel,
   isAdvisory,
   pendingCount,
@@ -65,7 +64,6 @@ export function SubjectCard({
   onClassworkClick,
   onClick,
   className,
-  showPattern = true,
 }: SubjectCardProps) {
   const hasPending = (pendingCount ?? 0) > 0;
   const isTeacher = variant === "teacher";
@@ -87,17 +85,12 @@ export function SubjectCard({
 
   return (
     <Card
-<<<<<<< HEAD
       variant={defaultCardVariant}
       className={cn(
         "group relative flex w-full min-w-0 flex-1 flex-col justify-between shadow-none hover:-translate-y-1 cursor-pointer transition-all",
         isTeacher ? "min-w-[240px] p-3" : "p-3.5",
         className
       )}
-=======
-      variant={showPattern ? "squares" : "default"}
-      className={`group relative flex min-w-0 flex-col justify-between p-3.5 shadow-none hover:-translate-y-1 cursor-pointer transition-all${className || ""}`}
->>>>>>> dc7db93464a4c7a3e6b4260b334d9a565f25944c
       onClick={onClick}
     >
       <div className="flex flex-col items-start justify-between gap-2.5">

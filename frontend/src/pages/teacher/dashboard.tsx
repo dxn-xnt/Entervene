@@ -138,9 +138,6 @@ export default function Dashboard() {
                   <h1 className="text-xl font-bold sm:text-2xl md:text-4xl font-head tracking-tight">
                     Dashboard
                   </h1>
-                  <p className="text-xs text-muted-foreground hidden sm:block mt-0.5">
-                    Class health & progress overview for {data?.term_info.period_name || "Current Term"}
-                  </p>
                 </div>
               </div>
               <Button
@@ -165,25 +162,25 @@ export default function Dashboard() {
               <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
                 {isLoading && !data
                   ? Array.from({ length: 4 }).map((_, i) => (
-                      <Card key={i} className="@container/card animate-pulse">
-                        <Card.Header>
-                          <div className="h-4 w-24 bg-muted rounded" />
-                        </Card.Header>
-                        <Card.Content className="space-y-2">
-                          <div className="h-8 w-16 bg-muted rounded" />
-                          <div className="h-3 w-32 bg-muted rounded" />
-                        </Card.Content>
-                      </Card>
-                    ))
+                    <Card key={i} className="@container/card animate-pulse">
+                      <Card.Header>
+                        <div className="h-4 w-24 bg-muted rounded" />
+                      </Card.Header>
+                      <Card.Content className="space-y-2">
+                        <div className="h-8 w-16 bg-muted rounded" />
+                        <div className="h-3 w-32 bg-muted rounded" />
+                      </Card.Content>
+                    </Card>
+                  ))
                   : kpiCards.map((card) => (
-                      <OverviewCard
-                        key={card.title}
-                        title={card.title}
-                        count={card.count}
-                        stat={card.stat}
-                        statDescription={card.statDescription}
-                      />
-                    ))}
+                    <OverviewCard
+                      key={card.title}
+                      title={card.title}
+                      count={card.count}
+                      stat={card.stat}
+                      statDescription={card.statDescription}
+                    />
+                  ))}
               </div>
 
               {/* 2. Chronological Mastery & Completion Trend Chart */}
