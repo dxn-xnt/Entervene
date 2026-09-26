@@ -245,12 +245,68 @@ body:has([role="alertdialog"]) {
     overflow-y: overlay;
   }
 
-  .overflow-auto:not(.no-scrollbar),
-  .overflow-y-auto:not(.no-scrollbar),
-  .overflow-scroll:not(.no-scrollbar),
-  .overflow-y-scroll:not(.no-scrollbar) {
+  .overflow-auto:not(.no-scrollbar):not(.retro-scrollbar),
+  .overflow-y-auto:not(.no-scrollbar):not(.retro-scrollbar),
+  .overflow-scroll:not(.no-scrollbar):not(.retro-scrollbar),
+  .overflow-y-scroll:not(.no-scrollbar):not(.retro-scrollbar) {
     overflow-y: overlay;
   }
+}
+
+/* Visible Retro scrollbar for tables & frames with both horizontal & vertical scrolling */
+.retro-scrollbar {
+  overflow: auto !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(0, 0, 0, 0.4) #f1f5f9 !important;
+}
+
+.retro-scrollbar::-webkit-scrollbar {
+  width: 9px !important;
+  height: 9px !important;
+}
+
+.retro-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9 !important;
+  border-left: 1px solid rgba(0, 0, 0, 0.12) !important;
+  border-top: 1px solid rgba(0, 0, 0, 0.12) !important;
+}
+
+.retro-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.35) !important;
+  border-radius: 4px !important;
+  border: 2px solid #f1f5f9 !important;
+}
+
+.retro-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #000000 !important;
+}
+
+.retro-scrollbar::-webkit-scrollbar-corner {
+  background: #e2e8f0 !important;
+}
+
+.dark .retro-scrollbar {
+  scrollbar-color: rgba(255, 255, 255, 0.4) #1e293b !important;
+}
+
+.dark .retro-scrollbar::-webkit-scrollbar-track {
+  background: #1e293b !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+.dark .retro-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.35) !important;
+  border-radius: 4px !important;
+  border: 2px solid #1e293b !important;
+}
+
+.dark .retro-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #ffffff !important;
+}
+
+.dark .retro-scrollbar::-webkit-scrollbar-corner {
+  background: #0f172a !important;
 }
 
 /* Webkit (Chrome, Edge, Safari) — thin overlay scrollbar */
@@ -528,6 +584,13 @@ textarea::placeholder,
 [data-slot="dialog-header"],
 [data-slot="dialog-footer"] {
   flex-shrink: 0;
+}
+
+/* Modal actions share the same 6px system radius as page-header buttons.
+   Keep this after the form/dialog square-geometry rule so legacy form
+   descendants cannot flatten shared Button instances in action footers. */
+[data-slot="dialog-footer"] [data-slot="button"] {
+  border-radius: var(--radius);
 }
 
 [data-slot="dialog-content"]>div>form {

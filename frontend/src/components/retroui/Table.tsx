@@ -6,6 +6,7 @@ export type TableRoundedVariant = boolean | "none" | "sm" | "md" | "lg" | "xl" |
 
 export interface ITableProps extends React.HTMLAttributes<HTMLTableElement> {
     wrapperClassName?: string;
+    containerClassName?: string;
     rounded?: TableRoundedVariant | string;
 }
 
@@ -28,7 +29,7 @@ function getRoundedClass(rounded?: TableRoundedVariant | string): string {
 }
 
 const Table = React.forwardRef<HTMLTableElement, ITableProps>(
-    ({ className, wrapperClassName, rounded, ...props }, ref) => {
+    ({ className, wrapperClassName, containerClassName, rounded, ...props }, ref) => {
         const roundedClass = rounded !== undefined ? getRoundedClass(rounded) : "rounded";
         return (
             <div
@@ -38,7 +39,7 @@ const Table = React.forwardRef<HTMLTableElement, ITableProps>(
                     wrapperClassName,
                 )}
             >
-                <div className="h-full w-full overflow-x-auto bg-background">
+                <div className={cn("h-full w-full overflow-auto bg-background", containerClassName)}>
                     <table
                         ref={ref}
                         className={cn("w-full border-collapse caption-bottom text-sm", className)}

@@ -2,20 +2,14 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Calendar,
-  CheckCircle2,
-  Clock,
   ArrowUpRight,
-  TrendingUp,
-  Sparkles,
-  ClipboardList,
   AlertCircle,
-  FileText,
-  School,
 } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Progress } from "@/components/retroui/Progress";
+import { Select } from "@/components/retroui/Select";
 import { OverviewCard } from "@/components/overview-cards";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
@@ -78,10 +72,10 @@ export default function Dashboard() {
             setSelectedFilterKey(`${first.class_id}-${first.subject_id}`);
           }
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!cancelled) {
           console.error("Failed to load teacher dashboard health:", err);
-          setError(err.message || "Failed to load dashboard data");
+          setError(err instanceof Error ? err.message : "Failed to load dashboard data");
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -127,7 +121,7 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-y-auto">
+      <div className="flex min-w-0 flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             {/* Header */}
@@ -154,24 +148,28 @@ export default function Dashboard() {
               </Button>
             </header>
 
-            <div className="-mt-[1px] flex min-w-0 flex-col gap-5 border-t-2 border-border px-3 py-4 sm:px-4 sm:py-5 md:px-6 pb-12">
+            <main className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {error && (
-                <div role="alert" className="flex items-center gap-2 border-2 border-red-700 bg-red-50 p-3 text-sm text-red-800">
+                <div role="alert" className="flex items-center gap-2 border-2 border-destructive bg-destructive/10 p-3 text-sm text-destructive">
                   <AlertCircle className="size-4 shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
               {/* 1. Top KPI Summary Cards */}
-              <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
+              <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
                 {isLoading && !data
                   ? Array.from({ length: 4 }).map((_, i) => (
                       <Card key={i} className="@container/card animate-pulse">
                         <Card.Header>
-                          <div className="h-4 w-24 bg-muted rounded" />
+                          <Card.Description className="h-4 w-24 bg-muted text-transparent">
+                            Loading
+                          </Card.Description>
                         </Card.Header>
                         <Card.Content className="space-y-2">
-                          <div className="h-8 w-16 bg-muted rounded" />
-                          <div className="h-3 w-32 bg-muted rounded" />
+                          <Card.Title className="h-8 w-16 bg-muted text-transparent">
+                            0
+                          </Card.Title>
+                          <p className="h-3 w-32 bg-muted text-transparent">Loading summary</p>
                         </Card.Content>
                       </Card>
                     ))
@@ -187,14 +185,13 @@ export default function Dashboard() {
               </div>
 
               {/* 2. Chronological Mastery & Completion Trend Chart */}
-              <Card className="w-full border-2 border-black shadow-[3px_3px_0px_#000]">
-                <Card.Content className="p-4 sm:p-6">
+              <Card className="w-full">
+                <Card.Content>
                   {/* Chart Header with Class/Subject Filter */}
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
                     <div>
-                      <div className="flex items-center gap-2">
-                        <TrendingUp className="size-5 text-emerald-700" />
-                        <Card.Title className="text-lg sm:text-xl font-bold font-head mb-0">
+                      <div>
+                        <Card.Title className="mb-0 text-lg font-bold sm:text-xl">
                           Classwork Mastery & Completion Trend
                         </Card.Title>
                       </div>
@@ -205,25 +202,28 @@ export default function Dashboard() {
 
                     {/* Dynamic Section Selector */}
                     {data && data.trend_chart.available_filters.length > 0 && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex w-full items-center gap-2 sm:w-auto">
                         <label htmlFor="trend-filter" className="text-xs font-semibold text-muted-foreground">
                           Section:
                         </label>
-                        <select
-                          id="trend-filter"
+                        <Select
                           value={selectedFilterKey}
-                          onChange={(e) => setSelectedFilterKey(e.target.value)}
-                          className="border-2 border-black rounded px-3 py-1.5 text-xs font-semibold bg-background cursor-pointer hover:bg-muted/40 transition-colors focus:outline-none focus:ring-2 focus:ring-black"
+                          onValueChange={setSelectedFilterKey}
                         >
+                          <Select.Trigger id="trend-filter" className="min-w-0 flex-1 text-xs font-semibold sm:min-w-56">
+                            <Select.Value placeholder="Select a section" />
+                          </Select.Trigger>
+                          <Select.Content>
                           {data.trend_chart.available_filters.map((f) => (
-                            <option
+                            <Select.Item
                               key={`${f.class_id}-${f.subject_id}`}
                               value={`${f.class_id}-${f.subject_id}`}
                             >
                               {f.section_name} · {f.subject_name}
-                            </option>
+                            </Select.Item>
                           ))}
-                        </select>
+                          </Select.Content>
+                        </Select>
                       </div>
                     )}
                   </div>
@@ -248,17 +248,17 @@ export default function Dashboard() {
                           data={data.trend_chart.points}
                           margin={{ top: 10, right: 20, left: -15, bottom: 0 }}
                         >
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                           <XAxis
                             dataKey="short_label"
                             tickLine={false}
-                            axisLine={{ stroke: "#000", strokeWidth: 1 }}
+                            axisLine={{ stroke: "var(--foreground)", strokeWidth: 1 }}
                             tick={{ fontSize: 11, fontWeight: 500 }}
                           />
                           <YAxis
                             domain={[0, 100]}
                             tickLine={false}
-                            axisLine={{ stroke: "#000", strokeWidth: 1 }}
+                            axisLine={{ stroke: "var(--foreground)", strokeWidth: 1 }}
                             tick={{ fontSize: 11 }}
                             unit="%"
                           />
@@ -267,7 +267,7 @@ export default function Dashboard() {
                               if (!active || !payload || !payload.length) return null;
                               const point = payload[0].payload;
                               return (
-                                <div className="border-2 border-black bg-background p-2.5 rounded shadow-[2px_2px_0px_#000] text-xs max-w-xs space-y-1">
+                                <div className="max-w-xs space-y-1 rounded border-2 border-border bg-background p-2.5 text-xs text-foreground shadow-[2px_2px_0_#000]">
                                   <p className="font-bold">{point.title}</p>
                                   <p className="text-muted-foreground text-[11px]">
                                     Category: {point.category} · Due: {point.short_label}
@@ -308,10 +308,7 @@ export default function Dashboard() {
                     </div>
                   ) : (
                     /* Graceful "Pacing in Progress" State */
-                    <div className="border-2 border-dashed border-border rounded-lg p-6 sm:p-8 bg-muted/20 flex flex-col items-center text-center">
-                      <div className="size-12 rounded-full border-2 border-black bg-amber-100 flex items-center justify-center mb-3">
-                        <Sparkles className="size-6 text-amber-700" />
-                      </div>
+                    <div className="flex flex-col items-center border-2 border-dashed border-border bg-muted/20 p-6 text-center sm:p-8">
                       <h4 className="font-bold text-base font-head mb-1">
                         Pacing in Progress: Trend Curve Unlocks After 3 Graded Classworks
                       </h4>
@@ -325,22 +322,19 @@ export default function Dashboard() {
                       {data?.trend_chart.points && data.trend_chart.points.length > 0 && (
                         <div className="flex flex-wrap justify-center gap-2 max-w-lg">
                           {data.trend_chart.points.map((p) => (
-                            <div
+                            <Badge
                               key={p.classwork_id}
-                              className="border border-black rounded px-2.5 py-1 bg-background text-[11px] font-medium flex items-center gap-1.5 shadow-none"
+                              size="sm"
+                              variant={p.avg_score_percent !== null ? "success" : "outline"}
+                              className="max-w-full gap-1.5"
                             >
-                              <FileText className="size-3 text-muted-foreground" />
-                              <span className="truncate max-w-[140px]">{p.title}</span>
-                              {p.avg_score_percent !== null ? (
-                                <Badge size="sm" variant="solid" className="bg-emerald-600 text-white text-[10px] px-1 py-0">
-                                  {p.avg_score_percent}%
-                                </Badge>
-                              ) : (
-                                <Badge size="sm" variant="outline" className="text-[10px] px-1 py-0">
-                                  Pending scores
-                                </Badge>
-                              )}
-                            </div>
+                              <span className="max-w-[140px] truncate">{p.title}</span>
+                              <span className="shrink-0 border-l border-current/40 pl-1.5 text-[10px]">
+                                {p.avg_score_percent !== null
+                                  ? `${p.avg_score_percent}%`
+                                  : "Pending scores"}
+                              </span>
+                            </Badge>
                           ))}
                         </div>
                       )}
@@ -350,15 +344,14 @@ export default function Dashboard() {
               </Card>
 
               {/* 3. Section-by-Section Health Matrix & Live Action Queue Split */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 w-full">
+              <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-12">
                 {/* Section-by-Section Health Matrix (Left 7 Cols) */}
-                <Card className="lg:col-span-7 border-2 border-black shadow-[3px_3px_0px_#000]">
-                  <Card.Content className="p-4 sm:p-5">
+                <Card className="lg:col-span-7">
+                  <Card.Content>
                     <div className="flex items-center justify-between mb-4">
                       <div>
-                        <div className="flex items-center gap-2">
-                          <School className="size-5 text-primary" />
-                          <Card.Title className="text-lg font-bold font-head mb-0">
+                        <div>
+                          <Card.Title className="mb-0 text-lg font-bold">
                             Section-by-Section Health
                           </Card.Title>
                         </div>
@@ -370,7 +363,7 @@ export default function Dashboard() {
                         variant="outline"
                         size="sm"
                         onClick={() => navigate(routes.teacher.classes)}
-                        className="text-xs h-8 border-black shadow-none"
+                        className="h-8 text-xs shadow-none"
                       >
                         All Classes <ArrowUpRight className="size-3.5 ml-1" />
                       </Button>
@@ -381,7 +374,7 @@ export default function Dashboard() {
                         {data.section_matrix.map((sec) => (
                           <div
                             key={`${sec.class_id}-${sec.subject_id}`}
-                            className="border-2 border-black rounded p-3.5 bg-background hover:bg-muted/10 transition-colors"
+                            className="rounded border-2 border-border bg-background p-3.5 transition-colors hover:bg-muted/10"
                           >
                             <div className="flex items-center justify-between mb-2">
                               <div>
@@ -435,7 +428,7 @@ export default function Dashboard() {
                                 <div>
                                   <span className="text-muted-foreground mr-1.5">Class Average:</span>
                                   {sec.avg_score_percent !== null ? (
-                                    <span className="font-bold text-emerald-700">{sec.avg_score_percent}%</span>
+                                    <span className="font-bold text-primary">{sec.avg_score_percent}%</span>
                                   ) : (
                                     <Badge size="sm" variant="outline" className="text-[10px] bg-muted/30">
                                       Awaiting Graded Work
@@ -471,17 +464,16 @@ export default function Dashboard() {
                 {/* Live Action Queue (Right 5 Cols) */}
                 <div className="lg:col-span-5 flex flex-col gap-4">
                   {/* Card A: Submissions Awaiting Grading */}
-                  <Card className="border-2 border-black shadow-[3px_3px_0px_#000] flex-1">
-                    <Card.Content className="p-4 sm:p-5 flex flex-col h-full">
+                  <Card className="flex-1">
+                    <Card.Content className="flex h-full flex-col">
                       <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <ClipboardList className="size-5 text-amber-700" />
-                          <Card.Title className="text-base font-bold font-head mb-0">
+                        <div>
+                          <Card.Title className="mb-0 text-base font-bold">
                             Submissions to Review
                           </Card.Title>
                         </div>
                         {data && data.action_queue.pending_grading.length > 0 && (
-                          <Badge variant="solid" className="bg-amber-600 text-white text-xs px-2 py-0.5">
+                          <Badge variant="secondary" className="px-2 py-0.5 text-xs">
                             {data.action_queue.pending_grading.length} Pending
                           </Badge>
                         )}
@@ -492,7 +484,7 @@ export default function Dashboard() {
                           {data.action_queue.pending_grading.map((item) => (
                             <div
                               key={item.submission_id}
-                              className="border border-black rounded p-2.5 bg-background hover:bg-muted/10 transition-colors flex items-center justify-between gap-2"
+                              className="flex items-center justify-between gap-2 rounded border border-border bg-background p-2.5 transition-colors hover:bg-muted/10"
                             >
                               <div className="min-w-0 flex-1">
                                 <p className="text-xs font-bold truncate">{item.student_name}</p>
@@ -504,7 +496,7 @@ export default function Dashboard() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => navigate(routes.teacher.classworks)}
-                                className="h-7 text-xs border-black shrink-0 px-2"
+                                className="h-7 shrink-0 px-2 text-xs"
                               >
                                 Grade
                               </Button>
@@ -513,7 +505,6 @@ export default function Dashboard() {
                         </div>
                       ) : (
                         <div className="flex-1 flex flex-col items-center justify-center text-center py-6 text-muted-foreground text-xs">
-                          <CheckCircle2 className="size-8 text-emerald-600 mb-1.5" />
                           <p className="font-semibold text-foreground">All caught up!</p>
                           <p>No submissions currently pending review.</p>
                         </div>
@@ -522,11 +513,10 @@ export default function Dashboard() {
                   </Card>
 
                   {/* Card B: Upcoming Deadlines & Turn-in Pacing */}
-                  <Card className="border-2 border-black shadow-[3px_3px_0px_#000] flex-1">
-                    <Card.Content className="p-4 sm:p-5 flex flex-col h-full">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Clock className="size-5 text-primary" />
-                        <Card.Title className="text-base font-bold font-head mb-0">
+                  <Card className="flex-1">
+                    <Card.Content className="flex h-full flex-col">
+                      <div className="mb-3">
+                        <Card.Title className="mb-0 text-base font-bold">
                           Active Deadlines
                         </Card.Title>
                       </div>
@@ -536,11 +526,11 @@ export default function Dashboard() {
                           {data.action_queue.upcoming_deadlines.map((item, idx) => (
                             <div
                               key={item.classwork_id || idx}
-                              className="border border-black rounded p-2.5 bg-background flex flex-col gap-1 text-xs"
+                              className="flex flex-col gap-1 rounded border border-border bg-background p-2.5 text-xs"
                             >
                               <div className="flex items-center justify-between">
                                 <span className="font-bold truncate">{item.title}</span>
-                                <span className="text-[11px] font-semibold text-amber-800 shrink-0 ml-2">
+                                <span className="ml-2 shrink-0 text-[11px] font-semibold text-foreground">
                                   {item.due_date ? new Date(item.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Active"}
                                 </span>
                               </div>
@@ -555,7 +545,6 @@ export default function Dashboard() {
                         </div>
                       ) : (
                         <div className="flex-1 flex flex-col items-center justify-center text-center py-6 text-muted-foreground text-xs">
-                          <Calendar className="size-8 text-muted-foreground mb-1.5" />
                           <p>No upcoming task deadlines scheduled.</p>
                         </div>
                       )}
@@ -563,7 +552,7 @@ export default function Dashboard() {
                   </Card>
                 </div>
               </div>
-            </div>
+            </main>
           </div>
         </div>
       </div>

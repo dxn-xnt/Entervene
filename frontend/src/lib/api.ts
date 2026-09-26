@@ -1498,6 +1498,212 @@ export async function getTeacherAdvisoryClassGrades(
   return (await response.json()) as TeacherAdvisoryClassGradesResponse;
 }
 
+export async function exportTeacherAdvisoryStudentSF9(
+  classId: string | number,
+  studentId: string
+): Promise<{ blob: Blob; filename: string }> {
+  const url = `/api/v1/classes/teacher/advisory/${encodeURIComponent(String(classId))}/students/${encodeURIComponent(studentId)}/export-sf9`;
+  const response = await apiFetch(url);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(teacherAdvisoryClassErrorMessage(data, response.status, "Unable to export SF9 report card."));
+  }
+
+  const contentDisposition = response.headers.get("content-disposition");
+  let filename = `SF9_${studentId}.xlsx`;
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename=["']?([^"';]+)["']?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  const blob = await response.blob();
+  return { blob, filename };
+}
+
+export async function exportTeacherAdvisoryBatchSF9(
+  classId: string | number
+): Promise<{ blob: Blob; filename: string }> {
+  const url = `/api/v1/classes/teacher/advisory/${encodeURIComponent(String(classId))}/export-sf9-batch`;
+  const response = await apiFetch(url);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(teacherAdvisoryClassErrorMessage(data, response.status, "Unable to export advisory SF9 report cards."));
+  }
+
+  const contentDisposition = response.headers.get("content-disposition");
+  let filename = `SF9_Advisory_${classId}.xlsx`;
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename=["']?([^"';]+)["']?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  const blob = await response.blob();
+  return { blob, filename };
+}
+
+export type SF9SchoolInfo = {
+  school_name: string;
+  school_id: string;
+  region: string;
+  division: string;
+  district: string;
+  municipality: string;
+  principal_name: string;
+};
+
+export type SF9StudentInfo = {
+  student_id: string;
+  full_name: string;
+  student_lrn: string;
+  gender: string;
+  age: number | null;
+  dob: string | null;
+  track: string;
+};
+
+export type SF9ClassInfo = {
+  class_id: number;
+  section_name: string;
+  grade_level: string;
+  academic_year: string;
+  adviser_name: string;
+};
+
+export type SF9PeriodInfo = {
+  academic_period_id: number;
+  period_name: string;
+  period_sequence: number;
+};
+
+export type SF9SubjectGradeItem = {
+  subject_id: number;
+  subject_name: string;
+  grades: Record<string, number | null>;
+  final_grade: number | null;
+  remarks: string;
+};
+
+export type SF9GeneralAverage = {
+  final_rating: number | null;
+  descriptor: string | null;
+  remarks: string;
+};
+
+export type SF9DescriptorItem = {
+  scale: string;
+  description: string;
+  remarks: string;
+};
+
+export type SF9AttendanceMonth = {
+  month: string;
+  class_days: number;
+  present: number;
+  absent: number;
+};
+
+export type SF9AttendanceInfo = {
+  months: SF9AttendanceMonth[];
+  total: {
+    class_days: number;
+    present: number;
+    absent: number;
+  };
+};
+
+export type TeacherAdvisoryStudentSF9Data = {
+  school_info: SF9SchoolInfo;
+  student: SF9StudentInfo;
+  class_info: SF9ClassInfo;
+  periods: SF9PeriodInfo[];
+  learning_areas: {
+    core: SF9SubjectGradeItem[];
+    electives: SF9SubjectGradeItem[];
+  };
+  general_average: SF9GeneralAverage;
+  descriptors: SF9DescriptorItem[];
+  attendance: SF9AttendanceInfo;
+};
+
+export async function getTeacherAdvisoryStudentSF9Data(
+  classId: string | number,
+  studentId: string
+): Promise<TeacherAdvisoryStudentSF9Data> {
+  const url = `/api/v1/classes/teacher/advisory/${encodeURIComponent(String(classId))}/students/${encodeURIComponent(studentId)}/sf9-data`;
+  const response = await apiFetch(url);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(teacherAdvisoryClassErrorMessage(data, response.status, "Unable to load student SF9 report card data."));
+  }
+
+  return (await response.json()) as TeacherAdvisoryStudentSF9Data;
+}
+
+export async function exportTeacherAdvisoryStudentSF9Docx(
+  classId: string | number,
+  studentId: string,
+  comments?: { term1?: string; term2?: string; term3?: string }
+): Promise<{ blob: Blob; filename: string }> {
+  const params = new URLSearchParams();
+  if (comments?.term1) params.append("term1_comment", comments.term1);
+  if (comments?.term2) params.append("term2_comment", comments.term2);
+  if (comments?.term3) params.append("term3_comment", comments.term3);
+
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const url = `/api/v1/classes/teacher/advisory/${encodeURIComponent(String(classId))}/students/${encodeURIComponent(studentId)}/export-sf9-docx${query}`;
+  const response = await apiFetch(url);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(teacherAdvisoryClassErrorMessage(data, response.status, "Unable to export Word (.docx) SF9 report card."));
+  }
+
+  const contentDisposition = response.headers.get("content-disposition");
+  let filename = `SF9_${studentId}.docx`;
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename=["']?([^"';]+)["']?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  const blob = await response.blob();
+  return { blob, filename };
+}
+
+export async function exportTeacherAdvisoryBatchSF9Docx(
+  classId: string | number
+): Promise<{ blob: Blob; filename: string }> {
+  const url = `/api/v1/classes/teacher/advisory/${encodeURIComponent(String(classId))}/export-sf9-batch-docx`;
+  const response = await apiFetch(url);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(teacherAdvisoryClassErrorMessage(data, response.status, "Unable to export batch Word (.docx) SF9 report cards."));
+  }
+
+  const contentDisposition = response.headers.get("content-disposition");
+  let filename = `SF9_Advisory_${classId}.docx`;
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename=["']?([^"';]+)["']?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  const blob = await response.blob();
+  return { blob, filename };
+}
+
+
+
 export async function getClassTransferOptions(classId: string | number): Promise<ClassTransferOptionsResponse> {
   const response = await apiFetch(`/api/v1/classes/${encodeURIComponent(String(classId))}/transfer-options`);
 
