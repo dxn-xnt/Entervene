@@ -8,6 +8,8 @@ type OverviewCardProps = {
   count: string;
   stat?: string;
   statDescription?: string;
+  trend?: "up" | "down";
+  progressValue?: number;
   className?: string;
 };
 
@@ -68,22 +70,48 @@ export function OverviewCard({
   count,
   stat,
   statDescription,
+  trend,
+  progressValue,
   className,
 }: OverviewCardProps) {
   const description = statDescription ?? descriptionFor(title);
 
+  const isPositive = trend === "up" || (stat && stat.includes("▲"));
+  const isNegative = trend === "down" || (stat && stat.includes("▼"));
+
   return (
-    <Card className={cn("@container/card", className)}>
-      <Card.Header>
-        <Card.Description className="font-semibold">{title}</Card.Description>
+    <Card className={cn("@container/card transition-all duration-200", className)}>
+      <Card.Header className="">
+        <Card.Description className="text-xl font-bold text-foreground/90">{title}</Card.Description>
       </Card.Header>
-      <Card.Content>
-        <Card.Title className="text-4xl font-bold">{count}</Card.Title>
+      <Card.Content className="space-y-1.5">
+        <Card.Title className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">{count}</Card.Title>
         {(stat || description) && (
-          <p className="text-sm text-muted-foreground">
-            {stat && <span className="font-semibold text-foreground">{stat} </span>}
+          <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+            {stat && (
+              <span
+                className={cn(
+                  "font-medium",
+                  isPositive && "text-emerald-400 font-semibold",
+                  isNegative && "text-rose-400 font-semibold",
+                  !isPositive && !isNegative && "text-foreground font-semibold"
+                )}
+              >
+                {stat}{" "}
+              </span>
+            )}
             {description}
           </p>
+        )}
+        {typeof progressValue === "number" && (
+          <div className="pt-2">
+            <div className="h-1.5 sm:h-2 w-full bg-muted/60 rounded-full overflow-hidden border border-border/40">
+              <div
+                className="h-full bg-amber-400 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${Math.min(100, Math.max(0, progressValue))}%` }}
+              />
+            </div>
+          </div>
         )}
       </Card.Content>
     </Card>

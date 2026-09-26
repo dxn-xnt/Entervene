@@ -267,142 +267,141 @@ export default function TeacherClassDetail() {
                   : undefined
               }
             >
-            <header
-              data-student-detail-header={
-                studentInterfaceStudent ? "" : undefined
-              }
-              className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6"
-            >
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                <SidebarTrigger className="shrink-0 md:hidden" />
-                <Breadcrumb className="min-w-0">
-                  <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Link
-                        onClick={() => navigate("/teacher/classes")}
-                        className="cursor-pointer whitespace-nowrap text-muted-foreground hover:text-black"
-                      >
-                        Classes
-                      </Breadcrumb.Link>
-                    </Breadcrumb.Item>
-                    <Breadcrumb.Separator />
-                    <Breadcrumb.Item className="min-w-0">
-                      <Breadcrumb.Link
-                        onClick={() => navigate(`/teacher/classes/${detail.class_id}/subjects/${currentSubject?.subject_id}`)}
-                        className="cursor-pointer whitespace-nowrap !text-lg text-muted-foreground hover:text-black"
-                      >
-                        {currentSubject?.subject_name || "Subject"}
-                      </Breadcrumb.Link>
-                    </Breadcrumb.Item>
-                    <Breadcrumb.Separator />
-                    <Breadcrumb.Item className="min-w-0">
-                      <Breadcrumb.Page className="block truncate">
-                        {studentInterfaceStudent?.full_name || detail.section_name}
-                      </Breadcrumb.Page>
-                    </Breadcrumb.Item>
-                  </Breadcrumb.List>
-                </Breadcrumb>
-              </div>
+              <header
+                data-student-detail-header={
+                  studentInterfaceStudent ? "" : undefined
+                }
+                className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6"
+              >
+                <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                  <SidebarTrigger className="shrink-0 md:hidden" />
+                  <Breadcrumb className="min-w-0">
+                    <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Link
+                          onClick={() => navigate("/teacher/classes")}
+                          className="cursor-pointer whitespace-nowrap text-muted-foreground hover:text-black"
+                        >
+                          Classes
+                        </Breadcrumb.Link>
+                      </Breadcrumb.Item>
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item className="min-w-0">
+                        <Breadcrumb.Link
+                          onClick={() => navigate(`/teacher/classes/${detail.class_id}/subjects/${currentSubject?.subject_id}`)}
+                          className="cursor-pointer whitespace-nowrap !text-lg text-muted-foreground hover:text-black"
+                        >
+                          {currentSubject?.subject_name || "Subject"}
+                        </Breadcrumb.Link>
+                      </Breadcrumb.Item>
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item className="min-w-0">
+                        <Breadcrumb.Page className="block truncate">
+                          {studentInterfaceStudent?.full_name || detail.section_name}
+                        </Breadcrumb.Page>
+                      </Breadcrumb.Item>
+                    </Breadcrumb.List>
+                  </Breadcrumb>
+                </div>
 
-              <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
-                {studentInterfaceStudent ? (
-                  <ManualSuggestionPanel
-                    classId={detail.class_id}
-                    student={studentInterfaceStudent}
-                    subjectLoads={detail.subject_loads}
-                    displayMode="header"
+                <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
+                  {studentInterfaceStudent ? (
+                    <ManualSuggestionPanel
+                      classId={detail.class_id}
+                      student={studentInterfaceStudent}
+                      subjectLoads={detail.subject_loads}
+                      displayMode="header"
+                    />
+                  ) : tab === "lessons" ? (
+                    <Button
+                      className="w-full md:w-auto"
+                      onClick={() => setIsSetGoalModalOpen(true)}
+                    >
+                      <Pencil className="mr-2 size-4" /> Set Lesson Goal
+                    </Button>
+                  ) : null}
+                </div>
+              </header>
+              {!studentInterfaceStudent && (
+                <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                  <Tabs<DetailTab>
+                    tabs={[
+                      {
+                        id: "lessons",
+                        label: "Lessons",
+                        icon: BookOpen,
+                      },
+                      {
+                        id: "students",
+                        label: "Students",
+                        icon: Users,
+                      },
+                      {
+                        id: "classwork",
+                        label: "Classwork",
+                        icon: ClipboardList,
+                      },
+                    ]}
+                    activeTab={tab}
+                    onTabChange={(nextTab) => {
+                      setStudentInterfaceStudent(null);
+                      setTab(nextTab);
+                    }}
                   />
-                ) : tab === "lessons" ? (
-                  <Button
-                    className="w-full md:w-auto"
-                    onClick={() => setIsSetGoalModalOpen(true)}
-                  >
-                    <Pencil className="mr-2 size-4" /> Set Lesson Goal
-                  </Button>
-                ) : null}
-              </div>
-            </header>
-            {!studentInterfaceStudent && (
-              <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-                <Tabs<DetailTab>
-                  tabs={[
-                    {
-                      id: "lessons",
-                      label: "Lessons",
-                      icon: BookOpen,
-                    },
-                    {
-                      id: "students",
-                      label: "Students",
-                      icon: Users,
-                    },
-                    {
-                      id: "classwork",
-                      label: "Classwork",
-                      icon: ClipboardList,
-                    },
-                  ]}
-                  activeTab={tab}
-                  onTabChange={(nextTab) => {
-                    setStudentInterfaceStudent(null);
-                    setTab(nextTab);
-                  }}
-                />
-              </div>
-            )}
+                </div>
+              )}
             </div>
 
             <div
-              className={`flex min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6 ${
-                studentInterfaceStudent
-                  ? ""
-                  : "-mt-[1px] border-t-1 border-border"
-              }`}
+              className={`flex min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6 ${studentInterfaceStudent
+                ? ""
+                : "-mt-[1px] border-t-1 border-border"
+                }`}
             >
 
               {!studentInterfaceStudent && (
                 <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
-                <Card.Content>
-                  <div className="flex min-w-0 items-center justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <Card.Title
-                        className="mb-0 truncate text-2xl font-extrabold sm:text-3xl"
-                        title={currentSubject?.subject_name || detail.section_name}
-                      >
-                        {currentSubject?.subject_name || detail.section_name}
-                      </Card.Title>
-                    </div>
-                    <div className="flex shrink-0 flex-row items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        size="sm"
-                        className="w-fit font-black"
-                      >
-                        {statusLabel}
-                      </Badge>
-                      <Button
-                        variant="secondary"
-                        className="shadow-none w-7 p-1"
-                        size="sm"
-                        title={`View ${currentSubject?.subject_name || detail.section_name}`}
-                        onClick={() => {
-                          if (currentSubject) {
-                            navigate(
-                              `/teacher/classes/${detail.class_id}/subjects/${currentSubject.subject_id}`,
-                            );
-                          }
-                        }}
-                      >
-                        <ArrowUpRight className="size-4" />
-                      </Button>
-                    </div>
+                  <Card.Content>
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <Card.Title
+                          className="mb-0 truncate text-2xl font-extrabold sm:text-3xl"
+                          title={currentSubject?.subject_name || detail.section_name}
+                        >
+                          {currentSubject?.subject_name || detail.section_name}
+                        </Card.Title>
+                      </div>
+                      <div className="flex shrink-0 flex-row items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          size="sm"
+                          className="w-fit font-black"
+                        >
+                          {statusLabel}
+                        </Badge>
+                        <Button
+                          variant="secondary"
+                          className="shadow-none w-7 p-1"
+                          size="sm"
+                          title={`View ${currentSubject?.subject_name || detail.section_name}`}
+                          onClick={() => {
+                            if (currentSubject) {
+                              navigate(
+                                `/teacher/classes/${detail.class_id}/subjects/${currentSubject.subject_id}`,
+                              );
+                            }
+                          }}
+                        >
+                          <ArrowUpRight className="size-4" />
+                        </Button>
+                      </div>
 
-                  </div>
-                  <p className="text-xs">
-                    {detail.section_name} | {detail.academic_level} |  Active
-                    since {activeSince}
-                  </p>
-                </Card.Content>
+                    </div>
+                    <p className="text-xs">
+                      {detail.section_name} | {detail.academic_level} |  Active
+                      since {activeSince}
+                    </p>
+                  </Card.Content>
                 </Card>
               )}
 
@@ -1090,7 +1089,7 @@ function OverviewTab({
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:grid-rows-[auto_1fr] items-stretch min-w-0">
           <div className="flex flex-col gap-1 min-w-0">
             <h3 className="text-xl font-semibold">Overview</h3>
-            <div className="grid gap-4 md:grid-cols-3 min-w-0">
+            <div className="grid gap-4 md:grid-cols-2 min-w-0">
               <OverviewCard
                 title="Total Students"
                 count={String(detail.student_count ?? 0)}
@@ -1101,11 +1100,11 @@ function OverviewTab({
                 count={String(lessons.length)}
                 statDescription="In this subject"
               />
-              <OverviewCard
+              {/* <OverviewCard
                 title="Total Subjects"
                 count={String(detail.subject_count ?? 0)}
-                statDescription="Active subject loads"
-              />
+                statDescription="Active subject lo`ads"
+              /> */}
             </div>
           </div>
 
