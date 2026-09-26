@@ -2507,6 +2507,8 @@ export type OverviewCardData = {
   stat?: string;
   statDescription?: string;
   rawCount?: number | null;
+  trend?: "up" | "down";
+  progressValue?: number;
 };
 
 export type OverviewResponse = {
@@ -2704,6 +2706,7 @@ export interface TeacherDashboardHealthResponse {
     academic_year: string;
     is_active: boolean;
   };
+  cards?: OverviewCardData[];
   kpis: {
     active_classes: number;
     enrolled_students: number;
@@ -2724,6 +2727,7 @@ export interface TeacherDashboardHealthResponse {
     pending_grading: ActionQueuePendingItem[];
     upcoming_deadlines: ActionQueueDeadlineItem[];
   };
+  details?: Record<string, any>;
 }
 
 export async function getTeacherDashboardHealth(params: {
