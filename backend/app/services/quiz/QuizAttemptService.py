@@ -28,6 +28,7 @@ from app.services.classwork.ClassworkShared import (
     aware_utc,
     is_quiz_type,
 )
+from app.services.classwork.ClassworkAccessService import assignment_allows_student
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
 
 
@@ -223,6 +224,8 @@ def _student_quiz_scope(
         ClassworkAssignment.classwork_assignment_id == assignment_id
     ).first()
     if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    if not assignment_allows_student(assignment, student.student_id):
         raise HTTPException(status_code=404, detail="Assignment not found")
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
     if not classwork or classwork.is_archived:

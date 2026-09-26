@@ -18,6 +18,7 @@ export interface TeacherInterventionSummary {
   triggering_predicted_grade: number;
   triggering_intervention_level: string;
   created_at: string;
+  activated_at?: string | null;
   diagnosis_summary: {
     weakest_supported_components?: string[];
     competency_detail_status?: string;
@@ -41,6 +42,7 @@ export interface DiagnosisSnapshot {
 export interface TeacherInterventionDetail extends TeacherInterventionSummary {
   diagnosis_snapshot: DiagnosisSnapshot;
   activated_at: string | null;
+  activated_by_staff_id: string | null;
   resolved_at: string | null;
   resolution_reason: string | null;
 }
@@ -50,8 +52,8 @@ export class InterventionApiError extends Error {
   constructor(status: number, message: string) { super(message); this.status = status; }
 }
 
-async function read<T>(path: string, method = "GET"): Promise<T> {
-  const response = await apiFetch(path, { method });
+async function read<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+  const response = await apiFetch(path, { method, ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new InterventionApiError(response.status, typeof body.detail === "string" ? body.detail : "Unable to complete the request. Please try again.");
@@ -59,10 +61,70 @@ async function read<T>(path: string, method = "GET"): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-const base = "/api/v1/teacher/interventions/candidates";
-export const listTeacherCandidates = () => read<{ items: TeacherInterventionSummary[]; total: number }>(base);
-export const getTeacherCandidate = (id: number) => read<TeacherInterventionDetail>(`${base}/${id}`);
-export const activateTeacherCandidate = (id: number) => read<TeacherInterventionDetail>(`${base}/${id}/activate`, "POST");
+const base = "/api/v1/teacher/interventions";
+export const listTeacherCandidates = () => read<{ items: TeacherInterventionSummary[]; total: number }>(`${base}/candidates`);
+export const getTeacherCandidate = (id: number) => read<TeacherInterventionDetail>(`${base}/candidates/${id}`);
+export const activateTeacherCandidate = (id: number) => read<TeacherInterventionDetail>(`${base}/candidates/${id}/activate`, "POST");
+export const listTeacherActive = () => read<{ items: TeacherInterventionSummary[]; total: number }>(`${base}/active`);
+export const getTeacherActive = (id: number) => read<TeacherInterventionDetail>(`${base}/active/${id}`);
+
+export type MaterialKind = "STUDENT_REVIEWER" | "REMEDIAL_ASSESSMENT";
+export interface ReviewerDraft { title: string; introduction: string; body: string }
+export interface RemedialQuestion {
+  question_text: string;
+  question_type: "MULTIPLE_CHOICE" | "SHORT_ANSWER";
+  points: number;
+  display_order: number;
+  difficulty_level: "EASY" | "MEDIUM" | "HARD" | null;
+  explanation: string | null;
+  lesson_id: number | null;
+  options: Array<{ option_text: string; is_correct: boolean; option_order: number }>;
+  provenance?: null | { source_kind: "QUESTION_SCORE" | "SCORED_COMPETENCY" | "COVERAGE" | "COMPONENT"; source_question_id?: number | null; lesson_id?: number | null; competency_id?: number | null; coverage_classwork_id?: number | null; component?: string | null };
+}
+export interface RemedialDraft {
+  title: string;
+  instructions: string;
+  duration_minutes: number | null;
+  settings: Record<string, unknown>;
+  questions: RemedialQuestion[];
+}
+export interface SupportMaterial {
+  material_id: number;
+  intervention_id: number;
+  kind: MaterialKind;
+  status: "DRAFT" | "SENT";
+  evidence_basis: Record<string, unknown>;
+  generated_content: ReviewerDraft | RemedialDraft | null;
+  current_content: ReviewerDraft | RemedialDraft;
+  created_by_staff_id: string;
+  updated_by_staff_id: string;
+  created_at: string;
+  updated_at: string;
+  sent_at: string | null;
+  sent_by_staff_id: string | null;
+}
+export const listSupportMaterials = (id: number) => read<{ items: SupportMaterial[]; total: number }>(`${base}/${id}/materials`);
+export const createSupportMaterial = (id: number, kind: MaterialKind) => read<SupportMaterial>(`${base}/${id}/materials`, "POST", { kind });
+export const getSupportMaterial = (id: number, materialId: number) => read<SupportMaterial>(`${base}/${id}/materials/${materialId}`);
+export const saveSupportMaterial = (id: number, materialId: number, content: ReviewerDraft | RemedialDraft) => read<SupportMaterial>(`${base}/${id}/materials/${materialId}`, "PUT", { content });
+export const generateStudentReviewer = (id: number, materialId: number) => read<SupportMaterial>(`${base}/${id}/materials/${materialId}/generate`, "POST");
+export const sendStudentReviewer = (id: number, materialId: number) => read<SupportMaterial>(`${base}/${id}/materials/${materialId}/send`, "POST");
+
+export type RemediationFormat = "QUIZ" | "TOS" | "CLASSWORK" | "EXISTING_MATERIAL_ONLY";
+export interface RemediationResource {
+  kind: "LESSON" | "CLASSWORK"; id: number; title: string; description: string;
+  lesson: string; topic: string; attachments: string[]; classwork_type?: string;
+  access: "ALREADY_ACCESSIBLE" | "PLANNING_ONLY"; ai_read: "METADATA_ONLY";
+}
+export interface RemediationPlan {
+  teacher_choice: RemediationFormat | null;
+  selected_resources: Array<{ kind: "LESSON" | "CLASSWORK"; id: number }>;
+  ai_suggestion: null | { recommended_format: RemediationFormat; reason: string; focus: Array<{ competency: string }>; evidence_used: Record<string, unknown> };
+}
+export interface RemediationWorkspace { plan: RemediationPlan; resources: RemediationResource[] }
+export const getRemediationWorkspace = (id: number) => read<RemediationWorkspace>(`${base}/${id}/remediation`);
+export const saveRemediationPlan = (id: number, plan: Pick<RemediationPlan, "teacher_choice" | "selected_resources">) => read<RemediationWorkspace>(`${base}/${id}/remediation`, "PUT", plan);
+export const generateRemediationAdvisory = (id: number) => read<RemediationWorkspace>(`${base}/${id}/remediation/advisory`, "POST");
 
 export function matchingCandidate(prediction: DevelopmentCurrentTermListItem, candidates: TeacherInterventionSummary[]): TeacherInterventionSummary | undefined {
   return candidates.find((candidate) => candidate.status === "CANDIDATE"

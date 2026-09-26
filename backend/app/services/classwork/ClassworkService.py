@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import json
 from typing import Any, Optional, cast
+from uuid import UUID
 from app.schemas.Notification import NotificationType
 
 from fastapi import HTTPException, UploadFile
@@ -34,6 +35,7 @@ from app.schemas.Classwork import (
 )
 from app.schemas.Quiz import QuizBuilderUpsert
 from app.services.classwork.ClassworkAccessService import (
+    assignment_allows_student,
     authorize_assignment_access,
     authorize_classwork_access,
     classwork_has_submissions,
@@ -161,6 +163,25 @@ def notify_students_for_classwork(
         print(f"[Notification Error] Failed to send classwork notification: {err}")
 
 
+def _stage_targeted_assignment_notification(db: Session, assignment: ClassworkAssignment, classwork: Classwork, subject_id: int) -> None:
+    from app.models.people.Student import Student
+    from app.schemas.Notification import NotificationCreate
+    from app.services.NotificationService import stage_notification
+
+    student = db.query(Student).filter_by(student_id=assignment.recipient_student_id).first()
+    if not student or not student.user_id:
+        return
+    subject = db.query(Subject).filter_by(subject_id=subject_id).first()
+    subject_name = subject.subject_name if subject else "your subject"
+    stage_notification(db, NotificationCreate(
+        user_id=student.user_id,
+        notification_type="assignment_due",
+        title=f"{subject_name}: {classwork.title}",
+        body=f"Your teacher assigned additional {subject_name} practice for you.",
+        action_url=f"/student/subjects/{assignment.class_id}/{subject_id}?tab=classwork&classworkAssignmentId={assignment.classwork_assignment_id}",
+    ))
+
+
 
 def create_classwork_record(body: ClassworkCreate, staff_id: str, db: Session) -> ClassworkResponse:
     classwork_type = normalize_classwork_type(body.classwork_type)
@@ -227,6 +248,9 @@ async def create_classwork_wizard_record(
     quiz_payload: Optional[str],
     rubric_payload: Optional[str],
     files: Optional[list[UploadFile]],
+    intervention_id: int | None = None,
+    remediation_request_id: UUID | None = None,
+    current_user: dict | None = None,
     staff_id: str,
     db: Session,
     save_file_func=save_file,
@@ -271,6 +295,42 @@ async def create_classwork_wizard_record(
     ensure_class_targets(db, staff_id, subject_id, selected_class_ids, academic_period_id)
     quiz_builder = _parse_quiz_payload(quiz_payload, normalized_type)
 
+    intervention = None
+    if intervention_id is not None:
+        from app.models.intervention.Intervention import Intervention
+        from app.models.auth.Role import Role
+        from app.models.auth.UserRoles import UserRoles
+        from app.services.intervention.TeacherInterventionService import _require_scope
+        from sqlalchemy import func
+        if remediation_request_id is None or current_user is None or current_user.get("role") != "teacher":
+            raise HTTPException(status_code=403, detail="Teacher remediation identity is required")
+        try:
+            user_uuid = UUID(str(current_user.get("sub")))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=403, detail="Teacher identity is invalid") from None
+        if db.query(UserRoles.user_id).join(Role, UserRoles.role_id == Role.role_id).filter(
+            UserRoles.user_id == user_uuid, func.lower(Role.role_name) == "admin",
+        ).first():
+            raise HTTPException(status_code=403, detail="Admin accounts cannot manage interventions")
+        intervention = db.query(Intervention).filter_by(intervention_id=intervention_id).with_for_update().one_or_none()
+        if intervention is None or intervention.status != "ACTIVE":
+            raise HTTPException(status_code=404, detail="Active intervention not found")
+        _require_scope(db, staff_id, intervention)
+        if selected_class_ids != [intervention.class_id] or subject_id != intervention.subject_id or academic_period_id != intervention.academic_period_id:
+            raise HTTPException(status_code=400, detail="Remediation must match the intervention class, subject, and period")
+        choice = (intervention.remediation_plan or {}).get("teacher_choice")
+        if choice not in {"QUIZ", "CLASSWORK"} or (choice == "QUIZ") != is_quiz_type(normalized_type):
+            raise HTTPException(status_code=400, detail="Remediation type must match the teacher's saved choice")
+        if classwork_category in {"EXAMS", "QUARTERLY_ASSESSMENT"}:
+            raise HTTPException(status_code=400, detail="Remedial examination grading policy is not configured")
+        prior = db.query(ClassworkAssignment).filter_by(remediation_request_id=remediation_request_id).first()
+        if prior:
+            if prior.source_intervention_id != intervention_id or prior.assigned_by_staff_id != staff_id:
+                raise HTTPException(status_code=409, detail="Remediation request was already used")
+            return build_classwork_response(prior.classwork)
+    elif remediation_request_id is not None:
+        raise HTTPException(status_code=400, detail="Intervention is required for a remediation request")
+
     saved_paths: list[str] = []
     try:
         is_graded = False if is_reading_type(normalized_type) else True
@@ -309,6 +369,9 @@ async def create_classwork_wizard_record(
                 allow_late_submissions=allow_late_submissions,
                 max_attempts=max_attempts,
                 is_published=is_published,
+                recipient_student_id=intervention.student_id if intervention else None,
+                source_intervention_id=intervention.intervention_id if intervention else None,
+                remediation_request_id=remediation_request_id if intervention else None,
             )
             db.add(assignment)
             created_assignments.append(assignment)
@@ -329,10 +392,12 @@ async def create_classwork_wizard_record(
             # Save quiz builder rows before committing so classwork+quiz creation is atomic.
             upsert_quiz_builder(db, classwork, quiz_builder)
 
+        if intervention and is_published:
+            _stage_targeted_assignment_notification(db, created_assignments[0], classwork, subject_id)
         db.commit()
         db.refresh(classwork)
 
-        if is_published and selected_class_ids:
+        if is_published and selected_class_ids and not intervention:
             notif_title, notif_body = build_classwork_notification_details(
                 db=db,
                 classwork_title=title.strip(),
@@ -460,6 +525,7 @@ def check_and_notify_post_deadline_summaries(db: Session, staff_id: str):
             total_students = db.query(StudentClass).filter(
                 StudentClass.class_id == assignment.class_id,
                 StudentClass.enrollment_status == "enrolled",
+                *((StudentClass.student_id == assignment.recipient_student_id,) if assignment.recipient_student_id else ()),
             ).count()
 
             submitted_students = db.query(StudentSubmission).filter(
@@ -563,6 +629,11 @@ def update_classwork_record(
     if not classwork:
         raise HTTPException(status_code=404, detail="Classwork not found or not yours")
     values = body.model_dump(exclude_unset=True)
+    if any(a.recipient_student_id for a in classwork.assignments):
+        if ("subject_id" in values and values["subject_id"] != classwork.subject_id) or (values.get("classwork_type") and normalize_classwork_type(values["classwork_type"]) != classwork.classwork_type):
+            raise HTTPException(status_code=400, detail="Targeted remediation subject and type cannot be changed")
+        if values.get("classwork_category") in {"EXAMS", "QUARTERLY_ASSESSMENT"}:
+            raise HTTPException(status_code=400, detail="Remedial examination grading policy is not configured")
     rubric_levels = values.pop("rubric_levels", None)
     confirm_rubric_change = values.pop("confirm_rubric_change", False)
     if "classwork_type" in values and values["classwork_type"]:
@@ -606,7 +677,12 @@ def update_classwork_record(
         db.commit()
         db.refresh(classwork)
 
-        assigned_class_ids = [a.class_id for a in classwork.assignments if a.is_published]
+        targeted = [a for a in classwork.assignments if a.is_published and a.recipient_student_id]
+        assigned_class_ids = [a.class_id for a in classwork.assignments if a.is_published and not a.recipient_student_id]
+        for assignment in targeted:
+            _stage_targeted_assignment_notification(db, assignment, classwork, classwork.subject_id)
+        if targeted:
+            db.commit()
         if assigned_class_ids:
             cw_lessons = db.query(ClassworkLesson.lesson_id).filter(ClassworkLesson.classwork_id == classwork_id).all()
             lesson_ids_list = [l[0] for l in cw_lessons] if cw_lessons else None
@@ -755,6 +831,7 @@ def assign_classwork_to_classes(
     body: ClassworkAssignRequest,
     staff_id: str,
     db: Session,
+    current_user: dict | None = None,
 ) -> dict:
     classwork = db.query(Classwork).filter(
         Classwork.classwork_id == classwork_id,
@@ -765,6 +842,32 @@ def assign_classwork_to_classes(
     if classwork.is_archived:
         raise HTTPException(status_code=400, detail="Cannot assign archived classwork")
     class_ids = dedupe_ids(body.class_ids)
+    targeted = db.query(ClassworkAssignment).filter(
+        ClassworkAssignment.classwork_id == classwork_id,
+        ClassworkAssignment.recipient_student_id.isnot(None),
+    ).first()
+    if targeted:
+        if current_user is None or current_user.get("role") != "teacher":
+            raise HTTPException(status_code=403, detail="Teacher remediation identity is required")
+        from app.models.auth.Role import Role
+        from app.models.auth.UserRoles import UserRoles
+        from sqlalchemy import func
+        try:
+            user_uuid = UUID(str(current_user.get("sub")))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=403, detail="Teacher identity is invalid") from None
+        if db.query(UserRoles.user_id).join(Role, UserRoles.role_id == Role.role_id).filter(
+            UserRoles.user_id == user_uuid, func.lower(Role.role_name) == "admin",
+        ).first():
+            raise HTTPException(status_code=403, detail="Admin accounts cannot manage interventions")
+        from app.models.intervention.Intervention import Intervention
+        from app.services.intervention.TeacherInterventionService import _require_scope
+        if class_ids != [targeted.class_id] or body.academic_period_id not in (None, targeted.academic_period_id):
+            raise HTTPException(status_code=400, detail="Targeted remediation recipient and scope cannot be changed")
+        intervention = db.query(Intervention).filter_by(intervention_id=targeted.source_intervention_id).with_for_update().one_or_none()
+        if intervention is None or intervention.status != "ACTIVE":
+            raise HTTPException(status_code=404, detail="Active intervention not found")
+        _require_scope(db, staff_id, intervention)
     max_attempts = body.max_attempts if is_quiz_type(classwork.classwork_type) else None
     validate_classwork_values(max_attempts=max_attempts)
     validate_schedule(None, body.due_date, body.lock_date)
@@ -808,6 +911,7 @@ def assign_classwork_to_classes(
     created = []
     updated = []
     new_assignments = []
+    was_targeted_published = bool(targeted and targeted.is_published)
     try:
         for class_id in class_ids:
             existing = db.query(ClassworkAssignment).filter(
@@ -844,9 +948,14 @@ def assign_classwork_to_classes(
             db.flush()
             for assignment in new_assignments:
                 assignment.max_attempts = None
+        if targeted and body.is_published and not was_targeted_published:
+            db.flush()
+            _stage_targeted_assignment_notification(db, targeted, classwork, classwork.subject_id)
+        if targeted:
+            classwork.is_published = bool(body.is_published)
         db.commit()
 
-        if class_ids:
+        if class_ids and not targeted and body.is_published:
             cw_lessons = db.query(ClassworkLesson.lesson_id).filter(ClassworkLesson.classwork_id == classwork_id).all()
             lesson_ids_list = [l[0] for l in cw_lessons] if cw_lessons else None
             notif_title, notif_body = build_classwork_notification_details(
@@ -907,7 +1016,7 @@ def student_classworks_for_subject(
     results = []
     now = datetime.now(timezone.utc)
     for assignment, classwork, class_ in rows:
-        if not assignment_is_available(assignment, now):
+        if not assignment_allows_student(assignment, student.student_id) or not assignment_is_available(assignment, now):
             continue
         submission = db.query(StudentSubmission).filter(
             StudentSubmission.classwork_assignment_id == assignment.classwork_assignment_id,
@@ -1192,7 +1301,7 @@ def student_assignments(student, db: Session) -> dict:
 
     pending, submitted, graded = [], [], []
     for assignment, classwork, subject, staff in assignments:
-        if not assignment_is_available(assignment):
+        if not assignment_allows_student(assignment, student.student_id) or not assignment_is_available(assignment):
             continue
         submission = db.query(StudentSubmission).filter(
             StudentSubmission.classwork_assignment_id == assignment.classwork_assignment_id,

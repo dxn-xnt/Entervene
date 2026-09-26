@@ -13,6 +13,11 @@ from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.classwork.ClassworkShared import assignment_is_available, assignment_is_locked
 
 
+def assignment_allows_student(assignment: ClassworkAssignment, student_id) -> bool:
+    """A null recipient preserves the established classwide assignment contract."""
+    return assignment.recipient_student_id is None or str(assignment.recipient_student_id) == str(student_id)
+
+
 def user_id_from_claims(current_user: dict):
     value = current_user.get("sub")
     try:
@@ -67,7 +72,8 @@ def authorize_classwork_access(
             if class_id is not None:
                 query = query.filter(ClassworkAssignment.class_id == class_id)
             if any(
-                assignment_is_available(assignment)
+                assignment_allows_student(assignment, student.student_id)
+                and assignment_is_available(assignment)
                 and not assignment_is_locked(assignment)
                 for assignment in query.all()
             ):
@@ -97,7 +103,7 @@ def authorize_assignment_access(
         raise HTTPException(status_code=404, detail="Classwork not found")
     if role == "student" and assignment_is_available(assignment):
         student = db.query(Student).filter(Student.user_id == user_id).first()
-        if student and db.query(StudentClass).filter(
+        if student and assignment_allows_student(assignment, student.student_id) and db.query(StudentClass).filter(
             StudentClass.student_id == student.student_id,
             StudentClass.class_id == assignment.class_id,
             StudentClass.enrollment_status == "enrolled",

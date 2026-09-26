@@ -25,6 +25,7 @@ import {
   markInterventionViewed,
   type StudentSuggestionItem,
 } from "@/lib/interventions-api";
+import StudentReviewerSection from "./student-reviewer-section";
 
 export default function StudentInterventions() {
   const navigate = useNavigate();
@@ -98,6 +99,7 @@ export default function StudentInterventions() {
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:gap-6 sm:px-4 sm:py-4 md:px-6">
+              {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEVELOPMENT_PREDICTIONS === "true" && <StudentReviewerSection />}
               {/* KPI Header Cards */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <OverviewCard

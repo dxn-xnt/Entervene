@@ -1,4 +1,4 @@
-"""Current teacher review of frozen development Intervention candidates."""
+"""Current teacher review of frozen development Interventions."""
 
 from __future__ import annotations
 
@@ -69,6 +69,7 @@ def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
         triggering_predicted_grade=float(grade if grade is not None else source.predicted_period_grade),
         triggering_intervention_level=source.intervention_level,
         created_at=row.created_at,
+        activated_at=row.activated_at,
         diagnosis_summary={
             "snapshot_version": diagnosis.get("snapshot_version"),
             "weakest_supported_components": diagnosis.get("weakest_supported_components", []),
@@ -87,6 +88,23 @@ def list_teacher_candidates(db: Session, staff_id: str) -> TeacherInterventionLi
     return TeacherInterventionList(items=items, total=len(items))
 
 
+def list_teacher_active(db: Session, staff_id: str) -> TeacherInterventionList:
+    active = db.query(Intervention).filter_by(status="ACTIVE").order_by(
+        Intervention.activated_at.desc(), Intervention.intervention_id.desc(),
+    ).all()
+    items = [_summary(db, row) for row in active if _eligible_scope(db, staff_id, row)]
+    return TeacherInterventionList(items=items, total=len(items))
+
+
+def _detail(db: Session, row: Intervention) -> TeacherInterventionDetail:
+    return TeacherInterventionDetail(
+        **_summary(db, row).model_dump(),
+        diagnosis_snapshot=row.diagnosis_snapshot,
+        activated_by_staff_id=row.activated_by_staff_id,
+        resolved_at=row.resolved_at, resolution_reason=row.resolution_reason,
+    )
+
+
 def get_teacher_candidate(db: Session, staff_id: str, intervention_id: int) -> TeacherInterventionDetail:
     row = db.get(Intervention, intervention_id)
     if row is None:
@@ -94,12 +112,14 @@ def get_teacher_candidate(db: Session, staff_id: str, intervention_id: int) -> T
     _require_scope(db, staff_id, row)
     if row.status != "CANDIDATE":
         raise HTTPException(status_code=409, detail="Intervention is no longer a candidate")
-    return TeacherInterventionDetail(
-        **_summary(db, row).model_dump(),
-        diagnosis_snapshot=row.diagnosis_snapshot,
-        activated_at=row.activated_at, activated_by_staff_id=row.activated_by_staff_id,
-        resolved_at=row.resolved_at, resolution_reason=row.resolution_reason,
-    )
+    return _detail(db, row)
+
+
+def get_teacher_active(db: Session, staff_id: str, intervention_id: int) -> TeacherInterventionDetail:
+    row = db.get(Intervention, intervention_id)
+    if row is None or row.status != "ACTIVE" or not _eligible_scope(db, staff_id, row):
+        raise HTTPException(status_code=404, detail="Active intervention not found")
+    return _detail(db, row)
 
 
 def activate_teacher_candidate(db: Session, staff_id: str, intervention_id: int) -> TeacherInterventionDetail:
@@ -189,9 +209,4 @@ def activate_teacher_candidate(db: Session, staff_id: str, intervention_id: int)
     active = db.get(Intervention, intervention_id)
     if active is None or active.status != "ACTIVE":
         raise HTTPException(status_code=409, detail="Intervention activation did not complete")
-    return TeacherInterventionDetail(
-        **_summary(db, active).model_dump(),
-        diagnosis_snapshot=active.diagnosis_snapshot,
-        activated_at=active.activated_at, activated_by_staff_id=active.activated_by_staff_id,
-        resolved_at=active.resolved_at, resolution_reason=active.resolution_reason,
-    )
+    return _detail(db, active)

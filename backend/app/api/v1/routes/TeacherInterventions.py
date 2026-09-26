@@ -1,4 +1,4 @@
-"""Teacher-only review of corrected development Intervention candidates."""
+"""Teacher-only review of corrected development Interventions."""
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
@@ -11,10 +11,21 @@ from app.db.Session import get_db
 from app.models.auth.Role import Role
 from app.models.auth.UserRoles import UserRoles
 from app.schemas.TeacherIntervention import TeacherInterventionDetail, TeacherInterventionList
+from app.schemas.InterventionSupportMaterial import MaterialCreate, MaterialList, MaterialRead, MaterialUpdate
 from app.services.intervention.TeacherInterventionService import (
-    activate_teacher_candidate, get_teacher_candidate, list_teacher_candidates,
+    activate_teacher_candidate, get_teacher_active, get_teacher_candidate,
+    list_teacher_active, list_teacher_candidates,
 )
 from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME
+from app.services.intervention.InterventionSupportMaterialService import (
+    create_material, get_material, list_materials, update_material,
+)
+from app.services.intervention.InterventionReviewerGenerationService import generate_reviewer
+from app.services.intervention.InterventionReviewerDeliveryService import send_reviewer
+from app.services.ai.UsageGuard import actor
+from app.services.intervention.InterventionRemediationService import (
+    PlanUpdate, generate_advisory, get_workspace, save_plan,
+)
 
 
 def require_development_intervention_api() -> None:
@@ -46,6 +57,34 @@ def require_intervention_teacher(
 router = APIRouter(dependencies=[Depends(require_development_intervention_api)])
 
 
+@router.get("/{intervention_id}/remediation")
+def get_remediation_endpoint(
+    intervention_id: int, _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db),
+):
+    return get_workspace(db, staff_id, intervention_id)
+
+
+@router.put("/{intervention_id}/remediation")
+def save_remediation_endpoint(
+    intervention_id: int, body: PlanUpdate, _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db),
+):
+    return save_plan(db, staff_id, intervention_id, body)
+
+
+@router.post("/{intervention_id}/remediation/advisory")
+async def generate_remediation_endpoint(
+    intervention_id: int, _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db),
+):
+    token = actor.set(staff_id)
+    try:
+        return await generate_advisory(db, staff_id, intervention_id)
+    finally:
+        actor.reset(token)
+
+
 @router.get("/candidates", response_model=TeacherInterventionList)
 def list_candidates_endpoint(
     _teacher: dict = Depends(require_intervention_teacher),
@@ -53,6 +92,95 @@ def list_candidates_endpoint(
     db: Session = Depends(get_db),
 ):
     return list_teacher_candidates(db, staff_id)
+
+
+@router.get("/active", response_model=TeacherInterventionList)
+def list_active_endpoint(
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return list_teacher_active(db, staff_id)
+
+
+@router.get("/active/{intervention_id}", response_model=TeacherInterventionDetail)
+def get_active_endpoint(
+    intervention_id: int,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return get_teacher_active(db, staff_id, intervention_id)
+
+
+@router.get("/{intervention_id}/materials", response_model=MaterialList)
+def list_materials_endpoint(
+    intervention_id: int,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return list_materials(db, staff_id, intervention_id)
+
+
+@router.post("/{intervention_id}/materials", response_model=MaterialRead, status_code=201)
+def create_material_endpoint(
+    intervention_id: int,
+    body: MaterialCreate,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return create_material(db, staff_id, intervention_id, body.kind)
+
+
+@router.get("/{intervention_id}/materials/{material_id}", response_model=MaterialRead)
+def get_material_endpoint(
+    intervention_id: int,
+    material_id: int,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return get_material(db, staff_id, intervention_id, material_id)
+
+
+@router.put("/{intervention_id}/materials/{material_id}", response_model=MaterialRead)
+def update_material_endpoint(
+    intervention_id: int,
+    material_id: int,
+    body: MaterialUpdate,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return update_material(db, staff_id, intervention_id, material_id, body)
+
+
+@router.post("/{intervention_id}/materials/{material_id}/generate", response_model=MaterialRead)
+async def generate_reviewer_endpoint(
+    intervention_id: int,
+    material_id: int,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    token = actor.set(staff_id)
+    try:
+        return await generate_reviewer(db, staff_id, intervention_id, material_id)
+    finally:
+        actor.reset(token)
+
+
+@router.post("/{intervention_id}/materials/{material_id}/send", response_model=MaterialRead)
+def send_reviewer_endpoint(
+    intervention_id: int,
+    material_id: int,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return send_reviewer(db, staff_id, intervention_id, material_id)
 
 
 @router.get("/candidates/{intervention_id}", response_model=TeacherInterventionDetail)
