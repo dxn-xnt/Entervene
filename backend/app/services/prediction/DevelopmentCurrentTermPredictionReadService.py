@@ -83,6 +83,9 @@ def _as_utc(value: datetime) -> datetime:
 
 def _academic_evidence(snapshot: Any) -> dict[str, Any]:
     features = _snapshot_features(snapshot)
+    presentation = snapshot.get("examination_presentation") if isinstance(snapshot, dict) else None
+    if not isinstance(presentation, dict):
+        presentation = {"status": "DETAILS_UNAVAILABLE", "completed_count": 0, "components": {}}
     return {
         "written_works": {
             "graded_count": int(features.get("ww_available_activity_count") or 0),
@@ -96,6 +99,7 @@ def _academic_evidence(snapshot: Any) -> dict[str, Any]:
             "graded_count": int(features.get("qa_available_activity_count") or 0),
             "performance_percent": _to_float(features.get("qa_percent_so_far"))
             if features.get("qa_has_evidence") else None,
+            "presentation": presentation,
         },
         "overall": {
             "graded_activity_count": int(features.get("overall_available_activity_count") or 0),

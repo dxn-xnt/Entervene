@@ -147,7 +147,13 @@ def test_development_wrapper_uses_live_current_term_prediction(current_period_co
     ctx = current_period_context
     _set_weights(ctx)
     _make_ready(ctx)
-    monkeypatch.setattr(prediction_service.v3_scorer, "score_development_current_term", lambda _features: 78.0)
+    selected_models = []
+
+    def fake_score(_features, model_name=prediction_service.v3_scorer.MODEL_NAME):
+        selected_models.append(model_name)
+        return 78.0
+
+    monkeypatch.setattr(prediction_service.v3_scorer, "score_development_current_term", fake_score)
 
     result = service.predict_and_assess_development_current_term(
         ctx["db"],
@@ -161,3 +167,4 @@ def test_development_wrapper_uses_live_current_term_prediction(current_period_co
     assert result["projected_final_term_grade"] == 78.0
     assert result["intervention_level"] == "MODERATE_RISK"
     assert result["intervention_basis"] == service.INTERVENTION_BASIS
+    assert selected_models == [prediction_service.selected_development_model_name()]

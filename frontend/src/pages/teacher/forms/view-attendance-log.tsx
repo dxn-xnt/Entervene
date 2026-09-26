@@ -230,16 +230,16 @@ export default function ViewAttendanceLogModal({
         <Table wrapperClassName="attendance-records-wrapper h-auto shrink-0" className="attendance-records attendance-history w-full border-collapse">
           <Table.Header>
             <Table.Row>
-              <Table.Head className="min-w-[140px] font-black text-black">
+              <Table.Head className="min-w-[140px] font-head text-black">
                 <div className="flex items-center gap-1.5">
                   <Calendar className="size-3.5" />
                   Attendance Date
                 </div>
               </Table.Head>
-              <Table.Head className="min-w-[120px] font-black text-center text-black">
+              <Table.Head className="min-w-[120px] font-head text-center text-black">
                 Attendance
               </Table.Head>
-              <Table.Head className="font-black text-black">
+              <Table.Head className="font-head text-black">
                 Remarks
               </Table.Head>
             </Table.Row>
@@ -260,7 +260,7 @@ export default function ViewAttendanceLogModal({
               filteredHistory.map((log) => (
                 <Table.Row
                   key={log.attendance_id}
-                  className="hover:bg-gray-50 transition-colors"
+                  className="hover:bg-primary/50 transition-colors"
                 >
                   <Table.Cell className="font-bold tabular-nums" data-label="Date">
                     {log.date}

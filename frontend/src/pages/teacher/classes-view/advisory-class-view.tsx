@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
-import { Award, BookOpen, ChevronDown, Users } from "lucide-react";
+import { Award, BookOpen, ChevronDown, FileSpreadsheet, FileText, Loader2, Users } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
@@ -13,7 +14,10 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Table } from "@/components/retroui/Table";
 import { OverviewCard } from "@/components/overview-cards";
 import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
+import { SF9PreviewModal } from "@/components/teacher/sf9-preview-modal";
 import {
+  exportTeacherAdvisoryBatchSF9,
+  exportTeacherAdvisoryStudentSF9,
   getClassSchedule,
   getTeacherAdvisoryClassDetail,
   getTeacherAdvisoryClassGrades,
@@ -102,96 +106,96 @@ export default function AdvisoryClassDetail() {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col min-w-0 w-full max-w-full">
+        <div className="@container/main flex flex-1 flex-col min-w-0 w-full max-w-full">
+          <div className="flex flex-1 flex-col min-w-0 w-full max-w-full">
             <div data-page-tabs-sticky-region>
-            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
-              <SidebarTrigger className="md:hidden" />
-              <Breadcrumb>
-                <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Link
-                      onClick={() => navigate("/teacher/classes")}
-                      className="cursor-pointer"
-                    >
-                      Classes
-                    </Breadcrumb.Link>
-                  </Breadcrumb.Item>
-                  <Breadcrumb.Separator />
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Page>
-                      {detail.section_name}
-                    </Breadcrumb.Page>
-                  </Breadcrumb.Item>
-                </Breadcrumb.List>
-              </Breadcrumb>
-            </header>
-            <div className="px-4 md:px-6 bg-background -mt-[1px]">
-              <Tabs<DetailTab>
-                tabs={[
-                  {
-                    id: "classes",
-                    label: "Classes",
-                    icon: BookOpen,
-                  },
-                  {
-                    id: "students",
-                    label: "Students",
-                    icon: Users,
-                  },
-                  {
-                    id: "subjects",
-                    label: "Subject Load",
-                    icon: BookOpen,
-                  },
-                  {
-                    id: "grades",
-                    label: "Grades",
-                    icon: Award,
-                  },
-                ]}
-                activeTab={tab}
-                onTabChange={setTab}
-              />
-            </div>
+              <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
+                <SidebarTrigger className="md:hidden" />
+                <Breadcrumb>
+                  <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Link
+                        onClick={() => navigate("/teacher/classes")}
+                        className="cursor-pointer"
+                      >
+                        Classes
+                      </Breadcrumb.Link>
+                    </Breadcrumb.Item>
+                    <Breadcrumb.Separator />
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Page>
+                        {detail.section_name}
+                      </Breadcrumb.Page>
+                    </Breadcrumb.Item>
+                  </Breadcrumb.List>
+                </Breadcrumb>
+              </header>
+              <div className="px-4 md:px-6 bg-background -mt-[1px]">
+                <Tabs<DetailTab>
+                  tabs={[
+                    {
+                      id: "classes",
+                      label: "Classes",
+                      icon: BookOpen,
+                    },
+                    {
+                      id: "students",
+                      label: "Students",
+                      icon: Users,
+                    },
+                    {
+                      id: "subjects",
+                      label: "Subject Load",
+                      icon: BookOpen,
+                    },
+                    {
+                      id: "grades",
+                      label: "Grades",
+                      icon: Award,
+                    },
+                  ]}
+                  activeTab={tab}
+                  onTabChange={setTab}
+                />
+              </div>
             </div>
 
-            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
+            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4 min-w-0 w-full max-w-full">
 
-            <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
-              <Card.Content>
-                <div className="flex min-w-0 items-center justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <Card.Title
-                      className="mb-0 truncate text-2xl font-extrabold sm:text-3xl"
-                      title={detail.section_name}
+              <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
+                <Card.Content>
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <Card.Title
+                        className="mb-0 truncate text-2xl font-extrabold sm:text-3xl"
+                        title={detail.section_name}
+                      >
+                        {detail.section_name}
+                      </Card.Title>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      size="sm"
+                      className="w-fit shrink-0 font-black"
                     >
-                      {detail.section_name}
-                    </Card.Title>
+                      {statusLabel}
+                    </Badge>
                   </div>
-                  <Badge
-                    variant="outline"
-                    size="sm"
-                    className="w-fit shrink-0 font-black"
-                  >
-                    {statusLabel}
-                  </Badge>
-                </div>
-                <p className="text-sm font-normal">
-                  {detail.academic_level} - {detail.academic_year} | Active
-                  since {activeSince}
-                </p>
-              </Card.Content>
-            </Card>
+                  <p className="text-sm font-normal">
+                    {detail.academic_level} - {detail.academic_year} | Active
+                    since {activeSince}
+                  </p>
+                </Card.Content>
+              </Card>
 
-            {tab === "classes" && <OverviewTab detail={detail} />}
-            {tab === "students" && <StudentsTab detail={detail} />}
-            {tab === "subjects" && <SubjectLoadTab detail={detail} />}
-            {tab === "grades" && <GradesTab classId={detail.class_id} />}
+              {tab === "classes" && <OverviewTab detail={detail} />}
+              {tab === "students" && <StudentsTab detail={detail} />}
+              {tab === "subjects" && <SubjectLoadTab detail={detail} />}
+              {tab === "grades" && <GradesTab classId={detail.class_id} />}
+            </div>
           </div>
         </div>
-      </div>
       </div>
     </AppLayout>
   );
@@ -402,6 +406,34 @@ function GradesTab({ classId }: { classId: number }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [isBatchExportingXlsx, setIsBatchExportingXlsx] = useState(false);
+
+  const handleExportBatchSF9Xlsx = async () => {
+    try {
+      setIsBatchExportingXlsx(true);
+      toast.info("Generating batch Excel (.xlsx) report cards for advisory class...");
+      const { blob, filename } = await exportTeacherAdvisoryBatchSF9(classId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.setAttribute("download", filename);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("Advisory class SF9 report cards exported successfully.");
+    } catch (err) {
+      console.error("Batch SF9 export failed:", err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to export advisory SF9 report cards.",
+      );
+    } finally {
+      setIsBatchExportingXlsx(false);
+    }
+  };
+
 
   useEffect(() => {
     let isMounted = true;
@@ -484,11 +516,11 @@ function GradesTab({ classId }: { classId: number }) {
   ).length;
 
   return (
-    <div className="grid gap-4">
-      {/* Top Controls: Period selector & Search */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-col gap-4 min-w-0 w-full max-w-full">
+      {/* Top Controls: Period selector, Search & Batch SF9 Export */}
+      <div className="flex flex-col gap-4 min-w-0 w-full">
+        <div className="flex flex-wrap items-center justify-between gap-3 min-w-0 w-full">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             <span className="text-xs font-bold text-muted-foreground mr-1">
               Period:
             </span>
@@ -509,16 +541,33 @@ function GradesTab({ classId }: { classId: number }) {
             ))}
           </div>
 
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search students..."
-            className="w-full sm:w-64"
-          />
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search students..."
+              className="w-full sm:w-52"
+            />
+            <Button
+              variant="default"
+              size="sm"
+              disabled={isBatchExportingXlsx || !gradesData.students.length}
+              onClick={handleExportBatchSF9Xlsx}
+              className="font-bold text-xs flex items-center gap-1.5 border-2 border-black bg-primary text-primary-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none transition-all shrink-0"
+              title="Export all students' SF9 cards as a multi-sheet Excel workbook"
+            >
+              {isBatchExportingXlsx ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="size-3.5" />
+              )}
+              <span>{isBatchExportingXlsx ? "Exporting..." : "Excel (.xlsx)"}</span>
+            </Button>
+          </div>
         </div>
 
         {/* Metric Cards */}
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-3 min-w-0 w-full">
           <OverviewCard
             title="Total Students"
             count={String(gradesData.total_students)}
@@ -537,167 +586,247 @@ function GradesTab({ classId }: { classId: number }) {
         </div>
       </div>
 
-      {/* Grades Matrix */}
-      <Card className="block w-full border-black bg-card">
-        <Card.Content className="p-0">
-          {!gradesData.students.length ? (
-            <StateInline message="No students are enrolled in this class." />
-          ) : !filteredStudents.length ? (
-            <StateInline message="No students match your search." />
-          ) : (
-            <Table
-              wrapperClassName="overflow-x-auto"
-              className="border-black min-w-[850px] w-full"
-            >
-              <Table.Header>
-                <Table.Row className="bg-primary/20">
-                  <Table.Head className="min-w-[220px] font-black">
-                    Learner's Name
+      {/* Grades Matrix Scrollable Frame */}
+      <div className="block w-full min-w-0 max-w-full rounded border-2 border-black bg-card shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
+        {/* Frame Sub-header with Scroll Hint */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black bg-muted/40 px-4 py-2.5 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-extrabold text-foreground">
+              Grades Matrix
+            </span>
+            <Badge variant="outline" size="sm" className="rounded font-semibold text-[10px] border-black/40">
+              {gradesData.subjects.length} Subjects
+            </Badge>
+          </div>
+          <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+            <span>Scroll horizontally & vertically</span>
+            <span className="hidden sm:inline">• Headers and student names remain pinned</span>
+          </span>
+        </div>
+
+        {!gradesData.students.length ? (
+          <StateInline message="No students are enrolled in this class." />
+        ) : !filteredStudents.length ? (
+          <StateInline message="No students match your search." />
+        ) : (
+          <Table
+            wrapperClassName="border-0 shadow-none rounded-none min-w-0 w-full max-w-full"
+            containerClassName="max-h-[560px] overflow-auto overscroll-contain retro-scrollbar"
+            className="border-separate border-spacing-0 min-w-max w-full"
+          >
+            <Table.Header>
+              <Table.Row className="bg-primary">
+                {/* 2D Pinned Corner Header */}
+                <Table.Head className="sticky top-0 left-0 z-50 min-w-[220px] max-w-[260px] w-[240px] bg-primary text-primary-foreground font-black border-r-2 border-b-2 border-black shadow-[3px_3px_5px_-2px_rgba(0,0,0,0.25)] px-4 py-3">
+                  Learner's Name
+                </Table.Head>
+                {gradesData.subjects.map((subj) => (
+                  <Table.Head
+                    key={subj.subject_id}
+                    className="sticky top-0 z-30 text-center min-w-[140px] max-w-[180px] font-bold px-3 py-2.5 border-r border-b-2 border-black/20 border-b-black bg-primary text-primary-foreground"
+                  >
+                    <span className="block truncate font-bold text-xs" title={subj.subject_name}>
+                      {subj.subject_name}
+                    </span>
+                    {subj.teacher_name && (
+                      <span className="block text-[10px] font-normal text-primary-foreground/75 truncate mt-0.5" title={subj.teacher_name}>
+                        {subj.teacher_name}
+                      </span>
+                    )}
                   </Table.Head>
-                  {gradesData.subjects.map((subj) => (
-                    <Table.Head
-                      key={subj.subject_id}
-                      className="text-center min-w-[140px] font-bold"
+                ))}
+                <Table.Head className="sticky top-0 z-30 text-center min-w-[150px] font-black px-3 py-2.5 border-r border-b-2 border-black/20 border-b-black bg-primary text-primary-foreground">
+                  General Average (GWA)
+                </Table.Head>
+                <Table.Head className="sticky top-0 z-30 text-center min-w-[120px] font-black px-3 py-2.5 border-r border-b-2 border-black/20 border-b-black bg-primary text-primary-foreground">
+                  Status
+                </Table.Head>
+                <Table.Head className="sticky top-0 z-30 text-center min-w-[100px] font-black px-3 py-2.5 border-b-2 border-black bg-primary text-primary-foreground">
+                  SF9
+                </Table.Head>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {groupedStudents.map(([gender, students]) => (
+                <Fragment key={gender}>
+                  <Table.Row className="bg-muted/70 font-black">
+                    <Table.Cell
+                      colSpan={gradesData.subjects.length + 4}
+                      className="p-0 text-xs uppercase tracking-wider font-extrabold text-foreground border-y-2 border-black/30 bg-muted/70"
                     >
-                      <span className="block">{subj.subject_name}</span>
-                      {subj.teacher_name && (
-                        <span className="block text-[10px] font-normal text-muted-foreground">
-                          {subj.teacher_name}
-                        </span>
-                      )}
-                    </Table.Head>
-                  ))}
-                  <Table.Head className="text-center min-w-[160px] font-black">
-                    General Average (GWA)
-                  </Table.Head>
-                  <Table.Head className="text-center min-w-[120px] font-black">
-                    Status
-                  </Table.Head>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {groupedStudents.map(([gender, students]) => (
-                  <Fragment key={gender}>
-                    <Table.Row className="bg-muted/40 font-black border-y-2 border-black/30">
-                      <Table.Cell
-                        colSpan={gradesData.subjects.length + 3}
-                        className="py-2 text-xs uppercase tracking-wider font-extrabold text-foreground"
-                      >
-                        {gender} ({students.length})
-                      </Table.Cell>
-                    </Table.Row>
-                    {students.map((student) => (
-                      <Table.Row
-                        key={student.student_id}
-                        className="border-b border-border text-xs hover:bg-muted/10"
-                      >
-                        <Table.Cell className="font-semibold">
-                          <div className="flex items-center gap-2">
-                            <Avatar text={student.full_name} />
-                            <div>
-                              <span className="block font-bold text-sm text-foreground">
-                                {student.full_name}
-                              </span>
-                              {student.student_lrn && (
-                                <span className="block text-[10px] font-medium text-muted-foreground">
-                                  LRN {student.student_lrn}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </Table.Cell>
-                        {gradesData.subjects.map((subj) => {
-                          const gradeItem = student.grades[subj.subject_id];
-                          return (
-                            <Table.Cell
-                              key={subj.subject_id}
-                              className="text-center"
+                      <div className="sticky left-0 z-20 inline-flex items-center gap-2 px-4 py-2 font-black">
+                        <span>{gender}</span>
+                        <span className="text-muted-foreground font-semibold">({students.length})</span>
+                      </div>
+                    </Table.Cell>
+                  </Table.Row>
+                  {students.map((student) => (
+                    <Table.Row
+                      key={student.student_id}
+                      className="group text-xs hover:bg-muted/30 transition-colors"
+                    >
+                      {/* Pinned Student Name Column */}
+                      <Table.Cell className="sticky left-0 z-20 min-w-[220px] max-w-[260px] w-[240px] bg-card group-hover:bg-muted/50 transition-colors border-r-2 border-black/30 border-b border-border font-semibold shadow-[3px_0_5px_-2px_rgba(0,0,0,0.15)] px-4 py-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Avatar text={student.full_name} />
+                          <div className="min-w-0 flex-1">
+                            <span
+                              className="block font-bold text-sm text-foreground truncate"
+                              title={student.full_name}
                             >
-                              {gradeItem &&
+                              {student.full_name}
+                            </span>
+                            {student.student_lrn && (
+                              <span className="block text-[10px] font-medium text-muted-foreground truncate">
+                                LRN {student.student_lrn}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </Table.Cell>
+                      {gradesData.subjects.map((subj) => {
+                        const gradeItem = student.grades[subj.subject_id];
+                        return (
+                          <Table.Cell
+                            key={subj.subject_id}
+                            className="text-center px-3 py-2.5 min-w-[140px] border-r border-border/60 border-b border-border"
+                          >
+                            {gradeItem &&
                               gradeItem.is_finalized &&
                               gradeItem.final_period_grade !== null ? (
-                                <div className="flex flex-col items-center justify-center">
-                                  <span className="font-bold text-sm tabular-nums text-foreground">
-                                    {gradeItem.final_period_grade.toFixed(1)}
-                                  </span>
-                                  {gradeItem.performance_descriptor && (
-                                    <span className="text-[10px] font-semibold text-muted-foreground">
-                                      {gradeItem.performance_descriptor}
-                                    </span>
-                                  )}
-                                </div>
-                              ) : (
-                                <Badge
-                                  variant="outline"
-                                  size="sm"
-                                  className="font-semibold text-muted-foreground text-[10px] border-border"
-                                >
-                                  Pending
-                                </Badge>
-                              )}
-                            </Table.Cell>
-                          );
-                        })}
-                        <Table.Cell className="text-center">
-                          {student.is_all_finalized &&
-                          student.gwa !== null ? (
-                            <div className="flex flex-col items-center justify-center">
-                              <span className="font-black text-sm tabular-nums text-foreground">
-                                {student.gwa.toFixed(1)}
-                              </span>
-                              {student.gwa_descriptor && (
-                                <span className="text-[10px] font-semibold text-muted-foreground">
-                                  {student.gwa_descriptor}
+                              <div className="flex flex-col items-center justify-center">
+                                <span className="font-bold text-sm tabular-nums text-foreground">
+                                  {gradeItem.final_period_grade.toFixed(1)}
                                 </span>
-                              )}
-                            </div>
-                          ) : student.finalized_count > 0 &&
-                            student.gwa !== null ? (
-                            <div className="flex flex-col items-center justify-center text-amber-600 dark:text-amber-400">
-                              <span className="font-bold text-xs tabular-nums">
-                                {student.gwa.toFixed(1)}
-                              </span>
-                              <span className="text-[10px] font-medium text-muted-foreground">
-                                Partial ({student.finalized_count}/
-                                {student.total_subjects_count} subjects)
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground font-medium">
-                              —
+                                {gradeItem.performance_descriptor && (
+                                  <span className="text-[10px] font-semibold text-muted-foreground truncate max-w-[130px]" title={gradeItem.performance_descriptor}>
+                                    {gradeItem.performance_descriptor}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                size="sm"
+                                className="font-semibold text-muted-foreground text-[10px] border-border"
+                              >
+                                Pending
+                              </Badge>
+                            )}
+                          </Table.Cell>
+                        );
+                      })}
+                      <Table.Cell className="text-center px-3 py-2.5 min-w-[150px] border-r border-border/60 border-b border-border">
+                        {student.is_all_finalized &&
+                          student.gwa !== null ? (
+                          <div className="flex flex-col items-center justify-center">
+                            <span className="font-black text-sm tabular-nums text-foreground">
+                              {student.gwa.toFixed(1)}
                             </span>
-                          )}
-                        </Table.Cell>
-                        <Table.Cell className="text-center">
-                          {student.is_all_finalized ? (
-                            <Badge
-                              variant="solid"
-                              size="sm"
-                              className="bg-[#79bd80] text-black font-black text-[10px]"
-                            >
-                              Complete
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              size="sm"
-                              className="font-bold text-muted-foreground text-[10px]"
-                            >
-                              {student.finalized_count}/
-                              {student.total_subjects_count} Finalized
-                            </Badge>
-                          )}
-                        </Table.Cell>
-                      </Table.Row>
-                    ))}
-                  </Fragment>
-                ))}
-              </Table.Body>
-            </Table>
-          )}
-        </Card.Content>
-      </Card>
+                            {student.gwa_descriptor && (
+                              <span className="text-[10px] font-semibold text-muted-foreground truncate max-w-[140px]" title={student.gwa_descriptor}>
+                                {student.gwa_descriptor}
+                              </span>
+                            )}
+                          </div>
+                        ) : student.finalized_count > 0 &&
+                          student.gwa !== null ? (
+                          <div className="flex flex-col items-center justify-center text-amber-600 dark:text-amber-400">
+                            <span className="font-bold text-xs tabular-nums">
+                              {student.gwa.toFixed(1)}
+                            </span>
+                            <span className="text-[10px] font-medium text-muted-foreground">
+                              Partial ({student.finalized_count}/
+                              {student.total_subjects_count} subjects)
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground font-medium">
+                            —
+                          </span>
+                        )}
+                      </Table.Cell>
+                      <Table.Cell className="text-center px-3 py-2.5 min-w-[120px] border-r border-border/60 border-b border-border">
+                        {student.is_all_finalized ? (
+                          <Badge
+                            variant="solid"
+                            size="sm"
+                            className="bg-[#79bd80] text-black font-black text-[10px]"
+                          >
+                            Complete
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            size="sm"
+                            className="font-bold text-muted-foreground text-[10px]"
+                          >
+                            {student.finalized_count}/
+                            {student.total_subjects_count} Finalized
+                          </Badge>
+                        )}
+                      </Table.Cell>
+                      <Table.Cell className="text-center px-3 py-2.5 min-w-[100px] border-b border-border">
+                        <StudentSF9Button
+                          classId={classId}
+                          studentId={student.student_id}
+                          studentName={student.full_name}
+                          compact
+                        />
+                      </Table.Cell>
+                    </Table.Row>
+                  ))}
+                </Fragment>
+              ))}
+            </Table.Body>
+          </Table>
+        )}
+      </div>
     </div>
+  );
+}
+
+function StudentSF9Button({
+  classId,
+  studentId,
+  studentName,
+  compact = false,
+}: {
+  classId: number;
+  studentId: string;
+  studentName?: string;
+  compact?: boolean;
+}) {
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsPreviewOpen(true);
+        }}
+        className={`font-bold text-xs flex items-center gap-1.5 border-2 border-black bg-white hover:bg-muted shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none transition-all ${compact ? "px-2 py-1 h-7" : ""
+          }`}
+        title={`View and export DepEd SF9 Report Card for ${studentName || "student"}`}
+      >
+        <FileText className="size-3.5 text-blue-700" />
+        {!compact && <span>Export SF9</span>}
+        {compact && <span className="sr-only">Export SF9</span>}
+      </Button>
+
+      {isPreviewOpen && (
+        <SF9PreviewModal
+          isOpen={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          classId={classId}
+          studentId={studentId}
+          studentName={studentName}
+        />
+      )}
+    </>
   );
 }
 
@@ -712,18 +841,25 @@ function StudentRow({
 }) {
   return (
     <div className="border-b-2 border-black bg-white px-3 py-2 text-sm last:border-b-0">
-      <div className="flex min-h-12 items-center gap-3">
-        <Avatar text={student.avatar_initial || student.full_name} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-semibold">
-            {student.full_name}
-          </span>
-          {student.student_lrn && (
-            <span className="block text-[10px] font-semibold text-black/55">
-              LRN {student.student_lrn}
+      <div className="flex min-h-12 items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <Avatar text={student.avatar_initial || student.full_name} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-semibold">
+              {student.full_name}
             </span>
-          )}
-        </span>
+            {student.student_lrn && (
+              <span className="block text-[10px] font-semibold text-black/55">
+                LRN {student.student_lrn}
+              </span>
+            )}
+          </span>
+        </div>
+        <StudentSF9Button
+          classId={classId}
+          studentId={student.student_id}
+          studentName={student.full_name}
+        />
       </div>
       <ManualSuggestionPanel
         classId={classId}

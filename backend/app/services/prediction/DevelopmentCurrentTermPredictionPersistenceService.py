@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 from uuid import UUID
 
 from sqlalchemy import func
@@ -14,6 +14,7 @@ from sqlalchemy.engine import Connectable
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
+from app.core.Config import settings
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
@@ -21,13 +22,40 @@ from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTer
 from app.services.prediction import DevelopmentCurrentTermPredictionService as prediction_service
 from app.services.prediction import DevelopmentCurrentTermRiskService as intervention_service
 from app.services.prediction import DevelopmentCurrentTermScoringService as scorer
-from app.services.prediction.DevelopmentCurrentTermModelSelection import MODEL_NAMES, artifact_path, require_development_model_name
+from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME, MODEL_NAMES, artifact_path, require_development_model_name
 from app.services.prediction.CurrentPeriodFeatureBuilderService import build_current_period_features_from_records
 from app.services.prediction.PredictionGenerationTransaction import run_prediction_generation_transaction
+from app.services.intervention.InterventionCandidateService import sync_intervention_for_persisted_prediction
 
 
-EVIDENCE_SNAPSHOT_VERSION = "CURRENT_TERM_V3_EVIDENCE_V1"
+EVIDENCE_SNAPSHOT_VERSION = "CURRENT_TERM_V3_EVIDENCE_V2"
 MODEL_TARGET_COLUMN = "target_final_period_grade"
+
+
+def _sync_corrected_intervention_if_enabled(
+    db: Session,
+    model_version: AIModelVersion,
+    row: DevelopmentCurrentTermPrediction,
+    *,
+    student_id: UUID,
+    class_id: int,
+    subject_id: int,
+    period_id: int,
+) -> None:
+    readiness = row.evidence_snapshot.get("readiness") if isinstance(row.evidence_snapshot, dict) else None
+    if (
+        model_version.model_name == CORRECTED_MODEL_NAME
+        and settings.app_environment.lower() in {"development", "test"}
+        and settings.development_prediction_api_enabled
+        and settings.development_current_term_model_name == CORRECTED_MODEL_NAME
+        and isinstance(readiness, dict)
+        and readiness.get("status") == "READY"
+    ):
+        sync_intervention_for_persisted_prediction(
+            db, row,
+            student_id=student_id, class_id=class_id, subject_id=subject_id,
+            academic_period_id=period_id,
+        )
 
 
 def _digest_json(value: dict[str, Any]) -> str:
@@ -167,6 +195,7 @@ def _persist_successful_result(
             "reason_codes": list(prediction["readiness_reason_codes"]),
         },
         "model_features": [{"name": name, "value": features[name]} for name in columns],
+        "examination_presentation": built["evidence_summary"]["examination"]["presentation"],
         "intervention_reason_codes": list(intervention["triggered_reasons"]),
         "supporting_context": {
             "role": intervention_service.SUPPORTING_CONTEXT_ROLE,
@@ -188,10 +217,16 @@ def _persist_successful_result(
         old = latest.evidence_snapshot
         if (
             old.get("model_features") == snapshot["model_features"]
+            and old.get("examination_presentation") == snapshot["examination_presentation"]
             and old.get("feature_schema_sha256") == snapshot["feature_schema_sha256"]
             and old.get("artifact_sha256") == snapshot["artifact_sha256"]
             and old.get("training_dataset_version") == snapshot["training_dataset_version"]
         ):
+            _sync_corrected_intervention_if_enabled(
+                db, model_version, latest,
+                student_id=student_id, class_id=class_id, subject_id=subject_id,
+                period_id=period_id,
+            )
             return {
                 "persisted": False,
                 "unchanged": True,
@@ -232,6 +267,11 @@ def _persist_successful_result(
     )
     db.add(row)
     db.flush()
+    _sync_corrected_intervention_if_enabled(
+        db, model_version, row,
+        student_id=student_id, class_id=class_id, subject_id=subject_id,
+        period_id=period_id,
+    )
     return {
         "persisted": True,
         "prediction_id": row.prediction_id,
@@ -265,6 +305,7 @@ def generate_and_persist_development_current_term(
     cutoff_at: datetime | None = None,
     supporting_context: Mapping[str, Any] | None = None,
     bind: Connectable | None = None,
+    after_result: Callable[[Session, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     cutoff = cutoff_at or datetime.now(timezone.utc)
     scope = {
@@ -313,14 +354,22 @@ def generate_and_persist_development_current_term(
             intervention=intervention,
         )
 
+    def operation_with_followup(db: Session) -> dict[str, Any]:
+        result = operation(db)
+        if after_result is not None:
+            after_result(db, result)
+        return result
+
     for attempt in range(3):
         try:
-            return run_prediction_generation_transaction(scope, str(model_version_id), operation, bind=bind)
+            return run_prediction_generation_transaction(scope, str(model_version_id), operation_with_followup, bind=bind)
         except DBAPIError as exc:
             code = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
             constraint = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
             retryable = code == "40001" or (
-                code == "23505" and constraint == "uq_development_current_term_scope_revision"
+                code == "23505" and constraint in {
+                    "uq_development_current_term_scope_revision", "uq_intervention_open_scope",
+                }
             )
             if not retryable or attempt == 2:
                 raise

@@ -19,6 +19,7 @@ from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.submissions.SubmissionAttachment import SubmissionAttachment
 from app.schemas.Submission import GradeRequest, SubmissionAttachmentResponse, SubmissionResponse
+from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
 from app.services.classwork.ClassworkShared import (
     assignment_is_available,
     assignment_is_locked,
@@ -727,6 +728,7 @@ def grade_student_submission(
         raise HTTPException(status_code=400, detail="Grade cannot be negative")
     if classwork and classwork.total_points is not None and body.grade > float(classwork.total_points):
         raise HTTPException(status_code=400, detail=f"Grade cannot be greater than {float(classwork.total_points)}")
+    previous_grade = submission.grade
     submission.grade = Decimal(str(body.grade))
     submission.feedback = body.feedback
     submission.status = "graded"
@@ -734,6 +736,14 @@ def grade_student_submission(
     submission.graded_by_staff_id = staff_id
     db.commit()
     db.refresh(submission)
+    if submission.grade != previous_grade:
+        refresh_after_committed_grade_change(
+            db.get_bind(),
+            student_ids=[submission.student_id],
+            class_id=assignment.class_id,
+            subject_id=classwork.subject_id,
+            period_id=assignment.academic_period_id,
+        )
 
     # Notify student that their grade was released
     try:

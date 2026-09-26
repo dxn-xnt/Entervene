@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.models.academic.AcademicLevel import AcademicLevel
+from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME, LEGACY_MODEL_NAME
 from app.services.prediction import DevelopmentCurrentTermPredictionService as service
 from tests.test_development_current_term_prediction_service import _make_ready, _predict, _set_weights
 from tests.test_current_period_live_feature_builder import current_period_context
@@ -29,12 +30,17 @@ def test_verified_jhs_mapping_scores_exact_canonical_subject(current_period_cont
     _set_weights(ctx)
     _make_ready(ctx)
     captured = []
-    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", lambda features: captured.append(features["subject"]) or 86.0)
 
-    result = _predict(ctx)
+    def fake_score(features, model_name=LEGACY_MODEL_NAME):
+        captured.append((features["subject"], model_name))
+        return 86.0
+
+    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", fake_score)
+
+    result = _predict(ctx, model_name=CORRECTED_MODEL_NAME)
 
     assert result["status"] == service.STATUS_DEVELOPMENT_PREDICTION_AVAILABLE
-    assert captured == [canonical]
+    assert captured == [(canonical, CORRECTED_MODEL_NAME)]
 
 
 @pytest.mark.parametrize("code,name,reason", [

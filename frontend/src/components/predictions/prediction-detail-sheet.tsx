@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { routes } from "@/../routes";
 import {
   Sheet,
   SheetContent,
@@ -43,6 +45,7 @@ interface PredictionDetailSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   currentTermPrediction?: DevelopmentCurrentTermListItem | null;
+  candidateId?: number;
 }
 
 const RISK_BADGE_STYLES: Record<string, string> = {
@@ -89,6 +92,7 @@ export default function PredictionDetailSheet({
   open,
   onOpenChange,
   currentTermPrediction = null,
+  candidateId,
 }: PredictionDetailSheetProps) {
   const { user } = useAuth();
   const isTeacher = user?.role === "teacher";
@@ -119,7 +123,7 @@ export default function PredictionDetailSheet({
 
     Promise.all([
       fetchPredictionDetail(predictionId),
-      fetchPredictionSuggestions(predictionId).catch(() => []),
+      isTeacher ? fetchPredictionSuggestions(predictionId).catch(() => []) : Promise.resolve([]),
     ])
       .then(([detailRes, suggestionsRes]) => {
         setDetail(detailRes);
@@ -131,7 +135,7 @@ export default function PredictionDetailSheet({
         setLoadError("Unable to load this prediction detail. Please try again.");
       })
       .finally(() => setLoading(false));
-  }, [currentTermPrediction, predictionId, open]);
+  }, [currentTermPrediction, predictionId, open, isTeacher]);
 
   const handleAssignIntervention = async () => {
     if (!predictionId || !interventionTitle.trim()) return;
@@ -196,7 +200,10 @@ export default function PredictionDetailSheet({
         </SheetHeader>
 
         {currentTermPrediction ? (
-          <CurrentTermTeacherDetail prediction={currentTermPrediction} />
+          <div>
+            <CurrentTermTeacherDetail prediction={currentTermPrediction} />
+            {isTeacher && candidateId !== undefined && <div className="px-4 pb-5"><Button asChild><Link to={`${routes.teacher.interventions}?candidate=${candidateId}`}>Review Intervention</Link></Button></div>}
+          </div>
         ) : loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="animate-spin text-gray-400" size={28} />
@@ -512,7 +519,7 @@ export default function PredictionDetailSheet({
               </section>
             )}
 
-            <div className="space-y-3 border-t-2 border-black pt-4">
+            {isTeacher && <div className="space-y-3 border-t-2 border-black pt-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-extrabold uppercase tracking-wide text-black flex items-center gap-1.5">
                   <Sparkles size={16} className="text-yellow-500 fill-yellow-400" />
@@ -609,7 +616,7 @@ export default function PredictionDetailSheet({
                   🔒 Read-Only (Admin View): Assigning interventions is reserved for assigned subject teachers.
                 </div>
               )}
-            </div>
+            </div>}
 
             <Separator />
             {/* ── Section: Teacher Review ── */}
@@ -772,12 +779,12 @@ function CurrentTermTeacherDetail({ prediction }: { prediction: DevelopmentCurre
     </section>
 
     <section aria-labelledby="academic-evidence-heading">
-      <h2 id="academic-evidence-heading" className="mb-1 text-base font-black">Academic Evidence Used for Projection</h2>
-      <p className="mb-3 text-xs text-gray-600">These graded academic records were available when this projection was generated.</p>
+      <h2 id="academic-evidence-heading" className="mb-1 text-base font-black">Academic Evidence at Prediction Time</h2>
+      <p className="mb-3 text-xs text-gray-600">Completed grade components can inform the projection. Partial Examination scores are shown for context only.</p>
       <div className="space-y-2">
         <EvidenceRow label="Written Works" count={academic.written_works.graded_count} percent={academic.written_works.performance_percent} />
         <EvidenceRow label="Performance Tasks" count={academic.performance_tasks.graded_count} percent={academic.performance_tasks.performance_percent} />
-        <EvidenceRow label="Examination" count={academic.examination.graded_count} percent={academic.examination.performance_percent} />
+        <ExaminationEvidence examination={academic.examination} />
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 border-t-2 border-black pt-3">
         <div><p className="text-xs text-gray-600">Academic performance so far</p><p className="font-black">{formatPercent(academic.overall.performance_percent)}</p></div>
@@ -819,5 +826,39 @@ function EvidenceRow({ label, count, percent }: { label: string; count: number; 
   return <div className="flex items-center justify-between border border-black px-3 py-2">
     <div><p className="font-bold">{label}</p><p className="text-xs text-gray-600">{count} graded record{count === 1 ? "" : "s"}</p></div>
     <p className="font-black">{formatPercent(percent)}</p>
+  </div>;
+}
+
+export function ExaminationEvidence({ examination }: { examination: DevelopmentCurrentTermListItem["academic_evidence"]["examination"] }) {
+  const detail = examination.presentation;
+  const labels = [
+    ["SUMMATIVE_1", "Summative 1"],
+    ["SUMMATIVE_2", "Summative 2"],
+    ["TERM_EXAM", "Term Exam"],
+  ] as const;
+  const statusLabel = {
+    NOT_STARTED: "Not yet graded",
+    PARTIAL: "In progress",
+    COMPLETE: formatPercent(examination.performance_percent),
+    AGGREGATE: formatPercent(examination.performance_percent),
+    DETAILS_UNAVAILABLE: examination.performance_percent === null ? "Status unknown" : formatPercent(examination.performance_percent),
+  }[detail.status];
+
+  return <div className="border border-black px-3 py-2" aria-label="Examination evidence">
+    <div className="flex items-center justify-between">
+      <p className="font-bold">Examination</p>
+      <p className="font-black">{statusLabel}</p>
+    </div>
+    {(detail.status === "PARTIAL" || detail.status === "COMPLETE" || detail.status === "NOT_STARTED") && <>
+      <p className="text-xs text-gray-600">{detail.completed_count} of 3 graded</p>
+      <dl className="mt-2 grid grid-cols-2 gap-y-1 text-xs">
+        {labels.map(([key, label]) => <div className="contents" key={key}>
+          <dt>{label}</dt><dd className="text-right">{detail.components[key] === null || detail.components[key] === undefined ? "Not yet graded" : formatPercent(detail.components[key])}</dd>
+        </div>)}
+      </dl>
+    </>}
+    {detail.status === "PARTIAL" && <p className="mt-2 text-xs text-gray-600">Final Examination component not yet available for prediction.</p>}
+    {detail.status === "AGGREGATE" && <p className="text-xs text-gray-600">Individual examination parts were not recorded for this assessment.</p>}
+    {detail.status === "DETAILS_UNAVAILABLE" && <p className="text-xs text-gray-600">Component details are unavailable for this saved prediction.</p>}
   </div>;
 }

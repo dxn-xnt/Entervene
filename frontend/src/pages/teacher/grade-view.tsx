@@ -445,7 +445,7 @@ const TeacherGradeView = () => {
             <Table.Cell colSpan={periods.length + 3} className="py-1 font-black text-black">{label}</Table.Cell>
           </Table.Row>
           {group.map((item, idx) => (
-            <Table.Row key={item.student_id} className="border-b border-black/10 hover:bg-yellow-50/50">
+            <Table.Row key={item.student_id} className="border-b border-black/10 hover:bg-primary/50">
               <Table.Cell className="max-w-[200px] truncate text-sm font-extrabold text-black" title={item.name}>
                 {idx + 1}. {item.name}
               </Table.Cell>
@@ -482,16 +482,16 @@ const TeacherGradeView = () => {
 
     return (
       <Table className="w-full border-collapse text-sm">
-        <Table.Header className="border-b-2 border-black font-black [&_th]:h-auto [&_th]:px-2 [&_th]:py-2 [&_th]:text-base [&_th]:leading-tight sm:[&_th]:px-3 sm:[&_th]:py-2.5 sm:[&_th]:text-xs md:[&_th]:py-3 md:[&_th]:text-base">
+        <Table.Header className="border-b-2 border-black font-head [&_th]:h-auto [&_th]:px-2 [&_th]:py-2 [&_th]:text-base [&_th]:leading-tight sm:[&_th]:px-3 sm:[&_th]:py-2.5 sm:[&_th]:text-xs md:[&_th]:py-3 md:[&_th]:text-base">
           <Table.Row>
-            <Table.Head className="w-[20%] font-black text-black">Learner's Name</Table.Head>
+            <Table.Head className="w-[20%] font-head text-black">Learner's Name</Table.Head>
             {periods.map((p) => (
-              <Table.Head key={p.academic_period_id} className="text-center font-black text-black">
+              <Table.Head key={p.academic_period_id} className="text-center font-head text-black">
                 {p.period_name}
               </Table.Head>
             ))}
-            <Table.Head className="w-[12%] text-center font-black text-black">{summaryGradeLabel}</Table.Head>
-            <Table.Head className="w-[12%] text-center font-black text-black">Remarks</Table.Head>
+            <Table.Head className="w-[12%] text-center font-head text-black">{summaryGradeLabel}</Table.Head>
+            <Table.Head className="w-[12%] text-center font-head text-black">Remarks</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -529,11 +529,11 @@ const TeacherGradeView = () => {
       if (group.length === 0) return null;
       return (
         <>
-          <Table.Row className="py-1.5! border-y-2 border-black bg-muted hover:bg-muted">
+          <Table.Row className="py-1.5! border-y-2 border-black bg-muted hover:bg-primary/50">
             <Table.Cell colSpan={8} className="py-1.5! font-black text-black">{label}</Table.Cell>
           </Table.Row>
           {group.map((item) => (
-            <Table.Row key={item.student_id} className="border-b border-black/10 hover:bg-yellow-50/50">
+            <Table.Row key={item.student_id} className="border-b border-black/10 hover:bg-primary/50">
               <Table.Cell className="max-w-[200px] truncate text-sm font-extrabold text-black" title={item.name}>
                 {item.name}
               </Table.Cell>
@@ -658,11 +658,11 @@ const TeacherGradeView = () => {
 
     return (
       <Table wrapperClassName="border-0" className="w-full text-sm">
-        <Table.Header className="border-b-2 border-black font-black [&_th]:h-auto [&_th]:px-2 [&_th]:py-2 [&_th]:text-[11px] [&_th]:leading-tight sm:[&_th]:px-3 sm:[&_th]:py-2.5 sm:[&_th]:text-xs md:[&_th]:py-3 md:[&_th]:text-sm">
+        <Table.Header className="border-b-2 border-black font-head [&_th]:h-auto [&_th]:px-2 [&_th]:py-2 [&_th]:text-[11px] [&_th]:leading-tight sm:[&_th]:px-3 sm:[&_th]:py-2.5 sm:[&_th]:text-xs md:[&_th]:py-3 md:[&_th]:text-sm">
           <Table.Row>
-            <Table.Head className="w-[17%] font-black text-black">Learner's Name</Table.Head>
+            <Table.Head className="w-[17%] font-head text-black">Learner's Name</Table.Head>
             <Table.Head
-              className="w-[20%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
+              className="w-[20%] cursor-pointer text-center font-head text-black transition-colors hover:bg-primary/50"
               title="Click to view full Written Works breakdown"
               onClick={() =>
                 setSelectedCategory({
@@ -679,7 +679,7 @@ const TeacherGradeView = () => {
               {wwLabel}
             </Table.Head>
             <Table.Head
-              className="w-[20%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
+              className="w-[20%] cursor-pointer text-center font-head text-black transition-colors hover:bg-primary/50"
               title="Click to view full Performance Tasks breakdown"
               onClick={() =>
                 setSelectedCategory({
@@ -696,7 +696,7 @@ const TeacherGradeView = () => {
               {ptLabel}
             </Table.Head>
             <Table.Head
-              className="w-[12%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
+              className="w-[12%] cursor-pointer text-center font-head text-black transition-colors hover:bg-primary/50"
               title="Click to view full Exams breakdown"
               onClick={() =>
                 setSelectedCategory({
@@ -712,9 +712,9 @@ const TeacherGradeView = () => {
             >
               {examsLabel}
             </Table.Head>
-            <Table.Head className="w-[8%] text-center font-black text-black">Initial Grade</Table.Head>
-            <Table.Head className="w-[8%] text-center font-black text-black">Term Grade</Table.Head>
-            <Table.Head className="w-[8%] text-center font-black text-black">Descriptor</Table.Head>
+            <Table.Head className="w-[8%] text-center font-head text-black">Initial Grade</Table.Head>
+            <Table.Head className="w-[8%] text-center font-head text-black">Term Grade</Table.Head>
+            <Table.Head className="w-[8%] text-center font-head text-black">Descriptor</Table.Head>
             {/* <Table.Head className="w-[8%] text-center font-black text-black">Adviser Status</Table.Head> */}
           </Table.Row>
         </Table.Header>

@@ -15,7 +15,7 @@ export const cardVariants = cva(
         muted: "bg-muted text-muted-foreground",
         squares: "bg-card text-card-foreground retro-card-squares overflow-hidden",
         pattern: "bg-card text-card-foreground retro-card-squares overflow-hidden",
-        retro: "bg-card text-card-foreground retro-card-squares overflow-hidden",
+        retro: "bg-card text-card-foreground border-black shadow-black hover:shadow-sm hover:shadow-black overflow-hidden",
       },
     },
     defaultVariants: {

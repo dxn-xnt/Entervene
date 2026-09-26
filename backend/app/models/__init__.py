@@ -6,6 +6,7 @@ from . import submissions
 from . import quiz
 from . import ai
 from . import suggestion
+from . import intervention
 from . import settings
 from . import notifications
 from . import attendance

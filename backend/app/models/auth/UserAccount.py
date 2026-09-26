@@ -10,6 +10,7 @@ class UserAccount(Base):
 
     user_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, nullable=False)
+    avatar_path = Column(String(128), nullable=True)
     password_hash = Column(String(255), nullable=True)
     account_status = Column(String(50), default="active")
     email_status = Column(String(20), default="pending", server_default="pending", nullable=False)

@@ -1622,12 +1622,12 @@ export default function TeacherAttendancePage() {
                       <p className="mb-2 text-sm md:hidden">Swipe the table to compare dates. P: Present · A: Absent · L: Late · E: Excused · –: No record.</p>
                       <div className="attendance-date-region" role="region" aria-label="Attendance by date, scroll horizontally to see all dates" tabIndex={0}>
                       <Table
-                        wrapperClassName="attendance-date-grid overflow-x-auto h-auto shadow-none border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                        wrapperClassName="attendance-date-grid overflow-x-auto h-auto shadow-none border-2 border-black bg-background shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
                         className="bg-background min-w-[700px] border-collapse shadow-none"
                       >
-                        <Table.Header className="bg-gray-100 text-black border-b-2 border-black">
+                        <Table.Header className="bg-primary text-black border-b-2 border-black">
                           <Table.Row className="hover:bg-transparent">
-                            <Table.Head className="p-3 border-r-2 border-black sticky left-0 bg-gray-100 z-10 text-black font-extrabold text-xs uppercase">
+                            <Table.Head className="p-3 border-r-2 border-black sticky left-0 bg-primary z-10 text-black font-extrabold text-xs uppercase">
                               #
                             </Table.Head>
                             <Table.Head className="min-w-[220px] border-r-2 border-black p-3 text-xs font-extrabold uppercase text-black">
@@ -1641,7 +1641,7 @@ export default function TeacherAttendancePage() {
                                 {date}
                               </Table.Head>
                             ))}
-                            <Table.Head className="p-3 text-center sticky right-0 bg-gray-100 z-10 text-black font-extrabold text-xs uppercase">
+                            <Table.Head className="p-3 text-center sticky right-0 bg-primary z-10 text-black font-extrabold text-xs uppercase">
                               Rate
                             </Table.Head>
                           </Table.Row>
@@ -1650,9 +1650,9 @@ export default function TeacherAttendancePage() {
                           {summaryMatrix.map((student, idx) => (
                             <Table.Row
                               key={student.student_id}
-                              className="hover:bg-gray-50 border-b-2 border-black"
+                              className="hover:bg-primary/50 border-b-2 border-black"
                             >
-                              <Table.Cell className="p-2 font-bold border-r-2 border-black sticky left-0 bg-white z-10">
+                              <Table.Cell className="p-2 font-bold border-r-2 border-black sticky left-0 bg-background z-10">
                                 {idx + 1}
                               </Table.Cell>
                               <Table.Cell className="min-w-[220px] border-r-2 border-black p-2 font-bold">
@@ -1706,7 +1706,7 @@ export default function TeacherAttendancePage() {
                                   </Table.Cell>
                                 );
                               })}
-                              <Table.Cell className="p-2 text-center font-bold sticky right-0 bg-white z-10 border-l-2 border-black">
+                              <Table.Cell className="p-2 text-center font-bold sticky right-0 bg-background z-10 border-l-2 border-black">
                                 {student.rate}%
                               </Table.Cell>
                             </Table.Row>

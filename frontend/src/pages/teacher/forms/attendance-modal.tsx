@@ -101,8 +101,8 @@ export default function AttendanceModal({
           </div>
         </div>
 
-        <Table wrapperClassName="border-black shadow-md" className="bg-white">
-          <Table.Header className="font-sans bg-gray-50 border-b-2 border-black">
+        <Table wrapperClassName="border-black shadow-md" className="bg-background">
+          <Table.Header className="font-head bg-primary border-b-2 border-black">
             <Table.Row>
               <Table.Head className="font-bold text-base py-3">Name</Table.Head>
               <Table.Head className="font-bold text-base text-right py-3 pr-8">Present Status</Table.Head>
@@ -126,7 +126,7 @@ export default function AttendanceModal({
                   .toUpperCase();
 
                 return (
-                  <Table.Row key={st.student_id} className="hover:bg-gray-50 border-b border-gray-200">
+                  <Table.Row key={st.student_id} className="hover:bg-primary/50 border-b border-border">
                     <Table.Cell className="font-medium py-3">
                       <div className="flex items-center gap-3">
                         <div className="size-9 rounded-full bg-[#fde047] border-2 border-black flex items-center justify-center font-bold text-sm">

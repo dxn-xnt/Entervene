@@ -363,6 +363,28 @@ def test_get_returns_only_development_current_term_model_rows(current_period_con
     assert "student_lrn" not in payload and "300000000001" not in payload
 
 
+def test_get_exposes_frozen_partial_exam_details_and_marks_old_snapshots_unknown(current_period_context, monkeypatch):
+    ctx = current_period_context
+    model_version_id = _register_test_model(ctx)
+    row = _insert_development_prediction(ctx, model_version_id=model_version_id)
+    client = _client(monkeypatch, ctx["db"])
+
+    old_item = client.get(PATH, params=_read_params(ctx)).json()["items"][0]
+    assert old_item["academic_evidence"]["examination"]["presentation"]["status"] == "DETAILS_UNAVAILABLE"
+
+    snapshot = dict(row.evidence_snapshot)
+    snapshot["examination_presentation"] = {
+        "status": "PARTIAL", "completed_count": 2,
+        "components": {"SUMMATIVE_1": 90.0, "SUMMATIVE_2": 70.0, "TERM_EXAM": None},
+    }
+    row.evidence_snapshot = snapshot
+    ctx["db"].commit()
+    item = client.get(PATH, params=_read_params(ctx)).json()["items"][0]
+    exam = item["academic_evidence"]["examination"]
+    assert exam["presentation"] == snapshot["examination_presentation"]
+    assert exam["performance_percent"] is None
+
+
 def test_get_keeps_normal_production_reads_isolated(current_period_context, monkeypatch):
     ctx = current_period_context
     model_version_id = _register_test_model(ctx)
@@ -745,7 +767,7 @@ def test_real_postgres_http_end_to_end(current_period_context, monkeypatch):
             assert row.intervention_level == body["intervention_level"]
             assert row.risk_score is None
             snapshot = row.evidence_snapshot
-            assert snapshot["snapshot_version"] == "CURRENT_TERM_V3_EVIDENCE_V1"
+            assert snapshot["snapshot_version"] == "CURRENT_TERM_V3_EVIDENCE_V2"
             assert len(snapshot["model_features"]) == 31
             assert [x["name"] for x in snapshot["model_features"]] == scorer.required_feature_columns(scorer.load_development_current_term_schema())
             assert not any(term in json.dumps(snapshot).lower() for term in ("learner", "lrn", "email", "uploaded_file"))
