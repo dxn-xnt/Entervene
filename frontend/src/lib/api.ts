@@ -41,8 +41,32 @@ export type User = {
   employment_status?: string;
   is_on_leave?: boolean;
   active_substitutions_count?: number;
+  workload_hours?: number;
+  load_count?: number;
 };
 
+
+export type TeacherHandledSubject = {
+  subject_id: number;
+  subject_name: string;
+  subject_code?: string;
+  is_core?: boolean;
+  grade_levels?: string[];
+  sections?: string[];
+  class_count?: number;
+  weekly_hours?: number;
+  load_count?: number;
+};
+
+export type TeacherHandledClass = {
+  class_id: number;
+  section_name: string;
+  grade_level?: number | null;
+  student_count?: number;
+  is_adviser?: boolean;
+  subjects?: string[];
+  schedule_slots?: string[];
+};
 
 export type UserDetail = User & {
   staff_id?: string;
@@ -60,6 +84,8 @@ export type UserDetail = User & {
   last_section?: string | null;
   prior_gwa?: number | null;
   has_computed_gwa?: boolean;
+  handled_subjects?: TeacherHandledSubject[];
+  handled_classes?: TeacherHandledClass[];
 };
 
 export type UpdateUserPayload = {
@@ -106,6 +132,8 @@ export type UserAnalytics = {
   activity_feed: Array<Record<string, string>>;
   classwork: Array<Record<string, number | string | null>>;
   lms_behavior: Record<string, number | string | null> | null;
+  handled_subjects?: TeacherHandledSubject[];
+  handled_classes?: TeacherHandledClass[];
 };
 
 export type StudentMyClassSummary = {

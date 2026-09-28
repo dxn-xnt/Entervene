@@ -11,6 +11,7 @@ import { Input } from "@/components/retroui/Input";
 import { Progress } from "@/components/retroui/Progress";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
+import { ToggleSwitch } from "@/components/retroui/ToggleSwitch";
 import { OverviewCard } from "@/components/overview-cards";
 import { UserProfileHeader } from "@/components/profile-header";
 import {
@@ -19,13 +20,15 @@ import {
   getUserDetail,
   resendUserInvitation,
   updateUser,
+  type TeacherHandledClass,
+  type TeacherHandledSubject,
   type UpdateUserPayload,
   type UserAnalytics,
   type UserDetail,
   type UserRole,
 } from "../../lib/api";
 import { mergeAnalytics } from "../../mocks/userAnalytics";
-import { Archive, Pencil, RefreshCw } from "lucide-react";
+import { Archive, BookOpen, Clock, GraduationCap, Layers, Pencil, RefreshCw, Search, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -267,7 +270,7 @@ export default function AdminUserDetail() {
                       title="Send a new invitation email with an updated 48-hour activation link"
                     >
                       <RefreshCw className={cn("size-3.5", resending && "animate-spin")} />
-                      {resending ? "Resending..." : "Resend Invitation"}
+                      Resend Invitation
                     </Button>
                   )}
                   <Button
@@ -298,59 +301,58 @@ export default function AdminUserDetail() {
 
             <div className="border-t border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
 
-            {!loading && error && (
-              <Alert status="error">
-                <Alert.Description>{error}</Alert.Description>
-              </Alert>
-            )}
+              {!loading && error && (
+                <Alert status="error">
+                  <Alert.Description>{error}</Alert.Description>
+                </Alert>
+              )}
 
-            {!loading && notice && (
-              <Alert status="success">
-                <Alert.Description>{notice}</Alert.Description>
-              </Alert>
-            )}
+              {!loading && notice && (
+                <Alert status="success">
+                  <Alert.Description>{notice}</Alert.Description>
+                </Alert>
+              )}
 
-            {!loading && user && isPending && user.email_status === "failed" && (
-              <Alert status="error" className="border-2 border-red-500 bg-red-50 text-red-900">
-                <Alert.Description className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <span>
-                    <strong>Invitation Email Failed:</strong> The invitation email could not be delivered to <strong>{user.email}</strong>.
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="default"
-                    className="bg-red-600 hover:bg-red-700 text-white shrink-0 shadow-none"
-                    onClick={handleResendInvitation}
-                    disabled={resending}
-                  >
-                    {resending ? "Resending..." : "Resend Invitation"}
-                  </Button>
-                </Alert.Description>
-              </Alert>
-            )}
+              {!loading && user && isPending && user.email_status === "failed" && (
+                <Alert status="error" className="border-2 border-red-500 bg-red-50 text-red-900">
+                  <Alert.Description className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span>
+                      <strong>Invitation Email Failed:</strong> The invitation email could not be delivered to <strong>{user.email}</strong>.
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="bg-red-600 hover:bg-red-700 text-white shrink-0 shadow-none"
+                      onClick={handleResendInvitation}
+                      disabled={resending}
+                    >
+                      Resend Invitation
+                    </Button>
+                  </Alert.Description>
+                </Alert>
+              )}
 
-            {!loading && user && (
-              <div className="space-y-3">
-                <UserProfileHeader
-                  name={user.name}
-                  role={user.role}
-                  subtitle={
-                    user.role === "student"
-                      ? [user.grade_level ? `Grade ${user.grade_level}` : null, sectionName(user.section) ?? "No section assigned"].filter(Boolean).join(" - ")
-                      : user.email
-                  }
-                  extra={user.role === "student" ? user.email : undefined}
-                  avatarVariant={user.role === "student" ? "student" : user.role === "teacher" ? "teacher" : "default"}
-                  statusLabel={statusStyle.label}
-                  statusVariant={statusStyle.variant}
-                  isPending={isPending}
-                />
-
-                {effectiveRole === "student" && <StudentAnalytics data={data} />}
-                {effectiveRole === "teacher" && <TeacherAnalytics user={user} data={data} />}
-                {effectiveRole === "admin" && <AdminAnalytics data={data} />}
-              </div>
-            )}
+              {!loading && user && (
+                <div className="space-y-3">
+                  <UserProfileHeader
+                    name={user.name}
+                    role={user.role}
+                    subtitle={
+                      user.role === "student"
+                        ? [user.grade_level ? `Grade ${user.grade_level}` : null, sectionName(user.section) ?? "No section assigned"].filter(Boolean).join(" - ")
+                        : user.email
+                    }
+                    extra={user.role === "student" ? user.email : undefined}
+                    avatarVariant={user.role === "student" ? "student" : user.role === "teacher" ? "teacher" : "default"}
+                    statusLabel={statusStyle.label}
+                    statusVariant={statusStyle.variant}
+                    isPending={isPending}
+                  />
+                  {effectiveRole === "student" && <StudentAnalytics data={data} />}
+                  {effectiveRole === "teacher" && <TeacherAnalytics user={user} data={data} />}
+                  {effectiveRole === "admin" && <AdminAnalytics data={data} />}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -653,6 +655,9 @@ function Panel({ title, subtitle, children }: { title: string; subtitle?: string
 }
 
 function SubjectBars({ rows }: { rows: Array<Record<string, number | string>> }) {
+  if (!rows || rows.length === 0) {
+    return <p className="py-4 text-center text-xs text-muted-foreground">No subject performance records available.</p>;
+  }
   return (
     <div className="space-y-2">
       {rows.map((row, index) => {
@@ -670,6 +675,13 @@ function SubjectBars({ rows }: { rows: Array<Record<string, number | string>> })
 }
 
 function SmallLineChart({ data, xKey }: { data: Array<Record<string, number | string>>; xKey: string }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex h-36 items-center justify-center text-xs text-muted-foreground">
+        No period performance data recorded yet.
+      </div>
+    );
+  }
   return (
     <div className="h-36">
       <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
@@ -690,11 +702,19 @@ type OverviewMetric = {
   count: string;
   stat?: string;
   statDescription?: string;
+  trend?: "up" | "down";
 };
 
 function OverviewGrid({ metrics }: { metrics: OverviewMetric[] }) {
+  const colClass =
+    metrics.length === 2
+      ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-2"
+      : metrics.length === 1
+        ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-1"
+        : "grid gap-3 md:grid-cols-2";
+
   return (
-    <div className="grid gap-3 md:grid-cols-3">
+    <div className={colClass}>
       {metrics.map((metric) => (
         <OverviewCard key={metric.title} {...metric} />
       ))}
@@ -702,28 +722,270 @@ function OverviewGrid({ metrics }: { metrics: OverviewMetric[] }) {
   );
 }
 
+function TeacherHandledSideCard({
+  handledSubjects = [],
+  handledClasses = [],
+  className,
+}: {
+  handledSubjects?: TeacherHandledSubject[];
+  handledClasses?: TeacherHandledClass[];
+  className?: string;
+}) {
+  const [activeTab, setActiveTab] = useState<"subjects" | "classes">("subjects");
+  const [search, setSearch] = useState("");
+
+  const filteredSubjects = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return handledSubjects;
+    return handledSubjects.filter(
+      (s) =>
+        s.subject_name.toLowerCase().includes(q) ||
+        (s.subject_code && s.subject_code.toLowerCase().includes(q)) ||
+        s.sections?.some((sec) => sec.toLowerCase().includes(q)) ||
+        s.grade_levels?.some((gl) => gl.toLowerCase().includes(q))
+    );
+  }, [handledSubjects, search]);
+
+  const filteredClasses = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return handledClasses;
+    return handledClasses.filter(
+      (c) =>
+        c.section_name.toLowerCase().includes(q) ||
+        (c.grade_level && String(c.grade_level).includes(q)) ||
+        c.subjects?.some((sub) => sub.toLowerCase().includes(q))
+    );
+  }, [handledClasses, search]);
+
+  return (
+    <Card className={cn("flex flex-col h-full p-4 bg-background", className)}>
+      <Card.Header className="p-0">
+        {/* Switch / Toggle header */}
+        <ToggleSwitch
+          value={activeTab}
+          onValueChange={(val) => setActiveTab(val as "subjects" | "classes")}
+          size="sm"
+        >
+          <ToggleSwitch.Item value="subjects">
+            <BookOpen className="size-3.5 shrink-0" />
+            <span>Subjects</span>
+          </ToggleSwitch.Item>
+          <ToggleSwitch.Item value="classes">
+            <GraduationCap className="size-3.5 shrink-0" />
+            <span>Classes</span>
+          </ToggleSwitch.Item>
+        </ToggleSwitch>
+      </Card.Header>
+
+      {/* Card Content Area */}
+      <Card.Content className="p-0 flex flex-col overflow-y-auto gap-2">
+        {activeTab === "subjects" ? (
+          filteredSubjects.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground px-4">
+              <BookOpen className="size-8 opacity-30 mb-2" />
+              <p className="text-xs font-semibold">No subjects assigned</p>
+              <p className="text-[11px] opacity-75 mt-0.5">No subject loads are currently mapped to this teacher.</p>
+            </div>
+          ) : (
+            filteredSubjects.map((subject) => (
+              <Card
+                variant="squares"
+                key={subject.subject_id}
+                className="w-full flex flex-col shadow-none"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-bold text-md truncate leading-tight block" title={subject.subject_name}>
+                      {subject.subject_name}
+                    </h4>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {subject.is_core ? (
+                      <Badge variant="secondary" size="sm" className="text-[10px]">
+                        Core
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" size="sm" className="text-[10px]">
+                        Applied
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between text-[12px] text-muted-foreground">
+                  {subject.grade_levels && subject.grade_levels.length > 0 && (
+                    <span className="font-semibold text-foreground">{subject.grade_levels.join(", ")}</span>
+                  )}
+                  {subject.weekly_hours !== undefined && subject.weekly_hours > 0 && (
+                    <span className="flex items-center gap-1">
+                      <Clock className="size-3" />
+                      {subject.weekly_hours} hrs/wk
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1">
+                    <Layers className="size-3" />
+                    {subject.class_count ?? subject.sections?.length ?? 0} {subject.class_count === 1 ? "class" : "classes"}
+                  </span>
+                </div>
+
+                {subject.sections && subject.sections.length > 0 && (
+                  <div className="flex flex-row gap-2 items-center align-center mt-1">
+                    <div className="text-[11px] font-medium text-muted-foreground">Assigned Sections:</div>
+                    <div className="flex flex-wrap gap-2">
+                      {subject.sections.map((sec, idx) => (
+                        <Badge
+                          key={`${sec}-${idx}`}
+                          variant="outline"
+                          size="sm"
+                          className="text-[10px] py-0.5 px-1.5 font-medium bg-white"
+                        >
+                          {sec}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </Card>
+            ))
+          )
+        ) : (
+          filteredClasses.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground px-4">
+              <GraduationCap className="size-8 opacity-30 mb-2" />
+              <p className="text-xs font-semibold">No classes assigned</p>
+              <p className="text-[11px] opacity-75 mt-0.5">No class sections are currently handled by this teacher.</p>
+            </div>
+          ) : (
+            filteredClasses.map((cls) => (
+              <Card
+                variant="squares"
+                key={cls.class_id}
+                className="w-full overflow-x-auto shadow-none"
+              >
+                <div className="flex flex-col items-start justify-between gap-2">
+                  <div className="w-full flex-1 flex flex-row gap-2 items-center justify-between">
+                    <h4 className="font-bold text-lg truncate leading-tight block" title={cls.section_name}>{cls.section_name}</h4>
+                    {cls.is_adviser && (
+                      <Badge variant="solid" size="sm" className="text-[11px] shrink-0">
+                        Adviser
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex flex-row justify-between w-full align-center items-center">
+                    {cls.grade_level && (
+                      <span className="text-[12px] font-semibold text-muted-foreground">
+                        Grade {cls.grade_level}
+                      </span>
+                    )}
+                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                      <span className="flex items-center gap-1 font-medium text-foreground">
+                        <Users className="size-3" />
+                        {cls.student_count ?? 0} {cls.student_count === 1 ? "student" : "students"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {cls.subjects && cls.subjects.length > 0 && (
+                  <div className="flex flex-row gap-2 mt-2">
+                    <div className="text-[10px] font-medium text-muted-foreground whitespace-nowrap mt-0.5">Subjects Taught:</div>
+                    <div className="flex flex-wrap gap-2">
+                      {cls.subjects.map((sub, idx) => (
+                        <Badge
+                          key={`${sub}-${idx}`}
+                          variant="outline"
+                          size="sm"
+                          className="text-[10px] py-0.5 px-1.5 font-medium"
+                        >
+                          {sub}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </Card>
+            ))
+          )
+        )}
+      </Card.Content>
+    </Card>
+  );
+}
+
 function TeacherAnalytics({ user, data }: { user: UserDetail; data: ReturnType<typeof mergeAnalytics> }) {
   const summary = data.summary;
+  const rawHours = user.workload_hours ?? (summary.workloadHours !== undefined && summary.workloadHours !== null ? Number(summary.workloadHours) : null);
+  const loadCount = user.load_count ?? (summary.loadCount !== undefined && summary.loadCount !== null ? Number(summary.loadCount) : user.class_count ?? valueNumber(summary.classesHandled, 0));
+  const workloadDisplay = rawHours !== null && rawHours > 0 ? `${rawHours} hrs` : rawHours !== null ? "0 hrs" : `${loadCount} loads`;
+
+  const classCount = user.class_count ?? (summary.classesHandled !== undefined && summary.classesHandled !== null ? Number(summary.classesHandled) : 0);
+  const totalStudents = summary.totalStudents !== undefined && summary.totalStudents !== null ? Number(summary.totalStudents) : null;
+
+  const subjectCount = user.subjects?.length || (summary.subjectsHandled !== undefined && summary.subjectsHandled !== null ? Number(summary.subjectsHandled) : 0);
+  const subjectsList = user.subjects && user.subjects.length > 0 ? user.subjects : [];
+
+  const rawPerf = summary.classPerformance;
+  const hasPerf = rawPerf !== null && rawPerf !== undefined && rawPerf !== "N/A" && rawPerf !== "Unavailable";
+  const numericPerf = hasPerf ? Number(rawPerf) : null;
+  const perfDisplay = numericPerf !== null && !isNaN(numericPerf) ? `${Math.round(numericPerf)}%` : "N/A";
+
+  const handledSubjects = user.handled_subjects ?? data.handled_subjects ?? [];
+  const handledClasses = user.handled_classes ?? data.handled_classes ?? [];
+
   return (
-    <>
-      <OverviewGrid metrics={[
-        { title: "Class Handled", count: String(user.class_count ?? valueNumber(summary.classesHandled)), stat: "2+", statDescription: "increased from previous academic year" },
-        { title: "Subjects Handled", count: String(user.subjects?.length || valueNumber(summary.subjectsHandled)), stat: "2+", statDescription: "increased from previous academic year" },
-        { title: "Class Performance", count: `${valueNumber(summary.classPerformance)}%`, stat: "8%", statDescription: "increased from previous academic year" },
-      ]} />
-      <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
-        <Panel title="Period Class Performance" subtitle="Average student score across all handled subjects">
-          <SmallLineChart data={data.period_performance} xKey="period" />
-        </Panel>
-        <Panel title="Subject Breakdown" subtitle="Avg. score per subject handled">
-          <SubjectBars rows={data.subject_breakdown} />
-        </Panel>
+    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px] items-stretch">
+      {/* Left Column: Stat Cards & Analytics Panels */}
+      <div className="flex flex-col gap-3 min-w-0">
+        <OverviewGrid metrics={[
+
+          {
+            title: "Class Handled",
+            count: String(classCount),
+            stat: totalStudents !== null && totalStudents > 0 ? `${totalStudents} ${totalStudents === 1 ? "student" : "students"}` : undefined,
+            statDescription: totalStudents !== null && totalStudents > 0 ? "total enrolled in assigned classes" : "assigned class sections",
+          },
+          {
+            title: "Subjects Handled",
+            count: String(subjectCount),
+            stat: `+ ${String(subjectCount)}`,
+            statDescription: subjectCount > 0 ? "subjects assigned" : "distinct subjects taught",
+          },
+          {
+            title: "Class Performance",
+            count: perfDisplay,
+            stat: numericPerf !== null && !isNaN(numericPerf) ? (numericPerf >= 75 ? "Passing average" : "Needs support") : undefined,
+            statDescription: numericPerf !== null && !isNaN(numericPerf) ? "score across classwork" : "no graded assessments yet",
+          },
+          {
+            title: "Workload",
+            count: workloadDisplay,
+            stat: loadCount > 0 ? `${loadCount} ${loadCount === 1 ? "load" : "loads"}` : undefined,
+            statDescription: "scheduled weekly teaching load",
+          },
+        ]} />
+
+        <div className="grid gap-3 md:grid-cols-[1.4fr_1fr]">
+          <Panel title="Period Class Performance" subtitle="Average student score across all handled subjects">
+            <SmallLineChart data={data.period_performance} xKey="period" />
+          </Panel>
+          <Panel title="Subject Breakdown" subtitle="Avg. score per subject handled">
+            <SubjectBars rows={data.subject_breakdown} />
+          </Panel>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-[1fr_1fr]">
+          <StudentSnapshot />
+        </div>
       </div>
-      <div className="grid gap-3 lg:grid-cols-[1fr_1fr]">
-        <ActivityFeed rows={data.activity_feed} />
-        <StudentSnapshot />
+
+      {/* Right Column: Full-height Side Card with Subjects / Classes Toggle */}
+      <div className="flex flex-col h-full min-h-[480px]">
+        <TeacherHandledSideCard
+          handledSubjects={handledSubjects}
+          handledClasses={handledClasses}
+        />
       </div>
-    </>
+    </div>
   );
 }
 
@@ -813,14 +1075,18 @@ function MiniStat({ label, value }: { label: string; value: unknown }) {
 function ActivityFeed({ rows }: { rows: Array<Record<string, string>> }) {
   return (
     <Panel title="Recent Activity" subtitle="Latest action logged">
-      <div className="space-y-3">
-        {rows.map((row, index) => (
-          <div key={`${row.title}-${index}`} className="border-b border-black/10 pb-2 last:border-0">
-            <div className="text-xs font-bold">{row.title}</div>
-            <div className="text-[10px] text-muted-foreground">{row.timestamp}</div>
-          </div>
-        ))}
-      </div>
+      {!rows || rows.length === 0 ? (
+        <p className="py-4 text-center text-xs text-muted-foreground">No recent activity logged.</p>
+      ) : (
+        <div className="space-y-3">
+          {rows.map((row, index) => (
+            <div key={`${row.title}-${index}`} className="border-b border-black/10 pb-2 last:border-0">
+              <div className="text-xs font-bold">{row.title}</div>
+              <div className="text-[10px] text-muted-foreground">{row.timestamp}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </Panel>
   );
 }

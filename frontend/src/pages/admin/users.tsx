@@ -306,112 +306,112 @@ export default function AdminUsers() {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             <div data-page-tabs-sticky-region>
-            <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
-              <div className="flex min-w-0 items-center gap-3">
-                <SidebarTrigger className="shrink-0 md:hidden" />
-                <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">User Management</h1>
+              <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
+                <div className="flex min-w-0 items-center gap-3">
+                  <SidebarTrigger className="shrink-0 md:hidden" />
+                  <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">User Management</h1>
+                </div>
+                <Button
+                  size="header"
+                  className="w-full whitespace-nowrap md:w-auto"
+                  onClick={() => setModalOpen(true)}
+                >
+                  <Plus className="size-4" />
+                  New User
+                </Button>
+              </header>
+              <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                <Tabs
+                  tabs={tabs}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                />
               </div>
-              <Button
-                size="header"
-                className="w-full whitespace-nowrap md:w-auto"
-                onClick={() => setModalOpen(true)}
-              >
-                <Plus className="size-4" />
-                New User
-              </Button>
-            </header>
-            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-              <Tabs
-                tabs={tabs}
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
-              />
-            </div>
 
             </div>
 
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 [&_table]:min-w-[680px] sm:px-4 sm:py-4 md:px-6">
 
-            <div className="flex flex-col gap-3">
-              <div className="grid gap-3 md:grid-cols-[1fr_160px_160px] py-2">
-                <label className="relative">
-                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
-                  <Input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search class or adviser..."
-                    className="h-10 w-full border-black pl-9 pr-3"
-                  />
-                </label>
+              <div className="flex flex-col gap-3">
+                <div className="grid gap-3 md:grid-cols-[1fr_160px_160px] pb-1">
+                  <label className="relative">
+                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+                    <Input
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Search class or adviser..."
+                      className="h-10 w-full border-black pl-9 pr-3"
+                    />
+                  </label>
 
-                {activeTab === "student" ? (
+                  {activeTab === "student" ? (
+                    <Select
+                      value={statusFilter}
+                      onValueChange={(val) =>
+                        setStatusFilter(val as StatusFilter)
+                      }
+                    >
+                      <Select.Trigger>
+                        <Select.Value />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Group>
+                          <Select.Item value="all">All Statuses</Select.Item>
+                          <Select.Item value="active">Active</Select.Item>
+                          <Select.Item value="pending">Pending</Select.Item>
+                          <Select.Item value="inactive">Inactive</Select.Item>
+                          <Select.Item value="suspended">Suspended</Select.Item>
+                          <Select.Item value="archived">Archived</Select.Item>
+                          <Select.Item value="graduated">Graduated</Select.Item>
+                          <Select.Item value="transferred">Transferred</Select.Item>
+                          <Select.Item value="dropped">Dropped</Select.Item>
+                          <Select.Item value="no section assigned">
+                            No Section Assigned
+                          </Select.Item>
+                        </Select.Group>
+                      </Select.Content>
+                    </Select>
+                  ) : (
+                    <Select
+                      value={statusFilter}
+                      onValueChange={(val) =>
+                        setStatusFilter(val as StatusFilter)
+                      }
+                    >
+                      <Select.Trigger>
+                        <Select.Value />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Group>
+                          <Select.Item value="all">All Statuses</Select.Item>
+                          <Select.Item value="active">Active</Select.Item>
+                          <Select.Item value="inactive">Inactive</Select.Item>
+                          <Select.Item value="suspended">Suspended</Select.Item>
+                          <Select.Item value="archived">Archived</Select.Item>
+                        </Select.Group>
+                      </Select.Content>
+                    </Select>
+                  )}
+
                   <Select
-                    value={statusFilter}
-                    onValueChange={(val) =>
-                      setStatusFilter(val as StatusFilter)
-                    }
+                    value={sortBy}
+                    onValueChange={(val) => setSortBy(val as "A-Z" | "Z-A")}
                   >
-                    <Select.Trigger>
-                      <Select.Value />
+                    <Select.Trigger className="w-full">
+                      <Select.Value placeholder="Sort By" />
                     </Select.Trigger>
                     <Select.Content>
                       <Select.Group>
-                        <Select.Item value="all">All Statuses</Select.Item>
-                        <Select.Item value="active">Active</Select.Item>
-                        <Select.Item value="pending">Pending</Select.Item>
-                        <Select.Item value="inactive">Inactive</Select.Item>
-                        <Select.Item value="suspended">Suspended</Select.Item>
-                        <Select.Item value="archived">Archived</Select.Item>
-                        <Select.Item value="graduated">Graduated</Select.Item>
-                        <Select.Item value="transferred">Transferred</Select.Item>
-                        <Select.Item value="dropped">Dropped</Select.Item>
-                        <Select.Item value="no section assigned">
-                          No Section Assigned
-                        </Select.Item>
+                        <Select.Item value={"A-Z"}>A-Z</Select.Item>
+                        <Select.Item value={"Z-A"}>Z-A</Select.Item>
                       </Select.Group>
                     </Select.Content>
                   </Select>
-                ) : (
-                  <Select
-                    value={statusFilter}
-                    onValueChange={(val) =>
-                      setStatusFilter(val as StatusFilter)
-                    }
-                  >
-                    <Select.Trigger>
-                      <Select.Value />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Group>
-                        <Select.Item value="all">All Statuses</Select.Item>
-                        <Select.Item value="active">Active</Select.Item>
-                        <Select.Item value="inactive">Inactive</Select.Item>
-                        <Select.Item value="suspended">Suspended</Select.Item>
-                        <Select.Item value="archived">Archived</Select.Item>
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>
-                )}
+                </div>
 
-                <Select
-                  value={sortBy}
-                  onValueChange={(val) => setSortBy(val as "A-Z" | "Z-A")}
-                >
-                  <Select.Trigger className="w-full">
-                    <Select.Value placeholder="Sort By" />
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Group>
-                      <Select.Item value={"A-Z"}>A-Z</Select.Item>
-                      <Select.Item value={"Z-A"}>Z-A</Select.Item>
-                    </Select.Group>
-                  </Select.Content>
-                </Select>
-              </div>
-
-              {activeTab === "student" && (
-                <>
-                  {/* {studentStats && !loading && (
+                {activeTab === "student" && (
+                  <>
+                    {/* {studentStats && !loading && (
                     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                       <OverviewCard
                         title="Total Students"
@@ -432,220 +432,224 @@ export default function AdminUsers() {
                     </div>
                   )} */}
 
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                    <span className="shrink-0 text-sm font-regular text-muted-foreground">
-                      Grade:
-                    </span>
-                    {GRADE_LEVELS.map((g) => (
-                      <Button
-                        key={g}
-                        onClick={() => setGradeFilter(g)}
-                        variant={gradeFilter === g ? "default" : "outline"}
-                        size="sm"
-                        className="shrink-0 border-black shadow-none"
-                      >
-                        {g === "all" ? "All" : `Grade ${g}`}
-                      </Button>
-
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {error && (
-                <div className="rounded border-2 border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {error}
-                </div>
-              )}
-
-              {loading && (
-                <Card className="flex w-full items-center justify-center gap-3 py-12 text-sm text-muted-foreground shadow-md">
-                  <Loader size="sm" />
-                  Loading users
-                </Card>
-              )}
-
-              {!loading && activeTab === "student" && (
-                <>
-                  {studentGroups.size === 0 && (
-                    <div className="">
-                      <Empty className="shadow-md hover:shadow-none transition-shadow">
-                        <EmptyHeader>
-                          <EmptyMedia>
-                            <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background *:data-[slot=avatar]:grayscale">
-                              <Avatar variant="student" >
-                                <Avatar.Image
-                                  src="/avatars/student-avatars/3.svg"
-                                  alt="@shadcn" />
-                                <Avatar.Fallback>CN</Avatar.Fallback>
-                              </Avatar>
-                              <Avatar variant="student" >
-                                <Avatar.Image
-                                  src="/avatars/student-avatars/2.svg"
-                                  alt="@maxleiter"
-                                />
-                                <Avatar.Fallback>LR</Avatar.Fallback>
-                              </Avatar>
-                              <Avatar variant="student" >
-                                <Avatar.Image
-                                  src="/avatars/student-avatars/1.svg"
-                                  alt="@evilrabbit"
-                                />
-                                <Avatar.Fallback>ER</Avatar.Fallback>
-                              </Avatar>
-                            </div>
-                          </EmptyMedia>
-                          <EmptyTitle>No Student Enrolled</EmptyTitle>
-                          <EmptyDescription className="text-center whitespace-nowrap">
-                            Students will appear here once they are enrolled in a section.
-                          </EmptyDescription>
-                        </EmptyHeader>
-                        <EmptyContent>
-                          <Button size="sm" variant="default">
-                            Enroll Student
-                          </Button>
-                        </EmptyContent>
-                      </Empty>
-                    </div>
-                  )}
-                  <Accordion
-                    multiple
-                    value={[...studentGroups.keys()].filter((k) => !collapsedSections.has(k))}
-                    onValueChange={(values) => {
-                      const collapsed = [...studentGroups.keys()].filter(
-                        (k) => !values.includes(k)
-                      );
-                      setCollapsedSections(new Set(collapsed));
-                    }}
-                    className="flex flex-col gap-3"
-                  >
-                    {[...studentGroups.entries()].map(([key, groupUsers]) => {
-                      const isUnassigned = key === UNASSIGNED_KEY;
-                      const info = isUnassigned ? null : parseSectionInfo(key);
-                      const groupGrade = isUnassigned ? 0 : getGroupGrade(key, groupUsers);
-
-                      const headerLabel = isUnassigned
-                        ? "Unassigned — awaiting section"
-                        : info
-                          ? info.grade > 0
-                            ? `Grade ${info.grade} — ${info.sectionName}`
-                            : groupGrade > 0 && groupGrade < 999
-                              ? `Grade ${groupGrade} — ${info.sectionName}`
-                              : info.sectionName
-                          : key;
-
-                      return (
-                        <AccordionItem
-                          key={key}
-                          value={key}
-                          className={isUnassigned ? "border-amber-400" : ""}
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                      <span className="shrink-0 text-sm font-regular text-muted-foreground">
+                        Grade:
+                      </span>
+                      {GRADE_LEVELS.map((g) => (
+                        <Button
+                          key={g}
+                          autoIcon={false}
+                          onClick={() => setGradeFilter(g)}
+                          variant={gradeFilter === g ? "default" : "outline"}
+                          size="sm"
+                          className="shrink-0 border-black shadow-none"
                         >
-                          <AccordionTrigger
-                            className={cn(
-                              "items-center py-2.5 text-sm font-semibold transition-colors",
-                              // isUnassigned
-                              //   ? "bg-amber-50 hover:bg-accent hover:text-sidebar-accent-foreground"
-                              //   : "bg-background hover:bg-accent hover:text-sidebar-accent-foreground"
-                            )}
-                          >
-                            <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                              <span
-                                className={cn(
-                                  "truncate flex-1 text-lg font-bold text-left",
-                                  isUnassigned ? "text-amber-800" : ""
-                                )}
-                              >
-                                {headerLabel}
-                              </span>
-                              <Badge
-                                variant="secondary"
-                                size="sm"
-                                className="mr-2"
-                              >
-                                {groupUsers.length} student{groupUsers.length !== 1 ? "s" : ""}
-                              </Badge>
-                            </div>
+                          {g === "all" ? "All" : `Grade ${g}`}
+                        </Button>
 
-                          </AccordionTrigger>
+                      ))}
+                    </div>
+                  </>
+                )}
 
-                          <AccordionContent className="p-0 border-t-2 border-border">
-                            <Table wrapperClassName="rounded-none border-0 shadow-none">
-                              <Table.Header className="border-b-2 border-border bg-primary font-sans text-black">
-                                <Table.Row className="border-b-2 border-black hover:bg-transparent">
-                                  <Table.Head className="text-sm font-bold text-black">Name</Table.Head>
-                                  <Table.Head className="w-36 text-center text-sm font-bold text-black">Status</Table.Head>
-                                  <Table.Head className="w-64 text-center text-sm font-bold text-black">
-                                    {isUnassigned ? "Grade level" : "Section"}
-                                  </Table.Head>
-                                </Table.Row>
-                              </Table.Header>
-                              <Table.Body>
-                                {groupUsers.map((user) => (
-                                  <StudentRow
-                                    key={user.id}
-                                    user={user}
-                                    showGrade={isUnassigned}
-                                    onOpenUser={openUser}
-                                    onResend={handleResend}
-                                    isResending={resendingId === user.id}
+                {error && (
+                  <div className="rounded border-2 border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
+                  </div>
+                )}
+
+                {loading && (
+                  <Card className="flex w-full items-center justify-center gap-3 py-12 text-sm text-muted-foreground shadow-md">
+                    <Loader size="sm" />
+                    Loading users
+                  </Card>
+                )}
+
+                {!loading && activeTab === "student" && (
+                  <>
+                    {studentGroups.size === 0 && (
+                      <div className="">
+                        <Empty className="shadow-md hover:shadow-none transition-shadow">
+                          <EmptyHeader>
+                            <EmptyMedia>
+                              <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background *:data-[slot=avatar]:grayscale">
+                                <Avatar variant="student" >
+                                  <Avatar.Image
+                                    src="/avatars/student-avatars/3.svg"
+                                    alt="@shadcn" />
+                                  <Avatar.Fallback>CN</Avatar.Fallback>
+                                </Avatar>
+                                <Avatar variant="student" >
+                                  <Avatar.Image
+                                    src="/avatars/student-avatars/2.svg"
+                                    alt="@maxleiter"
                                   />
-                                ))}
-                              </Table.Body>
-                            </Table>
-                          </AccordionContent>
-                        </AccordionItem>
-                      );
-                    })}
-                  </Accordion>
-                </>
-              )}
+                                  <Avatar.Fallback>LR</Avatar.Fallback>
+                                </Avatar>
+                                <Avatar variant="student" >
+                                  <Avatar.Image
+                                    src="/avatars/student-avatars/1.svg"
+                                    alt="@evilrabbit"
+                                  />
+                                  <Avatar.Fallback>ER</Avatar.Fallback>
+                                </Avatar>
+                              </div>
+                            </EmptyMedia>
+                            <EmptyTitle>No Student Enrolled</EmptyTitle>
+                            <EmptyDescription className="text-center whitespace-nowrap">
+                              Students will appear here once they are enrolled in a section.
+                            </EmptyDescription>
+                          </EmptyHeader>
+                          <EmptyContent>
+                            <Button size="sm" variant="default">
+                              Enroll Student
+                            </Button>
+                          </EmptyContent>
+                        </Empty>
+                      </div>
+                    )}
+                    <Accordion
+                      multiple
+                      value={[...studentGroups.keys()].filter((k) => !collapsedSections.has(k))}
+                      onValueChange={(values) => {
+                        const collapsed = [...studentGroups.keys()].filter(
+                          (k) => !values.includes(k)
+                        );
+                        setCollapsedSections(new Set(collapsed));
+                      }}
+                      className="flex flex-col gap-3"
+                    >
+                      {[...studentGroups.entries()].map(([key, groupUsers]) => {
+                        const isUnassigned = key === UNASSIGNED_KEY;
+                        const info = isUnassigned ? null : parseSectionInfo(key);
+                        const groupGrade = isUnassigned ? 0 : getGroupGrade(key, groupUsers);
 
-              {!loading && activeTab !== "student" && (
-                <>
-                  {displayUsers.length === 0 ? (
-                    <Card className="py-12 text-center text-sm text-black">
-                      {emptyText}
-                    </Card>
-                  ) : (
-                    <Card className="block w-full overflow-hidden p-0 shadow-md">
-                      <Table wrapperClassName="rounded-none border-0 shadow-none">
-                        <Table.Header className="border-b-2 border-border bg-primary font-sans text-black">
-                          <Table.Row className="border-b-2 border-black hover:bg-transparent">
-                            <Table.Head className="text-sm font-bold text-black">Name</Table.Head>
-                            <Table.Head className="w-36 text-center text-sm font-bold text-black">Status</Table.Head>
-                            {activeTab === "teacher" ? (
-                              <>
-                                <Table.Head className="w-48 text-center text-sm font-bold text-black">Subjects</Table.Head>
-                                <Table.Head className="w-20 text-right text-sm font-bold text-black">Classes</Table.Head>
-                                <Table.Head className="w-28 text-right text-sm font-bold text-black">Actions</Table.Head>
-                              </>
-                            ) : (
-                              <Table.Head className="w-36 text-right text-sm font-bold text-black">Joined</Table.Head>
-                            )}
-                          </Table.Row>
-                        </Table.Header>
-                        <Table.Body>
-                          {displayUsers.map((user) => (
-                            <UserRow
-                              key={user.id}
-                              user={user}
-                              activeTab={activeTab}
-                              onOpenUser={openUser}
-                              onAssignSubstitute={(u) => setSelectedTeacherForSub(u)}
-                              onResend={handleResend}
-                              isResending={resendingId === user.id}
-                            />
-                          ))}
-                        </Table.Body>
-                      </Table>
-                    </Card>
-                  )}
-                </>
-              )}
+                        const headerLabel = isUnassigned
+                          ? "Unassigned — awaiting section"
+                          : info
+                            ? info.grade > 0
+                              ? `Grade ${info.grade} — ${info.sectionName}`
+                              : groupGrade > 0 && groupGrade < 999
+                                ? `Grade ${groupGrade} — ${info.sectionName}`
+                                : info.sectionName
+                            : key;
+
+                        return (
+                          <AccordionItem
+                            key={key}
+                            value={key}
+                            className={isUnassigned ? "border-amber-400" : ""}
+                          >
+                            <AccordionTrigger
+                              className={cn(
+                                "items-center py-2.5 text-sm font-semibold transition-colors",
+                                // isUnassigned
+                                //   ? "bg-amber-50 hover:bg-accent hover:text-sidebar-accent-foreground"
+                                //   : "bg-background hover:bg-accent hover:text-sidebar-accent-foreground"
+                              )}
+                            >
+                              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                <span
+                                  className={cn(
+                                    "truncate flex-1 text-lg font-bold text-left",
+                                    isUnassigned ? "text-amber-800" : ""
+                                  )}
+                                >
+                                  {headerLabel}
+                                </span>
+                                <Badge
+                                  variant="secondary"
+                                  size="sm"
+                                  className="mr-2"
+                                >
+                                  {groupUsers.length} student{groupUsers.length !== 1 ? "s" : ""}
+                                </Badge>
+                              </div>
+
+                            </AccordionTrigger>
+
+                            <AccordionContent className="p-0 border-t-2 border-border">
+                              <Table
+                                wrapperClassName="rounded-none border-0 shadow-none overflow-visible"
+                                containerClassName="overflow-visible"
+                              >
+                                <Table.Header className="border-b-2 border-border bg-primary font-sans text-black">
+                                  <Table.Row className="border-b-2 border-black hover:bg-transparent">
+                                    <Table.Head className="text-sm font-bold text-black">Name</Table.Head>
+                                    <Table.Head className="w-36 text-center text-sm font-bold text-black">Status</Table.Head>
+                                    <Table.Head className="w-40 text-center text-sm font-bold text-black">
+                                      {isUnassigned ? "Grade level" : "Section"}
+                                    </Table.Head>
+                                  </Table.Row>
+                                </Table.Header>
+                                <Table.Body>
+                                  {groupUsers.map((user) => (
+                                    <StudentRow
+                                      key={user.id}
+                                      user={user}
+                                      showGrade={isUnassigned}
+                                      onOpenUser={openUser}
+                                      onResend={handleResend}
+                                      isResending={resendingId === user.id}
+                                    />
+                                  ))}
+                                </Table.Body>
+                              </Table>
+                            </AccordionContent>
+                          </AccordionItem>
+                        );
+                      })}
+                    </Accordion>
+                  </>
+                )}
+
+                {!loading && activeTab !== "student" && (
+                  <>
+                    {displayUsers.length === 0 ? (
+                      <Card className="py-12 text-center text-sm text-black">
+                        {emptyText}
+                      </Card>
+                    ) : (
+                      <Card className="block w-full overflow-hidden p-0 shadow-md">
+                        <Table wrapperClassName="rounded-none border-0 shadow-none">
+                          <Table.Header className="border-b-2 border-border bg-primary font-sans text-black">
+                            <Table.Row className="border-b-2 border-black hover:bg-transparent">
+                              <Table.Head className="text-sm font-bold text-black">Name</Table.Head>
+                              <Table.Head className="w-36 text-center text-sm font-bold text-black">Status</Table.Head>
+                              {activeTab === "teacher" ? (
+                                <>
+                                  <Table.Head className="w-60 text-center text-sm font-bold text-black">Subjects</Table.Head>
+                                  <Table.Head className="w-20 text-center text-sm font-bold text-black">Classes</Table.Head>
+                                  <Table.Head className="w-28 text-right text-sm font-bold text-black">Actions</Table.Head>
+                                </>
+                              ) : (
+                                <Table.Head className="w-36 text-right text-sm font-bold text-black">Joined</Table.Head>
+                              )}
+                            </Table.Row>
+                          </Table.Header>
+                          <Table.Body>
+                            {displayUsers.map((user) => (
+                              <UserRow
+                                key={user.id}
+                                user={user}
+                                activeTab={activeTab}
+                                onOpenUser={openUser}
+                                onAssignSubstitute={(u) => setSelectedTeacherForSub(u)}
+                                onResend={handleResend}
+                                isResending={resendingId === user.id}
+                              />
+                            ))}
+                          </Table.Body>
+                        </Table>
+                      </Card>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
       </div>
 
       <AddUserModal
@@ -829,7 +833,7 @@ function UserRow({
         <Table.Cell>
           <NameCell name={user.name} subtitle={user.email} role={user.role} />
         </Table.Cell>
-        <Table.Cell className="text-center w-36">
+        <Table.Cell className="text-center max-w-20">
           <div className="flex flex-col items-center gap-1">
             <StatusBadge
               status={user.account_status}
@@ -840,60 +844,68 @@ function UserRow({
             {user.is_on_leave && (
               <Badge
                 size="sm"
-                variant="outline"
-                className="border-amber-500/50 text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 text-[10px] font-semibold"
+                variant="solid"
+                className="text-[10px] font-semibold"
               >
                 On Leave
               </Badge>
             )}
           </div>
         </Table.Cell>
-        <Table.Cell className="text-center w-48">
-          <div className="flex flex-wrap justify-center gap-1.5">
+        <Table.Cell className="text-center whitespace-nowrap min-w-115">
+          <div className="flex flex-nowrap items-center justify-center gap-1.5 whitespace-nowrap">
             {shown.length > 0 ? (
               shown.map((subject) => (
                 <Badge
                   key={subject}
                   variant="outline"
                   size="sm"
-                  className="bg-background text-[10px] font-medium"
+                  className="text-[10px] font-medium shrink-0 whitespace-nowrap"
                 >
                   {subject}
                 </Badge>
               ))
             ) : (
-              <span className="text-xs text-muted-foreground">No subjects</span>
+              <Badge
+                variant="default"
+                size="sm"
+                className="text-[10px] font-medium shrink-0 whitespace-nowrap"
+              >
+                No subjects
+              </Badge>
             )}
             {extra > 0 && (
               <Badge
                 variant="outline"
                 size="sm"
-                className="bg-background text-[10px] font-medium"
+                className="bg-background text-[10px] font-medium shrink-0 whitespace-nowrap"
               >
                 +{extra}
               </Badge>
             )}
           </div>
         </Table.Cell>
-        <Table.Cell className="text-right w-20">
-          <div className="flex items-center justify-end gap-1 text-xs font-semibold">
+        <Table.Cell className="text-center min-w-28">
+          <div className="flex items-center justify-center gap-1 text-xs font-semibold">
             <School className="size-3.5" />
             {user.class_count ?? 0}
           </div>
         </Table.Cell>
-        <Table.Cell className="text-right w-28" onClick={(e) => e.stopPropagation()}>
-          <Button
-            size="sm"
-            variant="default"
-            className="h-7 px-2 text-xs font-medium"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAssignSubstitute?.(user);
-            }}
-          >
-            <UserCheck className="h-3 w-3 mr-1" />
-            Substitute
-          </Button>
+        <Table.Cell className="text-right min-w-32" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-end">
+            <Button
+              size="sm"
+              variant="default"
+              className="h-7 px-2 text-xs font-medium"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAssignSubstitute?.(user);
+              }}
+            >
+              <UserCheck className="h-3 w-3 mr-1" />
+              Substitute
+            </Button>
+          </div>
         </Table.Cell>
       </Table.Row>
     );
@@ -908,7 +920,7 @@ function UserRow({
       <Table.Cell>
         <NameCell name={user.name} subtitle={user.email} role={user.role} />
       </Table.Cell>
-      <Table.Cell className="text-center w-36">
+      <Table.Cell className="text-center w-full">
         <StatusBadge
           status={user.account_status}
           emailStatus={user.email_status}
@@ -916,8 +928,8 @@ function UserRow({
           isResending={isResending}
         />
       </Table.Cell>
-      <Table.Cell className="text-right w-36">
-        <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+      <Table.Cell className="text-right w-full">
+        <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
           <UsersRound className="size-3.5" />
           {user.created_at || "—"}
         </div>
