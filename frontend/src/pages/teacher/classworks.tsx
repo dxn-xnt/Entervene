@@ -34,7 +34,7 @@ import { DialogueSelect } from "@/components/dialogue-select";
 import { Select } from "@/components/retroui/Select";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
-import { getTeacherActive, getRemediationWorkspace, type TeacherInterventionDetail, type RemediationFocus, type RemediationResource } from "@/lib/teacher-interventions-api";
+import { getTeacherActive, getRemediationWorkspace, type TeacherInterventionDetail, type RemediationFocus, type RemediationResource, type OriginalExamination } from "@/lib/teacher-interventions-api";
 
 const tabs: Array<TabItem<TabId>> = [
   { id: "all", label: "All", icon: ClipboardList },
@@ -93,7 +93,8 @@ export default function Classworks() {
   const interventionId = Number(routeParams.get("intervention_id"));
   const [remediationTarget, setRemediationTarget] = useState<TeacherInterventionDetail | null>(null);
   const [remediationFocus, setRemediationFocus] = useState<RemediationFocus | null>(null);
-  const [remediationGradeTreatment, setRemediationGradeTreatment] = useState<"PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | null>(null);
+  const [remediationGradeTreatment, setRemediationGradeTreatment] = useState<"PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | null>(null);
+  const [remediationOriginalExam, setRemediationOriginalExam] = useState<OriginalExamination | null>(null);
   const [remediationReferences, setRemediationReferences] = useState<RemediationResource[]>([]);
   const [remediationError, setRemediationError] = useState("");
   useEffect(() => {
@@ -106,6 +107,7 @@ export default function Classworks() {
     setRemediationTarget(null);
     setRemediationFocus(null);
     setRemediationGradeTreatment(null);
+    setRemediationOriginalExam(null);
     setRemediationReferences([]);
     let live = true;
     void Promise.all([getTeacherActive(interventionId), getRemediationWorkspace(interventionId)]).then(([detail, workspace]) => { if (live) {
@@ -113,10 +115,16 @@ export default function Classworks() {
         setRemediationError("The saved Intervention method, subject, or grade treatment has changed. Return to the Intervention to prepare support.");
         return;
       }
+      const originalExam = (workspace.original_exams ?? []).find((exam) => exam.assignment_id === workspace.plan.original_exam_assignment_id) ?? null;
+      if (workspace.plan.grade_treatment === "EXAMINATION" && (!originalExam || originalExam.assignment_id !== Number(routeParams.get("original_exam_assignment_id")))) {
+        setRemediationError("The original Examination selection changed. Return to the Intervention.");
+        return;
+      }
       const selected = new Set(workspace.plan.selected_resources.map((item) => `${item.kind}:${item.id}`));
       setRemediationTarget(detail);
       setRemediationFocus(workspace.focus);
       setRemediationGradeTreatment(workspace.plan.grade_treatment);
+      setRemediationOriginalExam(originalExam);
       setRemediationReferences(workspace.resources.filter((item) => item.recommended && selected.has(`${item.kind}:${item.id}`)));
     } })
       .catch((error) => { if (live) setRemediationError(error instanceof Error ? error.message : "Unable to load intervention recipient."); });
@@ -483,6 +491,7 @@ export default function Classworks() {
                       remediationTarget={remediationTarget}
                       remediationFocus={remediationFocus}
                       remediationGradeTreatment={remediationGradeTreatment}
+                      remediationOriginalExam={remediationOriginalExam}
                       remediationReferences={remediationReferences}
                       onClose={closeCreateWizard}
                       onSuccess={async () => {
@@ -503,6 +512,7 @@ export default function Classworks() {
                       remediationTarget={remediationTarget}
                       remediationFocus={remediationFocus}
                       remediationGradeTreatment={remediationGradeTreatment}
+                      remediationOriginalExam={remediationOriginalExam}
                       onClose={closeCreateWizard}
                       onSuccess={async () => {
                         await Promise.all([loadClassworks(), refetchClasses()]);

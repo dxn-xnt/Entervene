@@ -6,6 +6,8 @@ The test creates and drops its own database; it never writes to the configured D
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
+import asyncio
+import json
 import os
 from uuid import uuid4
 
@@ -25,6 +27,7 @@ from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.Lesson import Lesson
 from app.models.academic.StudentCLass import StudentClass
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.ai.AIModelVersion import ModelPurpose
@@ -40,12 +43,17 @@ from app.models.quiz.QuizAnswer import QuizAnswer
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.schemas.Quiz import QuizBuilderUpsert, QuizSubmitRequest
 from app.schemas.Submission import GradeRequest
+from app.schemas.Classwork import ClassworkUpdate
 from app.services.prediction.CurrentPeriodFeatureBuilderService import build_current_period_features_from_records
 from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME
 from app.services.prediction.DevelopmentGradeRefreshService import settings
 from app.services.quiz import QuizAttemptService as attempts
 from app.services.quiz.QuizBuilderService import upsert_quiz_builder
 from app.services.submission.SubmissionService import grade_student_submission
+from app.services.classwork.ClassworkService import create_classwork_wizard_record, update_classwork_record
+from app.services.intervention.InterventionRemediationService import PlanUpdate, save_plan, get_workspace
+from app.services.student_record.StudentRecordService import teacher_student_gradebook
+from fastapi import HTTPException
 from tests.test_development_current_term_model_4l import _register_corrected
 
 
@@ -97,6 +105,7 @@ def _academic_scope(db: Session):
         is_core=True, status="active")
     class_ = Class(section_name="Natural Trace", academic_year_id=year.academic_year_id,
         academic_level_id=level.academic_level_id, academic_period=period, adviser=teacher)
+    class_.period_template_group = "JHS_45MIN"
     db.add_all([period, teacher, student, subject, class_])
     db.flush()
     db.add(StudentClass(student_id=student.student_id, class_id=class_.class_id,
@@ -153,6 +162,8 @@ def test_grade_commit_naturally_creates_candidate_with_scored_exam_competency(is
         ):
             assignment = _assignment(db, title=title, category=category, subtype=subtype,
                 teacher=teacher, class_=class_, subject=subject, period=period, activity_mode="MANUAL")
+            if subtype == "SUMMATIVE_2":
+                summative_2 = assignment
             submission = StudentSubmission(student_id=student.student_id,
                 classwork_assignment_id=assignment.classwork_assignment_id,
                 status="submitted", submitted_at=datetime.now(timezone.utc))
@@ -249,3 +260,110 @@ def test_grade_commit_naturally_creates_candidate_with_scored_exam_competency(is
         assert by_order[1].quiz_question_id not in {
             item["quiz_question_id"] for row in scored for item in row["supporting_scores"]
         }
+
+        # The teacher links one targeted remedial activity to that scored original.
+        teacher_id = teacher.staff_id
+        candidate.status = "ACTIVE"
+        candidate.activated_at = datetime.now(timezone.utc)
+        candidate.activated_by_staff_id = teacher_id
+        db.commit()
+        save_plan(db, teacher.staff_id, candidate.intervention_id,
+            PlanUpdate(teacher_choice="CLASSWORK", grade_treatment="EXAMINATION",
+                       original_exam_assignment_id=exam.classwork_assignment_id))
+        workspace = get_workspace(db, teacher.staff_id, candidate.intervention_id)
+        assert any(item["assignment_id"] == exam.classwork_assignment_id and item["subtype"] == "SUMMATIVE_1"
+                   for item in workspace["original_exams"])
+        create_args = dict(title="Summative 1 remedial", classwork_type="ASSIGNMENT",
+            subject_id=subject.subject_id, description=None, instructions="Complete the remedial assessment",
+            classwork_category="QUARTERLY_ASSESSMENT", exam_subtype="SUMMATIVE_1", total_points=10,
+            is_published=True, class_ids=json.dumps([class_.class_id]),
+            academic_period_id=period.academic_period_id, lesson_ids=json.dumps([lesson.lesson_id]),
+            due_date=None, lock_date=None, allow_late_submissions=False, max_attempts=None,
+            quiz_payload=None, rubric_payload=None, files=None, intervention_id=candidate.intervention_id,
+            remediation_request_id=uuid4(), original_exam_assignment_id=exam.classwork_assignment_id,
+            current_user={"sub": str(uuid4()), "role": "teacher"}, staff_id=teacher.staff_id, db=db)
+        with pytest.raises(HTTPException) as subtype_error:
+            asyncio.run(create_classwork_wizard_record(**{**create_args, "exam_subtype": "TERM_EXAM"}))
+        assert subtype_error.value.status_code == 400
+        with pytest.raises(HTTPException) as points_error:
+            asyncio.run(create_classwork_wizard_record(**{**create_args, "total_points": 20}))
+        assert points_error.value.status_code == 400
+        created = asyncio.run(create_classwork_wizard_record(**create_args))
+        remedial = db.query(ClassworkAssignment).filter_by(classwork_id=created.classwork_id).one()
+        assert remedial.original_exam_assignment_id == exam.classwork_assignment_id
+        assert remedial.recipient_student_id == student.student_id
+        assert remedial.classwork.exam_subtype == "SUMMATIVE_1"
+        with pytest.raises(HTTPException) as edited_subtype:
+            update_classwork_record(remedial.classwork_id, ClassworkUpdate(exam_subtype="TERM_EXAM"), teacher_id, db)
+        assert edited_subtype.value.status_code == 400
+        repeated = asyncio.run(create_classwork_wizard_record(**{
+            **create_args, "title": "Summative 1 second remedial", "remediation_request_id": uuid4(),
+        }))
+        repeated_assignment = db.query(ClassworkAssignment).filter_by(classwork_id=repeated.classwork_id).one()
+        assert repeated_assignment.original_exam_assignment_id == exam.classwork_assignment_id
+        save_plan(db, teacher_id, candidate.intervention_id,
+            PlanUpdate(teacher_choice="CLASSWORK", grade_treatment="EXAMINATION",
+                       original_exam_assignment_id=summative_2.classwork_assignment_id))
+        with pytest.raises(HTTPException) as stale_selection:
+            asyncio.run(create_classwork_wizard_record(**{**create_args, "remediation_request_id": uuid4()}))
+        assert stale_selection.value.status_code == 400
+        lower_created = asyncio.run(create_classwork_wizard_record(**{
+            **create_args, "title": "Summative 2 remedial", "exam_subtype": "SUMMATIVE_2",
+            "original_exam_assignment_id": summative_2.classwork_assignment_id,
+            "remediation_request_id": uuid4(),
+        }))
+        lower_remedial = db.query(ClassworkAssignment).filter_by(classwork_id=lower_created.classwork_id).one()
+        lower_attempt = StudentSubmission(student_id=student.student_id,
+            classwork_assignment_id=lower_remedial.classwork_assignment_id, status="submitted")
+        db.add(lower_attempt)
+        db.commit()
+        revisions_before = db.query(DevelopmentCurrentTermPrediction).count()
+        grade_student_submission(lower_attempt.submission_id, GradeRequest(grade=2), teacher_id, db)
+        assert db.query(DevelopmentCurrentTermPrediction).count() == revisions_before
+        attempt = StudentSubmission(student_id=student.student_id,
+            classwork_assignment_id=remedial.classwork_assignment_id, status="submitted")
+        db.add(attempt)
+        db.commit()
+        revisions_before = db.query(DevelopmentCurrentTermPrediction).count()
+        grade_student_submission(attempt.submission_id, GradeRequest(grade=0), teacher.staff_id, db)
+        assert db.query(DevelopmentCurrentTermPrediction).count() == revisions_before
+        grade_student_submission(attempt.submission_id, GradeRequest(grade=8), teacher.staff_id, db)
+        assert db.query(DevelopmentCurrentTermPrediction).count() > revisions_before
+        repeated_attempt = StudentSubmission(student_id=student.student_id,
+            classwork_assignment_id=repeated_assignment.classwork_assignment_id, status="submitted")
+        db.add(repeated_attempt)
+        db.commit()
+        revisions_after_first = db.query(DevelopmentCurrentTermPrediction).count()
+        grade_student_submission(repeated_attempt.submission_id, GradeRequest(grade=9), teacher_id, db)
+        assert db.query(DevelopmentCurrentTermPrediction).count() > revisions_after_first
+        assert db.get(StudentSubmission, attempt.submission_id).grade == 8
+        assert db.query(StudentSubmission).filter_by(classwork_assignment_id=exam.classwork_assignment_id).one().grade == 0
+        gradebook = teacher_student_gradebook(db, teacher.staff_id, class_.class_id,
+            subject.subject_id, period.academic_period_id)
+        student_row = next(item for item in gradebook.studentGrades if item.student_id == str(student.student_id))
+        assert student_row.ps_summative_1 == 90
+        assert student_row.ps_summative_2 == 40
+        assert len(gradebook.classwork[0].exams) == 3  # one column per original Examination
+        assert student_row.remedial_exams[0]["original_score"] == 0
+        assert student_row.remedial_exams[0]["remedial_score"] == 8
+        assert student_row.remedial_exams[0]["effective_score"] == 9
+        assert student_row.remedial_exams[1]["remedial_score"] == 9
+        assert student_row.remedial_exams[1]["effective_score"] == 9
+        assert student_row.remedial_exams[2]["remedial_score"] == 2
+        assert student_row.remedial_exams[2]["effective_score"] == 4
+        latest = db.query(DevelopmentCurrentTermPrediction).order_by(
+            DevelopmentCurrentTermPrediction.revision.desc()).first()
+        projected = latest.evidence_snapshot["projected_final_term_grade_raw"]
+        db.refresh(candidate)
+        assert candidate.status == ("RESOLVED" if projected >= 85 else "ACTIVE")
+
+        period_grade = StudentPeriodGrade(student_id=student.student_id, class_id=class_.class_id,
+            subject_id=subject.subject_id, academic_period_id=period.academic_period_id,
+            final_period_grade=Decimal("80"), is_finalized=True,
+            finalized_at=datetime.now(timezone.utc), finalized_by_staff_id=teacher_id)
+        db.add(period_grade)
+        db.commit()
+        with pytest.raises(HTTPException) as finalized_error:
+            grade_student_submission(attempt.submission_id, GradeRequest(grade=9), teacher_id, db)
+        assert finalized_error.value.status_code == 409
+        assert db.get(StudentSubmission, attempt.submission_id).grade == 8

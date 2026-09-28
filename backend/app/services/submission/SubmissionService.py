@@ -20,6 +20,7 @@ from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.submissions.SubmissionAttachment import SubmissionAttachment
 from app.schemas.Submission import GradeRequest, SubmissionAttachmentResponse, SubmissionResponse
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
+from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
 from app.services.classwork.ClassworkShared import (
     assignment_is_available,
     assignment_is_locked,
@@ -738,6 +739,7 @@ def grade_student_submission(
     assignment = teacher_owns_assignment(submission.classwork_assignment_id, staff_id, db, write_required=True)
     if not assignment_allows_student(assignment, submission.student_id):
         raise HTTPException(status_code=403, detail="Student is not assigned to this activity")
+    ensure_remedial_period_open(db, assignment, submission.student_id)
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first() if assignment else None
     if classwork and (classwork.classwork_type or "").upper() == "READING":
         raise HTTPException(status_code=400, detail="Reading classworks cannot be graded")
@@ -751,9 +753,10 @@ def grade_student_submission(
     submission.status = "graded"
     submission.graded_at = datetime.now(timezone.utc)
     submission.graded_by_staff_id = staff_id
+    refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, submission.student_id, previous_grade, submission.grade)
     db.commit()
     db.refresh(submission)
-    if classwork.is_graded and submission.grade != previous_grade:
+    if refresh_needed:
         refresh_after_committed_grade_change(
             db.get_bind(),
             student_ids=[submission.student_id],

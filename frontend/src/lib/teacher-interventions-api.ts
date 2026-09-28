@@ -51,7 +51,7 @@ export interface TeacherInterventionDetail extends TeacherInterventionSummary {
 
 export interface TeacherResolvedInterventionDetail extends TeacherInterventionDetail {
   resolution_projection: number | null;
-  targeted_activities: Array<{ assignment_id: number; title: string; classwork_type: string; submission_status: string | null; grade: number | null; total_points: number | null }>;
+  targeted_activities: Array<{ assignment_id: number; title: string; classwork_type: string; submission_status: string | null; grade: number | null; total_points: number | null; original_assignment_id?: number | null; original_title?: string | null; exam_subtype?: string | null; original_grade?: number | null; effective_grade?: number | null }>;
   sent_reviewer: { title: string; introduction: string; body: string } | null;
 }
 
@@ -142,18 +142,20 @@ export interface RemediationFocus {
 export interface RemediationProgress {
   triggering_projection: number; latest_projection: number | null; latest_revision: number | null;
   completed_remediation: Array<{ title: string; assignment_id: number; grade: number | null; total_points: number | null }>;
-  assigned_remediation?: Array<{ title: string; assignment_id: number; component: string | null; is_graded: boolean; submission_status: string | null; grade: number | null; total_points: number | null }>;
+  assigned_remediation?: Array<{ title: string; assignment_id: number; component: string | null; is_graded: boolean; submission_status: string | null; grade: number | null; total_points: number | null; original_assignment_id?: number | null; original_title?: string | null; original_grade?: number | null; effective_grade?: number | null; exam_subtype?: string | null }>;
   status: string; status_reason: string;
 }
 export interface RemediationPlan {
   teacher_choice: RemediationFormat | null;
-  grade_treatment?: "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | null;
+  grade_treatment?: "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | null;
+  original_exam_assignment_id?: number | null;
   selected_resources: Array<{ kind: "LESSON" | "CLASSWORK"; id: number }>;
   ai_suggestion: null | { recommended_format: RemediationFormat; reason: string; focus: Array<{ competency: string }>; evidence_used: Record<string, unknown> };
 }
-export interface RemediationWorkspace { plan: RemediationPlan; resources: RemediationResource[]; focus: RemediationFocus; progress: RemediationProgress }
+export interface OriginalExamination { assignment_id: number; title: string; subtype: "SUMMATIVE_1" | "SUMMATIVE_2" | "TERM_EXAM"; score: number; total_points: number }
+export interface RemediationWorkspace { plan: RemediationPlan; resources: RemediationResource[]; focus: RemediationFocus; progress: RemediationProgress; original_exams: OriginalExamination[] }
 export const getRemediationWorkspace = (id: number) => read<RemediationWorkspace>(`${base}/${id}/remediation`);
-export const saveRemediationPlan = (id: number, plan: Pick<RemediationPlan, "teacher_choice" | "selected_resources" | "grade_treatment">) => read<RemediationWorkspace>(`${base}/${id}/remediation`, "PUT", plan);
+export const saveRemediationPlan = (id: number, plan: Pick<RemediationPlan, "teacher_choice" | "selected_resources" | "grade_treatment"> & Partial<Pick<RemediationPlan, "original_exam_assignment_id">>) => read<RemediationWorkspace>(`${base}/${id}/remediation`, "PUT", plan);
 export const generateRemediationAdvisory = (id: number) => read<RemediationWorkspace>(`${base}/${id}/remediation/advisory`, "POST");
 
 export function matchingCandidate(prediction: DevelopmentCurrentTermListItem, candidates: TeacherInterventionSummary[]): TeacherInterventionSummary | undefined {

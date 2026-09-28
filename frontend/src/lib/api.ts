@@ -648,6 +648,7 @@ export type StudentGradebookRow = {
   ps_quarterly?: number | null;
   ps_exams?: number | null;
   ps_summative_1?: number | null;
+  remedial_exams?: Array<{ original_assignment_id: number; original_title: string; subtype: string; original_score: number | null; remedial_score: number | null; effective_score: number | null; total_points: number }>;
   ps_summative_2?: number | null;
   ps_term_exam?: number | null;
   initial_grade?: number | null;

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 import json
 from typing import Any, Optional, cast
 from uuid import UUID
@@ -250,6 +251,7 @@ async def create_classwork_wizard_record(
     files: Optional[list[UploadFile]],
     intervention_id: int | None = None,
     remediation_request_id: UUID | None = None,
+    original_exam_assignment_id: int | None = None,
     current_user: dict | None = None,
     staff_id: str,
     db: Session,
@@ -321,19 +323,61 @@ async def create_classwork_wizard_record(
         choice = (intervention.remediation_plan or {}).get("teacher_choice")
         if choice not in {"QUIZ", "CLASSWORK"} or (choice == "QUIZ") != is_quiz_type(normalized_type):
             raise HTTPException(status_code=400, detail="Remediation type must match the teacher's saved choice")
-        if classwork_category in {"EXAMS", "QUARTERLY_ASSESSMENT"}:
-            raise HTTPException(status_code=400, detail="Remedial examination grading policy is not configured")
         treatment = (intervention.remediation_plan or {}).get("grade_treatment")
-        if treatment not in {"PRACTICE_ONLY", "WRITTEN_WORK", "PERFORMANCE_TASK"}:
+        if treatment not in {"PRACTICE_ONLY", "WRITTEN_WORK", "PERFORMANCE_TASK", "EXAMINATION"}:
             raise HTTPException(status_code=400, detail="Select and save the remediation grade treatment before creating support")
-        if (treatment == "PRACTICE_ONLY" and classwork_category is not None) or (treatment != "PRACTICE_ONLY" and classwork_category != treatment):
+        expected_category = "QUARTERLY_ASSESSMENT" if treatment == "EXAMINATION" else treatment
+        if (treatment == "PRACTICE_ONLY" and classwork_category is not None) or (treatment != "PRACTICE_ONLY" and classwork_category != expected_category):
             raise HTTPException(status_code=400, detail="Remediation grade treatment does not match the saved choice")
+        if treatment == "EXAMINATION":
+            from app.services.intervention.InterventionRemediationFocusService import build_remediation_focus
+            if build_remediation_focus(intervention)["component"] != "EXAMINATION":
+                raise HTTPException(status_code=400, detail="Intervention Examination focus is required")
+            from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
+            from app.models.submissions.StudentSubmission import StudentSubmission
+            from app.services.grading.ExaminationCalculator import EXAM_SUBTYPES, categorize_exam_subtype
+            if original_exam_assignment_id is None:
+                raise HTTPException(status_code=400, detail="Select the original Examination assessment")
+            if original_exam_assignment_id != (intervention.remediation_plan or {}).get("original_exam_assignment_id"):
+                raise HTTPException(status_code=400, detail="Original Examination must match the teacher's saved selection")
+            if is_quiz_type(normalized_type) and max_attempts != 1:
+                raise HTTPException(status_code=400, detail="Remedial Examination quiz permits one attempt per activity")
+            original = db.get(ClassworkAssignment, original_exam_assignment_id)
+            if (original is None or original.original_exam_assignment_id is not None
+                or original.class_id != intervention.class_id
+                or original.academic_period_id != intervention.academic_period_id
+                or original.classwork.subject_id != intervention.subject_id
+                or not original.classwork.is_graded
+                or original.recipient_student_id not in (None, intervention.student_id)
+                or original.classwork.is_archived):
+                raise HTTPException(status_code=400, detail="Original Examination is outside this student and period")
+            subtype = categorize_exam_subtype(original.classwork.exam_subtype, original.classwork.title, original.classwork.classwork_category)
+            if subtype not in EXAM_SUBTYPES or original.classwork.classwork_category not in {"EXAMS", "QUARTERLY_ASSESSMENT"}:
+                raise HTTPException(status_code=400, detail="Original assessment has no supported Examination subtype")
+            if exam_subtype not in (None, subtype):
+                raise HTTPException(status_code=400, detail="Remedial subtype must match the original Examination")
+            exam_subtype = subtype
+            original_points = original.classwork.total_points
+            if original_points is None or original_points <= 0 or total_points is None or Decimal(str(total_points)) != original_points:
+                raise HTTPException(status_code=400, detail="Remedial maximum points must equal the original Examination")
+            if not db.query(StudentSubmission.submission_id).filter_by(
+                classwork_assignment_id=original_exam_assignment_id, student_id=intervention.student_id,
+            ).filter(StudentSubmission.grade.isnot(None)).first():
+                raise HTTPException(status_code=400, detail="Original Examination needs a recorded score")
+            if db.query(StudentPeriodGrade.period_grade_id).filter_by(
+                student_id=intervention.student_id, class_id=intervention.class_id,
+                subject_id=intervention.subject_id, academic_period_id=intervention.academic_period_id,
+                is_finalized=True,
+            ).first():
+                raise HTTPException(status_code=409, detail="The period grade is finalized")
+        elif original_exam_assignment_id is not None:
+            raise HTTPException(status_code=400, detail="Original Examination link requires Examination grade treatment")
         prior = db.query(ClassworkAssignment).filter_by(remediation_request_id=remediation_request_id).first()
         if prior:
             if prior.source_intervention_id != intervention_id or prior.assigned_by_staff_id != staff_id:
                 raise HTTPException(status_code=409, detail="Remediation request was already used")
             return build_classwork_response(prior.classwork)
-    elif remediation_request_id is not None:
+    elif remediation_request_id is not None or original_exam_assignment_id is not None:
         raise HTTPException(status_code=400, detail="Intervention is required for a remediation request")
 
     saved_paths: list[str] = []
@@ -377,6 +421,7 @@ async def create_classwork_wizard_record(
                 recipient_student_id=intervention.student_id if intervention else None,
                 source_intervention_id=intervention.intervention_id if intervention else None,
                 remediation_request_id=remediation_request_id if intervention else None,
+                original_exam_assignment_id=original_exam_assignment_id if intervention else None,
             )
             db.add(assignment)
             created_assignments.append(assignment)
@@ -634,11 +679,19 @@ def update_classwork_record(
     if not classwork:
         raise HTTPException(status_code=404, detail="Classwork not found or not yours")
     values = body.model_dump(exclude_unset=True)
+    linked_exam = any(a.original_exam_assignment_id is not None for a in classwork.assignments) or db.query(
+        ClassworkAssignment.classwork_assignment_id,
+    ).filter(ClassworkAssignment.original_exam_assignment_id.in_(
+        a.classwork_assignment_id for a in classwork.assignments
+    )).first() is not None
+    if linked_exam and any(key in values and values[key] != getattr(classwork, key) for key in
+                           ("classwork_type", "classwork_category", "exam_subtype", "total_points", "is_graded")):
+        raise HTTPException(status_code=400, detail="Linked Examination grading fields cannot be changed")
+    if linked_exam and "rubric_levels" in values:
+        raise HTTPException(status_code=400, detail="Linked Examination rubric cannot be changed")
     if any(a.recipient_student_id for a in classwork.assignments):
         if ("subject_id" in values and values["subject_id"] != classwork.subject_id) or (values.get("classwork_type") and normalize_classwork_type(values["classwork_type"]) != classwork.classwork_type):
             raise HTTPException(status_code=400, detail="Targeted remediation subject and type cannot be changed")
-        if values.get("classwork_category") in {"EXAMS", "QUARTERLY_ASSESSMENT"}:
-            raise HTTPException(status_code=400, detail="Remedial examination grading policy is not configured")
         if "classwork_category" in values and values["classwork_category"] != classwork.classwork_category:
             raise HTTPException(status_code=400, detail="Targeted remediation grade treatment cannot be changed after creation")
         if "is_graded" in values and values["is_graded"] != classwork.is_graded:

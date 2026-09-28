@@ -21,3 +21,7 @@ Open your browser: Go to http://localhost:5173
 Credentials:
 - Admin: demo-admin@example.com / DemoAdmin!2026
 - Teacher: demo-teacher@example.com / DemoTeacher!2026
+
+Student	Email	Password
+Intervention target	demo-remediation-target@example.com	CH-xyemaZrMR63_u0KckBH3IB_7szNKLe8SY8sheqv4
+Same-class comparison	demo-remediation-classmate@example.com	CmYBXPVivPYdJPZGvq9SFz1YB7o8Ikd8e9UhsnmbDko

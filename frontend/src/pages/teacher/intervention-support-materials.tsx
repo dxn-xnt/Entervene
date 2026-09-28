@@ -9,6 +9,7 @@ import {
   type RemediationFormat, type RemediationPlan, type RemediationResource, type RemediationFocus,
   type RemediationProgress, type RemedialDraft, type ReviewerDraft, type SupportMaterial,
   type TeacherInterventionDetail,
+  type OriginalExamination,
 } from "@/lib/teacher-interventions-api";
 
 const methods: Array<{ value: RemediationFormat; label: string; detail: string }> = [
@@ -28,6 +29,7 @@ export default function InterventionSupportMaterials({ detail }: { detail: Teach
   const [resources, setResources] = useState<RemediationResource[]>([]);
   const [focus, setFocus] = useState<RemediationFocus | null>(null);
   const [progress, setProgress] = useState<RemediationProgress | null>(null);
+  const [originalExams, setOriginalExams] = useState<OriginalExamination[]>([]);
   const [plan, setPlan] = useState<RemediationPlan>({ teacher_choice: null, grade_treatment: null, selected_resources: [], ai_suggestion: null });
   const [reviewerDraft, setReviewerDraft] = useState<ReviewerDraft | null>(null);
   const [browseAll, setBrowseAll] = useState(false);
@@ -45,7 +47,7 @@ export default function InterventionSupportMaterials({ detail }: { detail: Teach
     try {
       const [support, workspace] = await Promise.all([listSupportMaterials(interventionId), getRemediationWorkspace(interventionId)]);
       setMaterials(support.items); setResources(workspace.resources); setPlan(workspace.plan);
-      setFocus(workspace.focus); setProgress(workspace.progress);
+      setFocus(workspace.focus); setProgress(workspace.progress); setOriginalExams(workspace.original_exams ?? []);
       const reviewer = support.items.find((item) => item.kind === "STUDENT_REVIEWER");
       setReviewerDraft(reviewer ? reviewer.current_content as ReviewerDraft : null);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to load support workspace."); }
@@ -63,7 +65,7 @@ export default function InterventionSupportMaterials({ detail }: { detail: Teach
   const manuallySelected = resources.filter((item) => selected.has(`${item.kind}:${item.id}`) && !item.recommended);
   const visible = resources.filter((item) => (browseAll || item.recommended) && (kindFilter === "ALL" || item.kind === kindFilter)
     && `${item.title} ${item.description} ${item.lesson}`.toLowerCase().includes(search.toLowerCase()));
-  const assigned = progress?.assigned_remediation ?? progress?.completed_remediation.map((item) => ({ ...item, component: null, is_graded: true, submission_status: "graded" })) ?? [];
+  const assigned: NonNullable<RemediationProgress["assigned_remediation"]> = progress?.assigned_remediation ?? progress?.completed_remediation.map((item) => ({ ...item, component: null, is_graded: true, submission_status: "graded" })) ?? [];
   const phase = progress?.completed_remediation.length ? "Active · Monitoring" : assigned.length ? "Active · Assigned" : plan.teacher_choice ? "Active · Preparing Support" : "Active · Needs Support";
   const focusName = focus?.component ? componentLabel(focus.component) : "Component unavailable";
   const sourceName = focus?.component === "EXAMINATION" ? (focus.exam_subtype ? componentLabel(focus.exam_subtype) : "Subtype requires teacher confirmation") : null;
@@ -77,14 +79,16 @@ export default function InterventionSupportMaterials({ detail }: { detail: Teach
   const updatePlan = async (next: RemediationPlan, message: string) => action(async () => {
     const result = await saveRemediationPlan(interventionId, {
       teacher_choice: next.teacher_choice, grade_treatment: next.grade_treatment ?? null,
+      ...(next.grade_treatment === "EXAMINATION" ? { original_exam_assignment_id: next.original_exam_assignment_id ?? null } : {}),
       selected_resources: next.selected_resources,
     });
     setPlan(result.plan); setResources(result.resources); setNotice(message);
   });
   const openTool = () => {
     if (!plan.teacher_choice || plan.teacher_choice === "EXISTING_MATERIAL_ONLY") return;
-    if (isGraded(plan.teacher_choice) && !plan.grade_treatment) { setError("Choose practice only or an official grade component before continuing."); return; }
+    if (isGraded(plan.teacher_choice) && (!plan.grade_treatment || (plan.grade_treatment === "EXAMINATION" && !plan.original_exam_assignment_id))) { setError("Choose a grade treatment and original Examination before continuing."); return; }
     const params = new URLSearchParams({ remediation: plan.teacher_choice, subject_id: String(subjectId), intervention_id: String(interventionId) });
+    if (plan.grade_treatment === "EXAMINATION" && plan.original_exam_assignment_id) params.set("original_exam_assignment_id", String(plan.original_exam_assignment_id));
     params.set("title", plan.teacher_choice === "TOS" ? `${subjectName} remediation blueprint` : plan.teacher_choice === "QUIZ" ? `${subjectName} focused practice` : `${subjectName} remediation task`);
     if (isGraded(plan.teacher_choice)) {
       params.set("instructions", "Review the Intervention evidence and selected planning references. Assign this activity only to the named student.");
@@ -119,7 +123,7 @@ export default function InterventionSupportMaterials({ detail }: { detail: Teach
         <h3 className="font-black">Intervention progress</h3>
         <p>Trigger projection: <strong>{progress?.triggering_projection.toFixed(2)}</strong></p>
         <p className="font-semibold">Support activity</p>
-        {assigned.map((item) => <p key={item.assignment_id}><strong>{item.title}</strong> · {item.submission_status === "graded" ? "Completed" : item.submission_status ?? "Awaiting submission"}{item.grade !== null && item.total_points !== null ? ` · ${item.grade}/${item.total_points}` : ""} · {item.is_graded ? `${plan.teacher_choice === "EXISTING_MATERIAL_ONLY" ? "Historical grade treatment" : "Recorded grade treatment"}: ${componentLabel(item.component)}` : "Practice only · No official grade impact"}</p>)}
+        {assigned.map((item) => <p key={item.assignment_id}><strong>{item.title}</strong> · {item.submission_status === "graded" ? "Completed" : item.submission_status ?? "Awaiting submission"}{item.grade !== null && item.total_points !== null ? ` · ${item.grade}/${item.total_points}` : ""} · {item.is_graded ? `${plan.teacher_choice === "EXISTING_MATERIAL_ONLY" ? "Historical grade treatment" : "Recorded grade treatment"}: ${componentLabel(item.component)}` : "Practice only · No official grade impact"}{item.original_assignment_id && <span className="block">{item.original_title} · {componentLabel(item.exam_subtype)} · Original: {item.original_grade ?? "—"}/{item.total_points ?? "—"} · Remedial: {item.grade ?? "Pending"}/{item.total_points ?? "—"} · Effective: {item.effective_grade ?? "—"}/{item.total_points ?? "—"}</span>}</p>)}
         <p className="font-semibold">Official academic outcome</p>
         <p>Latest projected final grade: <strong>{progress?.latest_projection?.toFixed(2) ?? "Unavailable"}</strong></p>
         <p>Status: <strong>{phase}</strong></p>
@@ -170,19 +174,25 @@ export default function InterventionSupportMaterials({ detail }: { detail: Teach
           {isGraded(plan.teacher_choice) && <Card className="space-y-3 border-2 border-amber-500 bg-amber-50">
             <h3 className="font-black">Step 5 · Grade treatment</h3>
             <p>Support focus: <strong>{focusName}{sourceName ? ` · ${sourceName}` : ""}</strong></p>
-            {focus?.component === "EXAMINATION" && <p className="text-sm">{sourceName ?? "Examination"} is the evidence source. It cannot currently be used as a new remedial grade slot.</p>}
-            <p className="text-sm">Practice only stores completion and score for support progress without changing official grades or triggering a prediction refresh. Choosing Written Work or Performance Task records the new activity in that official component; it does not mean that component was the diagnosed weakness.</p>
-            <fieldset className="space-y-1"><legend className="font-semibold">How should this activity be treated?</legend>{(["PRACTICE_ONLY", "WRITTEN_WORK", "PERFORMANCE_TASK"] as const).map((choice) => <label key={choice} className="flex gap-2"><input type="radio" name="grade-treatment" checked={plan.grade_treatment === choice} disabled={working} onChange={() => void updatePlan({ ...plan, grade_treatment: choice }, "Grade treatment saved.")} />{choice === "PRACTICE_ONLY" ? "Practice only · No official grade impact" : `Count as ${componentLabel(choice)}`}</label>)}</fieldset>
+            {focus?.component === "EXAMINATION" && <p className="text-sm">Select the student's scored original Examination. Its subtype and maximum points will be fixed for the remedial assessment.</p>}
+            <p className="text-sm">Practice only stores completion without changing grades. Written Work and Performance Task add a new activity in that component. Remedial Examination replaces the original assessment's effective score only when higher.</p>
+            <fieldset className="space-y-1"><legend className="font-semibold">How should this activity be treated?</legend>{(["PRACTICE_ONLY", "WRITTEN_WORK", "PERFORMANCE_TASK"] as const).map((choice) => <label key={choice} className="flex gap-2"><input type="radio" name="grade-treatment" checked={plan.grade_treatment === choice} disabled={working} onChange={() => void updatePlan({ ...plan, grade_treatment: choice, original_exam_assignment_id: null }, "Grade treatment saved.")} />{choice === "PRACTICE_ONLY" ? "Practice only · No official grade impact" : `Count as ${componentLabel(choice)}`}</label>)}{focus?.component === "EXAMINATION" && <label className="flex gap-2"><input type="radio" name="grade-treatment" checked={plan.grade_treatment === "EXAMINATION"} disabled={working || originalExams.length === 0} onChange={() => void updatePlan({ ...plan, grade_treatment: "EXAMINATION", original_exam_assignment_id: originalExams[0]?.assignment_id ?? null }, "Original Examination selected.")} />Remedial Examination · Higher score counts</label>}</fieldset>
+            {focus?.component === "EXAMINATION" && originalExams.length === 0 && <p className="text-sm">No scored original Examination is available for this student and period.</p>}
+            {plan.grade_treatment === "EXAMINATION" && <label className="block text-sm font-semibold">Original Examination
+              <select className="mt-1 w-full rounded border p-2" value={plan.original_exam_assignment_id ?? ""} disabled={working} onChange={(event) => void updatePlan({ ...plan, original_exam_assignment_id: Number(event.target.value) }, "Original Examination selected.")}>
+                {originalExams.map((exam) => <option key={exam.assignment_id} value={exam.assignment_id}>{exam.title} · {componentLabel(exam.subtype)} · {exam.score}/{exam.total_points}</option>)}
+              </select>
+            </label>}
             {!plan.grade_treatment && <p className="text-sm font-semibold">Choose practice only or an official grade component before continuing.</p>}
           </Card>}
           {plan.teacher_choice && <Card className="space-y-2 border-2 border-black bg-yellow-50">
             <h3 className="font-black">Prepared support</h3>
             <p>Target: <strong>{detail.student_name}</strong></p><p>Support focus: <strong>{focusName}{sourceName ? ` · ${sourceName}` : ""}</strong></p>
             <p>Method: <strong>{methods.find((item) => item.value === plan.teacher_choice)?.label}</strong></p>
-            {isGraded(plan.teacher_choice) && <><p>Grade treatment: <strong>{plan.grade_treatment === "PRACTICE_ONLY" ? "Practice only · No official grade impact" : plan.grade_treatment ? componentLabel(plan.grade_treatment) : "Selection required"}</strong></p><p>Recipient: <strong>This student only</strong></p></>}
+            {isGraded(plan.teacher_choice) && <><p>Grade treatment: <strong>{plan.grade_treatment === "PRACTICE_ONLY" ? "Practice only · No official grade impact" : plan.grade_treatment ? componentLabel(plan.grade_treatment) : "Selection required"}</strong></p>{plan.grade_treatment === "EXAMINATION" && <p>Original: <strong>{originalExams.find((exam) => exam.assignment_id === plan.original_exam_assignment_id)?.title ?? "Selection required"}</strong></p>}<p>Recipient: <strong>This student only</strong></p></>}
             {plan.teacher_choice === "TOS" && <p>TOS is a blueprint/export. It creates no graded student activity.</p>}
             {plan.teacher_choice === "EXISTING_MATERIAL_ONLY" && <p>Selected materials remain planning references; they are not privately delivered.</p>}
-            {plan.teacher_choice !== "EXISTING_MATERIAL_ONLY" && <Button disabled={working || (isGraded(plan.teacher_choice) && !plan.grade_treatment)} onClick={openTool}>Continue to {plan.teacher_choice === "QUIZ" ? "Quiz Builder" : plan.teacher_choice === "CLASSWORK" ? "Classwork Creator" : "TOS Generator"}</Button>}
+            {plan.teacher_choice !== "EXISTING_MATERIAL_ONLY" && <Button disabled={working || (isGraded(plan.teacher_choice) && (!plan.grade_treatment || (plan.grade_treatment === "EXAMINATION" && !plan.original_exam_assignment_id)))} onClick={openTool}>Continue to {plan.teacher_choice === "QUIZ" ? "Quiz Builder" : plan.teacher_choice === "CLASSWORK" ? "Classwork Creator" : "TOS Generator"}</Button>}
           </Card>}
           {hasOldDraft && oldDraft && <details className="rounded border p-3 text-sm"><summary className="cursor-pointer font-semibold">Previous/legacy support draft</summary><div className="space-y-2 pt-2"><p>Preserved for reference. Use the existing authoring tool for new support.</p>{oldDraft.title.trim() && <strong>{oldDraft.title}</strong>}{oldDraft.instructions.trim() && <p>{oldDraft.instructions}</p>}<p>{oldDraft.questions.length} saved questions</p>{oldDraft.questions.map((question, index) => <div key={index} className="rounded border p-2"><strong>{question.question_text || `Question ${index + 1}`}</strong>{question.options.map((option, optionIndex) => <p key={optionIndex}>{option.option_text}{option.is_correct ? " (correct answer)" : ""}</p>)}{question.explanation && <p>Explanation: {question.explanation}</p>}</div>)}</div></details>}
         </div>

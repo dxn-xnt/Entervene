@@ -30,6 +30,7 @@ from app.services.classwork.ClassworkShared import (
 )
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
+from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
 
 
 def get_student_quiz_attempt(
@@ -49,6 +50,7 @@ def start_student_quiz_attempt(
 ) -> QuizAttemptResponse:
     assignment, classwork, quiz = _student_quiz_scope(db, student, assignment_id)
     _ensure_before_due(assignment)
+    ensure_remedial_period_open(db, assignment, student.student_id)
 
     submission = _submission_for(db, student, assignment_id)
     previous_grade = submission.grade if submission else None
@@ -71,9 +73,10 @@ def start_student_quiz_attempt(
         submission.feedback = None
         submission.graded_at = None
         submission.graded_by_staff_id = None
+    refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, student.student_id, previous_grade, submission.grade)
     db.commit()
     db.refresh(submission)
-    if classwork.is_graded and submission.grade != previous_grade:
+    if refresh_needed:
         refresh_after_committed_grade_change(
             db.get_bind(),
             student_ids=[student.student_id],
@@ -91,6 +94,7 @@ def submit_student_quiz_attempt(
     payload: QuizSubmitRequest,
 ) -> QuizAttemptResponse:
     assignment, classwork, quiz = _student_quiz_scope(db, student, assignment_id)
+    ensure_remedial_period_open(db, assignment, student.student_id)
     submission = _submission_for(db, student, assignment_id)
     previous_grade = submission.grade if submission else None
     if not submission:
@@ -202,9 +206,10 @@ def submit_student_quiz_attempt(
     else:
         submission.status = "graded"
         submission.graded_at = now
+    refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, student.student_id, previous_grade, submission.grade)
     db.commit()
     db.refresh(submission)
-    if classwork.is_graded and submission.grade != previous_grade:
+    if refresh_needed:
         refresh_after_committed_grade_change(
             db.get_bind(),
             student_ids=[student.student_id],
