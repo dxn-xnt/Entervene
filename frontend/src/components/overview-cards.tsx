@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/retroui/Card";
+import { Progress } from "@/components/retroui/Progress";
 
 type OverviewCardProps = {
   title: string;
@@ -104,14 +105,11 @@ export function OverviewCard({
           </p>
         )}
         {typeof progressValue === "number" && (
-          <div className="pt-2">
-            <div className="h-1.5 sm:h-2 w-full bg-muted/60 rounded-full overflow-hidden border border-border/40">
-              <div
-                className="h-full bg-amber-400 rounded-full transition-all duration-500 ease-out"
-                style={{ width: `${Math.min(100, Math.max(0, progressValue))}%` }}
-              />
-            </div>
-          </div>
+          <Progress
+            value={progressValue}
+            className="mt-2 h-2"
+            aria-label={`${title}: ${Math.round(progressValue)}%`}
+          />
         )}
       </Card.Content>
     </Card>

@@ -3,6 +3,8 @@ import {
   CheckSquare,
   ClipboardList,
   FileText,
+  LayoutGrid,
+  List,
   Plus,
   RefreshCw,
   Search,
@@ -16,6 +18,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { apiFetch } from "@/lib/api";
 import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 import ClassworkCard from "./classworks/classwork-card";
+import ClassworkListItem from "./classworks/classwork-list-item";
 import { isQuizType } from "@/lib/classwork-utils";
 import type {
   ClassworkKind,
@@ -23,6 +26,7 @@ import type {
   TabId,
   TeacherClassLoad,
   TeacherClasswork,
+  ClassworkTracking,
 } from "@/types/classwork";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
@@ -32,9 +36,16 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { Select } from "@/components/retroui/Select";
+import SegmentedControl from "@/components/retroui/SegmentedControl";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
-import { getTeacherActive, getRemediationWorkspace, type TeacherInterventionDetail, type RemediationFocus, type RemediationResource, type OriginalExamination } from "@/lib/teacher-interventions-api";
+import {
+  getTeacherActive,
+  getRemediationWorkspace,
+  type TeacherInterventionDetail,
+  type RemediationFocus,
+  type RemediationResource,
+} from "@/lib/teacher-interventions-api";
 
 const tabs: Array<TabItem<TabId>> = [
   { id: "all", label: "All", icon: ClipboardList },
@@ -50,31 +61,31 @@ const createOptions: Array<{
   description: string;
   icon: LucideIcon;
 }> = [
-    {
-      type: "READING",
-      title: "Reading",
-      description: "Create and publish class topics or resources for learners",
-      icon: BookOpen,
-    },
-    {
-      type: "QUIZ",
-      title: "Quiz",
-      description: "Build and assign quizzes to assess learner understanding",
-      icon: ClipboardList,
-    },
-    {
-      type: "ASSIGNMENT",
-      title: "Assignment",
-      description: "Post tasks or projects for students to complete and submit",
-      icon: FileText,
-    },
-    {
-      type: "ACTIVITY",
-      title: "Activity",
-      description: "Design interactive tasks to enhance learner engagement",
-      icon: CheckSquare,
-    },
-  ];
+  {
+    type: "READING",
+    title: "Reading",
+    description: "Create and publish class topics or resources for learners",
+    icon: BookOpen,
+  },
+  {
+    type: "QUIZ",
+    title: "Quiz",
+    description: "Build and assign quizzes to assess learner understanding",
+    icon: ClipboardList,
+  },
+  {
+    type: "ASSIGNMENT",
+    title: "Assignment",
+    description: "Post tasks or projects for students to complete and submit",
+    icon: FileText,
+  },
+  {
+    type: "ACTIVITY",
+    title: "Activity",
+    description: "Design interactive tasks to enhance learner engagement",
+    icon: CheckSquare,
+  },
+];
 
 const tabType: Partial<Record<TabId, string>> = {
   readings: "READING",
@@ -91,11 +102,16 @@ export default function Classworks() {
   const remediationTitle = routeParams.get("title") || undefined;
   const remediationInstructions = routeParams.get("instructions") || undefined;
   const interventionId = Number(routeParams.get("intervention_id"));
-  const [remediationTarget, setRemediationTarget] = useState<TeacherInterventionDetail | null>(null);
-  const [remediationFocus, setRemediationFocus] = useState<RemediationFocus | null>(null);
-  const [remediationGradeTreatment, setRemediationGradeTreatment] = useState<"PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | null>(null);
-  const [remediationOriginalExam, setRemediationOriginalExam] = useState<OriginalExamination | null>(null);
-  const [remediationReferences, setRemediationReferences] = useState<RemediationResource[]>([]);
+  const [remediationTarget, setRemediationTarget] =
+    useState<TeacherInterventionDetail | null>(null);
+  const [remediationFocus, setRemediationFocus] =
+    useState<RemediationFocus | null>(null);
+  const [remediationGradeTreatment, setRemediationGradeTreatment] = useState<
+    "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | null
+  >(null);
+  const [remediationReferences, setRemediationReferences] = useState<
+    RemediationResource[]
+  >([]);
   const [remediationError, setRemediationError] = useState("");
   useEffect(() => {
     if (!remediationType) return;
@@ -110,25 +126,49 @@ export default function Classworks() {
     setRemediationOriginalExam(null);
     setRemediationReferences([]);
     let live = true;
-    void Promise.all([getTeacherActive(interventionId), getRemediationWorkspace(interventionId)]).then(([detail, workspace]) => { if (live) {
-      if (detail.subject_id !== Number(remediationSubject) || workspace.plan.teacher_choice !== remediationType || !workspace.plan.grade_treatment) {
-        setRemediationError("The saved Intervention method, subject, or grade treatment has changed. Return to the Intervention to prepare support.");
-        return;
-      }
-      const originalExam = (workspace.original_exams ?? []).find((exam) => exam.assignment_id === workspace.plan.original_exam_assignment_id) ?? null;
-      if (workspace.plan.grade_treatment === "EXAMINATION" && (!originalExam || originalExam.assignment_id !== Number(routeParams.get("original_exam_assignment_id")))) {
-        setRemediationError("The original Examination selection changed. Return to the Intervention.");
-        return;
-      }
-      const selected = new Set(workspace.plan.selected_resources.map((item) => `${item.kind}:${item.id}`));
-      setRemediationTarget(detail);
-      setRemediationFocus(workspace.focus);
-      setRemediationGradeTreatment(workspace.plan.grade_treatment);
-      setRemediationOriginalExam(originalExam);
-      setRemediationReferences(workspace.resources.filter((item) => item.recommended && selected.has(`${item.kind}:${item.id}`)));
-    } })
-      .catch((error) => { if (live) setRemediationError(error instanceof Error ? error.message : "Unable to load intervention recipient."); });
-    return () => { live = false; };
+    void Promise.all([
+      getTeacherActive(interventionId),
+      getRemediationWorkspace(interventionId),
+    ])
+      .then(([detail, workspace]) => {
+        if (live) {
+          if (
+            detail.subject_id !== Number(remediationSubject) ||
+            workspace.plan.teacher_choice !== remediationType ||
+            !workspace.plan.grade_treatment
+          ) {
+            setRemediationError(
+              "The saved Intervention method, subject, or grade treatment has changed. Return to the Intervention to prepare support.",
+            );
+            return;
+          }
+          const selected = new Set(
+            workspace.plan.selected_resources.map(
+              (item) => `${item.kind}:${item.id}`,
+            ),
+          );
+          setRemediationTarget(detail);
+          setRemediationFocus(workspace.focus);
+          setRemediationGradeTreatment(workspace.plan.grade_treatment);
+          setRemediationReferences(
+            workspace.resources.filter(
+              (item) =>
+                item.recommended && selected.has(`${item.kind}:${item.id}`),
+            ),
+          );
+        }
+      })
+      .catch((error) => {
+        if (live)
+          setRemediationError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load intervention recipient.",
+          );
+      });
+    return () => {
+      live = false;
+    };
   }, [interventionId, remediationType, remediationSubject]);
   const {
     classes: loads,
@@ -144,11 +184,15 @@ export default function Classworks() {
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [classFilter, setClassFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [sortMode, _setSortMode] = useState<SortMode>("newest");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [sortMode] = useState<SortMode>("newest");
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [selectedType, setSelectedType] = useState<ClassworkKind | null>(null);
   const [loadingItems, setLoadingItems] = useState(true);
   const [itemsError, setItemsError] = useState("");
+  const [trackingByClasswork, setTrackingByClasswork] = useState<
+    Record<number, ClassworkTracking>
+  >({});
 
   useEffect(() => {
     if (remediationType !== "QUIZ" && remediationType !== "CLASSWORK") return;
@@ -161,8 +205,12 @@ export default function Classworks() {
     setLoadingItems(true);
     setItemsError("");
     try {
-      const periodQuery = selectedPeriodId ? `?academic_period_id=${selectedPeriodId}` : "";
-      const classworksResponse = await apiFetch(`/api/v1/classwork-assignments/my-classworks${periodQuery}`);
+      const periodQuery = selectedPeriodId
+        ? `?academic_period_id=${selectedPeriodId}`
+        : "";
+      const classworksResponse = await apiFetch(
+        `/api/v1/classwork-assignments/my-classworks${periodQuery}`,
+      );
       if (!classworksResponse.ok) {
         throw new Error("Unable to load your classworks.");
       }
@@ -208,10 +256,16 @@ export default function Classworks() {
 
   // Auto-reset filters if selected filter is not present in newly scoped loads
   useEffect(() => {
-    if (subjectFilter !== "all" && !subjects.some((s) => String(s.id) === subjectFilter)) {
+    if (
+      subjectFilter !== "all" &&
+      !subjects.some((s) => String(s.id) === subjectFilter)
+    ) {
       setSubjectFilter("all");
     }
-    if (classFilter !== "all" && !classSections.some((c) => String(c.id) === classFilter)) {
+    if (
+      classFilter !== "all" &&
+      !classSections.some((c) => String(c.id) === classFilter)
+    ) {
       setClassFilter("all");
     }
   }, [subjects, classSections, subjectFilter, classFilter]);
@@ -252,7 +306,54 @@ export default function Classworks() {
       const second = new Date(b.created_at ?? 0).getTime();
       return sortMode === "oldest" ? first - second : second - first;
     });
-  }, [activeTab, classFilter, items, search, sortMode, statusFilter, subjectFilter]);
+  }, [
+    activeTab,
+    classFilter,
+    items,
+    search,
+    sortMode,
+    statusFilter,
+    subjectFilter,
+  ]);
+
+  useEffect(() => {
+    const trackableItems = filteredItems.filter(
+      (item) =>
+        (item.assignments?.length ?? 0) > 0 &&
+        !trackingByClasswork[item.classwork_id],
+    );
+    if (!trackableItems.length) return;
+
+    let cancelled = false;
+    void Promise.all(
+      trackableItems.map(async (item) => {
+        const response = await apiFetch(
+          `/api/v1/submissions/classwork/${item.classwork_id}/tracking`,
+        );
+        if (!response.ok)
+          throw new Error(
+            `Unable to load submission summary for ${item.classwork_id}.`,
+          );
+        return (await response.json()) as ClassworkTracking;
+      }),
+    )
+      .then((summaries) => {
+        if (cancelled) return;
+        setTrackingByClasswork((current) => ({
+          ...current,
+          ...Object.fromEntries(
+            summaries.map((summary) => [summary.classwork_id, summary]),
+          ),
+        }));
+      })
+      .catch(() => {
+        // The list remains useful even when an individual tracking summary is unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filteredItems, trackingByClasswork]);
 
   const openCreateWizard = () => {
     const preferredType = tabType[activeTab] as ClassworkKind | undefined;
@@ -265,7 +366,9 @@ export default function Classworks() {
     setSelectedType(null);
     if (remediationType) {
       const next = new URLSearchParams(routeParams);
-      next.delete("remediation"); next.delete("title"); next.delete("instructions");
+      next.delete("remediation");
+      next.delete("title");
+      next.delete("instructions");
       setRouteParams(next, { replace: true });
     }
   };
@@ -280,36 +383,35 @@ export default function Classworks() {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             <div data-page-tabs-sticky-region>
-            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="shrink-0 md:hidden" />
-                <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">Classwork</h1>
+              <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+                <div className="flex items-center gap-3">
+                  <SidebarTrigger className="shrink-0 md:hidden" />
+                  <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
+                    Classwork
+                  </h1>
+                </div>
+
+                <Button
+                  type="button"
+                  size="header"
+                  onClick={openCreateWizard}
+                  className="shrink-0 whitespace-nowrap"
+                >
+                  <Plus className="size-4" />
+                  <span className="hidden sm:inline">New Classwork</span>
+                  <span className="sm:hidden">New</span>
+                </Button>
+              </header>
+              <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                <Tabs
+                  tabs={tabs}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                />
               </div>
-
-              <Button
-                type="button"
-                size="header"
-                onClick={openCreateWizard}
-                className="shrink-0 whitespace-nowrap"
-              >
-                <Plus className="size-4" />
-                <span className="hidden sm:inline">New Classwork</span>
-                <span className="sm:hidden">New</span>
-              </Button>
-            </header>
-            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-              <Tabs
-                tabs={tabs}
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
-              />
-            </div>
-
             </div>
 
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-
-
               <main className="flex flex-col gap-4">
                 {error && (
                   <div className="flex items-center justify-between rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -398,29 +500,56 @@ export default function Classworks() {
                       </Select.Group>
                     </Select.Content>
                   </Select>
-                </div>
 
+                  <SegmentedControl
+                    size="sm"
+                    value={viewMode}
+                    onValueChange={(val) => setViewMode(val as "grid" | "list")}
+                    className="shrink-0"
+                    aria-label="Classwork view switcher"
+                  >
+                    <SegmentedControl.Item value="grid" title="Grid View">
+                      <LayoutGrid className="size-4" />
+                      <span className="ml-1.5 hidden sm:inline">Grid</span>
+                    </SegmentedControl.Item>
+                    <SegmentedControl.Item value="list" title="List View">
+                      <List className="size-4" />
+                      <span className="ml-1.5 hidden sm:inline">List</span>
+                    </SegmentedControl.Item>
+                  </SegmentedControl>
+                </div>
 
                 {isLoading ? (
                   <p className="py-12 text-center text-sm font-semibold text-gray-500">
                     Loading classworks...
                   </p>
                 ) : filteredItems.length > 0 ? (
-                  <section className="space-y-3">
-                    {filteredItems.map((item) => (
-                      <ClassworkCard
-                        key={item.classwork_id}
-                        item={item}
-                        onOpen={openClassworkDetail}
-                      />
-                    ))}
-                  </section>
+                  viewMode === "grid" ? (
+                    <section className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] items-stretch gap-4">
+                      {filteredItems.map((item) => (
+                        <ClassworkCard
+                          key={item.classwork_id}
+                          item={item}
+                          tracking={trackingByClasswork[item.classwork_id]}
+                          onOpen={openClassworkDetail}
+                        />
+                      ))}
+                    </section>
+                  ) : (
+                    <section className="flex flex-col gap-3">
+                      {filteredItems.map((item) => (
+                        <ClassworkListItem
+                          key={item.classwork_id}
+                          item={item}
+                          tracking={trackingByClasswork[item.classwork_id]}
+                          onOpen={openClassworkDetail}
+                        />
+                      ))}
+                    </section>
+                  )
                 ) : (
                   <Card className="flex flex-col justify-center items-center">
-                    <ClipboardList
-                      className="mx-auto mb-2 "
-                      size={24}
-                    />
+                    <ClipboardList className="mx-auto mb-2 " size={24} />
                     <p className="font-bold">No classworks found</p>
                     <p className="mt-1 text-sm text-gray-500">
                       Try another tab, search term, or filter.
@@ -477,14 +606,30 @@ export default function Classworks() {
                         </Button>
                       </Dialog.Footer>
                     </Dialog.Content>
-                  ) : remediationType && (!remediationTarget || !remediationFocus || !remediationGradeTreatment || remediationError) ? (
-                    <Dialog.Content size="lg"><p className="p-5">{remediationError || "Loading intervention recipient..."}</p></Dialog.Content>
+                  ) : remediationType &&
+                    (!remediationTarget ||
+                      !remediationFocus ||
+                      !remediationGradeTreatment ||
+                      remediationError) ? (
+                    <Dialog.Content size="lg">
+                      <p className="p-5">
+                        {remediationError ||
+                          "Loading intervention recipient..."}
+                      </p>
+                    </Dialog.Content>
                   ) : isQuizType(selectedType) ? (
                     <CreateClassworkQuizModal
                       selectedType={selectedType}
                       subjects={subjects}
                       loads={loads as unknown as TeacherClassLoad[]}
-                      initialSubjectId={remediationTarget ? String(remediationTarget.subject_id) : remediationSubject || (subjectFilter !== "all" ? subjectFilter : undefined)}
+                      initialSubjectId={
+                        remediationTarget
+                          ? String(remediationTarget.subject_id)
+                          : remediationSubject ||
+                            (subjectFilter !== "all"
+                              ? subjectFilter
+                              : undefined)
+                      }
                       initialTitle={remediationTitle}
                       initialInstructions={remediationInstructions}
                       remediationDraft={Boolean(remediationType)}
@@ -505,7 +650,14 @@ export default function Classworks() {
                       selectedType={selectedType}
                       subjects={subjects}
                       loads={loads as unknown as TeacherClassLoad[]}
-                      initialSubjectId={remediationTarget ? String(remediationTarget.subject_id) : remediationSubject || (subjectFilter !== "all" ? subjectFilter : undefined)}
+                      initialSubjectId={
+                        remediationTarget
+                          ? String(remediationTarget.subject_id)
+                          : remediationSubject ||
+                            (subjectFilter !== "all"
+                              ? subjectFilter
+                              : undefined)
+                      }
                       initialTitle={remediationTitle}
                       initialInstructions={remediationInstructions}
                       remediationDraft={Boolean(remediationType)}
