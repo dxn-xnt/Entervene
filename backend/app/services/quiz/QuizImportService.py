@@ -15,6 +15,13 @@ ANSWER_RE = re.compile(r"^\s*(?:answer|ans)\s*[:\-]\s*([A-Da-d])(?:[\).]\s*.*)?\
 ANSWER_KEY_HEADER_RE = re.compile(r"^\s*answer\s+key\s*$", re.IGNORECASE)
 ANSWER_KEY_ITEM_RE = re.compile(r"^\s*(\d+)[\).]\s*([A-Da-d])(?:[\).]\s*.*)?\s*$")
 INLINE_KEY_RE = re.compile(r"^\(([A-Da-d])\)\s*(.+)$")
+SECTION_HEADER_RE = re.compile(r"^\s*(?:section\s+\d+|page\s+\d+|chapter\s+\d+|part\s+[ivxlcdm\d]+).*$", re.IGNORECASE)
+PAGE_FOOTER_RE = re.compile(
+    r"^\s*(?:page\s+\d+(?:\s*(?:of|/)\s*\d+)?|[-–—~*\[\(]+\s*page\s+\d+\s*[-–—~*\]\)]+|[-–—~*]+\s*\d+\s*[-–—~*]+|\d+\s*(?:of|/)\s*\d+)\s*$",
+    re.IGNORECASE,
+)
+EXPLANATION_RE = re.compile(r"^\s*(?:explanation|rationale|reason|notes?)\s*[:\-].*$", re.IGNORECASE)
+
 
 
 async def preview_quiz_import(file: UploadFile) -> QuizImportPreviewResponse:
@@ -177,6 +184,8 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
                 "question_text": question_text,
                 "options": [],
                 "answer_key": inline_answer_key,
+                "has_answer_line": False,
+                "has_explanation_line": False,
             }
             continue
 
@@ -192,10 +201,23 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
 
         if answer_match and current:
             current["answer_key"] = answer_match.group(1).upper()
+            current["has_answer_line"] = True
             continue
 
-        if current and not current["options"]:
-            current["question_text"] = f"{current['question_text']} {line}".strip()
+        if EXPLANATION_RE.match(line) and current:
+            current["has_explanation_line"] = True
+            continue
+
+        if current:
+            if SECTION_HEADER_RE.match(line) or PAGE_FOOTER_RE.match(line):
+                continue
+            if current.get("has_answer_line") or current.get("has_explanation_line"):
+                continue
+            if current["options"]:
+                current["options"][-1]["text"] = f"{current['options'][-1]['text']} {line}".strip()
+            else:
+                current["question_text"] = f"{current['question_text']} {line}".strip()
+
 
     if current:
         parsed.append(current)
