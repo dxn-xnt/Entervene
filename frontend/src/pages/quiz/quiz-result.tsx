@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft, FileEdit, CheckCircle2, XCircle, Clock, AlertCircle, Award, RotateCcw } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
@@ -6,10 +6,11 @@ import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
+import { Switch } from "@/components/retroui/Switch";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { routes } from "@/../routes";
 import AppLayout from "@/layouts/app-layout";
-import { getQuizAttempt, type QuizAttemptResponse } from "@/lib/quiz-api";
+import { getQuizAttempt, type QuizAttemptResponse, type QuizAttemptQuestion } from "@/lib/quiz-api";
 
 const StudentQuizResult = () => {
   const { assignmentId } = useParams<{ assignmentId: string }>();
@@ -19,6 +20,7 @@ const StudentQuizResult = () => {
   const [quiz, setQuiz] = useState<QuizAttemptResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showIncorrectOnly, setShowIncorrectOnly] = useState(false);
 
   useEffect(() => {
     if (!aid) {
@@ -48,6 +50,51 @@ const StudentQuizResult = () => {
       cancelled = true;
     };
   }, [aid]);
+
+  const getQuestionStatus = (q: QuizAttemptQuestion): "correct" | "incorrect" | "unattempted" => {
+    if (q.is_correct === true) return "correct";
+    if (q.is_correct === false) return "incorrect";
+    return "unattempted";
+  };
+
+  const isQuestionIncorrect = (q: QuizAttemptQuestion) => q.is_correct === false;
+
+  const questionItems = useMemo(() => {
+    if (!quiz?.questions) return [];
+    return quiz.questions.map((q, originalIndex) => ({
+      question: q,
+      originalIndex,
+    }));
+  }, [quiz?.questions]);
+
+  const incorrectCount = useMemo(() => {
+    if (!quiz?.questions) return 0;
+    return quiz.questions.filter(isQuestionIncorrect).length;
+  }, [quiz?.questions]);
+
+  const displayedQuestions = useMemo(() => {
+    if (showIncorrectOnly) {
+      return questionItems.filter(({ question }) => isQuestionIncorrect(question));
+    }
+    return questionItems;
+  }, [showIncorrectOnly, questionItems]);
+
+  const hasUnattemptedOrNeedsGrading = useMemo(() => {
+    if (!quiz?.questions) return false;
+    return quiz.questions.some((q) => q.is_correct == null);
+  }, [quiz?.questions]);
+
+  const handleQuestionClick = (originalIndex: number) => {
+    if (!quiz) return;
+    const target = quiz.questions[originalIndex];
+    if (showIncorrectOnly && !isQuestionIncorrect(target)) {
+      setShowIncorrectOnly(false);
+    }
+    setTimeout(() => {
+      const el = document.getElementById(`quiz-question-card-${originalIndex}`);
+      el?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    }, 50);
+  };
 
   if (loading) {
     return (
@@ -194,18 +241,102 @@ const StudentQuizResult = () => {
               {/* Item-by-item breakdown if summary is released */}
               {quiz.summary_available && quiz.questions.length > 0 && (
                 <div className="flex flex-col gap-4">
+                  {/* Sticky Question Navigator */}
+                  <div className="sticky top-0 z-20 py-2 -mx-1 px-1 sm:px-0 bg-background/95 backdrop-blur-sm">
+                    <Card className="shadow-none w-full bg-white border-2 border-black p-3 sm:p-4">
+                      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-extrabold uppercase text-gray-700">
+                          Question Navigator ({quiz.questions.length} Questions)
+                        </span>
+                        <div className="flex items-center gap-3 text-[11px] font-bold text-gray-600">
+                          <span className="flex items-center gap-1.5">
+                            <span className="h-2.5 w-2.5 rounded-full bg-[#8BCB88] border border-black" /> Correct
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <span className="h-2.5 w-2.5 rounded-full bg-[#FF6B6B] border border-black" /> Incorrect
+                          </span>
+                          {hasUnattemptedOrNeedsGrading && (
+                            <span className="flex items-center gap-1.5">
+                              <span className="h-2.5 w-2.5 rounded-full bg-[#FFD08A] border border-black" /> Unattempted / Needs Grading
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto py-1">
+                        {quiz.questions.map((q, idx) => {
+                          const status = getQuestionStatus(q);
+                          return (
+                            <button
+                              key={q.quiz_question_id}
+                              type="button"
+                              onClick={() => handleQuestionClick(idx)}
+                              className={`relative flex h-8 min-w-8 items-center justify-center rounded border-2 border-black px-2 text-xs font-black transition-all cursor-pointer ${
+                                status === "correct"
+                                  ? "bg-[#8BCB88] text-black"
+                                  : status === "incorrect"
+                                    ? "bg-[#FF6B6B] text-black"
+                                    : "bg-[#FFD08A] text-black"
+                              } hover:scale-105 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-1`}
+                              title={`Question ${idx + 1}: ${status}`}
+                              aria-label={`Question ${idx + 1} (${status})`}
+                              data-question-number={idx + 1}
+                              data-status={status}
+                            >
+                              {idx + 1}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Show Incorrect Only Toggle */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 mt-2.5 border-t border-black/10">
+                        <label
+                          htmlFor="show-incorrect-only"
+                          className={`flex items-center gap-2 select-none text-xs font-bold ${
+                            incorrectCount === 0
+                              ? "opacity-50 cursor-not-allowed text-gray-500"
+                              : "cursor-pointer text-gray-800"
+                          }`}
+                        >
+                          <Switch
+                            id="show-incorrect-only"
+                            checked={showIncorrectOnly}
+                            onCheckedChange={setShowIncorrectOnly}
+                            disabled={incorrectCount === 0}
+                            aria-label={`Show incorrect only (${incorrectCount})`}
+                          />
+                          <span>Show incorrect only ({incorrectCount})</span>
+                        </label>
+
+                        {incorrectCount === 0 && (
+                          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300">
+                            Perfect score! No incorrect questions.
+                          </span>
+                        )}
+                        {showIncorrectOnly && incorrectCount > 0 && (
+                          <span className="text-[11px] font-semibold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-300">
+                            Showing {displayedQuestions.length} wrong answers
+                          </span>
+                        )}
+                      </div>
+                    </Card>
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <h2 className="text-lg font-bold flex items-center gap-2">
                       <Award className="w-5 h-5" />
                       Question Breakdown
                     </h2>
                     <span className="text-xs font-semibold text-black/60">
-                      {quiz.questions.length} Items
+                      {showIncorrectOnly
+                        ? `Showing ${displayedQuestions.length} of ${quiz.questions.length} Items`
+                        : `${quiz.questions.length} Items`}
                     </span>
                   </div>
 
                   <div className="flex flex-col gap-3">
-                    {quiz.questions.map((q, idx) => {
+                    {displayedQuestions.map(({ question: q, originalIndex }) => {
                       const isCorrect = q.is_correct === true;
                       const isIncorrect = q.is_correct === false;
                       const isNeedsGrading = q.is_correct == null && q.points_awarded == null;
@@ -213,12 +344,13 @@ const StudentQuizResult = () => {
                       return (
                         <Card
                           key={q.quiz_question_id}
-                          className="bg-white border-2 border-black p-5 flex flex-col gap-3"
+                          id={`quiz-question-card-${originalIndex}`}
+                          className="bg-white border-2 border-black p-5 flex flex-col gap-3 scroll-mt-48 sm:scroll-mt-40"
                         >
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex items-start gap-2">
                               <span className="font-bold text-sm text-black/50 shrink-0 mt-0.5">
-                                #{idx + 1}
+                                #{originalIndex + 1}
                               </span>
                               <div>
                                 <p className="font-semibold text-base">{q.question_text}</p>
@@ -300,6 +432,11 @@ const StudentQuizResult = () => {
                         </Card>
                       );
                     })}
+                    {displayedQuestions.length === 0 && (
+                      <Card className="bg-white border-2 border-black p-8 text-center">
+                        <p className="font-bold text-sm text-black/70">No questions to display.</p>
+                      </Card>
+                    )}
                   </div>
                 </div>
               )}
