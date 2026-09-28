@@ -49,7 +49,7 @@ class AcademicPeriod(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     academic_year_id: Mapped[int] = mapped_column(Integer, ForeignKey("academic_year.academic_year_id", ondelete="CASCADE"), nullable=False)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False)
 
 
     academic_year = relationship("AcademicYear", back_populates="periods")

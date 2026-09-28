@@ -16,8 +16,10 @@ class ClassworkAssignment(Base):
         UniqueConstraint("classwork_id", "class_id", name="uq_classwork_assignment"),
         Index("ix_classwork_assignment_class_published_due", "class_id", "is_published", "due_date"),
         Index("ix_classwork_assignment_classwork_id", "classwork_id"),
+        Index("ix_remedial_original_exam", "original_exam_assignment_id"),
         UniqueConstraint("remediation_request_id", name="uq_classwork_remediation_request"),
         CheckConstraint("(recipient_student_id IS NULL AND source_intervention_id IS NULL AND remediation_request_id IS NULL) OR (recipient_student_id IS NOT NULL AND source_intervention_id IS NOT NULL AND remediation_request_id IS NOT NULL)", name="ck_classwork_targeted_pair"),
+        CheckConstraint("original_exam_assignment_id IS NULL OR (recipient_student_id IS NOT NULL AND original_exam_assignment_id <> classwork_assignment_id)", name="ck_remedial_exam_has_target"),
     )
 
     classwork_assignment_id: Mapped[int] = Column(Integer, primary_key=True, autoincrement=True)
@@ -33,6 +35,7 @@ class ClassworkAssignment(Base):
     recipient_student_id: Mapped[UUID | None] = Column(PG_UUID(as_uuid=True), ForeignKey("student.student_id", ondelete="RESTRICT"), nullable=True)
     source_intervention_id: Mapped[int | None] = Column(Integer, ForeignKey("intervention.intervention_id", ondelete="RESTRICT"), nullable=True)
     remediation_request_id: Mapped[UUID | None] = Column(PG_UUID(as_uuid=True), nullable=True)
+    original_exam_assignment_id: Mapped[int | None] = Column(Integer, ForeignKey("classwork_assignment.classwork_assignment_id", ondelete="RESTRICT"), nullable=True)
     assigned_by_staff_id: Mapped[str] = Column(String(20), ForeignKey("academic_staff.staff_id"), nullable=False)
     publish_date: Mapped[datetime | None] = Column(DateTime(timezone=True))
     due_date: Mapped[datetime | None] = Column(DateTime(timezone=True))

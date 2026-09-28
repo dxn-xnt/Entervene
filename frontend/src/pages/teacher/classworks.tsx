@@ -123,6 +123,7 @@ export default function Classworks() {
     setRemediationTarget(null);
     setRemediationFocus(null);
     setRemediationGradeTreatment(null);
+    setRemediationOriginalExam(null);
     setRemediationReferences([]);
     let live = true;
     void Promise.all([
@@ -635,6 +636,7 @@ export default function Classworks() {
                       remediationTarget={remediationTarget}
                       remediationFocus={remediationFocus}
                       remediationGradeTreatment={remediationGradeTreatment}
+                      remediationOriginalExam={remediationOriginalExam}
                       remediationReferences={remediationReferences}
                       onClose={closeCreateWizard}
                       onSuccess={async () => {
@@ -662,6 +664,7 @@ export default function Classworks() {
                       remediationTarget={remediationTarget}
                       remediationFocus={remediationFocus}
                       remediationGradeTreatment={remediationGradeTreatment}
+                      remediationOriginalExam={remediationOriginalExam}
                       onClose={closeCreateWizard}
                       onSuccess={async () => {
                         await Promise.all([loadClassworks(), refetchClasses()]);

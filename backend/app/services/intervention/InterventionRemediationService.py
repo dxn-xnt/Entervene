@@ -21,6 +21,7 @@ from app.services.intervention.InterventionReviewerGenerationService import buil
 from app.services.intervention.InterventionSupportMaterialService import _basis
 from app.services.intervention.TeacherInterventionService import _eligible_scope, _source
 from app.services.intervention.InterventionRemediationFocusService import build_remediation_focus
+from app.services.grading.ExaminationCalculator import EXAM_SUBTYPES, categorize_exam_subtype
 
 FORMATS = {"QUIZ", "TOS", "CLASSWORK", "EXISTING_MATERIAL_ONLY"}
 
@@ -35,6 +36,7 @@ class PlanUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     teacher_choice: str | None = None
     grade_treatment: str | None = None
+    original_exam_assignment_id: int | None = None
     selected_resources: list[ResourceRef] = Field(default_factory=list, max_length=30)
 
 
@@ -148,7 +150,24 @@ def progress(db: Session, row: Intervention) -> dict:
             classwork_assignment_id=assignment.classwork_assignment_id, student_id=row.student_id,
         ).order_by(StudentSubmission.submission_id.desc()).first()
         work = assignment.classwork
+        original_result = None
+        effective_result = None
+        if assignment.original_exam_assignment_id is not None:
+            original = db.get(ClassworkAssignment, assignment.original_exam_assignment_id)
+            original_submission = db.query(StudentSubmission).filter_by(
+                classwork_assignment_id=original.classwork_assignment_id, student_id=row.student_id,
+            ).order_by(StudentSubmission.submission_id.desc()).first() if original else None
+            original_result = float(original_submission.grade) if original_submission and original_submission.grade is not None else None
+            if original_result is not None:
+                from app.services.grading.RemedialExamination import effective_exam_score_for_change
+                effective_result = effective_exam_score_for_change(db, assignment, row.student_id,
+                    float(submission.grade) if submission and submission.grade is not None else None)
         assigned.append({"title": work.title, "assignment_id": assignment.classwork_assignment_id,
+                         "original_assignment_id": assignment.original_exam_assignment_id,
+                         "exam_subtype": work.exam_subtype,
+                         "original_title": original.classwork.title if assignment.original_exam_assignment_id is not None and original else None,
+                         "original_grade": original_result,
+                         "effective_grade": effective_result,
                          "component": work.classwork_category,
                          "is_graded": work.is_graded,
                          "submission_status": submission.status if submission else None,
@@ -173,15 +192,49 @@ def get_workspace(db: Session, staff_id: str, intervention_id: int) -> dict:
     row = _row(db, staff_id, intervention_id)
     return {"plan": {"grade_treatment": None, "teacher_choice": None, "selected_resources": [], "ai_suggestion": None, **(row.remediation_plan or {})},
             "resources": resources(db, row, staff_id), "focus": build_remediation_focus(row),
+            "original_exams": original_exams(db, row),
             "progress": progress(db, row)}
+
+
+def original_exams(db: Session, row: Intervention) -> list[dict]:
+    assignments = db.query(ClassworkAssignment).join(Classwork).filter(
+        ClassworkAssignment.class_id == row.class_id,
+        ClassworkAssignment.academic_period_id == row.academic_period_id,
+        Classwork.subject_id == row.subject_id,
+        Classwork.is_graded.is_(True),
+        Classwork.is_archived.is_(False),
+        ClassworkAssignment.original_exam_assignment_id.is_(None),
+    ).order_by(ClassworkAssignment.classwork_assignment_id).all()
+    results = []
+    for assignment in assignments:
+        work = assignment.classwork
+        subtype = categorize_exam_subtype(work.exam_subtype, work.title, work.classwork_category)
+        if (assignment.recipient_student_id not in (None, row.student_id)
+            or work.classwork_category not in {"EXAMS", "QUARTERLY_ASSESSMENT"}
+            or subtype not in EXAM_SUBTYPES or work.total_points is None or work.total_points <= 0):
+            continue
+        submission = db.query(StudentSubmission).filter_by(
+            classwork_assignment_id=assignment.classwork_assignment_id, student_id=row.student_id,
+        ).filter(StudentSubmission.grade.isnot(None)).order_by(StudentSubmission.submission_id.desc()).first()
+        if submission:
+            results.append({"assignment_id": assignment.classwork_assignment_id, "title": work.title,
+                            "subtype": subtype, "score": float(submission.grade),
+                            "total_points": float(work.total_points)})
+    return results
 
 
 def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate) -> dict:
     row = _row(db, staff_id, intervention_id)
     if body.teacher_choice is not None and body.teacher_choice not in FORMATS:
         raise HTTPException(422, "Unsupported remediation format")
-    if body.grade_treatment is not None and body.grade_treatment not in {"PRACTICE_ONLY", "WRITTEN_WORK", "PERFORMANCE_TASK"}:
+    if body.grade_treatment is not None and body.grade_treatment not in {"PRACTICE_ONLY", "WRITTEN_WORK", "PERFORMANCE_TASK", "EXAMINATION"}:
         raise HTTPException(422, "Unsupported remediation grade treatment")
+    if body.grade_treatment == "EXAMINATION" and body.original_exam_assignment_id not in {
+        exam["assignment_id"] for exam in original_exams(db, row)
+    }:
+        raise HTTPException(422, "Select a scored original Examination in this student scope")
+    if body.grade_treatment == "EXAMINATION" and build_remediation_focus(row)["component"] != "EXAMINATION":
+        raise HTTPException(422, "The Intervention does not have Examination as its support focus")
     available = {(r["kind"], r["id"]) for r in resources(db, row, staff_id)}
     selected = [(ref.kind, ref.id) for ref in body.selected_resources]
     if len(set(selected)) != len(selected) or any(item not in available for item in selected):
@@ -189,6 +242,7 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
     plan = dict(row.remediation_plan or {})
     plan.update({"teacher_choice": body.teacher_choice,
                  "grade_treatment": (body.grade_treatment or "PRACTICE_ONLY") if body.teacher_choice in {"QUIZ", "CLASSWORK"} else None,
+                 "original_exam_assignment_id": body.original_exam_assignment_id if body.grade_treatment == "EXAMINATION" else None,
                  "selected_resources": [ref.model_dump() for ref in body.selected_resources],
                  "evidence_basis": _basis(row)})
     row.remediation_plan = plan

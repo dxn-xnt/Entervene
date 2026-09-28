@@ -27,6 +27,7 @@ from app.services.grading.ExaminationCalculator import (
     compute_examination_component,
 )
 from app.services.student_record.StudentRecordService import resolve_subject_grading_weights
+from app.services.grading.RemedialExamination import effective_exam_scores
 
 
 MODEL_NAME = "entervene_current_period_grade_rf_v1"
@@ -263,7 +264,14 @@ def build_current_period_features_from_records(
     domain_warnings: list[dict[str, Any]] = []
 
     rows, unresolved = _classwork_rows(db, student_id, class_id, subject_id, source_period_id, cutoff_at)
+    effective_exams = effective_exam_scores(
+        [assignment for assignment, _, _, _ in rows],
+        {assignment.classwork_assignment_id: _to_float(submission.grade) if submission and submission.grade is not None else None
+         for assignment, _, submission, _ in rows if assignment.recipient_student_id in (None, student_id)},
+    )
     for _assignment, classwork, submission, is_unresolved in rows:
+        if _assignment.recipient_student_id not in (None, student_id) or _assignment.original_exam_assignment_id is not None:
+            continue
         component = classify_classwork_component(
             classwork.classwork_type,
             classwork.classwork_category,
@@ -273,6 +281,8 @@ def build_current_period_features_from_records(
             domain_warnings.append({"code": "UNRESOLVED_SUBMISSION", "classwork_id": classwork.classwork_id})
             continue
         score = _to_float(submission.grade) if submission and submission.grade is not None else None
+        if _assignment.classwork_assignment_id in effective_exams:
+            score = effective_exams[_assignment.classwork_assignment_id]
         possible = _to_float(classwork.total_points)
         if component == CanonicalGradingComponent.WRITTEN_WORK:
             _add_score(accumulators["ww"], score, possible)

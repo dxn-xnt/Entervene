@@ -46,6 +46,11 @@ class ResolvedSupportActivity(BaseModel):
     submission_status: str | None
     grade: float | None
     total_points: float | None
+    original_assignment_id: int | None = None
+    original_title: str | None = None
+    exam_subtype: str | None = None
+    original_grade: float | None = None
+    effective_grade: float | None = None
 
 
 class TeacherResolvedInterventionDetail(TeacherInterventionDetail):
