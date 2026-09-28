@@ -15,8 +15,12 @@ interface ViewGradeScoreModalProps {
     id: number;
     title: string;
     maxScore: number;
+    recipientStudentId?: string | null;
+    sourceInterventionId?: number | null;
+    assignedLearnerCount?: number | null;
   }[];
   studentGrades: {
+    student_id: string;
     name: string;
     scores: (number | null)[];
     gender?: string | null;
@@ -46,6 +50,7 @@ export default function ViewGradeScoreModal({
   const paginatedItems = orderedItems.slice(startIndex, endIndex);
 
   const totalMaxScore = items.reduce((sum, item) => sum + item.maxScore, 0);
+  const hasTargetedItems = items.some((item) => item.recipientStudentId);
 
   const filteredStudents = studentGrades.filter((sg) =>
     sg.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -80,11 +85,12 @@ export default function ViewGradeScoreModal({
               <Table.Cell className="whitespace-nowrap text-sm font-extrabold text-black">
                 {idx + 1}. {student.name}
               </Table.Cell>
-              {paginatedItems.map((_, i) => {
+              {paginatedItems.map((activity, i) => {
                 const score = studentPaginatedScores[i];
+                const assigned = !activity.recipientStudentId || activity.recipientStudentId === student.student_id;
                 return (
                   <Table.Cell key={i} className="text-center font-semibold tabular-nums">
-                    {score !== null && score !== undefined ? score : "—"}
+                    {!assigned ? <span title="Not assigned to this intervention activity" className="text-gray-500">N/A</span> : score !== null && score !== undefined ? score : "—"}
                   </Table.Cell>
                 );
               })}
@@ -121,7 +127,7 @@ export default function ViewGradeScoreModal({
           <div className="flex items-center gap-3 text-xs text-muted-foreground font-medium">
             <span>Total Items: <strong className="text-foreground">{items.length}</strong></span>
             <span>·</span>
-            <span>Category Max Score: <strong className="text-foreground">{totalMaxScore}</strong></span>
+            <span>Category Max Score: <strong className="text-foreground">{hasTargetedItems ? "Varies by learner" : totalMaxScore}</strong></span>
           </div>
         </div>
 
@@ -137,6 +143,7 @@ export default function ViewGradeScoreModal({
                         <span className="max-w-[160px] break-words text-center text-sm font-black leading-tight text-black" title={item.title}>
                           {item.title}
                         </span>
+                        {item.sourceInterventionId && <span title={`Intervention activity · ${item.assignedLearnerCount ?? 1} learner assigned · Source Intervention ${item.sourceInterventionId}`} className="rounded border border-black bg-yellow-50 px-1 text-[10px] font-black">I</span>}
                         {onEnterScores && (
                           <button
                             type="button"
@@ -151,6 +158,7 @@ export default function ViewGradeScoreModal({
                       <span className="whitespace-nowrap border border-black bg-yellow-50 px-2 py-0.5 text-[11px] font-bold text-black">
                         {item.maxScore} pts
                       </span>
+                      {item.sourceInterventionId && <span className="text-[10px] font-semibold text-gray-600">Intervention · Targeted · {item.assignedLearnerCount ?? 1} learner</span>}
                     </div>
                   </Table.Head>
                 ))}

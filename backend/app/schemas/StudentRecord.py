@@ -126,6 +126,9 @@ class ClassworkCategoryHeader(BaseModel):
     id: int
     title: str
     maxScore: float
+    recipientStudentId: Optional[str] = None
+    sourceInterventionId: Optional[int] = None
+    assignedLearnerCount: Optional[int] = None
 
 
 class GradebookCategoryHeaderGroup(BaseModel):

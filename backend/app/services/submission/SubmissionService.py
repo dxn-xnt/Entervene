@@ -736,8 +736,10 @@ def grade_student_submission(
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     assignment = teacher_owns_assignment(submission.classwork_assignment_id, staff_id, db, write_required=True)
+    if not assignment_allows_student(assignment, submission.student_id):
+        raise HTTPException(status_code=403, detail="Student is not assigned to this activity")
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first() if assignment else None
-    if classwork and (not getattr(classwork, "is_graded", True) or (classwork.classwork_type or "").upper() == "READING"):
+    if classwork and (classwork.classwork_type or "").upper() == "READING":
         raise HTTPException(status_code=400, detail="Reading classworks cannot be graded")
     if body.grade < 0:
         raise HTTPException(status_code=400, detail="Grade cannot be negative")
@@ -751,7 +753,7 @@ def grade_student_submission(
     submission.graded_by_staff_id = staff_id
     db.commit()
     db.refresh(submission)
-    if submission.grade != previous_grade:
+    if classwork.is_graded and submission.grade != previous_grade:
         refresh_after_committed_grade_change(
             db.get_bind(),
             student_ids=[submission.student_id],

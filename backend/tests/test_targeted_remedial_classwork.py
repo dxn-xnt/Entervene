@@ -77,7 +77,17 @@ def test_intervention_publication_scope_and_retry(candidate_context):
     with pytest.raises(HTTPException):
         asyncio.run(create_classwork_wizard_record(**kwargs))
     _activate(c)
-    save_plan(db, _staff(c), _id(c), PlanUpdate(teacher_choice="CLASSWORK"))
+    plan = save_plan(db, _staff(c), _id(c), PlanUpdate(teacher_choice="CLASSWORK"))
+    assert plan["plan"]["grade_treatment"] == "PRACTICE_ONLY"
+    with pytest.raises(HTTPException) as missing_treatment:
+        asyncio.run(create_classwork_wizard_record(**kwargs))
+    assert missing_treatment.value.status_code == 400
+    save_plan(db, _staff(c), _id(c), PlanUpdate(teacher_choice="CLASSWORK", grade_treatment="WRITTEN_WORK"))
+    kwargs["classwork_category"] = "PERFORMANCE_TASK"
+    with pytest.raises(HTTPException) as treatment_error:
+        asyncio.run(create_classwork_wizard_record(**kwargs))
+    assert treatment_error.value.status_code == 400
+    kwargs["classwork_category"] = "WRITTEN_WORK"
     before = db.query(Classwork).count()
     created = asyncio.run(create_classwork_wizard_record(**kwargs))
     assignment = db.query(ClassworkAssignment).filter_by(classwork_id=created.classwork_id).one()
@@ -111,7 +121,7 @@ def test_intervention_quiz_uses_existing_builder(candidate_context):
     account = UserAccount(user_id=uuid4(), email=f"remediation-{uuid4().hex[:8]}@example.test", password_hash="test")
     db.add(account); db.flush(); c["student"].user_id = account.user_id; db.commit()
     _activate(c)
-    save_plan(db, _staff(c), _id(c), PlanUpdate(teacher_choice="QUIZ"))
+    save_plan(db, _staff(c), _id(c), PlanUpdate(teacher_choice="QUIZ", grade_treatment="WRITTEN_WORK"))
     result = asyncio.run(create_classwork_wizard_record(
         title="Targeted quiz", classwork_type="QUIZ", subject_id=c["subject"].subject_id,
         description=None, instructions="Practice", classwork_category="WRITTEN_WORK", total_points=10,
@@ -132,7 +142,7 @@ def test_intervention_quiz_uses_existing_builder(candidate_context):
 def test_targeted_draft_requires_explicit_publication(candidate_context):
     c = candidate_context; db = c["db"]
     _activate(c)
-    save_plan(db, _staff(c), _id(c), PlanUpdate(teacher_choice="CLASSWORK"))
+    save_plan(db, _staff(c), _id(c), PlanUpdate(teacher_choice="CLASSWORK", grade_treatment="WRITTEN_WORK"))
     identity = {"sub": str(c["staff"].user_id), "role": "teacher"}
     result = asyncio.run(create_classwork_wizard_record(
         title="Draft practice", classwork_type="ASSIGNMENT", subject_id=c["subject"].subject_id,

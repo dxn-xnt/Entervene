@@ -23,6 +23,7 @@ class StudentActivityScoreItem(BaseModel):
     student_id: UUID
     name: str
     score: Optional[float] = None
+    assigned: bool = True
 
 
 class ActivityScoresResponse(BaseModel):

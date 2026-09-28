@@ -298,6 +298,9 @@ def teacher_student_gradebook(
             id=assignment.classwork.classwork_id,
             title=assignment.classwork.title,
             maxScore=float(assignment.classwork.total_points or 100),
+            recipientStudentId=str(assignment.recipient_student_id) if assignment.recipient_student_id else None,
+            sourceInterventionId=assignment.source_intervention_id,
+            assignedLearnerCount=1 if assignment.recipient_student_id else len(students),
         )
         if cat_key == "writtenWork":
             written_headers.append(header)
@@ -338,24 +341,30 @@ def teacher_student_gradebook(
     for student in students:
         student_subs = submissions_by_student.get(student.student_id, {})
 
+        def assigned(assignment: ClassworkAssignment) -> bool:
+            return assignment.recipient_student_id is None or assignment.recipient_student_id == student.student_id
+
         written_scores = [
-            _extract_score(student_subs, asgn.classwork_assignment_id)
+            _extract_score(student_subs, asgn.classwork_assignment_id) if assigned(asgn) else None
             for asgn in written_assignments
         ]
         performance_scores = [
-            _extract_score(student_subs, asgn.classwork_assignment_id)
+            _extract_score(student_subs, asgn.classwork_assignment_id) if assigned(asgn) else None
             for asgn in performance_assignments
         ]
         quarterly_scores = [
-            _extract_score(student_subs, asgn.classwork_assignment_id)
+            _extract_score(student_subs, asgn.classwork_assignment_id) if assigned(asgn) else None
             for asgn in quarterly_assignments
         ]
 
         # DepEd K-12 grade computation using resolved template weights
         grade_res = _deped_grade(
-            written_scores, written_assignments,
-            performance_scores, performance_assignments,
-            quarterly_scores, quarterly_assignments,
+            [score for score, asgn in zip(written_scores, written_assignments) if assigned(asgn)],
+            [asgn for asgn in written_assignments if assigned(asgn)],
+            [score for score, asgn in zip(performance_scores, performance_assignments) if assigned(asgn)],
+            [asgn for asgn in performance_assignments if assigned(asgn)],
+            [score for score, asgn in zip(quarterly_scores, quarterly_assignments) if assigned(asgn)],
+            [asgn for asgn in quarterly_assignments if assigned(asgn)],
             weights=weights,
         )
         ps_ww = grade_res.ps_ww
@@ -1491,7 +1500,7 @@ def _metrics_for_student(
     submissions: dict[int, StudentSubmission],
 ) -> Metrics:
     official_grade = _official_period_grade(db, scope, student)
-    assigned_count = len(assignments)
+    assigned_count = sum(assignment.recipient_student_id is None or assignment.recipient_student_id == student.student_id for assignment in assignments)
     submitted_count = 0
     missing_count = 0
     late_count = 0
@@ -1502,6 +1511,8 @@ def _metrics_for_student(
     now = datetime.now(timezone.utc)
 
     for assignment in assignments:
+        if assignment.recipient_student_id is not None and assignment.recipient_student_id != student.student_id:
+            continue
         cw = assignment.classwork
         if not getattr(cw, "is_graded", True) or (getattr(cw, "classwork_type", "") or "").upper() == READING_TYPE:
             continue

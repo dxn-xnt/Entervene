@@ -31,7 +31,8 @@ import {
 } from "../classworks/quiz-builder-utils";
 import { exportQuizPdf, exportQuizDocx } from "@/lib/quiz-export";
 import AIQuizGeneratorModal from "./ai-quiz-generator-modal";
-import type { TeacherInterventionDetail } from "@/lib/teacher-interventions-api";
+import type { TeacherInterventionDetail, RemediationFocus, RemediationResource } from "@/lib/teacher-interventions-api";
+import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
 
 interface CreateClassworkQuizModalProps {
     selectedType: ClassworkKind;
@@ -42,6 +43,9 @@ interface CreateClassworkQuizModalProps {
     initialInstructions?: string;
     remediationDraft?: boolean;
     remediationTarget?: TeacherInterventionDetail | null;
+    remediationFocus?: RemediationFocus | null;
+    remediationGradeTreatment?: "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | null;
+    remediationReferences?: RemediationResource[];
     onClose: () => void;
     onSuccess: () => void;
     onBack: () => void;
@@ -56,6 +60,9 @@ export default function CreateClassworkQuizModal({
     initialInstructions,
     remediationDraft = false,
     remediationTarget,
+    remediationFocus = null,
+    remediationGradeTreatment = null,
+    remediationReferences = [],
     onClose,
     onSuccess,
     onBack,
@@ -76,7 +83,8 @@ export default function CreateClassworkQuizModal({
             title: initialTitle || "",
             instructions: initialInstructions || "",
             is_published: remediationDraft ? false : emptyClassworkDraft.is_published,
-            classwork_category: "WRITTEN_WORK",
+            classwork_category: remediationDraft ? (remediationGradeTreatment === "PRACTICE_ONLY" ? "" : remediationGradeTreatment || "") : categoryFromFocus(null),
+            exam_subtype: "",
             subject_id: preferredId,
         };
     });
@@ -343,7 +351,8 @@ export default function CreateClassworkQuizModal({
     const validateDetails = () => {
         if (!draft.subject_id) return "Choose a subject.";
         if (!draft.title.trim()) return "Topic title is required.";
-        if (remediationDraft && (draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && !draft.exam_subtype) return "Choose an Examination sub-type explicitly.";
+        if ((draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && !draft.exam_subtype) return "Choose an Examination sub-type explicitly.";
+        if (remediationDraft && (draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS")) return "Remedial Examination publication is blocked until official slot policy is defined. Choose Written Work or Performance Task.";
         const points = Number(draft.total_points);
         if (!Number.isFinite(points) || points <= 0) {
             return "Total points must be greater than zero.";
@@ -508,9 +517,9 @@ export default function CreateClassworkQuizModal({
                 );
 
                 setAvailableLessons(lessons);
-                setSelectedLessonIds((current) =>
-                    current.filter((id) => uniqueLessons.has(id)),
-                );
+                setSelectedLessonIds((current) => remediationFocus
+                    ? remediationFocus.lesson_ids.filter((id) => uniqueLessons.has(id))
+                    : current.filter((id) => uniqueLessons.has(id)));
                 setCreateError("");
             } catch (err) {
                 if (!isActive) return;
@@ -560,7 +569,7 @@ export default function CreateClassworkQuizModal({
             display_order: index + 1,
             difficulty_level: question.difficulty_level,
             explanation: question.explanation.trim() || null,
-            lesson_id: null,
+            lesson_id: question.lesson_id && selectedLessonIds.includes(question.lesson_id) ? question.lesson_id : null,
             options:
                 question.question_type === "MULTIPLE_CHOICE"
                     ? question.options.map((option, optionIndex) => ({
@@ -932,7 +941,7 @@ export default function CreateClassworkQuizModal({
                         </div>
 
                         <div className="grid gap-4 sm:grid-cols-3">
-                            <div className="flex flex-col gap-1 w-full">
+                            {remediationDraft && remediationGradeTreatment === "PRACTICE_ONLY" ? <p className="rounded border border-green-700 bg-green-50 p-3 text-sm font-semibold">Practice only · No official grading component. Score and completion remain visible in Intervention progress.</p> : <div className="flex flex-col gap-1 w-full">
                                 <label className="text-xs font-bold text-gray-700">
                                     Grading component
                                 </label>
@@ -944,7 +953,7 @@ export default function CreateClassworkQuizModal({
                                             classwork_category: val,
                                         }))
                                     }
-                                    disabled={isCreating}
+                                    disabled={isCreating || remediationDraft}
                                 >
                                     <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
                                         <Select.Value placeholder="Select Category" />
@@ -957,13 +966,13 @@ export default function CreateClassworkQuizModal({
                                             <Select.Item value="PERFORMANCE_TASK">
                                                 Performance Task
                                             </Select.Item>
-                                            <Select.Item value="QUARTERLY_ASSESSMENT">
+                                            {!remediationDraft && <Select.Item value="QUARTERLY_ASSESSMENT">
                                                 Exams
-                                            </Select.Item>
+                                            </Select.Item>}
                                         </Select.Group>
                                     </Select.Content>
                                 </Select>
-                            </div>
+                            </div>}
 
                             {(draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && (
                                 <div className="flex flex-col gap-1 w-full">
@@ -971,7 +980,7 @@ export default function CreateClassworkQuizModal({
                                         Exam Sub-type
                                     </label>
                                     <Select
-                                        value={remediationDraft ? draft.exam_subtype : (draft.exam_subtype || "SUMMATIVE_1")}
+                                        value={draft.exam_subtype}
                                         onValueChange={(val) =>
                                             setDraft((current) => ({
                                                 ...current,
@@ -1047,6 +1056,18 @@ export default function CreateClassworkQuizModal({
                                 />
                             </div>
                         </div>
+                        {remediationFocus && (
+                            <p className="rounded border p-3 text-sm">
+                                Evidence focus: {focusGuidance(remediationFocus)}
+                                {remediationFocus.component === "EXAMINATION" && " Term Exam is the evidence source when traceable; it is not a new remedial grade slot."}
+                                {remediationDraft && (remediationGradeTreatment === "PRACTICE_ONLY" ? " Practice only: completion and score do not affect official grades or predictions." : ` Grade treatment: ${remediationGradeTreatment === "PERFORMANCE_TASK" ? "Performance Task" : "Written Work"}. This records the new activity separately from the diagnosed weakness.`)}
+                            </p>
+                        )}
+                        {remediationReferences.length > 0 && (
+                            <p className="rounded border p-3 text-sm">
+                                Selected evidence-matched references (metadata only): {remediationReferences.map((item) => item.title).join("; ")}. Review these materials yourself; their file contents were not analyzed.
+                            </p>
+                        )}
                     </div>
                 )}
 
@@ -1725,7 +1746,8 @@ export default function CreateClassworkQuizModal({
                                 <p className="text-xs font-bold text-gray-700">
                                     Assign to sections
                                 </p>
-                                {remediationTarget && <p className="rounded border p-2 text-xs">Remedial assignment for <strong>{remediationTarget.student_name}</strong> in {remediationTarget.class_name}. Only this student will receive this quiz.</p>}
+                {remediationTarget && <p className="rounded border p-2 text-xs">Remedial assignment for <strong>{remediationTarget.student_name}</strong> in {remediationTarget.class_name}. Only this student will receive this quiz.</p>}
+                {remediationFocus && <p className="rounded border p-2 text-xs">Evidence focus: {focusGuidance(remediationFocus)}{remediationFocus.component === "EXAMINATION" ? " Remedial Examination publication is blocked; choose another grading component for a graded activity." : ""}</p>}
                                 <Button
                                     type="button"
                                     variant="outline"
@@ -1815,6 +1837,28 @@ export default function CreateClassworkQuizModal({
                                 </p>
                             )}
                         </div>
+
+                        {selectedLessonIds.length > 0 && <div className="space-y-3 rounded border-2 border-black bg-white p-4">
+                            <h3 className="font-bold">Question-level lesson mapping</h3>
+                            <p className="text-xs text-gray-600">Choose the lesson each question actually assesses. Its linked competency is used only when that student's answer has a score.</p>
+                            {quizQuestions.map((question, index) => <div key={question.id} className="flex flex-col gap-1">
+                                <label className="text-xs font-bold text-gray-700" htmlFor={`question-lesson-${question.id}`}>
+                                    Question {index + 1}: {question.question_text}
+                                </label>
+                                <select
+                                    id={`question-lesson-${question.id}`}
+                                    value={question.lesson_id && selectedLessonIds.includes(question.lesson_id) ? question.lesson_id : ""}
+                                    onChange={(event) => updateQuizQuestion(question.id, { lesson_id: event.target.value ? Number(event.target.value) : null })}
+                                    disabled={isCreating}
+                                    className="w-full rounded border-2 border-black bg-white px-3 py-2 text-sm"
+                                >
+                                    <option value="">No question-level competency mapping</option>
+                                    {availableLessons.filter((lesson) => selectedLessonIds.includes(lesson.lesson_id)).map((lesson) => (
+                                        <option key={lesson.lesson_id} value={lesson.lesson_id}>{lesson.title}</option>
+                                    ))}
+                                </select>
+                            </div>)}
+                        </div>}
 
                         {/* ── Export Questionnaire Card in Step 4 ── */}
                         <div className="rounded border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-wrap items-center justify-between gap-3 mt-4">
@@ -1953,6 +1997,7 @@ export default function CreateClassworkQuizModal({
                     "Subject"
                 }
                 subjects={subjects}
+                remediationFocus={remediationFocus}
                 onGenerated={(questions, warnings, chosenSubjectId, synthesizedTitle, associatedLessonIds, additionalCoverageScope, associatedLessonTitles) => {
                     setQuizQuestions(
                         questions.length > 0

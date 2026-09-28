@@ -227,7 +227,9 @@ def build_candidate_diagnosis(db: Session, prediction: DevelopmentCurrentTermPre
         if component not in weakest:
             continue
         linked = _quiz_item_evidence(db, submission.submission_id, classwork.classwork_id, prediction.subject_id)
-        if not linked:
+        # A quiz total cannot stand in for missing per-question mappings or scores.
+        # Whole-activity attribution is reserved for activities without quiz items.
+        if not linked and not db.query(Quiz.quiz_id).filter(Quiz.classwork_id == classwork.classwork_id).first():
             single = _single_lesson_attribution(db, classwork.classwork_id, prediction.subject_id)
             if single is not None:
                 lesson, competency = single

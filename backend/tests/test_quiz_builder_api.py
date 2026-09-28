@@ -242,6 +242,27 @@ def test_teacher_can_upsert_read_and_validate_quiz_builder(quiz_api_context):
     assert readiness.json()["is_publish_ready"] is True
 
 
+def test_examination_quiz_builder_persists_question_lesson_mapping(quiz_api_context):
+    c = quiz_api_context
+    classwork = c["quiz_classwork"]
+    classwork.classwork_category = "EXAMS"
+    classwork.exam_subtype = "SUMMATIVE_1"
+    c["db"].commit()
+    response = c["client"].put(
+        f"/api/v1/quizzes/classwork/{classwork.classwork_id}",
+        json=_valid_payload(c["lesson"].lesson_id),
+    )
+    assert response.status_code == 200
+    assert response.json()["questions"][0]["lesson_id"] == c["lesson"].lesson_id
+    assert response.json()["questions"][1]["lesson_id"] is None
+    saved = c["db"].query(QuizQuestion).join(Question).filter(
+        QuizQuestion.quiz_id == response.json()["quiz_id"],
+        QuizQuestion.display_order == 1,
+    ).one()
+    assert saved.question.lesson_id == c["lesson"].lesson_id
+    assert saved.question.question_text == "What does a variable store?"
+
+
 def test_quiz_builder_requires_due_date_for_after_due_summary_release(quiz_api_context):
     c = quiz_api_context
     classwork_id = c["quiz_classwork"].classwork_id

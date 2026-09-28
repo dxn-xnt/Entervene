@@ -30,7 +30,8 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { ActivityRubricEditor } from "@/components/activity-rubric-editor";
 import { activityRubricMaximum, defaultActivityRubric, validateActivityRubric } from "@/lib/classwork-utils";
 import type { ActivityRubricLevel } from "@/types/classwork";
-import type { TeacherInterventionDetail } from "@/lib/teacher-interventions-api";
+import type { TeacherInterventionDetail, RemediationFocus } from "@/lib/teacher-interventions-api";
+import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
 
 interface CreateClassworkModalProps {
   selectedType: ClassworkKind;
@@ -41,6 +42,8 @@ interface CreateClassworkModalProps {
   initialInstructions?: string;
   remediationDraft?: boolean;
   remediationTarget?: TeacherInterventionDetail | null;
+  remediationFocus?: RemediationFocus | null;
+  remediationGradeTreatment?: "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | null;
   onClose: () => void;
   onSuccess: () => void;
   onBack: () => void;
@@ -55,6 +58,8 @@ export default function CreateClassworkModal({
   initialInstructions,
   remediationDraft = false,
   remediationTarget,
+  remediationFocus = null,
+  remediationGradeTreatment = null,
   onClose,
   onSuccess,
   onBack,
@@ -72,7 +77,8 @@ export default function CreateClassworkModal({
       title: initialTitle || "",
       instructions: initialInstructions || "",
       is_published: remediationDraft ? false : emptyClassworkDraft.is_published,
-      classwork_category: "WRITTEN_WORK",
+      classwork_category: remediationDraft ? (remediationGradeTreatment === "PRACTICE_ONLY" ? "" : remediationGradeTreatment || "") : categoryFromFocus(null),
+      exam_subtype: "",
       subject_id: preferredId,
     };
   });
@@ -172,6 +178,7 @@ export default function CreateClassworkModal({
     if (!draft.subject_id) return "Choose a subject.";
     if (!draft.title.trim()) return "Topic title is required.";
     if (remediationDraft && (draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && !draft.exam_subtype) return "Choose an Examination sub-type explicitly.";
+    if (remediationDraft && (draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS")) return "Remedial Examination publication is blocked until official slot policy is defined. Choose Written Work or Performance Task.";
     if (!isReadingType(selectedType)) {
       if (selectedType === "ACTIVITY") {
         const rubricError = validateActivityRubric(rubricLevels);
@@ -254,9 +261,9 @@ export default function CreateClassworkModal({
         );
 
         setAvailableLessons(lessons);
-        setSelectedLessonIds((current) =>
-          current.filter((id) => uniqueLessons.has(id)),
-        );
+        setSelectedLessonIds((current) => remediationFocus
+          ? remediationFocus.lesson_ids.filter((id) => uniqueLessons.has(id))
+          : current.filter((id) => uniqueLessons.has(id)));
         setCreateError("");
       } catch (err) {
         if (!isActive) return;
@@ -507,7 +514,7 @@ export default function CreateClassworkModal({
 
               {!isReadingType(selectedType) && (
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Grading component">
+                  {remediationDraft && remediationGradeTreatment === "PRACTICE_ONLY" ? <p className="rounded border border-green-700 bg-green-50 p-3 text-sm font-semibold">Practice only · No official grading component. Score and completion remain visible in Intervention progress.</p> : <Field label="Grading component">
                     <Select
                       value={draft.classwork_category}
                       onValueChange={(val) =>
@@ -516,7 +523,7 @@ export default function CreateClassworkModal({
                           classwork_category: val,
                         }))
                       }
-                      disabled={isCreating}
+                      disabled={isCreating || remediationDraft}
                     >
                       <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
                         <Select.Value placeholder="Select Category" />
@@ -529,13 +536,13 @@ export default function CreateClassworkModal({
                           <Select.Item value="PERFORMANCE_TASK">
                             Performance Task
                           </Select.Item>
-                          <Select.Item value="QUARTERLY_ASSESSMENT">
+                          {!remediationDraft && <Select.Item value="QUARTERLY_ASSESSMENT">
                             Exams
-                          </Select.Item>
+                          </Select.Item>}
                         </Select.Group>
                       </Select.Content>
                     </Select>
-                  </Field>
+                  </Field>}
 
                   {(draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && (
                     <Field label="Exam Sub-type">
@@ -587,6 +594,14 @@ export default function CreateClassworkModal({
                     />
                   </Field>}
                 </div>
+              )}
+
+              {remediationFocus && !isReadingType(selectedType) && (
+                <p className="rounded border p-3 text-sm">
+                  Evidence focus: {focusGuidance(remediationFocus)}
+                  {remediationFocus.component === "EXAMINATION" && " Term Exam is the evidence source when traceable; it is not a new remedial grade slot."}
+                  {remediationDraft && (remediationGradeTreatment === "PRACTICE_ONLY" ? " Practice only: completion and score do not affect official grades or predictions." : ` Grade treatment: ${remediationGradeTreatment === "PERFORMANCE_TASK" ? "Performance Task" : "Written Work"}. This records the new activity separately from the diagnosed weakness.`)}
+                </p>
               )}
 
               <Field label="Upload material">
@@ -789,6 +804,7 @@ export default function CreateClassworkModal({
 
               <Field label="Assign to sections">
                 {remediationTarget && <p className="mb-3 rounded border p-3 text-sm">Remedial assignment for <strong>{remediationTarget.student_name}</strong> in {remediationTarget.class_name}. Only this student will receive this activity.</p>}
+                {remediationFocus && <p className="mb-3 rounded border p-3 text-sm">Evidence focus: {focusGuidance(remediationFocus)}{remediationFocus.component === "EXAMINATION" ? " Remedial Examination publication is blocked; choose another grading component for a graded activity." : ""}</p>}
                 <div className="flex items-center justify-end -mt-8 mb-2">
                   <Button
                     variant="outline"

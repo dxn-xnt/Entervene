@@ -73,7 +73,7 @@ def start_student_quiz_attempt(
         submission.graded_by_staff_id = None
     db.commit()
     db.refresh(submission)
-    if submission.grade != previous_grade:
+    if classwork.is_graded and submission.grade != previous_grade:
         refresh_after_committed_grade_change(
             db.get_bind(),
             student_ids=[student.student_id],
@@ -204,7 +204,7 @@ def submit_student_quiz_attempt(
         submission.graded_at = now
     db.commit()
     db.refresh(submission)
-    if submission.grade != previous_grade:
+    if classwork.is_graded and submission.grade != previous_grade:
         refresh_after_committed_grade_change(
             db.get_bind(),
             student_ids=[student.student_id],

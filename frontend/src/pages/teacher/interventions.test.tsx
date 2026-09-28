@@ -6,11 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TeacherInterventions from "./interventions";
 import { InterventionApiError } from "@/lib/teacher-interventions-api";
 
-const api = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn(), activate: vi.fn(), activeList: vi.fn(), activeDetail: vi.fn(), materials: vi.fn(), createMaterial: vi.fn(), saveMaterial: vi.fn(), generateReviewer: vi.fn(), sendReviewer: vi.fn(), workspace: vi.fn(), savePlan: vi.fn(), advisory: vi.fn() }));
+const api = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn(), activate: vi.fn(), activeList: vi.fn(), activeDetail: vi.fn(), resolvedList: vi.fn(), resolvedDetail: vi.fn(), materials: vi.fn(), createMaterial: vi.fn(), saveMaterial: vi.fn(), generateReviewer: vi.fn(), sendReviewer: vi.fn(), workspace: vi.fn(), savePlan: vi.fn(), advisory: vi.fn() }));
 vi.mock("@/lib/teacher-interventions-api", async (original) => ({
   ...await original<typeof import("@/lib/teacher-interventions-api")>(),
   listTeacherCandidates: api.list, getTeacherCandidate: api.detail, activateTeacherCandidate: api.activate,
   listTeacherActive: api.activeList, getTeacherActive: api.activeDetail,
+  listTeacherResolved: api.resolvedList, getTeacherResolved: api.resolvedDetail,
   listSupportMaterials: api.materials, createSupportMaterial: api.createMaterial, saveSupportMaterial: api.saveMaterial, generateStudentReviewer: api.generateReviewer, sendStudentReviewer: api.sendReviewer,
   getRemediationWorkspace: api.workspace, saveRemediationPlan: api.savePlan, generateRemediationAdvisory: api.advisory,
 }));
@@ -45,8 +46,29 @@ const activeDetail = { ...detail, ...active, activated_by_staff_id: "T-001" };
 function mount(path = "/teacher/interventions") {
   return render(<MemoryRouter initialEntries={[path]}><Routes><Route path="/teacher/interventions" element={<TeacherInterventions />} /><Route path="/teacher/classworks" element={<div>Existing Classwork page</div>} /><Route path="/teacher/tos" element={<div>Existing TOS page</div>} /></Routes></MemoryRouter>);
 }
-beforeEach(() => { api.list.mockResolvedValue({ items: [candidate], total: 1 }); api.detail.mockResolvedValue(detail); api.activate.mockResolvedValue(activeDetail); api.activeList.mockResolvedValue({ items: [], total: 0 }); api.activeDetail.mockResolvedValue(activeDetail); api.materials.mockResolvedValue({ items: [], total: 0 }); api.workspace.mockResolvedValue({ plan: { teacher_choice: null, selected_resources: [], ai_suggestion: null }, resources: [] }); api.advisory.mockResolvedValue({ plan: { teacher_choice: null, selected_resources: [], ai_suggestion: { recommended_format: "QUIZ", reason: "Focused practice may help.", focus: [], evidence_used: {} } }, resources: [] }); });
+beforeEach(() => { api.list.mockResolvedValue({ items: [candidate], total: 1 }); api.detail.mockResolvedValue(detail); api.activate.mockResolvedValue(activeDetail); api.activeList.mockResolvedValue({ items: [], total: 0 }); api.activeDetail.mockResolvedValue(activeDetail); api.resolvedList.mockResolvedValue({ items: [], total: 0 }); api.materials.mockResolvedValue({ items: [], total: 0 }); api.workspace.mockResolvedValue({ plan: { teacher_choice: null, grade_treatment: null, selected_resources: [], ai_suggestion: null }, resources: [], focus: { basis: "FROZEN_TRIGGER_DIAGNOSIS", evidence_level: "SCORED_COMPETENCY", component: "WRITTEN_WORK", exam_subtype: null, competency_ids: [2], competencies: [{ id: 2, label: "Add fractions" }], lesson_ids: [], lessons: [], source_classwork_ids: [], topics: [], question_evidence: [], coverage_is_context_only: false }, progress: { triggering_projection: 74, latest_projection: 74, latest_revision: 2, completed_remediation: [], assigned_remediation: [], status: "ACTIVE", status_reason: "Latest projected final grade remains below 85." } }); api.advisory.mockResolvedValue({ plan: { teacher_choice: null, grade_treatment: null, selected_resources: [], ai_suggestion: { recommended_format: "QUIZ", reason: "Focused practice may help.", focus: [], evidence_used: {} } }, resources: [] }); });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
+
+it("shows resolved history and a read-only detail with saved support", async () => {
+  const resolved = { ...active, status: "RESOLVED", resolved_at: "2026-09-27T00:00:00Z", resolution_reason: "IMPROVED_PREDICTION" };
+  api.resolvedList.mockResolvedValue({ items: [resolved], total: 1 });
+  api.resolvedDetail.mockResolvedValue({ ...activeDetail, ...resolved, resolution_projection: 88,
+    targeted_activities: [{ assignment_id: 14, title: "Focused practice", classwork_type: "QUIZ", submission_status: "graded", grade: 8, total_points: 10 }],
+    sent_reviewer: { title: "Ratio review", introduction: "Read first", body: "Practice ratios" } });
+  mount("/teacher/interventions?view=resolved");
+  expect(await screen.findByText("Alex Rivera")).toBeTruthy();
+  expect(screen.getByText("Improved Prediction")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Review" }));
+  const sheet = await screen.findByRole("complementary");
+  expect(await within(sheet).findByText("Resolved · Read-only history")).toBeTruthy();
+  expect(within(sheet).getByText(/Projection at resolution:/).textContent).toContain("88.00");
+  expect(within(sheet).getByText(/Focused practice.*8\/10/)).toBeTruthy();
+  expect(within(sheet).getByText("Ratio review")).toBeTruthy();
+  expect(within(sheet).queryByRole("button", { name: "Approve Intervention" })).toBeNull();
+  expect(within(sheet).queryByRole("button", { name: "Open reviewer" })).toBeNull();
+  expect(within(sheet).queryByRole("button", { name: "Prepare Remediation" })).toBeNull();
+  expect(api.resolvedDetail).toHaveBeenCalledWith(12);
+});
 
 describe("teacher candidate review", () => {
   it("lists teacher candidates and prioritizes the backend high-risk label", async () => {
@@ -77,7 +99,16 @@ describe("teacher candidate review", () => {
   it("explains unavailable individual competency scores", async () => {
     api.detail.mockResolvedValue({ ...detail, diagnosis_snapshot: { ...detail.diagnosis_snapshot, lowest_supported_competencies: [] } });
     mount("/teacher/interventions?candidate=12");
-    expect(await screen.findByText("Individual competency scores are unavailable in this saved diagnosis.")).toBeTruthy();
+    expect(await screen.findByText("No specific competency could be identified from scored evidence.")).toBeTruthy();
+  });
+  it("labels question scores as stronger than assessment coverage", async () => {
+    api.detail.mockResolvedValue({ ...detail, diagnosis_snapshot: { ...detail.diagnosis_snapshot,
+      lowest_supported_competencies: [{ ...detail.diagnosis_snapshot.lowest_supported_competencies[0], supporting_scores: [{ source_type: "QUIZ_QUESTION", activity_title: "Summative 1", quiz_question_id: 8, lesson_title: "Fractions", score: 1, possible_score: 2 }] }],
+      manual_assessment_coverage: [{ ...detail.diagnosis_snapshot.manual_assessment_coverage[0], in_weakest_supported_component: true }],
+    } });
+    mount("/teacher/interventions?candidate=12");
+    expect(await screen.findByText("Scored question-level competency evidence")).toBeTruthy();
+    expect(screen.getByText(/Scored question #8.*1\/2/)).toBeTruthy();
   });
   it("activates through the teacher API and refreshes the list", async () => {
     api.list.mockResolvedValueOnce({ items: [candidate], total: 1 }).mockResolvedValueOnce({ items: [], total: 0 });
@@ -112,6 +143,21 @@ describe("teacher candidate review", () => {
 });
 
 describe("teacher active intervention review", () => {
+  it.each([
+    ["QUESTION_SCORE", "Scored question-level competency evidence"],
+    ["ACTIVITY_COVERAGE", "Assessment coverage only · competencies are unranked"],
+    ["COMPONENT_ONLY", "Component-level evidence only"],
+  ])("shows the supported %s evidence level", async (level, expected) => {
+    const workspace = await api.workspace();
+    api.workspace.mockResolvedValue({ ...workspace, focus: { ...workspace.focus, evidence_level: level,
+      question_evidence: level === "QUESTION_SCORE" ? [{ quiz_question_id: 4, score: 1, possible_score: 2 }] : [],
+    } });
+    mount("/teacher/interventions?active=12");
+    const sheet = await screen.findByRole("complementary");
+    expect(await within(sheet).findByText(expected)).toBeTruthy();
+    if (level === "QUESTION_SCORE") expect(within(sheet).getByText("Question #4: 1/2")).toBeTruthy();
+    if (level === "ACTIVITY_COVERAGE") expect(within(sheet).getByText(/does not identify which one was difficult/i)).toBeTruthy();
+  });
   it("shows the active list and original frozen detail without approval controls", async () => {
     api.activeList.mockResolvedValue({ items: [active], total: 1 });
     mount("/teacher/interventions?view=active");
@@ -123,8 +169,9 @@ describe("teacher active intervention review", () => {
     expect(within(sheet).getByText(/Scored evidence: 1\/2/)).toBeTruthy();
     expect(within(sheet).getByText(/Assessment total 12\/20/)).toBeTruthy();
     expect(within(sheet).getByText(/does not score each covered competency separately/i)).toBeTruthy();
-    expect(await within(sheet).findByText("1. Student reviewer")).toBeTruthy();
+    expect(await within(sheet).findByText("Step 3 · Support materials")).toBeTruthy();
     expect(within(sheet).getByRole("button", { name: "Prepare Remediation" })).toBeTruthy();
+    expect(within(sheet).getByText(/Support focus:/)).toBeTruthy();
     fireEvent.click(within(sheet).getByRole("button", { name: "Open reviewer" }));
     expect(within(sheet).getByRole("button", { name: "Create reviewer draft" })).toBeTruthy();
     expect(within(sheet).queryByRole("button", { name: "Approve Intervention" })).toBeNull();
@@ -187,7 +234,7 @@ describe("teacher active intervention review", () => {
     mount("/teacher/interventions?active=12");
     const sheet = await screen.findByRole("complementary");
     await within(sheet).findByRole("button", { name: "Prepare Remediation" });
-    expect(within(sheet).queryByText(/Earlier remedial assessment draft/)).toBeNull();
+    expect(within(sheet).queryByText(/Previous\/legacy support draft/)).toBeNull();
     expect(within(sheet).queryByRole("button", { name: "Add Question" })).toBeNull();
     expect(api.saveMaterial).not.toHaveBeenCalled();
   });
@@ -198,7 +245,7 @@ describe("teacher active intervention review", () => {
     api.materials.mockResolvedValue({ items: [material], total: 1 });
     mount("/teacher/interventions?active=12");
     const sheet = await screen.findByRole("complementary");
-    fireEvent.click(await within(sheet).findByText(/Earlier remedial assessment draft/));
+    fireEvent.click(await within(sheet).findByText(/Previous\/legacy support draft/));
     expect(within(sheet).getByText("Fractions practice")).toBeTruthy();
     expect(within(sheet).getByText(/What is one half plus one half/)).toBeTruthy();
     expect(within(sheet).getByText(/One \(correct answer\)/)).toBeTruthy();
@@ -207,7 +254,8 @@ describe("teacher active intervention review", () => {
   });
   it("selects scoped materials and lets the teacher override AI advice", async () => {
     const resource = { kind: "LESSON", id: 4, title: "Fractions guide", description: "Practice guide", lesson: "Fractions",
-      topic: "Fractions", attachments: [], access: "PLANNING_ONLY", ai_read: "METADATA_ONLY" };
+      topic: "Fractions", attachments: [], access: "PLANNING_ONLY", ai_read: "METADATA_ONLY", recommended: true,
+      match_reason: "Matched lesson: Fractions", match_level: "LESSON", match_rank: 80 };
     const initial = { teacher_choice: null, selected_resources: [], ai_suggestion: null };
     api.workspace.mockResolvedValue({ plan: initial, resources: [resource] });
     api.savePlan.mockImplementation(async (_id, plan) => ({ plan: { ...plan, ai_suggestion: api.advisory.mock.calls.length ? { recommended_format: "QUIZ", reason: "Focused practice may help.", focus: [], evidence_used: {} } : null }, resources: [resource] }));
@@ -216,24 +264,61 @@ describe("teacher active intervention review", () => {
     const sheet = await screen.findByRole("complementary");
     fireEvent.click(await within(sheet).findByRole("button", { name: "Select resources" }));
     fireEvent.click(within(sheet).getByRole("checkbox"));
-    await waitFor(() => expect(api.savePlan).toHaveBeenCalledWith(12, { teacher_choice: null, selected_resources: [{ kind: "LESSON", id: 4 }] }));
+    await waitFor(() => expect(api.savePlan).toHaveBeenCalledWith(12, { teacher_choice: null, grade_treatment: null, selected_resources: [{ kind: "LESSON", id: 4 }] }));
     fireEvent.click(within(sheet).getByRole("button", { name: "Prepare Remediation" }));
+    fireEvent.click(within(sheet).getByRole("button", { name: "Get AI advisory" }));
     await waitFor(() => expect(api.advisory).toHaveBeenCalledWith(12));
     expect(await within(sheet).findByText(/Focused practice may help/)).toBeTruthy();
     fireEvent.click(within(sheet).getByRole("radio", { name: /Classwork/ }));
-    await waitFor(() => expect(api.savePlan).toHaveBeenLastCalledWith(12, { teacher_choice: "CLASSWORK", selected_resources: [{ kind: "LESSON", id: 4 }] }));
-    expect(within(sheet).getByRole("button", { name: "Open existing Classwork tool" })).toBeTruthy();
+    await waitFor(() => expect(api.savePlan).toHaveBeenLastCalledWith(12, { teacher_choice: "CLASSWORK", grade_treatment: "PRACTICE_ONLY", selected_resources: [{ kind: "LESSON", id: 4 }] }));
+    expect(within(sheet).getByRole("radio", { name: /Practice only/ })).toHaveProperty("checked", true);
+  });
+  it("shows current progress separately from frozen evidence and recommends only matched materials", async () => {
+    const base = { kind: "LESSON", description: "", lesson: "", topic: "", attachments: [], access: "PLANNING_ONLY", ai_read: "METADATA_ONLY" };
+    api.workspace.mockResolvedValue({
+      plan: { teacher_choice: "QUIZ", grade_treatment: null, selected_resources: [], ai_suggestion: null },
+      focus: { basis: "FROZEN_TRIGGER_DIAGNOSIS", evidence_level: "COMPONENT_ONLY", component: "EXAMINATION", exam_subtype: "TERM_EXAM", exam_subtype_requires_confirmation: false,
+        lesson_ids: [], lessons: [], competency_ids: [], competencies: [], topics: [], source_classwork_ids: [10], question_evidence: [], coverage_is_context_only: false },
+      progress: { triggering_projection: 84.0167, latest_projection: 83.9926, latest_revision: 6, status: "ACTIVE",
+        status_reason: "Latest projected final grade remains below 85.", completed_remediation: [{ title: "Practice Quiz", assignment_id: 12, grade: 10, total_points: 10 }],
+        assigned_remediation: [{ title: "Practice Quiz", assignment_id: 12, grade: 10, total_points: 10, component: "WRITTEN_WORK", is_graded: true, submission_status: "graded" }] },
+      resources: [{ ...base, id: 10, title: "Term Exam", recommended: false, match_rank: 60, match_level: "SOURCE_ACTIVITY", match_reason: "Source activity metadata; file contents were not analyzed" },
+        { ...base, id: 11, title: "Unrelated Geometry", recommended: false, match_rank: 0, match_level: null, match_reason: null }],
+    });
+    mount("/teacher/interventions?active=12");
+    const sheet = await screen.findByRole("complementary");
+    expect(await within(sheet).findByText(/Latest projected final grade:/)).toBeTruthy();
+    expect(within(sheet).getAllByText("83.99")).toHaveLength(2);
+    expect(sheet.textContent).toContain("Practice Quiz");
+    expect(sheet.textContent).toContain("10/10");
+    expect(sheet.textContent).toContain("Recorded grade treatment: Written Work");
+    expect(within(sheet).getAllByText(/Active · Monitoring/)).toHaveLength(2);
+    fireEvent.click(within(sheet).getByText("Plan or adjust support"));
+    fireEvent.click(within(sheet).getByRole("button", { name: "Select resources" }));
+    expect(within(sheet).queryByText("Term Exam")).toBeNull();
+    expect(within(sheet).queryByText("Unrelated Geometry")).toBeNull();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Browse all eligible materials" }));
+    expect(within(sheet).getByText("Term Exam")).toBeTruthy();
+    expect(within(sheet).getByText("Unrelated Geometry")).toBeTruthy();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Prepare Remediation" }));
+    expect(within(sheet).getByText(/cannot currently be used as a new remedial grade slot/)).toBeTruthy();
+    expect(api.advisory).not.toHaveBeenCalled();
   });
   it.each([
     ["QUIZ", "Existing Classwork page"],
     ["CLASSWORK", "Existing Classwork page"],
     ["TOS", "Existing TOS page"],
   ])("opens the existing %s authoring path", async (choice, destination) => {
-    api.workspace.mockResolvedValue({ plan: { teacher_choice: choice, selected_resources: [], ai_suggestion: null }, resources: [] });
+    api.workspace.mockResolvedValue({ plan: { teacher_choice: choice, grade_treatment: choice === "TOS" ? null : "WRITTEN_WORK", selected_resources: [], ai_suggestion: null }, resources: [], focus: { component: "WRITTEN_WORK", evidence_level: "COMPONENT_ONLY", competency_ids: [], lessons: [], competencies: [], exam_subtype: null }, progress: { triggering_projection: 74, latest_projection: 74, completed_remediation: [], assigned_remediation: [], status_reason: "Latest projected final grade remains below 85." } });
     mount("/teacher/interventions?active=12");
     const sheet = await screen.findByRole("complementary");
     fireEvent.click(await within(sheet).findByRole("button", { name: "Prepare Remediation" }));
-    fireEvent.click(within(sheet).getByRole("button", { name: /Open existing/ }));
+    if (choice === "TOS") {
+      expect(within(sheet).getByText(/creates no graded student activity/)).toBeTruthy();
+    } else {
+      expect(within(sheet).getByText(/This student only/)).toBeTruthy();
+    }
+    fireEvent.click(within(sheet).getByRole("button", { name: /Continue to/ }));
     expect(await screen.findByText(destination)).toBeTruthy();
   });
   it("shows active empty, loading, and retry states independently", async () => {

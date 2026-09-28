@@ -34,7 +34,7 @@ import { DialogueSelect } from "@/components/dialogue-select";
 import { Select } from "@/components/retroui/Select";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
-import { getTeacherActive, type TeacherInterventionDetail } from "@/lib/teacher-interventions-api";
+import { getTeacherActive, getRemediationWorkspace, type TeacherInterventionDetail, type RemediationFocus, type RemediationResource } from "@/lib/teacher-interventions-api";
 
 const tabs: Array<TabItem<TabId>> = [
   { id: "all", label: "All", icon: ClipboardList },
@@ -92,6 +92,9 @@ export default function Classworks() {
   const remediationInstructions = routeParams.get("instructions") || undefined;
   const interventionId = Number(routeParams.get("intervention_id"));
   const [remediationTarget, setRemediationTarget] = useState<TeacherInterventionDetail | null>(null);
+  const [remediationFocus, setRemediationFocus] = useState<RemediationFocus | null>(null);
+  const [remediationGradeTreatment, setRemediationGradeTreatment] = useState<"PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | null>(null);
+  const [remediationReferences, setRemediationReferences] = useState<RemediationResource[]>([]);
   const [remediationError, setRemediationError] = useState("");
   useEffect(() => {
     if (!remediationType) return;
@@ -101,11 +104,24 @@ export default function Classworks() {
     }
     setRemediationError("");
     setRemediationTarget(null);
+    setRemediationFocus(null);
+    setRemediationGradeTreatment(null);
+    setRemediationReferences([]);
     let live = true;
-    void getTeacherActive(interventionId).then((detail) => { if (live) setRemediationTarget(detail); })
+    void Promise.all([getTeacherActive(interventionId), getRemediationWorkspace(interventionId)]).then(([detail, workspace]) => { if (live) {
+      if (detail.subject_id !== Number(remediationSubject) || workspace.plan.teacher_choice !== remediationType || !workspace.plan.grade_treatment) {
+        setRemediationError("The saved Intervention method, subject, or grade treatment has changed. Return to the Intervention to prepare support.");
+        return;
+      }
+      const selected = new Set(workspace.plan.selected_resources.map((item) => `${item.kind}:${item.id}`));
+      setRemediationTarget(detail);
+      setRemediationFocus(workspace.focus);
+      setRemediationGradeTreatment(workspace.plan.grade_treatment);
+      setRemediationReferences(workspace.resources.filter((item) => item.recommended && selected.has(`${item.kind}:${item.id}`)));
+    } })
       .catch((error) => { if (live) setRemediationError(error instanceof Error ? error.message : "Unable to load intervention recipient."); });
     return () => { live = false; };
-  }, [interventionId, remediationType]);
+  }, [interventionId, remediationType, remediationSubject]);
   const {
     classes: loads,
     isLoading: loadingClasses,
@@ -453,7 +469,7 @@ export default function Classworks() {
                         </Button>
                       </Dialog.Footer>
                     </Dialog.Content>
-                  ) : remediationType && (!remediationTarget || remediationError) ? (
+                  ) : remediationType && (!remediationTarget || !remediationFocus || !remediationGradeTreatment || remediationError) ? (
                     <Dialog.Content size="lg"><p className="p-5">{remediationError || "Loading intervention recipient..."}</p></Dialog.Content>
                   ) : isQuizType(selectedType) ? (
                     <CreateClassworkQuizModal
@@ -465,6 +481,9 @@ export default function Classworks() {
                       initialInstructions={remediationInstructions}
                       remediationDraft={Boolean(remediationType)}
                       remediationTarget={remediationTarget}
+                      remediationFocus={remediationFocus}
+                      remediationGradeTreatment={remediationGradeTreatment}
+                      remediationReferences={remediationReferences}
                       onClose={closeCreateWizard}
                       onSuccess={async () => {
                         await Promise.all([loadClassworks(), refetchClasses()]);
@@ -482,6 +501,8 @@ export default function Classworks() {
                       initialInstructions={remediationInstructions}
                       remediationDraft={Boolean(remediationType)}
                       remediationTarget={remediationTarget}
+                      remediationFocus={remediationFocus}
+                      remediationGradeTreatment={remediationGradeTreatment}
                       onClose={closeCreateWizard}
                       onSuccess={async () => {
                         await Promise.all([loadClassworks(), refetchClasses()]);

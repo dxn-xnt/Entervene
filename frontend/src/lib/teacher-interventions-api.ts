@@ -19,6 +19,8 @@ export interface TeacherInterventionSummary {
   triggering_intervention_level: string;
   created_at: string;
   activated_at?: string | null;
+  resolved_at?: string | null;
+  resolution_reason?: string | null;
   diagnosis_summary: {
     weakest_supported_components?: string[];
     competency_detail_status?: string;
@@ -32,8 +34,8 @@ export interface DiagnosisSnapshot {
   weakest_supported_components?: string[];
   components?: Record<string, { evidence_state: string; percent: number | null; model_observation_count?: number }>;
   supporting_activities?: Array<{ classwork_id: number; title: string; component: string; score: number; possible_score: number; percent: number }>;
-  lowest_supported_competencies?: Array<{ competency_id: number; competency_code: string; competency_statement: string; percent: number; score: number; possible_score: number; supporting_scores: Array<{ source_type: string; activity_title: string }> }>;
-  manual_assessment_coverage?: Array<{ classwork_id: number; title: string; component: string; score: number; possible_score: number; percent: number; covered_lessons: Array<{ lesson_id: number; title: string }>; covered_competencies: Array<{ competency_id: number; competency_code: string; competency_statement: string }>; score_scope: string; coverage_provenance: string }>;
+  lowest_supported_competencies?: Array<{ competency_id: number; competency_code: string; competency_statement: string; percent: number; score: number; possible_score: number; supporting_scores: Array<{ source_type: string; activity_title: string; quiz_question_id?: number; lesson_title?: string; score?: number; possible_score?: number }> }>;
+  manual_assessment_coverage?: Array<{ classwork_id: number; title: string; component: string; score: number; possible_score: number; percent: number; in_weakest_supported_component?: boolean; covered_lessons: Array<{ lesson_id: number; title: string }>; covered_competencies: Array<{ competency_id: number; competency_code: string; competency_statement: string }>; score_scope: string; coverage_provenance: string }>;
   covered_competencies_for_teacher_review?: Array<{ competency_id: number; competency_code: string; competency_statement: string; ranking_status: string; assessment_classwork_ids: number[] }>;
   competency_detail_status?: string;
   external_assessment_detail_status?: string;
@@ -45,6 +47,12 @@ export interface TeacherInterventionDetail extends TeacherInterventionSummary {
   activated_by_staff_id: string | null;
   resolved_at: string | null;
   resolution_reason: string | null;
+}
+
+export interface TeacherResolvedInterventionDetail extends TeacherInterventionDetail {
+  resolution_projection: number | null;
+  targeted_activities: Array<{ assignment_id: number; title: string; classwork_type: string; submission_status: string | null; grade: number | null; total_points: number | null }>;
+  sent_reviewer: { title: string; introduction: string; body: string } | null;
 }
 
 export class InterventionApiError extends Error {
@@ -67,6 +75,8 @@ export const getTeacherCandidate = (id: number) => read<TeacherInterventionDetai
 export const activateTeacherCandidate = (id: number) => read<TeacherInterventionDetail>(`${base}/candidates/${id}/activate`, "POST");
 export const listTeacherActive = () => read<{ items: TeacherInterventionSummary[]; total: number }>(`${base}/active`);
 export const getTeacherActive = (id: number) => read<TeacherInterventionDetail>(`${base}/active/${id}`);
+export const listTeacherResolved = () => read<{ items: TeacherInterventionSummary[]; total: number }>(`${base}/resolved`);
+export const getTeacherResolved = (id: number) => read<TeacherResolvedInterventionDetail>(`${base}/resolved/${id}`);
 
 export type MaterialKind = "STUDENT_REVIEWER" | "REMEDIAL_ASSESSMENT";
 export interface ReviewerDraft { title: string; introduction: string; body: string }
@@ -115,15 +125,35 @@ export interface RemediationResource {
   kind: "LESSON" | "CLASSWORK"; id: number; title: string; description: string;
   lesson: string; topic: string; attachments: string[]; classwork_type?: string;
   access: "ALREADY_ACCESSIBLE" | "PLANNING_ONLY"; ai_read: "METADATA_ONLY";
+  recommended: boolean; match_reason: string | null; match_level: "COMPETENCY" | "LESSON" | "SOURCE_ACTIVITY" | null; match_rank: number;
+}
+export interface RemediationFocus {
+  basis: "FROZEN_TRIGGER_DIAGNOSIS";
+  evidence_level: "QUESTION_SCORE" | "SCORED_COMPETENCY" | "ACTIVITY_COVERAGE" | "COMPONENT_ONLY";
+  component: "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | null;
+  exam_subtype: "SUMMATIVE_1" | "SUMMATIVE_2" | "TERM_EXAM" | null;
+  exam_subtype_requires_confirmation: boolean;
+  lesson_ids: number[]; lessons: Array<{ id: number; title: string }>;
+  competency_ids: number[]; competencies: Array<{ id: number; label: string }>;
+  topics: string[]; source_classwork_ids: number[];
+  question_evidence: Array<{ quiz_question_id: number | null; score: number; possible_score: number }>;
+  coverage_is_context_only: boolean;
+}
+export interface RemediationProgress {
+  triggering_projection: number; latest_projection: number | null; latest_revision: number | null;
+  completed_remediation: Array<{ title: string; assignment_id: number; grade: number | null; total_points: number | null }>;
+  assigned_remediation?: Array<{ title: string; assignment_id: number; component: string | null; is_graded: boolean; submission_status: string | null; grade: number | null; total_points: number | null }>;
+  status: string; status_reason: string;
 }
 export interface RemediationPlan {
   teacher_choice: RemediationFormat | null;
+  grade_treatment?: "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | null;
   selected_resources: Array<{ kind: "LESSON" | "CLASSWORK"; id: number }>;
   ai_suggestion: null | { recommended_format: RemediationFormat; reason: string; focus: Array<{ competency: string }>; evidence_used: Record<string, unknown> };
 }
-export interface RemediationWorkspace { plan: RemediationPlan; resources: RemediationResource[] }
+export interface RemediationWorkspace { plan: RemediationPlan; resources: RemediationResource[]; focus: RemediationFocus; progress: RemediationProgress }
 export const getRemediationWorkspace = (id: number) => read<RemediationWorkspace>(`${base}/${id}/remediation`);
-export const saveRemediationPlan = (id: number, plan: Pick<RemediationPlan, "teacher_choice" | "selected_resources">) => read<RemediationWorkspace>(`${base}/${id}/remediation`, "PUT", plan);
+export const saveRemediationPlan = (id: number, plan: Pick<RemediationPlan, "teacher_choice" | "selected_resources" | "grade_treatment">) => read<RemediationWorkspace>(`${base}/${id}/remediation`, "PUT", plan);
 export const generateRemediationAdvisory = (id: number) => read<RemediationWorkspace>(`${base}/${id}/remediation/advisory`, "POST");
 
 export function matchingCandidate(prediction: DevelopmentCurrentTermListItem, candidates: TeacherInterventionSummary[]): TeacherInterventionSummary | undefined {
