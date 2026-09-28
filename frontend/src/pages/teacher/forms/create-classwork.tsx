@@ -30,7 +30,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { ActivityRubricEditor } from "@/components/activity-rubric-editor";
 import { activityRubricMaximum, defaultActivityRubric, validateActivityRubric } from "@/lib/classwork-utils";
 import type { ActivityRubricLevel } from "@/types/classwork";
-import type { TeacherInterventionDetail, RemediationFocus } from "@/lib/teacher-interventions-api";
+import type { TeacherInterventionDetail, RemediationFocus, OriginalExamination } from "@/lib/teacher-interventions-api";
 import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
 
 interface CreateClassworkModalProps {
@@ -43,7 +43,8 @@ interface CreateClassworkModalProps {
   remediationDraft?: boolean;
   remediationTarget?: TeacherInterventionDetail | null;
   remediationFocus?: RemediationFocus | null;
-  remediationGradeTreatment?: "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | null;
+  remediationGradeTreatment?: "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | null;
+  remediationOriginalExam?: OriginalExamination | null;
   onClose: () => void;
   onSuccess: () => void;
   onBack: () => void;
@@ -60,6 +61,7 @@ export default function CreateClassworkModal({
   remediationTarget,
   remediationFocus = null,
   remediationGradeTreatment = null,
+  remediationOriginalExam = null,
   onClose,
   onSuccess,
   onBack,
@@ -77,8 +79,9 @@ export default function CreateClassworkModal({
       title: initialTitle || "",
       instructions: initialInstructions || "",
       is_published: remediationDraft ? false : emptyClassworkDraft.is_published,
-      classwork_category: remediationDraft ? (remediationGradeTreatment === "PRACTICE_ONLY" ? "" : remediationGradeTreatment || "") : categoryFromFocus(null),
-      exam_subtype: "",
+      classwork_category: remediationDraft ? (remediationGradeTreatment === "PRACTICE_ONLY" ? "" : remediationGradeTreatment === "EXAMINATION" ? "QUARTERLY_ASSESSMENT" : remediationGradeTreatment || "") : categoryFromFocus(null),
+      exam_subtype: remediationOriginalExam?.subtype ?? "",
+      total_points: remediationOriginalExam ? String(remediationOriginalExam.total_points) : emptyClassworkDraft.total_points,
       subject_id: preferredId,
     };
   });
@@ -178,7 +181,7 @@ export default function CreateClassworkModal({
     if (!draft.subject_id) return "Choose a subject.";
     if (!draft.title.trim()) return "Topic title is required.";
     if (remediationDraft && (draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && !draft.exam_subtype) return "Choose an Examination sub-type explicitly.";
-    if (remediationDraft && (draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS")) return "Remedial Examination publication is blocked until official slot policy is defined. Choose Written Work or Performance Task.";
+    if (remediationGradeTreatment === "EXAMINATION" && (!remediationOriginalExam || draft.exam_subtype !== remediationOriginalExam.subtype || Number(draft.total_points) !== remediationOriginalExam.total_points)) return "Remedial Examination must match the original subtype and maximum points.";
     if (!isReadingType(selectedType)) {
       if (selectedType === "ACTIVITY") {
         const rubricError = validateActivityRubric(rubricLevels);
@@ -334,6 +337,7 @@ export default function CreateClassworkModal({
       if (remediationTarget) {
         formData.append("intervention_id", String(remediationTarget.intervention_id));
         formData.append("remediation_request_id", remediationRequestId);
+        if (remediationOriginalExam && remediationGradeTreatment === "EXAMINATION") formData.append("original_exam_assignment_id", String(remediationOriginalExam.assignment_id));
       }
       formData.append("lesson_ids", JSON.stringify(selectedLessonIds));
       if (draft.due_date) {
@@ -536,7 +540,7 @@ export default function CreateClassworkModal({
                           <Select.Item value="PERFORMANCE_TASK">
                             Performance Task
                           </Select.Item>
-                          {!remediationDraft && <Select.Item value="QUARTERLY_ASSESSMENT">
+                          {(!remediationDraft || remediationGradeTreatment === "EXAMINATION") && <Select.Item value="QUARTERLY_ASSESSMENT">
                             Exams
                           </Select.Item>}
                         </Select.Group>
@@ -554,7 +558,7 @@ export default function CreateClassworkModal({
                             exam_subtype: val,
                           }))
                         }
-                        disabled={isCreating}
+                        disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
                       >
                         <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
                           <Select.Value placeholder="Select Sub-type" />
@@ -589,7 +593,7 @@ export default function CreateClassworkModal({
                           total_points: event.target.value,
                         }))
                       }
-                      disabled={isCreating}
+                      disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
                       className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
                     />
                   </Field>}
@@ -599,8 +603,8 @@ export default function CreateClassworkModal({
               {remediationFocus && !isReadingType(selectedType) && (
                 <p className="rounded border p-3 text-sm">
                   Evidence focus: {focusGuidance(remediationFocus)}
-                  {remediationFocus.component === "EXAMINATION" && " Term Exam is the evidence source when traceable; it is not a new remedial grade slot."}
-                  {remediationDraft && (remediationGradeTreatment === "PRACTICE_ONLY" ? " Practice only: completion and score do not affect official grades or predictions." : ` Grade treatment: ${remediationGradeTreatment === "PERFORMANCE_TASK" ? "Performance Task" : "Written Work"}. This records the new activity separately from the diagnosed weakness.`)}
+                  {remediationGradeTreatment === "EXAMINATION" && remediationOriginalExam ? ` Original ${remediationOriginalExam.title}: ${remediationOriginalExam.score}/${remediationOriginalExam.total_points}. The higher result will count.` : ""}
+                  {remediationDraft && remediationGradeTreatment === "PRACTICE_ONLY" && " Practice only: completion and score do not affect official grades or predictions."}
                 </p>
               )}
 

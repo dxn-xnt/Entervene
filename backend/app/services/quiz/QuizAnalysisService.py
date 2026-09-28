@@ -26,6 +26,7 @@ from app.schemas.Quiz import (
 )
 from app.services.quiz.QuizBuilderService import get_teacher_quiz_classwork
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
+from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
 
 
@@ -354,6 +355,7 @@ def grade_teacher_quiz_submission(
         raise HTTPException(status_code=404, detail="Assignment not found")
 
     classwork = get_teacher_quiz_classwork(db, staff_id, assignment.classwork_id)
+    ensure_remedial_period_open(db, assignment, submission.student_id)
     quiz = _quiz_with_questions(db, classwork.classwork_id)
     if not quiz:
         raise HTTPException(status_code=404, detail="Quiz not found")
@@ -422,9 +424,10 @@ def grade_teacher_quiz_submission(
     submission.graded_at = datetime.now(timezone.utc)
     submission.graded_by_staff_id = staff_id
 
+    refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, submission.student_id, previous_grade, submission.grade)
     db.commit()
     db.refresh(submission)
-    if classwork.is_graded and submission.grade != previous_grade:
+    if refresh_needed:
         refresh_after_committed_grade_change(
             db.get_bind(),
             student_ids=[submission.student_id],

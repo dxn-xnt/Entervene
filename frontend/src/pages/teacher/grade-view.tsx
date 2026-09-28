@@ -583,6 +583,10 @@ const TeacherGradeView = () => {
                   </div>
                   <div className="size-4 shrink-0" />
                 </div>
+                {item.remedial_exams?.map((exam) => <div key={`${exam.original_assignment_id}-${exam.remedial_score}`} className="mt-1 text-[10px] text-left leading-tight">
+                  <strong>{exam.original_title} ({exam.subtype.replaceAll("_", " ")})</strong><br />
+                  Original: {exam.original_score ?? "—"}/{exam.total_points} · Remedial: {exam.remedial_score ?? "Pending"}/{exam.total_points} · Effective: {exam.effective_score ?? "—"}/{exam.total_points}
+                </div>)}
               </Table.Cell>
 
               <Table.Cell className="font-medium text-center tabular-nums whitespace-nowrap">

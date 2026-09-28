@@ -269,16 +269,18 @@ const StudentQuizResult = () => {
                                 return (
                                   <div
                                     key={opt.option_id}
-                                    className={`px-3 py-2 text-xs border rounded flex items-center justify-between ${optStyle}`}
+                                    className={`px-3 py-2 text-xs border rounded flex items-start justify-between gap-2 min-w-0 h-full ${optStyle}`}
                                   >
-                                    <span>{opt.option_text}</span>
+                                    <span className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere] leading-snug">
+                                      {opt.option_text}
+                                    </span>
                                     {isSelected && (
-                                      <span className="text-[10px] uppercase font-bold tracking-wider ml-2">
+                                      <span className="text-[10px] uppercase font-bold tracking-wider shrink-0 mt-0.5">
                                         Your Answer
                                       </span>
                                     )}
                                     {!isSelected && isAnswerCorrect && (
-                                      <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-700 ml-2">
+                                      <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-700 shrink-0 mt-0.5">
                                         Correct
                                       </span>
                                     )}

@@ -332,7 +332,7 @@ const StudentQuizTake = () => {
 
       {/* Question card */}
       <div className="px-12 md:px-24">
-        <Card className="bg-[#F6E9B2] flex justify-center items-center">
+        <Card className="bg-[#F6E9B2] flex flex-col justify-center items-center p-6 text-center">
           <p className="text-sm text-black/50 mb-1">
             Question {currentIndex + 1} of {totalQuestions}
             {currentQuestion.points > 0 && (
@@ -341,7 +341,7 @@ const StudentQuizTake = () => {
               </span>
             )}
           </p>
-          <p className="text-center text-lg font-semibold">
+          <p className="text-center text-lg font-semibold whitespace-normal break-words [overflow-wrap:anywhere] max-w-full">
             {currentQuestion.question_text}
           </p>
         </Card>
@@ -359,10 +359,12 @@ const StudentQuizTake = () => {
                   autoIcon={false}
                   key={opt.option_id}
                   onClick={() => selectOption(currentQuestion.quiz_question_id, opt.option_id)}
-                  className={`h-auto min-h-[5rem] cursor-pointer flex items-center justify-center p-8 text-center text-lg font-semibold transition-all hover:shadow-none ${selected ? "bg-primary text-primary-foreground border-black" : "bg-white text-black hover:bg-black/5"
+                  className={`w-full min-w-0 h-full min-h-[5rem] cursor-pointer flex items-center justify-center p-4 sm:p-6 text-center text-base sm:text-lg font-semibold transition-all hover:shadow-none whitespace-normal break-words [overflow-wrap:anywhere] ${selected ? "bg-primary text-primary-foreground border-black" : "bg-white text-black hover:bg-black/5"
                     }`}
                 >
-                  {opt.option_text}
+                  <span className="w-full max-w-full min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] text-center leading-relaxed">
+                    {opt.option_text}
+                  </span>
                 </Button>
               );
             })}

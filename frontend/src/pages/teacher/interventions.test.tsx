@@ -70,6 +70,29 @@ it("shows resolved history and a read-only detail with saved support", async () 
   expect(api.resolvedDetail).toHaveBeenCalledWith(12);
 });
 
+it("identifies a later active intervention as a new cycle after resolved history", async () => {
+  const resolved = { ...active, status: "RESOLVED", resolved_at: "2026-09-26T12:07:00Z", resolution_reason: "IMPROVED_PREDICTION", triggering_predicted_grade: 84.04 };
+  const current = { ...active, intervention_id: 13, source_prediction_id: 39, source_prediction_revision: 5,
+    created_at: "2026-09-26T12:18:00Z", activated_at: "2026-09-26T12:27:00Z", triggering_predicted_grade: 84.02 };
+  api.resolvedList.mockResolvedValue({ items: [resolved], total: 1 });
+  api.resolvedDetail.mockResolvedValue({ ...activeDetail, ...resolved, resolution_projection: 86.47, targeted_activities: [], sent_reviewer: null });
+  api.activeList.mockResolvedValue({ items: [current], total: 1 });
+  api.activeDetail.mockResolvedValue({ ...activeDetail, ...current });
+
+  mount("/teacher/interventions?active=13");
+  let sheet = await screen.findByRole("complementary");
+  expect(await within(sheet).findByText("Current support cycle")).toBeTruthy();
+  expect(sheet.textContent).toContain("A new below-threshold prediction opened this cycle");
+  cleanup();
+
+  mount("/teacher/interventions?resolved=12");
+  sheet = await screen.findByRole("complementary");
+  expect(await within(sheet).findByText("Previous intervention cycle")).toBeTruthy();
+  expect(sheet.textContent).toContain("Projection at resolution: 86.47");
+  expect(sheet.textContent).toContain("new active support cycle (trigger 84.02)");
+  expect(sheet.textContent).toContain("not the student's current prediction");
+});
+
 describe("teacher candidate review", () => {
   it("lists teacher candidates and prioritizes the backend high-risk label", async () => {
     api.list.mockResolvedValue({ items: [{ ...candidate, intervention_id: 13, student_name: "Morgan", triggering_intervention_level: "MODERATE_RISK" }, candidate], total: 2 });
@@ -301,8 +324,25 @@ describe("teacher active intervention review", () => {
     expect(within(sheet).getByText("Term Exam")).toBeTruthy();
     expect(within(sheet).getByText("Unrelated Geometry")).toBeTruthy();
     fireEvent.click(within(sheet).getByRole("button", { name: "Prepare Remediation" }));
-    expect(within(sheet).getByText(/cannot currently be used as a new remedial grade slot/)).toBeTruthy();
+    expect(within(sheet).getByText(/No scored original Examination is available for this student and period/)).toBeTruthy();
     expect(api.advisory).not.toHaveBeenCalled();
+  });
+  it("selects a scored original Examination for the higher-score treatment", async () => {
+    const workspace = {
+      plan: { teacher_choice: "CLASSWORK", grade_treatment: "PRACTICE_ONLY", selected_resources: [], ai_suggestion: null },
+      focus: { basis: "FROZEN_TRIGGER_DIAGNOSIS", evidence_level: "COMPONENT_ONLY", component: "EXAMINATION", exam_subtype: null,
+        lesson_ids: [], lessons: [], competency_ids: [], competencies: [], topics: [], source_classwork_ids: [], question_evidence: [], coverage_is_context_only: false },
+      progress: { triggering_projection: 74, latest_projection: 74, latest_revision: 2, completed_remediation: [], assigned_remediation: [], status: "ACTIVE", status_reason: "Monitoring." },
+      resources: [], original_exams: [{ assignment_id: 41, title: "Summative 2", subtype: "SUMMATIVE_2", score: 6, total_points: 10 }],
+    };
+    api.workspace.mockResolvedValue(workspace);
+    api.savePlan.mockImplementation(async (_id: number, body: Record<string, unknown>) => ({ ...workspace, plan: { ...workspace.plan, ...body } }));
+    mount("/teacher/interventions?active=12");
+    const sheet = await screen.findByRole("complementary");
+    fireEvent.click(await within(sheet).findByRole("button", { name: "Prepare Remediation" }));
+    fireEvent.click(within(sheet).getByRole("radio", { name: /Remedial Examination/ }));
+    await waitFor(() => expect(api.savePlan).toHaveBeenCalledWith(12, expect.objectContaining({ grade_treatment: "EXAMINATION", original_exam_assignment_id: 41 })));
+    await waitFor(() => expect((within(sheet).getByRole("combobox", { name: "Original Examination" }) as HTMLSelectElement).value).toBe("41"));
   });
   it.each([
     ["QUIZ", "Existing Classwork page"],

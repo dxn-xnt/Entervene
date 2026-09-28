@@ -7,6 +7,7 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.intervention.Intervention import Intervention
 from app.models.intervention.InterventionSupportMaterial import InterventionSupportMaterial
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.services.grading.RemedialExamination import effective_exam_score_for_change
 
 
 def resolution_projection(db: Session, row: Intervention) -> float | None:
@@ -44,6 +45,10 @@ def targeted_activities(db: Session, row: Intervention, *, student_view: bool) -
         if not submission and (not assignment.is_published or not work.is_published or work.is_archived):
             continue
         visible_score = not student_view or work.show_scores
+        original = db.get(ClassworkAssignment, assignment.original_exam_assignment_id) if assignment.original_exam_assignment_id else None
+        original_submission = db.query(StudentSubmission).filter_by(
+            classwork_assignment_id=original.classwork_assignment_id, student_id=row.student_id,
+        ).order_by(StudentSubmission.submission_id.desc()).first() if original else None
         result.append({
             "assignment_id": assignment.classwork_assignment_id,
             "title": work.title,
@@ -51,6 +56,12 @@ def targeted_activities(db: Session, row: Intervention, *, student_view: bool) -
             "submission_status": submission.status if submission else None,
             "grade": float(submission.grade) if submission and submission.grade is not None and visible_score else None,
             "total_points": float(work.total_points) if work.total_points is not None and visible_score else None,
+            "original_assignment_id": assignment.original_exam_assignment_id,
+            "original_title": original.classwork.title if original else None,
+            "exam_subtype": work.exam_subtype if original else None,
+            "original_grade": float(original_submission.grade) if original_submission and original_submission.grade is not None and visible_score else None,
+            "effective_grade": effective_exam_score_for_change(db, assignment, row.student_id,
+                float(submission.grade) if submission and submission.grade is not None else None) if original and visible_score else None,
         })
     return result
 

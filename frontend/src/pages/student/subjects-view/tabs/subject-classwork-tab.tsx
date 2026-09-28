@@ -1135,8 +1135,8 @@ export default function SubjectClassworkTab({
                   </Button>
                 </div>
 
-                <Card className="block w-full border-black bg-white px-6 py-12 text-center shadow-md hover:shadow-none">
-                  <p className="text-lg font-bold">
+                <Card className="block w-full border-black bg-white px-6 py-8 text-center shadow-md hover:shadow-none">
+                  <p className="text-lg font-bold whitespace-normal break-words [overflow-wrap:anywhere]">
                     {currentQuestion.question_text}
                   </p>
                 </Card>
@@ -1147,6 +1147,7 @@ export default function SubjectClassworkTab({
                       <Button
                         key={option.option_id}
                         type="button"
+                        autoIcon={false}
                         onClick={() =>
                           setQuizAnswers((current) => ({
                             ...current,
@@ -1157,14 +1158,16 @@ export default function SubjectClassworkTab({
                           }))
                         }
                         disabled={isQuizSubmitting}
-                        className={`min-h-24 rounded border-black px-4 py-3 text-lg font-bold shadow-md hover:shadow-none ${
+                        className={`w-full min-w-0 h-full min-h-24 rounded border-black p-4 text-base sm:text-lg font-bold shadow-md hover:shadow-none whitespace-normal break-words [overflow-wrap:anywhere] ${
                           quizAnswers[currentQuestion.quiz_question_id]
                             ?.selected_option_id === option.option_id
                             ? "bg-success hover:bg-success"
                             : "bg-white hover:bg-white"
                         }`}
                       >
-                        {option.option_text}
+                        <span className="w-full max-w-full min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] text-center leading-snug">
+                          {option.option_text}
+                        </span>
                       </Button>
                     ))}
                   </div>

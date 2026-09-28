@@ -20,6 +20,10 @@ def test_academic_period_model_defaults_to_term_values():
     assert columns.period_type.default.arg == "TERM"
     assert columns.total_periods_in_year.default.arg == 3
     assert columns.period_progress_ratio.default.arg == 0.3333
+    assert columns.created_at.server_default is not None
+    assert columns.updated_at.server_default is None
+    assert columns.updated_at.default is not None
+    assert columns.updated_at.onupdate is not None
 
 
 def test_default_academic_period_values_normalize_to_term_one():
