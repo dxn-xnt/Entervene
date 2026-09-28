@@ -1,98 +1,134 @@
-import {
-  BookOpen,
-  CheckSquare,
-  ClipboardList,
-  FileText,
-  Link as LinkIcon,
-  type LucideIcon,
-} from "lucide-react";
-
 import { useMemo } from "react";
-import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
+import { Card } from "@/components/retroui/Card";
+import { Progress } from "@/components/retroui/Progress";
 import { formatDate } from "@/lib/classwork-utils";
-import type { TeacherClasswork } from "@/types/classwork";
-
-const typeIcon: Record<string, LucideIcon> = {
-  READING: BookOpen,
-  ACTIVITY: CheckSquare,
-  ASSIGNMENT: FileText,
-  QUIZ: ClipboardList,
-};
+import type { ClassworkTracking, TeacherClasswork } from "@/types/classwork";
 
 type ClassworkCardProps = {
   item: TeacherClasswork;
+  tracking?: ClassworkTracking;
   onOpen: (item: TeacherClasswork) => void;
 };
 
-export default function ClassworkCard({ item, onOpen }: ClassworkCardProps) {
-  const Icon = typeIcon[item.classwork_type.toUpperCase()] || ClipboardList;
+function displayType(value: string) {
+  return value.charAt(0) + value.slice(1).toLowerCase();
+}
 
-  const assignmentCount = item.assignments?.length ?? 0;
-  const attachmentCount = item.attachments?.length ?? 0;
-
-  const sectionLabel = useMemo(() => {
-    if (!item.assignments || item.assignments.length === 0) {
-      return null;
-    }
-    const names = item.assignments
-      .map((assignment) => assignment.title)
-      .filter((title): title is string => Boolean(title && title.trim()));
-    if (names.length === 0) return null;
+export default function ClassworkCard({
+  item,
+  tracking,
+  onOpen,
+}: ClassworkCardProps) {
+  const sections = useMemo(() => {
+    const names = Array.from(
+      new Set(
+        (item.assignments ?? [])
+          .map((assignment) => assignment.title?.trim())
+          .filter((title): title is string => Boolean(title)),
+      ),
+    );
     if (names.length <= 2) return names.join(", ");
-    return `${names.slice(0, 2).join(", ")} (+${names.length - 2} more)`;
+    return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
   }, [item.assignments]);
 
-  const subtitleSubject = useMemo(() => {
-    if (item.subject_name && sectionLabel) {
-      return `${item.subject_name} - ${sectionLabel}`;
-    }
-    return item.subject_name || sectionLabel || null;
-  }, [item.subject_name, sectionLabel]);
+  const dueLabel = useMemo(() => {
+    const dueDates = Array.from(
+      new Set(
+        (item.assignments ?? [])
+          .map((assignment) => assignment.due_date)
+          .filter((date): date is string => Boolean(date)),
+      ),
+    );
+    if (!dueDates.length) return null;
+    if (dueDates.length === 1) return `Due ${formatDate(dueDates[0])}`;
+    return `${dueDates.length} section due dates`;
+  }, [item.assignments]);
+
+  const completionRate =
+    tracking && tracking.total_students > 0
+      ? Math.round((tracking.submitted_count / tracking.total_students) * 100)
+      : null;
+
+  const hasAssignments = (item.assignments?.length ?? 0) > 0;
+  const openCard = () => onOpen(item);
 
   return (
     <Card
-      className="block w-full cursor-pointer"
-      onClick={() => onOpen(item)}
+      className="flex h-full w-full cursor-pointer flex-col"
+      role="button"
+      tabIndex={0}
+      onClick={openCard}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openCard();
+        }
+      }}
+      aria-label={`Open ${item.title}`}
     >
-      <Card.Content className="flex items-center justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start gap-2">
-            <Icon size={19} className="mt-0.5 shrink-0" />
-
-            <Card.Title className="mb-0 text-sm md:text-base font-bold line-clamp-2 break-words [overflow-wrap:anywhere]">
-              {item.title}
-            </Card.Title>
-          </div>
-
-          <p className="mt-1 text-xs font-medium text-gray-600">
-            {[subtitleSubject, `Created ${formatDate(item.created_at)}`]
-              .filter(Boolean)
-              .join(" | ")}
-          </p>
+      <Card.Header className="flex-col items-stretch gap-2">
+        <div className="flex items-center gap-1.5">
+          <Badge variant="secondary" size="sm">
+            {displayType(item.classwork_type)}
+          </Badge>
+          <Badge variant={item.is_published ? "success" : "outline"} size="sm">
+            {item.is_published ? "Published" : "Draft"}
+          </Badge>
         </div>
 
-        <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          {assignmentCount > 0 && (
-            <Badge
-              variant="secondary"
-              size="sm"
-              className="flex items-center gap-1"
-            >
-              <LinkIcon size={12} />
-              <span>Class {assignmentCount}</span>
-            </Badge>
-          )}
+        <div className="min-w-0">
+          <Card.Title className="mb-0.5 line-clamp-2 break-words text-base font-bold [overflow-wrap:anywhere]">
+            {item.title}
+          </Card.Title>
+          <Card.Description className="truncate text-xs font-medium text-muted-foreground">
+            {[item.subject_name, sections].filter(Boolean).join(" · ") ||
+              "Subject or section unavailable"}
+          </Card.Description>
+        </div>
+      </Card.Header>
 
-          {attachmentCount > 0 && (
-            <Badge
-              variant="secondary"
-              size="sm"
-              className="flex items-center gap-1"
-            >
-              <FileText size={12} />
-              <span>File {attachmentCount}</span>
-            </Badge>
+      <Card.Content className="mt-auto flex flex-col gap-3">
+        {tracking && (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">
+                Submitted{" "}
+                <span className="font-bold text-foreground">
+                  {tracking.submitted_count}/{tracking.total_students}
+                </span>
+              </span>
+              <span className="font-bold text-foreground">
+                {completionRate === null ? "No students" : `${completionRate}%`}
+              </span>
+            </div>
+            <Progress value={completionRate ?? 0} className="h-3" />
+          </div>
+        )}
+
+        {!tracking && hasAssignments && (
+          <p className="text-xs text-muted-foreground">
+            Loading submission summary…
+          </p>
+        )}
+        {!hasAssignments && (
+          <p className="text-xs text-muted-foreground">
+            Not assigned to a section
+          </p>
+        )}
+
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {item.total_points !== null && item.total_points !== undefined && (
+            <span>
+              <span className="font-bold text-foreground">
+                {item.total_points}
+              </span>{" "}
+              pts
+            </span>
+          )}
+          <span>Created {formatDate(item.created_at)}</span>
+          {dueLabel && (
+            <span className="font-bold text-foreground">{dueLabel}</span>
           )}
         </div>
       </Card.Content>

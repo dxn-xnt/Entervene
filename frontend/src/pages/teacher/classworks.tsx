@@ -23,6 +23,7 @@ import type {
   TabId,
   TeacherClassLoad,
   TeacherClasswork,
+  ClassworkTracking,
 } from "@/types/classwork";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
@@ -136,11 +137,12 @@ export default function Classworks() {
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [classFilter, setClassFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [sortMode, _setSortMode] = useState<SortMode>("newest");
+  const sortMode: SortMode = "newest";
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [selectedType, setSelectedType] = useState<ClassworkKind | null>(null);
   const [loadingItems, setLoadingItems] = useState(true);
   const [itemsError, setItemsError] = useState("");
+  const [trackingByClasswork, setTrackingByClasswork] = useState<Record<number, ClassworkTracking>>({});
 
   useEffect(() => {
     if (remediationType !== "QUIZ" && remediationType !== "CLASSWORK") return;
@@ -245,6 +247,36 @@ export default function Classworks() {
       return sortMode === "oldest" ? first - second : second - first;
     });
   }, [activeTab, classFilter, items, search, sortMode, statusFilter, subjectFilter]);
+
+  useEffect(() => {
+    const trackableItems = filteredItems.filter(
+      (item) => (item.assignments?.length ?? 0) > 0 && !trackingByClasswork[item.classwork_id],
+    );
+    if (!trackableItems.length) return;
+
+    let cancelled = false;
+    void Promise.all(
+      trackableItems.map(async (item) => {
+        const response = await apiFetch(`/api/v1/submissions/classwork/${item.classwork_id}/tracking`);
+        if (!response.ok) throw new Error(`Unable to load submission summary for ${item.classwork_id}.`);
+        return (await response.json()) as ClassworkTracking;
+      }),
+    )
+      .then((summaries) => {
+        if (cancelled) return;
+        setTrackingByClasswork((current) => ({
+          ...current,
+          ...Object.fromEntries(summaries.map((summary) => [summary.classwork_id, summary])),
+        }));
+      })
+      .catch(() => {
+        // The list remains useful even when an individual tracking summary is unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filteredItems, trackingByClasswork]);
 
   const openCreateWizard = () => {
     const preferredType = tabType[activeTab] as ClassworkKind | undefined;
@@ -398,11 +430,12 @@ export default function Classworks() {
                     Loading classworks...
                   </p>
                 ) : filteredItems.length > 0 ? (
-                  <section className="space-y-3">
+                  <section className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] items-stretch gap-4">
                     {filteredItems.map((item) => (
                       <ClassworkCard
                         key={item.classwork_id}
                         item={item}
+                        tracking={trackingByClasswork[item.classwork_id]}
                         onOpen={openClassworkDetail}
                       />
                     ))}

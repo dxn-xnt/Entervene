@@ -1,13 +1,11 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Calendar,
-  AlertCircle,
-  FileText,
-} from "lucide-react";
+import { Calendar, AlertCircle, FileText } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
+import { Badge } from "@/components/retroui/Badge";
 import { Select } from "@/components/retroui/Select";
+import { Progress } from "@/components/retroui/Progress";
 import { OverviewCard } from "@/components/overview-cards";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
@@ -109,9 +107,24 @@ const defaultTeacherCards: OverviewCardData[] = [
 ];
 
 const defaultStudentsNeedingSupport = [
-  { name: "Jose Reyes", section: "Archimedes · 3 missing tasks", score: 52, variant: "destructive" },
-  { name: "Ana Lim", section: "Newton · falling 12 pts", score: 61, variant: "destructive" },
-  { name: "Paolo Cruz", section: "Curie · low attendance", score: 68, variant: "warning" },
+  {
+    name: "Jose Reyes",
+    section: "Archimedes · 3 missing tasks",
+    score: 52,
+    variant: "destructive",
+  },
+  {
+    name: "Ana Lim",
+    section: "Newton · falling 12 pts",
+    score: 61,
+    variant: "destructive",
+  },
+  {
+    name: "Paolo Cruz",
+    section: "Curie · low attendance",
+    score: 68,
+    variant: "warning",
+  },
 ];
 
 const defaultTopPerformers = [
@@ -121,9 +134,24 @@ const defaultTopPerformers = [
 ];
 
 const defaultDueThisWeek = [
-  { title: "Fractions worksheet", section: "Newton · Mathematics 9", due_label: "Tomorrow", variant: "destructive" },
-  { title: "Lab report: Cells", section: "Curie · Science 9", due_label: "Thu", variant: "warning" },
-  { title: "Sanaysay", section: "Archimedes · Filipino 9", due_label: "Fri", variant: "warning" },
+  {
+    title: "Fractions worksheet",
+    section: "Newton · Mathematics 9",
+    due_label: "Tomorrow",
+    variant: "destructive",
+  },
+  {
+    title: "Lab report: Cells",
+    section: "Curie · Science 9",
+    due_label: "Thu",
+    variant: "warning",
+  },
+  {
+    title: "Sanaysay",
+    section: "Archimedes · Filipino 9",
+    due_label: "Fri",
+    variant: "warning",
+  },
 ];
 
 const defaultTopicMastery = [
@@ -144,24 +172,120 @@ const defaultSubmissionsWeekday = [
 ];
 
 const defaultTrendChartPoints: TrendChartPoint[] = [
-  { classwork_id: 1, title: "Classwork 1", category: "Classwork", due_date: null, label: "CW 1", short_label: "CW 1", avg_score_percent: 70, completion_rate_percent: 60, submitted_count: 22, total_enrolled: 36 },
-  { classwork_id: 2, title: "Classwork 2", category: "Classwork", due_date: null, label: "CW 2", short_label: "CW 2", avg_score_percent: 72, completion_rate_percent: 68, submitted_count: 24, total_enrolled: 36 },
-  { classwork_id: 3, title: "Classwork 3", category: "Classwork", due_date: null, label: "CW 3", short_label: "CW 3", avg_score_percent: 72, completion_rate_percent: 74, submitted_count: 27, total_enrolled: 36 },
-  { classwork_id: 4, title: "Classwork 4", category: "Classwork", due_date: null, label: "CW 4", short_label: "CW 4", avg_score_percent: 76, completion_rate_percent: 78, submitted_count: 28, total_enrolled: 36 },
-  { classwork_id: 5, title: "Classwork 5", category: "Classwork", due_date: null, label: "CW 5", short_label: "CW 5", avg_score_percent: 78, completion_rate_percent: 82, submitted_count: 30, total_enrolled: 36 },
-  { classwork_id: 6, title: "Classwork 6", category: "Classwork", due_date: null, label: "CW 6", short_label: "CW 6", avg_score_percent: 80, completion_rate_percent: 85, submitted_count: 31, total_enrolled: 36 },
+  {
+    classwork_id: 1,
+    title: "Classwork 1",
+    category: "Classwork",
+    due_date: null,
+    label: "CW 1",
+    short_label: "CW 1",
+    avg_score_percent: 70,
+    completion_rate_percent: 60,
+    submitted_count: 22,
+    total_enrolled: 36,
+  },
+  {
+    classwork_id: 2,
+    title: "Classwork 2",
+    category: "Classwork",
+    due_date: null,
+    label: "CW 2",
+    short_label: "CW 2",
+    avg_score_percent: 72,
+    completion_rate_percent: 68,
+    submitted_count: 24,
+    total_enrolled: 36,
+  },
+  {
+    classwork_id: 3,
+    title: "Classwork 3",
+    category: "Classwork",
+    due_date: null,
+    label: "CW 3",
+    short_label: "CW 3",
+    avg_score_percent: 72,
+    completion_rate_percent: 74,
+    submitted_count: 27,
+    total_enrolled: 36,
+  },
+  {
+    classwork_id: 4,
+    title: "Classwork 4",
+    category: "Classwork",
+    due_date: null,
+    label: "CW 4",
+    short_label: "CW 4",
+    avg_score_percent: 76,
+    completion_rate_percent: 78,
+    submitted_count: 28,
+    total_enrolled: 36,
+  },
+  {
+    classwork_id: 5,
+    title: "Classwork 5",
+    category: "Classwork",
+    due_date: null,
+    label: "CW 5",
+    short_label: "CW 5",
+    avg_score_percent: 78,
+    completion_rate_percent: 82,
+    submitted_count: 30,
+    total_enrolled: 36,
+  },
+  {
+    classwork_id: 6,
+    title: "Classwork 6",
+    category: "Classwork",
+    due_date: null,
+    label: "CW 6",
+    short_label: "CW 6",
+    avg_score_percent: 80,
+    completion_rate_percent: 85,
+    submitted_count: 31,
+    total_enrolled: 36,
+  },
 ];
 
 const defaultHardestQuestions = [
-  { code: "Q7 · Simplify mixed fractions", quiz: "Fractions Quiz", rate: "34% correct", variant: "destructive" },
-  { code: "Q3 · Parts of the cell", quiz: "Lab Quiz", rate: "48% correct", variant: "destructive" },
-  { code: "Q5 · Uri ng pang-uri", quiz: "Pagsusulit 1", rate: "57% correct", variant: "warning" },
+  {
+    code: "Q7 · Simplify mixed fractions",
+    quiz: "Fractions Quiz",
+    rate: "34% correct",
+    variant: "destructive",
+  },
+  {
+    code: "Q3 · Parts of the cell",
+    quiz: "Lab Quiz",
+    rate: "48% correct",
+    variant: "destructive",
+  },
+  {
+    code: "Q5 · Uri ng pang-uri",
+    quiz: "Pagsusulit 1",
+    rate: "57% correct",
+    variant: "warning",
+  },
 ];
 
 const defaultReviewSubmissions = [
-  { title: "Panganganak ng Pang-uri", section: "Archimedes · Filipino 9", badge: "6 new", variant: "destructive" },
-  { title: "Fractions Quiz", section: "Newton · Mathematics 9", badge: "5 new", variant: "destructive" },
-  { title: "Lab Report: Cells", section: "Curie · Science 9", badge: "3 new", variant: "warning" },
+  {
+    title: "Panganganak ng Pang-uri",
+    section: "Archimedes · Filipino 9",
+    badge: "6 new",
+    variant: "destructive",
+  },
+  {
+    title: "Fractions Quiz",
+    section: "Newton · Mathematics 9",
+    badge: "5 new",
+    variant: "destructive",
+  },
+  {
+    title: "Lab Report: Cells",
+    section: "Curie · Science 9",
+    badge: "3 new",
+    variant: "warning",
+  },
 ];
 
 const defaultGradeDistribution = [
@@ -215,7 +339,10 @@ export default function Dashboard() {
 
         if (!cancelled) {
           setData(res);
-          if (!selectedFilterKey && res.trend_chart.available_filters.length > 0) {
+          if (
+            !selectedFilterKey &&
+            res.trend_chart.available_filters.length > 0
+          ) {
             const first = res.trend_chart.available_filters[0];
             setSelectedFilterKey(`${first.class_id}-${first.subject_id}`);
           }
@@ -223,7 +350,11 @@ export default function Dashboard() {
       } catch (err: unknown) {
         if (!cancelled) {
           console.error("Failed to load teacher dashboard health:", err);
-          setError(err instanceof Error ? err.message : "Failed to load dashboard data");
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Failed to load dashboard data",
+          );
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -324,18 +455,29 @@ export default function Dashboard() {
     ];
   }, [data]);
 
-  const studentsSupport = data?.details?.students_needing_support || defaultStudentsNeedingSupport;
+  const studentsSupport =
+    data?.details?.students_needing_support || defaultStudentsNeedingSupport;
   const topPerformers = data?.details?.top_performers || defaultTopPerformers;
   const dueWeek = data?.details?.due_this_week || defaultDueThisWeek;
   const topicMastery = data?.details?.topic_mastery || defaultTopicMastery;
-  const submissionsWeekday = data?.details?.submissions_by_weekday || defaultSubmissionsWeekday;
-  const hardestQuestions = data?.details?.hardest_questions || defaultHardestQuestions;
+  const submissionsWeekday =
+    data?.details?.submissions_by_weekday || defaultSubmissionsWeekday;
+  const hardestQuestions =
+    data?.details?.hardest_questions || defaultHardestQuestions;
   const reviewSubmissions = defaultReviewSubmissions;
-  const gradeDistribution = data?.details?.grade_distribution || defaultGradeDistribution;
-  const attendanceSections = data?.details?.attendance_by_section || defaultAttendanceBySection;
+  const gradeDistribution =
+    data?.details?.grade_distribution || defaultGradeDistribution;
+  const attendanceSections =
+    data?.details?.attendance_by_section || defaultAttendanceBySection;
 
-  const maxWeekdayCount = Math.max(...submissionsWeekday.map((s: any) => s.count), 45);
-  const maxGradeDistCount = Math.max(...gradeDistribution.map((g: any) => g.count), 15);
+  const maxWeekdayCount = Math.max(
+    ...submissionsWeekday.map((s: any) => s.count),
+    45,
+  );
+  const maxGradeDistCount = Math.max(
+    ...gradeDistribution.map((g: any) => g.count),
+    15,
+  );
 
   return (
     <AppLayout>
@@ -365,7 +507,10 @@ export default function Dashboard() {
 
             <main className="-mt-[1px] flex min-w-0 flex-col gap-5 border-t-2 border-border px-3 py-4 sm:px-4 sm:py-5 md:gap-6 md:px-6">
               {error && (
-                <div role="alert" className="flex items-center gap-2 border-2 border-destructive bg-destructive/10 p-3 text-sm text-destructive">
+                <div
+                  role="alert"
+                  className="flex items-center gap-2 border-2 border-destructive bg-destructive/10 p-3 text-sm text-destructive"
+                >
                   <AlertCircle className="size-4 shrink-0" />
                   <span>{error}</span>
                 </div>
@@ -385,7 +530,9 @@ export default function Dashboard() {
                           <Card.Title className="h-8 w-16 bg-muted text-transparent">
                             0
                           </Card.Title>
-                          <p className="h-3 w-32 bg-muted text-transparent">Loading summary</p>
+                          <p className="h-3 w-32 bg-muted text-transparent">
+                            Loading summary
+                          </p>
                         </Card.Content>
                       </Card>
                     ))
@@ -419,19 +566,24 @@ export default function Dashboard() {
                         className="flex items-center justify-between rounded-xl border border-border/80 bg-card/60 px-3 py-2.5 text-xs sm:text-sm"
                       >
                         <div className="flex flex-col min-w-0 pr-2">
-                          <span className="font-semibold text-foreground truncate">{s.name}</span>
-                          <span className="text-[11px] text-muted-foreground truncate">{s.section}</span>
+                          <span className="font-semibold text-foreground truncate">
+                            {s.name}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground truncate">
+                            {s.section}
+                          </span>
                         </div>
-                        <span
-                          className={cn(
-                            "shrink-0 rounded-full px-3 py-0.5 text-[11px] font-semibold border",
+                        <Badge
+                          size="sm"
+                          variant={
                             s.variant === "destructive" || s.score <= 65
-                              ? "border-rose-500/80 bg-rose-500/15 text-rose-400"
-                              : "border-amber-500/80 bg-amber-500/15 text-amber-400"
-                          )}
+                              ? "destructive"
+                              : "default"
+                          }
+                          className="shrink-0"
                         >
                           {s.score}%
-                        </span>
+                        </Badge>
                       </div>
                     ))}
                   </div>
@@ -452,12 +604,16 @@ export default function Dashboard() {
                         className="flex items-center justify-between rounded-xl border border-border/80 bg-card/60 px-3 py-2.5 text-xs sm:text-sm"
                       >
                         <div className="flex flex-col min-w-0 pr-2">
-                          <span className="font-semibold text-foreground truncate">{p.name}</span>
-                          <span className="text-[11px] text-muted-foreground truncate">{p.section}</span>
+                          <span className="font-semibold text-foreground truncate">
+                            {p.name}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground truncate">
+                            {p.section}
+                          </span>
                         </div>
-                        <span className="shrink-0 rounded-full border border-emerald-500/80 bg-emerald-500/15 px-3 py-0.5 text-[11px] font-semibold text-emerald-400">
+                        <Badge size="sm" variant="success" className="shrink-0">
                           {p.score}%
-                        </span>
+                        </Badge>
                       </div>
                     ))}
                   </div>
@@ -478,19 +634,25 @@ export default function Dashboard() {
                         className="flex items-center justify-between rounded-xl border border-border/80 bg-card/60 px-3 py-2.5 text-xs sm:text-sm"
                       >
                         <div className="flex flex-col min-w-0 pr-2">
-                          <span className="font-semibold text-foreground truncate">{d.title}</span>
-                          <span className="text-[11px] text-muted-foreground truncate">{d.section}</span>
+                          <span className="font-semibold text-foreground truncate">
+                            {d.title}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground truncate">
+                            {d.section}
+                          </span>
                         </div>
-                        <span
-                          className={cn(
-                            "shrink-0 rounded-full px-3 py-0.5 text-[11px] font-semibold border",
-                            d.due_label === "Tomorrow" || d.variant === "destructive"
-                              ? "border-rose-500/80 bg-rose-500/15 text-rose-400"
-                              : "border-amber-500/80 bg-amber-500/15 text-amber-400"
-                          )}
+                        <Badge
+                          size="sm"
+                          variant={
+                            d.due_label === "Tomorrow" ||
+                            d.variant === "destructive"
+                              ? "destructive"
+                              : "default"
+                          }
+                          className="shrink-0"
                         >
                           {d.due_label}
-                        </span>
+                        </Badge>
                       </div>
                     ))}
                   </div>
@@ -506,15 +668,17 @@ export default function Dashboard() {
 
                   <div className="mt-3 flex flex-col justify-between gap-2.5">
                     {topicMastery.map((item: any) => (
-                      <div key={item.topic} className="flex items-center justify-between gap-3 text-xs sm:text-sm">
-                        <span className="font-medium text-foreground/90 shrink-0 w-24 truncate">{item.topic}</span>
-                        <div className="relative flex-1 h-2.5 rounded bg-muted/60 overflow-hidden">
-                          <div
-                            className="h-full rounded bg-amber-400 transition-all duration-500"
-                            style={{ width: `${item.rate}%` }}
-                          />
-                        </div>
-                        <span className="font-semibold text-foreground text-right w-10 shrink-0">{item.rate}%</span>
+                      <div
+                        key={item.topic}
+                        className="flex items-center justify-between gap-3 text-xs sm:text-sm"
+                      >
+                        <span className="font-medium text-foreground/90 shrink-0 w-24 truncate">
+                          {item.topic}
+                        </span>
+                        <Progress value={item.rate} className="h-2.5 flex-1" />
+                        <span className="font-semibold text-foreground text-right w-10 shrink-0">
+                          {item.rate}%
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -537,24 +701,29 @@ export default function Dashboard() {
                     </p>
                   </div>
 
-                  <div className="mt-4 flex h-40 items-end justify-between gap-2 px-1">
-                    {submissionsWeekday.map((item: any, idx: number) => {
-                      const heightPct = Math.round((item.count / maxWeekdayCount) * 85);
-                      const isGreen = item.isHighlight;
-                      return (
-                        <div key={idx} className="flex flex-1 flex-col items-center gap-1.5 h-full justify-end">
-                          <span className="text-[11px] font-semibold text-foreground">{item.count}</span>
-                          <div
-                            className={cn(
-                              "w-full max-w-[28px] rounded-t-sm transition-all duration-500",
-                              isGreen ? "bg-emerald-400" : "bg-amber-400"
-                            )}
-                            style={{ height: `${heightPct}%` }}
-                          />
-                          <span className="text-[11px] font-medium text-muted-foreground shrink-0">{item.day}</span>
-                        </div>
-                      );
-                    })}
+                  <div className="mt-4 flex flex-col justify-between gap-2.5">
+                    {submissionsWeekday.map((item: any, idx: number) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between gap-3 text-xs sm:text-sm"
+                      >
+                        <span className="font-medium text-foreground/90 shrink-0 w-10 truncate">
+                          {item.day}
+                        </span>
+                        <Progress
+                          value={Math.round(
+                            (item.count / maxWeekdayCount) * 100,
+                          )}
+                          className={cn(
+                            "h-3 flex-1",
+                            item.isHighlight && "[&>div]:bg-success",
+                          )}
+                        />
+                        <span className="font-semibold text-foreground text-right w-8 shrink-0">
+                          {item.count}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </Card>
 
@@ -573,19 +742,24 @@ export default function Dashboard() {
                         className="flex items-center justify-between rounded-xl border border-border/80 bg-card/60 px-3 py-2.5 text-xs sm:text-sm"
                       >
                         <div className="flex flex-col min-w-0 pr-2">
-                          <span className="font-semibold text-foreground truncate">{q.code}</span>
-                          <span className="text-[11px] text-muted-foreground truncate">{q.quiz}</span>
+                          <span className="font-semibold text-foreground truncate">
+                            {q.code}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground truncate">
+                            {q.quiz}
+                          </span>
                         </div>
-                        <span
-                          className={cn(
-                            "shrink-0 rounded-full px-3 py-0.5 text-[11px] font-semibold border",
+                        <Badge
+                          size="sm"
+                          variant={
                             q.variant === "destructive"
-                              ? "border-rose-500/80 bg-rose-500/15 text-rose-400"
-                              : "border-amber-500/80 bg-amber-500/15 text-amber-400"
-                          )}
+                              ? "destructive"
+                              : "default"
+                          }
+                          className="shrink-0"
                         >
                           {q.rate}
-                        </span>
+                        </Badge>
                       </div>
                     ))}
                   </div>
@@ -603,43 +777,52 @@ export default function Dashboard() {
                           Classwork Mastery & Completion Trend
                         </Card.Title>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Class score averages vs. task submission completion, last 6 classworks
+                          Class score averages vs. task submission completion,
+                          last 6 classworks
                         </p>
                       </div>
 
-                      {data && data.trend_chart.available_filters.length > 0 && (
-                        <div className="flex items-center gap-1.5 sm:w-auto">
-                          <Select
-                            value={selectedFilterKey}
-                            onValueChange={setSelectedFilterKey}
-                          >
-                            <Select.Trigger id="trend-filter" className="h-8 text-xs font-semibold sm:min-w-44">
-                              <Select.Value placeholder="Select section" />
-                            </Select.Trigger>
-                            <Select.Content>
-                              {data.trend_chart.available_filters.map((f) => (
-                                <Select.Item
-                                  key={`${f.class_id}-${f.subject_id}`}
-                                  value={`${f.class_id}-${f.subject_id}`}
-                                >
-                                  {f.section_name} · {f.subject_name}
-                                </Select.Item>
-                              ))}
-                            </Select.Content>
-                          </Select>
-                        </div>
-                      )}
+                      {data &&
+                        data.trend_chart.available_filters.length > 0 && (
+                          <div className="flex items-center gap-1.5 sm:w-auto">
+                            <Select
+                              value={selectedFilterKey}
+                              onValueChange={setSelectedFilterKey}
+                            >
+                              <Select.Trigger
+                                id="trend-filter"
+                                className="h-8 text-xs font-semibold sm:min-w-44"
+                              >
+                                <Select.Value placeholder="Select section" />
+                              </Select.Trigger>
+                              <Select.Content>
+                                {data.trend_chart.available_filters.map((f) => (
+                                  <Select.Item
+                                    key={`${f.class_id}-${f.subject_id}`}
+                                    value={`${f.class_id}-${f.subject_id}`}
+                                  >
+                                    {f.section_name} · {f.subject_name}
+                                  </Select.Item>
+                                ))}
+                              </Select.Content>
+                            </Select>
+                          </div>
+                        )}
                     </div>
 
                     {/* Chart Legend */}
                     <div className="flex flex-wrap items-center gap-4 mb-3 text-xs text-muted-foreground font-medium">
                       <div className="flex items-center gap-1.5">
                         <span className="size-2.5 rounded-full bg-emerald-400 inline-block" />
-                        <span className="text-foreground">Class Mastery Average (%)</span>
+                        <span className="text-foreground">
+                          Class Mastery Average (%)
+                        </span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="w-3.5 h-0.5 border-t-2 border-dashed border-amber-400 inline-block" />
-                        <span className="text-foreground">Submission Completion (%)</span>
+                        <span className="text-foreground">
+                          Submission Completion (%)
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -649,33 +832,48 @@ export default function Dashboard() {
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart
                         data={
-                          data?.trend_chart.points && data.trend_chart.points.length > 0
+                          data?.trend_chart.points &&
+                          data.trend_chart.points.length > 0
                             ? data.trend_chart.points
                             : defaultTrendChartPoints
                         }
                         margin={{ top: 10, right: 15, left: -20, bottom: 0 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" strokeOpacity={0.4} />
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          vertical={false}
+                          stroke="var(--border)"
+                          strokeOpacity={0.4}
+                        />
                         <XAxis
                           dataKey="short_label"
                           tickLine={false}
-                          axisLine={{ stroke: "var(--foreground)", strokeWidth: 1 }}
+                          axisLine={{
+                            stroke: "var(--foreground)",
+                            strokeWidth: 1,
+                          }}
                           tick={{ fontSize: 11, fontWeight: 500 }}
                         />
                         <YAxis
                           domain={[50, 100]}
                           ticks={[50, 75, 100]}
                           tickLine={false}
-                          axisLine={{ stroke: "var(--foreground)", strokeWidth: 1 }}
+                          axisLine={{
+                            stroke: "var(--foreground)",
+                            strokeWidth: 1,
+                          }}
                           tick={{ fontSize: 11 }}
                         />
                         <Tooltip
                           content={({ active, payload }) => {
-                            if (!active || !payload || !payload.length) return null;
+                            if (!active || !payload || !payload.length)
+                              return null;
                             const point = payload[0].payload;
                             return (
                               <div className="space-y-1 rounded border border-border bg-background p-2.5 text-xs text-foreground shadow-md">
-                                <p className="font-bold">{point.title || point.short_label}</p>
+                                <p className="font-bold">
+                                  {point.title || point.short_label}
+                                </p>
                                 <p className="text-emerald-400 font-semibold">
                                   Mastery: {point.avg_score_percent}%
                                 </p>
@@ -692,7 +890,12 @@ export default function Dashboard() {
                           name="Mastery %"
                           stroke="#34d399"
                           strokeWidth={2.5}
-                          dot={{ r: 4, stroke: "var(--background)", strokeWidth: 1.5, fill: "#34d399" }}
+                          dot={{
+                            r: 4,
+                            stroke: "var(--background)",
+                            strokeWidth: 1.5,
+                            fill: "#34d399",
+                          }}
                           activeDot={{ r: 6 }}
                         />
                         <Line
@@ -702,7 +905,12 @@ export default function Dashboard() {
                           stroke="#f59e0b"
                           strokeWidth={2}
                           strokeDasharray="4 4"
-                          dot={{ r: 3, stroke: "var(--background)", strokeWidth: 1, fill: "#f59e0b" }}
+                          dot={{
+                            r: 3,
+                            stroke: "var(--background)",
+                            strokeWidth: 1,
+                            fill: "#f59e0b",
+                          }}
                         />
                       </LineChart>
                     </ResponsiveContainer>
@@ -716,7 +924,8 @@ export default function Dashboard() {
                       Section-by-Section Health
                     </h2>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      Performance, completion, and attendance across your classes
+                      Performance, completion, and attendance across your
+                      classes
                     </p>
                   </div>
 
@@ -765,41 +974,55 @@ export default function Dashboard() {
                       >
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm text-foreground">{sec.section_name}</span>
-                            <span className="px-1.5 py-0.2 bg-amber-400 text-black text-[10px] font-semibold rounded">
-                              {sec.grade_level || "Grade 9"}
+                            <span className="font-bold text-sm text-foreground">
+                              {sec.section_name}
                             </span>
-                            <span className="text-muted-foreground text-[11px]">{sec.subject_name}</span>
+                            <Badge
+                              variant="secondary"
+                              size="sm"
+                              className="px-1.5 py-0 text-[10px]"
+                            >
+                              {sec.grade_level || "Grade 9"}
+                            </Badge>
+                            <span className="text-muted-foreground text-[11px]">
+                              {sec.subject_name}
+                            </span>
                           </div>
-                          <span className="font-semibold text-muted-foreground">{sec.student_count} Students</span>
+                          <span className="font-semibold text-muted-foreground">
+                            {sec.student_count} Students
+                          </span>
                         </div>
 
                         {/* Task completion & attendance progress */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2.5">
                           <div className="space-y-1">
                             <div className="flex justify-between text-[11px]">
-                              <span className="text-muted-foreground">Task Completion</span>
-                              <span className="font-semibold">{sec.completion_rate_percent}%</span>
+                              <span className="text-muted-foreground">
+                                Task Completion
+                              </span>
+                              <span className="font-semibold">
+                                {sec.completion_rate_percent}%
+                              </span>
                             </div>
-                            <div className="h-2 w-full rounded bg-muted/60 overflow-hidden">
-                              <div
-                                className="h-full bg-amber-400 rounded"
-                                style={{ width: `${sec.completion_rate_percent}%` }}
-                              />
-                            </div>
+                            <Progress
+                              value={sec.completion_rate_percent}
+                              className="h-2"
+                            />
                           </div>
 
                           <div className="space-y-1">
                             <div className="flex justify-between text-[11px]">
-                              <span className="text-muted-foreground">Attendance</span>
-                              <span className="font-semibold">{sec.attendance_rate_percent}%</span>
+                              <span className="text-muted-foreground">
+                                Attendance
+                              </span>
+                              <span className="font-semibold">
+                                {sec.attendance_rate_percent}%
+                              </span>
                             </div>
-                            <div className="h-2.5 w-full rounded-full border border-border/80 p-0.5 bg-background overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-emerald-400"
-                                style={{ width: `${sec.attendance_rate_percent}%` }}
-                              />
-                            </div>
+                            <Progress
+                              value={sec.attendance_rate_percent}
+                              className="h-2"
+                            />
                           </div>
                         </div>
 
@@ -808,15 +1031,24 @@ export default function Dashboard() {
                           <div className="flex items-center gap-3">
                             <span>
                               Class Average:{" "}
-                              <span className="font-semibold text-foreground px-1.5 py-0.5 rounded-full border border-border/70">
+                              <Badge
+                                variant="outline"
+                                size="sm"
+                                className="px-1.5 py-0 text-[10px]"
+                              >
                                 {sec.avg_score_percent}%
-                              </span>
+                              </Badge>
                             </span>
                             <span>
-                              Passing Rate: <span className="font-semibold text-foreground">{sec.passing_rate_percent}%</span>
+                              Passing Rate:{" "}
+                              <span className="font-semibold text-foreground">
+                                {sec.passing_rate_percent}%
+                              </span>
                             </span>
                           </div>
-                          <span>{sec.published_classworks} published tasks</span>
+                          <span>
+                            {sec.published_classworks} published tasks
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -830,7 +1062,6 @@ export default function Dashboard() {
                 <Card className="flex flex-col justify-between p-4 sm:p-5 lg:col-span-4">
                   <div>
                     <div className="flex items-center gap-2">
-                      <FileText className="size-4 text-amber-400" />
                       <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
                         Submissions to Review
                       </h2>
@@ -844,19 +1075,24 @@ export default function Dashboard() {
                         className="flex items-center justify-between rounded-xl border border-border/80 bg-card/60 px-3 py-2.5 text-xs sm:text-sm"
                       >
                         <div className="flex flex-col min-w-0 pr-2">
-                          <span className="font-semibold text-foreground truncate">{item.title}</span>
-                          <span className="text-[11px] text-muted-foreground truncate">{item.section}</span>
+                          <span className="font-semibold text-foreground truncate">
+                            {item.title}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground truncate">
+                            {item.section}
+                          </span>
                         </div>
-                        <span
-                          className={cn(
-                            "shrink-0 rounded-full px-3 py-0.5 text-[11px] font-semibold border",
+                        <Badge
+                          size="sm"
+                          variant={
                             item.variant === "destructive"
-                              ? "border-rose-500/80 bg-rose-500/15 text-rose-400"
-                              : "border-amber-500/80 bg-amber-500/15 text-amber-400"
-                          )}
+                              ? "destructive"
+                              : "default"
+                          }
+                          className="shrink-0"
                         >
                           {item.badge}
-                        </span>
+                        </Badge>
                       </div>
                     ))}
                   </div>
@@ -873,24 +1109,31 @@ export default function Dashboard() {
                     </p>
                   </div>
 
-                  <div className="mt-4 flex h-36 items-end justify-between gap-2 px-1">
+                  <div className="mt-4 flex flex-col justify-between gap-2.5">
                     {gradeDistribution.map((item: any, idx: number) => {
-                      const heightPct = Math.round((item.count / maxGradeDistCount) * 85);
                       const isRed = item.variant === "destructive";
                       const isGreen = item.variant === "success";
                       return (
-                        <div key={idx} className="flex flex-1 flex-col items-center gap-1.5 h-full justify-end">
-                          <span className="text-[11px] font-semibold text-foreground">{item.count}</span>
-                          <div
-                            className={cn(
-                              "w-full rounded-t-sm transition-all duration-500",
-                              isRed && "bg-rose-500",
-                              isGreen && "bg-emerald-400",
-                              !isRed && !isGreen && "bg-amber-400"
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between gap-3 text-xs sm:text-sm"
+                        >
+                          <span className="font-medium text-foreground/90 shrink-0 w-14 truncate">
+                            {item.band}
+                          </span>
+                          <Progress
+                            value={Math.round(
+                              (item.count / maxGradeDistCount) * 100,
                             )}
-                            style={{ height: `${heightPct}%` }}
+                            className={cn(
+                              "h-3 flex-1",
+                              isRed && "[&>div]:bg-destructive",
+                              isGreen && "[&>div]:bg-success",
+                            )}
                           />
-                          <span className="text-[11px] font-medium text-muted-foreground shrink-0">{item.band}</span>
+                          <span className="font-semibold text-foreground text-right w-8 shrink-0">
+                            {item.count}
+                          </span>
                         </div>
                       );
                     })}
@@ -907,15 +1150,17 @@ export default function Dashboard() {
 
                   <div className="mt-3 flex flex-col justify-between gap-3">
                     {attendanceSections.map((item: any) => (
-                      <div key={item.section} className="flex items-center justify-between gap-2 text-xs sm:text-sm">
-                        <span className="font-medium text-foreground/90 shrink-0 w-20 truncate">{item.section}</span>
-                        <div className="relative flex-1 h-3 rounded-full border border-border/80 bg-background/50 p-0.5 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-emerald-400 transition-all duration-500"
-                            style={{ width: `${item.rate}%` }}
-                          />
-                        </div>
-                        <span className="font-semibold text-foreground text-right w-10 shrink-0">{item.rate}%</span>
+                      <div
+                        key={item.section}
+                        className="flex items-center justify-between gap-2 text-xs sm:text-sm"
+                      >
+                        <span className="font-medium text-foreground/90 shrink-0 w-20 truncate">
+                          {item.section}
+                        </span>
+                        <Progress value={item.rate} className="h-3 flex-1" />
+                        <span className="font-semibold text-foreground text-right w-10 shrink-0">
+                          {item.rate}%
+                        </span>
                       </div>
                     ))}
                   </div>
