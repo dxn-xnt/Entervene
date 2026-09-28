@@ -430,7 +430,7 @@ export default function Classworks() {
                     Loading classworks...
                   </p>
                 ) : filteredItems.length > 0 ? (
-                  <section className="space-y-3">
+                  <section className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] items-stretch gap-4">
                     {filteredItems.map((item) => (
                       <ClassworkCard
                         key={item.classwork_id}

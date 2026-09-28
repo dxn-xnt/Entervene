@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
+import { Progress } from "@/components/retroui/Progress";
 import { formatDate } from "@/lib/classwork-utils";
 import type { ClassworkTracking, TeacherClasswork } from "@/types/classwork";
 
@@ -14,7 +15,11 @@ function displayType(value: string) {
   return value.charAt(0) + value.slice(1).toLowerCase();
 }
 
-export default function ClassworkCard({ item, tracking, onOpen }: ClassworkCardProps) {
+export default function ClassworkCard({
+  item,
+  tracking,
+  onOpen,
+}: ClassworkCardProps) {
   const sections = useMemo(() => {
     const names = Array.from(
       new Set(
@@ -40,15 +45,17 @@ export default function ClassworkCard({ item, tracking, onOpen }: ClassworkCardP
     return `${dueDates.length} section due dates`;
   }, [item.assignments]);
 
-  const completionRate = tracking && tracking.total_students > 0
-    ? Math.round((tracking.submitted_count / tracking.total_students) * 100)
-    : null;
+  const completionRate =
+    tracking && tracking.total_students > 0
+      ? Math.round((tracking.submitted_count / tracking.total_students) * 100)
+      : null;
 
+  const hasAssignments = (item.assignments?.length ?? 0) > 0;
   const openCard = () => onOpen(item);
 
   return (
     <Card
-      className="block w-full cursor-pointer"
+      className="flex h-full w-full cursor-pointer flex-col"
       role="button"
       tabIndex={0}
       onClick={openCard}
@@ -60,65 +67,70 @@ export default function ClassworkCard({ item, tracking, onOpen }: ClassworkCardP
       }}
       aria-label={`Open ${item.title}`}
     >
-      <Card.Header className="mb-3 flex-row items-start justify-between gap-3">
-        <div className="min-w-0">
-          <Card.Title className="mb-1 line-clamp-2 break-words text-base font-bold [overflow-wrap:anywhere] md:text-lg">
-            {item.title}
-          </Card.Title>
-          <Card.Description className="text-xs font-medium text-muted-foreground">
-            {[item.subject_name, sections].filter(Boolean).join(" · ") || "Subject or section unavailable"}
-          </Card.Description>
-        </div>
-        <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-          <Badge variant="secondary" size="sm">{displayType(item.classwork_type)}</Badge>
+      <Card.Header className="flex-col items-stretch gap-2">
+        <div className="flex items-center gap-1.5">
+          <Badge variant="secondary" size="sm">
+            {displayType(item.classwork_type)}
+          </Badge>
           <Badge variant={item.is_published ? "success" : "outline"} size="sm">
             {item.is_published ? "Published" : "Draft"}
           </Badge>
         </div>
+
+        <div className="min-w-0">
+          <Card.Title className="mb-0.5 line-clamp-2 break-words text-base font-bold [overflow-wrap:anywhere]">
+            {item.title}
+          </Card.Title>
+          <Card.Description className="truncate text-xs font-medium text-muted-foreground">
+            {[item.subject_name, sections].filter(Boolean).join(" · ") ||
+              "Subject or section unavailable"}
+          </Card.Description>
+        </div>
       </Card.Header>
 
-      <Card.Content className="grid gap-3 border-t border-border pt-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
-          {tracking && (
-            <>
-              <div>
-                <dt className="text-muted-foreground">Submitted</dt>
-                <dd className="font-bold text-foreground">
-                  {tracking.submitted_count} / {tracking.total_students}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Completion</dt>
-                <dd className="font-bold text-foreground">
-                  {completionRate === null ? "No enrolled students" : `${completionRate}%`}
-                </dd>
-              </div>
-            </>
-          )}
-          {item.total_points !== null && item.total_points !== undefined && (
-            <div>
-              <dt className="text-muted-foreground">Points</dt>
-              <dd className="font-bold text-foreground">{item.total_points}</dd>
+      <Card.Content className="mt-auto flex flex-col gap-3">
+        {tracking && (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">
+                Submitted{" "}
+                <span className="font-bold text-foreground">
+                  {tracking.submitted_count}/{tracking.total_students}
+                </span>
+              </span>
+              <span className="font-bold text-foreground">
+                {completionRate === null ? "No students" : `${completionRate}%`}
+              </span>
             </div>
-          )}
-          <div>
-            <dt className="text-muted-foreground">Created</dt>
-            <dd className="font-bold text-foreground">{formatDate(item.created_at)}</dd>
+            <Progress value={completionRate ?? 0} className="h-3" />
           </div>
-          {dueLabel && (
-            <div className="col-span-2 sm:col-span-1">
-              <dt className="text-muted-foreground">Schedule</dt>
-              <dd className="font-bold text-foreground">{dueLabel}</dd>
-            </div>
-          )}
-        </dl>
+        )}
 
-        {!tracking && (item.assignments?.length ?? 0) > 0 && (
-          <p className="text-xs text-muted-foreground">Loading submission summary…</p>
+        {!tracking && hasAssignments && (
+          <p className="text-xs text-muted-foreground">
+            Loading submission summary…
+          </p>
         )}
-        {!item.assignments?.length && (
-          <p className="text-xs text-muted-foreground">Not assigned to a section</p>
+        {!hasAssignments && (
+          <p className="text-xs text-muted-foreground">
+            Not assigned to a section
+          </p>
         )}
+
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {item.total_points !== null && item.total_points !== undefined && (
+            <span>
+              <span className="font-bold text-foreground">
+                {item.total_points}
+              </span>{" "}
+              pts
+            </span>
+          )}
+          <span>Created {formatDate(item.created_at)}</span>
+          {dueLabel && (
+            <span className="font-bold text-foreground">{dueLabel}</span>
+          )}
+        </div>
       </Card.Content>
     </Card>
   );
