@@ -45,6 +45,7 @@ import {
   type TeacherInterventionDetail,
   type RemediationFocus,
   type RemediationResource,
+  type OriginalExamination,
 } from "@/lib/teacher-interventions-api";
 
 const tabs: Array<TabItem<TabId>> = [
@@ -107,8 +108,10 @@ export default function Classworks() {
   const [remediationFocus, setRemediationFocus] =
     useState<RemediationFocus | null>(null);
   const [remediationGradeTreatment, setRemediationGradeTreatment] = useState<
-    "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | null
+    "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | null
   >(null);
+  const [remediationOriginalExam, setRemediationOriginalExam] =
+    useState<OriginalExamination | null>(null);
   const [remediationReferences, setRemediationReferences] = useState<
     RemediationResource[]
   >([]);
@@ -142,6 +145,23 @@ export default function Classworks() {
             );
             return;
           }
+          const originalExam =
+            (workspace.original_exams ?? []).find(
+              (exam) =>
+                exam.assignment_id ===
+                workspace.plan.original_exam_assignment_id,
+            ) ?? null;
+          if (
+            workspace.plan.grade_treatment === "EXAMINATION" &&
+            (!originalExam ||
+              originalExam.assignment_id !==
+                Number(routeParams.get("original_exam_assignment_id")))
+          ) {
+            setRemediationError(
+              "The original Examination selection changed. Return to the Intervention.",
+            );
+            return;
+          }
           const selected = new Set(
             workspace.plan.selected_resources.map(
               (item) => `${item.kind}:${item.id}`,
@@ -150,6 +170,7 @@ export default function Classworks() {
           setRemediationTarget(detail);
           setRemediationFocus(workspace.focus);
           setRemediationGradeTreatment(workspace.plan.grade_treatment);
+          setRemediationOriginalExam(originalExam);
           setRemediationReferences(
             workspace.resources.filter(
               (item) =>
