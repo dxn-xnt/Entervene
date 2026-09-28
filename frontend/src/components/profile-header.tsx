@@ -91,34 +91,29 @@ export function UserProfileHeader({
   const avatarSrc = AVATAR_SRC[avatarVariant];
 
   return (
-    <Card className={cn("flex items-center justify-between gap-4 p-4 shadow-[4px_5px_0_#000]", className)}>
+    <Card className={cn("flex justify-between gap-4 p-4 shadow-[4px_5px_0_#000]", className)}>
       <div className="flex min-w-0 items-center gap-3">
-        <Avatar variant={avatarVariant} className="size-12 shrink-0">
+        <Avatar variant={avatarVariant} className="size-16 shrink-0">
           {avatarSrc && <Avatar.Image src={avatarSrc} alt={name} />}
           <Avatar.Fallback className="bg-amber-200 text-amber-900 font-bold text-lg">
             {name.charAt(0).toUpperCase()}
           </Avatar.Fallback>
         </Avatar>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="truncate text-lg font-bold">{name}</div>
-            <RoleBadge role={role} />
+        <div className="flex flex-col min-w-0">
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="truncate text-xl font-bold">{name}</div>
+            <RoleBadge role={role} className="my-auto text-xs px-2 py-0.5" />
           </div>
-          {subtitle && <div className="truncate text-xs text-muted-foreground">{subtitle}</div>}
-          {extra && <div className="truncate text-xs text-muted-foreground">{extra}</div>}
+          {subtitle && <div className="truncate text-sm text-muted-foreground">{subtitle}</div>}
+          {extra && <div className="truncate text-sm text-muted-foreground">{extra}</div>}
         </div>
       </div>
       {(statusLabel || isPending) && (
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
+        <div className="flex shrink-0 flex-col items-start gap-1.5">
           {statusLabel && (
-            <Badge variant={statusVariant}>
+            <Badge variant={statusVariant} size="sm">
               {statusLabel}
             </Badge>
-          )}
-          {isPending && (
-            <div className="max-w-[360px] text-right text-[10px] font-medium leading-snug text-muted-foreground">
-              Pending accounts can be managed after the invitation is accepted.
-            </div>
           )}
         </div>
       )}
