@@ -17,7 +17,6 @@ import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-s
 import { SF9PreviewModal } from "@/components/teacher/sf9-preview-modal";
 import {
   exportTeacherAdvisoryBatchSF9,
-  exportTeacherAdvisoryStudentSF9,
   getClassSchedule,
   getTeacherAdvisoryClassDetail,
   getTeacherAdvisoryClassGrades,

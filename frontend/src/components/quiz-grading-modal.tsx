@@ -199,9 +199,11 @@ export default function QuizGradingModal({
                             : "border-gray-200 bg-gray-50 text-gray-700"
                         }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span>{opt.option_text}</span>
-                        <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-start justify-between gap-2 min-w-0">
+                        <span className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere] leading-snug">
+                          {opt.option_text}
+                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
                           {isCorrect && (
                             <span className="rounded bg-[#8BCB88] px-1.5 py-0.5 text-[10px] font-black uppercase text-black">
                               Correct Key
