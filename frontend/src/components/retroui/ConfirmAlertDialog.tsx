@@ -29,7 +29,10 @@ export default function ConfirmAlertDialog({
             <Alert.Description>{description}</Alert.Description>
           </Alert>
         </div>
-        <div className="flex shrink-0 flex-col-reverse items-stretch gap-2 border-t-2 border-border bg-background px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
+        <div
+          data-slot="dialog-footer"
+          className="flex shrink-0 flex-col-reverse items-stretch gap-2 border-t-2 border-border bg-background px-5 py-4 sm:flex-row sm:items-center sm:justify-end"
+        >
           <Button
             type="button"
             onClick={onCancel}

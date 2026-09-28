@@ -41,6 +41,11 @@ function fmt(val: number | null | undefined, d = 1): string {
   return val.toFixed(d);
 }
 
+function displayActivityScore(score: number | null | undefined, header: GradebookCategoryHeader | undefined, studentId: string): string | number {
+  if (header?.recipientStudentId && header.recipientStudentId !== studentId) return "N/A";
+  return score ?? "—";
+}
+
 /** Helper to get at most 2 latest items (or scores) arranged latest to oldest (newest first). */
 function getLatestTwo<T>(arr: T[]): { item: T; originalIndex: number }[] {
   if (!arr || arr.length === 0) return [];
@@ -151,7 +156,7 @@ const TeacherGradeView = () => {
   const [selectedCategory, setSelectedCategory] = useState<{
     name: string;
     items: GradebookCategoryHeader[];
-    studentGrades: { name: string; scores: (number | null)[] }[];
+    studentGrades: { student_id: string; name: string; scores: (number | null)[]; gender?: string | null }[];
   } | null>(null);
   const [addingCategoryName, setAddingCategoryName] = useState<string | null>(null);
   const [scoringActivity, setScoringActivity] = useState<{
@@ -542,9 +547,9 @@ const TeacherGradeView = () => {
                 <div className="flex flex-row items-center justify-between gap-1 w-full">
                   <div className="size-4 shrink-0" />
                   <div className="flex flex-row justify-around w-full text-xs">
-                    {getLatestTwo(item.writtenWork).map(({ item: score }, i) => (
+                    {getLatestTwo(cg.writtenWork).map(({ item: header, originalIndex }, i) => (
                       <span className="w-full text-center tabular-nums" key={i}>
-                        {score !== null && score !== undefined ? score : "—"}
+                        {displayActivityScore(item.writtenWork[originalIndex], header, item.student_id)}
                       </span>
                     ))}
                   </div>
@@ -556,9 +561,9 @@ const TeacherGradeView = () => {
                 <div className="flex flex-row items-center justify-between gap-1 w-full">
                   <div className="size-4 shrink-0" />
                   <div className="flex flex-row justify-around w-full text-xs">
-                    {getLatestTwo(item.performanceTask).map(({ item: score }, i) => (
+                    {getLatestTwo(cg.performanceTask).map(({ item: header, originalIndex }, i) => (
                       <span className="w-full text-center tabular-nums" key={i}>
-                        {score !== null && score !== undefined ? score : "—"}
+                        {displayActivityScore(item.performanceTask[originalIndex], header, item.student_id)}
                       </span>
                     ))}
                   </div>
@@ -570,14 +575,18 @@ const TeacherGradeView = () => {
                 <div className="flex flex-row items-center justify-between gap-1 w-full">
                   <div className="size-4 shrink-0" />
                   <div className="flex flex-row justify-around w-full text-xs">
-                    {getLatestTwo(item.exams && item.exams.length > 0 ? item.exams : (item.quarterlyAssessment ?? [])).map(({ item: score }, i) => (
+                    {getLatestTwo(examItems).map(({ item: header, originalIndex }, i) => (
                       <span className="w-full text-center tabular-nums" key={i}>
-                        {score !== null && score !== undefined ? score : "—"}
+                        {displayActivityScore((item.exams && item.exams.length > 0 ? item.exams : item.quarterlyAssessment ?? [])[originalIndex], header, item.student_id)}
                       </span>
                     ))}
                   </div>
                   <div className="size-4 shrink-0" />
                 </div>
+                {item.remedial_exams?.map((exam) => <div key={`${exam.original_assignment_id}-${exam.remedial_score}`} className="mt-1 text-[10px] text-left leading-tight">
+                  <strong>{exam.original_title} ({exam.subtype.replaceAll("_", " ")})</strong><br />
+                  Original: {exam.original_score ?? "—"}/{exam.total_points} · Remedial: {exam.remedial_score ?? "Pending"}/{exam.total_points} · Effective: {exam.effective_score ?? "—"}/{exam.total_points}
+                </div>)}
               </Table.Cell>
 
               <Table.Cell className="font-medium text-center tabular-nums whitespace-nowrap">
@@ -669,6 +678,7 @@ const TeacherGradeView = () => {
                   name: "Written Works",
                   items: cg.writtenWork,
                   studentGrades: filtered.map((sg) => ({
+                    student_id: sg.student_id,
                     name: sg.name,
                     scores: sg.writtenWork,
                     gender: sg.gender,
@@ -686,6 +696,7 @@ const TeacherGradeView = () => {
                   name: "Performance Tasks",
                   items: cg.performanceTask,
                   studentGrades: filtered.map((sg) => ({
+                    student_id: sg.student_id,
                     name: sg.name,
                     scores: sg.performanceTask,
                     gender: sg.gender,
@@ -703,6 +714,7 @@ const TeacherGradeView = () => {
                   name: "Exams",
                   items: examItems,
                   studentGrades: filtered.map((sg) => ({
+                    student_id: sg.student_id,
                     name: sg.name,
                     scores: sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []),
                     gender: sg.gender,
@@ -730,7 +742,7 @@ const TeacherGradeView = () => {
                     setSelectedCategory({
                       name: "Written Works",
                       items: cg.writtenWork,
-                      studentGrades: filtered.map((sg) => ({ name: sg.name, scores: sg.writtenWork, gender: sg.gender })),
+                      studentGrades: filtered.map((sg) => ({ student_id: sg.student_id, name: sg.name, scores: sg.writtenWork, gender: sg.gender })),
                     })
                   }
                 >
@@ -747,6 +759,7 @@ const TeacherGradeView = () => {
                       onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                     >
                       <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
+                      {item.sourceInterventionId && <span title={`Intervention · Targeted · ${item.assignedLearnerCount ?? 1} learner`} className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
                       <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                     </button>
                   ))}
@@ -771,7 +784,7 @@ const TeacherGradeView = () => {
                     setSelectedCategory({
                       name: "Performance Tasks",
                       items: cg.performanceTask,
-                      studentGrades: filtered.map((sg) => ({ name: sg.name, scores: sg.performanceTask, gender: sg.gender })),
+                      studentGrades: filtered.map((sg) => ({ student_id: sg.student_id, name: sg.name, scores: sg.performanceTask, gender: sg.gender })),
                     })
                   }
                 >
@@ -788,6 +801,7 @@ const TeacherGradeView = () => {
                       onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                     >
                       <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
+                      {item.sourceInterventionId && <span title={`Intervention · Targeted · ${item.assignedLearnerCount ?? 1} learner`} className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
                       <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                     </button>
                   ))}
@@ -813,6 +827,7 @@ const TeacherGradeView = () => {
                       name: "Exams",
                       items: examItems,
                       studentGrades: filtered.map((sg) => ({
+                        student_id: sg.student_id,
                         name: sg.name,
                         scores: sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []),
                         gender: sg.gender,
@@ -833,6 +848,7 @@ const TeacherGradeView = () => {
                       onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                     >
                       <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
+                      {item.sourceInterventionId && <span title={`Intervention · Targeted · ${item.assignedLearnerCount ?? 1} learner`} className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
                       <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                     </button>
                   ))}

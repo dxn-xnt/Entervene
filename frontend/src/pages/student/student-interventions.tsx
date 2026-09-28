@@ -25,6 +25,9 @@ import {
   markInterventionViewed,
   type StudentSuggestionItem,
 } from "@/lib/interventions-api";
+import StudentReviewerSection from "./student-reviewer-section";
+import StudentActiveInterventions from "./student-active-interventions";
+import StudentResolvedInterventions from "./student-resolved-interventions";
 
 export default function StudentInterventions() {
   const navigate = useNavigate();
@@ -98,6 +101,8 @@ export default function StudentInterventions() {
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:gap-6 sm:px-4 sm:py-4 md:px-6">
+              {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEVELOPMENT_PREDICTIONS === "true" && <><StudentActiveInterventions /><StudentResolvedInterventions /><StudentReviewerSection /></>}
+              <h2 className="text-xl font-bold">Study Recommendations</h2>
               {/* KPI Header Cards */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <OverviewCard
@@ -254,8 +259,8 @@ export default function StudentInterventions() {
                 /* Clean RetroUI Empty State */
                 <EmptyStateCard
                   icon={<PartyPopper size={24} />}
-                  title="No Active Interventions"
-                  description="You currently have no pending study interventions or remedial tasks assigned for this view. Keep up the great work in your classes!"
+                  title="No Study Recommendations"
+                  description="You currently have no study recommendations for this view."
                 >
                   <Button
                     size="sm"

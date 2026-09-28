@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
+import { useTeacherCandidateShortcut } from "@/components/predictions/use-teacher-candidate-shortcut";
 import { PredictionGradeSection } from "@/components/predictions/prediction-grade-section";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import type {
@@ -394,6 +395,7 @@ function TeacherCurrentTermDashboard() {
   const [riskLevel, setRiskLevel] = useState<string | undefined>();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
+  const candidateId = useTeacherCandidateShortcut(selected);
 
   useEffect(() => {
     if (!selectedPeriodId) { Promise.resolve().then(() => setLoading(false)); return; }
@@ -449,6 +451,6 @@ function TeacherCurrentTermDashboard() {
         </div>
       </div>
     </div>
-    <PredictionDetailSheet predictionId={selected?.prediction_id ?? null} currentTermPrediction={selected} open={selected !== null} onOpenChange={(open) => { if (!open) setSelected(null); }} />
+    <PredictionDetailSheet predictionId={selected?.prediction_id ?? null} currentTermPrediction={selected} candidateId={candidateId} open={selected !== null} onOpenChange={(open) => { if (!open) setSelected(null); }} />
   </AppLayout>;
 }

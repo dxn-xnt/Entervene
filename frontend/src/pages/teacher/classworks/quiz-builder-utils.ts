@@ -21,6 +21,7 @@ export const createEmptyQuizQuestion = (
   questionType: QuizQuestionType = "MULTIPLE_CHOICE",
 ): QuizQuestionDraft => ({
   id: quizQuestionId(),
+  lesson_id: null,
   question_text: "",
   question_type: questionType,
   points: "1",

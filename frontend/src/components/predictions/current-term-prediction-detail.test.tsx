@@ -2,10 +2,12 @@
 import type { ReactNode } from "react";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import PredictionDetailSheet from "./prediction-detail-sheet";
 import type { DevelopmentCurrentTermListItem } from "@/lib/prediction-api";
 
-vi.mock("@/context/AuthContext", () => ({ useAuth: () => ({ user: { role: "teacher" } }) }));
+const auth = vi.hoisted(() => ({ role: "teacher" as "teacher" | "admin" }));
+vi.mock("@/context/AuthContext", () => ({ useAuth: () => ({ user: { role: auth.role } }) }));
 vi.mock("@/components/ui/sheet", () => ({
   Sheet: ({ open, children }: { open: boolean; children: ReactNode }) => open ? <div>{children}</div> : null,
   SheetContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -36,9 +38,21 @@ const prediction: DevelopmentCurrentTermListItem = {
   official_final_grade: null,
 };
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); auth.role = "teacher"; });
 
 describe("current-term prediction detail", () => {
+  it("links only a supplied matching candidate to teacher review", () => {
+    const view = render(<MemoryRouter><PredictionDetailSheet predictionId={41} currentTermPrediction={prediction} candidateId={12} open onOpenChange={() => undefined} /></MemoryRouter>);
+    expect(screen.getByRole("link", { name: "Review Intervention" }).getAttribute("href")).toBe("/teacher/interventions?candidate=12");
+    view.unmount();
+    render(<MemoryRouter><PredictionDetailSheet predictionId={41} currentTermPrediction={prediction} open onOpenChange={() => undefined} /></MemoryRouter>);
+    expect(screen.queryByRole("link", { name: "Review Intervention" })).toBeNull();
+  });
+  it("never shows candidate review in the Admin prediction detail", () => {
+    auth.role = "admin";
+    render(<MemoryRouter><PredictionDetailSheet predictionId={41} currentTermPrediction={prediction} candidateId={12} open onOpenChange={() => undefined} /></MemoryRouter>);
+    expect(screen.queryByRole("link", { name: "Review Intervention" })).toBeNull();
+  });
   const renderExamination = (status: DevelopmentCurrentTermListItem["academic_evidence"]["examination"]["presentation"]["status"], components: { SUMMATIVE_1: number | null; SUMMATIVE_2: number | null; TERM_EXAM: number | null }, performancePercent: number | null = null) => {
     render(<PredictionDetailSheet predictionId={41} currentTermPrediction={{
       ...prediction,

@@ -623,6 +623,9 @@ export type GradebookCategoryHeader = {
   id: number;
   title: string;
   maxScore: number;
+  recipientStudentId?: string | null;
+  sourceInterventionId?: number | null;
+  assignedLearnerCount?: number | null;
 };
 
 export type GradebookCategoryHeaderGroup = {
@@ -645,6 +648,7 @@ export type StudentGradebookRow = {
   ps_quarterly?: number | null;
   ps_exams?: number | null;
   ps_summative_1?: number | null;
+  remedial_exams?: Array<{ original_assignment_id: number; original_title: string; subtype: string; original_score: number | null; remedial_score: number | null; effective_score: number | null; total_points: number }>;
   ps_summative_2?: number | null;
   ps_term_exam?: number | null;
   initial_grade?: number | null;
@@ -921,6 +925,7 @@ export type StudentActivityScoreItem = {
   student_id: string;
   name: string;
   score: number | null;
+  assigned: boolean;
 };
 
 export type ActivityScoresResponse = {
@@ -2507,6 +2512,8 @@ export type OverviewCardData = {
   stat?: string;
   statDescription?: string;
   rawCount?: number | null;
+  trend?: "up" | "down";
+  progressValue?: number;
 };
 
 export type OverviewResponse = {
@@ -2704,6 +2711,7 @@ export interface TeacherDashboardHealthResponse {
     academic_year: string;
     is_active: boolean;
   };
+  cards?: OverviewCardData[];
   kpis: {
     active_classes: number;
     enrolled_students: number;
@@ -2724,6 +2732,7 @@ export interface TeacherDashboardHealthResponse {
     pending_grading: ActionQueuePendingItem[];
     upcoming_deadlines: ActionQueueDeadlineItem[];
   };
+  details?: Record<string, any>;
 }
 
 export async function getTeacherDashboardHealth(params: {
@@ -2743,4 +2752,3 @@ export async function getTeacherDashboardHealth(params: {
   }
   return (await res.json()) as TeacherDashboardHealthResponse;
 }
-

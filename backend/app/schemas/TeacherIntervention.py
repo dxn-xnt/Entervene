@@ -1,0 +1,64 @@
+from datetime import datetime
+from typing import Any
+from uuid import UUID
+
+from pydantic import BaseModel
+
+
+class TeacherInterventionSummary(BaseModel):
+    intervention_id: int
+    student_id: UUID
+    student_name: str
+    student_lrn: str
+    class_id: int
+    class_name: str
+    subject_id: int
+    subject_name: str
+    academic_period_id: int
+    academic_period_name: str
+    status: str
+    source_prediction_id: int
+    source_prediction_revision: int
+    triggering_predicted_grade: float
+    triggering_intervention_level: str
+    created_at: datetime
+    activated_at: datetime | None = None
+    resolved_at: datetime | None = None
+    resolution_reason: str | None = None
+    diagnosis_summary: dict[str, Any]
+
+
+class TeacherInterventionDetail(TeacherInterventionSummary):
+    diagnosis_snapshot: dict[str, Any]
+    activated_by_staff_id: str | None = None
+
+
+class ResolvedReviewer(BaseModel):
+    title: str
+    introduction: str
+    body: str
+
+
+class ResolvedSupportActivity(BaseModel):
+    assignment_id: int
+    title: str
+    classwork_type: str
+    submission_status: str | None
+    grade: float | None
+    total_points: float | None
+    original_assignment_id: int | None = None
+    original_title: str | None = None
+    exam_subtype: str | None = None
+    original_grade: float | None = None
+    effective_grade: float | None = None
+
+
+class TeacherResolvedInterventionDetail(TeacherInterventionDetail):
+    resolution_projection: float | None
+    targeted_activities: list[ResolvedSupportActivity]
+    sent_reviewer: ResolvedReviewer | None
+
+
+class TeacherInterventionList(BaseModel):
+    items: list[TeacherInterventionSummary]
+    total: int

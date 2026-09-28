@@ -12,7 +12,6 @@ mnsts2000
 password in the app password for the google account
 kpjc wnfa ckzv cast
 
-
 #frontend
 npm run dev
 
@@ -126,3 +125,4 @@ Sample Accounts:
 "maria.santos2+30@student.ph"
 "angela.rivera+21@student.ph"
 "m.cruz@school.edu.ph"
+

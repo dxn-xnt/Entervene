@@ -126,6 +126,9 @@ class ClassworkCategoryHeader(BaseModel):
     id: int
     title: str
     maxScore: float
+    recipientStudentId: Optional[str] = None
+    sourceInterventionId: Optional[int] = None
+    assignedLearnerCount: Optional[int] = None
 
 
 class GradebookCategoryHeaderGroup(BaseModel):
@@ -143,6 +146,7 @@ class StudentGradebookRow(BaseModel):
     performanceTask: list[Optional[float]]
     quarterlyAssessment: list[Optional[float]] = []
     exams: list[Optional[float]] = []
+    remedial_exams: list[dict] = []
     # Per-category Percentage Scores (PS = sum_scores / max_possible * 100)
     ps_written: Optional[float] = None
     ps_performance: Optional[float] = None

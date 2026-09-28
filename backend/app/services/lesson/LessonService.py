@@ -266,6 +266,7 @@ def assign_lesson_to_classes(
 
 
 def lesson_classwork_assignments(lesson_id: int, class_id: int, student, db: Session) -> list[dict]:
+    from app.services.classwork.ClassworkAccessService import assignment_allows_student
     ensure_student_enrolled(db, student.student_id, class_id)
     rows = (
         db.query(ClassworkAssignment)
@@ -282,6 +283,8 @@ def lesson_classwork_assignments(lesson_id: int, class_id: int, student, db: Ses
     results = []
     now = datetime.now(timezone.utc)
     for assignment in rows:
+        if not assignment_allows_student(assignment, student.student_id):
+            continue
         classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
         submission = db.query(StudentSubmission).filter(
             StudentSubmission.classwork_assignment_id == assignment.classwork_assignment_id,

@@ -31,12 +31,22 @@ import {
 } from "../classworks/quiz-builder-utils";
 import { exportQuizPdf, exportQuizDocx } from "@/lib/quiz-export";
 import AIQuizGeneratorModal from "./ai-quiz-generator-modal";
+import type { TeacherInterventionDetail, RemediationFocus, RemediationResource, OriginalExamination } from "@/lib/teacher-interventions-api";
+import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
 
 interface CreateClassworkQuizModalProps {
     selectedType: ClassworkKind;
     subjects: Array<{ id: number; name: string }>;
     loads: TeacherClassLoad[];
     initialSubjectId?: string;
+    initialTitle?: string;
+    initialInstructions?: string;
+    remediationDraft?: boolean;
+    remediationTarget?: TeacherInterventionDetail | null;
+    remediationFocus?: RemediationFocus | null;
+    remediationGradeTreatment?: "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | null;
+    remediationOriginalExam?: OriginalExamination | null;
+    remediationReferences?: RemediationResource[];
     onClose: () => void;
     onSuccess: () => void;
     onBack: () => void;
@@ -47,6 +57,14 @@ export default function CreateClassworkQuizModal({
     subjects,
     loads,
     initialSubjectId,
+    initialTitle,
+    initialInstructions,
+    remediationDraft = false,
+    remediationTarget,
+    remediationFocus = null,
+    remediationGradeTreatment = null,
+    remediationOriginalExam = null,
+    remediationReferences = [],
     onClose,
     onSuccess,
     onBack,
@@ -64,10 +82,21 @@ export default function CreateClassworkQuizModal({
                     : "";
         return {
             ...emptyClassworkDraft,
-            classwork_category: "WRITTEN_WORK",
+            title: initialTitle || "",
+            instructions: initialInstructions || "",
+            is_published: remediationDraft ? false : emptyClassworkDraft.is_published,
+            classwork_category: remediationDraft ? (remediationGradeTreatment === "PRACTICE_ONLY" ? "" : remediationGradeTreatment === "EXAMINATION" ? "QUARTERLY_ASSESSMENT" : remediationGradeTreatment || "") : categoryFromFocus(null),
+            exam_subtype: remediationOriginalExam?.subtype ?? "",
+            total_points: remediationOriginalExam ? String(remediationOriginalExam.total_points) : emptyClassworkDraft.total_points,
+            max_attempts: remediationGradeTreatment === "EXAMINATION" ? "1" : emptyClassworkDraft.max_attempts,
             subject_id: preferredId,
         };
     });
+    useEffect(() => {
+        if (initialSubjectId && subjects.some((subject) => String(subject.id) === String(initialSubjectId))) {
+            setDraft((current) => current.subject_id ? current : { ...current, subject_id: String(initialSubjectId) });
+        }
+    }, [initialSubjectId, subjects]);
 
     const [quizQuestions, setQuizQuestions] = useState<QuizQuestionDraft[]>([
         createEmptyQuizQuestion(1),
@@ -84,7 +113,8 @@ export default function CreateClassworkQuizModal({
     const [isExporting, setIsExporting] = useState<"pdf" | "docx" | null>(null);
     const [includeExportAnswerKey, setIncludeExportAnswerKey] = useState(false);
 
-    const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);
+    const [selectedClassIds, setSelectedClassIds] = useState<number[]>(remediationTarget ? [remediationTarget.class_id] : []);
+    const [remediationRequestId] = useState(() => crypto.randomUUID());
     const [availableLessons, setAvailableLessons] = useState<TeacherLesson[]>([]);
     const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>([]);
     const [isLessonLoading, setIsLessonLoading] = useState(false);
@@ -164,7 +194,7 @@ export default function CreateClassworkQuizModal({
                 ...current,
                 title: current.title || preview.title || "",
                 instructions: current.instructions,
-                total_points: String(
+                total_points: remediationOriginalExam ? String(remediationOriginalExam.total_points) : String(
                     importedQuestions.reduce(
                         (sum, q) => sum + Number(q.points || 0),
                         0,
@@ -306,6 +336,7 @@ export default function CreateClassworkQuizModal({
     };
 
     const toggleClass = (classId: number) => {
+        if (remediationTarget) return;
         setSelectedClassIds((current) =>
             current.includes(classId)
                 ? current.filter((id) => id !== classId)
@@ -324,6 +355,8 @@ export default function CreateClassworkQuizModal({
     const validateDetails = () => {
         if (!draft.subject_id) return "Choose a subject.";
         if (!draft.title.trim()) return "Topic title is required.";
+        if ((draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && !draft.exam_subtype) return "Choose an Examination sub-type explicitly.";
+        if (remediationGradeTreatment === "EXAMINATION" && (!remediationOriginalExam || draft.exam_subtype !== remediationOriginalExam.subtype || Number(draft.total_points) !== remediationOriginalExam.total_points || Number(draft.max_attempts) !== 1)) return "Remedial Examination must match the original subtype and maximum points, with one quiz attempt.";
         const points = Number(draft.total_points);
         if (!Number.isFinite(points) || points <= 0) {
             return "Total points must be greater than zero.";
@@ -488,9 +521,9 @@ export default function CreateClassworkQuizModal({
                 );
 
                 setAvailableLessons(lessons);
-                setSelectedLessonIds((current) =>
-                    current.filter((id) => uniqueLessons.has(id)),
-                );
+                setSelectedLessonIds((current) => remediationFocus
+                    ? remediationFocus.lesson_ids.filter((id) => uniqueLessons.has(id))
+                    : current.filter((id) => uniqueLessons.has(id)));
                 setCreateError("");
             } catch (err) {
                 if (!isActive) return;
@@ -540,7 +573,7 @@ export default function CreateClassworkQuizModal({
             display_order: index + 1,
             difficulty_level: question.difficulty_level,
             explanation: question.explanation.trim() || null,
-            lesson_id: null,
+            lesson_id: question.lesson_id && selectedLessonIds.includes(question.lesson_id) ? question.lesson_id : null,
             options:
                 question.question_type === "MULTIPLE_CHOICE"
                     ? question.options.map((option, optionIndex) => ({
@@ -603,6 +636,11 @@ export default function CreateClassworkQuizModal({
             formData.append("subject_id", String(draft.subject_id));
             formData.append("show_scores", String(draft.show_scores));
             formData.append("class_ids", JSON.stringify(selectedClassIds));
+            if (remediationTarget) {
+                formData.append("intervention_id", String(remediationTarget.intervention_id));
+                formData.append("remediation_request_id", remediationRequestId);
+                if (remediationOriginalExam && remediationGradeTreatment === "EXAMINATION") formData.append("original_exam_assignment_id", String(remediationOriginalExam.assignment_id));
+            }
             formData.append("lesson_ids", JSON.stringify(selectedLessonIds));
             if (draft.due_date) {
                 formData.append("due_date", new Date(draft.due_date).toISOString());
@@ -836,7 +874,7 @@ export default function CreateClassworkQuizModal({
                                     }));
                                     setSelectedClassIds([]);
                                 }}
-                                disabled={isCreating}
+                                disabled={isCreating || Boolean(remediationTarget)}
                             >
                                 <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm font-medium">
                                     <Select.Value placeholder="Choose subject" />
@@ -908,7 +946,7 @@ export default function CreateClassworkQuizModal({
                         </div>
 
                         <div className="grid gap-4 sm:grid-cols-3">
-                            <div className="flex flex-col gap-1 w-full">
+                            {remediationDraft && remediationGradeTreatment === "PRACTICE_ONLY" ? <p className="rounded border border-green-700 bg-green-50 p-3 text-sm font-semibold">Practice only · No official grading component. Score and completion remain visible in Intervention progress.</p> : <div className="flex flex-col gap-1 w-full">
                                 <label className="text-xs font-bold text-gray-700">
                                     Grading component
                                 </label>
@@ -920,7 +958,7 @@ export default function CreateClassworkQuizModal({
                                             classwork_category: val,
                                         }))
                                     }
-                                    disabled={isCreating}
+                                    disabled={isCreating || remediationDraft}
                                 >
                                     <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
                                         <Select.Value placeholder="Select Category" />
@@ -933,13 +971,13 @@ export default function CreateClassworkQuizModal({
                                             <Select.Item value="PERFORMANCE_TASK">
                                                 Performance Task
                                             </Select.Item>
-                                            <Select.Item value="QUARTERLY_ASSESSMENT">
+                                            {(!remediationDraft || remediationGradeTreatment === "EXAMINATION") && <Select.Item value="QUARTERLY_ASSESSMENT">
                                                 Exams
-                                            </Select.Item>
+                                            </Select.Item>}
                                         </Select.Group>
                                     </Select.Content>
                                 </Select>
-                            </div>
+                            </div>}
 
                             {(draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && (
                                 <div className="flex flex-col gap-1 w-full">
@@ -947,14 +985,14 @@ export default function CreateClassworkQuizModal({
                                         Exam Sub-type
                                     </label>
                                     <Select
-                                        value={draft.exam_subtype || "SUMMATIVE_1"}
+                                        value={draft.exam_subtype}
                                         onValueChange={(val) =>
                                             setDraft((current) => ({
                                                 ...current,
                                                 exam_subtype: val,
                                             }))
                                         }
-                                        disabled={isCreating}
+                                        disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
                                     >
                                         <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
                                             <Select.Value placeholder="Select Sub-type" />
@@ -993,7 +1031,7 @@ export default function CreateClassworkQuizModal({
                                             total_points: event.target.value,
                                         }))
                                     }
-                                    disabled={isCreating}
+                                    disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
                                     className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
                                 />
                             </div>
@@ -1018,11 +1056,23 @@ export default function CreateClassworkQuizModal({
                                             max_attempts: event.target.value,
                                         }));
                                     }}
-                                    disabled={isCreating}
+                                    disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
                                     className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
                                 />
                             </div>
                         </div>
+                        {remediationFocus && (
+                            <p className="rounded border p-3 text-sm">
+                                Evidence focus: {focusGuidance(remediationFocus)}
+                                {remediationGradeTreatment === "EXAMINATION" && remediationOriginalExam ? ` Original ${remediationOriginalExam.title}: ${remediationOriginalExam.score}/${remediationOriginalExam.total_points}. The higher result will count.` : ""}
+                                {remediationDraft && remediationGradeTreatment === "PRACTICE_ONLY" && " Practice only: completion and score do not affect official grades or predictions."}
+                            </p>
+                        )}
+                        {remediationReferences.length > 0 && (
+                            <p className="rounded border p-3 text-sm">
+                                Selected evidence-matched references (metadata only): {remediationReferences.map((item) => item.title).join("; ")}. Review these materials yourself; their file contents were not analyzed.
+                            </p>
+                        )}
                     </div>
                 )}
 
@@ -1133,7 +1183,7 @@ export default function CreateClassworkQuizModal({
                                                 max_attempts: event.target.value,
                                             }));
                                         }}
-                                        disabled={isCreating}
+                                        disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
                                         className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
                                     />
                                 </div>
@@ -1701,6 +1751,8 @@ export default function CreateClassworkQuizModal({
                                 <p className="text-xs font-bold text-gray-700">
                                     Assign to sections
                                 </p>
+                {remediationTarget && <p className="rounded border p-2 text-xs">Remedial assignment for <strong>{remediationTarget.student_name}</strong> in {remediationTarget.class_name}. Only this student will receive this quiz.</p>}
+                {remediationFocus && <p className="rounded border p-2 text-xs">Evidence focus: {focusGuidance(remediationFocus)}{remediationGradeTreatment === "EXAMINATION" && remediationOriginalExam ? ` Original ${remediationOriginalExam.title} fixes the subtype and ${remediationOriginalExam.total_points} possible points.` : ""}</p>}
                                 <Button
                                     type="button"
                                     variant="outline"
@@ -1710,7 +1762,7 @@ export default function CreateClassworkQuizModal({
                                             selectedSubjectLoads.map((load) => load.class_id),
                                         )
                                     }
-                                    disabled={isCreating || selectedSubjectLoads.length === 0}
+                                    disabled={isCreating || Boolean(remediationTarget) || selectedSubjectLoads.length === 0}
                                     className="px-2 py-1 text-xs border border-black rounded shadow-xs"
                                 >
                                     Select all
@@ -1725,7 +1777,7 @@ export default function CreateClassworkQuizModal({
                                             key={load.subject_load_id}
                                             type="button"
                                             onClick={() => toggleClass(load.class_id)}
-                                            disabled={isCreating}
+                                            disabled={isCreating || Boolean(remediationTarget)}
                                             className={`rounded border-2 border-black px-3 py-2 text-xs font-bold text-center cursor-pointer transition shadow-md hover:translate-y-0.5 active:translate-y-1 ${isSelected ? "bg-[#7ABA78]" : "bg-white"
                                                 }`}
                                         >
@@ -1790,6 +1842,28 @@ export default function CreateClassworkQuizModal({
                                 </p>
                             )}
                         </div>
+
+                        {selectedLessonIds.length > 0 && <div className="space-y-3 rounded border-2 border-black bg-white p-4">
+                            <h3 className="font-bold">Question-level lesson mapping</h3>
+                            <p className="text-xs text-gray-600">Choose the lesson each question actually assesses. Its linked competency is used only when that student's answer has a score.</p>
+                            {quizQuestions.map((question, index) => <div key={question.id} className="flex flex-col gap-1">
+                                <label className="text-xs font-bold text-gray-700" htmlFor={`question-lesson-${question.id}`}>
+                                    Question {index + 1}: {question.question_text}
+                                </label>
+                                <select
+                                    id={`question-lesson-${question.id}`}
+                                    value={question.lesson_id && selectedLessonIds.includes(question.lesson_id) ? question.lesson_id : ""}
+                                    onChange={(event) => updateQuizQuestion(question.id, { lesson_id: event.target.value ? Number(event.target.value) : null })}
+                                    disabled={isCreating}
+                                    className="w-full rounded border-2 border-black bg-white px-3 py-2 text-sm"
+                                >
+                                    <option value="">No question-level competency mapping</option>
+                                    {availableLessons.filter((lesson) => selectedLessonIds.includes(lesson.lesson_id)).map((lesson) => (
+                                        <option key={lesson.lesson_id} value={lesson.lesson_id}>{lesson.title}</option>
+                                    ))}
+                                </select>
+                            </div>)}
+                        </div>}
 
                         {/* ── Export Questionnaire Card in Step 4 ── */}
                         <div className="rounded border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-wrap items-center justify-between gap-3 mt-4">
@@ -1928,6 +2002,7 @@ export default function CreateClassworkQuizModal({
                     "Subject"
                 }
                 subjects={subjects}
+                remediationFocus={remediationFocus}
                 onGenerated={(questions, warnings, chosenSubjectId, synthesizedTitle, associatedLessonIds, additionalCoverageScope, associatedLessonTitles) => {
                     setQuizQuestions(
                         questions.length > 0
@@ -1943,7 +2018,7 @@ export default function CreateClassworkQuizModal({
                         ...current,
                         title: current.title?.trim() ? current.title : (synthesizedTitle || current.title),
                         subject_id: chosenSubjectId ? String(chosenSubjectId) : current.subject_id,
-                        total_points: String(
+                        total_points: remediationOriginalExam ? String(remediationOriginalExam.total_points) : String(
                             questions.reduce(
                                 (sum, q) => sum + Number(q.points || 0),
                                 0,

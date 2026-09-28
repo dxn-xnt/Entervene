@@ -100,7 +100,7 @@ export default function EnterManualScoresModal({
       return;
     }
 
-    const payloadScores = Object.entries(scoreInputs).map(([student_id, val]) => {
+    const payloadScores = Object.entries(scoreInputs).filter(([student_id]) => students.some((student) => student.student_id === student_id && student.assigned)).map(([student_id, val]) => {
       const trimmed = val.trim();
       const score = trimmed !== "" ? parseFloat(trimmed) : null;
       return { student_id, score };
@@ -174,6 +174,7 @@ export default function EnterManualScoresModal({
                   </div>
 
                   <div className="flex items-center gap-2 self-end sm:self-auto">
+                    {!student.assigned ? <span className="text-sm font-bold text-gray-500" title="Not assigned to this intervention activity">N/A · Not assigned</span> :
                     <div className="flex flex-col items-end">
                       <div className="flex items-center gap-1.5">
                         <Input
@@ -191,7 +192,7 @@ export default function EnterManualScoresModal({
                         <span className="text-xs text-muted-foreground font-semibold">/ {maxScore}</span>
                       </div>
                       {err && <span className="text-[11px] text-red-600 font-semibold mt-0.5">{err}</span>}
-                    </div>
+                    </div>}
                   </div>
                 </div>
               );

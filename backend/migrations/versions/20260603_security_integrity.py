@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 
 revision = "20260603_security_integrity"
-down_revision = None
+down_revision = "20260602_initial_schema"
 branch_labels = None
 depends_on = None
 

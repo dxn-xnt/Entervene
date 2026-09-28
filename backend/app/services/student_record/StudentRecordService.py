@@ -41,6 +41,7 @@ from app.services.grading.ExaminationCalculator import (
     categorize_exam_subtype,
     compute_examination_component,
 )
+from app.services.grading.RemedialExamination import effective_exam_scores
 from app.schemas.StudentRecord import (
     BulkSendGradesRequest,
     BulkSendGradesToAdviserResponse,
@@ -288,6 +289,7 @@ def teacher_student_gradebook(
     written_assignments: list[ClassworkAssignment] = []
     performance_assignments: list[ClassworkAssignment] = []
     quarterly_assignments: list[ClassworkAssignment] = []
+    remedial_exam_assignments: list[ClassworkAssignment] = []
 
     for assignment in assignments:
         cw = assignment.classwork
@@ -298,6 +300,9 @@ def teacher_student_gradebook(
             id=assignment.classwork.classwork_id,
             title=assignment.classwork.title,
             maxScore=float(assignment.classwork.total_points or 100),
+            recipientStudentId=str(assignment.recipient_student_id) if assignment.recipient_student_id else None,
+            sourceInterventionId=assignment.source_intervention_id,
+            assignedLearnerCount=1 if assignment.recipient_student_id else len(students),
         )
         if cat_key == "writtenWork":
             written_headers.append(header)
@@ -306,6 +311,9 @@ def teacher_student_gradebook(
             performance_headers.append(header)
             performance_assignments.append(assignment)
         else:
+            if assignment.original_exam_assignment_id is not None:
+                remedial_exam_assignments.append(assignment)
+                continue
             quarterly_headers.append(header)
             quarterly_assignments.append(assignment)
 
@@ -337,25 +345,37 @@ def teacher_student_gradebook(
 
     for student in students:
         student_subs = submissions_by_student.get(student.student_id, {})
+        exam_scores = effective_exam_scores(
+            [*quarterly_assignments, *remedial_exam_assignments],
+            {assignment.classwork_assignment_id: _extract_score(student_subs, assignment.classwork_assignment_id)
+             for assignment in [*quarterly_assignments, *remedial_exam_assignments]
+             if assignment.recipient_student_id in (None, student.student_id)},
+        )
+
+        def assigned(assignment: ClassworkAssignment) -> bool:
+            return assignment.recipient_student_id is None or assignment.recipient_student_id == student.student_id
 
         written_scores = [
-            _extract_score(student_subs, asgn.classwork_assignment_id)
+            _extract_score(student_subs, asgn.classwork_assignment_id) if assigned(asgn) else None
             for asgn in written_assignments
         ]
         performance_scores = [
-            _extract_score(student_subs, asgn.classwork_assignment_id)
+            _extract_score(student_subs, asgn.classwork_assignment_id) if assigned(asgn) else None
             for asgn in performance_assignments
         ]
         quarterly_scores = [
-            _extract_score(student_subs, asgn.classwork_assignment_id)
+            exam_scores.get(asgn.classwork_assignment_id) if assigned(asgn) else None
             for asgn in quarterly_assignments
         ]
 
         # DepEd K-12 grade computation using resolved template weights
         grade_res = _deped_grade(
-            written_scores, written_assignments,
-            performance_scores, performance_assignments,
-            quarterly_scores, quarterly_assignments,
+            [score for score, asgn in zip(written_scores, written_assignments) if assigned(asgn)],
+            [asgn for asgn in written_assignments if assigned(asgn)],
+            [score for score, asgn in zip(performance_scores, performance_assignments) if assigned(asgn)],
+            [asgn for asgn in performance_assignments if assigned(asgn)],
+            [score for score, asgn in zip(quarterly_scores, quarterly_assignments) if assigned(asgn)],
+            [asgn for asgn in quarterly_assignments if assigned(asgn)],
             weights=weights,
         )
         ps_ww = grade_res.ps_ww
@@ -403,6 +423,16 @@ def teacher_student_gradebook(
                 performanceTask=performance_scores,
                 quarterlyAssessment=quarterly_scores,
                 exams=quarterly_scores,
+                remedial_exams=[{
+                    "original_assignment_id": asgn.original_exam_assignment_id,
+                    "original_title": next((item.classwork.title for item in quarterly_assignments
+                                            if item.classwork_assignment_id == asgn.original_exam_assignment_id), "Examination"),
+                    "subtype": asgn.classwork.exam_subtype,
+                    "original_score": _extract_score(student_subs, asgn.original_exam_assignment_id),
+                    "remedial_score": _extract_score(student_subs, asgn.classwork_assignment_id),
+                    "effective_score": exam_scores.get(asgn.original_exam_assignment_id),
+                    "total_points": float(asgn.classwork.total_points or 0),
+                } for asgn in remedial_exam_assignments if asgn.recipient_student_id == student.student_id],
                 ps_written=ps_ww,
                 ps_performance=ps_pt,
                 ps_quarterly=ps_qa,
@@ -833,15 +863,18 @@ def _compute_student_period_components(
         _extract_score(student_subs, asgn.classwork_assignment_id)
         for asgn in performance_assignments
     ]
-    quarterly_scores = [
-        _extract_score(student_subs, asgn.classwork_assignment_id)
-        for asgn in quarterly_assignments
-    ]
+    effective = effective_exam_scores(
+        quarterly_assignments,
+        {asgn.classwork_assignment_id: _extract_score(student_subs, asgn.classwork_assignment_id)
+         for asgn in quarterly_assignments if asgn.recipient_student_id in (None, student.student_id)},
+    )
+    official_quarterly_assignments = [asgn for asgn in quarterly_assignments if asgn.original_exam_assignment_id is None]
+    quarterly_scores = [effective.get(asgn.classwork_assignment_id) for asgn in official_quarterly_assignments]
 
     grade_res = _deped_grade(
         written_scores, written_assignments,
         performance_scores, performance_assignments,
-        quarterly_scores, quarterly_assignments,
+        quarterly_scores, official_quarterly_assignments,
         weights=weights,
     )
     return {
@@ -1491,7 +1524,7 @@ def _metrics_for_student(
     submissions: dict[int, StudentSubmission],
 ) -> Metrics:
     official_grade = _official_period_grade(db, scope, student)
-    assigned_count = len(assignments)
+    assigned_count = sum(assignment.recipient_student_id is None or assignment.recipient_student_id == student.student_id for assignment in assignments)
     submitted_count = 0
     missing_count = 0
     late_count = 0
@@ -1500,8 +1533,18 @@ def _metrics_for_student(
     earned = Decimal("0")
     possible = Decimal("0")
     now = datetime.now(timezone.utc)
+    effective_exams = effective_exam_scores(
+        [assignment for assignment in assignments if _categorize_assignment(assignment) == "quarterlyAssessment"],
+        {assignment.classwork_assignment_id: float(submissions[assignment.classwork_assignment_id].grade)
+         for assignment in assignments
+         if assignment.recipient_student_id in (None, student.student_id)
+         and assignment.classwork_assignment_id in submissions
+         and submissions[assignment.classwork_assignment_id].grade is not None},
+    )
 
     for assignment in assignments:
+        if assignment.recipient_student_id is not None and assignment.recipient_student_id != student.student_id:
+            continue
         cw = assignment.classwork
         if not getattr(cw, "is_graded", True) or (getattr(cw, "classwork_type", "") or "").upper() == READING_TYPE:
             continue
@@ -1521,8 +1564,10 @@ def _metrics_for_student(
         # Quiz submissions can be auto-scored before their status is marked as graded.
         if submission is not None and submission.grade is not None and assignment.classwork.total_points is not None:
             graded_count += 1
-            earned += Decimal(str(submission.grade))
-            possible += Decimal(str(assignment.classwork.total_points))
+            if assignment.original_exam_assignment_id is None:
+                official_score = effective_exams.get(assignment.classwork_assignment_id, float(submission.grade))
+                earned += Decimal(str(official_score))
+                possible += Decimal(str(assignment.classwork.total_points))
         elif status in {"submitted", "late", GRADED_STATUS}:
             ungraded_count += 1
 

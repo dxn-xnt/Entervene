@@ -383,6 +383,7 @@ def _student_assignment_rows(db: Session, student_id: uuid.UUID) -> list[tuple[C
         .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
         .join(Subject, Subject.subject_id == Classwork.subject_id)
         .filter(ClassworkAssignment.class_id.in_(class_ids))
+        .filter(or_(ClassworkAssignment.recipient_student_id.is_(None), ClassworkAssignment.recipient_student_id == student_id))
         .filter(Classwork.is_archived.is_(False))
         .filter(Classwork.is_graded.is_(True))
         .filter(Classwork.classwork_type != "READING")

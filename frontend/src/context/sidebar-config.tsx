@@ -22,7 +22,6 @@ export const SidebarConfigs: Record<string, NavItem[]> = {
     { title: "Users", url: routes.admin.users, icon: <Users /> },
 
     { title: "AI Predictions", url: routes.admin.predictions, icon: <Sparkles /> },
-    { title: "Interventions", url: routes.admin.interventions, icon: <Shield /> },
     { title: "Notifications", url: routes.admin.notifications, icon: <Bell /> },
     { title: "System Settings", url: routes.admin.settings, icon: <Settings /> },
   ],

@@ -28,6 +28,8 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import type { CompetencyItem } from "./types";
+import type { RemediationFocus } from "@/lib/teacher-interventions-api";
+import { focusGuidance, supportedRemediationCompetencies } from "@/lib/remediation-authoring";
 import {
   computeTOS,
   validateTOS,
@@ -51,9 +53,11 @@ import {
 } from "@/lib/tos-export";
 
 export interface TOSGeneratorScreenProps {
+  initialTitle?: string;
   subjectId?: number;
   subjectName?: string;
   competencies?: CompetencyItem[];
+  remediationFocus?: RemediationFocus | null;
   initialExamId?: number | null;
   initialStep?: WizardStep;
   parentLabel?: string;
@@ -71,9 +75,11 @@ type WizardStep =
   | "export";
 
 export function TOSGeneratorScreen({
+  initialTitle,
   subjectId = 0,
   subjectName = "",
   competencies = [],
+  remediationFocus = null,
   initialExamId,
   initialStep,
   parentLabel,
@@ -100,7 +106,7 @@ export function TOSGeneratorScreen({
   const [deletingExamId, setDeletingExamId] = useState<number | null>(null);
 
   // Step 1: Exam Info & Test Parts
-  const [title, setTitle] = useState("Summative Assessment 1");
+  const [title, setTitle] = useState(initialTitle || "Summative Assessment 1");
   const [quarter, setQuarter] = useState("Term 1");
   const [testParts, setTestParts] = useState<TestPart[]>([
     { type: "MULTIPLE_CHOICE", count: 15 },
@@ -187,8 +193,9 @@ export function TOSGeneratorScreen({
   // Initialize competencies and load exams list
   useEffect(() => {
     if (competencies && competencies.length > 0) {
-      setLoadedCompetencies(competencies);
-      const initial = competencies.map((c) => ({
+      const supported = supportedRemediationCompetencies(competencies, remediationFocus);
+      setLoadedCompetencies(supported);
+      const initial = supported.map((c) => ({
         competency_id: c.competency_id,
         label: c.statement,
         code: c.competency_code || undefined,
@@ -196,14 +203,18 @@ export function TOSGeneratorScreen({
         is_adhoc: false,
       }));
       setCompInputs(initial);
+    } else if (remediationFocus && remediationFocus.competency_ids.length === 0) {
+      setLoadedCompetencies([]);
+      setCompInputs([]);
     } else if (currentSubjectId) {
       apiFetch(`/api/v1/competencies/subject/${currentSubjectId}`)
         .then((res) => (res.ok ? res.json() : []))
         .then((compData: CompetencyItem[]) => {
-          if (Array.isArray(compData) && compData.length > 0) {
-            setLoadedCompetencies(compData);
+          const supported = supportedRemediationCompetencies(Array.isArray(compData) ? compData : [], remediationFocus);
+          if (Array.isArray(supported) && supported.length > 0) {
+            setLoadedCompetencies(supported);
             setCompInputs(
-              compData.map((c) => ({
+              supported.map((c) => ({
                 competency_id: c.competency_id,
                 label: c.statement,
                 code: c.competency_code || undefined,
@@ -229,7 +240,7 @@ export function TOSGeneratorScreen({
     } else if (currentSubjectId) {
       loadSavedExams();
     }
-  }, [competencies, currentSubjectId, initialExamId]);
+  }, [competencies, currentSubjectId, initialExamId, remediationFocus]);
 
   const availableCompetencies = useMemo(() => {
     return (loadedCompetencies || []).filter(
@@ -914,6 +925,7 @@ export function TOSGeneratorScreen({
 
       {/* ── Main Container (Full-Width, No Sidebar Inside Wizard) ── */}
       <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+      {remediationFocus && <p className="mb-3 rounded border p-3 text-sm">Intervention blueprint focus: {focusGuidance(remediationFocus)} TOS is a blueprint/export, not a graded student activity.</p>}
       <Card className="block p-0 rounded border-2 border-border bg-card shadow-lg overflow-hidden">
         {/* Top Banner */}
         <div className="flex flex-col gap-2 border-b-2 border-border bg-accent px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">

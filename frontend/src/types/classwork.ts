@@ -102,6 +102,16 @@ export type AssignmentTracking = {
   missing: TrackingStudent[];
 };
 
+export type ClassworkTracking = {
+  classwork_id: number;
+  classwork_title: string;
+  total_students: number;
+  submitted_count: number;
+  missing_count: number;
+  submitted: TrackingStudent[];
+  missing: TrackingStudent[];
+};
+
 export type SubmissionAttachment = {
   submission_attachment_id: number;
   file_name: string;

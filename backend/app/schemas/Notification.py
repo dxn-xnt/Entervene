@@ -16,6 +16,9 @@ NotificationType = Literal[
     "submission_graded",
     "grade_submission_window_opened",
     "grade_submission_closing_soon",
+    "intervention_candidate",
+    "intervention_resolved",
+    "intervention_reviewer_available",
 ]
 
 

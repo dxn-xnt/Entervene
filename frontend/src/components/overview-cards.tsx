@@ -2,12 +2,15 @@
 
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/retroui/Card";
+import { Progress } from "@/components/retroui/Progress";
 
 type OverviewCardProps = {
   title: string;
   count: string;
   stat?: string;
   statDescription?: string;
+  trend?: "up" | "down";
+  progressValue?: number;
   className?: string;
 };
 
@@ -68,22 +71,45 @@ export function OverviewCard({
   count,
   stat,
   statDescription,
+  trend,
+  progressValue,
   className,
 }: OverviewCardProps) {
   const description = statDescription ?? descriptionFor(title);
 
+  const isPositive = trend === "up" || (stat && stat.includes("▲"));
+  const isNegative = trend === "down" || (stat && stat.includes("▼"));
+
   return (
-    <Card className={cn("@container/card", className)}>
-      <Card.Header>
-        <Card.Description className="font-semibold">{title}</Card.Description>
+    <Card className={cn("@container/card transition-all duration-200", className)}>
+      <Card.Header className="">
+        <Card.Description className="text-xl font-bold text-foreground/90">{title}</Card.Description>
       </Card.Header>
-      <Card.Content>
-        <Card.Title className="text-4xl font-bold">{count}</Card.Title>
+      <Card.Content className="space-y-1.5">
+        <Card.Title className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">{count}</Card.Title>
         {(stat || description) && (
-          <p className="text-sm text-muted-foreground">
-            {stat && <span className="font-semibold text-foreground">{stat} </span>}
+          <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+            {stat && (
+              <span
+                className={cn(
+                  "font-medium",
+                  isPositive && "text-emerald-400 font-semibold",
+                  isNegative && "text-rose-400 font-semibold",
+                  !isPositive && !isNegative && "text-foreground font-semibold"
+                )}
+              >
+                {stat}{" "}
+              </span>
+            )}
             {description}
           </p>
+        )}
+        {typeof progressValue === "number" && (
+          <Progress
+            value={progressValue}
+            className="mt-2 h-2"
+            aria-label={`${title}: ${Math.round(progressValue)}%`}
+          />
         )}
       </Card.Content>
     </Card>

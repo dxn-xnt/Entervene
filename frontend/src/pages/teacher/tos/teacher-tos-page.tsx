@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/retroui/Button";
@@ -20,6 +21,7 @@ import { toast } from "sonner";
 import { TOSGeneratorScreen } from "../classes-view/subject-details/tos-generator-screen";
 import type { CompetencyItem } from "../classes-view/subject-details/types";
 import { Text } from "@/components/retroui/Text";
+import { getTeacherActive, getRemediationWorkspace, type RemediationFocus } from "@/lib/teacher-interventions-api";
 
 interface SubjectOption {
   subject_id: number;
@@ -49,6 +51,11 @@ interface SavedTOSSummary {
 }
 
 export const TeacherTOSPage: React.FC = () => {
+  const [routeParams, setRouteParams] = useSearchParams();
+  const remediationSubject = routeParams.get("subject_id");
+  const remediationInterventionId = Number(routeParams.get("intervention_id"));
+  const [remediationFocus, setRemediationFocus] = useState<RemediationFocus | null>(null);
+  const [remediationError, setRemediationError] = useState("");
   const [exams, setExams] = useState<SavedTOSSummary[]>([]);
   const [subjects, setSubjects] = useState<SubjectOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -120,6 +127,39 @@ export const TeacherTOSPage: React.FC = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (routeParams.get("remediation") !== "TOS") return;
+    if (!Number.isInteger(remediationInterventionId) || remediationInterventionId <= 0) {
+      setRemediationError("Open the TOS blueprint from an active Intervention.");
+      return;
+    }
+    let live = true;
+    void Promise.all([getTeacherActive(remediationInterventionId), getRemediationWorkspace(remediationInterventionId)])
+      .then(([detail, workspace]) => {
+        if (!live) return;
+        if (workspace.plan.teacher_choice !== "TOS" || detail.subject_id !== Number(remediationSubject)) {
+          setRemediationError("The saved Intervention support choice or subject has changed.");
+          return;
+        }
+        setRemediationFocus(workspace.focus);
+      })
+      .catch((cause) => { if (live) setRemediationError(cause instanceof Error ? cause.message : "Unable to load Intervention focus."); });
+    return () => { live = false; };
+  }, [remediationInterventionId, remediationSubject, routeParams.get("remediation")]);
+
+  useEffect(() => {
+    if (routeParams.get("remediation") !== "TOS" || !subjects.length || !remediationFocus || remediationError) return;
+    const subject = subjects.find((item) => item.subject_id === Number(remediationSubject));
+    if (!subject) return;
+    setActiveSubject(subject);
+    setActiveCompetencies([]);
+    setActiveExamId(null);
+    setIsWizardOpen(true);
+    const next = new URLSearchParams(routeParams);
+    next.delete("remediation");
+    setRouteParams(next, { replace: true });
+  }, [subjects, remediationSubject, routeParams, setRouteParams, remediationFocus, remediationError]);
+
   const handleOpenExam = async (exam: SavedTOSSummary) => {
     setIsOpeningExam(true);
     try {
@@ -151,6 +191,7 @@ export const TeacherTOSPage: React.FC = () => {
   };
 
   const handleStartNewTOS = () => {
+    setRemediationFocus(null);
     const targetSub =
       selectedSubjectFilter !== "ALL"
         ? subjects.find((s) => s.subject_id === Number(selectedSubjectFilter))
@@ -216,15 +257,18 @@ export const TeacherTOSPage: React.FC = () => {
           <div className="@container/main flex flex-1 flex-col">
             <div className="flex flex-1 flex-col">
               <TOSGeneratorScreen
+                initialTitle={routeParams.get("title") || undefined}
                 subjectId={activeSubject?.subject_id ?? 0}
                 subjectName={activeSubject?.subject_name ?? ""}
                 competencies={activeCompetencies}
+                remediationFocus={remediationFocus}
                 initialExamId={activeExamId}
                 initialStep={activeExamId ? "blueprint" : "test-parts"}
                 parentLabel="TOS Generator"
                 subjectsList={subjects}
                 onBack={() => {
                   setIsWizardOpen(false);
+                  setRemediationFocus(null);
                   setActiveSubject(null);
                   setActiveExamId(null);
                   fetchData();
@@ -263,6 +307,7 @@ export const TeacherTOSPage: React.FC = () => {
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+              {remediationError && <p role="alert" className="rounded border p-3 text-sm text-red-700">{remediationError}</p>}
               {/* Filter Toolbar */}
               <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-center md:justify-between">
                 {/* Search Input */}

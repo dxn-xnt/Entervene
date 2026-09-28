@@ -25,7 +25,6 @@ const AdminClassDetail = lazy(() => import("./pages/admin/class-view"));
 const SubjectLoadStudio = lazy(() => import("./pages/admin/subject-load-studio"));
 const AdminUsers = lazy(() => import("./pages/admin/users"));
 const AdminUserDetail = lazy(() => import("./pages/admin/user-detail"));
-const AdminInterventions = lazy(() => import("./pages/admin/interventions"));
 const AdminNotifications = lazy(() => import("./pages/admin/notifications"));
 const AdminSettings = lazy(() => import("./pages/admin/system-settings"));
 const AcademicPeriods = lazy(() => import("./pages/admin/academic-periods"));
@@ -45,7 +44,7 @@ const AdvisoryClassDetail = lazy(() => import("./pages/teacher/classes-view/advi
 const ClassSections = lazy(() => import("./pages/teacher/classes-view/class-section"));
 const TeacherClassworks = lazy(() => import("./pages/teacher/classworks"));
 // import TeacherLessons from "./pages/teacher/lessons";
-// import TeacherInterventions from "./pages/teacher/interventions";
+const TeacherInterventions = lazy(() => import("./pages/teacher/interventions"));
 const CreateLesson = lazy(() => import("./pages/teacher/create-lesson"));
 const TeacherGrades = lazy(() => import("./pages/teacher/grades"));
 const TeacherGradeView = lazy(() => import("./pages/teacher/grade-view"));
@@ -109,7 +108,6 @@ const App = () => {
                   <Route path={routes.admin.subjectLoadStudio} element={<SubjectLoadStudio />} />
                   <Route path={routes.admin.users} element={<AdminUsers />} />
                   <Route path={routes.admin.userDetail} element={<AdminUserDetail />} />
-                  <Route path={routes.admin.interventions} element={<AdminInterventions />} />
                   <Route path={routes.admin.studentView} element={<AdminStudentView />} />
                   <Route path={routes.admin.notifications} element={<AdminNotifications />} />
                   <Route path={routes.admin.settings} element={<AdminSettings />} />
@@ -134,7 +132,7 @@ const App = () => {
                   <Route path={routes.teacher.createLesson} element={<CreateLesson />} />
                   {/* <Route path={routes.teacher.lessons} element={<TeacherLessons />} /> */}
                   <Route path={routes.teacher.profile} element={<TeacherProfile />} />
-                  <Route path={routes.teacher.interventions} element={<AdminInterventions />} />
+                  <Route path={routes.teacher.interventions} element={<TeacherInterventions />} />
                   <Route path={routes.teacher.grades} element={<TeacherGrades />} />
                   <Route path={routes.teacher.gradeView} element={<TeacherGradeView />} />
                   <Route path={routes.teacher.notifications} element={<TeacherNotifications />} />

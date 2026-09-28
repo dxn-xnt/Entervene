@@ -26,6 +26,8 @@ from app.schemas.Quiz import (
 )
 from app.services.quiz.QuizBuilderService import get_teacher_quiz_classwork
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
+from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
+from app.services.classwork.ClassworkAccessService import assignment_allows_student
 
 
 TURNED_IN_STATUSES = {"submitted", "late", "graded"}
@@ -49,6 +51,17 @@ def build_teacher_quiz_analysis(
     class_ids = [assignment.class_id for assignment in assignments]
     roster = _roster(db, class_ids)
     submissions = _submissions(db, assignment_ids)
+    enrolled_pairs = {(str(row.student_id), row.class_id) for row in db.query(StudentClass).filter(
+        StudentClass.class_id.in_(class_ids), StudentClass.enrollment_status == "enrolled",
+    ).all()}
+    roster = [student for student in roster if any(
+        (str(student.student_id), assignment.class_id) in enrolled_pairs
+        and assignment_allows_student(assignment, student.student_id) for assignment in assignments
+    )]
+    assignment_by_id = {assignment.classwork_assignment_id: assignment for assignment in assignments}
+    submissions = [submission for submission in submissions if assignment_allows_student(
+        assignment_by_id[submission.classwork_assignment_id], submission.student_id,
+    )]
     submissions_by_student = {str(submission.student_id): submission for submission in submissions}
 
     total_points = Decimal(str(classwork.total_points)) if classwork.total_points is not None else None
@@ -342,6 +355,7 @@ def grade_teacher_quiz_submission(
         raise HTTPException(status_code=404, detail="Assignment not found")
 
     classwork = get_teacher_quiz_classwork(db, staff_id, assignment.classwork_id)
+    ensure_remedial_period_open(db, assignment, submission.student_id)
     quiz = _quiz_with_questions(db, classwork.classwork_id)
     if not quiz:
         raise HTTPException(status_code=404, detail="Quiz not found")
@@ -410,9 +424,10 @@ def grade_teacher_quiz_submission(
     submission.graded_at = datetime.now(timezone.utc)
     submission.graded_by_staff_id = staff_id
 
+    refresh_needed = classwork.is_graded and effective_grade_changed(db, assignment, submission.student_id, previous_grade, submission.grade)
     db.commit()
     db.refresh(submission)
-    if submission.grade != previous_grade:
+    if refresh_needed:
         refresh_after_committed_grade_change(
             db.get_bind(),
             student_ids=[submission.student_id],

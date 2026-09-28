@@ -9,7 +9,6 @@ import {
   ListChecks,
   Sparkles,
   Trash2,
-  X,
 } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
@@ -123,7 +122,7 @@ export function SetLessonGoalModal({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, subjectId, linkedClassworks]);
+  }, [isOpen, classId, subjectId, linkedClassworks]);
 
   // 2. Initialize selected items from current saved goals
   useEffect(() => {
@@ -269,35 +268,27 @@ export function SetLessonGoalModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content size="xl" className="max-h-[90vh] p-0 flex flex-col">
+      <Dialog.Content size="xl">
         {/* Header */}
-        <Dialog.Header className="flex items-center justify-between border-b-2 border-black bg-primary px-5 py-3">
+        <Dialog.Header>
           <div className="flex items-center gap-2">
-            <Sparkles className="size-5" />
             <div>
-              <Dialog.Title className="text-lg font-black text-black">
+              <Dialog.Title className="text-lg font-black">
                 Set Lesson Goals {periodName ? `— ${periodName}` : ""}
               </Dialog.Title>
-              <p className="text-xs font-semibold text-gray-700">
+              <Dialog.Description className="text-xs font-semibold text-current/80">
                 Choose and order the specific lessons and exams to highlight for your students.
-              </p>
+              </Dialog.Description>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded p-1 text-black hover:bg-black/10"
-          >
-            <X className="size-5" />
-          </button>
         </Dialog.Header>
 
         {/* Modal Body - 2 Columns */}
-        <div className="grid grid-cols-1 md:grid-cols-2 divide-y-2 md:divide-y-0 md:divide-x-2 divide-black flex-1 overflow-hidden min-h-[420px]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 divide-y-2 divide-border overflow-y-auto md:grid-cols-2 md:divide-x-2 md:divide-y-0">
           {/* LEFT: Distinctly Grouped Source Picker */}
-          <div className="flex flex-col overflow-y-auto p-4 max-h-[60vh]">
+          <div className="flex min-w-0 flex-col p-4">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-black uppercase tracking-wider text-black">
+              <h4 className="text-sm font-black uppercase tracking-wider text-foreground">
                 Available Items
               </h4>
               <span className="text-xs text-muted-foreground">Check to add</span>
@@ -305,12 +296,12 @@ export function SetLessonGoalModal({
 
             {/* GROUP 1: Lessons & Linked Classworks */}
             <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2 pb-1 border-b border-gray-300">
-                <BookOpen className="size-4 text-emerald-700" />
-                <span className="text-xs font-black uppercase text-emerald-900 tracking-wide">
+              <div className="flex items-center gap-2 border-b border-border pb-1">
+                <BookOpen className="size-4 text-primary" />
+                <span className="text-xs font-black uppercase tracking-wide text-foreground">
                   Lessons & Classworks
                 </span>
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-emerald-100">
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
                   {lessons.length}
                 </Badge>
               </div>
@@ -328,10 +319,10 @@ export function SetLessonGoalModal({
                   return (
                     <div
                       key={lesson.lesson_id}
-                      className="border-2 border-black bg-white rounded-none shadow-sm"
+                      className="border-2 border-border bg-card text-card-foreground shadow-sm"
                     >
                       {/* Lesson Row */}
-                      <div className="flex items-center justify-between p-2.5 bg-gray-50 hover:bg-gray-100">
+                      <div className="flex items-center justify-between bg-muted/50 p-2.5">
                         <label className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer select-none">
                           <input
                             type="checkbox"
@@ -339,7 +330,7 @@ export function SetLessonGoalModal({
                             onChange={() => toggleLesson(lesson)}
                             className="size-4 accent-black rounded-none cursor-pointer"
                           />
-                          <span className="text-xs font-bold text-black truncate">
+                          <span className="truncate text-xs font-bold text-foreground">
                             {lesson.title}
                           </span>
                         </label>
@@ -352,7 +343,7 @@ export function SetLessonGoalModal({
                                 [lesson.lesson_id]: !prev[lesson.lesson_id],
                               }))
                             }
-                            className="p-1 hover:bg-gray-200 text-gray-600 rounded"
+                            className="p-1 text-muted-foreground hover:bg-muted"
                             title="Toggle classworks"
                           >
                             {isExpanded ? (
@@ -366,13 +357,13 @@ export function SetLessonGoalModal({
 
                       {/* Linked Classworks (Indented under parent lesson) */}
                       {isExpanded && cws.length > 0 && (
-                        <div className="pl-6 pr-2 py-2 border-t border-gray-200 bg-white flex flex-col gap-1.5">
+                        <div className="flex flex-col gap-1.5 border-t border-border bg-background py-2 pl-6 pr-2">
                           {cws.map((cw) => {
                             const isCwSelected = selectedKeySet.has(`cw-${cw.classwork_id}`);
                             return (
                               <label
                                 key={cw.classwork_id}
-                                className="flex items-center justify-between gap-2 p-1.5 text-xs hover:bg-gray-50 cursor-pointer rounded select-none"
+                                className="flex cursor-pointer select-none items-center justify-between gap-2 p-1.5 text-xs hover:bg-muted/50"
                               >
                                 <div className="flex items-center gap-2 min-w-0">
                                   <input
@@ -381,13 +372,13 @@ export function SetLessonGoalModal({
                                     onChange={() => toggleClasswork(cw, false)}
                                     className="size-3.5 accent-black rounded-none cursor-pointer"
                                   />
-                                  <span className="font-medium text-gray-800 truncate">
+                                  <span className="truncate font-medium text-foreground">
                                     {cw.title}
                                   </span>
                                 </div>
                                 <Badge
                                   variant="secondary"
-                                  className="text-[9px] px-1.5 py-0 bg-blue-100 text-blue-900 shrink-0"
+                                  className="shrink-0 px-1.5 py-0 text-[9px]"
                                 >
                                   {cw.classwork_type || "Task"}
                                 </Badge>
@@ -402,12 +393,12 @@ export function SetLessonGoalModal({
               )}
 
               {/* GROUP 2: Clearly-labeled Exams / Term Assessments */}
-              <div className="mt-4 flex items-center gap-2 pb-1 border-b border-gray-300">
-                <GraduationCap className="size-4 text-purple-700" />
-                <span className="text-xs font-black uppercase text-purple-900 tracking-wide">
+              <div className="mt-4 flex items-center gap-2 border-b border-border pb-1">
+                <GraduationCap className="size-4 text-primary" />
+                <span className="text-xs font-black uppercase tracking-wide text-foreground">
                   Exams / Term Assessments
                 </span>
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-purple-100">
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
                   {subjectLevelExams.length}
                 </Badge>
               </div>
@@ -426,7 +417,7 @@ export function SetLessonGoalModal({
                   return (
                     <label
                       key={exam.classwork_id}
-                      className="flex items-center justify-between gap-2 p-2.5 border-2 border-black bg-purple-50/50 hover:bg-purple-100/50 cursor-pointer select-none"
+                      className="flex cursor-pointer select-none items-center justify-between gap-2 border-2 border-border bg-card p-2.5"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <input
@@ -436,15 +427,15 @@ export function SetLessonGoalModal({
                           className="size-4 accent-black rounded-none cursor-pointer"
                         />
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-black truncate">{exam.title}</p>
+                          <p className="truncate text-xs font-bold text-foreground">{exam.title}</p>
                           {exam.due_date && (
-                            <p className="text-[10px] text-gray-600">
+                            <p className="text-[10px] text-muted-foreground">
                               Due {new Date(exam.due_date).toLocaleDateString()}
                             </p>
                           )}
                         </div>
                       </div>
-                      <Badge className="bg-purple-700 text-white text-[10px] px-1.5 py-0.5 shrink-0">
+                      <Badge className="shrink-0 px-1.5 py-0.5 text-[10px]">
                         Exam
                       </Badge>
                     </label>
@@ -455,14 +446,14 @@ export function SetLessonGoalModal({
           </div>
 
           {/* RIGHT: Selected & Ordered Goals List */}
-          <div className="flex flex-col overflow-y-auto p-4 max-h-[60vh] bg-gray-50/50">
+          <div className="flex min-w-0 flex-col bg-muted/30 p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <ListChecks className="size-4" />
-                <h4 className="text-sm font-black uppercase tracking-wider text-black">
+                <h4 className="text-sm font-black uppercase tracking-wider text-foreground">
                   Curated Goal Layout
                 </h4>
-                <Badge variant="secondary" className="text-xs font-extrabold bg-primary">
+                <Badge className="text-xs font-extrabold">
                   {selectedItems.length}
                 </Badge>
               </div>
@@ -470,7 +461,7 @@ export function SetLessonGoalModal({
                 <button
                   type="button"
                   onClick={() => setSelectedItems([])}
-                  className="text-xs text-red-600 font-bold hover:underline"
+                  className="text-xs font-bold text-destructive"
                 >
                   Clear All
                 </button>
@@ -478,9 +469,9 @@ export function SetLessonGoalModal({
             </div>
 
             {selectedItems.length === 0 ? (
-              <div className="flex flex-col items-center justify-center flex-1 p-8 text-center border-2 border-dashed border-gray-300 rounded-none bg-white">
-                <Sparkles className="size-8 text-gray-400 mb-2" />
-                <p className="text-sm font-bold text-gray-700">No goals selected yet</p>
+              <div className="flex flex-1 flex-col items-center justify-center border-2 border-dashed border-border bg-background p-8 text-center">
+                <Sparkles className="mb-2 size-8 text-muted-foreground" />
+                <p className="text-sm font-bold text-foreground">No goals selected yet</p>
                 <p className="text-xs text-muted-foreground mt-1 max-w-xs">
                   Check items from the left panel to add them. You can reorder them to dictate the exact order shown to students.
                 </p>
@@ -490,7 +481,7 @@ export function SetLessonGoalModal({
                 {selectedItems.map((item, index) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between gap-2 p-2.5 border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    className="flex items-center justify-between gap-2 border-2 border-border bg-card p-2.5 text-card-foreground shadow-[2px_2px_0_#000]"
                   >
                     {/* Index & Title */}
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -499,22 +490,16 @@ export function SetLessonGoalModal({
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <p className="text-xs font-bold text-black truncate">{item.title}</p>
+                          <p className="truncate text-xs font-bold text-foreground">{item.title}</p>
                           <Badge
                             variant="secondary"
-                            className={`text-[9px] px-1 py-0 ${
-                              item.isExam
-                                ? "bg-purple-100 text-purple-900 border-purple-400"
-                                : item.item_type === "LESSON"
-                                  ? "bg-emerald-100 text-emerald-900 border-emerald-400"
-                                  : "bg-blue-100 text-blue-900 border-blue-400"
-                            }`}
+                            className="px-1 py-0 text-[9px]"
                           >
                             {item.typeBadge}
                           </Badge>
                         </div>
                         {item.subtitle && (
-                          <p className="text-[10px] text-gray-500">{item.subtitle}</p>
+                          <p className="text-[10px] text-muted-foreground">{item.subtitle}</p>
                         )}
                       </div>
                     </div>
@@ -525,7 +510,7 @@ export function SetLessonGoalModal({
                         type="button"
                         disabled={index === 0}
                         onClick={() => moveItem(index, "up")}
-                        className="p-1 hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent rounded text-black"
+                        className="p-1 text-foreground hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent"
                         title="Move Up"
                       >
                         <ArrowUp className="size-3.5" />
@@ -534,7 +519,7 @@ export function SetLessonGoalModal({
                         type="button"
                         disabled={index === selectedItems.length - 1}
                         onClick={() => moveItem(index, "down")}
-                        className="p-1 hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent rounded text-black"
+                        className="p-1 text-foreground hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent"
                         title="Move Down"
                       >
                         <ArrowDown className="size-3.5" />
@@ -542,7 +527,7 @@ export function SetLessonGoalModal({
                       <button
                         type="button"
                         onClick={() => removeItem(item.id)}
-                        className="p-1 text-red-600 hover:bg-red-50 rounded"
+                        className="p-1 text-destructive hover:bg-destructive/10"
                         title="Remove"
                       >
                         <Trash2 className="size-3.5" />
@@ -555,35 +540,30 @@ export function SetLessonGoalModal({
           </div>
         </div>
 
-        {/* Footer Actions */}
-        <div className="flex items-center justify-between border-t-2 border-black bg-white px-5 py-3">
+        <Dialog.Footer className="mt-0 justify-between">
           <p className="text-xs text-muted-foreground">
             {selectedItems.length === 0
               ? "Saving will clear goals (leaving panel blank for this term)."
               : `${selectedItems.length} item(s) will be displayed in this order.`}
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
             <Button
               type="button"
               variant="outline"
-              size="sm"
               onClick={onClose}
               disabled={isSaving}
-              className="border-black font-bold"
             >
               Cancel
             </Button>
             <Button
               type="button"
-              size="sm"
               onClick={handleSave}
               disabled={isSaving}
-              className="border-black bg-primary font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
             >
               {isSaving ? "Saving..." : "Save Lesson Goals"}
             </Button>
           </div>
-        </div>
+        </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
   );

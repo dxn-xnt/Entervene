@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { routes } from "@/../routes";
 import {
   Sheet,
   SheetContent,
@@ -43,6 +45,7 @@ interface PredictionDetailSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   currentTermPrediction?: DevelopmentCurrentTermListItem | null;
+  candidateId?: number;
 }
 
 const RISK_BADGE_STYLES: Record<string, string> = {
@@ -89,6 +92,7 @@ export default function PredictionDetailSheet({
   open,
   onOpenChange,
   currentTermPrediction = null,
+  candidateId,
 }: PredictionDetailSheetProps) {
   const { user } = useAuth();
   const isTeacher = user?.role === "teacher";
@@ -119,7 +123,7 @@ export default function PredictionDetailSheet({
 
     Promise.all([
       fetchPredictionDetail(predictionId),
-      fetchPredictionSuggestions(predictionId).catch(() => []),
+      isTeacher ? fetchPredictionSuggestions(predictionId).catch(() => []) : Promise.resolve([]),
     ])
       .then(([detailRes, suggestionsRes]) => {
         setDetail(detailRes);
@@ -131,7 +135,7 @@ export default function PredictionDetailSheet({
         setLoadError("Unable to load this prediction detail. Please try again.");
       })
       .finally(() => setLoading(false));
-  }, [currentTermPrediction, predictionId, open]);
+  }, [currentTermPrediction, predictionId, open, isTeacher]);
 
   const handleAssignIntervention = async () => {
     if (!predictionId || !interventionTitle.trim()) return;
@@ -196,7 +200,10 @@ export default function PredictionDetailSheet({
         </SheetHeader>
 
         {currentTermPrediction ? (
-          <CurrentTermTeacherDetail prediction={currentTermPrediction} />
+          <div>
+            <CurrentTermTeacherDetail prediction={currentTermPrediction} />
+            {isTeacher && candidateId !== undefined && <div className="px-4 pb-5"><Button asChild><Link to={`${routes.teacher.interventions}?candidate=${candidateId}`}>Review Intervention</Link></Button></div>}
+          </div>
         ) : loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="animate-spin text-gray-400" size={28} />
@@ -512,7 +519,7 @@ export default function PredictionDetailSheet({
               </section>
             )}
 
-            <div className="space-y-3 border-t-2 border-black pt-4">
+            {isTeacher && <div className="space-y-3 border-t-2 border-black pt-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-extrabold uppercase tracking-wide text-black flex items-center gap-1.5">
                   <Sparkles size={16} className="text-yellow-500 fill-yellow-400" />
@@ -609,7 +616,7 @@ export default function PredictionDetailSheet({
                   🔒 Read-Only (Admin View): Assigning interventions is reserved for assigned subject teachers.
                 </div>
               )}
-            </div>
+            </div>}
 
             <Separator />
             {/* ── Section: Teacher Review ── */}

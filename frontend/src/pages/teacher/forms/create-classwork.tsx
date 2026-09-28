@@ -30,12 +30,21 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { ActivityRubricEditor } from "@/components/activity-rubric-editor";
 import { activityRubricMaximum, defaultActivityRubric, validateActivityRubric } from "@/lib/classwork-utils";
 import type { ActivityRubricLevel } from "@/types/classwork";
+import type { TeacherInterventionDetail, RemediationFocus, OriginalExamination } from "@/lib/teacher-interventions-api";
+import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
 
 interface CreateClassworkModalProps {
   selectedType: ClassworkKind;
   subjects: Array<{ id: number; name: string }>;
   loads: TeacherClassLoad[];
   initialSubjectId?: string;
+  initialTitle?: string;
+  initialInstructions?: string;
+  remediationDraft?: boolean;
+  remediationTarget?: TeacherInterventionDetail | null;
+  remediationFocus?: RemediationFocus | null;
+  remediationGradeTreatment?: "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | null;
+  remediationOriginalExam?: OriginalExamination | null;
   onClose: () => void;
   onSuccess: () => void;
   onBack: () => void;
@@ -46,6 +55,13 @@ export default function CreateClassworkModal({
   subjects,
   loads,
   initialSubjectId,
+  initialTitle,
+  initialInstructions,
+  remediationDraft = false,
+  remediationTarget,
+  remediationFocus = null,
+  remediationGradeTreatment = null,
+  remediationOriginalExam = null,
   onClose,
   onSuccess,
   onBack,
@@ -60,12 +76,23 @@ export default function CreateClassworkModal({
           : "";
     return {
       ...emptyClassworkDraft,
-      classwork_category: "WRITTEN_WORK",
+      title: initialTitle || "",
+      instructions: initialInstructions || "",
+      is_published: remediationDraft ? false : emptyClassworkDraft.is_published,
+      classwork_category: remediationDraft ? (remediationGradeTreatment === "PRACTICE_ONLY" ? "" : remediationGradeTreatment === "EXAMINATION" ? "QUARTERLY_ASSESSMENT" : remediationGradeTreatment || "") : categoryFromFocus(null),
+      exam_subtype: remediationOriginalExam?.subtype ?? "",
+      total_points: remediationOriginalExam ? String(remediationOriginalExam.total_points) : emptyClassworkDraft.total_points,
       subject_id: preferredId,
     };
   });
+  useEffect(() => {
+    if (initialSubjectId && subjects.some((subject) => String(subject.id) === String(initialSubjectId))) {
+      setDraft((current) => current.subject_id ? current : { ...current, subject_id: String(initialSubjectId) });
+    }
+  }, [initialSubjectId, subjects]);
   const [materials, setMaterials] = useState<File[]>([]);
-  const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);
+  const [selectedClassIds, setSelectedClassIds] = useState<number[]>(remediationTarget ? [remediationTarget.class_id] : []);
+  const [remediationRequestId] = useState(() => crypto.randomUUID());
   const [availableLessons, setAvailableLessons] = useState<TeacherLesson[]>([]);
   const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>([]);
   const [isLessonLoading, setIsLessonLoading] = useState(false);
@@ -134,6 +161,7 @@ export default function CreateClassworkModal({
   };
 
   const toggleClass = (classId: number) => {
+    if (remediationTarget) return;
     setSelectedClassIds((current) =>
       current.includes(classId)
         ? current.filter((id) => id !== classId)
@@ -152,6 +180,8 @@ export default function CreateClassworkModal({
   const validateDetails = () => {
     if (!draft.subject_id) return "Choose a subject.";
     if (!draft.title.trim()) return "Topic title is required.";
+    if (remediationDraft && (draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && !draft.exam_subtype) return "Choose an Examination sub-type explicitly.";
+    if (remediationGradeTreatment === "EXAMINATION" && (!remediationOriginalExam || draft.exam_subtype !== remediationOriginalExam.subtype || Number(draft.total_points) !== remediationOriginalExam.total_points)) return "Remedial Examination must match the original subtype and maximum points.";
     if (!isReadingType(selectedType)) {
       if (selectedType === "ACTIVITY") {
         const rubricError = validateActivityRubric(rubricLevels);
@@ -234,9 +264,9 @@ export default function CreateClassworkModal({
         );
 
         setAvailableLessons(lessons);
-        setSelectedLessonIds((current) =>
-          current.filter((id) => uniqueLessons.has(id)),
-        );
+        setSelectedLessonIds((current) => remediationFocus
+          ? remediationFocus.lesson_ids.filter((id) => uniqueLessons.has(id))
+          : current.filter((id) => uniqueLessons.has(id)));
         setCreateError("");
       } catch (err) {
         if (!isActive) return;
@@ -304,6 +334,11 @@ export default function CreateClassworkModal({
       formData.append("is_published", String(draft.is_published));
       formData.append("show_scores", String(draft.show_scores));
       formData.append("class_ids", JSON.stringify(selectedClassIds));
+      if (remediationTarget) {
+        formData.append("intervention_id", String(remediationTarget.intervention_id));
+        formData.append("remediation_request_id", remediationRequestId);
+        if (remediationOriginalExam && remediationGradeTreatment === "EXAMINATION") formData.append("original_exam_assignment_id", String(remediationOriginalExam.assignment_id));
+      }
       formData.append("lesson_ids", JSON.stringify(selectedLessonIds));
       if (draft.due_date) {
         formData.append("due_date", new Date(draft.due_date).toISOString());
@@ -419,7 +454,7 @@ export default function CreateClassworkModal({
                     }));
                     setSelectedClassIds([]);
                   }}
-                  disabled={isCreating}
+                  disabled={isCreating || Boolean(remediationTarget)}
                 >
                   <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm font-medium">
                     <Select.Value placeholder="Choose subject" />
@@ -483,7 +518,7 @@ export default function CreateClassworkModal({
 
               {!isReadingType(selectedType) && (
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Grading component">
+                  {remediationDraft && remediationGradeTreatment === "PRACTICE_ONLY" ? <p className="rounded border border-green-700 bg-green-50 p-3 text-sm font-semibold">Practice only · No official grading component. Score and completion remain visible in Intervention progress.</p> : <Field label="Grading component">
                     <Select
                       value={draft.classwork_category}
                       onValueChange={(val) =>
@@ -492,7 +527,7 @@ export default function CreateClassworkModal({
                           classwork_category: val,
                         }))
                       }
-                      disabled={isCreating}
+                      disabled={isCreating || remediationDraft}
                     >
                       <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
                         <Select.Value placeholder="Select Category" />
@@ -505,25 +540,25 @@ export default function CreateClassworkModal({
                           <Select.Item value="PERFORMANCE_TASK">
                             Performance Task
                           </Select.Item>
-                          <Select.Item value="QUARTERLY_ASSESSMENT">
+                          {(!remediationDraft || remediationGradeTreatment === "EXAMINATION") && <Select.Item value="QUARTERLY_ASSESSMENT">
                             Exams
-                          </Select.Item>
+                          </Select.Item>}
                         </Select.Group>
                       </Select.Content>
                     </Select>
-                  </Field>
+                  </Field>}
 
                   {(draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && (
                     <Field label="Exam Sub-type">
                       <Select
-                        value={draft.exam_subtype || "SUMMATIVE_1"}
+                        value={remediationDraft ? draft.exam_subtype : (draft.exam_subtype || "SUMMATIVE_1")}
                         onValueChange={(val) =>
                           setDraft((current) => ({
                             ...current,
                             exam_subtype: val,
                           }))
                         }
-                        disabled={isCreating}
+                        disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
                       >
                         <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
                           <Select.Value placeholder="Select Sub-type" />
@@ -558,11 +593,19 @@ export default function CreateClassworkModal({
                           total_points: event.target.value,
                         }))
                       }
-                      disabled={isCreating}
+                      disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
                       className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
                     />
                   </Field>}
                 </div>
+              )}
+
+              {remediationFocus && !isReadingType(selectedType) && (
+                <p className="rounded border p-3 text-sm">
+                  Evidence focus: {focusGuidance(remediationFocus)}
+                  {remediationGradeTreatment === "EXAMINATION" && remediationOriginalExam ? ` Original ${remediationOriginalExam.title}: ${remediationOriginalExam.score}/${remediationOriginalExam.total_points}. The higher result will count.` : ""}
+                  {remediationDraft && remediationGradeTreatment === "PRACTICE_ONLY" && " Practice only: completion and score do not affect official grades or predictions."}
+                </p>
               )}
 
               <Field label="Upload material">
@@ -764,6 +807,8 @@ export default function CreateClassworkModal({
               </div>
 
               <Field label="Assign to sections">
+                {remediationTarget && <p className="mb-3 rounded border p-3 text-sm">Remedial assignment for <strong>{remediationTarget.student_name}</strong> in {remediationTarget.class_name}. Only this student will receive this activity.</p>}
+                {remediationFocus && <p className="mb-3 rounded border p-3 text-sm">Evidence focus: {focusGuidance(remediationFocus)}{remediationFocus.component === "EXAMINATION" ? " Remedial Examination publication is blocked; choose another grading component for a graded activity." : ""}</p>}
                 <div className="flex items-center justify-end -mt-8 mb-2">
                   <Button
                     variant="outline"
@@ -773,7 +818,7 @@ export default function CreateClassworkModal({
                         selectedSubjectLoads.map((load) => load.class_id),
                       )
                     }
-                    disabled={isCreating || selectedSubjectLoads.length === 0}
+                    disabled={isCreating || Boolean(remediationTarget) || selectedSubjectLoads.length === 0}
                   >
                     Select all
                   </Button>
@@ -787,7 +832,7 @@ export default function CreateClassworkModal({
                         key={load.subject_load_id}
                         type="button"
                         onClick={() => toggleClass(load.class_id)}
-                        disabled={isCreating}
+                        disabled={isCreating || Boolean(remediationTarget)}
                         className={`rounded text-center cursor-pointer transition shadow-md hover:bg-accent hover:translate-y-0.5 active:translate-y-1 ${isSelected ? "bg-primary" : "bg-white"
                           }`}
                       >
