@@ -105,6 +105,19 @@ def test_advisory_rejects_unverified_weakness_claim(candidate_context, monkeypat
     assert ctx["db"].get(Intervention, _id(ctx)).remediation_plan is None
 
 
+def test_advisory_cannot_invent_exam_subtype(candidate_context, monkeypatch):
+    ctx = candidate_context; _activate(ctx)
+    monkeypatch.setattr(settings, "groq_api_key", "test-key")
+    async def invented(*_args, **_kwargs):
+        return json.dumps({"recommended_format": "QUIZ", "reason": "General practice may help the student.",
+                           "exam_subtype": "TERM_EXAM"})
+    monkeypatch.setattr("app.services.ai.Provider.generate_text", invented)
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(generate_advisory(ctx["db"], _staff(ctx), _id(ctx)))
+    assert exc.value.status_code == 502
+    assert ctx["db"].get(Intervention, _id(ctx)).remediation_plan is None
+
+
 def test_http_teacher_only_and_candidate_rejected(candidate_context):
     ctx = candidate_context
     path = f"/{_id(ctx)}/remediation"

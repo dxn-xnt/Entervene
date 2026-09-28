@@ -12,6 +12,7 @@ from app.api.v1.routes.Predictions import router as predictions_router
 from app.api.v1.routes.DevelopmentCurrentTermPredictions import router as development_current_term_router
 from app.api.v1.routes.TeacherInterventions import router as teacher_interventions_router
 from app.api.v1.routes.StudentInterventionReviewers import router as student_intervention_reviewers_router
+from app.api.v1.routes.StudentPersistentInterventions import router as student_persistent_interventions_router
 from app.api.v1.routes.Auth import router as auth_router
 from app.api.v1.routes.Students import router as students_router
 from app.api.v1.routes.Classworks import router as classworks_router
@@ -85,6 +86,7 @@ app.include_router(predictions_router, prefix="/api/v1/predictions",           t
 app.include_router(development_current_term_router, prefix="/api/v1/development", tags=["Development Predictions"])
 app.include_router(teacher_interventions_router, prefix="/api/v1/teacher/interventions", tags=["Teacher Interventions"])
 app.include_router(student_intervention_reviewers_router, prefix="/api/v1/student/intervention-reviewers", tags=["Student Intervention Reviewers"])
+app.include_router(student_persistent_interventions_router, prefix="/api/v1/student/interventions", tags=["Student Interventions"])
 app.include_router(students_router,    prefix="/api/v1/students",              tags=["Students"])
 app.include_router(
     classworks_router,

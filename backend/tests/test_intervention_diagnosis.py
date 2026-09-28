@@ -15,16 +15,21 @@ from app.models.academic.GradingTemplateComponent import GradingTemplateComponen
 from app.models.academic.Lesson import Lesson
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.academic.StudentCLass import StudentClass
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.classwork.ClassworkCoverage import ClassworkCoverage
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.intervention.Intervention import Intervention
 from app.models.people.Student import Student
 from app.models.quiz.Question import Question
+from app.models.quiz.QuestionOption import QuestionOption
 from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizAnswer import QuizAnswer
 from app.models.quiz.QuizQuestion import QuizQuestion
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.schemas.Quiz import QuizSubmitRequest
+from app.services.intervention.InterventionRemediationFocusService import build_remediation_focus
+from app.services.quiz.QuizAttemptService import submit_student_quiz_attempt
 from app.services.prediction import DevelopmentCurrentTermScoringService as scorer
 from app.schemas.ActivityCoverage import ActivityCoverageUpdate
 from app.services.activity.ActivityCoverageService import replace_manual_activity_coverage
@@ -159,6 +164,130 @@ def test_quiz_question_score_can_support_its_linked_competency(current_period_co
     assert item["supporting_scores"][0]["source_type"] == "QUIZ_QUESTION"
     assert covered.competency_id not in {item["competency_id"] for item in diagnosis["lowest_supported_competencies"]}
     assert diagnosis["covered_competencies_for_teacher_review"][0]["competency_id"] == covered.competency_id
+
+
+def _exam_set(ctx):
+    return [
+        add_activity(ctx, "EXAMS", 3, 8, title="Summative 1", classwork_type="QUIZ", exam_subtype="SUMMATIVE_1"),
+        add_activity(ctx, "EXAMS", 7, 10, title="Summative 2", classwork_type="EXAM", exam_subtype="SUMMATIVE_2"),
+        add_activity(ctx, "EXAMS", 5, 10, title="Term Exam", classwork_type="EXAM", exam_subtype="TERM_EXAM"),
+    ]
+
+
+def test_exam_questions_aggregate_actual_scored_competency_evidence(current_period_context, monkeypatch):
+    ctx = current_period_context
+    model, _ = _prepare(ctx, monkeypatch)
+    exams = _exam_set(ctx)
+    competency, lesson = _link_competency(ctx, exams[0], statement="Interpret ratios")
+    db = ctx["db"]
+    quiz = Quiz(classwork_id=exams[0].classwork_id, total_items=4, status="PUBLISHED")
+    db.add(quiz)
+    db.flush()
+    submission = db.query(StudentSubmission).filter_by(classwork_assignment_id=exams[0].classwork_assignment_id).one()
+    for order, (lesson_id, awarded) in enumerate(((lesson.lesson_id, 0), (lesson.lesson_id, 1), (lesson.lesson_id, 2), (None, 0)), start=1):
+        question = Question(question_text=f"Ratio item {order}", question_type="MULTIPLE_CHOICE", points=Decimal("2"), lesson_id=lesson_id)
+        db.add(question)
+        db.flush()
+        link = QuizQuestion(quiz_id=quiz.quiz_id, question_id=question.question_id, display_order=order)
+        db.add(link)
+        db.flush()
+        db.add(QuizAnswer(quiz_question_id=link.quiz_question_id, submission_id=submission.submission_id, points_awarded=Decimal(awarded)))
+    db.commit()
+
+    _run(ctx, model.model_version_id)
+    diagnosis = _diagnosis(ctx)
+    assert diagnosis["weakest_supported_components"] == ["EXAMINATION"]
+    assert len(diagnosis["lowest_supported_competencies"]) == 1
+    scored = diagnosis["lowest_supported_competencies"][0]
+    assert scored["competency_id"] == competency.competency_id
+    assert (scored["score"], scored["possible_score"], scored["percent"]) == (3, 6, 50)
+    assert [item["score"] for item in scored["supporting_scores"]] == [0, 1, 2]
+    assert all(item["source_type"] == "QUIZ_QUESTION" for item in scored["supporting_scores"])
+    focus = build_remediation_focus(ctx["db"].query(Intervention).one())
+    assert focus["evidence_level"] == "QUESTION_SCORE"
+    assert focus["competency_ids"] == [competency.competency_id]
+    assert [item["score"] for item in focus["question_evidence"]] == [0, 1]
+
+
+def test_submitted_exam_answer_reaches_linked_competency(current_period_context, monkeypatch):
+    ctx = current_period_context
+    model, _ = _prepare(ctx, monkeypatch)
+    exams = _exam_set(ctx)
+    competency, lesson = _link_competency(ctx, exams[0], statement="Read ratios")
+    db = ctx["db"]
+    db.add(StudentClass(student_id=ctx["student"].student_id, class_id=ctx["class"].class_id,
+                        academic_year_id=ctx["class"].academic_year_id, enrollment_status="enrolled"))
+    quiz = Quiz(classwork_id=exams[0].classwork_id, total_items=1, status="PUBLISHED")
+    db.add(quiz)
+    db.flush()
+    question = Question(question_text="Ratio meaning", question_type="MULTIPLE_CHOICE",
+                        points=Decimal("8"), lesson_id=lesson.lesson_id)
+    db.add(question)
+    db.flush()
+    wrong = QuestionOption(question_id=question.question_id, option_text="Wrong", is_correct=False, option_order=1)
+    db.add_all([wrong, QuestionOption(question_id=question.question_id, option_text="Right", is_correct=True, option_order=2)])
+    link = QuizQuestion(quiz_id=quiz.quiz_id, question_id=question.question_id, display_order=1)
+    db.add(link)
+    db.flush()
+    submission = db.query(StudentSubmission).filter_by(classwork_assignment_id=exams[0].classwork_assignment_id).one()
+    submission.status = "pending"
+    submission.grade = None
+    db.commit()
+    monkeypatch.setattr("app.services.quiz.QuizAttemptService.refresh_after_committed_grade_change", lambda *args, **kwargs: None)
+
+    submit_student_quiz_attempt(db, ctx["student"], exams[0].classwork_assignment_id,
+                                QuizSubmitRequest(answers=[{"quiz_question_id": link.quiz_question_id,
+                                                            "selected_option_id": wrong.option_id}]))
+    answer = db.query(QuizAnswer).filter_by(submission_id=submission.submission_id).one()
+    assert answer.points_awarded == 0
+    assert answer.quiz_question.question.lesson_id == lesson.lesson_id
+    _run(ctx, model.model_version_id)
+    scored = _diagnosis(ctx)["lowest_supported_competencies"]
+    assert len(scored) == 1
+    assert scored[0]["competency_id"] == competency.competency_id
+    assert (scored[0]["score"], scored[0]["possible_score"]) == (0, 8)
+
+
+def test_unmapped_exam_quiz_never_inherits_whole_activity_competency(current_period_context, monkeypatch):
+    ctx = current_period_context
+    model, _ = _prepare(ctx, monkeypatch)
+    exams = _exam_set(ctx)
+    _competency, _lesson = _link_competency(ctx, exams[0])
+    db = ctx["db"]
+    quiz = Quiz(classwork_id=exams[0].classwork_id, total_items=1, status="PUBLISHED")
+    db.add(quiz)
+    db.flush()
+    question = Question(question_text="Unmapped exam item", question_type="MULTIPLE_CHOICE", points=Decimal("8"), lesson_id=None)
+    db.add(question)
+    db.flush()
+    link = QuizQuestion(quiz_id=quiz.quiz_id, question_id=question.question_id, display_order=1)
+    db.add(link)
+    db.flush()
+    submission = db.query(StudentSubmission).filter_by(classwork_assignment_id=exams[0].classwork_assignment_id).one()
+    db.add(QuizAnswer(quiz_question_id=link.quiz_question_id, submission_id=submission.submission_id, points_awarded=Decimal("3")))
+    db.commit()
+    _run(ctx, model.model_version_id)
+    row = ctx["db"].query(Intervention).one()
+    assert row.diagnosis_snapshot["lowest_supported_competencies"] == []
+    assert build_remediation_focus(row)["evidence_level"] == "COMPONENT_ONLY"
+
+
+@pytest.mark.parametrize("with_coverage", [False, True])
+def test_manual_exam_total_stays_unranked(current_period_context, monkeypatch, with_coverage):
+    ctx = current_period_context
+    model, _ = _prepare(ctx, monkeypatch)
+    exams = _exam_set(ctx)
+    exams[0].classwork.activity_mode = "MANUAL"
+    ctx["db"].commit()
+    if with_coverage:
+        competency = Competency(statement="Covered, not scored", subject_id=ctx["subject"].subject_id)
+        ctx["db"].add(competency)
+        ctx["db"].commit()
+        _manual_coverage(ctx, exams[0], competency, valid_from=datetime.now(timezone.utc) - timedelta(hours=1))
+    _run(ctx, model.model_version_id)
+    row = ctx["db"].query(Intervention).one()
+    assert row.diagnosis_snapshot["lowest_supported_competencies"] == []
+    assert build_remediation_focus(row)["evidence_level"] == ("ACTIVITY_COVERAGE" if with_coverage else "COMPONENT_ONLY")
 
 
 @pytest.mark.parametrize("start_hours,end_hours,included", [

@@ -14,11 +14,12 @@ from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.models.intervention.Intervention import Intervention
 from app.schemas.TeacherIntervention import (
-    TeacherInterventionDetail, TeacherInterventionList, TeacherInterventionSummary,
+    TeacherInterventionDetail, TeacherInterventionList, TeacherInterventionSummary, TeacherResolvedInterventionDetail,
 )
 from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 from app.services.academic.SubstitutionService import SubstitutionService
 from app.services.intervention.InterventionCandidateService import sync_intervention_for_persisted_prediction
+from app.services.intervention.InterventionHistoryService import resolution_projection, sent_reviewer, targeted_activities
 from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME
 from app.services.prediction.DevelopmentCurrentTermPredictionPersistenceService import generate_and_persist_development_current_term
 
@@ -70,6 +71,7 @@ def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
         triggering_intervention_level=source.intervention_level,
         created_at=row.created_at,
         activated_at=row.activated_at,
+        resolved_at=row.resolved_at, resolution_reason=row.resolution_reason,
         diagnosis_summary={
             "snapshot_version": diagnosis.get("snapshot_version"),
             "weakest_supported_components": diagnosis.get("weakest_supported_components", []),
@@ -96,12 +98,19 @@ def list_teacher_active(db: Session, staff_id: str) -> TeacherInterventionList:
     return TeacherInterventionList(items=items, total=len(items))
 
 
+def list_teacher_resolved(db: Session, staff_id: str) -> TeacherInterventionList:
+    rows = db.query(Intervention).filter_by(status="RESOLVED").order_by(
+        Intervention.resolved_at.desc(), Intervention.intervention_id.desc(),
+    ).all()
+    items = [_summary(db, row) for row in rows if _eligible_scope(db, staff_id, row)]
+    return TeacherInterventionList(items=items, total=len(items))
+
+
 def _detail(db: Session, row: Intervention) -> TeacherInterventionDetail:
     return TeacherInterventionDetail(
         **_summary(db, row).model_dump(),
         diagnosis_snapshot=row.diagnosis_snapshot,
         activated_by_staff_id=row.activated_by_staff_id,
-        resolved_at=row.resolved_at, resolution_reason=row.resolution_reason,
     )
 
 
@@ -120,6 +129,19 @@ def get_teacher_active(db: Session, staff_id: str, intervention_id: int) -> Teac
     if row is None or row.status != "ACTIVE" or not _eligible_scope(db, staff_id, row):
         raise HTTPException(status_code=404, detail="Active intervention not found")
     return _detail(db, row)
+
+
+def get_teacher_resolved(db: Session, staff_id: str, intervention_id: int) -> TeacherResolvedInterventionDetail:
+    row = db.get(Intervention, intervention_id)
+    if row is None or row.status != "RESOLVED" or not _eligible_scope(db, staff_id, row):
+        raise HTTPException(status_code=404, detail="Resolved intervention not found")
+    reviewer = sent_reviewer(db, row)
+    return TeacherResolvedInterventionDetail(
+        **_detail(db, row).model_dump(),
+        resolution_projection=resolution_projection(db, row),
+        targeted_activities=targeted_activities(db, row, student_view=False),
+        sent_reviewer=reviewer.current_content if reviewer else None,
+    )
 
 
 def activate_teacher_candidate(db: Session, staff_id: str, intervention_id: int) -> TeacherInterventionDetail:

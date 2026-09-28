@@ -9,6 +9,7 @@ export type QuizOptionDraft = {
 
 export type QuizQuestionDraft = {
   id: string;
+  lesson_id: number | null;
   question_text: string;
   question_type: QuizQuestionType;
   points: string;

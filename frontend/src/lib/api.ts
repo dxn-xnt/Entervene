@@ -623,6 +623,9 @@ export type GradebookCategoryHeader = {
   id: number;
   title: string;
   maxScore: number;
+  recipientStudentId?: string | null;
+  sourceInterventionId?: number | null;
+  assignedLearnerCount?: number | null;
 };
 
 export type GradebookCategoryHeaderGroup = {
@@ -921,6 +924,7 @@ export type StudentActivityScoreItem = {
   student_id: string;
   name: string;
   score: number | null;
+  assigned: boolean;
 };
 
 export type ActivityScoresResponse = {
@@ -2747,4 +2751,3 @@ export async function getTeacherDashboardHealth(params: {
   }
   return (await res.json()) as TeacherDashboardHealthResponse;
 }
-

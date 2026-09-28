@@ -20,6 +20,8 @@ import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
 import { apiFetch } from "@/lib/api";
+import type { RemediationFocus } from "@/lib/teacher-interventions-api";
+import { focusGuidance } from "@/lib/remediation-authoring";
 import type {
   QuizQuestionDraft,
   QuizQuestionType,
@@ -55,6 +57,7 @@ export interface AIQuizGeneratorModalProps {
   subjectName?: string;
   subjects?: Array<{ id: number; name: string }>;
   quizTitle?: string; // draft title from parent
+  remediationFocus?: RemediationFocus | null;
   onGenerated: (
     questions: QuizQuestionDraft[],
     warnings?: string[],
@@ -135,6 +138,7 @@ export default function AIQuizGeneratorModal({
   subjectName,
   subjects,
   quizTitle,
+  remediationFocus,
   onGenerated,
 }: AIQuizGeneratorModalProps) {
   // Active subject selection
@@ -161,7 +165,7 @@ export default function AIQuizGeneratorModal({
   const [readingClassworks, setReadingClassworks] = useState<ReadingClassworkItem[]>([]);
   const [selectedReadingIds, setSelectedReadingIds] = useState<number[]>([]);
   const [isLoadingSource, setIsLoadingSource] = useState(false);
-  const [additionalCoverage, setAdditionalCoverage] = useState("");
+  const [additionalCoverage, setAdditionalCoverage] = useState(() => remediationFocus ? focusGuidance(remediationFocus) : "");
 
   const handleSourceModeChange = (mode: "lesson" | "specific") => {
     setSourceMode(mode);
@@ -255,13 +259,15 @@ export default function AIQuizGeneratorModal({
       })
       .then((data) => {
         if (!active) return;
-        setLessons(data.filter((l) => Number(l.subject_id) === Number(currentSubjectId)));
+        const eligible = data.filter((l) => Number(l.subject_id) === Number(currentSubjectId));
+        setLessons(eligible);
+        if (remediationFocus) setSelectedLessonIds(remediationFocus.lesson_ids.filter((id) => eligible.some((lesson) => lesson.lesson_id === id)));
       })
       .catch(() => { if (active) setLessons([]); })
       .finally(() => { if (active) setIsLoadingSource(false); });
 
     return () => { active = false; };
-  }, [isOpen, currentSubjectId]);
+  }, [isOpen, currentSubjectId, remediationFocus]);
 
   useEffect(() => {
     if (!isOpen || !currentSubjectId || sourceMode !== "specific") return;
@@ -437,6 +443,7 @@ export default function AIQuizGeneratorModal({
 
       const drafts: QuizQuestionDraft[] = data.questions.map((q, idx) => ({
         id: `ai-q-${Date.now()}-${idx + 1}`,
+        lesson_id: null,
         question_text: q.question_text || `Question ${idx + 1}`,
         question_type: q.question_type || "MULTIPLE_CHOICE",
         points: String(q.points ?? 1),

@@ -424,7 +424,7 @@ def grade_teacher_quiz_submission(
 
     db.commit()
     db.refresh(submission)
-    if submission.grade != previous_grade:
+    if classwork.is_graded and submission.grade != previous_grade:
         refresh_after_committed_grade_change(
             db.get_bind(),
             student_ids=[submission.student_id],

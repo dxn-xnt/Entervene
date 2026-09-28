@@ -10,11 +10,11 @@ from app.core.Dependencies import get_staff_id, require_role
 from app.db.Session import get_db
 from app.models.auth.Role import Role
 from app.models.auth.UserRoles import UserRoles
-from app.schemas.TeacherIntervention import TeacherInterventionDetail, TeacherInterventionList
+from app.schemas.TeacherIntervention import TeacherInterventionDetail, TeacherInterventionList, TeacherResolvedInterventionDetail
 from app.schemas.InterventionSupportMaterial import MaterialCreate, MaterialList, MaterialRead, MaterialUpdate
 from app.services.intervention.TeacherInterventionService import (
     activate_teacher_candidate, get_teacher_active, get_teacher_candidate,
-    list_teacher_active, list_teacher_candidates,
+    list_teacher_active, list_teacher_candidates, list_teacher_resolved, get_teacher_resolved,
 )
 from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME
 from app.services.intervention.InterventionSupportMaterialService import (
@@ -111,6 +111,22 @@ def get_active_endpoint(
     db: Session = Depends(get_db),
 ):
     return get_teacher_active(db, staff_id, intervention_id)
+
+
+@router.get("/resolved", response_model=TeacherInterventionList)
+def list_resolved_endpoint(
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db),
+):
+    return list_teacher_resolved(db, staff_id)
+
+
+@router.get("/resolved/{intervention_id}", response_model=TeacherResolvedInterventionDetail)
+def get_resolved_endpoint(
+    intervention_id: int, _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db),
+):
+    return get_teacher_resolved(db, staff_id, intervention_id)
 
 
 @router.get("/{intervention_id}/materials", response_model=MaterialList)

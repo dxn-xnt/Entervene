@@ -323,6 +323,11 @@ async def create_classwork_wizard_record(
             raise HTTPException(status_code=400, detail="Remediation type must match the teacher's saved choice")
         if classwork_category in {"EXAMS", "QUARTERLY_ASSESSMENT"}:
             raise HTTPException(status_code=400, detail="Remedial examination grading policy is not configured")
+        treatment = (intervention.remediation_plan or {}).get("grade_treatment")
+        if treatment not in {"PRACTICE_ONLY", "WRITTEN_WORK", "PERFORMANCE_TASK"}:
+            raise HTTPException(status_code=400, detail="Select and save the remediation grade treatment before creating support")
+        if (treatment == "PRACTICE_ONLY" and classwork_category is not None) or (treatment != "PRACTICE_ONLY" and classwork_category != treatment):
+            raise HTTPException(status_code=400, detail="Remediation grade treatment does not match the saved choice")
         prior = db.query(ClassworkAssignment).filter_by(remediation_request_id=remediation_request_id).first()
         if prior:
             if prior.source_intervention_id != intervention_id or prior.assigned_by_staff_id != staff_id:
@@ -333,7 +338,7 @@ async def create_classwork_wizard_record(
 
     saved_paths: list[str] = []
     try:
-        is_graded = False if is_reading_type(normalized_type) else True
+        is_graded = False if is_reading_type(normalized_type) or (intervention and treatment == "PRACTICE_ONLY") else True
         classwork = Classwork(
             title=title.strip(),
             description=description,
@@ -634,6 +639,10 @@ def update_classwork_record(
             raise HTTPException(status_code=400, detail="Targeted remediation subject and type cannot be changed")
         if values.get("classwork_category") in {"EXAMS", "QUARTERLY_ASSESSMENT"}:
             raise HTTPException(status_code=400, detail="Remedial examination grading policy is not configured")
+        if "classwork_category" in values and values["classwork_category"] != classwork.classwork_category:
+            raise HTTPException(status_code=400, detail="Targeted remediation grade treatment cannot be changed after creation")
+        if "is_graded" in values and values["is_graded"] != classwork.is_graded:
+            raise HTTPException(status_code=400, detail="Targeted remediation grade treatment cannot be changed after creation")
     rubric_levels = values.pop("rubric_levels", None)
     confirm_rubric_change = values.pop("confirm_rubric_change", False)
     if "classwork_type" in values and values["classwork_type"]:
