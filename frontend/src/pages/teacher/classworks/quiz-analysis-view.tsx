@@ -209,28 +209,47 @@ export default function QuizAnalysisView({
                           </div>
                         </div>
                       </div>
-                      <p className="text-lg font-bold mb-4">
+                      <p className="text-lg font-bold mb-4 whitespace-normal break-words [overflow-wrap:anywhere] leading-snug">
                         {i + 1}. {q.question_text}
                       </p>
                       {q.question_type === "MULTIPLE_CHOICE" ? (
-                        <div className="space-y-2 max-w-2xl">
+                        <div className="space-y-3 w-full">
                           {q.option_distribution.map((opt, idx) => {
                             const percent = q.answered_count > 0 ? (opt.selected_count / q.answered_count) * 100 : 0;
                             return (
-                              <div key={opt.option_id} className="flex items-center gap-4">
-                                <span className="w-4 font-bold">{String.fromCharCode(65 + idx)}.</span>
-                                <div className="flex-1 text-sm">{opt.option_text}</div>
-                                <div className="w-24 text-right text-xs font-bold text-gray-500 flex items-center justify-end gap-1">
-                                  {opt.is_correct ? <span className="text-[#3A6D38]">correct <Check size={12} className="inline" /></span> : <span>incorrect <X size={12} className="inline" /></span>}
-                                </div>
-                                <div className="w-80 h-7 border border-black rounded bg-white relative overflow-hidden flex items-center">
-                                  <div
-                                    className={`absolute top-0 left-0 h-full ${opt.is_correct ? 'bg-[#3A6D38]' : 'bg-gray-100'}`}
-                                    style={{ width: `${percent}%` }}
-                                  />
-                                  <span className={`relative z-10 text-xs px-2 font-bold ${opt.is_correct && percent > 15 ? 'text-white' : 'text-black'}`}>
-                                    {opt.selected_count} answered
+                              <div
+                                key={opt.option_id}
+                                className="flex items-start justify-between gap-4 py-2 border-b border-gray-100 last:border-b-0"
+                              >
+                                <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
+                                  <span className="w-5 shrink-0 font-bold text-sm pt-0.5 text-gray-700">
+                                    {String.fromCharCode(65 + idx)}.
                                   </span>
+                                  <div className="flex-1 min-w-0 text-sm whitespace-normal break-words [overflow-wrap:anywhere] leading-relaxed text-gray-800 pt-0.5">
+                                    {opt.option_text}
+                                  </div>
+                                </div>
+                                <div className="shrink-0 flex items-center justify-end gap-3 pt-0.5 ml-auto">
+                                  <div className="w-24 shrink-0 text-right text-xs font-bold flex items-center justify-end gap-1">
+                                    {opt.is_correct ? (
+                                      <span className="text-[#3A6D38] inline-flex items-center gap-1 font-bold">
+                                        correct <Check size={12} className="inline shrink-0" />
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-500 inline-flex items-center gap-1 font-bold">
+                                        incorrect <X size={12} className="inline shrink-0" />
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="w-56 sm:w-64 h-7 border border-black rounded bg-white relative overflow-hidden flex items-center shrink-0">
+                                    <div
+                                      className={`absolute top-0 left-0 h-full ${opt.is_correct ? 'bg-[#3A6D38]' : 'bg-gray-100'}`}
+                                      style={{ width: `${percent}%` }}
+                                    />
+                                    <span className={`relative z-10 text-xs px-2.5 font-bold whitespace-nowrap ${opt.is_correct && percent > 15 ? 'text-white' : 'text-black'}`}>
+                                      {opt.selected_count} answered
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
                             );
