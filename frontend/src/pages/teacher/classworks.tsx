@@ -45,6 +45,7 @@ import {
   type TeacherInterventionDetail,
   type RemediationFocus,
   type RemediationResource,
+  type OriginalExamination,
 } from "@/lib/teacher-interventions-api";
 
 const tabs: Array<TabItem<TabId>> = [
@@ -101,14 +102,17 @@ export default function Classworks() {
   const remediationSubject = routeParams.get("subject_id");
   const remediationTitle = routeParams.get("title") || undefined;
   const remediationInstructions = routeParams.get("instructions") || undefined;
+  const remediationOriginalAssignmentId = Number(routeParams.get("original_exam_assignment_id"));
   const interventionId = Number(routeParams.get("intervention_id"));
   const [remediationTarget, setRemediationTarget] =
     useState<TeacherInterventionDetail | null>(null);
   const [remediationFocus, setRemediationFocus] =
     useState<RemediationFocus | null>(null);
   const [remediationGradeTreatment, setRemediationGradeTreatment] = useState<
-    "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | null
+    "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | null
   >(null);
+  const [remediationOriginalExam, setRemediationOriginalExam] =
+    useState<OriginalExamination | null>(null);
   const [remediationReferences, setRemediationReferences] = useState<
     RemediationResource[]
   >([]);
@@ -135,7 +139,9 @@ export default function Classworks() {
           if (
             detail.subject_id !== Number(remediationSubject) ||
             workspace.plan.teacher_choice !== remediationType ||
-            !workspace.plan.grade_treatment
+            !workspace.plan.grade_treatment ||
+            (workspace.plan.grade_treatment === "EXAMINATION" &&
+              workspace.plan.original_exam_assignment_id !== remediationOriginalAssignmentId)
           ) {
             setRemediationError(
               "The saved Intervention method, subject, or grade treatment has changed. Return to the Intervention to prepare support.",
@@ -150,6 +156,16 @@ export default function Classworks() {
           setRemediationTarget(detail);
           setRemediationFocus(workspace.focus);
           setRemediationGradeTreatment(workspace.plan.grade_treatment);
+          if (workspace.plan.grade_treatment === "EXAMINATION") {
+            const original = workspace.original_exams.find(
+              (exam) => exam.assignment_id === remediationOriginalAssignmentId,
+            );
+            if (!original) {
+              setRemediationError("The selected original Examination is unavailable. Return to the Intervention to choose a scored original.");
+              return;
+            }
+            setRemediationOriginalExam(original);
+          }
           setRemediationReferences(
             workspace.resources.filter(
               (item) =>
@@ -169,7 +185,7 @@ export default function Classworks() {
     return () => {
       live = false;
     };
-  }, [interventionId, remediationType, remediationSubject]);
+  }, [interventionId, remediationType, remediationSubject, remediationOriginalAssignmentId]);
   const {
     classes: loads,
     isLoading: loadingClasses,
