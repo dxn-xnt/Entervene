@@ -9,6 +9,7 @@ import { Avatar } from "@/components/retroui/Avatar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Card as RetroCard } from "@/components/retroui/Card";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { Input } from "@/components/retroui/Input";
@@ -87,6 +88,7 @@ function normalizedStudentGender(gender: string) {
 }
 
 export default function AdminClassDetail() {
+  const toast = useToast();
   const { classId } = useParams();
   const navigate = useNavigate();
   const [tab, setTab] = useState<DetailTab>("classes");
@@ -217,6 +219,7 @@ export default function AdminClassDetail() {
     grade: loadedClass.academic_level.level_name,
     section: loadedClass.section_name,
     adviser: adviserName,
+    adviserAvatar: loadedClass.adviser?.avatar,
     academicYear: loadedClass.academic_year.year_label,
     status: normalizedClassStatus(loadedClass.class_status),
   };
@@ -246,6 +249,7 @@ export default function AdminClassDetail() {
 
   async function saveStudentListChanges(payload: UpdateClassStudentListRequest) {
     const updatedStudents = await updateClassStudentList(loadedClass.class_id, payload);
+    toast.success({ title: "Student list updated" });
     setClassStudents(updatedStudents);
     const [availableResult, detailResult] = await Promise.allSettled([
       getUnassignedClassStudents(loadedClass.academic_level.academic_level_id),
@@ -368,7 +372,7 @@ export default function AdminClassDetail() {
           classId={loadedClass.class_id}
           initialClass={loadedClass}
           onClose={() => setShowEditClass(false)}
-          onSaved={(updatedClass) => setClassDetail(updatedClass)}
+          onSaved={(updatedClass) => { setClassDetail(updatedClass); toast.success({ title: "Class updated" }); }}
         />
       )}
       {showEditStudents && classStudents && !isArchived && (
@@ -508,7 +512,7 @@ function OverviewTab({
             <div className="flex items-center gap-3">
               <Avatar variant="teacher" className="size-12 shrink-0">
                 <Avatar.Image
-                  src="/avatars/teacher-avatars/12.svg"
+                  src={selectedClass.adviserAvatar || "/avatars/teacher-avatars/12.svg"}
                   alt={selectedClass.adviser}
                 />
                 <Avatar.Fallback>
@@ -714,7 +718,7 @@ function StudentsTab({
                               <div className="flex items-center gap-3">
                                 <Avatar variant="student" className="size-8 shrink-0">
                                   <Avatar.Image
-                                    src="/avatars/student-avatars/1.svg"
+                                    src={student.avatar || "/avatars/student-avatars/1.svg"}
                                     alt={student.full_name}
                                   />
                                   <Avatar.Fallback>

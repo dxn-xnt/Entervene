@@ -732,7 +732,7 @@ export default function ClassworkView({
                                 <div className="flex items-center gap-3">
                                   <Avatar variant="student" className="size-8 shrink-0">
                                     <Avatar.Image
-                                      src="/avatars/student-avatars/1.svg"
+                                      src={student.avatar || "/avatars/student-avatars/1.svg"}
                                       alt={student.student_name}
                                     />
                                     <Avatar.Fallback>

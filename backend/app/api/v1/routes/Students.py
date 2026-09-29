@@ -163,8 +163,9 @@ def get_my_classmates(
     assignment, class_, _, _, _ = _current_class_row(db, student)
 
     rows = (
-        db.query(Student)
+        db.query(Student, UserAccount.avatar_path)
         .join(StudentClass, StudentClass.student_id == Student.student_id)
+        .outerjoin(UserAccount, Student.user_id == UserAccount.user_id)
         .filter(
             StudentClass.class_id == class_.class_id,
             StudentClass.academic_year_id == assignment.academic_year_id,
@@ -179,8 +180,9 @@ def get_my_classmates(
             "full_name": _student_full_name(classmate),
             "gender": classmate.gender,
             "avatar_initial": ((classmate.first_name or "").strip()[:1] or "?").upper(),
+            "avatar": avatar,
         }
-        for classmate in rows
+        for classmate, avatar in rows
     ]
     classmates.sort(key=lambda item: item["full_name"].casefold())
 
@@ -261,7 +263,7 @@ def get_my_subjects(
             "subject_name":       row.subject_name,
             "subject_codename":   row.subject_codename,
             "teacher_name":       " ".join(part for part in [row.teacher_first_name, row.teacher_last_name] if part),
-            "teacher_avatar":     row.teacher_avatar or "/avatars/teacher-avatars/12.svg",
+            "teacher_avatar":     row.teacher_avatar,
             "period_id":          row.academic_period_id,
             "period_name":        row.period_name,
             "is_current_period":  row.is_current_period,

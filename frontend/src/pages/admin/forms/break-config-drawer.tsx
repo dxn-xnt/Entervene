@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -84,6 +85,7 @@ export default function BreakConfigDrawer({
   onSaved,
   studioData,
 }: BreakConfigDrawerProps) {
+  const toast = useToast();
   const { getSetting } = useSettings();
   const [activeGroup, setActiveGroup] = useState<string>(initialGroup || "JHS_45MIN");
   const [slots, setSlots] = useState<PeriodTemplateSlotItem[]>([]);
@@ -169,7 +171,7 @@ export default function BreakConfigDrawer({
     slotId: number | undefined,
     displayOrder: number,
     field: keyof PeriodTemplateSlotItem,
-    value: any
+    value: PeriodTemplateSlotItem[keyof PeriodTemplateSlotItem]
   ) => {
     if (field === "start_time" || field === "end_time") {
       const s = slots.find(
@@ -178,8 +180,8 @@ export default function BreakConfigDrawer({
           ((slotId && st.slot_id === slotId) || st.display_order === displayOrder)
       );
       if (s) {
-        const start = field === "start_time" ? value : s.start_time;
-        const end = field === "end_time" ? value : s.end_time;
+        const start = field === "start_time" ? String(value) : s.start_time;
+        const end = field === "end_time" ? String(value) : s.end_time;
         const schoolDayStart = getSetting("school_day_start", "06:00");
         const schoolDayEnd = getSetting("school_day_end", "20:00");
         const errorMsg = validatePeriodTimeRange(start, end, schoolDayStart, schoolDayEnd);
@@ -280,10 +282,13 @@ export default function BreakConfigDrawer({
       }
 
       setShowConfirmModal(false);
+      toast.success({ title: "Break timelines saved" });
       onSaved();
       onClose();
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Error saving break settings.");
+      const message = err instanceof Error ? err.message : "Error saving break settings.";
+      setNotice(message);
+      toast.error({ title: "Unable to save break timelines", description: message });
       setShowConfirmModal(false);
     } finally {
       setIsSaving(false);
@@ -312,15 +317,24 @@ export default function BreakConfigDrawer({
         throw new Error(errData.detail || "Failed to reassign section.");
       }
       const data = await res.json();
+      let conflictCount = 0;
       if (data.conflicts && data.conflicts.length > 0) {
-        const errorConflicts = data.conflicts.filter((c: any) => c.severity === "error");
+        const errorConflicts = data.conflicts.filter((c: { severity?: string }) => c.severity === "error");
         if (errorConflicts.length > 0) {
+          conflictCount = errorConflicts.length;
           setNotice(`Warning: Reassigned section, but detected ${errorConflicts.length} schedule conflict(s) with new break walls.`);
         }
       }
+      if (conflictCount > 0) {
+        toast.warning({ title: "Section reassigned with schedule conflicts", description: `${conflictCount} conflict(s) need review.` });
+      } else {
+        toast.success({ title: "Section assigned to break timeline" });
+      }
       onSaved();
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Failed to reassign section.");
+      const message = err instanceof Error ? err.message : "Failed to reassign section.";
+      setNotice(message);
+      toast.error({ title: "Failed to reassign section", description: message });
     } finally {
       setIsReassigning(false);
     }
@@ -479,7 +493,7 @@ export default function BreakConfigDrawer({
 
                         <Select
                           value={slot.slot_type}
-                          onValueChange={(newType: any) => {
+                          onValueChange={(newType: string) => {
                             const isLocked = newType !== "CLASS";
                             handleSlotFieldChange(slot.slot_id ?? undefined, slot.display_order, "slot_type", newType);
                             handleSlotFieldChange(slot.slot_id ?? undefined, slot.display_order, "is_locked_break", isLocked);

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Card as RetroCard } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
@@ -26,6 +27,7 @@ import {
 } from "@/lib/api";
 
 export default function AdminSubjectLevel() {
+  const toast = useToast();
   const navigate = useNavigate();
   const { grade } = useParams<{ grade: string }>();
   const decodedGrade = decodeURIComponent(grade || "Grade 7");
@@ -88,9 +90,11 @@ export default function AdminSubjectLevel() {
     if (!pendingArchive) return;
     try {
       await archiveSubject(pendingArchive.subject_id);
+      toast.success({ title: "Subject archived" });
       await loadSubjects();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to archive subject.");
+      toast.error({ title: "Unable to archive subject", description: err instanceof Error ? err.message : undefined });
     } finally {
       setPendingArchive(null);
     }

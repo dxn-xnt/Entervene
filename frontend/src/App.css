@@ -616,6 +616,13 @@ textarea::placeholder,
   overflow: hidden;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  [data-sonner-toaster] [data-sonner-toast] {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 [data-slot="sheet-content"]> :not([data-slot="sheet-header"]):not([data-slot="sheet-footer"]):not([data-slot="sheet-close"]) {
   min-height: 0;
   overflow-y: auto;

@@ -28,6 +28,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import { cn } from "@/lib/utils";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import AssignSubstituteModal from "./forms/assign-substitute-modal";
+import { useToast } from "@/components/retroui/use-toast";
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -189,6 +190,7 @@ function groupStudents(students: User[], sortBy: "A-Z" | "Z-A" = "A-Z"): Map<str
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function AdminUsers() {
+  const toast = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialTab = (searchParams.get("tab") ?? "teacher") as TabId;
@@ -210,17 +212,18 @@ export default function AdminUsers() {
   );
   const [resendingId, setResendingId] = useState<string | null>(null);
 
-  const handleResend = useCallback(async (user: User) => {
+  const handleResend = async (user: User) => {
     try {
       setResendingId(user.id);
       await resendUserInvitation(user.id);
+      toast.success({ title: "Invitation resent" });
       await fetchUsers();
-    } catch (err: any) {
-      alert(err.message || "Failed to resend invitation.");
+    } catch (err: unknown) {
+      toast.error({ title: "Failed to resend invitation", description: err instanceof Error ? err.message : undefined });
     } finally {
       setResendingId(null);
     }
-  }, []);
+  };
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -263,6 +266,15 @@ export default function AdminUsers() {
   useEffect(() => {
     void fetchUsers();
   }, [fetchUsers]);
+
+  useEffect(() => {
+    const onAvatarUpdated = (event: Event) => {
+      const { userId, avatar } = (event as CustomEvent<{ userId: string; avatar: string | null }>).detail;
+      setUsers((current) => current.map((item) => item.id === userId ? { ...item, avatar } : item));
+    };
+    window.addEventListener("enterve:avatar-updated", onAvatarUpdated);
+    return () => window.removeEventListener("enterve:avatar-updated", onAvatarUpdated);
+  }, []);
 
   const filteredStudents = useMemo(() => {
     if (activeTab !== "student") return users;
@@ -719,7 +731,7 @@ function StudentRow({
       className="cursor-pointer border-b border-border last:border-b-0"
     >
       <Table.Cell>
-        <NameCell name={user.name} subtitle={user.email} role={user.role} />
+        <NameCell name={user.name} subtitle={user.email} role={user.role} avatar={user.avatar} />
       </Table.Cell>
 
       <Table.Cell className="text-center w-36">
@@ -831,7 +843,7 @@ function UserRow({
         className="cursor-pointer border-b border-border last:border-b-0"
       >
         <Table.Cell>
-          <NameCell name={user.name} subtitle={user.email} role={user.role} />
+          <NameCell name={user.name} subtitle={user.email} role={user.role} avatar={user.avatar} />
         </Table.Cell>
         <Table.Cell className="text-center max-w-20">
           <div className="flex flex-col items-center gap-1">
@@ -918,7 +930,7 @@ function UserRow({
       className="cursor-pointer border-b border-border last:border-b-0"
     >
       <Table.Cell>
-        <NameCell name={user.name} subtitle={user.email} role={user.role} />
+        <NameCell name={user.name} subtitle={user.email} role={user.role} avatar={user.avatar} />
       </Table.Cell>
       <Table.Cell className="text-center w-full">
         <StatusBadge
@@ -942,10 +954,12 @@ function NameCell({
   name,
   subtitle,
   role,
+  avatar,
 }: {
   name: string;
   subtitle?: string;
   role: "admin" | "teacher" | "student";
+  avatar?: string | null;
 }) {
   const defaultAvatar =
     role === "student"
@@ -958,7 +972,7 @@ function NameCell({
         variant={role === "student" ? "student" : "teacher"}
         className="size-10 shrink-0"
       >
-        <Avatar.Image src={defaultAvatar} alt={name} />
+        <Avatar.Image src={avatar || defaultAvatar} alt={name} />
         <Avatar.Fallback>{name.charAt(0).toUpperCase()}</Avatar.Fallback>
       </Avatar>
       <div className="min-w-0">

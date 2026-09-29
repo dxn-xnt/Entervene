@@ -16,6 +16,7 @@ from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
+from app.models.auth.UserAccount import UserAccount
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.submissions.SubmissionAttachment import SubmissionAttachment
 from app.schemas.Submission import GradeRequest, SubmissionAttachmentResponse, SubmissionResponse
@@ -536,6 +537,12 @@ def assignment_tracking(assignment_id: int, staff_id: str, db: Session) -> dict:
     if assignment.recipient_student_id:
         roster_query = roster_query.filter(Student.student_id == assignment.recipient_student_id)
     roster_rows = roster_query.order_by(Student.last_name.asc(), Student.first_name.asc()).all()
+    avatars = dict(
+        db.query(Student.student_id, UserAccount.avatar_path)
+        .join(UserAccount, Student.user_id == UserAccount.user_id)
+        .filter(Student.student_id.in_([student.student_id for student in roster_rows]))
+        .all()
+    ) if roster_rows else {}
     submissions = db.query(StudentSubmission).filter(
         StudentSubmission.classwork_assignment_id == assignment_id
     ).all()
@@ -547,6 +554,7 @@ def assignment_tracking(assignment_id: int, staff_id: str, db: Session) -> dict:
         base = {
             "student_id": sid,
             "student_name": student_name(student),
+            "avatar": avatars.get(student.student_id),
             "student_lrn": student.student_lrn,
             "email": student.email,
         }
@@ -645,6 +653,12 @@ def classwork_tracking(classwork_id: int, staff_id: str, db: Session) -> dict:
         .order_by(Student.last_name.asc(), Student.first_name.asc())
         .all()
     )
+    avatars = dict(
+        db.query(Student.student_id, UserAccount.avatar_path)
+        .join(UserAccount, Student.user_id == UserAccount.user_id)
+        .filter(Student.student_id.in_([student.student_id for student in students]))
+        .all()
+    ) if students else {}
 
     submitted, missing = [], []
     for student in students:
@@ -653,6 +667,7 @@ def classwork_tracking(classwork_id: int, staff_id: str, db: Session) -> dict:
         base = {
             "student_id": sid,
             "student_name": student_name(student),
+            "avatar": avatars.get(student.student_id),
             "student_lrn": student.student_lrn,
             "email": student.email,
         }

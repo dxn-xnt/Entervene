@@ -104,7 +104,7 @@ export default function ClassCard({ item, onEdit, onArchive }: {
         {/* Adviser */}
         <div className="flex items-center gap-2 pt-3">
           <Avatar variant="teacher" className="size-10">
-            <Avatar.Image src="/avatars/teacher-avatars/12.svg" alt={adviserName} />
+            <Avatar.Image src={item.adviser?.avatar || "/avatars/teacher-avatars/12.svg"} alt={adviserName} />
             <Avatar.Fallback className="bg-amber-200 text-amber-900 font-semibold rounded-full">
               {item.adviser ? adviserName.charAt(0) : "-"}
             </Avatar.Fallback>

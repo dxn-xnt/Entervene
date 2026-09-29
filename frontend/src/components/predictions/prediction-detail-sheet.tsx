@@ -14,6 +14,7 @@ import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";
 import { Input } from "@/components/retroui/Input";
 import { Progress } from "@/components/retroui/Progress";
+import { useToast } from "@/components/retroui/use-toast";
 import { Select } from "@/components/retroui/Select";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -97,6 +98,7 @@ export default function PredictionDetailSheet({
   currentTermPrediction = null,
   candidateId,
 }: PredictionDetailSheetProps) {
+  const toast = useToast();
   const { user } = useAuth();
   const isTeacher = user?.role === "teacher";
 
@@ -151,6 +153,7 @@ export default function PredictionDetailSheet({
         priority: interventionPriority,
       });
       setInterventionSuccess(true);
+      toast.success({ title: "Intervention assigned" });
       setInterventionTitle("");
       // Refresh detail and suggestions
       const [updatedDetail, updatedSuggestions] = await Promise.all([
@@ -162,6 +165,7 @@ export default function PredictionDetailSheet({
     } catch (err: unknown) {
       console.error(err);
       setInterventionError(err instanceof Error ? err.message : "Failed to assign intervention");
+      toast.error({ title: "Failed to assign intervention", description: err instanceof Error ? err.message : undefined });
     } finally {
       setAssigningIntervention(false);
     }
@@ -185,10 +189,12 @@ export default function PredictionDetailSheet({
           : prev
       );
       setReviewSuccess(true);
+      toast.success({ title: "Review submitted" });
       setReviewDecision("");
       setReviewNotes("");
     } catch (err) {
       console.error(err);
+      toast.error({ title: "Failed to submit review", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSubmitting(false);
     }

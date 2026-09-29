@@ -11,6 +11,7 @@ import { apiFetch } from "@/lib/api";
 import type { InviteUserPayload } from "@/lib/api";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/components/retroui/use-toast";
 
 type Step = "choose" | "import" | "manual";
 type Role = "Teacher" | "Student" | "Admin";
@@ -338,6 +339,7 @@ export default function AddUserModal({
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [manualSubmitting, setManualSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
 
   const handleClose = () => {
     setStep("choose");
@@ -378,7 +380,15 @@ export default function AddUserModal({
 
       if (res.ok) {
         onUserAdded?.(form);
+        const created = data.created_count ?? data.created ?? 0;
+        if (created > 0) toast.success({ title: `${created} user${created === 1 ? "" : "s"} imported` });
+      } else {
+        toast.error({ title: "User import failed", description: backendImportResult(data, importRole).message });
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to import users.";
+      setImportResult({ message, failed_count: 1 });
+      toast.error({ title: "User import failed", description: message });
     } finally {
       setImporting(false);
     }
@@ -440,16 +450,16 @@ export default function AddUserModal({
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        window.alert(data.detail ?? "Unable to send invite.");
+        const detail = typeof data.detail === "string" ? data.detail : "Unable to send invite.";
+        toast.error({ title: "Unable to create user", description: detail });
         return;
       }
 
       onUserAdded?.(form);
       handleClose();
+      toast.success({ title: "User created", description: `${form.firstName.trim()} ${form.lastName.trim()} was added successfully.` });
     } catch (error) {
-      window.alert(
-        error instanceof Error ? error.message : "Unable to send invite.",
-      );
+      toast.error({ title: "Unable to create user", description: error instanceof Error ? error.message : "Unable to send invite." });
     } finally {
       setManualSubmitting(false);
     }

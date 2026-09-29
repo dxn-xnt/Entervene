@@ -2,6 +2,15 @@ import * as React from "react";
 import * as AvatarPrimitive from "@radix-ui/react-avatar";
 
 import { cn } from "@/lib/utils";
+import { API_URL } from "@/lib/api";
+
+/** Keep bundled avatar assets local; resolve API media paths against the API origin. */
+function resolveAvatarUrl(src?: string) {
+  if (!src) return undefined;
+  if (src.startsWith("/avatars/")) return src;
+  if (/^(https?:|blob:|data:)/i.test(src)) return src;
+  return `${API_URL}/${src.replace(/^\//, "")}`;
+}
 
 const AvatarContext = React.createContext<{ variant: "teacher" | "student" | "default" }>({
   variant: "default",
@@ -30,11 +39,12 @@ Avatar.displayName = "Avatar";
 const AvatarImage = React.forwardRef<
   React.ElementRef<typeof AvatarPrimitive.Image>,
   React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
->(({ className, ...props }, ref) => {
+>(({ className, src, ...props }, ref) => {
   const { variant } = React.useContext(AvatarContext);
   return (
     <AvatarPrimitive.Image
       ref={ref}
+      src={resolveAvatarUrl(src)}
       className={cn(
         "aspect-square h-full w-full object-cover scale-[1.75]",
         variant === "student" ? "absolute overflow-visible" : "",

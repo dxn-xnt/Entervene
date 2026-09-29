@@ -482,7 +482,7 @@ function AvailableStudentsPanel({
                   }`}
               >
                 <Avatar variant="student" className="size-9 shrink-0">
-                  <Avatar.Image src="/avatars/student-avatars/1.svg" alt={assignmentStudentName(student)} />
+                  <Avatar.Image src={student.avatar || "/avatars/student-avatars/1.svg"} alt={assignmentStudentName(student)} />
                   <Avatar.Fallback>
                     {(student.first_name || "?").charAt(0).toUpperCase()}
                   </Avatar.Fallback>
@@ -566,7 +566,7 @@ function StudentActionRow({
         <Table.Cell>
           <div className="flex items-center gap-3">
             <Avatar variant="student" className="size-9 shrink-0">
-              <Avatar.Image src="/avatars/student-avatars/1.svg" alt={student.full_name} />
+              <Avatar.Image src={student.avatar || "/avatars/student-avatars/1.svg"} alt={student.full_name} />
               <Avatar.Fallback>
                 {(student.avatar_initial || student.full_name || "?").charAt(0).toUpperCase()}
               </Avatar.Fallback>
