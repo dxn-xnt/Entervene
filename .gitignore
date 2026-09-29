@@ -40,6 +40,8 @@ __pycache__/
 *.pyc
 .pytest_cache/
 backend/test_temp/
+backend/pytest_temp_dir/
+backend/.pytest-*/
 backend/.demo-fixtures/
 
 # Dependencies / Node
