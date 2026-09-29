@@ -41,8 +41,9 @@ export function Tabs<T extends string = string>({
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
+    if (!sentinel || typeof window.matchMedia !== "function" || typeof IntersectionObserver === "undefined") return;
+
     const mobileQuery = window.matchMedia("(max-width: 639px)");
-    if (!sentinel) return;
 
     const updatePinnedState = () => {
       setIsPinned(mobileQuery.matches && sentinel.getBoundingClientRect().top < 0);
@@ -50,13 +51,13 @@ export function Tabs<T extends string = string>({
     const observer = new IntersectionObserver(updatePinnedState, { threshold: 0 });
 
     observer.observe(sentinel);
-    mobileQuery.addEventListener("change", updatePinnedState);
+    mobileQuery.addEventListener?.("change", updatePinnedState);
     window.addEventListener("scroll", updatePinnedState, { passive: true });
     updatePinnedState();
 
     return () => {
       observer.disconnect();
-      mobileQuery.removeEventListener("change", updatePinnedState);
+      mobileQuery.removeEventListener?.("change", updatePinnedState);
       window.removeEventListener("scroll", updatePinnedState);
     };
   }, []);

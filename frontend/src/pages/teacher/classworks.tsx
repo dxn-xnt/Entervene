@@ -34,9 +34,9 @@ import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Input } from "@/components/retroui/Input";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
-import { DialogueSelect } from "@/components/dialogue-select";
 import { Select } from "@/components/retroui/Select";
 import SegmentedControl from "@/components/retroui/SegmentedControl";
+import { DialogueSelect } from "@/components/dialogue-select";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
 import {
@@ -62,31 +62,31 @@ const createOptions: Array<{
   description: string;
   icon: LucideIcon;
 }> = [
-  {
-    type: "READING",
-    title: "Reading",
-    description: "Create and publish class topics or resources for learners",
-    icon: BookOpen,
-  },
-  {
-    type: "QUIZ",
-    title: "Quiz",
-    description: "Build and assign quizzes to assess learner understanding",
-    icon: ClipboardList,
-  },
-  {
-    type: "ASSIGNMENT",
-    title: "Assignment",
-    description: "Post tasks or projects for students to complete and submit",
-    icon: FileText,
-  },
-  {
-    type: "ACTIVITY",
-    title: "Activity",
-    description: "Design interactive tasks to enhance learner engagement",
-    icon: CheckSquare,
-  },
-];
+    {
+      type: "READING",
+      title: "Reading",
+      description: "Create and publish class topics or resources for learners",
+      icon: BookOpen,
+    },
+    {
+      type: "QUIZ",
+      title: "Quiz",
+      description: "Build and assign quizzes to assess learner understanding",
+      icon: ClipboardList,
+    },
+    {
+      type: "ASSIGNMENT",
+      title: "Assignment",
+      description: "Post tasks or projects for students to complete and submit",
+      icon: FileText,
+    },
+    {
+      type: "ACTIVITY",
+      title: "Activity",
+      description: "Design interactive tasks to enhance learner engagement",
+      icon: CheckSquare,
+    },
+  ];
 
 const tabType: Partial<Record<TabId, string>> = {
   readings: "READING",
@@ -403,7 +403,7 @@ export default function Classworks() {
                 <div className="flex items-center gap-3">
                   <SidebarTrigger className="shrink-0 md:hidden" />
                   <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
-                    Classwork
+                    Classworks
                   </h1>
                 </div>
 
@@ -447,37 +447,15 @@ export default function Classworks() {
                 )}
 
                 <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                  <div className="relative min-w-0 flex-1 shadow-md transition-shadow hover:shadow-none sm:min-w-48">
-                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+                  <label className="relative min-w-0 flex-1 sm:min-w-48">
+                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50 z-10" />
                     <Input
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
                       placeholder="Search classwork..."
-                      className="h-10 w-full border-black pl-9 pr-3 shadow-none bg-background"
+                      className="h-10 w-full border-black pl-9 pr-3"
                     />
-                  </div>
-
-                  <Select
-                    value={subjectFilter}
-                    onValueChange={(val) => setSubjectFilter(val)}
-                  >
-                    <Select.Trigger className="w-full md:w-44">
-                      <Select.Value placeholder="All subjects" />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Group>
-                        <Select.Item value="all">All subjects</Select.Item>
-                        {subjects.map((subject) => (
-                          <Select.Item
-                            key={subject.id}
-                            value={String(subject.id)}
-                          >
-                            {subject.name}
-                          </Select.Item>
-                        ))}
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>
+                  </label>
 
                   <Select
                     value={classFilter}
@@ -533,6 +511,37 @@ export default function Classworks() {
                       <span className="ml-1.5 hidden sm:inline">List</span>
                     </SegmentedControl.Item>
                   </SegmentedControl>
+                </div>
+
+                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                  <span className="shrink-0 text-sm font-regular text-muted-foreground">
+                    Subject:
+                  </span>
+                  <Button
+                    autoIcon={false}
+                    variant={subjectFilter === "all" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSubjectFilter("all")}
+                    className="shrink-0 border-black shadow-none"
+                  >
+                    All subjects
+                  </Button>
+                  {subjects.map((subject) => (
+                    <Button
+                      key={subject.id}
+                      autoIcon={false}
+                      variant={
+                        subjectFilter === String(subject.id)
+                          ? "default"
+                          : "outline"
+                      }
+                      size="sm"
+                      onClick={() => setSubjectFilter(String(subject.id))}
+                      className="shrink-0 border-black shadow-none"
+                    >
+                      {subject.name}
+                    </Button>
+                  ))}
                 </div>
 
                 {isLoading ? (
@@ -642,9 +651,9 @@ export default function Classworks() {
                         remediationTarget
                           ? String(remediationTarget.subject_id)
                           : remediationSubject ||
-                            (subjectFilter !== "all"
-                              ? subjectFilter
-                              : undefined)
+                          (subjectFilter !== "all"
+                            ? subjectFilter
+                            : undefined)
                       }
                       initialTitle={remediationTitle}
                       initialInstructions={remediationInstructions}
@@ -670,9 +679,9 @@ export default function Classworks() {
                         remediationTarget
                           ? String(remediationTarget.subject_id)
                           : remediationSubject ||
-                            (subjectFilter !== "all"
-                              ? subjectFilter
-                              : undefined)
+                          (subjectFilter !== "all"
+                            ? subjectFilter
+                            : undefined)
                       }
                       initialTitle={remediationTitle}
                       initialInstructions={remediationInstructions}

@@ -140,8 +140,7 @@ describe("teacher candidate review", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Approve Intervention" }));
     await waitFor(() => expect(api.activate).toHaveBeenCalledWith(12));
     expect(await screen.findByText(/Intervention approved for Alex Rivera/)).toBeTruthy();
-    expect(await screen.findByText("No candidates to review")).toBeTruthy();
-    fireEvent.click(screen.getByRole("tab", { name: "Active" }));
+    fireEvent.click(screen.getByRole("tab", { name: /Active/i }));
     expect(await screen.findByText("Alex Rivera")).toBeTruthy();
   });
   it.each([

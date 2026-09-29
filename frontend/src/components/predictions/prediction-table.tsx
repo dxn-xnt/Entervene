@@ -46,7 +46,7 @@ function SortableHeader({
     <button
       type="button"
       onClick={() => onSort(column)}
-      className="inline-flex items-center gap-1.5 font-bold hover:underline cursor-pointer"
+      className="inline-flex items-center gap-1.5 font-bold cursor-pointer"
     >
       {label}
       <ArrowUpDown
@@ -83,7 +83,7 @@ export default function PredictionTable({
 
   return (
     <div className="flex flex-col">
-      <Table wrapperClassName="border-0 shadow-md mb-2">
+      <Table className="shadow-none" wrapperClassName="shadow-none hover:shadow-none transition-all mb-2">
         <Table.Header className="text-black bg-yellow-400">
           <Table.Row className="border-b-2 border-black bg-yellow-400 hover:bg-yellow-400">
             <Table.Head className="font-extrabold text-black whitespace-nowrap">
@@ -101,14 +101,14 @@ export default function PredictionTable({
             {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">Term</Table.Head> */}
             <Table.Head className="font-extrabold text-black whitespace-nowrap">
               <SortableHeader
-                label={currentTerm ? "Projected Final Term Grade" : "Predicted Grade"}
+                label={currentTerm ? "Projected Term Grade" : "Predicted Grade"}
                 column="predicted_period_grade"
                 sortBy={sortBy}
                 sortOrder={sortOrder}
                 onSort={onSort}
               />
             </Table.Head>
-            <Table.Head className="font-extrabold text-black whitespace-nowrap">{currentTerm ? "Intervention Level" : "Risk Level"}</Table.Head>
+            <Table.Head className="font-extrabold text-black whitespace-nowrap">Risk Level</Table.Head>
             {!currentTerm && <Table.Head className="font-extrabold text-black whitespace-nowrap">
               <SortableHeader
                 label="Risk Score"

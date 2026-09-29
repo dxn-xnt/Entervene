@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 ENV_FILE = os.getenv("ENV_FILE", ".env")
 load_dotenv(ENV_FILE)
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     app_name: str = "ENTERVENE"
     debug: bool = False
-    app_environment: str = "production"
+    app_environment: str = Field(default="production", validation_alias=AliasChoices("app_environment", "app_env"))
     development_prediction_api_enabled: bool = False
     development_current_term_model_name: str = "entervene_current_term_development_rf_v3"
     database_url: str = Field(..., min_length=1)

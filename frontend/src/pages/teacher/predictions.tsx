@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { OverviewCard } from "@/components/overview-cards";
+import { Card } from "@/components/retroui/Card";
+import { Alert } from "@/components/retroui/Alert";
+import { Loader } from "@/components/retroui/Loader";
 import { Button } from "@/components/retroui/Button";
 import { Tabs } from "@/components/retroui/Tabs";
 import { useAuth } from "@/context/AuthContext";
@@ -244,130 +247,131 @@ function LegacyPredictionsDashboard() {
               />
             ) : (
 
-            <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-              {/* ── Risk Summary Cards ── */}
-              <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-4">
-                {RISK_CARDS.map((card) => {
-                  const count = summary[card.key];
-                  const isActive = riskLevel === card.key;
+              <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+                {/* ── Risk Summary Cards ── */}
+                <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-4">
+                  {RISK_CARDS.map((card) => {
+                    const count = summary[card.key];
+                    const isActive = riskLevel === card.key;
 
-                  return (
-                    <button
-                      key={card.key}
-                      type="button"
-                      onClick={() => handleRiskClick(isActive ? undefined : card.key)}
-                      className="text-left cursor-pointer transition-transform active:translate-x-[2px] active:translate-y-[2px] w-full"
-                    >
-                      <OverviewCard
-                        title={card.label}
-                        count={String(count)}
-                        className={cn(
-                          "w-full border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all",
-                          isActive
-                            ? `${card.activeClass} shadow-none translate-x-[2px] translate-y-[2px]`
-                            : "hover:translate-x-[-1px] hover:translate-y-[-1px]"
-                        )}
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* ── Main Content Area ── */}
-              <div className="flex flex-col lg:flex-row gap-5">
-                <div className="flex-1 flex flex-col gap-4 min-w-0">
-                  <PredictionFilters
-                    filters={filters}
-                    gradeLevel={gradeLevel}
-                    classId={classId}
-                    subjectId={subjectId}
-                    academicPeriodId={selectedPeriodId ?? undefined}
-                    riskLevel={riskLevel}
-                    search={search}
-                    onGradeChange={(v) => {
-                      setGradeLevel(v);
-                      setOffset(0);
-                    }}
-                    onClassChange={(v) => {
-                      setClassId(v);
-                      setOffset(0);
-                    }}
-                    onSubjectChange={(v) => {
-                      setSubjectId(v);
-                      setOffset(0);
-                    }}
-                    hidePeriodFilter
-                    onRiskChange={(v) => {
-                      setRiskLevel(v);
-                      setOffset(0);
-                    }}
-                    onSearchChange={handleSearchChange}
-                    onClearAll={handleClearAll}
-                  />
-
-                  {isFilterActive ? (
-                    /* ── Filtered Predictions View ── */
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center justify-between py-2 border-b-2 border-black">
-                        <div>
-                          <h2 className="text-xl font-black uppercase tracking-tight text-black">Filtered Student Predictions</h2>
-                          <p className="text-xs text-gray-600 font-semibold">
-                            Showing matching predictions for active criteria ({data?.total ?? 0} results)
-                          </p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleClearAll}
-                          className="border-2 border-black font-bold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                        >
-                          Clear Filters
-                        </Button>
-                      </div>
-
-                      {loading && !data ? (
-                        <div className="flex items-center justify-center py-20 text-gray-400">
-                          Loading predictions...
-                        </div>
-                      ) : (
-                        <PredictionTable
-                          items={data?.items ?? []}
-                          total={data?.total ?? 0}
-                          limit={data?.limit ?? limit}
-                          offset={data?.offset ?? 0}
-                          sortBy={sortBy}
-                          sortOrder={sortOrder}
-                          onSort={handleSort}
-                          onPageChange={setOffset}
-                          onRowClick={handleRowClick}
+                    return (
+                      <button
+                        key={card.key}
+                        type="button"
+                        onClick={() => handleRiskClick(isActive ? undefined : card.key)}
+                        className="text-left cursor-pointer transition-transform active:translate-x-[2px] active:translate-y-[2px] w-full"
+                      >
+                        <OverviewCard
+                          title={card.label}
+                          count={String(count)}
+                          className={cn(
+                            "w-full border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all",
+                            isActive
+                              ? `${card.activeClass} shadow-none translate-x-[2px] translate-y-[2px]`
+                              : "hover:translate-x-[-1px] hover:translate-y-[-1px]"
+                          )}
                         />
-                      )}
-                    </div>
-                  ) : (
-                    /* ── Default Grade Cohort Overview ── */
-                    <div className="flex flex-col gap-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-1">
-                        <div>
-                          <h2 className="text-xl font-black tracking-tight text-black">Grade Cohort Summaries</h2>
-                        </div>
-                      </div>
+                      </button>
+                    );
+                  })}
+                </div>
 
-                      {gradeSummaries.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {gradeSummaries.map((group) => (
-                            <PredictionGradeSection key={group.grade_level} group={group} />
-                          ))}
+                {/* ── Main Content Area ── */}
+                <div className="flex flex-col lg:flex-row gap-5">
+                  <div className="flex-1 flex flex-col gap-4 min-w-0">
+                    <PredictionFilters
+                      filters={filters}
+                      gradeLevel={gradeLevel}
+                      classId={classId}
+                      subjectId={subjectId}
+                      academicPeriodId={selectedPeriodId ?? undefined}
+                      riskLevel={riskLevel}
+                      search={search}
+                      onGradeChange={(v) => {
+                        setGradeLevel(v);
+                        setOffset(0);
+                      }}
+                      onClassChange={(v) => {
+                        setClassId(v);
+                        setOffset(0);
+                      }}
+                      onSubjectChange={(v) => {
+                        setSubjectId(v);
+                        setOffset(0);
+                      }}
+                      hidePeriodFilter
+                      onRiskChange={(v) => {
+                        setRiskLevel(v);
+                        setOffset(0);
+                      }}
+                      onSearchChange={handleSearchChange}
+                      onClearAll={handleClearAll}
+                    />
+
+                    {isFilterActive ? (
+                      /* ── Filtered Predictions View ── */
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between py-2 border-b-2 border-black">
+                          <div>
+                            <h2 className="text-xl font-black uppercase tracking-tight text-black">Filtered Student Predictions</h2>
+                            <p className="text-xs text-gray-600 font-semibold">
+                              Showing matching predictions for active criteria ({data?.total ?? 0} results)
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleClearAll}
+                            className="border-2 border-black font-bold"
+                          >
+                            Clear Filters
+                          </Button>
                         </div>
-                      ) : (
-                        <div className="p-6 bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] rounded-none text-center text-sm font-semibold text-gray-600">
-                          No grade overview summaries found for this scope.
+
+                        {loading && !data ? (
+                          <div className="flex flex-col items-center justify-center py-20 gap-3 text-gray-500">
+                            <Loader size="md" />
+                            <span className="text-sm font-semibold">Loading predictions...</span>
+                          </div>
+                        ) : (
+                          <PredictionTable
+                            items={data?.items ?? []}
+                            total={data?.total ?? 0}
+                            limit={data?.limit ?? limit}
+                            offset={data?.offset ?? 0}
+                            sortBy={sortBy}
+                            sortOrder={sortOrder}
+                            onSort={handleSort}
+                            onPageChange={setOffset}
+                            onRowClick={handleRowClick}
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      /* ── Default Grade Cohort Overview ── */
+                      <div className="flex flex-col gap-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-1">
+                          <div>
+                            <h2 className="text-xl font-black tracking-tight text-black">Grade Cohort Summaries</h2>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  )}
+
+                        {gradeSummaries.length > 0 ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {gradeSummaries.map((group) => (
+                              <PredictionGradeSection key={group.grade_level} group={group} />
+                            ))}
+                          </div>
+                        ) : (
+                          <Card className="p-6 bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] rounded-none text-center text-sm font-semibold text-gray-600">
+                            No grade overview summaries found for this scope.
+                          </Card>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
             )}
           </div>
         </div>
@@ -442,12 +446,42 @@ function TeacherCurrentTermDashboard() {
             onSearchChange={setSearch}
             onClearAll={() => { setGradeLevel(undefined); setClassId(undefined); setSubjectId(undefined); setRiskLevel(undefined); setSearch(""); }}
           />
-          {loadError && <div role="alert" className="border-2 border-red-600 bg-red-50 p-4 font-semibold">{loadError}</div>}
-          {loading ? <div className="py-20 text-center font-semibold text-gray-500">Loading current-term projections...</div> : loadError ? null : !selectedPeriodId ? <div>Select an academic term to view projections.</div> : filtered ? <PredictionTable
-            items={data.items} total={data.total} limit={Math.max(10, data.total)} offset={0} currentTerm hidePagination
-            onSort={() => undefined} onPageChange={() => undefined}
-            onRowClick={(predictionId) => setSelected(rows.find((row) => row.prediction_id === predictionId) || null)}
-          /> : <div className="flex flex-col gap-3"><h2 className="text-xl font-black">Grade Cohort Summaries</h2>{gradeSummaries.length ? <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{gradeSummaries.map((group) => <PredictionGradeSection key={group.grade_level} group={group} />)}</div> : <div className="border-2 border-black bg-white p-6 text-center font-semibold">No current-term projections are available for this scope.</div>}</div>}
+          {loadError && <Alert status="error" className="font-semibold">{loadError}</Alert>}
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 font-semibold text-gray-500">
+              <Loader size="md" />
+              <span>Loading current-term projections...</span>
+            </div>
+          ) : loadError ? null : !selectedPeriodId ? (
+            <Card className="border-2 border-black bg-white p-6 text-center font-semibold text-gray-700">
+              Select an academic term to view projections.
+            </Card>
+          ) : filtered ? (
+            <PredictionTable
+              items={data.items}
+              total={data.total}
+              limit={Math.max(10, data.total)}
+              offset={0}
+              currentTerm
+              hidePagination
+              onSort={() => undefined}
+              onPageChange={() => undefined}
+              onRowClick={(predictionId) => setSelected(rows.find((row) => row.prediction_id === predictionId) || null)}
+            />
+          ) : (
+            <div className="flex flex-col gap-3">
+              <h2 className="text-xl font-black">Grade Cohort Summaries</h2>
+              {gradeSummaries.length ? (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {gradeSummaries.map((group) => <PredictionGradeSection key={group.grade_level} group={group} />)}
+                </div>
+              ) : (
+                <Card className="border-2 border-black bg-white p-6 text-center font-semibold">
+                  No current-term projections are available for this scope.
+                </Card>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
