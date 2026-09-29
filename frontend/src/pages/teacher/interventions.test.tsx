@@ -330,10 +330,11 @@ describe("teacher active intervention review", () => {
   it("selects a scored original Examination for the higher-score treatment", async () => {
     const workspace = {
       plan: { teacher_choice: "CLASSWORK", grade_treatment: "PRACTICE_ONLY", selected_resources: [], ai_suggestion: null },
-      focus: { basis: "FROZEN_TRIGGER_DIAGNOSIS", evidence_level: "COMPONENT_ONLY", component: "EXAMINATION", exam_subtype: null,
+      focus: { basis: "FROZEN_TRIGGER_DIAGNOSIS", evidence_level: "COMPONENT_ONLY", component: "EXAMINATION", exam_subtype: "SUMMATIVE_1",
         lesson_ids: [], lessons: [], competency_ids: [], competencies: [], topics: [], source_classwork_ids: [], question_evidence: [], coverage_is_context_only: false },
       progress: { triggering_projection: 74, latest_projection: 74, latest_revision: 2, completed_remediation: [], assigned_remediation: [], status: "ACTIVE", status_reason: "Monitoring." },
-      resources: [], original_exams: [{ assignment_id: 41, title: "Summative 2", subtype: "SUMMATIVE_2", score: 6, total_points: 10 }],
+      resources: [], original_exams: [{ assignment_id: 41, title: "Summative 2", subtype: "SUMMATIVE_2", score: 6, total_points: 10 },
+        { assignment_id: 42, title: "Summative 1", subtype: "SUMMATIVE_1", score: 3, total_points: 10 }],
     };
     api.workspace.mockResolvedValue(workspace);
     api.savePlan.mockImplementation(async (_id: number, body: Record<string, unknown>) => ({ ...workspace, plan: { ...workspace.plan, ...body } }));
@@ -341,8 +342,8 @@ describe("teacher active intervention review", () => {
     const sheet = await screen.findByRole("complementary");
     fireEvent.click(await within(sheet).findByRole("button", { name: "Prepare Remediation" }));
     fireEvent.click(within(sheet).getByRole("radio", { name: /Remedial Examination/ }));
-    await waitFor(() => expect(api.savePlan).toHaveBeenCalledWith(12, expect.objectContaining({ grade_treatment: "EXAMINATION", original_exam_assignment_id: 41 })));
-    await waitFor(() => expect((within(sheet).getByRole("combobox", { name: "Original Examination" }) as HTMLSelectElement).value).toBe("41"));
+    await waitFor(() => expect(api.savePlan).toHaveBeenCalledWith(12, expect.objectContaining({ grade_treatment: "EXAMINATION", original_exam_assignment_id: 42 })));
+    await waitFor(() => expect((within(sheet).getByRole("combobox", { name: "Original Examination" }) as HTMLSelectElement).value).toBe("42"));
   });
   it.each([
     ["QUIZ", "Existing Classwork page"],

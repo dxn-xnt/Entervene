@@ -11,6 +11,7 @@ export const userAnalyticsMocks: Record<UserRole, MockAnalytics> = {
       classesHandled: 4,
       subjectsHandled: 2,
       classPerformance: 95,
+      workloadHours: 24,
     },
     period_performance: [
       { period: "T1", score: 76 },
@@ -29,6 +30,16 @@ export const userAnalyticsMocks: Record<UserRole, MockAnalytics> = {
     activity_feed: [
       { title: "New lesson added for Science 9 - Chapter 7: Genetics", timestamp: "Today 9:14 AM" },
       { title: "New lesson added for Science 8 - Chapter 7: Genetics", timestamp: "Today 9:14 AM" },
+    ],
+    handled_subjects: [
+      { subject_id: 1, subject_name: "Science 9", subject_code: "SCI9", is_core: true, grade_levels: ["Grade 9"], sections: ["Ruby", "Emerald"], class_count: 2, weekly_hours: 12, load_count: 2 },
+      { subject_id: 2, subject_name: "Science 8", subject_code: "SCI8", is_core: true, grade_levels: ["Grade 8"], sections: ["Diamond", "Sapphire"], class_count: 2, weekly_hours: 12, load_count: 2 },
+    ],
+    handled_classes: [
+      { class_id: 1, section_name: "Grade 9 - Ruby", grade_level: 9, student_count: 42, is_adviser: true, subjects: ["Science 9"] },
+      { class_id: 2, section_name: "Grade 9 - Emerald", grade_level: 9, student_count: 39, is_adviser: false, subjects: ["Science 9"] },
+      { class_id: 3, section_name: "Grade 8 - Diamond", grade_level: 8, student_count: 40, is_adviser: false, subjects: ["Science 8"] },
+      { class_id: 4, section_name: "Grade 8 - Sapphire", grade_level: 8, student_count: 38, is_adviser: false, subjects: ["Science 8"] },
     ],
     subject_mastery: [],
     score_trend: [],
@@ -176,5 +187,13 @@ export function mergeAnalytics(role: UserRole, analytics?: UserAnalytics | null)
       analytics.subject_breakdown.length > 0 ? analytics.subject_breakdown : fallback.subject_breakdown,
     activity_feed: analytics.activity_feed.length > 0 ? analytics.activity_feed : fallback.activity_feed,
     classwork: analytics.classwork.length > 0 ? analytics.classwork : fallback.classwork,
+    handled_subjects:
+      analytics.handled_subjects && analytics.handled_subjects.length > 0
+        ? analytics.handled_subjects
+        : fallback.handled_subjects,
+    handled_classes:
+      analytics.handled_classes && analytics.handled_classes.length > 0
+        ? analytics.handled_classes
+        : fallback.handled_classes,
   };
 }

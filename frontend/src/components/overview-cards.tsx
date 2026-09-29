@@ -57,6 +57,8 @@ const metricDescriptions: Record<string, string> = {
   "avg. class score": "Average recorded score for this class",
   "at-risk students": "Students currently flagged for support",
   "total hours": "Recorded hours across these subjects",
+  workload: "Scheduled weekly teaching workload",
+  "teaching workload": "Scheduled weekly teaching workload",
   active: "Records currently marked active",
   pending: "Records currently awaiting action",
   unassigned: "Records without a current assignment",

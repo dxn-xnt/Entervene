@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:e2e": "playwright test -c playwright.config.ts",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -59,6 +60,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/typography": "^0.5.19",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^24.12.2",

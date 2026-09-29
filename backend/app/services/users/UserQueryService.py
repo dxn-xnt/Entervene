@@ -84,13 +84,20 @@ def _base_user_query(db: Session):
     )
 
 
-def _teacher_summaries(db: Session, teacher_ids: set[str]) -> dict[str, dict[str, set]]:
-    summaries: dict[str, dict[str, set]] = {}
+def _teacher_summaries(db: Session, teacher_ids: set[str]) -> dict[str, dict[str, Any]]:
+    summaries: dict[str, dict[str, Any]] = {}
     if not teacher_ids:
         return summaries
 
     teacher_loads = (
-        db.query(SubjectLoad.staff_id, Subject.subject_name, SubjectLoad.class_id)
+        db.query(
+            SubjectLoad.staff_id,
+            Subject.subject_name,
+            SubjectLoad.class_id,
+            SubjectLoad.start_time,
+            SubjectLoad.end_time,
+            SubjectLoad.days_of_week,
+        )
         .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
         .filter(SubjectLoad.staff_id.in_(teacher_ids))
         .filter(SubjectLoad.is_active_version.is_(True))
@@ -98,11 +105,25 @@ def _teacher_summaries(db: Session, teacher_ids: set[str]) -> dict[str, dict[str
         .all()
     )
     for load in teacher_loads:
-        summary = summaries.setdefault(load.staff_id, {"subjects": set(), "class_ids": set()})
+        summary = summaries.setdefault(
+            load.staff_id,
+            {"subjects": set(), "class_ids": set(), "weekly_minutes": 0, "load_count": 0},
+        )
         if load.subject_name:
             summary["subjects"].add(load.subject_name)
         if load.class_id is not None:
             summary["class_ids"].add(load.class_id)
+        summary["load_count"] += 1
+        if load.start_time and load.end_time and load.days_of_week:
+            days_count = len(load.days_of_week) if isinstance(load.days_of_week, list) else 0
+            try:
+                sh, sm = map(int, load.start_time.split(":"))
+                eh, em = map(int, load.end_time.split(":"))
+                dur = (eh * 60 + em) - (sh * 60 + sm)
+                if dur > 0:
+                    summary["weekly_minutes"] += dur * days_count
+            except Exception:
+                pass
     return summaries
 
 
@@ -183,11 +204,13 @@ def list_users(
         if user.account_status == "pending":
             item["email_status"] = getattr(user, "email_status", "sent") or "sent"
         if client_role == "teacher" and user.staff_id:
-            summary = teacher_summaries.get(user.staff_id, {"subjects": set(), "class_ids": set()})
+            summary = teacher_summaries.get(user.staff_id, {"subjects": set(), "class_ids": set(), "weekly_minutes": 0, "load_count": 0})
             item["staff_id"] = user.staff_id
             item["employment_status"] = user.employment_status or ""
             item["subjects"] = sorted(summary["subjects"])
             item["class_count"] = len(summary["class_ids"])
+            item["workload_hours"] = round(summary["weekly_minutes"] / 60, 1) if summary.get("weekly_minutes") else 0
+            item["load_count"] = summary.get("load_count", 0)
             leave_info = leave_summaries.get(user.staff_id, {"is_on_leave": False, "active_substitutions_count": 0})
             item["is_on_leave"] = leave_info["is_on_leave"]
             item["active_substitutions_count"] = leave_info["active_substitutions_count"]
@@ -198,6 +221,162 @@ def list_users(
         response.append(item)
     return response
 
+
+
+def _get_teacher_handled_data(db: Session, staff_id: str) -> dict[str, Any]:
+    teacher_loads = (
+        db.query(
+            SubjectLoad.subject_load_id,
+            SubjectLoad.class_id,
+            SubjectLoad.subject_id,
+            SubjectLoad.start_time,
+            SubjectLoad.end_time,
+            SubjectLoad.days_of_week,
+            Subject.subject_name,
+            Subject.subject_codename,
+            Subject.is_core,
+            Class.section_name,
+            AcademicLevel.grade_level,
+            Class.adviser_staff_id,
+        )
+        .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
+        .join(Class, Class.class_id == SubjectLoad.class_id)
+        .outerjoin(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
+        .filter(SubjectLoad.staff_id == staff_id)
+        .filter(SubjectLoad.is_active_version.is_(True))
+        .filter(SubjectLoad.status.in_(["active", "published"]))
+        .all()
+    )
+
+    class_ids = sorted({load.class_id for load in teacher_loads if load.class_id is not None})
+    class_student_counts: dict[int, int] = {}
+    if class_ids:
+        counts = (
+            db.query(StudentClass.class_id, func.count(StudentClass.student_id))
+            .filter(StudentClass.class_id.in_(class_ids))
+            .filter(StudentClass.enrollment_status == "enrolled")
+            .group_by(StudentClass.class_id)
+            .all()
+        )
+        class_student_counts = {cid: cnt for cid, cnt in counts}
+
+    total_weekly_minutes = 0
+    subjects_dict: dict[int, dict[str, Any]] = {}
+    classes_dict: dict[int, dict[str, Any]] = {}
+
+    for load in teacher_loads:
+        dur_mins = 0
+        if load.start_time and load.end_time and load.days_of_week:
+            days_count = len(load.days_of_week) if isinstance(load.days_of_week, list) else 0
+            try:
+                sh, sm = map(int, load.start_time.split(":"))
+                eh, em = map(int, load.end_time.split(":"))
+                dur = (eh * 60 + em) - (sh * 60 + sm)
+                if dur > 0:
+                    dur_mins = dur * days_count
+                    total_weekly_minutes += dur_mins
+            except Exception:
+                pass
+
+        sid = load.subject_id
+        if sid not in subjects_dict:
+            subjects_dict[sid] = {
+                "subject_id": sid,
+                "subject_name": load.subject_name,
+                "subject_code": load.subject_codename or "",
+                "is_core": bool(load.is_core),
+                "grade_levels": set(),
+                "sections": set(),
+                "weekly_minutes": 0,
+                "load_count": 0,
+            }
+        s_entry = subjects_dict[sid]
+        s_entry["load_count"] += 1
+        s_entry["weekly_minutes"] += dur_mins
+        if load.grade_level:
+            s_entry["grade_levels"].add(f"Grade {load.grade_level}")
+        if load.section_name:
+            s_entry["sections"].add(load.section_name)
+
+        cid = load.class_id
+        if cid not in classes_dict:
+            classes_dict[cid] = {
+                "class_id": cid,
+                "section_name": load.section_name,
+                "grade_level": load.grade_level,
+                "student_count": class_student_counts.get(cid, 0),
+                "is_adviser": load.adviser_staff_id == staff_id,
+                "subjects": set(),
+                "schedule_slots": [],
+            }
+        c_entry = classes_dict[cid]
+        c_entry["subjects"].add(load.subject_name)
+        if load.days_of_week and load.start_time and load.end_time:
+            days_str = "/".join(load.days_of_week) if isinstance(load.days_of_week, list) else str(load.days_of_week)
+            c_entry["schedule_slots"].append(f"{load.subject_name} ({days_str} {load.start_time}-{load.end_time})")
+
+    adviser_classes = (
+        db.query(Class.class_id, Class.section_name, AcademicLevel.grade_level)
+        .outerjoin(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
+        .filter(Class.adviser_staff_id == staff_id)
+        .all()
+    )
+    for adv_class in adviser_classes:
+        if adv_class.class_id not in classes_dict:
+            st_cnt = (
+                db.query(func.count(StudentClass.student_id))
+                .filter(StudentClass.class_id == adv_class.class_id)
+                .filter(StudentClass.enrollment_status == "enrolled")
+                .scalar()
+            ) or 0
+            classes_dict[adv_class.class_id] = {
+                "class_id": adv_class.class_id,
+                "section_name": adv_class.section_name,
+                "grade_level": adv_class.grade_level,
+                "student_count": st_cnt,
+                "is_adviser": True,
+                "subjects": set(),
+                "schedule_slots": [],
+            }
+
+    handled_subjects = []
+    for sid, sinfo in subjects_dict.items():
+        handled_subjects.append({
+            "subject_id": sid,
+            "subject_name": sinfo["subject_name"],
+            "subject_code": sinfo["subject_code"],
+            "is_core": sinfo["is_core"],
+            "grade_levels": sorted(sinfo["grade_levels"]),
+            "sections": sorted(sinfo["sections"]),
+            "class_count": len(sinfo["sections"]),
+            "weekly_hours": round(sinfo["weekly_minutes"] / 60, 1),
+            "load_count": sinfo["load_count"],
+        })
+    handled_subjects.sort(key=lambda s: s["subject_name"])
+
+    handled_classes = []
+    for cid, cinfo in classes_dict.items():
+        handled_classes.append({
+            "class_id": cid,
+            "section_name": cinfo["section_name"],
+            "grade_level": cinfo["grade_level"],
+            "student_count": cinfo["student_count"],
+            "is_adviser": cinfo["is_adviser"],
+            "subjects": sorted(cinfo["subjects"]),
+            "schedule_slots": cinfo["schedule_slots"],
+        })
+    handled_classes.sort(key=lambda c: (c["grade_level"] or 0, c["section_name"]))
+
+    return {
+        "handled_subjects": handled_subjects,
+        "handled_classes": handled_classes,
+        "total_weekly_hours": round(total_weekly_minutes / 60, 1),
+        "load_count": len(teacher_loads),
+        "class_count": len(classes_dict),
+        "subjects": [s["subject_name"] for s in handled_subjects],
+        "class_ids": list(classes_dict.keys()),
+        "subject_ids": list(subjects_dict.keys()),
+    }
 
 
 def get_user_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any]:
@@ -226,18 +405,15 @@ def get_user_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any]:
 
     # Add role-specific fields only after the common account/profile data exists.
     if client_role == "teacher" and user.staff_id:
-        teacher_loads = (
-            db.query(Subject.subject_name, SubjectLoad.class_id)
-            .join(SubjectLoad, Subject.subject_id == SubjectLoad.subject_id)
-            .filter(SubjectLoad.staff_id == user.staff_id)
-            .filter(SubjectLoad.is_active_version.is_(True))
-            .filter(SubjectLoad.status.in_(["active", "published"]))
-            .all()
-        )
+        tdata = _get_teacher_handled_data(db, user.staff_id)
         item["staff_id"] = user.staff_id
         item["employment_status"] = user.employment_status or ""
-        item["subjects"] = sorted({load.subject_name for load in teacher_loads if load.subject_name})
-        item["class_count"] = len({load.class_id for load in teacher_loads if load.class_id is not None})
+        item["subjects"] = tdata["subjects"]
+        item["class_count"] = tdata["class_count"]
+        item["workload_hours"] = tdata["total_weekly_hours"]
+        item["load_count"] = tdata["load_count"]
+        item["handled_subjects"] = tdata["handled_subjects"]
+        item["handled_classes"] = tdata["handled_classes"]
 
     if client_role == "student" and user.student_id:
         class_row = (
@@ -293,9 +469,26 @@ def get_user_analytics(db: Session, user_id: uuid.UUID) -> dict:
     user = _base_user_query(db).filter(UserAccount.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    if role_name_to_client_role(user.role_name) == "student" and user.student_id:
+    client_role = role_name_to_client_role(user.role_name)
+    if client_role == "student" and user.student_id:
         try:
             return _student_user_analytics(db, user.student_id)
+        except Exception:
+            return {
+                "summary": None,
+                "subject_mastery": [],
+                "score_trend": [],
+                "historical_performance": [],
+                "period_performance": [],
+                "quarterly_performance": [],
+                "subject_breakdown": [],
+                "activity_feed": [],
+                "classwork": [],
+                "lms_behavior": None,
+            }
+    if client_role == "teacher" and user.staff_id:
+        try:
+            return _teacher_user_analytics(db, user.staff_id)
         except Exception:
             return {
                 "summary": None,
@@ -318,6 +511,122 @@ def get_user_analytics(db: Session, user_id: uuid.UUID) -> dict:
         "quarterly_performance": [],
         "subject_breakdown": [],
         "activity_feed": [],
+        "classwork": [],
+        "lms_behavior": None,
+    }
+
+
+def _teacher_user_analytics(db: Session, staff_id: str) -> dict:
+    tdata = _get_teacher_handled_data(db, staff_id)
+    class_ids = tdata["class_ids"]
+    subject_ids = tdata["subject_ids"]
+
+    total_students = 0
+    if class_ids:
+        total_students = (
+            db.query(func.count(func.distinct(StudentClass.student_id)))
+            .filter(StudentClass.class_id.in_(class_ids))
+            .filter(StudentClass.enrollment_status == "enrolled")
+            .scalar()
+        ) or 0
+
+    avg_grade = None
+    if class_ids and subject_ids:
+        raw_avg = (
+            db.query(func.avg((StudentSubmission.grade / func.nullif(Classwork.total_points, 0)) * 100))
+            .join(ClassworkAssignment, ClassworkAssignment.classwork_assignment_id == StudentSubmission.classwork_assignment_id)
+            .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
+            .filter(ClassworkAssignment.class_id.in_(class_ids))
+            .filter(Classwork.subject_id.in_(subject_ids))
+            .filter(StudentSubmission.status == "graded")
+            .filter(StudentSubmission.grade.isnot(None))
+            .filter(Classwork.total_points > 0)
+            .scalar()
+        )
+        if raw_avg is not None:
+            avg_grade = round(float(raw_avg), 1)
+
+    if avg_grade is None and class_ids:
+        period_grade_avg = (
+            db.query(func.avg(StudentPeriodGrade.final_period_grade))
+            .filter(StudentPeriodGrade.class_id.in_(class_ids))
+            .filter(StudentPeriodGrade.final_period_grade.isnot(None))
+            .scalar()
+        )
+        if period_grade_avg is not None:
+            avg_grade = round(float(period_grade_avg), 1)
+
+    subject_breakdown = []
+    if class_ids:
+        for subj in tdata["handled_subjects"]:
+            sid = subj["subject_id"]
+            sname = subj["subject_name"]
+            subj_avg = (
+                db.query(func.avg((StudentSubmission.grade / func.nullif(Classwork.total_points, 0)) * 100))
+                .join(ClassworkAssignment, ClassworkAssignment.classwork_assignment_id == StudentSubmission.classwork_assignment_id)
+                .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
+                .filter(ClassworkAssignment.class_id.in_(class_ids))
+                .filter(Classwork.subject_id == sid)
+                .filter(StudentSubmission.status == "graded")
+                .filter(StudentSubmission.grade.isnot(None))
+                .filter(Classwork.total_points > 0)
+                .scalar()
+            )
+            val = round(float(subj_avg), 1) if subj_avg is not None else 0
+            subject_breakdown.append({"subject": sname, "value": val})
+
+    period_performance = []
+    if class_ids:
+        periods = (
+            db.query(AcademicPeriod.period_code, func.avg(StudentPeriodGrade.final_period_grade))
+            .join(StudentPeriodGrade, StudentPeriodGrade.academic_period_id == AcademicPeriod.academic_period_id)
+            .filter(StudentPeriodGrade.class_id.in_(class_ids))
+            .filter(StudentPeriodGrade.final_period_grade.isnot(None))
+            .group_by(AcademicPeriod.period_code, AcademicPeriod.period_order)
+            .order_by(AcademicPeriod.period_order.asc())
+            .all()
+        )
+        for p_code, p_avg in periods:
+            period_performance.append({
+                "period": p_code or "Period",
+                "score": round(float(p_avg), 1),
+            })
+
+    activity_feed = []
+    if subject_ids:
+        recent_cw = (
+            db.query(Classwork.title, Subject.subject_name, Classwork.created_at)
+            .join(Subject, Subject.subject_id == Classwork.subject_id)
+            .filter(Classwork.subject_id.in_(subject_ids))
+            .order_by(Classwork.created_at.desc())
+            .limit(5)
+            .all()
+        )
+        for cw in recent_cw:
+            time_str = cw.created_at.strftime("%b %d, %I:%M %p") if cw.created_at else "Recently"
+            activity_feed.append({
+                "title": f"New classwork added: {cw.title} ({cw.subject_name})",
+                "timestamp": time_str,
+            })
+
+    return {
+        "summary": {
+            "workloadHours": tdata["total_weekly_hours"],
+            "loadCount": tdata["load_count"],
+            "classesHandled": tdata["class_count"],
+            "subjectsHandled": len(tdata["handled_subjects"]),
+            "totalStudents": total_students,
+            "classPerformance": avg_grade if avg_grade is not None else "N/A",
+        },
+        "handled_subjects": tdata["handled_subjects"],
+        "handled_classes": tdata["handled_classes"],
+        "subject_mastery": [],
+        "score_trend": [],
+        "historical_performance": [],
+        "period_performance": period_performance,
+        "quarterly_performance": period_performance,
+        "subject_breakdown": subject_breakdown,
+        "activity_feed": activity_feed,
         "classwork": [],
         "lms_behavior": None,
     }
