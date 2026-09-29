@@ -20,6 +20,17 @@ npx expo start
 
 #sample accounts (login)
 
+Admin: demo-admin@example.com / DemoAdmin!2026
+Teacher: demo-teacher@example.com / DemoTeacher!2026
+
+Student	Email	Password
+Intervention target	demo-remediation-target@example.com	CH-xyemaZrMR63_u0KckBH3IB_7szNKLe8SY8sheqv4
+
+Another student 
+Email: demo-drew-balanced@example.com
+Password: n5awoaRQtc9qttEbn9fix1DRzZlUdHOB
+
+
 #admin
 admin@mnsts.edu.ph
 hash_mnsts_admin_01
