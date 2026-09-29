@@ -9,19 +9,77 @@ from fastapi import HTTPException, UploadFile
 from app.schemas.Quiz import QuizImportPreviewResponse, QuizOptionIn, QuizQuestionIn
 
 
-QUESTION_RE = re.compile(r"^[^0-9A-Da-d]*(\d+)[\).]\s*(.+)$")
-OPTION_RE = re.compile(r"^\s*([A-Da-d])[\).]\s*(.+)$")
-ANSWER_RE = re.compile(r"^\s*(?:answer|ans)\s*[:\-]\s*([A-Da-d])(?:[\).]\s*.*)?\s*$", re.IGNORECASE)
-ANSWER_KEY_HEADER_RE = re.compile(r"^\s*answer\s+key\s*$", re.IGNORECASE)
-ANSWER_KEY_ITEM_RE = re.compile(r"^\s*(\d+)[\).]\s*([A-Da-d])(?:[\).]\s*.*)?\s*$")
-INLINE_KEY_RE = re.compile(r"^\(([A-Da-d])\)\s*(.+)$")
-SECTION_HEADER_RE = re.compile(r"^\s*(?:section\s+\d+|page\s+\d+|chapter\s+\d+|part\s+[ivxlcdm\d]+).*$", re.IGNORECASE)
+QUESTION_START_RE = re.compile(r"^\s*[_~–—\-\.\s]*\s*(\d+)[\)\.]\s*(.+)$")
+DOC_HEADER_RE = re.compile(
+    r"^\s*(?:name|student\s+name|grade(?:\s*&|\s+and)?\s*section|score|date|class|subject|teacher)\s*[:\-].*$",
+    re.IGNORECASE,
+)
+SECTION_HEADER_RE = re.compile(
+    r"^\s*(?:part\s+[ivxlcdm\d]+|section\s+\d+|chapter\s+\d+)\b.*$",
+    re.IGNORECASE,
+)
+DIRECTIONS_START_RE = re.compile(
+    r"^\s*(?:directions|instructions|general\s+instructions)\s*[:\-]?.*$",
+    re.IGNORECASE,
+)
 PAGE_FOOTER_RE = re.compile(
     r"^\s*(?:page\s+\d+(?:\s*(?:of|/)\s*\d+)?|[-–—~*\[\(]+\s*page\s+\d+\s*[-–—~*\]\)]+|[-–—~*]+\s*\d+\s*[-–—~*]+|\d+\s*(?:of|/)\s*\d+)\s*$",
     re.IGNORECASE,
 )
 EXPLANATION_RE = re.compile(r"^\s*(?:explanation|rationale|reason|notes?)\s*[:\-].*$", re.IGNORECASE)
+BLANK_ANSWER_RE = re.compile(r"^\s*(?:answer|ans)\s*[:\-]\s*[_.\s-]*$", re.IGNORECASE)
+ANSWER_LINE_RE = re.compile(r"^\s*(?:answer|ans)\s*[:\-]\s*(.+)$", re.IGNORECASE)
+INLINE_KEY_RE = re.compile(r"^\(([A-Da-d])\)\s*(.+)$")
+TRAILING_KEY_HEADER_RE = re.compile(
+    r"^\s*(?:quick\s+)?answer\s+keys?(?:\s*\(.*|\s*[:\-].*|\s*$)",
+    re.IGNORECASE | re.MULTILINE,
+)
 
+
+def _extract_options_from_line(line: str) -> list[tuple[str, str]]:
+    pattern = re.compile(r"(?:^|\s+|(?<=[^\s]))([A-Da-d])[\).]\s*")
+    matches = list(pattern.finditer(line))
+    if not matches:
+        return []
+    m0 = matches[0]
+    if line[:m0.start()].strip() != "":
+        return []
+    first_label = m0.group(1).upper()
+    results = []
+    curr_label = first_label
+    curr_start = m0.end()
+    for m in matches[1:]:
+        cand_label = m.group(1).upper()
+        if ord(cand_label) == ord(curr_label) + 1:
+            content = line[curr_start:m.start()].strip()
+            results.append((curr_label, content))
+            curr_label = cand_label
+            curr_start = m.end()
+    results.append((curr_label, line[curr_start:].strip()))
+    return results
+
+
+def _parse_trailing_keys(text: str) -> dict[int, str]:
+    if not text.strip():
+        return {}
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    joined = " ".join(lines)
+    pattern = re.compile(
+        r"(?:^|\s+)(\d+)\s*[\.\-\)]\s*(.*?)(?=(?:\s+\d+\s*[\.\-\)]\s*)|$)",
+        re.DOTALL,
+    )
+    keys: dict[int, str] = {}
+    for match in pattern.finditer(joined):
+        num = int(match.group(1))
+        val = match.group(2).strip()
+        val = re.sub(
+            r"^(?:\[(?:key/rubric|key|rubric)\]|key|rubric)\s*[:\-]?\s*",
+            "",
+            val,
+            flags=re.IGNORECASE,
+        ).strip()
+        keys[num] = val
+    return keys
 
 
 async def preview_quiz_import(file: UploadFile) -> QuizImportPreviewResponse:
@@ -72,10 +130,31 @@ def _extract_pdf_text(content: bytes) -> str:
 
     try:
         reader = PdfReader(BytesIO(content))
-        text = "\n".join(page.extract_text() or "" for page in reader.pages)
-        # Strip NUL bytes left by broken font encodings (e.g. Symbol font
-        # without a ToUnicode CMap, common in jsPDF-generated PDFs).
-        text = text.replace("\x00", "")
+        raw_text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        # Handle legacy UTF-16BE lines where jsPDF exported without ToUnicode:
+        # pypdf extracted 0x21 0x92 (→) as "!\x92", 0x22 0x64 (≤) as '"d', 0x22 0x65 (≥) as '"e', 0x22 0x82 (⊂) as '"\x82'
+        # Crucially: In UTF-16BE, ASCII characters have \x00 before them (e.g. \x00" \x00d in "data", \x00! \x00' in Wow!').
+        # Non-ASCII 2-byte characters have a non-zero high byte, so the high byte is NOT preceded by \x00.
+        # We perform these substitutions strictly per-line on lines containing null bytes using lookbehind to prevent
+        # corrupting normal English words like "data", "electron", or "Wow!'".
+        cleaned_lines = []
+        for line in raw_text.splitlines():
+            if "\x00" in line:
+                line = re.sub(r'(?<!\x00)"d', "<=", line)
+                line = re.sub(r'(?<!\x00)"e', ">=", line)
+                line = re.sub(r'(?<!\x00)"[\x82\u201a]', "subset of", line)
+                line = re.sub(r'(?<!\x00)![\x92\u2019]', "->", line)
+                line = line.replace("\x00", "")
+            cleaned_lines.append(line)
+        text = "\n".join(cleaned_lines)
+
+        # Restore non-breaking hyphen glyph artifact: \u2011 is encoded in UTF-16BE as 0x20 0x11.
+        # In PDFs lacking ToUnicode mapping, pypdf extracts 0x20 as ' ' and 0x11 as DC1.
+        # Collapsing preceding space and \x11 into a hyphen reconstructs the original hyphenated word without stray spaces.
+        text = re.sub(r"[ \t]*\x11[ \t]*", "-", text)
+        # Treat \x0b (vertical tab) and \x0c (form feed) as whitespace (newlines), not deletions
+        text = re.sub(r"[\x0b\x0c]", "\n", text)
+        text = re.sub(r"[\x01-\x08\x0e-\x1f\x7f]", "", text)
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Unable to extract text from this PDF") from exc
     if not text.strip():
@@ -133,84 +212,132 @@ def _decode_text(content: bytes, suffix: str) -> str:
             continue
         printable_ratio = sum(1 for char in text if char.isprintable() or char.isspace()) / max(len(text), 1)
         if printable_ratio > 0.85 and "\x00" not in text[:200]:
-            return text
+            return re.sub(r"[\x0b\x0c]", "\n", text)
     raise HTTPException(status_code=400, detail="Unable to read this quiz file as text")
 
 
 def _title_from_text(text: str, filename: str) -> str:
     for line in text.splitlines():
         cleaned = line.strip()
-        if cleaned and not QUESTION_RE.match(cleaned) and not OPTION_RE.match(cleaned):
+        if (
+            cleaned
+            and not QUESTION_START_RE.match(cleaned)
+            and not _extract_options_from_line(cleaned)
+            and not DOC_HEADER_RE.match(cleaned)
+            and not SECTION_HEADER_RE.match(cleaned)
+            and not DIRECTIONS_START_RE.match(cleaned)
+            and not TRAILING_KEY_HEADER_RE.match(cleaned)
+        ):
             if len(cleaned) <= 80:
                 return cleaned
     return Path(filename).stem.replace("_", " ").replace("-", " ").title()
 
 
 def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
+    """Two-pass quiz parser: parse structure first, then resolve answer keys."""
+    clean_text = text.replace("\x00", "")
+    clean_text = re.sub(r"[ \t]*\x11[ \t]*", "-", clean_text)
+    clean_text = re.sub(r"[\x0b\x0c]", "\n", clean_text)
+    clean_text = re.sub(r"[\x01-\x08\x0e-\x1f\x7f]", "", clean_text)
+
+    # Separate trailing answer key section if present
+    tk_match = TRAILING_KEY_HEADER_RE.search(clean_text)
+    if tk_match:
+        body_text = clean_text[: tk_match.start()]
+        trailing_key_raw = clean_text[tk_match.end() :]
+        answer_key_map = _parse_trailing_keys(trailing_key_raw)
+    else:
+        body_text = clean_text
+        answer_key_map = {}
+
+    # Pass 1: Parse questions and options from body text
     parsed: list[dict] = []
     current: dict | None = None
-    warnings: list[str] = []
-    answer_key_map: dict[int, str] = {}
-    in_answer_key = False
+    in_directions = False
 
-    for raw_line in text.splitlines():
+    for raw_line in body_text.splitlines():
         line = raw_line.strip()
         if not line:
             continue
-        if ANSWER_KEY_HEADER_RE.match(line):
+
+        if DOC_HEADER_RE.match(line):
+            continue
+
+        if SECTION_HEADER_RE.match(line):
             if current:
                 parsed.append(current)
                 current = None
-            in_answer_key = True
+            in_directions = False
             continue
-        if in_answer_key:
-            key_match = ANSWER_KEY_ITEM_RE.match(line)
-            if key_match:
-                answer_key_map[int(key_match.group(1))] = key_match.group(2).upper()
-            continue
-        question_match = QUESTION_RE.match(line)
-        option_match = OPTION_RE.match(line)
-        answer_match = ANSWER_RE.match(line)
 
-        if question_match:
+        if DIRECTIONS_START_RE.match(line):
             if current:
                 parsed.append(current)
-            body = question_match.group(2).strip()
-            inline_answer = INLINE_KEY_RE.match(body)
-            inline_answer_key = inline_answer.group(1).upper() if inline_answer else None
-            question_text = inline_answer.group(2).strip() if inline_answer else body
+                current = None
+            in_directions = True
+            continue
+
+        if PAGE_FOOTER_RE.match(line):
+            continue
+
+        q_match = QUESTION_START_RE.match(line)
+        if q_match:
+            in_directions = False
+            if current:
+                parsed.append(current)
+            q_num = int(q_match.group(1))
+            body = q_match.group(2).strip()
+            inline_ans_match = INLINE_KEY_RE.match(body)
+            if inline_ans_match:
+                inline_key = inline_ans_match.group(1).upper()
+                q_text = inline_ans_match.group(2).strip()
+            else:
+                inline_key = None
+                q_text = body
             current = {
-                "number": int(question_match.group(1)),
-                "question_text": question_text,
+                "number": q_num,
+                "question_text": q_text,
                 "options": [],
-                "answer_key": inline_answer_key,
+                "inline_key": inline_key,
                 "has_answer_line": False,
                 "has_explanation_line": False,
             }
             continue
 
-        if option_match and current:
-            label = option_match.group(1).upper()
-            option_text = option_match.group(2).strip()
-            inline_answer = INLINE_KEY_RE.match(option_text)
-            if inline_answer:
-                current["answer_key"] = inline_answer.group(1).upper()
-                option_text = inline_answer.group(2).strip()
-            current["options"].append({"label": label, "text": option_text})
+        if in_directions:
             continue
 
-        if answer_match and current:
-            current["answer_key"] = answer_match.group(1).upper()
+        if current and not current.get("has_answer_line") and not current.get("has_explanation_line"):
+            opt_list = _extract_options_from_line(line)
+            if opt_list:
+                for lbl, txt in opt_list:
+                    inline_opt_match = INLINE_KEY_RE.match(txt)
+                    if inline_opt_match:
+                        current["inline_key"] = inline_opt_match.group(1).upper()
+                        txt = inline_opt_match.group(2).strip()
+                    current["options"].append({"label": lbl, "text": txt})
+                continue
+
+        if current and BLANK_ANSWER_RE.match(line):
+            # A blank "Answer: ____" line is NOT an answer key; ignore it
             current["has_answer_line"] = True
             continue
 
-        if EXPLANATION_RE.match(line) and current:
+        if current and ANSWER_LINE_RE.match(line):
+            ans_val = ANSWER_LINE_RE.match(line).group(1).strip()
+            m_letter = re.match(r"^([A-Da-d])(?:[\).]\s*.*)?$", ans_val)
+            if m_letter:
+                current["inline_key"] = m_letter.group(1).upper()
+            else:
+                current["inline_key"] = ans_val
+            current["has_answer_line"] = True
+            continue
+
+        if current and EXPLANATION_RE.match(line):
             current["has_explanation_line"] = True
             continue
 
         if current:
-            if SECTION_HEADER_RE.match(line) or PAGE_FOOTER_RE.match(line):
-                continue
             if current.get("has_answer_line") or current.get("has_explanation_line"):
                 continue
             if current["options"]:
@@ -218,48 +345,116 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
             else:
                 current["question_text"] = f"{current['question_text']} {line}".strip()
 
-
     if current:
         parsed.append(current)
 
+    # Pass 2: Resolve keys with precedence: inline > trailing > none
     questions: list[QuizQuestionIn] = []
+    warnings: list[str] = []
+
     for index, item in enumerate(parsed, start=1):
+        num = item["number"]
         options = item["options"]
-        if len(options) >= 2:
-            correct_label = item["answer_key"] or answer_key_map.get(item["number"]) or options[0]["label"]
-            if not item["answer_key"] and item["number"] not in answer_key_map:
-                warnings.append(f"Question {index} had no answer key; first option was marked correct.")
-            questions.append(QuizQuestionIn(
-                question_text=item["question_text"],
-                question_type="MULTIPLE_CHOICE",
-                points=1,
-                display_order=len(questions) + 1,
-                difficulty_level="MEDIUM",
-                options=[
-                    QuizOptionIn(
-                        option_text=option["text"],
-                        is_correct=option["label"] == correct_label,
-                        option_order=option_index,
+        inline_key = item.get("inline_key")
+        trailing_key = answer_key_map.get(num)
+
+        resolved_key = None
+        if inline_key and trailing_key:
+            if inline_key.strip().upper() == trailing_key.strip().upper():
+                resolved_key = inline_key
+            else:
+                matching_inline_opt = next(
+                    (o for o in options if o["label"].upper() == inline_key.upper()),
+                    None,
+                )
+                matching_trailing_opt = next(
+                    (
+                        o
+                        for o in options
+                        if o["label"].upper() == trailing_key.upper()
+                        or o["text"].strip().lower() == trailing_key.strip().lower()
+                    ),
+                    None,
+                )
+                if (
+                    matching_inline_opt
+                    and matching_trailing_opt
+                    and matching_inline_opt == matching_trailing_opt
+                ):
+                    resolved_key = inline_key
+                else:
+                    resolved_key = inline_key
+                    warnings.append(
+                        f"Question {num}: inline answer key ({inline_key}) took precedence over trailing key ({trailing_key})."
                     )
-                    for option_index, option in enumerate(options, start=1)
-                ],
-            ))
+        elif inline_key:
+            resolved_key = inline_key
+        elif trailing_key:
+            resolved_key = trailing_key
         else:
-            warnings.append(f"Question {index} was imported as short answer because it has fewer than two options.")
-            correct_key = item["answer_key"] or answer_key_map.get(item["number"])
+            warnings.append(
+                f"Question {num} has no answer key. Please select the correct answer in the builder."
+            )
+
+        if len(options) >= 2:
+            correct_label = None
+            if resolved_key:
+                rk_upper = resolved_key.strip().upper()
+                rk_lower = resolved_key.strip().lower()
+                for opt in options:
+                    if opt["label"].upper() == rk_upper:
+                        correct_label = opt["label"]
+                        break
+                if not correct_label:
+                    for opt in options:
+                        opt_text_lower = opt["text"].strip().lower()
+                        if opt_text_lower == rk_lower:
+                            correct_label = opt["label"]
+                            break
+                        if rk_upper in ("T", "TRUE") and opt_text_lower in ("true", "t"):
+                            correct_label = opt["label"]
+                            break
+                        if rk_upper in ("F", "FALSE") and opt_text_lower in ("false", "f"):
+                            correct_label = opt["label"]
+                            break
+
+            questions.append(
+                QuizQuestionIn(
+                    question_text=item["question_text"],
+                    question_type="MULTIPLE_CHOICE",
+                    points=1,
+                    display_order=len(questions) + 1,
+                    difficulty_level="MEDIUM",
+                    options=[
+                        QuizOptionIn(
+                            option_text=option["text"],
+                            is_correct=(option["label"] == correct_label) if correct_label else False,
+                            option_order=option_index,
+                        )
+                        for option_index, option in enumerate(options, start=1)
+                    ],
+                )
+            )
+        else:
             sa_options = []
-            if correct_key and correct_key.strip():
-                sa_options.append(QuizOptionIn(
-                    option_text=correct_key.strip(),
-                    is_correct=True,
-                    option_order=1,
-                ))
-            questions.append(QuizQuestionIn(
-                question_text=item["question_text"],
-                question_type="SHORT_ANSWER",
-                points=1,
-                display_order=len(questions) + 1,
-                difficulty_level="MEDIUM",
-                options=sa_options,
-            ))
+            if resolved_key and resolved_key.strip():
+                sa_options.append(
+                    QuizOptionIn(
+                        option_text=resolved_key.strip(),
+                        is_correct=True,
+                        option_order=1,
+                    )
+                )
+            questions.append(
+                QuizQuestionIn(
+                    question_text=item["question_text"],
+                    question_type="SHORT_ANSWER",
+                    points=1,
+                    display_order=len(questions) + 1,
+                    difficulty_level="MEDIUM",
+                    options=sa_options,
+                )
+            )
+
     return questions, warnings
+
