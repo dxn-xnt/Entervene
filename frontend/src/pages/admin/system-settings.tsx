@@ -13,6 +13,7 @@ import { Switch } from "@/components/retroui/Switch";
 import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
+import { useToast } from "@/components/retroui/use-toast";
 import { ArrowUpRight, Lock, Plus, Calendar, Save } from "lucide-react";
 import AddAcademicPeriodModal from "./forms/add-academic-period";
 import AddPathwayModal from "./forms/add-pathway";
@@ -100,11 +101,9 @@ export default function AdminSystemSettings() {
   const [templates, setTemplates] = React.useState<Template[]>([]);
   const [isPeriodModalOpen, setIsPeriodModalOpen] = React.useState(false);
 
-  // Toast
-  const [toastMsg, setToastMsg] = React.useState<string | null>(null);
-  const showToast = (msg: string) => {
-    setToastMsg(msg);
-    window.setTimeout(() => setToastMsg(null), 2400);
+  const toast = useToast();
+  const showToast = (msg: string, status: "success" | "error" = "success") => {
+    toast[status]({ title: msg });
   };
 
   // Subject Groups state
@@ -180,7 +179,7 @@ export default function AdminSystemSettings() {
       showToast(`Grade ${scope.grade_level} pathway assignment updated.`);
     } catch (err) {
       console.error("Failed to update pathway scope", err);
-      showToast("Failed to update pathway scope.");
+      showToast("Failed to update pathway scope.", "error");
     }
   };
 
@@ -195,7 +194,7 @@ export default function AdminSystemSettings() {
       showToast(`Pathway ${pathway.name} ${updated.is_enabled ? "enabled" : "disabled"}.`);
     } catch (err) {
       console.error("Failed to toggle pathway", err);
-      showToast("Failed to toggle pathway.");
+      showToast("Failed to toggle pathway.", "error");
     }
   };
 
@@ -303,6 +302,7 @@ export default function AdminSystemSettings() {
       await refetchGlobalSettings();
     } catch (err) {
       console.error(`Failed to update setting ${key}:`, err);
+      throw err;
     }
   };
 
@@ -311,6 +311,8 @@ export default function AdminSystemSettings() {
     try {
       await saveSingleSetting("general_average_passing_grade", averagePassing);
       showToast("General average threshold saved");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to save threshold.", "error");
     } finally {
       setIsSavingThresholds(false);
     }
@@ -318,7 +320,7 @@ export default function AdminSystemSettings() {
 
   const handleSaveTeacherCaps = async () => {
     if (parseInt(minSubjects) > parseInt(maxSubjects)) {
-      showToast("Minimum subjects cannot exceed Maximum subjects.");
+      showToast("Minimum subjects cannot exceed Maximum subjects.", "error");
       return;
     }
     setIsSavingTeacherCaps(true);
@@ -333,7 +335,7 @@ export default function AdminSystemSettings() {
       refetchGlobalSettings();
     } catch (err) {
       console.error(err);
-      showToast("Failed to save teacher workload caps.");
+      showToast("Failed to save teacher workload caps.", "error");
     } finally {
       setIsSavingTeacherCaps(false);
     }
@@ -346,12 +348,14 @@ export default function AdminSystemSettings() {
       const startMins = (parseInt(schoolDayStart.split(":")[0]) || 0) * 60 + (parseInt(schoolDayStart.split(":")[1]) || 0);
       const endMins = (parseInt(schoolDayEnd.split(":")[0]) || 0) * 60 + (parseInt(schoolDayEnd.split(":")[1]) || 0);
       if (startMins >= endMins) {
-        showToast("Start time must be before end time.");
+        showToast("Start time must be before end time.", "error");
         return;
       }
       await saveSingleSetting("school_day_start", schoolDayStart);
       await saveSingleSetting("school_day_end", schoolDayEnd);
       showToast("School operational hours saved");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to save school hours.", "error");
     } finally {
       setIsSavingSchoolHours(false);
     }
@@ -363,7 +367,7 @@ export default function AdminSystemSettings() {
       showToast("Subject group passing threshold updated");
       await loadSubjectGroups();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to update threshold");
+      showToast(err instanceof Error ? err.message : "Failed to update threshold", "error");
     }
   };
 
@@ -381,7 +385,7 @@ export default function AdminSystemSettings() {
             affectedSubjects: customErr.affectedSubjects,
           });
         } else {
-          showToast(err instanceof Error ? err.message : "Failed to deactivate group");
+          showToast(err instanceof Error ? err.message : "Failed to deactivate group", "error");
         }
       }
     } else {
@@ -390,7 +394,7 @@ export default function AdminSystemSettings() {
         showToast("Subject group activated");
         await loadSubjectGroups();
       } catch (err) {
-        showToast(err instanceof Error ? err.message : "Failed to activate group");
+        showToast(err instanceof Error ? err.message : "Failed to activate group", "error");
       }
     }
   };
@@ -419,6 +423,7 @@ export default function AdminSystemSettings() {
       await loadSubjectGroups();
     } catch (err) {
       setGroupError(err instanceof Error ? err.message : "Failed to create group");
+      showToast(err instanceof Error ? err.message : "Failed to create group", "error");
     }
   };
 
@@ -430,6 +435,8 @@ export default function AdminSystemSettings() {
       await saveSingleSetting("medical_pathway_enabled", medicalEnabled ? "true" : "false");
       await saveSingleSetting("engineering_pathway_enabled", engineeringEnabled ? "true" : "false");
       showToast("Curriculum scope saved");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to save curriculum scope.", "error");
     } finally {
       setIsSavingScope(false);
     }
@@ -452,7 +459,7 @@ export default function AdminSystemSettings() {
       showToast(`Active academic year changed to ${selectedYear?.year_label || yearIdStr}`);
     } catch (err) {
       console.error("Failed to change academic year", err);
-      showToast("Failed to change academic year.");
+      showToast("Failed to change academic year.", "error");
     }
   };
 
@@ -477,7 +484,7 @@ export default function AdminSystemSettings() {
         showToast(`Active period changed to ${selectedP?.period || `Period ${periodId}`}`);
       } catch (err) {
         console.error("Failed to change academic period", err);
-        showToast("Failed to change academic period.");
+        showToast("Failed to change academic period.", "error");
       }
     }
     setPendingPeriodId(null);
@@ -1387,14 +1394,6 @@ export default function AdminSystemSettings() {
       </Dialog>
 
       {/* Toast */}
-      {toastMsg && (
-        <div
-          className="fixed right-6 bottom-6 z-50 border-2 border-black bg-white px-4 py-3 font-bold text-sm max-w-sm"
-          style={{ boxShadow: "5px 5px 0 #000" }}
-        >
-          {toastMsg}
-        </div>
-      )}
     </AppLayout>
   );
 }

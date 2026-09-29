@@ -9,6 +9,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Search, Sparkles, CheckCircle2, XCircle, Archive, Shield, Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { useAuth } from "@/context/AuthContext";
@@ -21,6 +22,7 @@ import {
 } from "@/lib/interventions-api";
 
 export default function AdminInterventions() {
+  const toast = useToast();
   const { user } = useAuth();
   const isTeacher = user?.role === "teacher";
   const isAdmin = user?.role === "admin";
@@ -43,9 +45,9 @@ export default function AdminInterventions() {
         status: statusFilter === "All" ? undefined : statusFilter,
       });
       setItems(res.suggestions || []);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Failed to load interventions");
+      setError(err instanceof Error ? err.message : "Failed to load interventions");
     } finally {
       setLoading(false);
     }
@@ -97,9 +99,11 @@ export default function AdminInterventions() {
     setActionLoadingId(id);
     try {
       await approveIntervention(id);
+      toast.success({ title: "Intervention approved" });
       await loadData();
     } catch (err) {
       console.error(err);
+      toast.error({ title: "Unable to approve intervention", description: err instanceof Error ? err.message : undefined });
     } finally {
       setActionLoadingId(null);
     }
@@ -109,9 +113,11 @@ export default function AdminInterventions() {
     setActionLoadingId(id);
     try {
       await dismissIntervention(id);
+      toast.success({ title: "Intervention dismissed" });
       await loadData();
     } catch (err) {
       console.error(err);
+      toast.error({ title: "Unable to dismiss intervention", description: err instanceof Error ? err.message : undefined });
     } finally {
       setActionLoadingId(null);
     }
@@ -121,9 +127,11 @@ export default function AdminInterventions() {
     setActionLoadingId(id);
     try {
       await archiveIntervention(id);
+      toast.success({ title: "Intervention archived" });
       await loadData();
     } catch (err) {
       console.error(err);
+      toast.error({ title: "Unable to archive intervention", description: err instanceof Error ? err.message : undefined });
     } finally {
       setActionLoadingId(null);
     }

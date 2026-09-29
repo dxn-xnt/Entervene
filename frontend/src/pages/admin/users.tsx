@@ -28,6 +28,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import { cn } from "@/lib/utils";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import AssignSubstituteModal from "./forms/assign-substitute-modal";
+import { useToast } from "@/components/retroui/use-toast";
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -189,6 +190,7 @@ function groupStudents(students: User[], sortBy: "A-Z" | "Z-A" = "A-Z"): Map<str
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function AdminUsers() {
+  const toast = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialTab = (searchParams.get("tab") ?? "teacher") as TabId;
@@ -210,17 +212,18 @@ export default function AdminUsers() {
   );
   const [resendingId, setResendingId] = useState<string | null>(null);
 
-  const handleResend = useCallback(async (user: User) => {
+  const handleResend = async (user: User) => {
     try {
       setResendingId(user.id);
       await resendUserInvitation(user.id);
+      toast.success({ title: "Invitation resent" });
       await fetchUsers();
-    } catch (err: any) {
-      alert(err.message || "Failed to resend invitation.");
+    } catch (err: unknown) {
+      toast.error({ title: "Failed to resend invitation", description: err instanceof Error ? err.message : undefined });
     } finally {
       setResendingId(null);
     }
-  }, []);
+  };
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);

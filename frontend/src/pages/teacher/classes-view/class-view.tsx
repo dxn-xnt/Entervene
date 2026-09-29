@@ -28,6 +28,7 @@ import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
+import { useToast } from "@/components/retroui/use-toast";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Text } from "@/components/retroui/Text";
 import { Select } from "@/components/retroui/Select";
@@ -2567,6 +2568,7 @@ function StudentRow({
   subjectLoads: TeacherAdvisoryClassDetailResponse["subject_loads"];
   onSelectStudent?: (student: TeacherAdvisoryStudentItem) => void;
 }) {
+  const toast = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<SuggestionResponse[]>([]);
@@ -2604,11 +2606,13 @@ function StudentRow({
       if (action === "approve") await approveSuggestion(id);
       else if (action === "dismiss") await dismissSuggestion(id);
       else await archiveSuggestion(id);
+      toast.success({ title: `Suggestion ${action === "approve" ? "approved" : action === "dismiss" ? "dismissed" : "archived"}` });
       await loadHistory();
     } catch (err) {
       setHistoryError(
         err instanceof Error ? err.message : "Unable to update suggestion.",
       );
+      toast.error({ title: "Unable to update suggestion", description: err instanceof Error ? err.message : undefined });
     }
   }
 

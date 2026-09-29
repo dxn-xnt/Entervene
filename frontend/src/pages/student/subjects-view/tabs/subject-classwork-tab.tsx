@@ -24,6 +24,7 @@ import { Alert } from "@/components/retroui/Alert";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { API_URL, apiFetch } from "@/lib/api";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { LoadingPanel } from "@/components/loading-panel";
@@ -266,6 +267,7 @@ export default function SubjectClassworkTab({
   classId,
   subjectId,
 }: SubjectClassworkTabProps) {
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const autoOpenedAssignmentRef = useRef<number | null>(null);
   const [classworks, setClassworks] = useState<ClassworkAssignment[]>([]);
@@ -675,18 +677,9 @@ export default function SubjectClassworkTab({
       setSelectedSubmission(submission);
       updateClassworkStatus(assignmentId, submission.status);
 
-      setNotice({
-        status: "success",
-        title: "Assignment submitted",
-        description: "Your work was submitted successfully.",
-      });
+      toast.success({ title: "Assignment submitted", description: "Your work was submitted successfully." });
     } catch (err) {
-      setNotice({
-        status: "error",
-        title: "Submission failed",
-        description:
-          err instanceof Error ? err.message : "Failed to submit assignment",
-      });
+      toast.error({ title: "Submission failed", description: err instanceof Error ? err.message : "Failed to submit assignment" });
     } finally {
       setSubmittingId(null);
     }
@@ -720,20 +713,9 @@ export default function SubjectClassworkTab({
       );
       updateClassworkStatus(assignmentId, submission.status);
 
-      setNotice({
-        status: "success",
-        title: "Reading completed",
-        description: "You have marked this reading material as completed.",
-      });
+      toast.success({ title: "Reading completed", description: "You have marked this reading material as completed." });
     } catch (err) {
-      setNotice({
-        status: "error",
-        title: "Failed to update reading status",
-        description:
-          err instanceof Error
-            ? err.message
-            : "Failed to mark reading as completed.",
-      });
+      toast.error({ title: "Failed to update reading status", description: err instanceof Error ? err.message : "Failed to mark reading as completed." });
     } finally {
       setIsMarkingRead(false);
     }
@@ -755,18 +737,9 @@ export default function SubjectClassworkTab({
 
       setSelectedSubmission(null);
       updateClassworkStatus(assignmentId, "not_submitted_yet");
-      setNotice({
-        status: "success",
-        title: "Submission deleted",
-        description: "You can now resubmit your work.",
-      });
+      toast.success({ title: "Submission deleted", description: "You can now resubmit your work." });
     } catch (err) {
-      setNotice({
-        status: "error",
-        title: "Delete failed",
-        description:
-          err instanceof Error ? err.message : "Failed to delete submission",
-      });
+      toast.error({ title: "Delete failed", description: err instanceof Error ? err.message : "Failed to delete submission" });
     } finally {
       setDeletingId(null);
     }

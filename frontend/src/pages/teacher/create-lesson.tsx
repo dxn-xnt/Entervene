@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Loader2, Save, Upload, X } from "lucide-react";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -44,6 +45,7 @@ export default function CreateLessonModal({
   onClose,
   onCreated,
 }: CreateLessonModalProps) {
+  const toast = useToast();
   const navigate = useNavigate();
   const handleClose = () => {
     if (onClose) {
@@ -269,9 +271,11 @@ export default function CreateLessonModal({
         );
       }
 
+      toast.success({ title: "Lesson created" });
       handleCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create lesson.");
+      toast.error({ title: "Unable to create lesson", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSubmitting(false);
     }

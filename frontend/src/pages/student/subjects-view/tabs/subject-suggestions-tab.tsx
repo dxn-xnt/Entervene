@@ -14,6 +14,7 @@ import {
 import type { SuggestionResponse } from "@/types/suggestion";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
+import { useToast } from "@/components/retroui/use-toast";
 
 type Notice = {
   status: "success" | "error" | "info";
@@ -69,6 +70,7 @@ export default function SubjectSuggestionsTab({
   hideIntro = false,
 }: SubjectSuggestionsTabProps) {
   const navigate = useNavigate();
+  const toast = useToast();
   const [suggestions, setSuggestions] = useState<SuggestionResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -133,17 +135,9 @@ export default function SubjectSuggestionsTab({
         suggestion.student_suggestion_id,
       );
       updateSuggestion(updated);
-      setNotice({
-        status: "success",
-        title: "Suggestion completed",
-        description: "This study material is now marked complete.",
-      });
+      toast.success({ title: "Suggestion completed", description: "This study material is now marked complete." });
     } catch (err) {
-      setNotice({
-        status: "error",
-        title: "Unable to complete suggestion",
-        description: err instanceof Error ? err.message : "Please try again.",
-      });
+      toast.error({ title: "Unable to complete suggestion", description: err instanceof Error ? err.message : "Please try again." });
     } finally {
       setBusyId(null);
     }

@@ -30,8 +30,10 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Badge } from "@/components/retroui/Badge";
 import { Accordion } from "@/components/retroui/Accordion";
+import { useToast } from "@/components/retroui/use-toast";
 
 export default function AdminClasses() {
+  const toast = useToast();
   const [search, setSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState("All");
   const [yearFilter, setYearFilter] = useState("All");
@@ -76,17 +78,19 @@ export default function AdminClasses() {
     setNotice("");
     try {
       const result = await archiveClass(archiveTarget.class_id);
+      toast.success({ title: "Class archived", description: result.message });
       await refreshClasses();
       setArchiveTarget(null);
       setNotice(result.message || "Class archived successfully.");
     } catch (error: unknown) {
+      toast.error({ title: "Unable to archive class", description: error instanceof Error ? error.message : undefined });
       setArchiveError(
         error instanceof Error ? error.message : "Unable to archive class.",
       );
     } finally {
       setIsArchiving(false);
     }
-  }, [archiveTarget, isArchiving, refreshClasses]);
+  }, [archiveTarget, isArchiving, refreshClasses, toast]);
 
   const classes = useMemo(() => classList?.classes ?? [], [classList]);
 
@@ -196,7 +200,7 @@ export default function AdminClasses() {
                   </Dialog.Trigger>
                   <AddClassModal
                     onClose={() => setShowNewClass(false)}
-                    onClassesCreated={() => void refreshClasses()}
+                    onClassesCreated={() => { toast.success({ title: "Classes created" }); void refreshClasses(); }}
                   />
                 </Dialog>
                 <Link to={routes.admin.subjectLoadStudio} className="w-full md:w-auto">
@@ -373,6 +377,7 @@ export default function AdminClasses() {
           classId={editTarget.class_id}
           onClose={() => setEditTarget(null)}
           onSaved={() => {
+            toast.success({ title: "Class updated" });
             setEditTarget(null);
             void refreshClasses();
           }}

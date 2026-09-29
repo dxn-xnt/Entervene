@@ -13,6 +13,7 @@ import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
 import { ToggleSwitch } from "@/components/retroui/ToggleSwitch";
 import { OverviewCard } from "@/components/overview-cards";
+import { useToast } from "@/components/retroui/use-toast";
 import { UserProfileHeader } from "@/components/profile-header";
 import {
   archiveUser,
@@ -93,6 +94,7 @@ function getStatusStyle(status: string | undefined | null): StatusStyle {
 }
 
 export default function AdminUserDetail() {
+  const toast = useToast();
   const { userId, role } = useParams<{ userId: string; role: UserRole }>();
   const navigate = useNavigate();
   const [user, setUser] = useState<UserDetail | null>(null);
@@ -165,10 +167,12 @@ export default function AdminUserDetail() {
     try {
       const res = await resendUserInvitation(userId);
       setNotice(res.message || "Invitation resent successfully.");
+      toast.success({ title: "Invitation resent" });
       const updated = await getUserDetail(userId);
       setUser(updated);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to resend invitation.");
+      toast.error({ title: "Failed to resend invitation", description: err instanceof Error ? err.message : undefined });
     } finally {
       setResending(false);
     }
@@ -184,8 +188,10 @@ export default function AdminUserDetail() {
       setUser(updated);
       setEditOpen(false);
       setNotice("User updated successfully.");
+      toast.success({ title: "User updated" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update user.");
+      toast.error({ title: "Unable to update user", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSaving(false);
     }
@@ -202,8 +208,10 @@ export default function AdminUserDetail() {
       setUser(updated);
       setArchiveOpen(false);
       setNotice("User archived successfully.");
+      toast.success({ title: "User archived" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to archive user.");
+      toast.error({ title: "Unable to archive user", description: err instanceof Error ? err.message : undefined });
     } finally {
       setArchiving(false);
     }

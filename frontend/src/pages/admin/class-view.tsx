@@ -9,6 +9,7 @@ import { Avatar } from "@/components/retroui/Avatar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Card as RetroCard } from "@/components/retroui/Card";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { Input } from "@/components/retroui/Input";
@@ -87,6 +88,7 @@ function normalizedStudentGender(gender: string) {
 }
 
 export default function AdminClassDetail() {
+  const toast = useToast();
   const { classId } = useParams();
   const navigate = useNavigate();
   const [tab, setTab] = useState<DetailTab>("classes");
@@ -246,6 +248,7 @@ export default function AdminClassDetail() {
 
   async function saveStudentListChanges(payload: UpdateClassStudentListRequest) {
     const updatedStudents = await updateClassStudentList(loadedClass.class_id, payload);
+    toast.success({ title: "Student list updated" });
     setClassStudents(updatedStudents);
     const [availableResult, detailResult] = await Promise.allSettled([
       getUnassignedClassStudents(loadedClass.academic_level.academic_level_id),
@@ -368,7 +371,7 @@ export default function AdminClassDetail() {
           classId={loadedClass.class_id}
           initialClass={loadedClass}
           onClose={() => setShowEditClass(false)}
-          onSaved={(updatedClass) => setClassDetail(updatedClass)}
+          onSaved={(updatedClass) => { setClassDetail(updatedClass); toast.success({ title: "Class updated" }); }}
         />
       )}
       {showEditStudents && classStudents && !isArchived && (

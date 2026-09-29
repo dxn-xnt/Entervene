@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Card } from "@/components/retroui/Card";
 import {
   createSupportMaterial, generateStudentReviewer, listSupportMaterials, saveSupportMaterial, sendStudentReviewer,
@@ -23,6 +24,7 @@ const componentLabel = (value: string | null | undefined) => value ? value.repla
 const isGraded = (choice: RemediationFormat | null) => choice === "QUIZ" || choice === "CLASSWORK";
 
 export default function InterventionSupportMaterials({ detail }: { detail: TeacherInterventionDetail }) {
+  const toast = useToast();
   const { intervention_id: interventionId, subject_id: subjectId, subject_name: subjectName } = detail;
   const navigate = useNavigate();
   const [materials, setMaterials] = useState<SupportMaterial[]>([]);
@@ -40,7 +42,11 @@ export default function InterventionSupportMaterials({ detail }: { detail: Teach
   const [working, setWorking] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNoticeState] = useState("");
+  const setNotice = (message: string) => {
+    setNoticeState(message);
+    if (message) toast.success({ title: message });
+  };
 
   const load = async () => {
     setLoading(true); setError("");
@@ -73,7 +79,7 @@ export default function InterventionSupportMaterials({ detail }: { detail: Teach
 
   const action = async (run: () => Promise<void>) => {
     setWorking(true); setError(""); setNotice("");
-    try { await run(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save changes."); }
+    try { await run(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save changes."); toast.error({ title: "Unable to save changes", description: cause instanceof Error ? cause.message : undefined }); }
     finally { setWorking(false); }
   };
   const updatePlan = async (next: RemediationPlan, message: string) => action(async () => {
@@ -151,8 +157,8 @@ export default function InterventionSupportMaterials({ detail }: { detail: Teach
             <Button size="sm" variant="outline" onClick={() => setPanel(panel === "materials" ? "" : "materials")}>Select resources</Button>
           </Card>
           {panel === "reviewer" && <Card className="space-y-3"><h4 className="font-bold">Student Reviewer · Optional study support</h4>
-            {!reviewer ? <Button disabled={working} onClick={() => void action(async () => { const made = await createSupportMaterial(interventionId, "STUDENT_REVIEWER"); setMaterials((items) => [...items, made]); setReviewerDraft(made.current_content as ReviewerDraft); })}>Create reviewer draft</Button>
-              : reviewerDraft && <>{reviewer.status === "DRAFT" && !reviewer.generated_content && <Button disabled={working} variant="outline" onClick={() => void action(async () => { const made = await generateStudentReviewer(interventionId, reviewer.material_id); setMaterials((items) => items.map((item) => item.material_id === made.material_id ? made : item)); setReviewerDraft(made.current_content as ReviewerDraft); })}>Generate reviewer</Button>}
+            {!reviewer ? <Button disabled={working} onClick={() => void action(async () => { const made = await createSupportMaterial(interventionId, "STUDENT_REVIEWER"); setMaterials((items) => [...items, made]); setReviewerDraft(made.current_content as ReviewerDraft); setNotice("Reviewer draft created."); })}>Create reviewer draft</Button>
+              : reviewerDraft && <>{reviewer.status === "DRAFT" && !reviewer.generated_content && <Button disabled={working} variant="outline" onClick={() => void action(async () => { const made = await generateStudentReviewer(interventionId, reviewer.material_id); setMaterials((items) => items.map((item) => item.material_id === made.material_id ? made : item)); setReviewerDraft(made.current_content as ReviewerDraft); setNotice("Reviewer generated."); })}>Generate reviewer</Button>}
                 {reviewer.status === "SENT" ? <div className="space-y-2"><strong>{reviewerDraft.title}</strong><p>{reviewerDraft.introduction}</p><p className="whitespace-pre-wrap">{reviewerDraft.body}</p></div> : <div className="space-y-2">
                   <label className="block">Title<input className="w-full rounded border p-2" value={reviewerDraft.title} onChange={(event) => setReviewerDraft({ ...reviewerDraft, title: event.target.value })} /></label>
                   <label className="block">Introduction<textarea className="w-full rounded border p-2" value={reviewerDraft.introduction} onChange={(event) => setReviewerDraft({ ...reviewerDraft, introduction: event.target.value })} /></label>

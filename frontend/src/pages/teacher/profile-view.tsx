@@ -1,6 +1,7 @@
 
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Dialog } from "@/components/retroui/Dialog";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
@@ -26,6 +27,7 @@ const TEACHER_AVATARS = [
 
 
 export default function TeacherProfile() {
+  const toast = useToast();
   const { user, updateAvatar } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tempSelectedAvatar, setTempSelectedAvatar] = useState(
@@ -154,9 +156,10 @@ export default function TeacherProfile() {
               onClick={async () => {
                 try {
                   await updateAvatar(tempSelectedAvatar);
+                  toast.success({ title: "Avatar updated" });
                   setIsModalOpen(false);
                 } catch (error) {
-                  window.alert(error instanceof Error ? error.message : "Unable to save avatar.");
+                  toast.error({ title: "Unable to save avatar", description: error instanceof Error ? error.message : undefined });
                 }
               }}
             >

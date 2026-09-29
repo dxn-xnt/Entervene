@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
@@ -28,6 +29,7 @@ export default function AddClassworkScoreModal({
   onSuccess,
   onClose,
 }: AddClassworkScoreModalProps) {
+  const toast = useToast();
   const [selectedCategory, setSelectedCategory] = useState<string>(categoryName);
   const [examSubtype, setExamSubtype] = useState<string>("SUMMATIVE_1");
   const [activityMode, setActivityMode] = useState<string>("MANUAL"); // MANUAL or ONLINE
@@ -106,11 +108,13 @@ export default function AddClassworkScoreModal({
         due_date: dateTaken ? new Date(dateTaken).toISOString() : undefined,
         lesson_ids: selectedLessonIds.length > 0 ? selectedLessonIds : undefined,
       });
+      toast.success({ title: "Classwork score created" });
 
       if (onSuccess) onSuccess();
       if (onClose) onClose();
-    } catch (err: any) {
-      setErrorMessage(err.message || "Failed to create activity.");
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Failed to create activity.");
+      toast.error({ title: "Failed to create activity", description: err instanceof Error ? err.message : undefined });
     } finally {
       setLoading(false);
     }
