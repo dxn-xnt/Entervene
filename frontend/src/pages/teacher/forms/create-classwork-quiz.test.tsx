@@ -84,3 +84,123 @@ it("requires an explicit Examination subtype before leaving quiz details", async
   expect(screen.getByText("Choose an Examination sub-type explicitly.")).toBeTruthy();
   expect(screen.getByText("Step 2 of 4")).toBeTruthy();
 });
+
+it("displays 'Needs answer key' badge and blocks assign step when a question is unkeyed", async () => {
+  api.fetch.mockImplementation(async (path: string) => {
+    if (path === "/api/v1/quizzes/import-preview") {
+      return {
+        ok: true,
+        json: async () => ({
+          title: "Unkeyed Quiz",
+          questions: [
+            {
+              question_text: "What is 2 + 2?",
+              question_type: "MULTIPLE_CHOICE",
+              points: 1,
+              options: [
+                { option_text: "3", is_correct: false, option_order: 1 },
+                { option_text: "4", is_correct: false, option_order: 2 },
+              ],
+            },
+          ],
+          warnings: ["Question 1 has no answer key. Please select the correct answer in the builder."],
+        }),
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  });
+
+  const { container } = render(
+    <CreateClassworkQuizModal
+      selectedType="QUIZ"
+      subjects={[{ id: 5, name: "Mathematics" }]}
+      loads={[{ subject_load_id: 9, subject_id: 5, subject_name: "Mathematics", class_id: 7, section_name: "Sapphire", academic_period_id: 3 }]}
+      onClose={vi.fn()}
+      onSuccess={vi.fn()}
+      onBack={vi.fn()}
+    />
+  );
+
+  const fileInput = container.querySelector('input[type="file"]')!;
+  const file = new File(["dummy"], "quiz.txt", { type: "text/plain" });
+  fireEvent.change(fileInput, { target: { files: [file] } });
+
+  await waitFor(() => expect(screen.getByText("Step 2 of 4")).toBeTruthy());
+
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(screen.getByText("Step 3 of 4")).toBeTruthy();
+
+  expect(screen.getByText("⚠️ Needs answer key")).toBeTruthy();
+  expect(screen.getByText("Select the correct choice below")).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(screen.getByText("Question 1 needs exactly one correct answer.")).toBeTruthy();
+  expect(screen.getByText("Step 3 of 4")).toBeTruthy();
+
+  const radios = screen.getAllByRole("radio");
+  fireEvent.click(radios[1]);
+  expect(screen.queryByText("⚠️ Needs answer key")).toBeNull();
+
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(screen.getByText("Step 4 of 4")).toBeTruthy();
+});
+
+it("does not block valid questions for True/False and Short Answer items", async () => {
+  api.fetch.mockImplementation(async (path: string) => {
+    if (path === "/api/v1/quizzes/import-preview") {
+      return {
+        ok: true,
+        json: async () => ({
+          title: "Valid Mixed Quiz",
+          questions: [
+            {
+              question_text: "Helium is a noble gas.",
+              question_type: "MULTIPLE_CHOICE",
+              points: 1,
+              options: [
+                { option_text: "True", is_correct: true, option_order: 1 },
+                { option_text: "False", is_correct: false, option_order: 2 },
+              ],
+            },
+            {
+              question_text: "What is the chemical symbol for gold?",
+              question_type: "SHORT_ANSWER",
+              points: 1,
+              options: [
+                { option_text: "Au", is_correct: true, option_order: 1 },
+              ],
+            },
+          ],
+          warnings: [],
+        }),
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  });
+
+  const { container } = render(
+    <CreateClassworkQuizModal
+      selectedType="QUIZ"
+      subjects={[{ id: 5, name: "Mathematics" }]}
+      loads={[{ subject_load_id: 9, subject_id: 5, subject_name: "Mathematics", class_id: 7, section_name: "Sapphire", academic_period_id: 3 }]}
+      onClose={vi.fn()}
+      onSuccess={vi.fn()}
+      onBack={vi.fn()}
+    />
+  );
+
+  const fileInput = container.querySelector('input[type="file"]')!;
+  const file = new File(["dummy"], "quiz.txt", { type: "text/plain" });
+  fireEvent.change(fileInput, { target: { files: [file] } });
+
+  await waitFor(() => expect(screen.getByText("Step 2 of 4")).toBeTruthy());
+
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(screen.getByText("Step 3 of 4")).toBeTruthy();
+
+  expect(screen.queryByText("⚠️ Needs answer key")).toBeNull();
+
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(screen.getByText("Step 4 of 4")).toBeTruthy();
+});
+
