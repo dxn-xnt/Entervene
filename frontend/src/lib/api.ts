@@ -27,6 +27,7 @@ export type User = {
   id: string;
   name: string;
   email: string;
+  avatar?: string | null;
   role: UserRole;
   created_at: string;
   account_status: string;
@@ -150,6 +151,7 @@ export type StudentClassmateItem = {
   full_name: string;
   gender?: string | null;
   avatar_initial?: string | null;
+  avatar?: string | null;
 };
 
 export type StudentClassmatesResponse = {

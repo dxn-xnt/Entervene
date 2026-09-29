@@ -267,6 +267,15 @@ export default function AdminUsers() {
     void fetchUsers();
   }, [fetchUsers]);
 
+  useEffect(() => {
+    const onAvatarUpdated = (event: Event) => {
+      const { userId, avatar } = (event as CustomEvent<{ userId: string; avatar: string | null }>).detail;
+      setUsers((current) => current.map((item) => item.id === userId ? { ...item, avatar } : item));
+    };
+    window.addEventListener("enterve:avatar-updated", onAvatarUpdated);
+    return () => window.removeEventListener("enterve:avatar-updated", onAvatarUpdated);
+  }, []);
+
   const filteredStudents = useMemo(() => {
     if (activeTab !== "student") return users;
     return users.filter((u) => {
@@ -722,7 +731,7 @@ function StudentRow({
       className="cursor-pointer border-b border-border last:border-b-0"
     >
       <Table.Cell>
-        <NameCell name={user.name} subtitle={user.email} role={user.role} />
+        <NameCell name={user.name} subtitle={user.email} role={user.role} avatar={user.avatar} />
       </Table.Cell>
 
       <Table.Cell className="text-center w-36">
@@ -834,7 +843,7 @@ function UserRow({
         className="cursor-pointer border-b border-border last:border-b-0"
       >
         <Table.Cell>
-          <NameCell name={user.name} subtitle={user.email} role={user.role} />
+          <NameCell name={user.name} subtitle={user.email} role={user.role} avatar={user.avatar} />
         </Table.Cell>
         <Table.Cell className="text-center max-w-20">
           <div className="flex flex-col items-center gap-1">
@@ -921,7 +930,7 @@ function UserRow({
       className="cursor-pointer border-b border-border last:border-b-0"
     >
       <Table.Cell>
-        <NameCell name={user.name} subtitle={user.email} role={user.role} />
+        <NameCell name={user.name} subtitle={user.email} role={user.role} avatar={user.avatar} />
       </Table.Cell>
       <Table.Cell className="text-center w-full">
         <StatusBadge
@@ -945,10 +954,12 @@ function NameCell({
   name,
   subtitle,
   role,
+  avatar,
 }: {
   name: string;
   subtitle?: string;
   role: "admin" | "teacher" | "student";
+  avatar?: string | null;
 }) {
   const defaultAvatar =
     role === "student"
@@ -961,7 +972,7 @@ function NameCell({
         variant={role === "student" ? "student" : "teacher"}
         className="size-10 shrink-0"
       >
-        <Avatar.Image src={defaultAvatar} alt={name} />
+        <Avatar.Image src={avatar || defaultAvatar} alt={name} />
         <Avatar.Fallback>{name.charAt(0).toUpperCase()}</Avatar.Fallback>
       </Avatar>
       <div className="min-w-0">

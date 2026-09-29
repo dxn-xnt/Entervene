@@ -108,6 +108,15 @@ export default function AdminUserDetail() {
   const [archiveOpen, setArchiveOpen] = useState(false);
 
   useEffect(() => {
+    const onAvatarUpdated = (event: Event) => {
+      const { userId: updatedId, avatar } = (event as CustomEvent<{ userId: string; avatar: string | null }>).detail;
+      if (updatedId === userId) setUser((current) => current ? { ...current, avatar } : current);
+    };
+    window.addEventListener("enterve:avatar-updated", onAvatarUpdated);
+    return () => window.removeEventListener("enterve:avatar-updated", onAvatarUpdated);
+  }, [userId]);
+
+  useEffect(() => {
     if (!userId) return;
 
     let active = true;
@@ -344,6 +353,7 @@ export default function AdminUserDetail() {
                 <div className="space-y-3">
                   <UserProfileHeader
                     name={user.name}
+                    avatar={user.avatar}
                     role={user.role}
                     subtitle={
                       user.role === "student"

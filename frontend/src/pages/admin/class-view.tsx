@@ -219,6 +219,7 @@ export default function AdminClassDetail() {
     grade: loadedClass.academic_level.level_name,
     section: loadedClass.section_name,
     adviser: adviserName,
+    adviserAvatar: loadedClass.adviser?.avatar,
     academicYear: loadedClass.academic_year.year_label,
     status: normalizedClassStatus(loadedClass.class_status),
   };
@@ -511,7 +512,7 @@ function OverviewTab({
             <div className="flex items-center gap-3">
               <Avatar variant="teacher" className="size-12 shrink-0">
                 <Avatar.Image
-                  src="/avatars/teacher-avatars/12.svg"
+                  src={selectedClass.adviserAvatar || "/avatars/teacher-avatars/12.svg"}
                   alt={selectedClass.adviser}
                 />
                 <Avatar.Fallback>
@@ -717,7 +718,7 @@ function StudentsTab({
                               <div className="flex items-center gap-3">
                                 <Avatar variant="student" className="size-8 shrink-0">
                                   <Avatar.Image
-                                    src="/avatars/student-avatars/1.svg"
+                                    src={student.avatar || "/avatars/student-avatars/1.svg"}
                                     alt={student.full_name}
                                   />
                                   <Avatar.Fallback>

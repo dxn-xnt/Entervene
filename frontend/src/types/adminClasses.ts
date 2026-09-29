@@ -21,6 +21,7 @@ export type ClassRecord = {
   grade: string;
   section: string;
   adviser: string;
+  adviserAvatar?: string | null;
   adviserEmail: string;
   academicYear: string;
   status: ClassStatus;
@@ -46,6 +47,7 @@ export type AdviserOption = {
   middle_name: string | null;
   last_name: string;
   suffix: string | null;
+  avatar?: string | null;
 };
 
 export type AcademicPathwayRead = {
@@ -137,6 +139,7 @@ export type ClassStudentListItem = {
   full_name: string;
   gender: string;
   avatar_initial: string;
+  avatar?: string | null;
   account_status: string | null;
 };
 
@@ -186,6 +189,7 @@ export type TeacherAdvisoryStudentItem = {
   email: string | null;
   account_status: string | null;
   avatar_initial: string;
+  avatar?: string | null;
 };
 
 export type TeacherAdvisorySubjectLoadItem = {
@@ -271,6 +275,7 @@ export type ClassAssignmentStudent = {
   last_name: string;
   gender: string | null;
   academic_level_id: number;
+  avatar?: string | null;
 };
 
 export type UnassignedClassStudentsResponse = {
