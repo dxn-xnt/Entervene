@@ -51,6 +51,7 @@ export function OfferingModal({
   readOnlyReason?: string;
   onSaved: (meta?: {
     message?: string;
+    partialFailure?: boolean;
     gradeValue?: string;
     pathway?: SubjectOfferingPathway;
     academicYearId?: number;
@@ -496,7 +497,7 @@ export function OfferingModal({
         };
 
         if (errors.length) {
-          await onSaved({ message: summaryMessage(createdCount, skippedCount, errors.length), ...savedMeta });
+          await onSaved({ message: summaryMessage(createdCount, skippedCount, errors.length), partialFailure: true, ...savedMeta });
           setError(`${summaryMessage(createdCount, skippedCount, errors.length)}. ${errors[0]}`);
         } else {
           await onSaved({ message: summaryMessage(createdCount, skippedCount, 0), ...savedMeta });

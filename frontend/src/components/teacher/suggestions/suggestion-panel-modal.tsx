@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bot, Lightbulb, Send } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Input } from "@/components/retroui/Input";
 import { Alert } from "@/components/retroui/Alert";
 import { apiFetch } from "@/lib/api";
@@ -64,6 +65,7 @@ export function SuggestionPanel({
   subjectLoads,
   onSuccess,
 }: SuggestionPanelProps) {
+  const toast = useToast();
   const isModalOpen = open !== undefined ? open : (isOpen ?? false);
 
   const activeSubjects = useMemo(() => {
@@ -191,6 +193,7 @@ export function SuggestionPanel({
         classwork_assignment_id: selected.classworkAssignmentId ?? null,
       });
       setSuccess("Suggestion sent to student successfully.");
+      toast.success({ title: "Suggestion sent to student" });
       setTitle("");
       setDescription("");
       if (onSuccess) onSuccess();
@@ -201,6 +204,7 @@ export function SuggestionPanel({
       setFormError(
         err instanceof Error ? err.message : "Unable to create suggestion.",
       );
+      toast.error({ title: "Unable to create suggestion", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSubmitting(false);
     }
@@ -224,6 +228,7 @@ export function SuggestionPanel({
       setSuccess(
         `Generated ${result.suggestions.length} draft recommendation${result.suggestions.length === 1 ? "" : "s"} for teacher review.`,
       );
+      toast.success({ title: `${result.suggestions.length} recommendation draft${result.suggestions.length === 1 ? "" : "s"} generated` });
       if (onSuccess) onSuccess();
     } catch (err) {
       setFormError(
@@ -231,6 +236,7 @@ export function SuggestionPanel({
           ? err.message
           : "Unable to generate recommendation drafts.",
       );
+      toast.error({ title: "Unable to generate recommendations", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsGenerating(false);
     }

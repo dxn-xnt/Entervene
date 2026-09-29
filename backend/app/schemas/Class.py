@@ -25,6 +25,7 @@ class AdviserOption(BaseModel):
     middle_name: str | None
     last_name: str
     suffix: str | None
+    avatar: str | None = None
 
 
 class ClassFormOptionsResponse(BaseModel):
@@ -112,6 +113,7 @@ class ClassStudentListItemResponse(BaseModel):
     full_name: str
     gender: str
     avatar_initial: str
+    avatar: str | None = None
     account_status: str | None = None
 
 
@@ -162,6 +164,7 @@ class TeacherAdvisoryStudentItem(BaseModel):
     email: str | None
     account_status: str | None
     avatar_initial: str
+    avatar: str | None = None
 
 
 class TeacherAdvisorySubjectLoadItem(BaseModel):
@@ -229,6 +232,7 @@ class UnassignedStudentItem(BaseModel):
     last_name: str
     gender: str | None
     academic_level_id: int
+    avatar: str | None = None
 
 
 class UnassignedStudentsResponse(BaseModel):

@@ -122,7 +122,7 @@ export default function StudentSubmissionView({
                   <div className="flex items-center gap-3 min-w-0">
                     <Avatar variant="student" className="size-12 shrink-0">
                       <Avatar.Image
-                        src="/avatars/student-avatars/1.svg"
+                        src={selectedStudent.avatar || "/avatars/student-avatars/1.svg"}
                         alt={selectedStudent.student_name}
                       />
                       <Avatar.Fallback>

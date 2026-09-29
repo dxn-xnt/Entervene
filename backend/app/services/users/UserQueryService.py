@@ -56,6 +56,7 @@ def _base_user_query(db: Session):
         db.query(
             UserAccount.user_id,
             UserAccount.email,
+            UserAccount.avatar_path.label("avatar"),
             UserAccount.created_at,
             UserAccount.account_status,
             UserAccount.email_status,
@@ -197,6 +198,7 @@ def list_users(
             "id": str(user.user_id),
             "name": display_name(first_name, last_name, user.email),
             "email": user.email,
+            "avatar": user.avatar,
             "role": client_role,
             "created_at": user.created_at.date().isoformat() if user.created_at else "",
             "account_status": user.account_status,
@@ -392,6 +394,7 @@ def get_user_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any]:
         "id": str(user.user_id),
         "name": display_name(first_name, last_name, user.email),
         "email": user.email,
+        "avatar": user.avatar,
         "role": client_role,
         "created_at": user.created_at.date().isoformat() if user.created_at else "",
         "account_status": user.account_status,

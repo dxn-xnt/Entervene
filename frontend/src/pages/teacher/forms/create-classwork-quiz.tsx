@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { ArrowLeft, ArrowRight, FileDown, FileText, Loader2, Pencil, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
@@ -69,6 +70,7 @@ export default function CreateClassworkQuizModal({
     onSuccess,
     onBack,
 }: CreateClassworkQuizModalProps) {
+    const toast = useToast();
     const [createStep, setCreateStep] = useState<
         "quiz-source" | "details" | "quiz" | "assign"
     >("quiz-source");
@@ -687,6 +689,7 @@ export default function CreateClassworkQuizModal({
 
             await createResponse.json();
 
+            toast.success({ title: "Quiz created successfully." });
             onSuccess();
         } catch (err) {
             setCreateError(

@@ -158,6 +158,7 @@ export default function SubjectDetails() {
       const res = await apiFetch(`/api/v1/competencies/${competencyId}`, {
         method: "DELETE",
       });
+      if (!res.ok) throw new Error("Failed to archive competency.");
       if (res.ok) {
         setCompetencies((prev) =>
           prev.filter((c) => c.competency_id !== competencyId),
@@ -169,9 +170,10 @@ export default function SubjectDetails() {
               : l,
           ),
         );
+        toast.success("Competency archived.");
       }
-    } catch {
-      alert("Failed to archive competency.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to archive competency.");
     }
   };
 
@@ -569,8 +571,10 @@ export default function SubjectDetails() {
         is_published: updatedLesson.is_published,
         show_scores: updatedLesson.show_scores,
       });
+      toast.success("Lesson updated.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update lesson.");
+      toast.error(err instanceof Error ? err.message : "Unable to update lesson.");
     } finally {
       setIsSavingLesson(false);
     }
@@ -602,12 +606,14 @@ export default function SubjectDetails() {
           lesson.lesson_id === updatedLesson.lesson_id ? updatedLesson : lesson,
         ),
       );
+      toast.success("Lesson material removed.");
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
           : "Unable to remove lesson material.",
       );
+      toast.error(err instanceof Error ? err.message : "Unable to remove lesson material.");
     } finally {
       setRemovingLessonAttachmentId(null);
     }
@@ -637,10 +643,12 @@ export default function SubjectDetails() {
       setLessonDraft(null);
       setLessonClassIds([]);
       setShowArchiveConfirm(false);
+      toast.success("Lesson archived.");
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Unable to archive lesson.",
       );
+      toast.error(err instanceof Error ? err.message : "Unable to archive lesson.");
     } finally {
       setIsArchivingLesson(false);
     }
@@ -880,6 +888,7 @@ export default function SubjectDetails() {
       setClassworkLesson(null);
       setClassworkDraft(emptyClassworkDraft);
       setClassworkMaterials([]);
+      toast.success("Classwork created.");
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "Unable to create classwork.";

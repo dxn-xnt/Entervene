@@ -9,7 +9,7 @@ interface AuthUser {
   userId: string;
   fullName: string;
   email: string;
-  avatar?: string;
+  avatar?: string | null;
 }
 
 interface AuthContextType {
@@ -30,36 +30,15 @@ function userFromAuthResponse(data: {
   user_id: string;
   full_name?: string;
   email?: string;
-  avatar?: string;
+  avatar?: string | null;
 }): AuthUser {
-  const storedAvatar = localStorage.getItem(`avatar_${data.user_id}`);
-  const defaultAvatar = data.role === "student"
-    ? "/avatars/student-avatars/1.svg"
-    : "/avatars/teacher-avatars/12.svg";
   return {
     role: data.role,
     userId: data.user_id,
     fullName: data.full_name?.trim() || data.email?.split("@")[0] || "User",
     email: data.email ?? "",
-    avatar: data.avatar || storedAvatar || defaultAvatar,
+    avatar: data.avatar ?? null,
   };
-}
-
-async function userWithSavedAvatar(data: Parameters<typeof userFromAuthResponse>[0]): Promise<AuthUser> {
-  const storedAvatar = localStorage.getItem(`avatar_${data.user_id}`);
-  if (!data.avatar && storedAvatar) {
-    try {
-      const res = await apiFetch("/api/v1/auth/me/avatar", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ avatar: storedAvatar }),
-      });
-      if (res.ok) data.avatar = storedAvatar;
-    } catch {
-      // The local avatar remains visible until it can be saved to the account.
-    }
-  }
-  return userFromAuthResponse(data);
 }
 
 function getErrorMessage(err: unknown): string {
@@ -89,7 +68,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const data = await res.json();
-    setUser(await userWithSavedAvatar(data));
+    setUser(userFromAuthResponse(data));
     return true;
   };
 
@@ -106,7 +85,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
         if (!cancelled && res.ok) {
           const meData = await res.json();
-          setUser(await userWithSavedAvatar(meData));
+          setUser(userFromAuthResponse(meData));
         }
       } catch {
         if (!cancelled) setUser(null);
@@ -134,7 +113,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const data = await res.json();
-    const authUser = await userWithSavedAvatar(data);
+    const authUser = userFromAuthResponse(data);
     setUser(authUser);
     return authUser.role;
   };
@@ -159,7 +138,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const refreshed = await refresh();
     if (refreshed) return data.role;
 
-    const authUser = await userWithSavedAvatar(data);
+    const authUser = userFromAuthResponse(data);
     setUser(authUser);
     return authUser.role;
   };
@@ -180,8 +159,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         body: JSON.stringify({ avatar: avatarPath }),
       });
       if (!res.ok) throw new Error("Unable to save avatar. Please try again.");
-      localStorage.setItem(`avatar_${user.userId}`, avatarPath);
-      setUser((current) => current ? { ...current, avatar: avatarPath } : current);
+      const data: { avatar: string | null } = await res.json();
+      setUser((current) => current ? { ...current, avatar: data.avatar } : current);
+      window.dispatchEvent(new CustomEvent("enterve:avatar-updated", {
+        detail: { userId: user.userId, avatar: data.avatar },
+      }));
     }
   };
 
