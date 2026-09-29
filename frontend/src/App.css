@@ -396,6 +396,11 @@ body:has([role="alertdialog"]) {
   isolation: isolate;
 }
 
+.retro-card-squares > * {
+  position: relative;
+  z-index: 1;
+}
+
 .retro-card-squares::before,
 .retro-bg-squares::before,
 .retro-squares-overlay::before {

@@ -125,7 +125,7 @@ export function SF9PreviewModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <Dialog.Content size="5xl" className="max-w-[1150px] max-h-[92vh] flex flex-col p-0 overflow-hidden border-2 border-black bg-muted/20">
+      <Dialog.Content size="4xl" className="max-w-[1150px] max-h-[92vh] flex flex-col p-0 overflow-hidden border-2 border-black bg-muted/20">
         {/* Modal Top Action Toolbar */}
         <Dialog.Header className="flex flex-row items-center justify-between border-b-2 border-black bg-card px-5 py-3">
           <div className="flex items-center gap-3">
