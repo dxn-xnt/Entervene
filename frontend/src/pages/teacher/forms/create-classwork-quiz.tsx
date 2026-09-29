@@ -173,14 +173,11 @@ export default function CreateClassworkQuizModal({
                     display_order: index + 1,
                     difficulty_level: question.difficulty_level || "MEDIUM",
                     explanation: question.explanation || "",
-                    options:
-                        question.question_type === "MULTIPLE_CHOICE"
-                            ? question.options.map((option, optionIndex) => ({
-                                option_text: option.option_text,
-                                is_correct: option.is_correct,
-                                option_order: optionIndex + 1,
-                            }))
-                            : [],
+                    options: question.options.map((option, optionIndex) => ({
+                        option_text: option.option_text,
+                        is_correct: option.is_correct,
+                        option_order: optionIndex + 1,
+                    })),
                 };
             });
 
@@ -457,7 +454,10 @@ export default function CreateClassworkQuizModal({
                 aiLinkedSubjectName ||
                 "Subject";
             if (format === "pdf") {
-                await exportQuizPdf(quizQuestions, draft.title || "Quiz", activeSubjectName, includeExportAnswerKey);
+                const result = await exportQuizPdf(quizQuestions, draft.title || "Quiz", activeSubjectName, includeExportAnswerKey);
+                if (result?.warnings?.length) {
+                    setCreateError(`Export notice: ${result.warnings.join(" ")}`);
+                }
             } else {
                 await exportQuizDocx(quizQuestions, draft.title || "Quiz", activeSubjectName, includeExportAnswerKey);
             }
@@ -1316,15 +1316,28 @@ export default function CreateClassworkQuizModal({
                         </div>
 
                         <div className="space-y-4">
-                            {quizQuestions.map((question, questionIndex) => (
+                            {quizQuestions.map((question, questionIndex) => {
+                                const isUnkeyed =
+                                    question.question_type === "MULTIPLE_CHOICE"
+                                        ? !question.options.some((o) => o.is_correct)
+                                        : question.options.length === 0 ||
+                                          !question.options.some((o) => o.option_text.trim());
+                                return (
                                 <div
                                     key={question.id}
-                                    className="rounded border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                                    className={`rounded border-2 ${isUnkeyed ? "border-amber-500 bg-amber-50/20" : "border-black bg-white"} p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]`}
                                 >
                                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                                        <h3 className="text-base font-bold">
-                                            Question {questionIndex + 1}
-                                        </h3>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="text-base font-bold">
+                                                Question {questionIndex + 1}
+                                            </h3>
+                                            {isUnkeyed && (
+                                                <span className="rounded border-2 border-amber-600 bg-amber-100 px-2 py-0.5 text-xs font-black text-amber-900 shadow-xs">
+                                                    ⚠️ Needs answer key
+                                                </span>
+                                            )}
+                                        </div>
                                         <Button
                                             type="button"
                                             variant="outline"
@@ -1409,7 +1422,14 @@ export default function CreateClassworkQuizModal({
 
                                     {question.question_type === "MULTIPLE_CHOICE" ? (
                                         <div className="mt-4 space-y-2">
-                                            <p className="text-xs font-bold text-gray-700">Choices</p>
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-xs font-bold text-gray-700">Choices</p>
+                                                {isUnkeyed && (
+                                                    <span className="text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-400 rounded px-2 py-0.5">
+                                                        Select the correct choice below
+                                                    </span>
+                                                )}
+                                            </div>
                                             {question.options.map((option, optionIndex) => (
                                                 <div
                                                     key={`${question.id}-${option.option_order}`}
@@ -1552,7 +1572,8 @@ export default function CreateClassworkQuizModal({
                                         />
                                     </div>
                                 </div>
-                            ))}
+                            );
+                            })}
                         </div>
 
                         <div className="flex flex-wrap gap-3">

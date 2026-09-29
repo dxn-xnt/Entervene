@@ -91,8 +91,8 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
     )
 
     # Assessments published
-    cw_count = db.query(Classwork).filter(Classwork.is_archived.is_(False), Classwork.type != "quiz").count()
-    quiz_count = db.query(Classwork).filter(Classwork.is_archived.is_(False), Classwork.type == "quiz").count()
+    cw_count = db.query(Classwork).filter(Classwork.is_archived.is_(False), func.upper(Classwork.classwork_type) != "QUIZ").count()
+    quiz_count = db.query(Classwork).filter(Classwork.is_archived.is_(False), func.upper(Classwork.classwork_type) == "QUIZ").count()
     total_assessments = cw_count + quiz_count
 
     ratio_str = f"{(total_students / total_staff if total_staff else 3.9):.1f} : 1" if total_staff else "3.9 : 1"
@@ -883,8 +883,8 @@ def build_teacher_dashboard_health(
             "total_students": enrolled_c,
         })
 
-    cw_count = len([a for a in all_assignments if a.classwork and a.classwork.type != "quiz"])
-    quiz_count = len([a for a in all_assignments if a.classwork and a.classwork.type == "quiz"])
+    cw_count = len([a for a in all_assignments if a.classwork and (a.classwork.classwork_type or "").upper() != "QUIZ"])
+    quiz_count = len([a for a in all_assignments if a.classwork and (a.classwork.classwork_type or "").upper() == "QUIZ"])
     total_published = len(all_assignments)
 
     cards = [

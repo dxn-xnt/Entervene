@@ -9,8 +9,132 @@ import type { QuizQuestionDraft } from "@/pages/teacher/classworks/quiz-builder-
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function sanitize(text: string): string {
-  return (text || "").replace(/[^\x00-\x7F]/g, (ch) => ch);
+export interface SanitizeOptions {
+  /**
+   * If true, transliterates non-ASCII characters to safe ASCII equivalents.
+   * If false, preserves all glyphs supported by the embedded Unicode font (Latin, Greek, Math, Punctuation).
+   * Default: true (safe for fallback or ASCII-only targets).
+   */
+  fallbackAscii?: boolean;
+  /**
+   * Optional callback invoked when unrenderable glyphs (e.g. CJK, emojis) are replaced with visible marker [?].
+   */
+  onWarning?: (warning: string) => void;
+}
+
+export function sanitize(text: string, options: SanitizeOptions = {}): string {
+  if (!text) return "";
+  const { fallbackAscii = true, onWarning } = options;
+  const unrecognized = new Set<string>();
+
+  if (!fallbackAscii) {
+    // Lossless mode for embedded DejaVu Sans subset
+    const inSubset = (cp: number) =>
+      (cp >= 0x20 && cp <= 0x7e) ||
+      cp === 0x0a ||
+      cp === 0x0d ||
+      cp === 0x09 ||
+      (cp >= 0xa0 && cp <= 0xff) ||
+      (cp >= 0x0370 && cp <= 0x03ff) ||
+      (cp >= 0x2010 && cp <= 0x206f) ||
+      (cp >= 0x2070 && cp <= 0x209f) ||
+      (cp >= 0x2100 && cp <= 0x214f) ||
+      (cp >= 0x2190 && cp <= 0x21ff) ||
+      (cp >= 0x2200 && cp <= 0x22ff);
+
+    let out = "";
+    for (const ch of Array.from(text)) {
+      const cp = ch.codePointAt(0);
+      if (cp !== undefined && inSubset(cp)) {
+        out += ch;
+      } else {
+        const hex =
+          cp !== undefined
+            ? `U+${cp.toString(16).toUpperCase().padStart(4, "0")}`
+            : "unknown";
+        unrecognized.add(`${ch} (${hex})`);
+        out += "[?]";
+      }
+    }
+    if (unrecognized.size && onWarning) {
+      onWarning(
+        `Some characters could not be rendered in PDF and were replaced with [?]: ${Array.from(
+          unrecognized
+        ).join(", ")}`
+      );
+    }
+    return out;
+  }
+
+  // Fallback mode: transliterate mathematical, greek, relational, superscripts, accents to ASCII
+  let res = text
+    .replace(/→/g, "->")
+    .replace(/←/g, "<-")
+    .replace(/↔/g, "<->")
+    .replace(/≤/g, "<=")
+    .replace(/≥/g, ">=")
+    .replace(/≠/g, "!=")
+    .replace(/≈/g, "~=")
+    .replace(/⊂/g, "subset of")
+    .replace(/±/g, "+/-")
+    .replace(/×/g, "x")
+    .replace(/÷/g, "/")
+    .replace(/°/g, " deg")
+    .replace(/•/g, "*")
+    .replace(/…/g, "...")
+    .replace(/²/g, "^2")
+    .replace(/³/g, "^3")
+    .replace(/¹/g, "^1")
+    .replace(/⁰/g, "^0")
+    .replace(/π/g, "pi")
+    .replace(/Π/g, "Pi")
+    .replace(/Δ/g, "Delta")
+    .replace(/δ/g, "delta")
+    .replace(/√/g, "sqrt")
+    .replace(/[µμ]/g, "u")
+    .replace(/½/g, "1/2")
+    .replace(/¼/g, "1/4")
+    .replace(/¾/g, "3/4")
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015]/g, (m) =>
+      m === "\u2014" || m === "\u2015" ? " -- " : "-"
+    )
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  let out = "";
+  for (const ch of Array.from(res)) {
+    const cp = ch.codePointAt(0);
+    if (
+      cp !== undefined &&
+      ((cp >= 0x20 && cp <= 0x7e) || cp === 0x0a || cp === 0x0d || cp === 0x09)
+    ) {
+      out += ch;
+    } else {
+      const hex =
+        cp !== undefined
+          ? `U+${cp.toString(16).toUpperCase().padStart(4, "0")}`
+          : "unknown";
+      unrecognized.add(`${ch} (${hex})`);
+      out += "[?]";
+    }
+  }
+  if (unrecognized.size && onWarning) {
+    onWarning(
+      `Some characters could not be rendered in PDF and were replaced with [?]: ${Array.from(
+        unrecognized
+      ).join(", ")}`
+    );
+  }
+  return out;
+}
+
+export function cleanDocxText(text: string): string {
+  if (!text) return "";
+  // DOCX XML is UTF-8 encoded and supports full Unicode natively.
+  // We only strip control characters that are invalid in XML 1.0.
+  return text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
 }
 
 function optionLetter(order: number): string {
@@ -82,17 +206,23 @@ function makeDocTitle(quizTitle?: string, subjectName?: string): string {
     day: "numeric",
     year: "numeric",
   });
-  return `${subjectName || "Quiz"} — ${date}`;
+  return `${subjectName || "Quiz"} - ${date}`;
 }
 
 // ─── PDF Export ──────────────────────────────────────────────────────────────
+
+export interface ExportPdfOptions {
+  save?: boolean;
+  outputPath?: string;
+}
 
 export async function exportQuizPdf(
   questions: QuizQuestionDraft[],
   quizTitle?: string,
   subjectName?: string,
-  includeAnswerKey = false
-): Promise<void> {
+  includeAnswerKey = false,
+  options?: ExportPdfOptions
+): Promise<{ doc: any; warnings: string[] }> {
   const { jsPDF } = await import("jspdf");
 
   // Legal: 215.9 × 330.2 mm (8.5 × 13 in)
@@ -106,6 +236,34 @@ export async function exportQuizPdf(
   const TW = PAGE_W - ML - MR; // usable text width
 
   let y = MT;
+  const warnings: string[] = [];
+  const addWarning = (msg: string) => {
+    if (!warnings.includes(msg)) warnings.push(msg);
+  };
+
+  // Lazy-load Unicode font
+  let activeFont = "helvetica";
+  let customFontLoaded = false;
+  try {
+    const { QUIZ_FONT_NAME, QUIZ_FONT_B64 } = await import("./quiz-export-font");
+    if (QUIZ_FONT_B64) {
+      doc.addFileToVFS(`${QUIZ_FONT_NAME}.ttf`, QUIZ_FONT_B64);
+      doc.addFont(`${QUIZ_FONT_NAME}.ttf`, QUIZ_FONT_NAME, "normal");
+      doc.addFont(`${QUIZ_FONT_NAME}.ttf`, QUIZ_FONT_NAME, "bold");
+      activeFont = QUIZ_FONT_NAME;
+      customFontLoaded = true;
+    }
+  } catch {
+    customFontLoaded = false;
+    activeFont = "helvetica";
+  }
+
+  const setDocFont = (bold: boolean) => {
+    doc.setFont(activeFont, bold ? "bold" : "normal");
+  };
+
+  const clean = (str: string) =>
+    sanitize(str, { fallbackAscii: !customFontLoaded, onWarning: addWarning });
 
   const checkPage = (needed: number) => {
     if (y + needed > PAGE_H - MB) {
@@ -121,9 +279,10 @@ export async function exportQuizPdf(
     indent = 0,
     gapAfter = 2.5
   ) => {
+    const cleanText = clean(text);
     doc.setFontSize(size);
-    doc.setFont("helvetica", bold ? "bold" : "normal");
-    const lines = doc.splitTextToSize(text, TW - indent);
+    setDocFont(bold);
+    const lines = doc.splitTextToSize(cleanText, TW - indent);
     const lh = size * 0.42; // standard 1.25 line height
     checkPage(lines.length * lh + gapAfter);
     doc.text(lines, ML + indent, y);
@@ -138,22 +297,22 @@ export async function exportQuizPdf(
     y += gap;
   };
 
-  const title = makeDocTitle(quizTitle, subjectName);
+  const title = clean(makeDocTitle(quizTitle, subjectName));
   const groups = groupQuestions(questions);
 
   // ── Header ──────────────────────────────────────────────────────────────
   doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.text((subjectName || "Subject").toUpperCase(), ML, y);
+  setDocFont(true);
+  doc.text(clean((subjectName || "Subject").toUpperCase()), ML, y);
   y += 4.5;
 
   doc.setFontSize(14);
-  doc.setFont("helvetica", "bold");
-  doc.text(title, ML, y);
+  setDocFont(true);
+  doc.text(clean(title), ML, y);
   y += 6;
 
   doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
+  setDocFont(false);
   doc.text(
     `Name: _________________________________________   Grade & Section: __________________   Score: _________`,
     ML,
@@ -175,7 +334,7 @@ export async function exportQuizPdf(
 
       // Question line with space for answer
       const prefixSpace = isMC ? "____ " : "";
-      const qText = `${prefixSpace}${qNum}. ${sanitize(q.question_text)}`;
+      const qText = `${prefixSpace}${qNum}. ${q.question_text}`;
       write(qText, 11, false, 0, 2.5);
 
       if (isMC && opts.length > 0) {
@@ -188,13 +347,13 @@ export async function exportQuizPdf(
         if (sorted.length === 2 && maxOptLen < 15) {
           // True/False inline
           const line = sorted
-            .map((opt) => `${optionLetter(opt.option_order ?? 1)}) ${sanitize(opt.option_text)}`)
+            .map((opt) => `${optionLetter(opt.option_order ?? 1)}) ${opt.option_text}`)
             .join("           ");
           write(line, 10.5, false, 12, 3);
         } else {
           for (const opt of sorted) {
             write(
-              `${optionLetter(opt.option_order ?? 1)}) ${sanitize(opt.option_text)}`,
+              `${optionLetter(opt.option_order ?? 1)}) ${opt.option_text}`,
               10.5,
               false,
               10,
@@ -235,7 +394,7 @@ export async function exportQuizPdf(
           const ansText = isTF && correct ? correct.option_text.toUpperCase() : letter;
           keyItems.push({ num: q.display_order, ans: ansText, isChoice: true });
         } else {
-          const text = sanitize(q.explanation || "(See rubric)");
+          const text = q.explanation || "(See rubric)";
           keyItems.push({ num: q.display_order, ans: text, isChoice: false });
         }
       }
@@ -254,10 +413,10 @@ export async function exportQuizPdf(
         const row = choiceItems.slice(i, i + COLS);
         row.forEach((item, colIdx) => {
           doc.setFontSize(10);
-          doc.setFont("helvetica", "bold");
+          setDocFont(true);
           doc.text(`${item.num}.`, ML + colIdx * colW, y);
-          doc.setFont("helvetica", "normal");
-          doc.text(` ${item.ans}`, ML + colIdx * colW + 7, y);
+          setDocFont(false);
+          doc.text(` ${clean(item.ans)}`, ML + colIdx * colW + 7, y);
         });
         y += 5;
       }
@@ -272,11 +431,18 @@ export async function exportQuizPdf(
     }
   }
 
-  // ── Save ────────────────────────────────────────────────────────────────
-  const filename = (title + ".pdf")
-    .replace(/[/\\:*?"<>|]/g, "-")
-    .replace(/\s+/g, "_");
-  doc.save(filename);
+  // ── Save or Output ──────────────────────────────────────────────────────
+  if (options?.outputPath && typeof window === "undefined") {
+    const fs = await (Function('return import("fs")')() as Promise<any>);
+    fs.writeFileSync(options.outputPath, Buffer.from(doc.output("arraybuffer")));
+  } else if (options?.save !== false) {
+    const filename = (title + ".pdf")
+      .replace(/[/\\:*?"<>|]/g, "-")
+      .replace(/\s+/g, "_");
+    doc.save(filename);
+  }
+
+  return { doc, warnings };
 }
 
 // ─── Word (.docx) Export ─────────────────────────────────────────────────────
@@ -297,7 +463,7 @@ export async function exportQuizDocx(
     PageOrientation,
   } = await import("docx");
 
-  const title = makeDocTitle(quizTitle, subjectName);
+  const title = cleanDocxText(makeDocTitle(quizTitle, subjectName));
   const groups = groupQuestions(questions);
 
   const children: InstanceType<typeof Paragraph>[] = [];
@@ -311,7 +477,7 @@ export async function exportQuizDocx(
       indent: opts.indent ? { left: convertInchesToTwip(opts.indent) } : undefined,
       children: [
         new TextRun({
-          text: sanitize(text),
+          text: cleanDocxText(text),
           bold: opts.bold ?? false,
           size: opts.size ?? 22, // half-points: 22 = 11pt
           font: "Calibri",
@@ -346,7 +512,7 @@ export async function exportQuizDocx(
       const isMC = q.question_type === "MULTIPLE_CHOICE";
       const prefixSpace = isMC ? "____ " : "";
       children.push(
-        p(`${prefixSpace}${q.display_order}. ${sanitize(q.question_text)}`, {
+        p(`${prefixSpace}${q.display_order}. ${q.question_text}`, {
           size: 22, // 11pt
           space: 60,
         })
@@ -358,7 +524,7 @@ export async function exportQuizDocx(
         );
         for (const opt of sorted) {
           children.push(
-            p(`${optionLetter(opt.option_order ?? 1)}) ${sanitize(opt.option_text)}`, {
+            p(`${optionLetter(opt.option_order ?? 1)}) ${opt.option_text}`, {
               size: 21,
               indent: 0.35,
               space: 40,
@@ -408,7 +574,7 @@ export async function exportQuizDocx(
         } else {
           nonChoiceItems.push({
             num: q.display_order,
-            ans: sanitize(q.explanation || "(See rubric)"),
+            ans: q.explanation || "(See rubric)",
           });
         }
       }
@@ -459,7 +625,9 @@ export async function exportQuizDocx(
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = (title + ".docx").replace(/[/\\:*?"<>|]/g, "-").replace(/\s+/g, "_");
+  a.download = (title + ".docx")
+    .replace(/[/\\:*?"<>|]/g, "-")
+    .replace(/\s+/g, "_");
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
