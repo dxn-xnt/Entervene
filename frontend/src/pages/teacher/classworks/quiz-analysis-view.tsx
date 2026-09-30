@@ -1,6 +1,6 @@
 import { Table } from "@/components/retroui/Table";
 import { useState } from "react";
-import { Check, X, Pencil, BarChart3, HelpCircle, Users } from "lucide-react";
+import { Check, X, Pencil, BarChart3, HelpCircle, Users, AlertTriangle } from "lucide-react";
 import type { QuizAnalysis } from "./quiz-builder-types";
 import type { TeacherClasswork } from "@/types/classwork";
 import { Select } from "@/components/retroui/Select";
@@ -13,6 +13,26 @@ const QUIZ_TABS: Array<TabItem<"overview" | "questions" | "students">> = [
   { id: "questions", label: "Questions", icon: HelpCircle },
   { id: "students", label: "Students", icon: Users },
 ];
+
+/**
+ * Accuracy tier thresholds (in percent) for question analysis and navigation.
+ * Tune these constants directly to adjust grading bands without modifying JSX logic.
+ */
+export const ACCURACY_THRESHOLD_HIGH = 80;    // >= 80%: High mastery (green)
+export const ACCURACY_THRESHOLD_MEDIUM = 50;  // 50% - 79%: Moderate difficulty (yellow); < 50%: Low accuracy / high-wrong (red)
+
+export function getAccuracyColorClass(accuracy: number | null | undefined, answeredCount?: number): string {
+  if (answeredCount === 0 || accuracy === null || accuracy === undefined) {
+    return "bg-gray-100 text-black";
+  }
+  if (accuracy >= ACCURACY_THRESHOLD_HIGH) {
+    return "bg-[#8BCB88] text-black";
+  }
+  if (accuracy >= ACCURACY_THRESHOLD_MEDIUM) {
+    return "bg-[#FFD08A] text-black";
+  }
+  return "bg-[#FF6B6B] text-black";
+}
 
 interface QuizAnalysisViewProps {
   quizAnalysis: QuizAnalysis | null;
@@ -170,34 +190,105 @@ export default function QuizAnalysisView({
 
             {activeTab === "questions" && (
               <div>
-                <div className="mb-4 flex justify-end">
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="font-medium text-gray-600">Sort By:</span>
-                    <Select value={questionSort} onValueChange={(v) => setQuestionSort(v as any)}>
-                      <Select.Trigger className="h-8 bg-white border-2 border-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] w-40">
-                        <Select.Value />
-                      </Select.Trigger>
-                      <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                        <Select.Item value="order">Question Order</Select.Item>
-                        <Select.Item value="accuracy">Accuracy</Select.Item>
-                      </Select.Content>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  {sortedQuestions.map((q, i) => (
-                    <div key={q.quiz_question_id} className="rounded border-2 border-black p-4 bg-white">
-                      <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
-                        <div className="flex gap-4">
-                          <div className="border border-black rounded px-2 py-1 flex flex-col text-xs bg-white">
-                            <span className="text-gray-500">Question Type</span>
-                            <span className="font-bold text-base">{q.question_type === "MULTIPLE_CHOICE" ? "Multiple Choice" : "Short Answer"}</span>
-                          </div>
-                          <div className="border border-black rounded px-2 py-1 flex flex-col text-xs bg-white">
-                            <span className="text-gray-500">points</span>
-                            <span className="font-bold text-center text-base">{q.points}</span>
+                {/* Sticky Question Navigator */}
+                {quizAnalysis.questions.length > 0 && (
+                  <div className="sticky top-0 z-20 pb-3 pt-1 -mt-1 bg-background/95 backdrop-blur-sm">
+                    <Card className="shadow-none w-full bg-white border-2 border-black p-3 sm:p-4 mb-2">
+                      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="text-xs font-extrabold uppercase tracking-wide text-gray-700">
+                            Question Navigator ({quizAnalysis.questions.length} Questions)
+                          </span>
+                          <div className="flex items-center gap-2.5 text-[11px] font-bold text-gray-600">
+                            <span className="flex items-center gap-1">
+                              <span className="h-2.5 w-2.5 rounded-full bg-[#8BCB88] border border-black" /> &ge;{ACCURACY_THRESHOLD_HIGH}%
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="h-2.5 w-2.5 rounded-full bg-[#FFD08A] border border-black" /> {ACCURACY_THRESHOLD_MEDIUM}-{ACCURACY_THRESHOLD_HIGH - 1}%
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="h-2.5 w-2.5 rounded-full bg-[#FF6B6B] border border-black" /> &lt;{ACCURACY_THRESHOLD_MEDIUM}%
+                            </span>
                           </div>
                         </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="font-medium text-gray-600 text-xs">Sort By:</span>
+                          <Select value={questionSort} onValueChange={(v) => setQuestionSort(v as any)}>
+                            <Select.Trigger className="h-7 bg-white border-2 border-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] w-36">
+                              <Select.Value />
+                            </Select.Trigger>
+                            <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                              <Select.Item value="order">Question Order</Select.Item>
+                              <Select.Item value="accuracy">Accuracy</Select.Item>
+                            </Select.Content>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div
+                        data-testid="question-navigator-grid"
+                        className="flex flex-wrap gap-2 max-h-36 sm:max-h-40 overflow-y-auto py-1 pr-1 scrollbar-thin"
+                      >
+                        {quizAnalysis.questions.map((q, idx) => {
+                          const displayNum = idx + 1;
+                          const accuracy = q.accuracy_percent ?? 0;
+                          const colorClass = getAccuracyColorClass(q.accuracy_percent, q.answered_count);
+                          return (
+                            <button
+                              key={q.quiz_question_id}
+                              type="button"
+                              data-testid={`navigator-btn-${displayNum}`}
+                              onClick={() => {
+                                const el = document.getElementById(`quiz-question-card-${q.quiz_question_id}`);
+                                el?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+                              }}
+                              className={`relative flex h-8 min-w-8 items-center justify-center rounded border-2 border-black px-2 text-xs font-black transition-all cursor-pointer ${colorClass} hover:opacity-90 hover:scale-105 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-1 active:scale-95`}
+                              title={
+                                q.answered_count === 0
+                                  ? `Question ${displayNum} (No attempts yet)`
+                                  : `Question ${displayNum} (${accuracy}% Accuracy)`
+                              }
+                              aria-label={`Jump to question ${displayNum} (${accuracy}% Accuracy)`}
+                            >
+                              {displayNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </Card>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  {sortedQuestions.map((q, i) => {
+                    const isHighWrong = (q.answered_count ?? 0) > 0 && (q.accuracy_percent ?? 0) < ACCURACY_THRESHOLD_MEDIUM;
+                    const wrongPercent = Math.round(100 - (q.accuracy_percent ?? 0));
+                    return (
+                      <div
+                        key={q.quiz_question_id}
+                        id={`quiz-question-card-${q.quiz_question_id}`}
+                        className="rounded border-2 border-black p-4 bg-white scroll-mt-28"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+                          <div className="flex flex-wrap items-center gap-4">
+                            <div className="border border-black rounded px-2 py-1 flex flex-col text-xs bg-white">
+                              <span className="text-gray-500">Question Type</span>
+                              <span className="font-bold text-base">{q.question_type === "MULTIPLE_CHOICE" ? "Multiple Choice" : "Short Answer"}</span>
+                            </div>
+                            <div className="border border-black rounded px-2 py-1 flex flex-col text-xs bg-white">
+                              <span className="text-gray-500">points</span>
+                              <span className="font-bold text-center text-base">{q.points}</span>
+                            </div>
+                            {isHighWrong && (
+                              <div
+                                data-testid={`high-wrong-flag-${q.quiz_question_id}`}
+                                className="inline-flex items-center gap-1.5 rounded border border-black bg-[#FF6B6B] px-2.5 py-1.5 text-xs font-bold text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                              >
+                                <AlertTriangle size={14} className="text-black shrink-0" />
+                                <span>{wrongPercent}% of students got this wrong</span>
+                              </div>
+                            )}
+                          </div>
                         <div className="flex gap-4">
                           <div className="border border-black rounded px-3 py-1 flex flex-col text-xs bg-white items-center">
                             <span className="text-gray-500">Correct answer</span>
@@ -261,7 +352,8 @@ export default function QuizAnalysisView({
                         </div>
                       )}
                     </div>
-                  ))}
+                  );
+                })}
                 </div>
               </div>
             )}
