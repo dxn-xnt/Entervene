@@ -13,6 +13,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from app.services.ai.option_shuffle import shuffle_options
 from app.services.ai.Provider import generate_text
 
 logger = logging.getLogger(__name__)
@@ -30,14 +31,20 @@ OUTPUT FORMAT REQUIREMENTS:
   "difficulty_level": "EASY" | "MEDIUM" | "HARD",
   "explanation": "Brief rationale, model answer, or grading rubric",
   "options": [
-    {"option_text": "Choice text", "is_correct": true, "option_order": 1}
+    {"option_text": "Option A text", "is_correct": false, "option_order": 1},
+    {"option_text": "Option B text", "is_correct": false, "option_order": 2},
+    {"option_text": "Option C text", "is_correct": true, "option_order": 3},
+    {"option_text": "Option D text", "is_correct": false, "option_order": 4}
   ]
 }
 3. Rules for Question Types:
-- MULTIPLE_CHOICE: question_type="MULTIPLE_CHOICE", exactly 4 options, exactly 1 marked is_correct: true.
+- MULTIPLE_CHOICE: question_type="MULTIPLE_CHOICE", exactly 4 options, exactly 1 marked is_correct: true. The position of the correct answer MUST be evenly and unpredictably distributed (vary across options A, B, C, and D) across questions. NEVER default to always placing the correct answer in Option A.
 - TRUE_FALSE: question_type="MULTIPLE_CHOICE", exactly 2 options: [{"option_text": "True", "is_correct": bool, "option_order": 1}, {"option_text": "False", "is_correct": bool, "option_order": 2}], exactly 1 marked is_correct: true.
 - SHORT_ANSWER / Identification: question_type="SHORT_ANSWER", options MUST contain exactly 1 option with {"option_text": "Exact Answer/Term", "is_correct": true, "option_order": 1}.
 - ESSAY / Open-Ended: question_type="SHORT_ANSWER", options MUST be [], explanation contains the key rubrics/expected analysis points.
+
+ANSWER POSITION RANDOMIZATION REQUIREMENT:
+For MULTIPLE_CHOICE questions, the correct answer must NOT always be in the first option (Option A). You MUST vary the correct answer position across options A, B, C, and D throughout the quiz items.
 """
 
 
@@ -167,9 +174,9 @@ def _extract_and_validate_json(
                         "option_order": order,
                     })
                 if len(validated_options) > 4:
-                    correct_idx = next((i for i, o in enumerate(validated_options) if o["is_correct"]), 0)
+                    correct_idx = next((i for i, o in enumerate(validated_options) if o["is_correct"]), -1)
                     if correct_idx >= 4:
-                        validated_options[0] = validated_options[correct_idx]
+                        validated_options[3] = validated_options[correct_idx]
                     validated_options = validated_options[:4]
 
                 correct_count = sum(1 for o in validated_options if o["is_correct"])
@@ -182,8 +189,13 @@ def _extract_and_validate_json(
                                 o["is_correct"] = True
                                 matched = True
                                 break
-                    if not matched and validated_options:
-                        validated_options[0]["is_correct"] = True
+                    if not matched:
+                        logger.warning(
+                            "Quiz question '%s' has no correct option marked by AI and hint '%s' did not resolve. Question discarded.",
+                            item.get("question_text", f"Question {idx}"),
+                            hint,
+                        )
+                        continue
                 elif correct_count > 1:
                     found_first = False
                     for o in validated_options:
@@ -192,6 +204,9 @@ def _extract_and_validate_json(
                                 found_first = True
                             else:
                                 o["is_correct"] = False
+
+                # Server-side shuffle for MULTIPLE_CHOICE if options do not reference positions or each other
+                validated_options = shuffle_options(validated_options, q_type)
 
         if idx - 1 < len(expected_points_sequence):
             points = expected_points_sequence[idx - 1]
@@ -202,7 +217,7 @@ def _extract_and_validate_json(
             "question_text": str(item.get("question_text", f"Question {idx}")).strip(),
             "question_type": q_type,
             "points": max(0.5, points),
-            "display_order": idx,
+            "display_order": len(valid_questions) + 1,
             "difficulty_level": str(item.get("difficulty_level", "MEDIUM")).upper(),
             "explanation": item.get("explanation"),
             "lesson_id": item.get("lesson_id"),
