@@ -8,6 +8,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
+import { useToast } from "@/components/retroui/use-toast";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -92,6 +93,7 @@ const MODULE_TABS: Array<TabItem<AdminSubjectSection>> = [
 ];
 
 export default function AdminSubjects() {
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab") as AdminSubjectSection | null;
   const initialSection = tabParam && ["catalog", "offerings", "grading", "archived"].includes(tabParam)
@@ -128,7 +130,11 @@ export default function AdminSubjects() {
   const [isDownloadingCatalogTemplate, setIsDownloadingCatalogTemplate] = useState(false);
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNoticeState] = useState<string | null>(null);
+  const setNotice = (message: string) => {
+    setNoticeState(message);
+    toast.success({ title: message });
+  };
   const [catalogImportResult, setCatalogImportResult] = useState<SubjectImportResult | null>(null);
   const [offeringImportResult, setOfferingImportResult] = useState<SubjectOfferingImportResult | null>(null);
   const [copyResult, setCopyResult] = useState<SubjectOfferingCopyAcademicYearResult | null>(null);
@@ -495,6 +501,7 @@ export default function AdminSubjects() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to complete action.");
+      toast.error({ title: "Unable to complete action", description: err instanceof Error ? err.message : undefined });
     } finally {
       setPendingAction(null);
     }
@@ -532,6 +539,7 @@ export default function AdminSubjects() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to import subject offerings.");
+      toast.error({ title: "Unable to import subject offerings", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsImportingOfferings(false);
       if (offeringImportInputRef.current) offeringImportInputRef.current.value = "";
@@ -592,6 +600,7 @@ export default function AdminSubjects() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to import catalog subjects.");
+      toast.error({ title: "Unable to import catalog subjects", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsImportingCatalog(false);
       if (catalogImportInputRef.current) catalogImportInputRef.current.value = "";
@@ -1240,7 +1249,13 @@ export default function AdminSubjects() {
         readOnly={isViewingInactiveAcademicYear}
         readOnlyReason={readOnlyReason}
         onSaved={async (savedMeta) => {
-          setNotice(savedMeta?.message ?? (editingOffering ? "Subject offering updated." : "Offerings saved."));
+          const message = savedMeta?.message ?? (editingOffering ? "Subject offering updated." : "Offerings saved.");
+          if (savedMeta?.partialFailure) {
+            setNoticeState(message);
+            toast.warning({ title: "Some offerings need attention", description: message });
+          } else {
+            setNotice(message);
+          }
           let nextFilters = offeringFilters;
           if (savedMeta?.gradeValue) {
             const nextGrade = savedMeta.gradeValue as CurriculumGradeValue;

@@ -7,6 +7,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
+import { useToast } from "@/components/retroui/use-toast";
 import {
   createSubjectOffering,
   createSubject,
@@ -97,6 +98,7 @@ export default function AddSubjectModal({
   onCreated,
   lockedGradeLevel,
 }: AddSubjectModalProps) {
+  const toast = useToast();
   const [options, setOptions] = React.useState<SubjectFormOptions | null>(null);
   const [offeringOptions, setOfferingOptions] =
     React.useState<SubjectOfferingFormOptions | null>(null);
@@ -139,7 +141,6 @@ export default function AddSubjectModal({
       });
       setOfferNow(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, subjectToEdit]);
 
   React.useEffect(() => {
@@ -345,6 +346,7 @@ export default function AddSubjectModal({
           is_math_or_science: form.is_math_or_science,
         });
         setSuccessMessage(`${form.subject_name.trim()} updated successfully.`);
+        toast.success({ title: "Subject updated" });
         await onCreated?.();
         return;
       }
@@ -363,6 +365,7 @@ export default function AddSubjectModal({
         setSuccessMessage(
           `${created.subject_name} has been added to the subject catalog.`,
         );
+        toast.success({ title: "Subject created" });
         setForm(formWithDefaults(options));
         await onCreated?.();
         return;
@@ -384,6 +387,7 @@ export default function AddSubjectModal({
         setSuccessMessage(
           `Subject created and ${offeringForm.academic_period_ids.length} offering(s) added.`,
         );
+        toast.success({ title: "Subject and offerings created" });
         setForm(formWithDefaults(options));
         setOfferNow(false);
         setOfferingForm((current) => ({ ...current, academic_period_ids: [] }));
@@ -394,6 +398,7 @@ export default function AddSubjectModal({
             ? `Subject was created, but offering setup failed. You can finish it in Subject Offerings. ${offeringErr.message}`
             : "Subject was created, but offering setup failed. You can finish it in Subject Offerings.",
         );
+        toast.error({ title: "Offering setup failed", description: offeringErr instanceof Error ? offeringErr.message : undefined });
         setSuccessMessage(
           `${created.subject_name} has been added to the subject catalog.`,
         );
@@ -402,6 +407,7 @@ export default function AddSubjectModal({
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save subject.");
+      toast.error({ title: "Unable to save subject", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);
     }

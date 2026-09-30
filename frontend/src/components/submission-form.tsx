@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Upload, X } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
-import { toast } from "sonner";
 import { maxClassworkMaterialSize } from "@/lib/classwork-utils";
 
 interface SubmissionFormProps {
@@ -31,7 +30,6 @@ export default function SubmissionForm({
     if (oversized) {
       const msg = `"${oversized.name}" exceeds the 10MB limit.`;
       setError(msg);
-      toast.error(msg);
       return;
     }
     setFiles(incomingFiles);
@@ -87,7 +85,6 @@ export default function SubmissionForm({
     if (oversized) {
       const msg = `"${oversized.name}" exceeds the 10MB limit.`;
       setError(msg);
-      toast.error(msg);
       return;
     }
 

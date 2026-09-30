@@ -10,6 +10,11 @@ import {
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
+import { Card } from "@/components/retroui/Card";
+import { Alert } from "@/components/retroui/Alert";
+import { Input } from "@/components/retroui/Input";
+import { Progress } from "@/components/retroui/Progress";
+import { useToast } from "@/components/retroui/use-toast";
 import { Select } from "@/components/retroui/Select";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -38,7 +43,6 @@ import {
   fetchPredictionSuggestions,
   submitTeacherReview,
 } from "@/lib/prediction-api";
-import { Card } from "../retroui/Card";
 
 interface PredictionDetailSheetProps {
   predictionId: number | null;
@@ -94,6 +98,7 @@ export default function PredictionDetailSheet({
   currentTermPrediction = null,
   candidateId,
 }: PredictionDetailSheetProps) {
+  const toast = useToast();
   const { user } = useAuth();
   const isTeacher = user?.role === "teacher";
 
@@ -148,6 +153,7 @@ export default function PredictionDetailSheet({
         priority: interventionPriority,
       });
       setInterventionSuccess(true);
+      toast.success({ title: "Intervention assigned" });
       setInterventionTitle("");
       // Refresh detail and suggestions
       const [updatedDetail, updatedSuggestions] = await Promise.all([
@@ -159,6 +165,7 @@ export default function PredictionDetailSheet({
     } catch (err: unknown) {
       console.error(err);
       setInterventionError(err instanceof Error ? err.message : "Failed to assign intervention");
+      toast.error({ title: "Failed to assign intervention", description: err instanceof Error ? err.message : undefined });
     } finally {
       setAssigningIntervention(false);
     }
@@ -182,10 +189,12 @@ export default function PredictionDetailSheet({
           : prev
       );
       setReviewSuccess(true);
+      toast.success({ title: "Review submitted" });
       setReviewDecision("");
       setReviewNotes("");
     } catch (err) {
       console.error(err);
+      toast.error({ title: "Failed to submit review", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSubmitting(false);
     }
@@ -202,15 +211,26 @@ export default function PredictionDetailSheet({
         {currentTermPrediction ? (
           <div>
             <CurrentTermTeacherDetail prediction={currentTermPrediction} />
-            {isTeacher && candidateId !== undefined && <div className="px-4 pb-5"><Button asChild><Link to={`${routes.teacher.interventions}?candidate=${candidateId}`}>Review Intervention</Link></Button></div>}
+            {isTeacher && candidateId !== undefined && (
+              <div className="px-4 pb-5">
+                <Button asChild>
+                  <Link to={`${routes.teacher.interventions}?candidate=${candidateId}`}>
+                    Review Intervention
+                  </Link>
+                </Button>
+              </div>
+            )}
           </div>
         ) : loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="animate-spin text-gray-400" size={28} />
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-gray-400">
+            <Loader2 size="md" />
+            <span className="text-xs font-semibold">Loading prediction details...</span>
           </div>
         ) : loadError ? (
-          <div className="px-4 py-20 text-center text-sm text-destructive" role="alert">
-            {loadError}
+          <div className="px-4 py-6" role="alert">
+            <Alert status="error" className="text-sm font-semibold">
+              {loadError}
+            </Alert>
           </div>
         ) : detail ? (
           <div className="flex flex-col gap-5 p-4">
@@ -519,63 +539,63 @@ export default function PredictionDetailSheet({
               </section>
             )}
 
-            {isTeacher && <div className="space-y-3 border-t-2 border-black pt-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-extrabold uppercase tracking-wide text-black flex items-center gap-1.5">
-                  <Sparkles size={16} className="text-yellow-500 fill-yellow-400" />
-                  Assigned Interventions ({suggestions.length})
-                </h3>
-              </div>
-
-              {suggestions.length > 0 ? (
-                <div className="flex flex-col gap-2">
-                  {suggestions.map((s) => (
-                    <div
-                      key={s.student_suggestion_id}
-                      className="rounded-none border-2 border-black bg-yellow-50/50 p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-extrabold text-xs text-black uppercase">
-                          {s.title}
-                        </span>
-                        <Badge
-                          className={`border-2 border-black text-[10px] uppercase font-bold px-2 ${s.status === "ACTIVE"
-                            ? "bg-amber-300 text-black"
-                            : "bg-emerald-400 text-black"
-                            }`}
-                        >
-                          {s.status}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-gray-700 font-medium mt-1">
-                        Priority: <strong className="text-black">{s.priority}</strong>
-                      </p>
-                    </div>
-                  ))}
+            {isTeacher ? (
+              <div className="space-y-3 border-t-2 border-black pt-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-extrabold uppercase tracking-wide text-black flex items-center gap-1.5">
+                    <Sparkles size={16} className="text-yellow-500 fill-yellow-400" />
+                    Assigned Interventions ({suggestions.length})
+                  </h3>
                 </div>
-              ) : (
-                <p className="text-xs text-gray-500 font-semibold italic">
-                  No persistent interventions assigned yet for this prediction.
-                </p>
-              )}
 
-              {/* Assign New Intervention Box */}
-              {isTeacher ? (
-                <div className="border-2 border-black p-3 bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-2.5 mt-2">
+                {suggestions.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    {suggestions.map((s) => (
+                      <div
+                        key={s.student_suggestion_id}
+                        className="rounded-none border-2 border-black bg-yellow-50/50 p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-xs text-black uppercase">
+                            {s.title}
+                          </span>
+                          <Badge
+                            className={`border-2 border-black text-[10px] uppercase font-bold px-2 ${s.status === "ACTIVE"
+                              ? "bg-amber-300 text-black"
+                              : "bg-emerald-400 text-black"
+                              }`}
+                          >
+                            {s.status}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-gray-700 font-medium mt-1">
+                          Priority: <strong className="text-black">{s.priority}</strong>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500 font-semibold italic">
+                    No persistent interventions assigned yet for this prediction.
+                  </p>
+                )}
+
+                {/* Assign New Intervention Box */}
+                <Card className="border-2 border-black p-3 bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-2.5 mt-2">
                   <span className="text-xs font-black uppercase text-black">
                     Quick Assign AI Intervention
                   </span>
                   {interventionSuccess && (
-                    <div className="text-xs font-bold text-emerald-700 flex items-center gap-1">
-                      <CheckCircle2 size={14} /> Intervention assigned successfully!
-                    </div>
+                    <Alert status="success" className="p-2 text-xs font-bold flex items-center gap-1">
+                      <CheckCircle2 size={14} className="shrink-0" /> Intervention assigned successfully!
+                    </Alert>
                   )}
                   {interventionError && (
-                    <div className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 p-2 rounded">
+                    <Alert status="error" className="p-2 text-xs font-bold">
                       {interventionError}
-                    </div>
+                    </Alert>
                   )}
-                  <input
+                  <Input
                     type="text"
                     placeholder="Intervention title (e.g. Remedial Algebra Review)..."
                     value={interventionTitle}
@@ -598,25 +618,25 @@ export default function PredictionDetailSheet({
                     </Select>
                     <Button
                       size="sm"
-                      disabled={!interventionTitle.trim() || assigningIntervention}
                       onClick={handleAssignIntervention}
-                      className="h-8 flex-1 bg-yellow-300 hover:bg-yellow-400 text-black border-2 border-black font-extrabold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      disabled={assigningIntervention || !interventionTitle.trim()}
+                      className="bg-yellow-400 hover:bg-yellow-500 text-black border-2 border-black font-extrabold text-xs h-8 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                     >
                       {assigningIntervention ? (
-                        <Loader2 size={14} className="animate-spin mr-1" />
+                        <Loader2 size="sm" className="mr-1" />
                       ) : (
                         <Send size={12} className="mr-1 stroke-[2.5]" />
                       )}
                       Assign Intervention
                     </Button>
                   </div>
-                </div>
-              ) : (
-                <div className="border-2 border-black p-3 bg-sky-50 text-sky-900 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] mt-2">
-                  🔒 Read-Only (Admin View): Assigning interventions is reserved for assigned subject teachers.
-                </div>
-              )}
-            </div>}
+                </Card>
+              </div>
+            ) : (
+              <Alert status="info" className="text-xs font-bold mt-2">
+                🔒 Read-Only (Admin View): Assigning interventions is reserved for assigned subject teachers.
+              </Alert>
+            )}
 
             <Separator />
             {/* ── Section: Teacher Review ── */}
@@ -743,93 +763,309 @@ function formatDate(value: string): string {
   });
 }
 
-function CurrentTermTeacherDetail({ prediction }: { prediction: DevelopmentCurrentTermListItem }) {
+function CurrentTermTeacherDetail({
+  prediction,
+}: {
+  prediction: DevelopmentCurrentTermListItem;
+}) {
   const academic = prediction.academic_evidence;
   const attendance = prediction.participation_context.attendance;
   const submissions = prediction.participation_context.submissions;
   const term = prediction.term_context;
-  const risk = RISK_LABELS[prediction.intervention_level] || prediction.intervention_level;
+  const risk =
+    RISK_LABELS[prediction.intervention_level] || prediction.intervention_level;
 
-  return <div className="flex flex-col gap-5 p-4 text-sm">
-    {prediction.official_final_grade_available && <div role="status" className="border-2 border-blue-700 bg-blue-50 p-3">
-      <p className="font-black">Final Grade: {prediction.official_final_grade?.toFixed(2) ?? "Not available"}</p>
-      <p>Earlier Projected Final Term Grade: {prediction.projected_final_term_grade?.toFixed(2) ?? "Not available"}</p>
-      <p>This projection was generated before the official final grade. It is historical and is no longer the current outcome.</p>
-    </div>}
-    {!term.is_active && !prediction.official_final_grade_available && <p role="status" className="border border-blue-700 bg-blue-50 p-3">This term is no longer active. The projection shown here is historical.</p>}
-    {term.scheduled_end_passed_while_active && <p role="status" className="border border-amber-700 bg-amber-50 p-3">Scheduled end date has passed; this term remains active.</p>}
-    <section aria-labelledby="student-overview-heading">
-      <h2 id="student-overview-heading" className="mb-2 text-base font-black">Student Overview</h2>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-2 border-black bg-yellow-50 p-3">
-        <dt className="text-gray-600">Student</dt><dd className="font-bold">{prediction.student_name || prediction.student_id}</dd>
-        <dt className="text-gray-600">Class / Section</dt><dd>{prediction.class_name}</dd>
-        <dt className="text-gray-600">Subject</dt><dd>{prediction.subject_name}</dd>
-        <dt className="text-gray-600">Academic Term</dt><dd>{prediction.period_name}</dd>
-      </dl>
-    </section>
+  return (
+    <div className="flex flex-col gap-5 p-4 text-sm">
+      {prediction.official_final_grade_available && (
+        <Alert
+          status="info"
+          role="status"
+          className="border-2 border-blue-700 bg-blue-50 p-3"
+        >
+          <p className="font-black">
+            Final Grade:{" "}
+            {prediction.official_final_grade?.toFixed(2) ?? "Not available"}
+          </p>
+          <p>
+            Earlier Projected Final Term Grade:{" "}
+            {prediction.projected_final_term_grade?.toFixed(2) ?? "Not available"}
+          </p>
+          <p>
+            This projection was generated before the official final grade. It is
+            historical and is no longer the current outcome.
+          </p>
+        </Alert>
+      )}
 
-    <section aria-labelledby="current-projection-heading">
-      <h2 id="current-projection-heading" className="mb-2 text-base font-black">{prediction.official_final_grade_available || !term.is_active ? "Earlier Projection" : "Current Projection"}</h2>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="border-2 border-black p-3"><p className="text-xs text-gray-600">Projected Final Term Grade</p><p className="text-2xl font-black">{prediction.projected_final_term_grade?.toFixed(2) ?? "Not available"}</p></div>
-        <div className="border-2 border-black p-3"><p className="text-xs text-gray-600">Intervention Level</p><Badge size="sm" variant="surface" className="mt-2 border-2 border-black font-bold">{risk}</Badge></div>
-      </div>
-      <p className="mt-2 font-semibold">{prediction.readiness_label}</p>
-      <p className="mt-1 text-xs text-gray-600">The intervention level is assigned from the projected grade using the school's configured thresholds.</p>
-    </section>
+      {!term.is_active && !prediction.official_final_grade_available && (
+        <Alert
+          status="info"
+          role="status"
+          className="border border-blue-700 bg-blue-50 p-3"
+        >
+          This term is no longer active. The projection shown here is historical.
+        </Alert>
+      )}
 
-    <section aria-labelledby="academic-evidence-heading">
-      <h2 id="academic-evidence-heading" className="mb-1 text-base font-black">Academic Evidence at Prediction Time</h2>
-      <p className="mb-3 text-xs text-gray-600">Completed grade components can inform the projection. Partial Examination scores are shown for context only.</p>
-      <div className="space-y-2">
-        <EvidenceRow label="Written Works" count={academic.written_works.graded_count} percent={academic.written_works.performance_percent} />
-        <EvidenceRow label="Performance Tasks" count={academic.performance_tasks.graded_count} percent={academic.performance_tasks.performance_percent} />
-        <ExaminationEvidence examination={academic.examination} />
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 border-t-2 border-black pt-3">
-        <div><p className="text-xs text-gray-600">Academic performance so far</p><p className="font-black">{formatPercent(academic.overall.performance_percent)}</p></div>
-        <div><p className="text-xs text-gray-600">Grade components observed</p><p className="font-black">{formatPercent(academic.overall.observed_component_weight_percent)}</p></div>
-      </div>
-    </section>
+      {term.scheduled_end_passed_while_active && (
+        <Alert
+          status="warning"
+          role="status"
+          className="border border-amber-700 bg-amber-50 p-3"
+        >
+          Scheduled end date has passed; this term remains active.
+        </Alert>
+      )}
 
-    <section aria-labelledby="classroom-context-heading" className="border-t-2 border-black pt-4">
-      <h2 id="classroom-context-heading" className="mb-1 text-base font-black">Additional Classroom Context</h2>
-      <p className="mb-3 text-xs text-gray-600">These participation indicators provide classroom context. They are not inputs to the current grade-projection model.</p>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="border border-black p-3">
-          <p className="font-bold">Attendance</p>
-          <p className="text-lg font-black">{formatPercent(attendance.attendance_rate)}</p>
-          <p className="text-xs text-gray-600">{attendance.absent} absent, {attendance.late} late across {attendance.recorded_days} recorded days</p>
+      <section aria-labelledby="student-overview-heading">
+        <h2 id="student-overview-heading" className="mb-2 text-base font-black">
+          Student Overview
+        </h2>
+        <Card className="grid grid-cols-2 gap-x-4 gap-y-2 border-2 border-black bg-yellow-50 p-3 shadow-none">
+          <dt className="text-gray-600 font-semibold">Student</dt>
+          <dd className="font-bold">
+            {prediction.student_name || prediction.student_id}
+          </dd>
+
+          <dt className="text-gray-600 font-semibold">Class / Section</dt>
+          <dd>{prediction.class_name}</dd>
+
+          <dt className="text-gray-600 font-semibold">Subject</dt>
+          <dd>{prediction.subject_name}</dd>
+
+          <dt className="text-gray-600 font-semibold">Academic Term</dt>
+          <dd>{prediction.period_name}</dd>
+        </Card>
+      </section>
+
+      <section aria-labelledby="current-projection-heading">
+        <h2
+          id="current-projection-heading"
+          className="mb-2 text-base font-black"
+        >
+          {prediction.official_final_grade_available || !term.is_active
+            ? "Earlier Projection"
+            : "Current Projection"}
+        </h2>
+        <div className="grid grid-cols-2 gap-3">
+          <Card className="border-2 border-black p-3 shadow-none bg-white">
+            <p className="text-xs text-gray-600">Projected Final Term Grade</p>
+            <p className="text-2xl font-black">
+              {prediction.projected_final_term_grade?.toFixed(2) ?? "Not available"}
+            </p>
+          </Card>
+          <Card className="border-2 border-black p-3 shadow-none bg-white">
+            <p className="text-xs text-gray-600">Intervention Level</p>
+            <Badge
+              size="sm"
+              variant="surface"
+              className="mt-2 border-2 border-black font-bold"
+            >
+              {risk}
+            </Badge>
+          </Card>
         </div>
-        <div className="border border-black p-3">
-          <p className="font-bold">Submissions</p>
-          <p className="text-lg font-black">{formatPercent(submissions.completion_rate)}</p>
-          <p className="text-xs text-gray-600">{submissions.submitted_count} of {submissions.assigned_count} submitted, {submissions.missing_count} missing, {submissions.late_count} late</p>
-        </div>
-      </div>
-    </section>
+        <p className="mt-2 font-semibold">{prediction.readiness_label}</p>
+        <p className="mt-1 text-xs text-gray-600">
+          The intervention level is assigned from the projected grade using the
+          school's configured thresholds.
+        </p>
+      </section>
 
-    <section aria-labelledby="term-progress-heading" className="border-t-2 border-black pt-4">
-      <h2 id="term-progress-heading" className="mb-2 text-base font-black">Term Progress</h2>
-      <dl className="grid grid-cols-2 gap-y-2">
-        <dt className="text-gray-600">Term dates</dt><dd>{formatDate(term.start_date)} - {formatDate(term.end_date)}</dd>
-        <dt className="text-gray-600">Evidence available through</dt><dd>{formatDate(term.evidence_cutoff_date)}</dd>
-        <dt className="text-gray-600">Term progress</dt><dd>{term.progress_percent.toFixed(1)}%</dd>
-        <dt className="text-gray-600">Days remaining</dt><dd>{term.days_remaining}</dd>
-        <dt className="text-gray-600">Still upcoming</dt><dd>{submissions.upcoming_count} assigned item{submissions.upcoming_count === 1 ? "" : "s"}</dd>
-      </dl>
-    </section>
-  </div>;
+      <section aria-labelledby="academic-evidence-heading">
+        <h2 id="academic-evidence-heading" className="mb-1 text-base font-black">
+          Academic Evidence at Prediction Time
+        </h2>
+        <p className="mb-3 text-xs text-gray-600">
+          Completed grade components can inform the projection. Partial
+          Examination scores are shown for context only.
+        </p>
+        <div className="space-y-2">
+          <EvidenceRow
+            label="Written Works"
+            count={academic.written_works.graded_count}
+            percent={academic.written_works.performance_percent}
+          />
+          <EvidenceRow
+            label="Performance Tasks"
+            count={academic.performance_tasks.graded_count}
+            percent={academic.performance_tasks.performance_percent}
+          />
+          <ExaminationEvidence examination={academic.examination} />
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 border-t-2 border-black pt-3">
+          <Card className="p-3 border-2 border-black shadow-none bg-white">
+            <p className="text-xs text-gray-600">Academic performance so far</p>
+            <p className="font-black text-lg mb-1">
+              {formatPercent(academic.overall.performance_percent)}
+            </p>
+            {academic.overall.performance_percent !== null && (
+              <Progress
+                value={Math.min(
+                  100,
+                  Math.max(0, academic.overall.performance_percent)
+                )}
+                className="h-2"
+              />
+            )}
+          </Card>
+          <Card className="p-3 border-2 border-black shadow-none bg-white">
+            <p className="text-xs text-gray-600">Grade components observed</p>
+            <p className="font-black text-lg mb-1">
+              {formatPercent(
+                academic.overall.observed_component_weight_percent
+              )}
+            </p>
+            {academic.overall.observed_component_weight_percent !== null && (
+              <Progress
+                value={Math.min(
+                  100,
+                  Math.max(
+                    0,
+                    academic.overall.observed_component_weight_percent
+                  )
+                )}
+                className="h-2"
+              />
+            )}
+          </Card>
+        </div>
+      </section>
+
+      <section
+        aria-labelledby="classroom-context-heading"
+        className="border-t-2 border-black pt-4"
+      >
+        <h2
+          id="classroom-context-heading"
+          className="mb-1 text-base font-black"
+        >
+          Additional Classroom Context
+        </h2>
+        <p className="mb-3 text-xs text-gray-600">
+          These participation indicators provide classroom context. They are not
+          inputs to the current grade-projection model.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <Card className="border-2 border-black p-3 shadow-none bg-white">
+            <div className="flex items-center justify-between mb-1">
+              <p className="font-bold">Attendance</p>
+              <span className="text-lg font-black">
+                {formatPercent(attendance.attendance_rate)}
+              </span>
+            </div>
+            <Progress
+              value={
+                attendance.attendance_rate !== null
+                  ? Math.min(100, Math.max(0, attendance.attendance_rate))
+                  : 0
+              }
+              className="h-2 mb-2"
+            />
+            <p className="text-xs text-gray-600">
+              {attendance.absent} absent, {attendance.late} late across{" "}
+              {attendance.recorded_days} recorded days
+            </p>
+          </Card>
+          <Card className="border-2 border-black p-3 shadow-none bg-white">
+            <div className="flex items-center justify-between mb-1">
+              <p className="font-bold">Submissions</p>
+              <span className="text-lg font-black">
+                {formatPercent(submissions.completion_rate)}
+              </span>
+            </div>
+            <Progress
+              value={
+                submissions.completion_rate !== null
+                  ? Math.min(100, Math.max(0, submissions.completion_rate))
+                  : 0
+              }
+              className="h-2 mb-2"
+            />
+            <p className="text-xs text-gray-600">
+              {submissions.submitted_count} of {submissions.assigned_count}{" "}
+              submitted, {submissions.missing_count} missing,{" "}
+              {submissions.late_count} late
+            </p>
+          </Card>
+        </div>
+      </section>
+
+      <section
+        aria-labelledby="term-progress-heading"
+        className="border-t-2 border-black pt-4"
+      >
+        <h2 id="term-progress-heading" className="mb-2 text-base font-black">
+          Term Progress
+        </h2>
+        <Progress
+          value={Math.min(100, Math.max(0, term.progress_percent))}
+          className="h-2.5 mb-3"
+        />
+        <dl className="grid grid-cols-2 gap-y-2">
+          <dt className="text-gray-600">Term dates</dt>
+          <dd>
+            {formatDate(term.start_date)} - {formatDate(term.end_date)}
+          </dd>
+
+          <dt className="text-gray-600">Evidence available through</dt>
+          <dd>{formatDate(term.evidence_cutoff_date)}</dd>
+
+          <dt className="text-gray-600">Term progress</dt>
+          <dd>{term.progress_percent.toFixed(1)}%</dd>
+
+          <dt className="text-gray-600">Days remaining</dt>
+          <dd>{term.days_remaining}</dd>
+
+          <dt className="text-gray-600">Still upcoming</dt>
+          <dd>
+            {submissions.upcoming_count} assigned item
+            {submissions.upcoming_count === 1 ? "" : "s"}
+          </dd>
+        </dl>
+      </section>
+    </div>
+  );
 }
 
-function EvidenceRow({ label, count, percent }: { label: string; count: number; percent: number | null }) {
-  return <div className="flex items-center justify-between border border-black px-3 py-2">
-    <div><p className="font-bold">{label}</p><p className="text-xs text-gray-600">{count} graded record{count === 1 ? "" : "s"}</p></div>
-    <p className="font-black">{formatPercent(percent)}</p>
-  </div>;
+function EvidenceRow({
+  label,
+  count,
+  percent,
+}: {
+  label: string;
+  count: number;
+  percent: number | null;
+}) {
+  return (
+    <div className="flex items-center justify-between border border-black px-3 py-2 bg-white">
+      <div>
+        <p className="font-bold">{label}</p>
+        <p className="text-xs text-gray-600">
+          {count} graded record{count === 1 ? "" : "s"}
+        </p>
+      </div>
+      <div className="flex items-center gap-3">
+        {percent !== null && (
+          <Progress
+            value={Math.min(100, Math.max(0, percent))}
+            className="w-16 h-2 hidden sm:block"
+          />
+        )}
+        <p className="font-black text-right min-w-[50px]">
+          {formatPercent(percent)}
+        </p>
+      </div>
+    </div>
+  );
 }
 
-export function ExaminationEvidence({ examination }: { examination: DevelopmentCurrentTermListItem["academic_evidence"]["examination"] }) {
+export function ExaminationEvidence({
+  examination,
+}: {
+  examination: DevelopmentCurrentTermListItem["academic_evidence"]["examination"];
+}) {
   const detail = examination.presentation;
   const labels = [
     ["SUMMATIVE_1", "Summative 1"],
@@ -841,24 +1077,58 @@ export function ExaminationEvidence({ examination }: { examination: DevelopmentC
     PARTIAL: "In progress",
     COMPLETE: formatPercent(examination.performance_percent),
     AGGREGATE: formatPercent(examination.performance_percent),
-    DETAILS_UNAVAILABLE: examination.performance_percent === null ? "Status unknown" : formatPercent(examination.performance_percent),
+    DETAILS_UNAVAILABLE:
+      examination.performance_percent === null
+        ? "Status unknown"
+        : formatPercent(examination.performance_percent),
   }[detail.status];
 
-  return <div className="border border-black px-3 py-2" aria-label="Examination evidence">
-    <div className="flex items-center justify-between">
-      <p className="font-bold">Examination</p>
-      <p className="font-black">{statusLabel}</p>
+  return (
+    <div
+      className="border border-black px-3 py-2"
+      aria-label="Examination evidence"
+    >
+      <div className="flex items-center justify-between">
+        <p className="font-bold">Examination</p>
+        <p className="font-black">{statusLabel}</p>
+      </div>
+      {(detail.status === "PARTIAL" ||
+        detail.status === "COMPLETE" ||
+        detail.status === "NOT_STARTED") && (
+        <>
+          <p className="text-xs text-gray-600">
+            {detail.completed_count} of 3 graded
+          </p>
+          <dl className="mt-2 grid grid-cols-2 gap-y-1 text-xs">
+            {labels.map(([key, label]) => (
+              <div className="contents" key={key}>
+                <dt>{label}</dt>
+                <dd className="text-right">
+                  {detail.components[key] === null ||
+                  detail.components[key] === undefined
+                    ? "Not yet graded"
+                    : formatPercent(detail.components[key])}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </>
+      )}
+      {detail.status === "PARTIAL" && (
+        <p className="mt-2 text-xs text-gray-600">
+          Final Examination component not yet available for prediction.
+        </p>
+      )}
+      {detail.status === "AGGREGATE" && (
+        <p className="text-xs text-gray-600">
+          Individual examination parts were not recorded for this assessment.
+        </p>
+      )}
+      {detail.status === "DETAILS_UNAVAILABLE" && (
+        <p className="text-xs text-gray-600">
+          Component details are unavailable for this saved prediction.
+        </p>
+      )}
     </div>
-    {(detail.status === "PARTIAL" || detail.status === "COMPLETE" || detail.status === "NOT_STARTED") && <>
-      <p className="text-xs text-gray-600">{detail.completed_count} of 3 graded</p>
-      <dl className="mt-2 grid grid-cols-2 gap-y-1 text-xs">
-        {labels.map(([key, label]) => <div className="contents" key={key}>
-          <dt>{label}</dt><dd className="text-right">{detail.components[key] === null || detail.components[key] === undefined ? "Not yet graded" : formatPercent(detail.components[key])}</dd>
-        </div>)}
-      </dl>
-    </>}
-    {detail.status === "PARTIAL" && <p className="mt-2 text-xs text-gray-600">Final Examination component not yet available for prediction.</p>}
-    {detail.status === "AGGREGATE" && <p className="text-xs text-gray-600">Individual examination parts were not recorded for this assessment.</p>}
-    {detail.status === "DETAILS_UNAVAILABLE" && <p className="text-xs text-gray-600">Component details are unavailable for this saved prediction.</p>}
-  </div>;
+  );
 }

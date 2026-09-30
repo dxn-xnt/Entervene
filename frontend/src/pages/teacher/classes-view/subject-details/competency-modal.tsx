@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Loader2, Plus, Save, X } from "lucide-react";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { apiFetch } from "@/lib/api";
@@ -30,6 +31,7 @@ export default function CompetencyModal({
   editingCompetency,
   initialData,
 }: CompetencyModalProps) {
+  const toast = useToast();
   const isModalOpen = open !== undefined ? open : (isOpen ?? false);
   const targetCompetency = editingCompetency || initialData || null;
 
@@ -96,6 +98,7 @@ export default function CompetencyModal({
         const updated = (await res.json()) as CompetencyItem;
         if (onSaved) onSaved(updated);
         if (onSuccess) await onSuccess(updated);
+        toast.success({ title: "Competency updated" });
       } else {
         const parsedSubjectId = Number(subjectId);
         if (!parsedSubjectId || isNaN(parsedSubjectId)) {
@@ -124,10 +127,12 @@ export default function CompetencyModal({
         const created = (await res.json()) as CompetencyItem;
         if (onSaved) onSaved(created);
         if (onSuccess) await onSuccess(created);
+        toast.success({ title: "Competency created" });
       }
       handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save competency.");
+      toast.error({ title: "Failed to save competency", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSubmitting(false);
     }

@@ -4,6 +4,7 @@ import { ChevronLeft, SkipBack, SkipForward, Flag, Loader2, AlertCircle } from "
 import { LoadingPanel } from "@/components/loading-panel";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
+import { useToast } from "@/components/retroui/use-toast";
 import { routes } from "@/../routes";
 import {
   getQuizAttempt,
@@ -27,6 +28,7 @@ function formatTime(totalSeconds: number): string {
 // Component
 // ---------------------------------------------------------------------------
 const StudentQuizTake = () => {
+  const toast = useToast();
   const { assignmentId } = useParams<{ assignmentId: string }>();
   const navigate = useNavigate();
   const aid = Number(assignmentId);
@@ -178,14 +180,16 @@ const StudentQuizTake = () => {
       });
 
       await submitQuizAttempt(aid, payload);
+      toast.success({ title: "Quiz submitted" });
 
       // Navigate to result page
       navigate(routes.student.quizResult.replace(":assignmentId", String(aid)), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit quiz.");
+      toast.error({ title: "Failed to submit quiz", description: err instanceof Error ? err.message : undefined });
       setSubmitting(false);
     }
-  }, [quiz, answers, aid, navigate, submitting]);
+  }, [quiz, answers, aid, navigate, submitting, toast]);
 
   // --------------------------------------------------
   // Derived values

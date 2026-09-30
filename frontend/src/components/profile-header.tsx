@@ -13,7 +13,7 @@ export type ProfileHeaderProps = {
   user?: {
     fullName?: string;
     email?: string;
-    avatar?: string;
+    avatar?: string | null;
     role?: string | null;
   } | null;
   onAvatarClick?: () => void;
@@ -61,6 +61,7 @@ export type UserProfileHeaderProps = {
   extra?: string;
   /** Avatar variant controlling the retroui Avatar style. */
   avatarVariant?: AvatarVariant;
+  avatar?: string | null;
   /** Status badge label. */
   statusLabel?: string;
   /** Status badge variant. */
@@ -82,13 +83,14 @@ export function UserProfileHeader({
   subtitle,
   extra,
   avatarVariant = "default",
+  avatar,
   statusLabel,
   statusVariant = "default",
   role,
   isPending,
   className,
 }: UserProfileHeaderProps) {
-  const avatarSrc = AVATAR_SRC[avatarVariant];
+  const avatarSrc = avatar || AVATAR_SRC[avatarVariant];
 
   return (
     <Card className={cn("flex justify-between gap-4 p-4 shadow-[4px_5px_0_#000]", className)}>

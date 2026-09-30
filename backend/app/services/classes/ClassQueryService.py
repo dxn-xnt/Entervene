@@ -45,7 +45,7 @@ def _academic_level_option(academic_level, requires_pathway: bool = False) -> di
     }
 
 
-def _adviser_option(adviser) -> dict | None:
+def _adviser_option(adviser, avatar: str | None = None) -> dict | None:
     if adviser is None:
         return None
     return {
@@ -54,6 +54,7 @@ def _adviser_option(adviser) -> dict | None:
         "middle_name": adviser.middle_name,
         "last_name": adviser.last_name,
         "suffix": adviser.suffix,
+        "avatar": avatar,
     }
 
 
@@ -119,13 +120,14 @@ def _student_list_item(student: Student, account: UserAccount | None = None) -> 
         "full_name": full_name,
         "gender": _student_gender_group(student.gender),
         "avatar_initial": (readable_text(student.first_name)[:1] or "?").upper(),
+        "avatar": account.avatar_path if account else None,
         "account_status": account.account_status if account else None,
     }
 
 
 def _teacher_advisory_student_item(student: Student, account: UserAccount | None) -> dict:
     return {
-        **_student_list_item(student),
+        **_student_list_item(student, account),
         "student_lrn": student.student_lrn,
         "email": student.email or (account.email if account else None),
         "account_status": account.account_status if account else None,
@@ -254,6 +256,7 @@ def list_classes_data(db: Session, status: str) -> dict:
             AcademicLevel,
             AcademicYear,
             AcademicStaff,
+            UserAccount.avatar_path.label("adviser_avatar"),
             AcademicPathway,
             func.count(StudentClass.student_class_id).label("student_count"),
             func.sum(case((func.lower(Student.gender).in_(["male", "m", "boy"]), 1), else_=0)).label("male_count"),
@@ -262,6 +265,7 @@ def list_classes_data(db: Session, status: str) -> dict:
         .join(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
         .join(AcademicYear, Class.academic_year_id == AcademicYear.academic_year_id)
         .outerjoin(AcademicStaff, Class.adviser_staff_id == AcademicStaff.staff_id)
+        .outerjoin(UserAccount, AcademicStaff.user_id == UserAccount.user_id)
         .outerjoin(AcademicPathway, Class.pathway_id == AcademicPathway.id)
         .outerjoin(StudentClass, Class.class_id == StudentClass.class_id)
         .outerjoin(Student, StudentClass.student_id == Student.student_id)
@@ -270,6 +274,7 @@ def list_classes_data(db: Session, status: str) -> dict:
             AcademicLevel.academic_level_id,
             AcademicYear.academic_year_id,
             AcademicStaff.staff_id,
+            UserAccount.avatar_path,
             AcademicPathway.id,
         )
         .order_by(AcademicLevel.grade_level, func.lower(Class.section_name))
@@ -280,7 +285,7 @@ def list_classes_data(db: Session, status: str) -> dict:
     total_students = 0
     active_classes = 0
     archived_classes = 0
-    for class_, academic_level, academic_year, adviser, pathway, student_count, male_count, female_count in class_rows:
+    for class_, academic_level, academic_year, adviser, adviser_avatar, pathway, student_count, male_count, female_count in class_rows:
         count = int(student_count or 0)
         total_students += count
         class_status = readable_text(class_.class_status) or "active"
@@ -299,7 +304,7 @@ def list_classes_data(db: Session, status: str) -> dict:
                 "pathway": _pathway_option(pathway),
                 "academic_year": _academic_year_option(academic_year),
                 "academic_level": _academic_level_option(academic_level),
-                "adviser": _adviser_option(adviser),
+                "adviser": _adviser_option(adviser, adviser_avatar),
                 "student_count": count,
                 "subject_count": 0,
                 "male_count": int(male_count or 0),
@@ -626,6 +631,12 @@ def get_unassigned_students_data(db: Session, academic_level_id: int) -> dict:
         .all()
     )
     students.sort(key=student_sort_key)
+    avatars = dict(
+        db.query(Student.student_id, UserAccount.avatar_path)
+        .join(UserAccount, Student.user_id == UserAccount.user_id)
+        .filter(Student.student_id.in_([student.student_id for student in students]))
+        .all()
+    ) if students else {}
 
     return {
         "academic_level": _academic_level_option(academic_level),
@@ -638,6 +649,7 @@ def get_unassigned_students_data(db: Session, academic_level_id: int) -> dict:
             "last_name": student.last_name,
             "gender": student.gender,
             "academic_level_id": student.academic_level_id,
+            "avatar": avatars.get(student.student_id),
         } for student in students],
     }
 
@@ -736,18 +748,19 @@ def get_class_transfer_options_data(db: Session, class_id: int) -> dict:
 
 def get_class_detail_data(db: Session, class_id: int) -> dict:
     class_row = (
-        db.query(Class, AcademicLevel, AcademicYear, AcademicStaff)
+        db.query(Class, AcademicLevel, AcademicYear, AcademicStaff, UserAccount.avatar_path)
         .options(joinedload(Class.pathway))
         .join(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
         .join(AcademicYear, Class.academic_year_id == AcademicYear.academic_year_id)
         .outerjoin(AcademicStaff, Class.adviser_staff_id == AcademicStaff.staff_id)
+        .outerjoin(UserAccount, AcademicStaff.user_id == UserAccount.user_id)
         .filter(Class.class_id == class_id)
         .first()
     )
     if class_row is None:
         raise HTTPException(status_code=404, detail="Class not found.")
 
-    class_, academic_level, academic_year, adviser = class_row
+    class_, academic_level, academic_year, adviser, adviser_avatar = class_row
     student_count = db.query(func.count(StudentClass.student_class_id)).filter(StudentClass.class_id == class_.class_id).scalar()
     subject_count = (
         db.query(func.count(SubjectLoad.subject_load_id))
@@ -767,7 +780,7 @@ def get_class_detail_data(db: Session, class_id: int) -> dict:
         "created_at": class_.created_at,
         "academic_year": _academic_year_option(academic_year),
         "academic_level": _academic_level_option(academic_level),
-        "adviser": _adviser_option(adviser),
+        "adviser": _adviser_option(adviser, adviser_avatar),
         "statistics": {
             "student_count": int(student_count or 0),
             "subject_count": int(subject_count or 0),

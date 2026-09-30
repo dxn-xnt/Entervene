@@ -12,6 +12,7 @@ import {
   DropdownMenuPortal
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -323,6 +324,7 @@ function GradeGroupCarousel({
 }
 
 export default function AdminSubjectLoadStudio() {
+  const toast = useToast();
   const [selectedGradeId, setSelectedGradeId] = useState<string>("all");
   const [selectedSectionId, setSelectedSectionId] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -1315,6 +1317,10 @@ export default function AdminSubjectLoadStudio() {
         message: res.message,
         type: "success",
       });
+      toast.success({
+        title: action === "draft" ? "Draft saved" : "Subject loads published",
+        description: res.message,
+      });
 
       // Refresh studio data to sync with DB
       void loadStudio(selectedPeriodId);
@@ -1348,6 +1354,10 @@ export default function AdminSubjectLoadStudio() {
           type: "error",
         });
       }
+      toast.error({
+        title: action === "draft" ? "Unable to save draft" : "Unable to publish subject loads",
+        description: typeof detail === "string" && detail ? detail : `Failed to ${action} subject loads.`,
+      });
     } finally {
       setIsSaving(false);
     }

@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";
 import {
@@ -36,6 +37,7 @@ export function ManualSuggestionPanel({
   subjectLoads,
   displayMode = "panel",
 }: Props) {
+  const toast = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<SuggestionResponse[]>([]);
@@ -73,11 +75,13 @@ export function ManualSuggestionPanel({
       if (action === "approve") await approveSuggestion(id);
       else if (action === "dismiss") await dismissSuggestion(id);
       else await archiveSuggestion(id);
+      toast.success({ title: `Suggestion ${action === "approve" ? "approved" : action === "dismiss" ? "dismissed" : "archived"}` });
       await loadHistory();
     } catch (err) {
       setHistoryError(
         err instanceof Error ? err.message : "Unable to update suggestion.",
       );
+      toast.error({ title: "Unable to update suggestion", description: err instanceof Error ? err.message : undefined });
     }
   }
 

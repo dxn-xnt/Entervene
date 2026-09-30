@@ -2,6 +2,7 @@ import { ProfileHeader } from "@/components/profile-header";
 import { useMemo, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Card } from "@/components/retroui/Card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { getMySchedule, type DynamicScheduleResponse } from "@/lib/api";
@@ -97,6 +98,7 @@ const TEACHER_AVATARS = [
 ];
 
 export default function AdminProfile() {
+  const toast = useToast();
   const { user, updateAvatar } = useAuth();
   const { weeks, currentWeekIndex, monthLabel } = useMemo(
     () => buildCalendar(new Date()),
@@ -273,9 +275,10 @@ export default function AdminProfile() {
                   onClick={async () => {
                     try {
                       await updateAvatar(tempSelectedAvatar);
+                      toast.success({ title: "Avatar updated" });
                       setIsModalOpen(false);
                     } catch (error) {
-                      window.alert(error instanceof Error ? error.message : "Unable to save avatar.");
+                      toast.error({ title: "Unable to save avatar", description: error instanceof Error ? error.message : undefined });
                     }
                   }}
                   className="px-5 py-1.5 bg-[#79bd80] text-black border-2 border-black"

@@ -104,9 +104,6 @@ export default function CreateClassworkModal({
 
   const setFormError = (msg: string) => {
     setCreateError(msg);
-    if (msg) {
-      toast.error(msg);
-    }
   };
 
   const selectedSubjectLoads = useMemo(
@@ -385,11 +382,12 @@ export default function CreateClassworkModal({
       }
       await createResponse.json();
 
+      toast.success("Classwork created successfully.");
       onSuccess();
     } catch (err) {
-      setFormError(
-        err instanceof Error ? err.message : "Unable to create classwork.",
-      );
+      const message = err instanceof Error ? err.message : "Unable to create classwork.";
+      setFormError(message);
+      toast.error(message);
     } finally {
       setIsCreating(false);
     }

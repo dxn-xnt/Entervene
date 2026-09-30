@@ -12,6 +12,7 @@ import { Input } from "@/components/retroui/Input";
 import { Loader } from "@/components/retroui/Loader";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
+import { useToast } from "@/components/retroui/use-toast";
 import {
   getUsers,
   getTeacherSubjectLoads,
@@ -36,6 +37,7 @@ export default function AssignSubstituteModal({
   onClose,
   onSuccess,
 }: AssignSubstituteModalProps) {
+  const toast = useToast();
   const [teachers, setTeachers] = React.useState<User[]>([]);
   const [isLoadingTeachers, setIsLoadingTeachers] = React.useState(true);
 
@@ -98,9 +100,9 @@ export default function AssignSubstituteModal({
             setSelectedLoadIds(allAvailable.map((l) => l.subject_load_id));
           }
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (isMounted) {
-          setErrorMsg(err?.message || "Failed to load assigned subject loads for this teacher.");
+          setErrorMsg(err instanceof Error ? err.message : "Failed to load assigned subject loads for this teacher.");
         }
       } finally {
         if (isMounted) setIsLoadingLoads(false);
@@ -188,10 +190,12 @@ export default function AssignSubstituteModal({
         end_date: endDate.trim() ? endDate : null,
         reason: reason.trim() || undefined,
       });
+      toast.success({ title: "Substitute assigned" });
       onSuccess();
       onClose();
-    } catch (err: any) {
-      setErrorMsg(err?.message || "Failed to assign substitute.");
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to assign substitute.");
+      toast.error({ title: "Failed to assign substitute", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSubmitting(false);
     }
