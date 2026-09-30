@@ -205,9 +205,10 @@ def _question_analysis(
     question = link.question
     answered_count = len(answers)
     correct_count = sum(1 for answer in answers if answer.is_correct is True)
+    evaluated_count = sum(1 for answer in answers if answer.is_correct is not None)
     accuracy = (
-        round((correct_count / answered_count) * 100, 2)
-        if answered_count and question.question_type == "MULTIPLE_CHOICE"
+        round((correct_count / evaluated_count) * 100, 2)
+        if evaluated_count > 0
         else None
     )
     needs_grading_count = sum(1 for answer in answers if answer.points_awarded is None)
@@ -225,7 +226,20 @@ def _question_analysis(
                 option_id=option.option_id,
                 option_text=option.option_text,
                 is_correct=option.is_correct,
-                selected_count=sum(1 for answer in answers if answer.answer_text == option.option_text),
+                selected_count=sum(
+                    1 for answer in answers
+                    if answer.answer_text
+                    and (
+                        answer.answer_text == option.option_text
+                        or (
+                            question.question_type == "SHORT_ANSWER"
+                            and (
+                                answer.answer_text.strip().lower() == option.option_text.strip().lower()
+                                or (option.is_correct and answer.is_correct is True)
+                            )
+                        )
+                    )
+                ),
             )
             for option in sorted(question.options, key=lambda item: item.option_order)
         ],

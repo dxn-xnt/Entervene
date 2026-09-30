@@ -192,7 +192,7 @@ export default function QuizAnalysisView({
               <div>
                 {/* Sticky Question Navigator */}
                 {quizAnalysis.questions.length > 0 && (
-                  <div className="sticky top-0 z-20 pb-3 pt-1 -mt-1 bg-background/95 backdrop-blur-sm">
+                  <div className="sticky top-[58px] sm:top-[65px] z-20 pb-3 pt-1 -mt-1 bg-background/95 backdrop-blur-sm">
                     <Card className="shadow-none w-full bg-white border-2 border-black p-3 sm:p-4 mb-2">
                       <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-3">
@@ -261,13 +261,15 @@ export default function QuizAnalysisView({
 
                 <div className="space-y-4">
                   {sortedQuestions.map((q, i) => {
+                    const originalIndex = quizAnalysis.questions.findIndex((orig) => orig.quiz_question_id === q.quiz_question_id);
+                    const questionNumber = originalIndex !== -1 ? originalIndex + 1 : i + 1;
                     const isHighWrong = (q.answered_count ?? 0) > 0 && (q.accuracy_percent ?? 0) < ACCURACY_THRESHOLD_MEDIUM;
                     const wrongPercent = Math.round(100 - (q.accuracy_percent ?? 0));
                     return (
                       <div
                         key={q.quiz_question_id}
                         id={`quiz-question-card-${q.quiz_question_id}`}
-                        className="rounded border-2 border-black p-4 bg-white scroll-mt-28"
+                        className="rounded border-2 border-black p-4 bg-white scroll-mt-[260px] sm:scroll-mt-[280px]"
                       >
                         <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
                           <div className="flex flex-wrap items-center gap-4">
@@ -301,7 +303,7 @@ export default function QuizAnalysisView({
                         </div>
                       </div>
                       <p className="text-lg font-bold mb-4 whitespace-normal break-words [overflow-wrap:anywhere] leading-snug">
-                        {i + 1}. {q.question_text}
+                        {questionNumber}. {q.question_text}
                       </p>
                       {q.question_type === "MULTIPLE_CHOICE" ? (
                         <div className="space-y-3 w-full">
@@ -347,8 +349,54 @@ export default function QuizAnalysisView({
                           })}
                         </div>
                       ) : (
-                        <div className="mt-2 text-sm text-gray-600">
-                          {q.needs_grading_count} responses need manual grading.
+                        <div className="space-y-3 w-full">
+                          {q.option_distribution.length > 0 ? (
+                            <div className="space-y-2">
+                              <span className="text-xs font-bold uppercase text-gray-500 block">
+                                Expected Key / Correct Answer:
+                              </span>
+                              {q.option_distribution.map((opt) => {
+                                const percent = q.answered_count > 0 ? (opt.selected_count / q.answered_count) * 100 : 0;
+                                return (
+                                  <div
+                                    key={opt.option_id}
+                                    className="flex items-start justify-between gap-4 py-2 border-b border-gray-100 last:border-b-0"
+                                  >
+                                    <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
+                                      <div className="flex-1 min-w-0 text-sm font-semibold whitespace-normal break-words [overflow-wrap:anywhere] leading-relaxed text-gray-800 pt-0.5">
+                                        {opt.option_text}
+                                      </div>
+                                    </div>
+                                    <div className="shrink-0 flex items-center justify-end gap-3 pt-0.5 ml-auto">
+                                      <div className="w-24 shrink-0 text-right text-xs font-bold flex items-center justify-end gap-1">
+                                        <span className="text-[#3A6D38] inline-flex items-center gap-1 font-bold">
+                                          correct <Check size={12} className="inline shrink-0" />
+                                        </span>
+                                      </div>
+                                      <div className="w-56 sm:w-64 h-7 border border-black rounded bg-white relative overflow-hidden flex items-center shrink-0">
+                                        <div
+                                          className="absolute top-0 left-0 h-full bg-[#8BCB88]"
+                                          style={{ width: `${percent}%` }}
+                                        />
+                                        <span className="relative z-10 text-xs px-2.5 font-bold whitespace-nowrap text-black">
+                                          {opt.selected_count} answered
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="rounded border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500 italic">
+                              No reference answer key provided.
+                            </div>
+                          )}
+                          {q.needs_grading_count > 0 && (
+                            <div className="mt-2 text-sm text-gray-600">
+                              {q.needs_grading_count} response{q.needs_grading_count === 1 ? "" : "s"} need manual grading.
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
