@@ -187,6 +187,26 @@ export type StudentTodosResponse = {
   all: TodoItem[];
 };
 
+export type StudentStudyboardMetrics = {
+  week_start: string;
+  attendance: Array<{ date: string; status: "present" | "late" | "absent" | "excused" | "no_record" }>;
+  attendance_rate: number | null;
+  daily_reading_seconds: number[];
+  subject_reading_seconds: Array<{ subject: string; seconds: number }>;
+  grade_trend: Array<{ week_start: string; average: number | null }>;
+  on_time_count: number;
+  late_submission_count: number;
+  quiz_correct: number;
+  quiz_wrong: number;
+};
+
+export async function getMyStudyboardMetrics(academicPeriodId?: number | null): Promise<StudentStudyboardMetrics> {
+  const query = academicPeriodId == null ? "" : `?academic_period_id=${academicPeriodId}`;
+  const response = await apiFetch(`/api/v1/students/me/studyboard-metrics${query}`);
+  if (!response.ok) throw new Error("Unable to load Studyboard insights. Please try again.");
+  return (await response.json()) as StudentStudyboardMetrics;
+}
+
 export type ActivePeriodResponse = {
   period_id: number | null;
   period_name: string;
@@ -609,6 +629,7 @@ export type StudentSubjectItem = {
   subject_name: string;
   subject_codename: string | null;
   teacher_name: string;
+  teacher_avatar?: string | null;
   period_id: number;
   period_name: string;
   is_current_period: boolean;
