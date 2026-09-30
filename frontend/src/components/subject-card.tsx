@@ -172,15 +172,15 @@ export function SubjectCard({
             </div>
           </div>
         ) : (
-          <div className="flex w-full min-w-0 flex-col justify-between gap-2 -mb-2 sm:flex-row items-start">
-            <p className="min-w-0 break-words text-xl font-bold sm:text-2xl">
-              {title}
-            </p>
+          <div className="flex w-full min-w-0 flex-col items-start gap-2">
             {hasPending && (
-              <Badge size="sm" variant="surface" className="shrink-0">
+              <Badge size="sm" variant="surface" className="max-w-full">
                 {pendingCount} {pendingCount === 1 ? "Pending Classwork" : "Pending Classworks"}
               </Badge>
             )}
+            <p className="w-full min-w-0 break-words text-xl font-bold sm:text-2xl">
+              {title}
+            </p>
           </div>
         )}
 
