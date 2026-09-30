@@ -57,7 +57,9 @@ it("submits the selected lesson on an Examination quiz question", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   fireEvent.click(screen.getByRole("button", { name: "Sapphire" }));
   fireEvent.click(await screen.findByRole("button", { name: /Variables.*Published lesson/i }));
-  fireEvent.change(screen.getByLabelText("Question 1: What is a ratio?"), { target: { value: "42" } });
+  // The single-lesson auto-prefill should have mapped Q1 already; the label now uses the "Q1:" prefix.
+  const select = (await screen.findByLabelText(/Q1: What is a ratio\?/i)) as HTMLSelectElement;
+  fireEvent.change(select, { target: { value: "42" } });
   fireEvent.click(screen.getByRole("button", { name: "Assign" }));
 
   await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());

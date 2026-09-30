@@ -120,6 +120,9 @@ export default function CreateClassworkQuizModal({
     const [availableLessons, setAvailableLessons] = useState<TeacherLesson[]>([]);
     const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>([]);
     const [isLessonLoading, setIsLessonLoading] = useState(false);
+    // Bulk-selection state for question-level mapping
+    const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(() => new Set());
+    const [bulkLessonId, setBulkLessonId] = useState<string>("");
     const [isCreating, setIsCreating] = useState(false);
     const [createError, setCreateError] = useState("");
 
@@ -523,9 +526,19 @@ export default function CreateClassworkQuizModal({
                 );
 
                 setAvailableLessons(lessons);
-                setSelectedLessonIds((current) => remediationFocus
-                    ? remediationFocus.lesson_ids.filter((id) => uniqueLessons.has(id))
-                    : current.filter((id) => uniqueLessons.has(id)));
+                setSelectedLessonIds((current) => {
+                    const next = remediationFocus
+                        ? remediationFocus.lesson_ids.filter((id) => uniqueLessons.has(id))
+                        : current.filter((id) => uniqueLessons.has(id));
+                    // Auto-prefill: when exactly one lesson is available or selected, map every unmapped question to it
+                    if (next.length === 1) {
+                        const autoId = next[0];
+                        setQuizQuestions((qs) =>
+                            qs.map((q) => q.lesson_id ? q : { ...q, lesson_id: autoId }),
+                        );
+                    }
+                    return next;
+                });
                 setCreateError("");
             } catch (err) {
                 if (!isActive) return;
@@ -1867,27 +1880,171 @@ export default function CreateClassworkQuizModal({
                             )}
                         </div>
 
-                        {selectedLessonIds.length > 0 && <div className="space-y-3 rounded border-2 border-black bg-white p-4">
-                            <h3 className="font-bold">Question-level lesson mapping</h3>
-                            <p className="text-xs text-gray-600">Choose the lesson each question actually assesses. Its linked competency is used only when that student's answer has a score.</p>
-                            {quizQuestions.map((question, index) => <div key={question.id} className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-700" htmlFor={`question-lesson-${question.id}`}>
-                                    Question {index + 1}: {question.question_text}
-                                </label>
-                                <select
-                                    id={`question-lesson-${question.id}`}
-                                    value={question.lesson_id && selectedLessonIds.includes(question.lesson_id) ? question.lesson_id : ""}
-                                    onChange={(event) => updateQuizQuestion(question.id, { lesson_id: event.target.value ? Number(event.target.value) : null })}
-                                    disabled={isCreating}
-                                    className="w-full rounded border-2 border-black bg-white px-3 py-2 text-sm"
-                                >
-                                    <option value="">No question-level competency mapping</option>
-                                    {availableLessons.filter((lesson) => selectedLessonIds.includes(lesson.lesson_id)).map((lesson) => (
-                                        <option key={lesson.lesson_id} value={lesson.lesson_id}>{lesson.title}</option>
-                                    ))}
-                                </select>
-                            </div>)}
-                        </div>}
+                        {selectedLessonIds.length > 0 && (() => {
+                            const linkedLessons = availableLessons.filter((l) => selectedLessonIds.includes(l.lesson_id));
+                            const mappedCount = quizQuestions.filter((q) => q.lesson_id && selectedLessonIds.includes(q.lesson_id)).length;
+                            const totalCount = quizQuestions.length;
+                            const allChecked = selectedQuestionIds.size === totalCount;
+                            const someChecked = selectedQuestionIds.size > 0 && !allChecked;
+
+                            const toggleSelectAll = () => {
+                                if (allChecked) {
+                                    setSelectedQuestionIds(new Set());
+                                } else {
+                                    setSelectedQuestionIds(new Set(quizQuestions.map((q) => q.id)));
+                                }
+                            };
+
+                            const applyBulkLesson = () => {
+                                if (!bulkLessonId || selectedQuestionIds.size === 0) return;
+                                setQuizQuestions((qs) =>
+                                    qs.map((q) =>
+                                        selectedQuestionIds.has(q.id)
+                                            ? { ...q, lesson_id: Number(bulkLessonId) }
+                                            : q,
+                                    ),
+                                );
+                                setSelectedQuestionIds(new Set());
+                                setBulkLessonId("");
+                            };
+
+                            return (
+                                <div className="space-y-3 rounded border-2 border-black bg-white p-4">
+                                    {/* Header row with title and progress counter */}
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <h3 className="font-bold">Question-level lesson mapping</h3>
+                                        <span className={`text-xs font-bold px-2 py-0.5 rounded border-2 ${
+                                            mappedCount === totalCount
+                                                ? "border-green-600 bg-green-100 text-green-800"
+                                                : mappedCount === 0
+                                                    ? "border-gray-400 bg-gray-50 text-gray-600"
+                                                    : "border-amber-500 bg-amber-50 text-amber-800"
+                                        }`}>
+                                            {mappedCount} / {totalCount} questions mapped
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-gray-600">Choose the lesson each question actually assesses. Its linked competency is used only when that student's answer has a score.</p>
+
+                                    {/* Bulk action toolbar */}
+                                    <div className="flex flex-wrap items-center gap-2 rounded border border-gray-300 bg-gray-50 px-3 py-2">
+                                        {/* Select-all checkbox */}
+                                        <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-semibold text-gray-700">
+                                            <input
+                                                type="checkbox"
+                                                id="question-mapping-select-all"
+                                                checked={allChecked}
+                                                ref={(el) => { if (el) el.indeterminate = someChecked; }}
+                                                onChange={toggleSelectAll}
+                                                disabled={isCreating}
+                                                className="w-4 h-4 border-2 border-black accent-black cursor-pointer"
+                                            />
+                                            {selectedQuestionIds.size === 0
+                                                ? "Select all"
+                                                : `${selectedQuestionIds.size} selected`}
+                                        </label>
+
+                                        {selectedQuestionIds.size > 0 && (
+                                            <>
+                                                <span className="text-gray-400 text-xs">—</span>
+                                                <select
+                                                    id="bulk-lesson-select"
+                                                    value={bulkLessonId}
+                                                    onChange={(e) => setBulkLessonId(e.target.value)}
+                                                    disabled={isCreating}
+                                                    className="rounded border-2 border-black bg-white px-2 py-1 text-xs"
+                                                >
+                                                    <option value="">Assign lesson…</option>
+                                                    {linkedLessons.map((lesson) => (
+                                                        <option key={lesson.lesson_id} value={lesson.lesson_id}>{lesson.title}</option>
+                                                    ))}
+                                                    <option value="__clear__">— Remove mapping</option>
+                                                </select>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (bulkLessonId === "__clear__") {
+                                                            setQuizQuestions((qs) =>
+                                                                qs.map((q) =>
+                                                                    selectedQuestionIds.has(q.id) ? { ...q, lesson_id: null } : q,
+                                                                ),
+                                                            );
+                                                            setSelectedQuestionIds(new Set());
+                                                            setBulkLessonId("");
+                                                        } else {
+                                                            applyBulkLesson();
+                                                        }
+                                                    }}
+                                                    disabled={isCreating || !bulkLessonId}
+                                                    className="rounded border-2 border-black bg-black px-3 py-1 text-xs font-bold text-white cursor-pointer disabled:opacity-50"
+                                                >
+                                                    Apply
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* Per-question rows */}
+                                    <div className="space-y-2">
+                                    {quizQuestions.map((question, index) => {
+                                        const isChecked = selectedQuestionIds.has(question.id);
+                                        const currentVal = question.lesson_id && selectedLessonIds.includes(question.lesson_id)
+                                            ? question.lesson_id
+                                            : "";
+                                        return (
+                                            <div
+                                                key={question.id}
+                                                className={`flex items-start gap-2 rounded border px-3 py-2 transition ${
+                                                    isChecked ? "border-black bg-gray-100" : "border-gray-200 bg-white"
+                                                }`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    aria-label={`Select Question ${index + 1}`}
+                                                    checked={isChecked}
+                                                    onChange={() => {
+                                                        setSelectedQuestionIds((prev) => {
+                                                            const next = new Set(prev);
+                                                            if (next.has(question.id)) next.delete(question.id);
+                                                            else next.add(question.id);
+                                                            return next;
+                                                        });
+                                                    }}
+                                                    disabled={isCreating}
+                                                    className="mt-1 w-4 h-4 shrink-0 border-2 border-black accent-black cursor-pointer"
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <label
+                                                        className="block text-xs font-bold text-gray-700 truncate"
+                                                        htmlFor={`question-lesson-${question.id}`}
+                                                    >
+                                                        Q{index + 1}: {question.question_text}
+                                                    </label>
+                                                    <select
+                                                        id={`question-lesson-${question.id}`}
+                                                        value={currentVal}
+                                                        onChange={(event) =>
+                                                            updateQuizQuestion(question.id, {
+                                                                lesson_id: event.target.value ? Number(event.target.value) : null,
+                                                            })
+                                                        }
+                                                        disabled={isCreating}
+                                                        className="mt-1 w-full rounded border-2 border-black bg-white px-2 py-1 text-xs"
+                                                    >
+                                                        <option value="">Not mapped</option>
+                                                        {linkedLessons.map((lesson) => (
+                                                            <option key={lesson.lesson_id} value={lesson.lesson_id}>
+                                                                {lesson.title}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    </div>
+                                </div>
+                            );
+                        })()}
 
                         {/* ── Export Questionnaire Card in Step 4 ── */}
                         <div className="rounded border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-wrap items-center justify-between gap-3 mt-4">

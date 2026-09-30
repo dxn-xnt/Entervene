@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import re
 from typing import Any, List
 
@@ -37,39 +38,63 @@ Example structure:
       "points": 1.0,
       "explanation": "Answer rationale",
       "options": [
-        {"option_text": "Option A", "is_correct": true, "option_order": 1},
+        {"option_text": "Option A", "is_correct": false, "option_order": 1},
         {"option_text": "Option B", "is_correct": false, "option_order": 2},
-        {"option_text": "Option C", "is_correct": false, "option_order": 3},
+        {"option_text": "Option C", "is_correct": true, "option_order": 3},
         {"option_text": "Option D", "is_correct": false, "option_order": 4}
       ]
     },
     {
       "question_text": "Sample question 2 prompt",
-      "question_type": "TRUE_FALSE",
+      "question_type": "MULTIPLE_CHOICE",
       "difficulty_band": "AVERAGE",
+      "cognitive_level": "APPLY",
+      "points": 1.0,
+      "explanation": "Answer rationale",
+      "options": [
+        {"option_text": "Option A", "is_correct": false, "option_order": 1},
+        {"option_text": "Option B", "is_correct": true, "option_order": 2},
+        {"option_text": "Option C", "is_correct": false, "option_order": 3},
+        {"option_text": "Option D", "is_correct": false, "option_order": 4}
+      ]
+    },
+    {
+      "question_text": "Sample question 3 prompt",
+      "question_type": "TRUE_FALSE",
+      "difficulty_band": "EASY",
       "cognitive_level": "UNDERSTAND",
       "points": 1.0,
       "explanation": "Answer rationale",
       "options": [
-        {"option_text": "True", "is_correct": true, "option_order": 1},
-        {"option_text": "False", "is_correct": false, "option_order": 2}
+        {"option_text": "True", "is_correct": false, "option_order": 1},
+        {"option_text": "False", "is_correct": true, "option_order": 2}
       ]
     }
   ]
 }
 
 RULES FOR QUESTION TYPES:
-- MULTIPLE_CHOICE: Provide EXACTLY 4 distinct multiple-choice options (A, B, C, D). Exactly 1 option must have is_correct: true. DO NOT use True/False options for Multiple Choice!
+- MULTIPLE_CHOICE: Provide EXACTLY 4 distinct multiple-choice options (A, B, C, D). Exactly 1 option must have is_correct: true. The position of the correct answer MUST be evenly and unpredictably distributed (vary across A, B, C, and D) across questions. NEVER default to always placing the correct answer in Option A. DO NOT use True/False options for Multiple Choice!
 - TRUE_FALSE: Exactly 2 options: [{"option_text": "True", "is_correct": bool, "option_order": 1}, {"option_text": "False", "is_correct": bool, "option_order": 2}], with exactly 1 marked is_correct: true.
 - IDENTIFICATION: options MUST contain 1 option with {"option_text": "Exact Answer/Term", "is_correct": true, "option_order": 1}.
 - MATCHING: question_text contains the Column A premise item. options contains the matching Column B options (4-5 options), with exactly 1 marked is_correct: true.
 - ESSAY: options MUST be [], explanation contains the key scoring rubrics and expected answer points.
+
+ANSWER POSITION RANDOMIZATION REQUIREMENT:
+For MULTIPLE_CHOICE questions, the correct answer must NOT always be in the first option (Option A). You MUST vary the correct answer position across options A, B, C, and D throughout the exam items.
 
 TAXONOMY & DIFFICULTY ALIGNMENT:
 - EASY questions correspond to cognitive levels REMEMBER or UNDERSTAND.
 - AVERAGE questions correspond to cognitive levels APPLY or ANALYZE.
 - DIFFICULT questions correspond to cognitive levels EVALUATE or CREATE.
 """
+
+from app.services.ai.option_shuffle import (
+    _has_positional_or_relative_options,
+    has_positional_or_relative_options,
+    shuffle_options,
+)
+
 
 
 def _build_tos_row_prompt(
@@ -215,13 +240,10 @@ def _extract_and_validate_tos_json(raw_text: str) -> list[dict[str, Any]]:
                         "option_order": order,
                     })
                 if len(validated_options) > 4:
-                    correct_idx = next((i for i, o in enumerate(validated_options) if o["is_correct"]), 0)
+                    correct_idx = next((i for i, o in enumerate(validated_options) if o["is_correct"]), -1)
                     if correct_idx >= 4:
-                        validated_options[0] = validated_options[correct_idx]
+                        validated_options[3] = validated_options[correct_idx]
                     validated_options = validated_options[:4]
-
-            for o_idx, o in enumerate(validated_options, start=1):
-                o["option_order"] = o_idx
 
             correct_count = sum(1 for o in validated_options if o["is_correct"])
             if correct_count == 0:
@@ -233,8 +255,13 @@ def _extract_and_validate_tos_json(raw_text: str) -> list[dict[str, Any]]:
                             o["is_correct"] = True
                             matched = True
                             break
-                if not matched and validated_options:
-                    validated_options[0]["is_correct"] = True
+                if not matched:
+                    logger.warning(
+                        "TOS question '%s' has no correct option marked by AI and hint '%s' did not resolve. Question marked invalid.",
+                        item.get("question_text", f"Question {idx}"),
+                        hint,
+                    )
+                    continue
             elif correct_count > 1:
                 found_first = False
                 for o in validated_options:
@@ -243,6 +270,9 @@ def _extract_and_validate_tos_json(raw_text: str) -> list[dict[str, Any]]:
                             found_first = True
                         else:
                             o["is_correct"] = False
+
+            # Server-side shuffle for MULTIPLE_CHOICE if options do not reference positions or each other
+            validated_options = shuffle_options(validated_options, q_type)
 
         valid_questions.append({
             "question_text": str(item.get("question_text", f"Question {idx}")).strip(),

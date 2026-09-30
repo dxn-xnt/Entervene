@@ -11,6 +11,8 @@
  */
 
 import type { TOSDraft } from "./tos-calculator";
+import { sanitize, cleanDocxText } from "./quiz-export";
+import { setupUnicodePdfFont } from "./pdf-font-loader";
 
 export type TOSExamMeta = {
   title?: string;
@@ -37,17 +39,16 @@ export type TOSExportQuestion = {
   }>;
 };
 
-function sanitize(text: string): string {
-  return (text || "").replace(/[^\x00-\x7F]/g, (ch) => ch);
-}
-
 function optionLetter(order: number): string {
   return String.fromCharCode(64 + Math.min(order, 26)); // A, B, C, D...
 }
 
 // ─── 1. TOS Blueprint Exports (Landscape Legal) ─────────────────────────────
 
-export async function exportTosBlueprintPdf(draft: TOSDraft): Promise<void> {
+export async function exportTosBlueprintPdf(
+  draft: TOSDraft,
+  options?: { save?: boolean }
+): Promise<any> {
   const { jsPDF } = await import("jspdf");
 
   // Landscape Legal: 330.2 × 215.9 mm
@@ -62,6 +63,9 @@ export async function exportTosBlueprintPdf(draft: TOSDraft): Promise<void> {
 
   let y = MT;
 
+  const { setFont: setDocFont, customFontLoaded } = await setupUnicodePdfFont(doc);
+  const clean = (str: string) => sanitize(str, { fallbackAscii: !customFontLoaded });
+
   const checkPage = (needed: number) => {
     if (y + needed > PAGE_H - MB) {
       doc.addPage();
@@ -71,23 +75,23 @@ export async function exportTosBlueprintPdf(draft: TOSDraft): Promise<void> {
 
   // Header Title
   doc.setFontSize(14);
-  doc.setFont("helvetica", "bold");
-  doc.text("TABLE OF SPECIFICATIONS (TOS)", ML, y);
+  setDocFont(true);
+  doc.text(clean("TABLE OF SPECIFICATIONS (TOS)"), ML, y);
   y += 6;
 
   doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text(`${draft.subject_name || "Subject"} — ${draft.title || "Summative Assessment"} (${draft.quarter || "Term 1"})`, ML, y);
+  setDocFont(true);
+  doc.text(clean(`${draft.subject_name || "Subject"} — ${draft.title || "Summative Assessment"} (${draft.quarter || "Term 1"})`), ML, y);
   y += 5;
 
   // Test Parts Breakdown Header
   doc.setFontSize(9.5);
-  doc.setFont("helvetica", "normal");
+  setDocFont(false);
   const testPartsStr = draft.test_parts
     .filter((p) => p.count > 0)
     .map((p) => `${p.type.replace(/_/g, " ")}: ${p.count}`)
     .join("  |  ");
-  doc.text(`Test Composition: ${testPartsStr}  |  Total Items: ${draft.total_items}`, ML, y);
+  doc.text(clean(`Test Composition: ${testPartsStr}  |  Total Items: ${draft.total_items}`), ML, y);
   y += 7;
 
   // Columns specification: total width = TW (300.2 mm)
@@ -118,19 +122,19 @@ export async function exportTosBlueprintPdf(draft: TOSDraft): Promise<void> {
   doc.rect(ML, y, TW, rowHeight, "S");
 
   doc.setFontSize(8.5);
-  doc.setFont("helvetica", "bold");
+  setDocFont(true);
 
   let x = ML;
   for (const c of cols) {
     doc.rect(x, y, c.w, rowHeight, "S");
     const textX = c.align === "center" ? x + c.w / 2 : x + 2;
-    doc.text(c.label, textX, y + 4.8, { align: c.align });
+    doc.text(clean(c.label), textX, y + 4.8, { align: c.align });
     x += c.w;
   }
   y += rowHeight;
 
   // Table Body Rows
-  doc.setFont("helvetica", "normal");
+  setDocFont(false);
   doc.setFontSize(8);
 
   for (const r of draft.rows) {
@@ -139,8 +143,8 @@ export async function exportTosBlueprintPdf(draft: TOSDraft): Promise<void> {
     const placementStr = r.items > 0 ? `${r.item_start}–${r.item_end}` : "-";
 
     const vals = [
-      sanitize(r.label).slice(0, 48),
-      sanitize(r.code || "-").slice(0, 10),
+      clean(r.label).slice(0, 48),
+      clean(r.code || "-").slice(0, 10),
       String(r.days),
       `${r.weight_percent.toFixed(1)}%`,
       String(r.items),
@@ -171,7 +175,7 @@ export async function exportTosBlueprintPdf(draft: TOSDraft): Promise<void> {
   doc.setFillColor(230, 230, 230);
   doc.rect(ML, y, TW, rowHeight, "F");
 
-  doc.setFont("helvetica", "bold");
+  setDocFont(true);
   doc.setFontSize(8.5);
   x = ML;
 
@@ -206,15 +210,18 @@ export async function exportTosBlueprintPdf(draft: TOSDraft): Promise<void> {
   // Difficulty Summary Box
   checkPage(18);
   doc.setFontSize(8.5);
-  doc.setFont("helvetica", "bold");
+  setDocFont(true);
   doc.text(
-    `Difficulty Distribution: Easy = ${gt.easy} (${((gt.easy / (gt.items || 1)) * 100).toFixed(1)}%)  |  Average = ${gt.average} (${((gt.average / (gt.items || 1)) * 100).toFixed(1)}%)  |  Difficult = ${gt.difficult} (${((gt.difficult / (gt.items || 1)) * 100).toFixed(1)}%)`,
+    clean(`Difficulty Distribution: Easy = ${gt.easy} (${((gt.easy / (gt.items || 1)) * 100).toFixed(1)}%)  |  Average = ${gt.average} (${((gt.average / (gt.items || 1)) * 100).toFixed(1)}%)  |  Difficult = ${gt.difficult} (${((gt.difficult / (gt.items || 1)) * 100).toFixed(1)}%)`),
     ML,
     y
   );
 
   const filename = `${(draft.title || "TOS_Blueprint").replace(/[/\\:*?"<>|]/g, "_")}_Blueprint.pdf`;
-  doc.save(filename);
+  if (options?.save !== false) {
+    doc.save(filename);
+  }
+  return doc;
 }
 
 export async function exportTosBlueprintDocx(draft: TOSDraft): Promise<void> {
@@ -235,7 +242,7 @@ export async function exportTosBlueprintDocx(draft: TOSDraft): Promise<void> {
   const p = (text: string, bold = false, size = 20) =>
     new Paragraph({
       spacing: { after: 80 },
-      children: [new TextRun({ text: sanitize(text), bold, size, font: "Calibri" })],
+      children: [new TextRun({ text: cleanDocxText(text), bold, size, font: "Calibri" })],
     });
 
   const headers = [
@@ -296,7 +303,7 @@ export async function exportTosBlueprintDocx(draft: TOSDraft): Promise<void> {
               children: [
                 new Paragraph({
                   alignment: idx === 0 ? AlignmentType.LEFT : AlignmentType.CENTER,
-                  children: [new TextRun({ text: sanitize(text), size: 16 })],
+                  children: [new TextRun({ text: cleanDocxText(text), size: 16 })],
                 }),
               ],
             })
@@ -333,7 +340,7 @@ export async function exportTosBlueprintDocx(draft: TOSDraft): Promise<void> {
             children: [
               new Paragraph({
                 alignment: idx === 0 ? AlignmentType.LEFT : AlignmentType.CENTER,
-                children: [new TextRun({ text: sanitize(text), bold: true, size: 17 })],
+                children: [new TextRun({ text: cleanDocxText(text), bold: true, size: 17 })],
               }),
             ],
             shading: { fill: "F0F0F0" },
@@ -477,8 +484,9 @@ function groupExamQuestions(questions: TOSExportQuestion[]): TOSQuestionGroup[] 
 
 export async function exportTosExamPdf(
   questions: TOSExportQuestion[],
-  meta: TOSExamMeta
-): Promise<void> {
+  meta: TOSExamMeta,
+  options?: { save?: boolean }
+): Promise<any> {
   const { jsPDF } = await import("jspdf");
 
   // Legal Portrait: 215.9 × 330.2 mm
@@ -493,6 +501,9 @@ export async function exportTosExamPdf(
 
   let y = MT;
 
+  const { setFont: setDocFont, customFontLoaded } = await setupUnicodePdfFont(doc);
+  const clean = (str: string) => sanitize(str, { fallbackAscii: !customFontLoaded });
+
   const checkPage = (needed: number) => {
     if (y + needed > PAGE_H - MB) {
       doc.addPage();
@@ -501,9 +512,10 @@ export async function exportTosExamPdf(
   };
 
   const write = (text: string, size: number, bold = false, indent = 0, gapAfter = 2.5) => {
+    const cleanText = clean(text);
     doc.setFontSize(size);
-    doc.setFont("helvetica", bold ? "bold" : "normal");
-    const lines = doc.splitTextToSize(text, TW - indent);
+    setDocFont(bold);
+    const lines = doc.splitTextToSize(cleanText, TW - indent);
     const lh = size * 0.42;
     checkPage(lines.length * lh + gapAfter);
     doc.text(lines, ML + indent, y);
@@ -524,18 +536,22 @@ export async function exportTosExamPdf(
 
   // Header
   doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.text(subjectName.toUpperCase(), ML, y);
+  setDocFont(true);
+  doc.text(clean(subjectName.toUpperCase()), ML, y);
   y += 4.5;
 
   doc.setFontSize(14);
-  doc.setFont("helvetica", "bold");
-  doc.text(title, ML, y);
+  setDocFont(true);
+  doc.text(clean(title), ML, y);
   y += 6;
 
   doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  doc.text("Name: _________________________________________   Grade & Section: __________________   Score: _________", ML, y);
+  setDocFont(false);
+  doc.text(
+    clean("Name: _________________________________________   Grade & Section: __________________   Score: _________"),
+    ML,
+    y
+  );
   y += 5;
   rule(5);
 
@@ -563,13 +579,13 @@ export async function exportTosExamPdf(
 
         checkPage(8);
         doc.setFontSize(10.5);
-        doc.setFont("helvetica", "normal");
-        const premiseText = `_____ ${qNum}. ${sanitize(q.question_text)}`;
+        setDocFont(false);
+        const premiseText = `_____ ${qNum}. ${clean(q.question_text)}`;
         const premiseLines = doc.splitTextToSize(premiseText, colAW - 5);
 
         doc.text(premiseLines, ML, y);
         if (choiceText) {
-          const choiceLines = doc.splitTextToSize(sanitize(choiceText), colBW - 5);
+          const choiceLines = doc.splitTextToSize(clean(choiceText), colBW - 5);
           doc.text(choiceLines, ML + colAW, y);
         }
         y += Math.max(premiseLines.length, 1) * 4.5 + 2;
@@ -580,7 +596,7 @@ export async function exportTosExamPdf(
       for (const q of group.questions) {
         const isMC = group.type === "MULTIPLE_CHOICE" || group.type === "TRUE_FALSE";
         const prefixSpace = isMC ? "____ " : "";
-        const qText = `${prefixSpace}${qNum}. ${sanitize(q.question_text)}`;
+        const qText = `${prefixSpace}${qNum}. ${clean(q.question_text)}`;
         write(qText, 10.5, false, 0, 2.5);
 
         const opts = q.options || [];
@@ -588,12 +604,12 @@ export async function exportTosExamPdf(
           const sorted = [...opts].sort((a, b) => (a.option_order || 0) - (b.option_order || 0));
           if (sorted.length === 2) {
             const line = sorted
-              .map((opt) => `${optionLetter(opt.option_order || 1)}) ${sanitize(opt.option_text)}`)
+              .map((opt) => `${optionLetter(opt.option_order || 1)}) ${clean(opt.option_text)}`)
               .join("           ");
             write(line, 10, false, 12, 3);
           } else {
             for (const opt of sorted) {
-              write(`${optionLetter(opt.option_order || 1)}) ${sanitize(opt.option_text)}`, 10, false, 10, 1.8);
+              write(`${optionLetter(opt.option_order || 1)}) ${clean(opt.option_text)}`, 10, false, 10, 1.8);
             }
             y += 1.5;
           }
@@ -602,7 +618,7 @@ export async function exportTosExamPdf(
           write("__________________________________________________________________________________________", 9, false, 6, 2.5);
           write("__________________________________________________________________________________________", 9, false, 6, 4);
           if (q.explanation) {
-            write(`[Scoring Criteria: ${sanitize(q.explanation)}]`, 8.5, false, 6, 3);
+            write(`[Scoring Criteria: ${clean(q.explanation)}]`, 8.5, false, 6, 3);
           }
         } else {
           // Identification
@@ -636,7 +652,7 @@ export async function exportTosExamPdf(
           write(`${currNum}. ${ans}`, 9.5, false, 4, 1.8);
         } else {
           const ans = q.explanation || (q.options && q.options[0]?.option_text) || "(See Rubric)";
-          write(`${currNum}. [Key/Rubric]: ${sanitize(ans)}`, 9, false, 4, 1.8);
+          write(`${currNum}. [Key/Rubric]: ${clean(ans)}`, 9, false, 4, 1.8);
         }
         currNum++;
       }
@@ -644,7 +660,10 @@ export async function exportTosExamPdf(
   }
 
   const filename = `${(title || "Exam").replace(/[/\\:*?"<>|]/g, "_")}_Exam.pdf`;
-  doc.save(filename);
+  if (options?.save !== false) {
+    doc.save(filename);
+  }
+  return doc;
 }
 
 export async function exportTosExamDocx(
@@ -673,7 +692,7 @@ export async function exportTosExamDocx(
       indent: opts.indent ? { left: convertInchesToTwip(opts.indent) } : undefined,
       children: [
         new TextRun({
-          text: sanitize(text),
+          text: cleanDocxText(text),
           bold: opts.bold ?? false,
           size: opts.size ?? 22,
           font: "Calibri",
@@ -703,18 +722,18 @@ export async function exportTosExamDocx(
     for (const q of group.questions) {
       const isMC = group.type === "MULTIPLE_CHOICE" || group.type === "TRUE_FALSE";
       const prefixSpace = isMC ? "____ " : "";
-      children.push(p(`${prefixSpace}${qNum}. ${sanitize(q.question_text)}`, { size: 21, space: 50 }));
+      children.push(p(`${prefixSpace}${qNum}. ${cleanDocxText(q.question_text)}`, { size: 21, space: 50 }));
 
       if (isMC && (q.options || []).length > 0) {
         const sorted = [...(q.options || [])].sort((a, b) => (a.option_order || 0) - (b.option_order || 0));
         for (const opt of sorted) {
-          children.push(p(`${optionLetter(opt.option_order || 1)}) ${sanitize(opt.option_text)}`, { size: 20, indent: 0.35, space: 35 }));
+          children.push(p(`${optionLetter(opt.option_order || 1)}) ${cleanDocxText(opt.option_text)}`, { size: 20, indent: 0.35, space: 35 }));
         }
       } else if (group.type === "ESSAY") {
         children.push(p("Answer: __________________________________________________________________", { size: 19, space: 60 }));
         children.push(p("__________________________________________________________________________", { size: 19, space: 60 }));
         if (q.explanation) {
-          children.push(p(`[Rubric: ${sanitize(q.explanation)}]`, { size: 18, indent: 0.2, space: 60 }));
+          children.push(p(`[Rubric: ${cleanDocxText(q.explanation)}]`, { size: 18, indent: 0.2, space: 60 }));
         }
       } else {
         children.push(p("Answer: __________________________________________________________________", { size: 19, space: 100 }));
@@ -743,7 +762,7 @@ export async function exportTosExamDocx(
           children.push(p(`${currNum}. ${ans}`, { size: 20, space: 40 }));
         } else {
           const ans = q.explanation || (q.options && q.options[0]?.option_text) || "(See Rubric)";
-          children.push(p(`${currNum}. [Key/Rubric]: ${sanitize(ans)}`, { size: 19, space: 40 }));
+          children.push(p(`${currNum}. [Key/Rubric]: ${cleanDocxText(ans)}`, { size: 19, space: 40 }));
         }
         currNum++;
       }
