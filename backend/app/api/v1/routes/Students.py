@@ -1,5 +1,6 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -20,8 +21,129 @@ from app.models.academic.AcademicYear import AcademicYear
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.Classwork import Classwork
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.models.attendance.Attendance import AttendanceRecord
+from app.models.quiz.QuizAnswer import QuizAnswer
 
 router = APIRouter()
+
+
+def _manila_date(value: datetime):
+    aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return aware.astimezone(ZoneInfo("Asia/Manila")).date()
+
+
+@router.get("/me/studyboard-metrics")
+def get_my_studyboard_metrics(
+    academic_period_id: int | None = None,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Actual, student-scoped records for the Studyboard (no inferred study sessions)."""
+    _require_student(current_user)
+    student = _resolve_student(db, current_user["sub"])
+    today = datetime.now(ZoneInfo("Asia/Manila")).date()
+    monday = today - timedelta(days=today.weekday())
+    friday = monday + timedelta(days=4)
+    six_weeks_ago = monday - timedelta(weeks=5)
+
+    try:
+        _, current_class, _, _, _ = _current_class_row(db, student)
+        class_id = current_class.class_id
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+        class_id = None
+
+    attendance_rows = (
+        db.query(AttendanceRecord)
+        .filter(AttendanceRecord.student_id == student.student_id)
+        .filter(AttendanceRecord.class_id == class_id)
+        .filter(AttendanceRecord.date >= monday, AttendanceRecord.date <= friday)
+        .all()
+    ) if class_id is not None else []
+    by_day: dict = {}
+    for record in attendance_rows:
+        by_day.setdefault(record.date, []).append(record)
+    attendance = []
+    for offset in range(5):
+        day = monday + timedelta(days=offset)
+        records = by_day.get(day, [])
+        advisory = [record for record in records if record.subject_id is None]
+        statuses = [(record.status or "").lower() for record in (advisory or records)]
+        status = (
+            "absent" if "absent" in statuses else
+            "late" if "late" in statuses else
+            "excused" if "excused" in statuses else
+            "present" if "present" in statuses else "no_record"
+        )
+        attendance.append({"date": day.isoformat(), "status": status})
+    recorded = [day for day in attendance if day["status"] != "no_record"]
+    attended = sum(day["status"] in {"present", "late", "excused"} for day in recorded)
+    attendance_rate = round(attended / len(recorded) * 100) if recorded else None
+
+    submission_query = (
+        db.query(StudentSubmission, ClassworkAssignment, Classwork, Subject)
+        .join(ClassworkAssignment, StudentSubmission.classwork_assignment_id == ClassworkAssignment.classwork_assignment_id)
+        .join(Classwork, ClassworkAssignment.classwork_id == Classwork.classwork_id)
+        .join(Subject, Classwork.subject_id == Subject.subject_id)
+        .filter(StudentSubmission.student_id == student.student_id)
+        .filter(ClassworkAssignment.class_id == class_id)
+    )
+    if academic_period_id is not None:
+        submission_query = submission_query.filter(ClassworkAssignment.academic_period_id == academic_period_id)
+    submission_rows = submission_query.all() if class_id is not None else []
+    daily_seconds = {i: 0 for i in range(7)}
+    subject_seconds: dict[int, dict] = {}
+    trend_buckets: dict[int, list[float]] = {i: [] for i in range(6)}
+    on_time = late = 0
+    visible_quiz_submission_ids = []
+    for submission, assignment, classwork, subject in submission_rows:
+        activity_at = submission.submitted_at or submission.created_at
+        if activity_at and monday <= _manila_date(activity_at) < monday + timedelta(days=7):
+            seconds = max(0, submission.reading_focused_seconds or 0)
+            daily_seconds[_manila_date(activity_at).weekday()] += seconds
+            if seconds:
+                bucket = subject_seconds.setdefault(subject.subject_id, {"subject": subject.subject_name, "seconds": 0})
+                bucket["seconds"] += seconds
+        if submission.submitted_at and assignment.due_date:
+            submitted_at = submission.submitted_at if submission.submitted_at.tzinfo else submission.submitted_at.replace(tzinfo=timezone.utc)
+            due_at = assignment.due_date if assignment.due_date.tzinfo else assignment.due_date.replace(tzinfo=timezone.utc)
+            if submitted_at <= due_at:
+                on_time += 1
+            else:
+                late += 1
+        if (submission.grade is not None and classwork.total_points and classwork.show_scores
+                and submission.graded_at and _manila_date(submission.graded_at) >= six_weeks_ago):
+            week = (_manila_date(submission.graded_at) - six_weeks_ago).days // 7
+            if week in trend_buckets:
+                trend_buckets[week].append(float(submission.grade / classwork.total_points * 100))
+        if classwork.classwork_type.upper() == "QUIZ" and classwork.show_scores and submission.status == "graded":
+            visible_quiz_submission_ids.append(submission.submission_id)
+
+    quiz_answers = (
+        db.query(QuizAnswer.is_correct)
+        .filter(QuizAnswer.submission_id.in_(visible_quiz_submission_ids))
+        .filter(QuizAnswer.is_correct.isnot(None))
+        .all()
+    ) if visible_quiz_submission_ids else []
+    quiz_correct = sum(answer.is_correct is True for answer in quiz_answers)
+    quiz_wrong = len(quiz_answers) - quiz_correct
+    return {
+        "week_start": monday.isoformat(),
+        "attendance": attendance,
+        "attendance_rate": attendance_rate,
+        "daily_reading_seconds": [daily_seconds[i] for i in range(7)],
+        "subject_reading_seconds": sorted(subject_seconds.values(), key=lambda item: -item["seconds"]),
+        "grade_trend": [
+            {"week_start": (six_weeks_ago + timedelta(weeks=i)).isoformat(),
+             "average": round(sum(values) / len(values)) if values else None}
+            for i, values in trend_buckets.items()
+        ],
+        "on_time_count": on_time,
+        "late_submission_count": late,
+        "quiz_correct": quiz_correct,
+        "quiz_wrong": quiz_wrong,
+    }
 
 
 def _require_student(current_user: dict) -> None:
