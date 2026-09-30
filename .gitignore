@@ -70,3 +70,7 @@ mobile-app/dist/
 .idea/
 
 .cursor
+
+# Generated TOS / Quiz export documents and previews
+scripts/*.pdf
+scripts/*.png
