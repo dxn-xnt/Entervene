@@ -287,24 +287,24 @@ export default function QuizAnalysisView({
                     </Select>
                   </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <Table className="w-full text-left text-sm border-collapse">
+                <div className="w-full">
+                  <Table className="w-full text-left text-sm border-separate border-spacing-0">
                     <Table.Header>
                       <Table.Row className="border-b-2 border-black">
-                        <Table.Head className="pb-3 font-head text-primary-foreground whitespace-nowrap pl-4">Learner's Name</Table.Head>
-                        <Table.Head className="pb-3 font-head text-primary-foreground"></Table.Head>
-                        <Table.Head className="pb-3 font-head text-primary-foreground text-center px-4">Accuracy</Table.Head>
-                        <Table.Head className="pb-3 font-head text-primary-foreground text-center px-4">Points</Table.Head>
-                        <Table.Head className="pb-3 font-head text-primary-foreground text-center px-4">Score</Table.Head>
-                        <Table.Head className="pb-3 font-head text-primary-foreground text-right pr-4">Action</Table.Head>
+                        <Table.Head className="pb-3 font-head text-primary-foreground whitespace-nowrap pl-4 w-52 sm:w-60 shrink-0">Learner's Name</Table.Head>
+                        <Table.Head className="pb-3 font-head text-primary-foreground min-w-[160px]"></Table.Head>
+                        <Table.Head className="pb-3 font-head text-primary-foreground text-center px-4 sticky right-[280px] z-20 w-[90px] min-w-[90px] max-w-[90px] bg-primary border-l-2 border-primary-foreground/30 shadow-[-6px_0_10px_-2px_rgba(0,0,0,0.2)]">Accuracy</Table.Head>
+                        <Table.Head className="pb-3 font-head text-primary-foreground text-center px-4 sticky right-[190px] z-20 w-[90px] min-w-[90px] max-w-[90px] bg-primary">Points</Table.Head>
+                        <Table.Head className="pb-3 font-head text-primary-foreground text-center px-4 sticky right-[110px] z-20 w-[80px] min-w-[80px] max-w-[80px] bg-primary">Score</Table.Head>
+                        <Table.Head className="pb-3 font-head text-primary-foreground text-right pr-4 sticky right-0 z-20 w-[110px] min-w-[110px] max-w-[110px] bg-primary">Action</Table.Head>
                       </Table.Row>
                     </Table.Header>
                     <Table.Body>
                       {sortedStudents.map((student) => {
                         const corrects = student.answers?.filter(a => a.is_correct === true).length || 0;
                         return (
-                          <Table.Row key={student.student_id} className="border-b border-border last:border-0">
-                            <Table.Cell className="py-4 pl-4 pr-2">
+                          <Table.Row key={student.student_id} className="group border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
+                            <Table.Cell className="py-4 pl-4 pr-2 w-52 sm:w-60 shrink-0">
                               <div className="flex items-center gap-2">
                                 <div className="grid h-8 w-8 place-items-center rounded-full border border-black bg-[#FFD08A] text-xs font-bold shrink-0">
                                   {student.student_name.slice(0, 1)}
@@ -325,33 +325,41 @@ export default function QuizAnalysisView({
                                 )}
                               </div>
                             </Table.Cell>
-                            <Table.Cell className="py-4 px-2">
-                              <div className="flex items-center gap-2">
-                                <div className="flex gap-[2px]">
-                                  {quizAnalysis.questions.map((q) => {
-                                    const ans = student.answers?.find(a => a.quiz_question_id === q.quiz_question_id);
-                                    return (
-                                      <div
-                                        key={q.quiz_question_id}
-                                        className={`w-[14px] h-[18px] border border-black rounded ${ans?.is_correct === true ? 'bg-[#8BCB88]' : ans?.is_correct === false ? 'bg-[#FF6B6B]' : 'bg-gray-100'
-                                          }`}
-                                      />
-                                    );
-                                  })}
+                            <Table.Cell className="py-4 px-2 min-w-0 max-w-0 w-full">
+                              <div className="flex items-center gap-2 min-w-0 w-full">
+                                <div
+                                  data-testid="dot-strip-scroll-container"
+                                  className="overflow-x-auto min-w-0 flex-1 py-1 px-1 scrollbar-thin"
+                                >
+                                  <div className="flex items-center gap-[2px] w-max pr-3">
+                                    {quizAnalysis.questions.map((q) => {
+                                      const ans = student.answers?.find(a => a.quiz_question_id === q.quiz_question_id);
+                                      return (
+                                        <div
+                                          key={q.quiz_question_id}
+                                          data-testid={`question-dot-${q.quiz_question_id}`}
+                                          className={`w-[14px] h-[18px] border border-black rounded shrink-0 ${ans?.is_correct === true ? 'bg-[#8BCB88]' : ans?.is_correct === false ? 'bg-[#FF6B6B]' : 'bg-gray-100'
+                                            }`}
+                                        />
+                                      );
+                                    })}
+                                  </div>
                                 </div>
-                                <span className="text-xs font-bold text-[#3A6D38] ml-2">{corrects} corrects <Check size={12} className="inline" /></span>
+                                <span className="text-xs font-bold text-[#3A6D38] ml-2 shrink-0 whitespace-nowrap">
+                                  {corrects} corrects <Check size={12} className="inline" />
+                                </span>
                               </div>
                             </Table.Cell>
-                            <Table.Cell className="py-4 px-4 text-center font-bold text-lg">
+                            <Table.Cell className="py-4 px-4 text-center font-bold text-lg sticky right-[280px] z-10 w-[90px] min-w-[90px] max-w-[90px] bg-card group-hover:bg-muted/50 border-l-2 border-border shadow-[-6px_0_10px_-2px_rgba(0,0,0,0.12)]">
                               {student.score_percent ?? 0}<span className="text-xs font-normal text-gray-500">%</span>
                             </Table.Cell>
-                            <Table.Cell className="py-4 px-4 text-center font-bold text-lg">
+                            <Table.Cell className="py-4 px-4 text-center font-bold text-lg sticky right-[190px] z-10 w-[90px] min-w-[90px] max-w-[90px] bg-card group-hover:bg-muted/50">
                               {student.grade ?? 0}<span className="text-xs font-normal text-gray-500">/{totalPoints}</span>
                             </Table.Cell>
-                            <Table.Cell className="py-4 px-4 text-center font-bold text-lg">
+                            <Table.Cell className="py-4 px-4 text-center font-bold text-lg sticky right-[110px] z-10 w-[80px] min-w-[80px] max-w-[80px] bg-card group-hover:bg-muted/50">
                               {student.grade ?? 0}
                             </Table.Cell>
-                            <Table.Cell className="py-4 pr-4 text-right">
+                            <Table.Cell className="py-4 pr-4 text-right sticky right-0 z-10 w-[110px] min-w-[110px] max-w-[110px] bg-card group-hover:bg-muted/50">
                               {student.submission_id ? (
                                 <button
                                   type="button"

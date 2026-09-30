@@ -145,3 +145,183 @@ describe("QuizAnalysisView - Question options wrapping and layout", () => {
   });
 });
 
+describe("QuizAnalysisView - Students tab layout and sticky columns", () => {
+  const mockClasswork: TeacherClasswork = {
+    classwork_id: 10,
+    title: "Exam Analysis",
+    classwork_type: "quiz",
+    status: "published",
+    total_points: 60,
+    created_at: new Date().toISOString(),
+  } as unknown as TeacherClasswork;
+
+  const createMockQuizAnalysis = (questionCount: number): QuizAnalysis => {
+    const questions = Array.from({ length: questionCount }, (_, i) => ({
+      quiz_question_id: i + 1,
+      question_text: `Question ${i + 1}`,
+      question_type: "MULTIPLE_CHOICE",
+      points: 1,
+      answered_count: 1,
+      correct_count: 1,
+      accuracy_percent: 100,
+      needs_grading_count: 0,
+      option_distribution: [],
+    }));
+
+    const answers = Array.from({ length: questionCount }, (_, i) => ({
+      quiz_question_id: i + 1,
+      is_correct: i % 2 === 0,
+      points_awarded: i % 2 === 0 ? 1 : 0,
+    }));
+
+    return {
+      quiz_id: 1,
+      classwork_id: 10,
+      title: "Exam Analysis",
+      total_points: questionCount,
+      total_students: 1,
+      submitted_count: 1,
+      missing_count: 0,
+      graded_count: 1,
+      needs_grading_count: 0,
+      class_accuracy_percent: 50,
+      questions,
+      students: [
+        {
+          student_id: "student-1",
+          student_name: "John Doe",
+          submission_id: 101,
+          status: "submitted",
+          attempt_count: 1,
+          grade: Math.floor(questionCount / 2),
+          score_percent: 50,
+          submitted_at: new Date().toISOString(),
+          needs_grading: false,
+          answers,
+        },
+      ],
+    };
+  };
+
+  it("renders 60-question quiz with scrollable dot strip, visual boundary, and sticky summary columns", () => {
+    const analysis60 = createMockQuizAnalysis(60);
+    render(
+      <QuizAnalysisView
+        quizAnalysis={analysis60}
+        isQuizAnalysisLoading={false}
+        quizAnalysisError=""
+        selected={mockClasswork}
+        setSelectedGradingSubmissionId={vi.fn()}
+      />
+    );
+
+    // Switch to Students tab
+    const studentsTab = screen.getByRole("tab", { name: /students/i });
+    fireEvent.click(studentsTab);
+
+    // Verify all 60 question dots exist inside the dot strip container
+    const dotStripContainer = screen.getByTestId("dot-strip-scroll-container");
+    expect(dotStripContainer).toBeTruthy();
+    expect(dotStripContainer.className).toContain("overflow-x-auto");
+
+    for (let i = 1; i <= 60; i++) {
+      expect(screen.getByTestId(`question-dot-${i}`)).toBeTruthy();
+    }
+
+    // Verify the inner dot strip wrapper has end padding to prevent clipping when scrolled right
+    const dotStripInner = dotStripContainer.firstElementChild as HTMLElement;
+    expect(dotStripInner).toBeTruthy();
+    expect(dotStripInner.className).toContain("pr-3");
+    expect(dotStripInner.className).toContain("w-max");
+
+    // Verify correct count summary label is rendered next to the strip
+    expect(screen.getByText(/30 corrects/i)).toBeTruthy();
+
+    // Verify sticky headers and their right-aligned offsets
+    const accuracyHead = screen.getByRole("columnheader", { name: "Accuracy" });
+    const pointsHead = screen.getByRole("columnheader", { name: "Points" });
+    const scoreHead = screen.getByRole("columnheader", { name: "Score" });
+    const actionHead = screen.getByRole("columnheader", { name: "Action" });
+
+    expect(accuracyHead.className).toContain("sticky");
+    expect(accuracyHead.className).toContain("right-[280px]");
+    expect(pointsHead.className).toContain("sticky");
+    expect(pointsHead.className).toContain("right-[190px]");
+    expect(scoreHead.className).toContain("sticky");
+    expect(scoreHead.className).toContain("right-[110px]");
+    expect(actionHead.className).toContain("sticky");
+    expect(actionHead.className).toContain("right-0");
+
+    // Verify visual boundary on the leftmost sticky column (Accuracy)
+    expect(accuracyHead.className).toContain("border-l-2");
+    expect(accuracyHead.className).toContain("shadow-[-6px_0_10px_-2px_rgba(0,0,0,0.2)]");
+
+    // Verify sticky body cells and visual boundary
+    const accuracyCell = screen.getByRole("cell", { name: "50%" });
+    const pointsCell = screen.getByRole("cell", { name: "30/60" });
+    const scoreCell = screen.getByRole("cell", { name: "30" });
+    const actionCell = screen.getByRole("button", { name: /score/i }).closest("td");
+
+    expect(accuracyCell.className).toContain("sticky");
+    expect(accuracyCell.className).toContain("right-[280px]");
+    expect(accuracyCell.className).toContain("border-l-2");
+    expect(accuracyCell.className).toContain("shadow-[-6px_0_10px_-2px_rgba(0,0,0,0.12)]");
+
+    expect(pointsCell.className).toContain("sticky");
+    expect(pointsCell.className).toContain("right-[190px]");
+
+    expect(scoreCell.className).toContain("sticky");
+    expect(scoreCell.className).toContain("right-[110px]");
+
+    expect(actionCell?.className).toContain("sticky");
+    expect(actionCell?.className).toContain("right-0");
+
+    // Scroll the dot strip container to simulate horizontal scrolling
+    fireEvent.scroll(dotStripContainer, { target: { scrollLeft: 500 } });
+
+    // Confirm Accuracy, Points, Score, Action remain fully accessible in the viewport
+    expect(screen.getByRole("columnheader", { name: "Accuracy" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Points" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Score" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Action" })).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "50%" })).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "30/60" })).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "30" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /score/i })).toBeTruthy();
+  });
+
+  it("renders 5-question quiz without empty or broken layout when no scroll is needed", () => {
+    const analysis5 = createMockQuizAnalysis(5);
+    render(
+      <QuizAnalysisView
+        quizAnalysis={analysis5}
+        isQuizAnalysisLoading={false}
+        quizAnalysisError=""
+        selected={mockClasswork}
+        setSelectedGradingSubmissionId={vi.fn()}
+      />
+    );
+
+    // Switch to Students tab
+    const studentsTab = screen.getByRole("tab", { name: /students/i });
+    fireEvent.click(studentsTab);
+
+    // Verify 5 question dots are rendered
+    const dotStripContainer = screen.getByTestId("dot-strip-scroll-container");
+    expect(dotStripContainer).toBeTruthy();
+
+    for (let i = 1; i <= 5; i++) {
+      expect(screen.getByTestId(`question-dot-${i}`)).toBeTruthy();
+    }
+    expect(screen.queryByTestId("question-dot-6")).toBeNull();
+
+    // Verify summary columns are present and properly positioned
+    expect(screen.getByRole("columnheader", { name: "Accuracy" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Points" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Score" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Action" })).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "50%" })).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "2/5" })).toBeTruthy();
+  });
+});
+
