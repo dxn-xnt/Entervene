@@ -127,7 +127,6 @@ export default function TeacherLessonDetailScreen({
             size="sm"
             onClick={() => openLessonManager(lesson)}
             className="shrink-0 gap-1.5 bg-white hover:bg-white font-bold"
-            title="Edit lesson details"
           >
             <Pencil size={15} />
             Edit

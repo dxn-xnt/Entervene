@@ -6,6 +6,7 @@ import { Tabs } from "@/components/retroui/Tabs";
 import { Input } from "@/components/retroui/Input";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Alert } from "@/components/retroui/Alert";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import {
@@ -338,19 +339,22 @@ export const LessonPlannerListPage: React.FC = () => {
                         {plan.status === "SUBMITTED" ? "Submitted" : "Draft"}
                       </span>
 
-                      <button
+                      <Tooltip>
+                        <TooltipTrigger render={<span className="inline-flex"><button
                         type="button"
                         disabled={deletingId === plan.plan_id}
                         onClick={(e) => handleDelete(e, plan.plan_id)}
                         className="rounded p-1 text-gray-400 hover:text-red-600 hover:bg-gray-100 transition"
-                        title="Delete lesson plan"
+                        aria-label="Delete lesson plan"
                       >
                         {deletingId === plan.plan_id ? (
                           <Loader2 className="size-4 animate-spin" />
                         ) : (
                           <Trash2 className="size-4" />
                         )}
-                      </button>
+                      </button></span>} />
+                        <TooltipContent>Delete lesson plan</TooltipContent>
+                      </Tooltip>
                     </div>
                   </div>
                 ))}

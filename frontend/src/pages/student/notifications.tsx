@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { routes } from "@/../routes";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import {
   getNotifications,
   markAllNotificationsAsRead,
@@ -131,6 +132,15 @@ const Notifications = () => {
     return "Classwork";
   };
 
+  const markAllDisabled = markingAll || notifications.every((n) => n.is_read);
+  const markAllButton = (
+    <Button variant="default" size="header" onClick={handleMarkAll} disabled={markAllDisabled} className="shrink-0 whitespace-nowrap">
+      {markingAll ? <Loader2 className="size-4 animate-spin" /> : null}
+      <span className="hidden sm:inline">Mark All as Read</span>
+      <span className="sm:hidden">Read All</span>
+    </Button>
+  );
+
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-clip">
@@ -143,19 +153,12 @@ const Notifications = () => {
                   Notifications
                 </h1>
               </div>
-              <Button
-                variant="default"
-                size="header"
-                onClick={handleMarkAll}
-                disabled={markingAll || notifications.every((n) => n.is_read)}
-                className="shrink-0 whitespace-nowrap"
-              >
-                {markingAll ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : null}
-                <span className="hidden sm:inline">Mark All as Read</span>
-                <span className="sm:hidden">Read All</span>
-              </Button>
+              {markAllDisabled ? (
+                <Tooltip>
+                  <TooltipTrigger render={<span className="inline-flex" tabIndex={0} aria-label={markingAll ? "Marking notifications as read" : "No unread notifications"}>{markAllButton}</span>} />
+                  <TooltipContent>{markingAll ? "Marking notifications as read" : "No unread notifications"}</TooltipContent>
+                </Tooltip>
+              ) : markAllButton}
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">

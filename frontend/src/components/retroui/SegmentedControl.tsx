@@ -109,6 +109,7 @@ export function SegmentedControlItem({
   children,
   className,
   disabled,
+  onClick,
   ...props
 }: SegmentedControlItemProps) {
   const context = React.useContext(SegmentedControlContext);
@@ -131,7 +132,10 @@ export function SegmentedControlItem({
       role="radio"
       aria-checked={isSelected}
       disabled={disabled}
-      onClick={() => context.onValueChange?.(value)}
+      onClick={(event) => {
+        onClick?.(event);
+        if (!event.defaultPrevented) context.onValueChange?.(value);
+      }}
       className={cn(
         "font-bold transition-all flex items-center rounded justify-center whitespace-nowrap cursor-pointer",
         sizeItemClasses,

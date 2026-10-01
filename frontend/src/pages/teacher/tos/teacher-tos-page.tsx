@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
@@ -481,16 +482,19 @@ export const TeacherTOSPage: React.FC = () => {
                           </span>
 
                           <div className="flex items-center gap-1.5">
-                            <Button
+                            <Tooltip>
+                              <TooltipTrigger render={<span className="inline-flex"><Button
                               size="sm"
                               variant="outline"
                               onClick={(e) => handleDeleteExam(e, ex.tos_exam_id)}
                               disabled={deletingId === ex.tos_exam_id}
                               className="h-7 border-2 border-black bg-red-50 px-2 text-red-700 hover:bg-red-100"
-                              title="Delete Exam"
+                              aria-label="Delete exam"
                             >
                               <Trash2 className="h-3 w-3" />
-                            </Button>
+                            </Button></span>} />
+                              <TooltipContent>Delete exam</TooltipContent>
+                            </Tooltip>
                             <Button
                               size="sm"
                               onClick={() => handleOpenExam(ex)}

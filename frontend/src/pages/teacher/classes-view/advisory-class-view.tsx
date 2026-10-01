@@ -7,6 +7,7 @@ import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
@@ -166,12 +167,10 @@ export default function AdvisoryClassDetail() {
                 <Card.Content>
                   <div className="flex min-w-0 items-center justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <Card.Title
-                        className="mb-0 truncate text-2xl font-extrabold sm:text-3xl"
-                        title={detail.section_name}
-                      >
-                        {detail.section_name}
-                      </Card.Title>
+                      <Tooltip>
+                        <TooltipTrigger render={<Card.Title className="mb-0 truncate text-2xl font-extrabold sm:text-3xl" tabIndex={0}>{detail.section_name}</Card.Title>} />
+                        <TooltipContent>{detail.section_name}</TooltipContent>
+                      </Tooltip>
                     </div>
                     <Badge
                       variant="outline"
@@ -553,7 +552,6 @@ function GradesTab({ classId }: { classId: number }) {
               disabled={isBatchExportingXlsx || !gradesData.students.length}
               onClick={handleExportBatchSF9Xlsx}
               className="font-bold text-xs flex items-center gap-1.5 border-2 border-black bg-primary text-primary-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none transition-all shrink-0"
-              title="Export all students' SF9 cards as a multi-sheet Excel workbook"
             >
               {isBatchExportingXlsx ? (
                 <Loader2 className="size-3.5 animate-spin" />
@@ -624,13 +622,15 @@ function GradesTab({ classId }: { classId: number }) {
                     key={subj.subject_id}
                     className="sticky top-0 z-30 text-center min-w-[140px] max-w-[180px] font-bold px-3 py-2.5 border-r border-b-2 border-black/20 border-b-black bg-primary text-primary-foreground"
                   >
-                    <span className="block truncate font-bold text-xs" title={subj.subject_name}>
-                      {subj.subject_name}
-                    </span>
+                    <Tooltip>
+                      <TooltipTrigger render={<span className="block truncate font-bold text-xs" tabIndex={0}>{subj.subject_name}</span>} />
+                      <TooltipContent>{subj.subject_name}</TooltipContent>
+                    </Tooltip>
                     {subj.teacher_name && (
-                      <span className="block text-[10px] font-normal text-primary-foreground/75 truncate mt-0.5" title={subj.teacher_name}>
-                        {subj.teacher_name}
-                      </span>
+                      <Tooltip>
+                        <TooltipTrigger render={<span className="block text-[10px] font-normal text-primary-foreground/75 truncate mt-0.5" tabIndex={0}>{subj.teacher_name}</span>} />
+                        <TooltipContent>{subj.teacher_name}</TooltipContent>
+                      </Tooltip>
                     )}
                   </Table.Head>
                 ))}
@@ -669,12 +669,10 @@ function GradesTab({ classId }: { classId: number }) {
                         <div className="flex items-center gap-2 min-w-0">
                           <Avatar text={student.full_name} />
                           <div className="min-w-0 flex-1">
-                            <span
-                              className="block font-bold text-sm text-foreground truncate"
-                              title={student.full_name}
-                            >
-                              {student.full_name}
-                            </span>
+                            <Tooltip>
+                              <TooltipTrigger render={<span className="block font-bold text-sm text-foreground truncate" tabIndex={0}>{student.full_name}</span>} />
+                              <TooltipContent>{student.full_name}</TooltipContent>
+                            </Tooltip>
                             {student.student_lrn && (
                               <span className="block text-[10px] font-medium text-muted-foreground truncate">
                                 LRN {student.student_lrn}
@@ -698,9 +696,10 @@ function GradesTab({ classId }: { classId: number }) {
                                   {gradeItem.final_period_grade.toFixed(1)}
                                 </span>
                                 {gradeItem.performance_descriptor && (
-                                  <span className="text-[10px] font-semibold text-muted-foreground truncate max-w-[130px]" title={gradeItem.performance_descriptor}>
-                                    {gradeItem.performance_descriptor}
-                                  </span>
+                                  <Tooltip>
+                                    <TooltipTrigger render={<span className="text-[10px] font-semibold text-muted-foreground truncate max-w-[130px]" tabIndex={0}>{gradeItem.performance_descriptor}</span>} />
+                                    <TooltipContent>{gradeItem.performance_descriptor}</TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
                             ) : (
@@ -723,9 +722,10 @@ function GradesTab({ classId }: { classId: number }) {
                               {student.gwa.toFixed(1)}
                             </span>
                             {student.gwa_descriptor && (
-                              <span className="text-[10px] font-semibold text-muted-foreground truncate max-w-[140px]" title={student.gwa_descriptor}>
-                                {student.gwa_descriptor}
-                              </span>
+                              <Tooltip>
+                                <TooltipTrigger render={<span className="text-[10px] font-semibold text-muted-foreground truncate max-w-[140px]" tabIndex={0}>{student.gwa_descriptor}</span>} />
+                                <TooltipContent>{student.gwa_descriptor}</TooltipContent>
+                              </Tooltip>
                             )}
                           </div>
                         ) : student.finalized_count > 0 &&
@@ -809,7 +809,6 @@ function StudentSF9Button({
         }}
         className={`font-bold text-xs flex items-center gap-1.5 border-2 border-black bg-white hover:bg-muted shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none transition-all ${compact ? "px-2 py-1 h-7" : ""
           }`}
-        title={`View and export DepEd SF9 Report Card for ${studentName || "student"}`}
       >
         <FileText className="size-3.5 text-blue-700" />
         {!compact && <span>Export SF9</span>}

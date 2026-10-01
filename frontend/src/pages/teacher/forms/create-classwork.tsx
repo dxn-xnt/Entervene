@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, FileText, Loader2, Plus, Trash2, X } from "lucid
 import { toast } from "sonner";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
@@ -653,15 +654,18 @@ export default function CreateClassworkModal({
                         key={`${material.name}-${material.size}`}
                         className="relative flex h-32 w-28 border-2 border-border flex-col justify-between p-2 text-center shadow-none"
                       >
-                        <button
+                        <Tooltip>
+                          <TooltipTrigger render={<span className="absolute right-1 top-1 inline-flex"><button
                           type="button"
                           onClick={() => removeMaterial(index)}
                           disabled={isCreating}
-                          className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full border border-black bg-white text-black hover:bg-destructive hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
-                          title="Remove file"
+                          className="flex h-6 w-6 items-center justify-center rounded-full border border-black bg-white text-black hover:bg-destructive hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                          aria-label={`Remove ${material.name}`}
                         >
                           <Trash2 size={13} />
-                        </button>
+                        </button></span>} />
+                          <TooltipContent>Remove file</TooltipContent>
+                        </Tooltip>
                         <FileText className="mx-auto mt-5" size={22} />
                         <div className="min-w-0">
                           <p className="truncate text-xs font-semibold">

@@ -35,6 +35,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
 import { LoadingPanel } from "@/components/loading-panel";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import type { StudentLesson as Lesson } from "@/types/student-subject";
 
 const LOCKED_CLASSWORK_MESSAGE =
@@ -907,19 +908,10 @@ export default function SubjectLessonTab({
       <div className="fixed inset-0 z-[99999] flex flex-col bg-white">
         <header className="border-b-2 border-black bg-white px-4 py-3">
           <div className="grid grid-cols-[auto_1fr_auto] items-start gap-3">
-            <Button
-              type="button"
-              onClick={() => {
-                setIsQuizFullscreen(false);
-                setQuizReviewMode(false);
-              }}
-              variant="outline"
-              size="icon"
-              className="rounded border-black bg-white shadow-md hover:bg-white hover:shadow-none"
-              aria-label="Exit fullscreen quiz"
-            >
-              <ChevronLeft size={22} />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger render={<span className="inline-flex"><Button type="button" onClick={() => { setIsQuizFullscreen(false); setQuizReviewMode(false); }} variant="outline" size="icon" className="rounded border-black bg-white shadow-md hover:bg-white hover:shadow-none" aria-label="Exit fullscreen quiz"><ChevronLeft size={22} /></Button></span>} />
+              <TooltipContent>Exit quiz</TooltipContent>
+            </Tooltip>
             <div className="text-center">
               <p className="text-xl font-black leading-none">
                 {isSummaryMode
@@ -1168,19 +1160,10 @@ export default function SubjectLessonTab({
             ) : currentQuestion ? (
               <section className="mx-auto max-w-3xl space-y-4">
                 <div className="flex items-center justify-between">
-                  <Button
-                    type="button"
-                    onClick={() =>
-                      setQuizCurrentIndex((index) => Math.max(0, index - 1))
-                    }
-                    disabled={quizCurrentIndex === 0}
-                    variant="outline"
-                    size="icon"
-                    className="rounded border-black bg-white shadow-md hover:shadow-none disabled:opacity-40"
-                    aria-label="Previous question"
-                  >
-                    <ChevronLeft size={18} />
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger render={<span className="inline-flex"><Button type="button" onClick={() => setQuizCurrentIndex((index) => Math.max(0, index - 1))} disabled={quizCurrentIndex === 0} variant="outline" size="icon" className="rounded border-black bg-white shadow-md hover:shadow-none disabled:opacity-40" aria-label="Previous question"><ChevronLeft size={18} /></Button></span>} />
+                    <TooltipContent>Previous</TooltipContent>
+                  </Tooltip>
                   <Button
                     type="button"
                     onClick={() =>
@@ -1196,21 +1179,10 @@ export default function SubjectLessonTab({
                   >
                     Flag Question
                   </Button>
-                  <Button
-                    type="button"
-                    onClick={() =>
-                      setQuizCurrentIndex((index) =>
-                        Math.min(questions.length - 1, index + 1),
-                      )
-                    }
-                    disabled={quizCurrentIndex === questions.length - 1}
-                    variant="outline"
-                    size="icon"
-                    className="rounded border-black bg-white shadow-md hover:shadow-none disabled:opacity-40"
-                    aria-label="Next question"
-                  >
-                    <ChevronRight size={18} />
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger render={<span className="inline-flex"><Button type="button" onClick={() => setQuizCurrentIndex((index) => Math.min(questions.length - 1, index + 1))} disabled={quizCurrentIndex === questions.length - 1} variant="outline" size="icon" className="rounded border-black bg-white shadow-md hover:shadow-none disabled:opacity-40" aria-label="Next question"><ChevronRight size={18} /></Button></span>} />
+                    <TooltipContent>Next</TooltipContent>
+                  </Tooltip>
                 </div>
 
                 <Card className="block w-full border-black bg-white px-6 py-8 text-center shadow-md hover:shadow-none">
@@ -1608,15 +1580,10 @@ export default function SubjectLessonTab({
               </Card.Title>
               <p className="text-sm">{displayTeacherName}</p>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="rounded shadow-none hover:bg-transparent hover:shadow-none"
-              aria-label="Subject information"
-            >
-              <Info size={18} />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger render={<span className="inline-flex"><Button type="button" variant="ghost" size="icon" className="rounded shadow-none hover:bg-transparent hover:shadow-none" aria-label="Subject information"><Info size={18} /></Button></span>} />
+              <TooltipContent>Subject information</TooltipContent>
+            </Tooltip>
           </Card>
 
           {/* ── Activity overdue banner ── */}

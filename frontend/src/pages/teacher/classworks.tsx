@@ -32,10 +32,11 @@ import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Input } from "@/components/retroui/Input";
-import { Dialog } from "@/components/retroui/Dialog";
+import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
 import { Select } from "@/components/retroui/Select";
 import SegmentedControl from "@/components/retroui/SegmentedControl";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { DialogueSelect } from "@/components/dialogue-select";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
@@ -502,14 +503,20 @@ export default function Classworks() {
                     className="shrink-0"
                     aria-label="Classwork view switcher"
                   >
-                    <SegmentedControl.Item value="grid" title="Grid View">
-                      <LayoutGrid className="size-4" />
-                      <span className="ml-1.5 hidden sm:inline">Grid</span>
-                    </SegmentedControl.Item>
-                    <SegmentedControl.Item value="list" title="List View">
-                      <List className="size-4" />
-                      <span className="ml-1.5 hidden sm:inline">List</span>
-                    </SegmentedControl.Item>
+                    <Tooltip>
+                      <TooltipTrigger render={<SegmentedControl.Item value="grid" aria-label="Grid view">
+                        <LayoutGrid className="size-4" />
+                        <span className="ml-1.5 hidden sm:inline">Grid</span>
+                      </SegmentedControl.Item>} />
+                      <TooltipContent>Grid view</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger render={<SegmentedControl.Item value="list" aria-label="List view">
+                        <List className="size-4" />
+                        <span className="ml-1.5 hidden sm:inline">List</span>
+                      </SegmentedControl.Item>} />
+                      <TooltipContent>List view</TooltipContent>
+                    </Tooltip>
                   </SegmentedControl>
                 </div>
 
@@ -597,13 +604,17 @@ export default function Classworks() {
                           <Text as="h5" className="font-sans text-xl font-bold">
                             Choose Classwork Type
                           </Text>
-                          <button
+                          <Tooltip>
+                            <TooltipTrigger render={<button
                             type="button"
                             onClick={closeCreateWizard}
-                            className="cursor-pointer text-black hover:text-gray-200"
+                            className={dialogHeaderCloseButtonClassName}
+                            aria-label="Close modal"
                           >
-                            <X size={18} />
-                          </button>
+                            <X className="size-4" />
+                          </button>} />
+                            <TooltipContent>Close modal</TooltipContent>
+                          </Tooltip>
                         </div>
                       </Dialog.Header>
                       <section className="p-5">
