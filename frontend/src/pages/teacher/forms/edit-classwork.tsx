@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { FileText, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/retroui/Button";
-import { Dialog } from "@/components/retroui/Dialog";
+import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { apiFetch } from "@/lib/api";
 import {
   allowedClassworkMaterialExtensions,
@@ -346,17 +347,21 @@ export default function EditClassworkModal({
                 <Pencil size={18} />
                 <span>Edit Classwork</span>
               </div>
-              <button
+              <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex"><button
                 type="button"
                 onClick={() => {
                   if (!isSavingEdit) {
                     onClose();
                   }
                 }}
-                className="cursor-pointer text-black hover:text-gray-700"
+                className={dialogHeaderCloseButtonClassName}
+                aria-label="Close modal"
               >
-                <X size={18} />
-              </button>
+                <X className="size-4" />
+              </button></span>} />
+                <TooltipContent>{isSavingEdit ? "Saving classwork" : "Close modal"}</TooltipContent>
+              </Tooltip>
             </div>
           </Dialog.Header>
 
@@ -691,7 +696,8 @@ export default function EditClassworkModal({
                       <span className="min-w-0 flex-1 truncate font-semibold">
                         {attachment.file_name}
                       </span>
-                      <Button
+                      <Tooltip>
+                        <TooltipTrigger render={<span className="inline-flex"><Button
                         type="button"
                         variant="ghost"
                         size="icon"
@@ -709,7 +715,9 @@ export default function EditClassworkModal({
                         aria-label={`Remove ${attachment.file_name}`}
                       >
                         <Trash2 size={15} />
-                      </Button>
+                      </Button></span>} />
+                        <TooltipContent>Remove file</TooltipContent>
+                      </Tooltip>
                     </div>
                   ))}
                 </div>
@@ -741,7 +749,8 @@ export default function EditClassworkModal({
                       <span className="text-xs text-gray-500">
                         {formatFileSize(material.size)}
                       </span>
-                      <Button
+                      <Tooltip>
+                        <TooltipTrigger render={<span className="inline-flex"><Button
                         type="button"
                         variant="ghost"
                         size="icon"
@@ -751,7 +760,9 @@ export default function EditClassworkModal({
                         aria-label={`Remove ${material.name}`}
                       >
                         <Trash2 size={15} />
-                      </Button>
+                      </Button></span>} />
+                        <TooltipContent>Remove file</TooltipContent>
+                      </Tooltip>
                     </div>
                   ))}
                 </div>

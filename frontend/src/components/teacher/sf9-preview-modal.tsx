@@ -149,7 +149,6 @@ export function SF9PreviewModal({
               disabled={isExportingPdf || !data}
               onClick={handleDownloadPdf}
               className="font-bold text-xs flex items-center gap-1.5 border-2 border-black bg-primary text-primary-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none"
-              title="Download official PDF directly to your device"
             >
               {isExportingPdf ? (
                 <Loader2 className="size-3.5 animate-spin" />

@@ -1,6 +1,7 @@
 import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Card } from "@/components/retroui/Card";
 import { ArrowUpRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -218,11 +219,12 @@ const TeacherClasses = () => {
                                 {group.loads.length} section{group.loads.length !== 1 ? "s" : ""}
                               </Badge>
 
-                              <Button
+                              <Tooltip>
+                                <TooltipTrigger render={<span className="inline-flex"><Button
                                 variant="secondary"
                                 className="shadow-none px-1"
                                 size="sm"
-                                title={`View ${group.subjectName}`}
+                                aria-label={`View ${group.subjectName}`}
                                 onClick={() => {
                                   if (group.loads[0]) {
                                     navigate(
@@ -232,7 +234,9 @@ const TeacherClasses = () => {
                                 }}
                               >
                                 <ArrowUpRight className="size-4" />
-                              </Button>
+                              </Button></span>} />
+                                <TooltipContent>View subject</TooltipContent>
+                              </Tooltip>
                             </div>
                           </div>
                           <div

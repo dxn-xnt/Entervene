@@ -33,6 +33,7 @@ import QuizAnalysisView from "./classworks/quiz-analysis-view";
 import StudentSubmissionView from "./classworks/student-submission-view";
 import EditClassworkModal from "./forms/edit-classwork";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
@@ -499,12 +500,15 @@ export default function ClassworkView({
                   </Breadcrumb.Item>
                   <Breadcrumb.Separator className="shrink-0" />
                   <Breadcrumb.Item className="min-w-0">
-                    <Breadcrumb.Page
+                    <Tooltip>
+                      <TooltipTrigger render={<Breadcrumb.Page
                       className="block max-w-[200px] truncate sm:max-w-[350px] lg:max-w-[400px]"
-                      title={selected?.title ?? "Classwork Title"}
+                      tabIndex={0}
                     >
                       {selected?.title ?? "Classwork Title"}
-                    </Breadcrumb.Page>
+                    </Breadcrumb.Page>} />
+                      <TooltipContent>{selected?.title ?? "Classwork Title"}</TooltipContent>
+                    </Tooltip>
                   </Breadcrumb.Item>
                 </Breadcrumb.List>
               </Breadcrumb>

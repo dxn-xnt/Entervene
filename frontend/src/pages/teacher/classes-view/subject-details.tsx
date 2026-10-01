@@ -13,7 +13,8 @@ import {
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
-import { Dialog } from "@/components/retroui/Dialog";
+import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Badge } from "@/components/retroui/Badge";
@@ -1531,12 +1532,15 @@ export default function SubjectDetails() {
                           Click for more details
                         </Button>
                       )}
-                      <Dialog.Close
-                        title="Close"
-                        className="cursor-pointer rounded p-1 hover:bg-white/60"
-                      >
-                        <X size={18} />
-                      </Dialog.Close>
+                      <Tooltip>
+                        <TooltipTrigger render={<Dialog.Close
+                          aria-label="Close dialog"
+                          className={dialogHeaderCloseButtonClassName}
+                        >
+                          <X className="size-4" />
+                        </Dialog.Close>} />
+                        <TooltipContent>Close dialog</TooltipContent>
+                      </Tooltip>
                     </div>
                   </>
                 </Dialog.Header>

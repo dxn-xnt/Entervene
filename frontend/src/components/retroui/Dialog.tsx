@@ -249,11 +249,13 @@ const dialogHeaderVariants = cva(
   },
 );
 
+export const dialogHeaderCloseButtonClassName = "cursor-pointer rounded-none p-1 text-current transition-colors hover:bg-foreground/10";
+
 const DialogHeaderDefaultLayout = ({ children }: { children: ReactNode }) => {
   return (
     <>
       {children}
-      <BaseDialog.Close title="Close pop-up" className="cursor-pointer rounded-none p-1 text-current transition-colors hover:bg-foreground/10">
+      <BaseDialog.Close title="Close pop-up" className={dialogHeaderCloseButtonClassName}>
         <X className="size-4" />
       </BaseDialog.Close>
     </>

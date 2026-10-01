@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Text } from "@/components/retroui/Text";
 import { Table } from "@/components/retroui/Table";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -90,7 +91,7 @@ export default function ViewGradeScoreModal({
                 const assigned = !activity.recipientStudentId || activity.recipientStudentId === student.student_id;
                 return (
                   <Table.Cell key={i} className="text-center font-semibold tabular-nums">
-                    {!assigned ? <span title="Not assigned to this intervention activity" className="text-gray-500">N/A</span> : score !== null && score !== undefined ? score : "—"}
+                    {!assigned ? <Tooltip><TooltipTrigger render={<span className="text-gray-500" tabIndex={0}>N/A</span>} /><TooltipContent>Not assigned</TooltipContent></Tooltip> : score !== null && score !== undefined ? score : "—"}
                   </Table.Cell>
                 );
               })}
@@ -140,19 +141,23 @@ export default function ViewGradeScoreModal({
                   <Table.Head key={item.id} className="min-w-[150px] px-3 py-3 text-center font-head text-black">
                     <div className="flex flex-col items-center justify-center gap-1">
                       <div className="flex items-center justify-center gap-1">
-                        <span className="max-w-[160px] break-words text-center text-sm font-black leading-tight text-black" title={item.title}>
-                          {item.title}
-                        </span>
-                        {item.sourceInterventionId && <span title={`Intervention activity · ${item.assignedLearnerCount ?? 1} learner assigned · Source Intervention ${item.sourceInterventionId}`} className="rounded border border-black bg-yellow-50 px-1 text-[10px] font-black">I</span>}
+                        <Tooltip>
+                          <TooltipTrigger render={<span className="max-w-[160px] break-words text-center text-sm font-black leading-tight text-black" tabIndex={0}>{item.title}</span>} />
+                          <TooltipContent>{item.title}</TooltipContent>
+                        </Tooltip>
+                        {item.sourceInterventionId && <Tooltip><TooltipTrigger render={<span className="rounded border border-black bg-yellow-50 px-1 text-[10px] font-black" tabIndex={0}>I</span>} /><TooltipContent>Intervention activity</TooltipContent></Tooltip>}
                         {onEnterScores && (
-                          <button
+                          <Tooltip>
+                            <TooltipTrigger render={<button
                             type="button"
-                            title="Enter / Edit Scores"
+                            aria-label="Enter or edit scores"
                             className="border border-transparent p-1 text-black transition-colors hover:border-black hover:bg-yellow-200"
                             onClick={() => onEnterScores(item)}
                           >
                             <Edit3 className="size-3.5" />
-                          </button>
+                          </button>} />
+                            <TooltipContent>Edit scores</TooltipContent>
+                          </Tooltip>
                         )}
                       </div>
                       <span className="whitespace-nowrap border border-black bg-yellow-50 px-2 py-0.5 text-[11px] font-bold text-black">

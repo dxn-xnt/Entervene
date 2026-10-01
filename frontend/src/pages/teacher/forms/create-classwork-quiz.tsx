@@ -3,9 +3,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { ArrowLeft, ArrowRight, FileDown, FileText, Loader2, Pencil, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { useToast } from "@/components/retroui/use-toast";
 import { Text } from "@/components/retroui/Text";
-import { Dialog } from "@/components/retroui/Dialog";
+import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { Alert } from "@/components/retroui/Alert";
@@ -733,18 +734,22 @@ export default function CreateClassworkQuizModal({
                         <Text as="h5" className="font-sans text-xl font-bold">
                             Create Quiz
                         </Text>
-                        <p className="text-xs font-semibold text-white/80">
+                        <p className="text-xs font-semibold text-black">
                             Step {createStepNumber} of {createStepTotal}
                         </p>
                     </div>
-                    <button
+                    <Tooltip>
+                      <TooltipTrigger render={<span className="inline-flex"><button
                         type="button"
                         onClick={onClose}
                         disabled={isCreating}
-                        className="cursor-pointer text-white hover:text-gray-200"
+                        className={dialogHeaderCloseButtonClassName}
+                        aria-label="Close modal"
                     >
-                        <X size={18} />
-                    </button>
+                        <X className="size-4" />
+                    </button></span>} />
+                      <TooltipContent>{isCreating ? "Creating classwork" : "Close modal"}</TooltipContent>
+                    </Tooltip>
                 </div>
             </Dialog.Header>
 
@@ -1474,7 +1479,8 @@ export default function CreateClassworkQuizModal({
                                                         placeholder={`Choice ${optionIndex + 1}`}
                                                         className="flex-1 bg-white border-2 border-black rounded shadow-md text-sm"
                                                     />
-                                                    <button
+                                                    <Tooltip>
+                                                      <TooltipTrigger render={<span className="inline-flex"><button
                                                         type="button"
                                                         onClick={() =>
                                                             removeQuizOption(question.id, optionIndex)
@@ -1486,7 +1492,9 @@ export default function CreateClassworkQuizModal({
                                                         aria-label={`Remove choice ${optionIndex + 1}`}
                                                     >
                                                         <X size={14} />
-                                                    </button>
+                                                    </button></span>} />
+                                                      <TooltipContent>{question.options.length <= 2 ? "Keep at least two choices" : "Remove choice"}</TooltipContent>
+                                                    </Tooltip>
                                                 </div>
                                             ))}
                                             <Button
@@ -1536,17 +1544,20 @@ export default function CreateClassworkQuizModal({
                                                         }
                                                         className="flex-1 bg-white border-2 border-black rounded shadow-md text-sm font-semibold"
                                                     />
-                                                    <button
+                                                    <Tooltip>
+                                                      <TooltipTrigger render={<span className="inline-flex"><button
                                                         type="button"
                                                         onClick={() =>
                                                             removeQuizOption(question.id, optionIndex)
                                                         }
                                                         disabled={isCreating}
                                                         className="rounded border-2 border-black p-2 text-xs font-bold bg-white cursor-pointer hover:bg-gray-100 disabled:opacity-40 transition"
-                                                        title="Remove alternative answer"
+                                                        aria-label="Remove alternative answer"
                                                     >
                                                         <X size={14} />
-                                                    </button>
+                                                    </button></span>} />
+                                                      <TooltipContent>Remove answer</TooltipContent>
+                                                    </Tooltip>
                                                 </div>
                                             ))}
 
