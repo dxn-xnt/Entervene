@@ -202,8 +202,8 @@ export default function PredictionDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader className="pb-0">
+      <SheetContent className="w-full data-[side=right]:sm:max-w-xl overflow-y-auto">
+        <SheetHeader className="py-3">
           <SheetTitle className="text-lg">Prediction Detail</SheetTitle>
           <SheetDescription className="sr-only">Student prediction, grade, and evidence details.</SheetDescription>
         </SheetHeader>
@@ -776,7 +776,7 @@ function CurrentTermTeacherDetail({
     RISK_LABELS[prediction.intervention_level] || prediction.intervention_level;
 
   return (
-    <div className="flex flex-col gap-5 p-4 text-sm">
+    <div className="flex flex-col gap-4 px-5 text-sm">
       {prediction.official_final_grade_available && (
         <Alert
           status="info"
@@ -822,7 +822,7 @@ function CurrentTermTeacherDetail({
         <h2 id="student-overview-heading" className="mb-2 text-base font-black">
           Student Overview
         </h2>
-        <Card className="grid grid-cols-2 gap-x-4 gap-y-2 border-2 border-black bg-yellow-50 p-3 shadow-none">
+        <Card className="grid grid-cols-2 gap-x-4 gap-y-2 border-2 border-black p-3 shadow-none">
           <dt className="text-gray-600 font-semibold">Student</dt>
           <dd className="font-bold">
             {prediction.student_name || prediction.student_id}
@@ -860,7 +860,7 @@ function CurrentTermTeacherDetail({
             <Badge
               size="sm"
               variant="surface"
-              className="mt-2 border-2 border-black font-bold"
+              className="mt-2 font-bold"
             >
               {risk}
             </Badge>
@@ -896,7 +896,7 @@ function CurrentTermTeacherDetail({
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2 border-t-2 border-black pt-3">
           <Card className="p-3 border-2 border-black shadow-none bg-white">
-            <p className="text-xs text-gray-600">Academic performance so far</p>
+            <p className="text-xs text-gray-600">Academic Performance</p>
             <p className="font-black text-lg mb-1">
               {formatPercent(academic.overall.performance_percent)}
             </p>
@@ -911,7 +911,7 @@ function CurrentTermTeacherDetail({
             )}
           </Card>
           <Card className="p-3 border-2 border-black shadow-none bg-white">
-            <p className="text-xs text-gray-600">Grade components observed</p>
+            <p className="text-xs text-gray-600">Grade Components Observed</p>
             <p className="font-black text-lg mb-1">
               {formatPercent(
                 academic.overall.observed_component_weight_percent
@@ -1095,25 +1095,25 @@ export function ExaminationEvidence({
       {(detail.status === "PARTIAL" ||
         detail.status === "COMPLETE" ||
         detail.status === "NOT_STARTED") && (
-        <>
-          <p className="text-xs text-gray-600">
-            {detail.completed_count} of 3 graded
-          </p>
-          <dl className="mt-2 grid grid-cols-2 gap-y-1 text-xs">
-            {labels.map(([key, label]) => (
-              <div className="contents" key={key}>
-                <dt>{label}</dt>
-                <dd className="text-right">
-                  {detail.components[key] === null ||
-                  detail.components[key] === undefined
-                    ? "Not yet graded"
-                    : formatPercent(detail.components[key])}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </>
-      )}
+          <>
+            <p className="text-xs text-gray-600">
+              {detail.completed_count} of 3 graded
+            </p>
+            <dl className="mt-2 grid grid-cols-2 gap-y-1 text-xs">
+              {labels.map(([key, label]) => (
+                <div className="contents" key={key}>
+                  <dt>{label}</dt>
+                  <dd className="text-right">
+                    {detail.components[key] === null ||
+                      detail.components[key] === undefined
+                      ? "Not yet graded"
+                      : formatPercent(detail.components[key])}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </>
+        )}
       {detail.status === "PARTIAL" && (
         <p className="mt-2 text-xs text-gray-600">
           Final Examination component not yet available for prediction.
