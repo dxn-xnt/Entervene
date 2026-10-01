@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
@@ -548,15 +549,18 @@ export default function AIQuizGeneratorModal({
                 </p>
               </div>
             </div>
-            <button
+            <Tooltip>
+              <TooltipTrigger render={<span className="inline-flex"><button
               type="button"
               onClick={onClose}
               disabled={isGenerating}
               className="cursor-pointer p-1 border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-neutral-100 disabled:opacity-50 text-black"
-              title="Close"
+              aria-label="Close generator"
             >
               <X size={16} />
-            </button>
+            </button></span>} />
+              <TooltipContent>{isGenerating ? "Generating quiz" : "Close generator"}</TooltipContent>
+            </Tooltip>
           </div>
         </Dialog.Header>
 
@@ -848,7 +852,8 @@ export default function AIQuizGeneratorModal({
                       </select>
 
                       <div className="flex items-center gap-1 shrink-0">
-                        <Input
+                        <Tooltip>
+                          <TooltipTrigger render={<Input
                           type="number"
                           min={1}
                           max={50}
@@ -862,14 +867,17 @@ export default function AIQuizGeneratorModal({
                             updateTestPart(part.id, { count: clamped });
                           }}
                           className="w-14 h-8 text-center text-xs font-bold border-2 border-black rounded shadow-none"
-                          title="Number of questions"
-                        />
+                          aria-label="Number of questions"
+                        />} />
+                          <TooltipContent>Questions</TooltipContent>
+                        </Tooltip>
                         <span className="text-[11px] font-semibold text-muted-foreground">items</span>
                       </div>
 
                       <div className="flex items-center gap-1 shrink-0">
                         <span className="text-xs font-black text-black">@</span>
-                        <Input
+                        <Tooltip>
+                          <TooltipTrigger render={<Input
                           type="number"
                           min={0.5}
                           max={100}
@@ -884,8 +892,10 @@ export default function AIQuizGeneratorModal({
                             updateTestPart(part.id, { points_per_item: clamped });
                           }}
                           className="w-14 h-8 text-center text-xs font-bold border-2 border-black rounded shadow-none bg-amber-50"
-                          title="Points per question"
-                        />
+                          aria-label="Points per question"
+                        />} />
+                          <TooltipContent>Points per question</TooltipContent>
+                        </Tooltip>
                         <span className="text-[11px] font-semibold text-muted-foreground">pt(s)</span>
                       </div>
 
@@ -893,17 +903,20 @@ export default function AIQuizGeneratorModal({
                         = {rowPts} pts
                       </Badge>
 
-                      <Button
+                      <Tooltip>
+                        <TooltipTrigger render={<span className="inline-flex"><Button
                         type="button"
                         variant="outline"
                         size="sm"
                         disabled={testParts.length <= 1}
                         onClick={() => removeTestPart(part.id)}
                         className="h-8 w-8 p-0 border-2 border-black text-red-600 hover:bg-red-50 disabled:opacity-30 cursor-pointer ml-auto shrink-0"
-                        title="Remove part"
+                        aria-label="Remove test part"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                      </Button></span>} />
+                        <TooltipContent>{testParts.length <= 1 ? "Keep one part" : "Remove part"}</TooltipContent>
+                      </Tooltip>
                     </div>
 
                     {/* ── Prominent Difficulty Customizer Toggle ── */}

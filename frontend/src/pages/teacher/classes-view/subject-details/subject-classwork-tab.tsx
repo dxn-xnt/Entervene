@@ -24,6 +24,7 @@ import type {
   TeacherClasswork,
 } from "@/types/classwork";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
@@ -275,12 +276,12 @@ export default function SubjectClassworkTab({
             Add Filter
           </Button>
 
-          <Button
+          <Tooltip>
+            <TooltipTrigger render={<span className="inline-flex"><Button
             variant="outline"
             size="md"
             onClick={cycleSort}
             className="gap-1.5"
-            title={`Current sort: ${sortMode}`}
           >
             {sortMode === "title" ? (
               <ArrowDownAZ size={15} />
@@ -288,7 +289,9 @@ export default function SubjectClassworkTab({
               <ArrowUpDown size={15} />
             )}
             Sort By
-          </Button>
+          </Button></span>} />
+            <TooltipContent>Sorted by {sortMode}</TooltipContent>
+          </Tooltip>
 
           {statusFilter !== "all" && (
             <Badge

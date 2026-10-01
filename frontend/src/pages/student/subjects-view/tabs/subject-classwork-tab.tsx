@@ -28,6 +28,7 @@ import { useToast } from "@/components/retroui/use-toast";
 import { API_URL, apiFetch } from "@/lib/api";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { LoadingPanel } from "@/components/loading-panel";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 
 interface Attachment {
   classwork_attachment_id: number;
@@ -810,19 +811,10 @@ export default function SubjectClassworkTab({
       <div className="fixed inset-0 z-[99999] flex flex-col bg-white">
         <header className="border-b-2 border-black bg-white px-4 py-3">
           <div className="grid grid-cols-[auto_1fr_auto] items-start gap-3">
-            <Button
-              type="button"
-              onClick={() => {
-                setIsQuizFullscreen(false);
-                setQuizReviewMode(false);
-              }}
-              variant="outline"
-              size="icon"
-              className="rounded border-black bg-white shadow-md hover:bg-white hover:shadow-none"
-              aria-label="Exit fullscreen quiz"
-            >
-              <ChevronLeft size={22} />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger render={<span className="inline-flex"><Button type="button" onClick={() => { setIsQuizFullscreen(false); setQuizReviewMode(false); }} variant="outline" size="icon" className="rounded border-black bg-white shadow-md hover:bg-white hover:shadow-none" aria-label="Exit fullscreen quiz"><ChevronLeft size={22} /></Button></span>} />
+              <TooltipContent>Exit quiz</TooltipContent>
+            </Tooltip>
             <div className="text-center">
               <p className="text-xl font-black leading-none">
                 {isSummaryMode
@@ -1063,19 +1055,10 @@ export default function SubjectClassworkTab({
             ) : currentQuestion ? (
               <section className="mx-auto max-w-3xl space-y-4">
                 <div className="flex items-center justify-between">
-                  <Button
-                    type="button"
-                    onClick={() =>
-                      setQuizCurrentIndex((index) => Math.max(0, index - 1))
-                    }
-                    disabled={quizCurrentIndex === 0}
-                    variant="outline"
-                    size="icon"
-                    className="rounded border-black bg-white shadow-md hover:shadow-none disabled:opacity-40"
-                    aria-label="Previous question"
-                  >
-                    <ChevronLeft size={18} />
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger render={<span className="inline-flex"><Button type="button" onClick={() => setQuizCurrentIndex((index) => Math.max(0, index - 1))} disabled={quizCurrentIndex === 0} variant="outline" size="icon" className="rounded border-black bg-white shadow-md hover:shadow-none disabled:opacity-40" aria-label="Previous question"><ChevronLeft size={18} /></Button></span>} />
+                    <TooltipContent>Previous</TooltipContent>
+                  </Tooltip>
                   <Button
                     type="button"
                     onClick={() =>
@@ -1091,21 +1074,10 @@ export default function SubjectClassworkTab({
                   >
                     Flag Question
                   </Button>
-                  <Button
-                    type="button"
-                    onClick={() =>
-                      setQuizCurrentIndex((index) =>
-                        Math.min(questions.length - 1, index + 1),
-                      )
-                    }
-                    disabled={quizCurrentIndex === questions.length - 1}
-                    variant="outline"
-                    size="icon"
-                    className="rounded border-black bg-white shadow-md hover:shadow-none disabled:opacity-40"
-                    aria-label="Next question"
-                  >
-                    <ChevronRight size={18} />
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger render={<span className="inline-flex"><Button type="button" onClick={() => setQuizCurrentIndex((index) => Math.min(questions.length - 1, index + 1))} disabled={quizCurrentIndex === questions.length - 1} variant="outline" size="icon" className="rounded border-black bg-white shadow-md hover:shadow-none disabled:opacity-40" aria-label="Next question"><ChevronRight size={18} /></Button></span>} />
+                    <TooltipContent>Next</TooltipContent>
+                  </Tooltip>
                 </div>
 
                 <Card className="block w-full border-black bg-white px-6 py-8 text-center shadow-md hover:shadow-none">
@@ -1250,12 +1222,21 @@ export default function SubjectClassworkTab({
           const isItemLoading = detailLoadingId === cw.classwork_assignment_id;
 
           return (
-            <Card
-              key={cw.classwork_assignment_id}
-              id={`student-classwork-${cw.classwork_assignment_id}`}
-              onClick={() => !isItemLoading && openClassworkDetail(cw)}
-              className="flex cursor-pointer flex-col border-black hover:border-gray-800 transition-colors"
-            >
+            <Tooltip key={cw.classwork_assignment_id}>
+              <TooltipTrigger render={<Card
+                id={`student-classwork-${cw.classwork_assignment_id}`}
+                onClick={() => !isItemLoading && openClassworkDetail(cw)}
+                className="flex cursor-pointer flex-col border-black hover:border-gray-800 transition-colors"
+                role="button"
+                tabIndex={isItemLoading ? -1 : 0}
+                aria-label={`View classwork: ${cw.title}`}
+                onKeyDown={(event) => {
+                  if (!isItemLoading && (event.key === "Enter" || event.key === " ")) {
+                    event.preventDefault();
+                    openClassworkDetail(cw);
+                  }
+                }}
+              >
               <div className="flex w-full items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -1277,9 +1258,7 @@ export default function SubjectClassworkTab({
                 </div>
 
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                  <Badge variant={badge.variant} size="sm" className={badge.cls}>
-                    {badge.label}
-                  </Badge>
+                  <Badge variant={badge.variant} size="sm" className={badge.cls}>{badge.label}</Badge>
                   {deadline && (
                     <Badge variant={deadline.variant} size="sm" className={deadline.cls}>
                       {deadline.label}
@@ -1290,7 +1269,9 @@ export default function SubjectClassworkTab({
                   )}
                 </div>
               </div>
-            </Card>
+            </Card>} />
+              <TooltipContent>{cw.is_locked ? "Not available yet" : "View classwork"}</TooltipContent>
+            </Tooltip>
           );
         })
       )}

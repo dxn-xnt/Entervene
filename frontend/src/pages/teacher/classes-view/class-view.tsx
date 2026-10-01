@@ -35,8 +35,9 @@ import { Select } from "@/components/retroui/Select";
 import { OverviewCard } from "@/components/overview-cards";
 import { Table } from "@/components/retroui/Table";
 import { DialogueSelect } from "@/components/dialogue-select";
-import { Dialog } from "@/components/retroui/Dialog";
+import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Avatar } from "@/components/retroui/Avatar";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
 import SetLessonGoalModal from "./subject-details/set-lesson-goal-modal";
@@ -365,12 +366,15 @@ export default function TeacherClassDetail() {
                   <Card.Content>
                     <div className="flex min-w-0 items-center justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <Card.Title
+                        <Tooltip>
+                          <TooltipTrigger render={<Card.Title
                           className="mb-0 truncate text-2xl font-extrabold sm:text-3xl"
-                          title={currentSubject?.subject_name || detail.section_name}
+                          tabIndex={0}
                         >
                           {currentSubject?.subject_name || detail.section_name}
-                        </Card.Title>
+                        </Card.Title>} />
+                          <TooltipContent>{currentSubject?.subject_name || detail.section_name}</TooltipContent>
+                        </Tooltip>
                       </div>
                       <div className="flex shrink-0 flex-row items-center gap-2">
                         <Badge
@@ -380,11 +384,12 @@ export default function TeacherClassDetail() {
                         >
                           {statusLabel}
                         </Badge>
-                        <Button
+                        <Tooltip>
+                          <TooltipTrigger render={<span className="inline-flex"><Button
                           variant="secondary"
                           className="shadow-none w-7 p-1"
                           size="sm"
-                          title={`View ${currentSubject?.subject_name || detail.section_name}`}
+                          aria-label={`View ${currentSubject?.subject_name || detail.section_name}`}
                           onClick={() => {
                             if (currentSubject) {
                               navigate(
@@ -394,7 +399,9 @@ export default function TeacherClassDetail() {
                           }}
                         >
                           <ArrowUpRight className="size-4" />
-                        </Button>
+                        </Button></span>} />
+                          <TooltipContent>View subject</TooltipContent>
+                        </Tooltip>
                       </div>
 
                     </div>
@@ -1201,7 +1208,6 @@ function OverviewTab({
                           }
                         }}
                         className="h-10 w-full gap-2 whitespace-nowrap text-sm"
-                        title="Go to Subject View"
                       >
                         <BookOpen size={16} />
                         Subject View
@@ -1253,7 +1259,7 @@ function OverviewTab({
                             }
                           }}
                           className="group flex w-full min-w-0 cursor-pointer select-none items-center justify-between gap-3 border-b-2 border-black bg-primary px-3 py-3 sm:px-4 sm:py-3.5"
-                          title={isCollapsed ? "Expand competency" : "Collapse competency"}
+                          aria-label={isCollapsed ? "Expand competency" : "Collapse competency"}
                         >
                           <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
                             <div className="min-w-0 flex-1">
@@ -1447,31 +1453,22 @@ function OverviewTab({
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {selectedClasswork && (
-                    <Button
+                  <Tooltip>
+                    <TooltipTrigger render={<button
                       type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        navigate(
-                          `/teacher/classworks/${selectedClasswork.classwork_id}`,
-                        )
-                      }
-                      className="border-2 border-black bg-white hover:bg-gray-50 font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs"
+                      onClick={closeClassworkDetail}
+                      aria-label="Close modal"
+                      className={dialogHeaderCloseButtonClassName}
                     >
-                      Click for more details
-                    </Button>
-                  )}
-                  <Dialog.Close
-                    title="Close"
-                    className="cursor-pointer rounded p-1 hover:bg-white/60 transition-colors"
-                  >
-                    <X size={18} />
-                  </Dialog.Close>
+                      <X className="size-4" />
+                    </button>} />
+                    <TooltipContent>Close modal</TooltipContent>
+                  </Tooltip>
                 </div>
               </>
             </Dialog.Header>
 
+            <div className="min-h-0 flex-1 overflow-y-auto">
             {detailLoadingId ? (
               <div className="p-8 text-center text-sm font-semibold text-gray-600">
                 Loading classwork details...
@@ -1661,6 +1658,18 @@ function OverviewTab({
                 </div>
               </div>
             ) : null}
+            </div>
+            <Dialog.Footer className="mt-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="header"
+                onClick={() => selectedClasswork && navigate(`/teacher/classworks/${selectedClasswork.classwork_id}`)}
+                disabled={!selectedClasswork}
+              >
+                View classwork details
+              </Button>
+            </Dialog.Footer>
           </Dialog.Content>
         </Dialog>
       )}
@@ -2491,13 +2500,17 @@ function ClassworkTab({
                   <Text as="h5" className="font-sans text-xl font-bold">
                     Create Classwork
                   </Text>
-                  <button
+                  <Tooltip>
+                    <TooltipTrigger render={<button
                     type="button"
                     onClick={closeCreateWizard}
-                    className="cursor-pointer text-black"
+                    className={dialogHeaderCloseButtonClassName}
+                    aria-label="Close modal"
                   >
-                    <X size={18} />
-                  </button>
+                    <X className="size-4" />
+                  </button>} />
+                    <TooltipContent>Close modal</TooltipContent>
+                  </Tooltip>
                 </div>
               </Dialog.Header>
               <section className="p-5">

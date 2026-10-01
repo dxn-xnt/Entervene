@@ -4,6 +4,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
 import { OverviewCard } from "@/components/overview-cards";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Badge } from "@/components/retroui/Badge";
 import { Input } from "@/components/retroui/Input";
 import { Table } from "@/components/retroui/Table";
@@ -1601,16 +1602,18 @@ export default function TeacherAttendancePage() {
                                 </Badge>
                               </Table.Cell>
                               <Table.Cell className="text-right pr-4">
-                                <Button
+                                <Tooltip>
+                                  <TooltipTrigger render={<span className="inline-flex"><Button
                                   size="sm"
                                   onClick={() => setSelectedStudentLogs(item)}
                                   className="shadow-none p-1 ml-auto"
-                                  title="View attendance log"
                                   aria-label={`View attendance log for ${item.student_name}`}
                                 >
                                   <span className="md:hidden">View logs</span>
                                   <ArrowUpRight size={16} />
-                                </Button>
+                                </Button></span>} />
+                                  <TooltipContent>View logs</TooltipContent>
+                                </Tooltip>
                               </Table.Cell>
                             </Table.Row>
                           ))}

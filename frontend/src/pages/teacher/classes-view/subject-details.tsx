@@ -13,7 +13,8 @@ import {
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
-import { Dialog } from "@/components/retroui/Dialog";
+import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Badge } from "@/components/retroui/Badge";
@@ -1502,7 +1503,7 @@ export default function SubjectDetails() {
             >
               <Dialog.Content
                 size="4xl"
-                className="no-scrollbar h-fit max-h-[90vh] !overflow-y-auto overflow-x-hidden"
+                className="no-scrollbar h-fit max-h-[90vh] overflow-x-hidden"
                 overlay={{ className: "bg-black/50" }}
               >
                 <Dialog.Header asChild>
@@ -1516,31 +1517,22 @@ export default function SubjectDetails() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {selectedClasswork && (
-                        <Button
+                      <Tooltip>
+                        <TooltipTrigger render={<button
                           type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            navigate(
-                              `/teacher/classworks/${selectedClasswork.classwork_id}`,
-                            )
-                          }
-                          className="border-black bg-white font-bold"
+                          onClick={closeClassworkDetail}
+                          aria-label="Close modal"
+                          className={dialogHeaderCloseButtonClassName}
                         >
-                          Click for more details
-                        </Button>
-                      )}
-                      <Dialog.Close
-                        title="Close"
-                        className="cursor-pointer rounded p-1 hover:bg-white/60"
-                      >
-                        <X size={18} />
-                      </Dialog.Close>
+                          <X className="size-4" />
+                        </button>} />
+                        <TooltipContent>Close modal</TooltipContent>
+                      </Tooltip>
                     </div>
                   </>
                 </Dialog.Header>
 
+                <div className="min-h-0 flex-1 overflow-y-auto">
                 {detailLoadingId ? (
                   <div className="p-8 text-center text-sm font-semibold text-gray-600">
                     Loading classwork details...
@@ -1792,6 +1784,18 @@ export default function SubjectDetails() {
                     </aside>
                   </div>
                 ) : null}
+                </div>
+                <Dialog.Footer className="mt-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="header"
+                    onClick={() => selectedClasswork && navigate(`/teacher/classworks/${selectedClasswork.classwork_id}`)}
+                    disabled={!selectedClasswork}
+                  >
+                    View classwork details
+                  </Button>
+                </Dialog.Footer>
               </Dialog.Content>
             </Dialog>
           )}

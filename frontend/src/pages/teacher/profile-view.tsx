@@ -1,6 +1,7 @@
 
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { useToast } from "@/components/retroui/use-toast";
 import { Dialog } from "@/components/retroui/Dialog";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -126,8 +127,8 @@ export default function TeacherProfile() {
                   {TEACHER_AVATARS.map((avatarPath) => {
                     const isSelected = tempSelectedAvatar === avatarPath;
                     return (
-                      <button
-                        key={avatarPath}
+                      <Tooltip key={avatarPath}>
+                        <TooltipTrigger render={<button
                         type="button"
                         aria-label={`Select teacher avatar ${TEACHER_AVATARS.indexOf(avatarPath) + 1}`}
                         aria-pressed={isSelected}
@@ -142,7 +143,9 @@ export default function TeacherProfile() {
                           alt=""
                           className="h-full w-full object-contain"
                         />
-                      </button>
+                      </button>} />
+                        <TooltipContent>Select avatar {TEACHER_AVATARS.indexOf(avatarPath) + 1}</TooltipContent>
+                      </Tooltip>
                     );
                   })}
             </div>

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { formatDate } from "@/lib/classwork-utils";
 import type { ClassworkTracking, TeacherClasswork } from "@/types/classwork";
 
@@ -46,7 +47,8 @@ export default function ClassworkListItem({
   const openItem = () => onOpen(item);
 
   return (
-    <Card
+    <Tooltip>
+      <TooltipTrigger render={<Card
       className="w-full cursor-pointer transition-all p-3.5 sm:p-4 hover:shadow-none"
       role="button"
       tabIndex={0}
@@ -96,6 +98,8 @@ export default function ClassworkListItem({
           </Badge>
         </div>
       </div>
-    </Card>
+    </Card>} />
+      <TooltipContent>View classwork</TooltipContent>
+    </Tooltip>
   );
 }

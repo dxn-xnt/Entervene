@@ -7,6 +7,7 @@ import { Progress } from "@/components/retroui/Progress";
 import { Card, type cardVariants } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { ArrowUpRight, UserRound } from "lucide-react";
 import type { VariantProps } from "class-variance-authority";
 
@@ -155,9 +156,10 @@ export function SubjectCard({
         {/* Header */}
         {isTeacher ? (
           <div className="flex flex-row w-full items-center justify-between gap-2">
-            <p className="text-2xl font-bold truncate min-w-0" title={title}>
-              {title}
-            </p>
+            <Tooltip>
+              <TooltipTrigger render={<p className="text-2xl font-bold truncate min-w-0" tabIndex={0}>{title}</p>} />
+              <TooltipContent>{title}</TooltipContent>
+            </Tooltip>
             <div className="flex items-center gap-1.5 shrink-0">
               {isAdvisory && (
                 <Badge size="sm" variant="solid">
@@ -211,17 +213,16 @@ export function SubjectCard({
               >
                 <div className="flex flex-col w-full gap-2">
                   <div className="flex flex-row justify-between items-center gap-2">
-                    <p
-                      className="text-md font-semibold truncate flex-1 min-w-0"
-                      title={activeCw.title}
-                    >
-                      {activeCw.title}
-                    </p>
-                    <Button
+                    <Tooltip>
+                      <TooltipTrigger render={<p className="text-md font-semibold truncate flex-1 min-w-0" tabIndex={0}>{activeCw.title}</p>} />
+                      <TooltipContent>{activeCw.title}</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger render={<span className="inline-flex"><Button
                       variant="secondary"
                       className="shadow-none p-1 shrink-0"
                       size="sm"
-                      title="View Classwork"
+                      aria-label="View classwork"
                       onClick={(e) => {
                         if (onClassworkClick) {
                           e.stopPropagation();
@@ -230,7 +231,9 @@ export function SubjectCard({
                       }}
                     >
                       <ArrowUpRight className="size-3" />
-                    </Button>
+                    </Button></span>} />
+                      <TooltipContent>View classwork</TooltipContent>
+                    </Tooltip>
                   </div>
                   <div className="flex flex-wrap gap-1.5 items-center">
                     <Badge

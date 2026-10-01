@@ -126,7 +126,7 @@ export function SF9PreviewModal({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <Dialog.Content size="4xl" className="max-w-[1150px] max-h-[92vh] flex flex-col p-0 overflow-hidden border-2 border-black bg-muted/20">
-        {/* Modal Top Action Toolbar */}
+        {/* Report title stays visible while the preview scrolls. */}
         <Dialog.Header className="flex flex-row items-center justify-between border-b-2 border-black bg-card px-5 py-3">
           <div className="flex items-center gap-3">
             <span className="flex size-8 items-center justify-center rounded border-2 border-black bg-primary text-primary-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
@@ -142,23 +142,6 @@ export function SF9PreviewModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="default"
-              size="sm"
-              disabled={isExportingPdf || !data}
-              onClick={handleDownloadPdf}
-              className="font-bold text-xs flex items-center gap-1.5 border-2 border-black bg-primary text-primary-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none"
-              title="Download official PDF directly to your device"
-            >
-              {isExportingPdf ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Download className="size-3.5" />
-              )}
-              <span>{isExportingPdf ? "Saving PDF..." : "Download PDF"}</span>
-            </Button>
-          </div>
         </Dialog.Header>
 
         {/* Modal Scrollable Body */}
@@ -596,6 +579,17 @@ export function SF9PreviewModal({
             </div>
           )}
         </div>
+        <Dialog.Footer className="mt-0">
+          <Button
+            variant="default"
+            size="header"
+            disabled={isExportingPdf || !data}
+            onClick={handleDownloadPdf}
+          >
+            {isExportingPdf ? <Loader2 className="animate-spin" /> : <Download />}
+            {isExportingPdf ? "Saving PDF..." : "Download PDF"}
+          </Button>
+        </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
   );

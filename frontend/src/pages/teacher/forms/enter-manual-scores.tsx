@@ -174,7 +174,7 @@ export default function EnterManualScoresModal({
                   </div>
 
                   <div className="flex items-center gap-2 self-end sm:self-auto">
-                    {!student.assigned ? <span className="text-sm font-bold text-gray-500" title="Not assigned to this intervention activity">N/A · Not assigned</span> :
+                    {!student.assigned ? <span className="text-sm font-bold text-gray-500">N/A · Not assigned</span> :
                     <div className="flex flex-col items-end">
                       <div className="flex items-center gap-1.5">
                         <Input
