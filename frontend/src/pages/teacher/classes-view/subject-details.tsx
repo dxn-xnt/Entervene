@@ -1503,7 +1503,7 @@ export default function SubjectDetails() {
             >
               <Dialog.Content
                 size="4xl"
-                className="no-scrollbar h-fit max-h-[90vh] !overflow-y-auto overflow-x-hidden"
+                className="no-scrollbar h-fit max-h-[90vh] overflow-x-hidden"
                 overlay={{ className: "bg-black/50" }}
               >
                 <Dialog.Header asChild>
@@ -1517,34 +1517,22 @@ export default function SubjectDetails() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {selectedClasswork && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            navigate(
-                              `/teacher/classworks/${selectedClasswork.classwork_id}`,
-                            )
-                          }
-                          className="border-black bg-white font-bold"
-                        >
-                          Click for more details
-                        </Button>
-                      )}
                       <Tooltip>
-                        <TooltipTrigger render={<Dialog.Close
-                          aria-label="Close dialog"
+                        <TooltipTrigger render={<button
+                          type="button"
+                          onClick={closeClassworkDetail}
+                          aria-label="Close modal"
                           className={dialogHeaderCloseButtonClassName}
                         >
                           <X className="size-4" />
-                        </Dialog.Close>} />
-                        <TooltipContent>Close dialog</TooltipContent>
+                        </button>} />
+                        <TooltipContent>Close modal</TooltipContent>
                       </Tooltip>
                     </div>
                   </>
                 </Dialog.Header>
 
+                <div className="min-h-0 flex-1 overflow-y-auto">
                 {detailLoadingId ? (
                   <div className="p-8 text-center text-sm font-semibold text-gray-600">
                     Loading classwork details...
@@ -1796,6 +1784,18 @@ export default function SubjectDetails() {
                     </aside>
                   </div>
                 ) : null}
+                </div>
+                <Dialog.Footer className="mt-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="header"
+                    onClick={() => selectedClasswork && navigate(`/teacher/classworks/${selectedClasswork.classwork_id}`)}
+                    disabled={!selectedClasswork}
+                  >
+                    View classwork details
+                  </Button>
+                </Dialog.Footer>
               </Dialog.Content>
             </Dialog>
           )}

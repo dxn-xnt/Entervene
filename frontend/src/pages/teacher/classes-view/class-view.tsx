@@ -1453,34 +1453,22 @@ function OverviewTab({
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {selectedClasswork && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        navigate(
-                          `/teacher/classworks/${selectedClasswork.classwork_id}`,
-                        )
-                      }
-                      className="border-2 border-black bg-white hover:bg-gray-50 font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs"
-                    >
-                      Click for more details
-                    </Button>
-                  )}
                   <Tooltip>
-                    <TooltipTrigger render={<Dialog.Close
-                      aria-label="Close dialog"
+                    <TooltipTrigger render={<button
+                      type="button"
+                      onClick={closeClassworkDetail}
+                      aria-label="Close modal"
                       className={dialogHeaderCloseButtonClassName}
                     >
                       <X className="size-4" />
-                    </Dialog.Close>} />
-                    <TooltipContent>Close dialog</TooltipContent>
+                    </button>} />
+                    <TooltipContent>Close modal</TooltipContent>
                   </Tooltip>
                 </div>
               </>
             </Dialog.Header>
 
+            <div className="min-h-0 flex-1 overflow-y-auto">
             {detailLoadingId ? (
               <div className="p-8 text-center text-sm font-semibold text-gray-600">
                 Loading classwork details...
@@ -1670,6 +1658,18 @@ function OverviewTab({
                 </div>
               </div>
             ) : null}
+            </div>
+            <Dialog.Footer className="mt-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="header"
+                onClick={() => selectedClasswork && navigate(`/teacher/classworks/${selectedClasswork.classwork_id}`)}
+                disabled={!selectedClasswork}
+              >
+                View classwork details
+              </Button>
+            </Dialog.Footer>
           </Dialog.Content>
         </Dialog>
       )}
