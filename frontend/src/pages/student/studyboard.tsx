@@ -10,7 +10,7 @@ import {
   Pie,
   PieChart,
   ResponsiveContainer,
-  Tooltip,
+  Tooltip as ChartTooltip,
   XAxis,
   YAxis,
 } from "recharts";
@@ -31,6 +31,7 @@ import {
 } from "@/lib/api";
 import { useStudentOverviewData } from "@/hooks/use-student-overview-data";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 
 const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const attendanceLabel = {
@@ -347,7 +348,7 @@ export default function Studyboard() {
                             fontSize: 10,
                           }}
                         />
-                        <Tooltip
+                        <ChartTooltip
                           formatter={(value) => `${value} min`}
                           contentStyle={{
                             background: "var(--card)",
@@ -412,7 +413,7 @@ export default function Studyboard() {
                             fontSize: 11,
                           }}
                         />
-                        <Tooltip
+                        <ChartTooltip
                           formatter={(value) => `${value}%`}
                           contentStyle={{
                             background: "var(--card)",
@@ -458,12 +459,10 @@ export default function Studyboard() {
                         key={item.subject}
                         className="grid grid-cols-[minmax(0,1fr)_4rem] gap-x-2 gap-y-1 text-xs"
                       >
-                        <span
-                          className="truncate font-medium"
-                          title={item.subject}
-                        >
-                          {item.subject}
-                        </span>
+                        <Tooltip>
+                          <TooltipTrigger render={<span tabIndex={0} className="truncate font-medium">{item.subject}</span>} />
+                          <TooltipContent>{item.subject}</TooltipContent>
+                        </Tooltip>
                         <span className="text-right font-semibold">
                           {duration(item.seconds)}
                         </span>
@@ -539,10 +538,11 @@ export default function Studyboard() {
               ) : (
                 <div className="space-y-2">
                   {overview.deadlines.map((item) => (
-                    <button
+                    <Tooltip key={item.assignment_id}>
+                    <TooltipTrigger render={<button
                       type="button"
-                      key={item.assignment_id}
                       onClick={() => openTodo(item)}
+                      aria-label={`View classwork: ${item.title}`}
                       className="flex w-full items-center justify-between gap-3 rounded border border-border bg-background p-2 text-left text-sm focus-visible:outline-2 focus-visible:outline-primary"
                     >
                       <span className="min-w-0">
@@ -556,7 +556,9 @@ export default function Studyboard() {
                       <Badge variant="outline" size="sm" className="shrink-0">
                         {dayLabel(item.due_date!)}
                       </Badge>
-                    </button>
+                    </button>} />
+                    <TooltipContent>View classwork</TooltipContent>
+                    </Tooltip>
                   ))}
                 </div>
               ))}
@@ -583,12 +585,16 @@ export default function Studyboard() {
                       <p className="mb-1 text-xs font-semibold">
                         {days[index]}
                       </p>
-                      <div
+                      <Tooltip>
+                      <TooltipTrigger render={<div
+                        tabIndex={0}
+                        aria-label={`${dayLabel(day.date)}: ${attendanceLabel[day.status]}`}
                         className={`flex min-h-12 items-center justify-center break-words rounded border-2 border-border px-0.5 text-[9px] font-semibold sm:px-1 sm:text-xs ${day.status === "present" ? "bg-primary text-primary-foreground" : day.status === "late" ? "bg-accent text-accent-foreground" : day.status === "absent" ? "bg-destructive text-destructive-foreground" : day.status === "excused" ? "bg-secondary text-secondary-foreground" : "bg-muted text-muted-foreground"}`}
-                        title={`${dayLabel(day.date)}: ${attendanceLabel[day.status]}`}
                       >
                         {attendanceLabel[day.status]}
-                      </div>
+                      </div>} />
+                      <TooltipContent>{dayLabel(day.date)}: {attendanceLabel[day.status]}</TooltipContent>
+                      </Tooltip>
                     </div>
                   ))}
                 </div>
@@ -631,9 +637,10 @@ export default function Studyboard() {
                               key={item.name}
                               className="grid grid-cols-[minmax(0,1fr)_3rem] gap-x-2 gap-y-1 text-xs"
                             >
-                              <span className="truncate" title={item.name}>
-                                {item.name}
-                              </span>
+                              <Tooltip>
+                                <TooltipTrigger render={<span tabIndex={0} className="truncate">{item.name}</span>} />
+                                <TooltipContent>{item.name}</TooltipContent>
+                              </Tooltip>
                               <span className="text-right font-semibold">
                                 {item.score}%
                               </span>

@@ -1,5 +1,6 @@
 import { BookOpen, CheckSquare, ClipboardList, FileText } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 
 type ListItemProps = {
   title: string;
@@ -15,24 +16,24 @@ const getClassworkIcon = (type?: string | null, category?: string | null) => {
   switch (normalized) {
     case "READING":
     case "READINGS":
-      return BookOpen;
+      return <BookOpen size={19} className="mt-0.5 shrink-0" />;
     case "ACTIVITY":
     case "ACTIVITIES":
-      return CheckSquare;
+      return <CheckSquare size={19} className="mt-0.5 shrink-0" />;
     case "QUIZ":
     case "QUIZZES":
-      return ClipboardList;
+      return <ClipboardList size={19} className="mt-0.5 shrink-0" />;
     case "ASSIGNMENT":
     case "ASSIGNMENTS":
     default:
-      return FileText;
+      return <FileText size={19} className="mt-0.5 shrink-0" />;
   }
 };
 
 const ToDoItem = ({ title, subject, deadline, type, category, onClick }: ListItemProps) => {
-  const IconComponent = getClassworkIcon(type, category);
+  const icon = getClassworkIcon(type, category);
 
-  return (
+  const card = (
     <Card
       onClick={onClick}
       className="block w-full cursor-pointer"
@@ -49,7 +50,7 @@ const ToDoItem = ({ title, subject, deadline, type, category, onClick }: ListIte
       <Card.Content className="flex items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2">
-            <IconComponent size={19} className="mt-0.5 shrink-0" />
+            {icon}
             <Card.Title className="mb-0 text-sm font-bold line-clamp-2 break-words [overflow-wrap:anywhere] md:text-base">
               {title}
             </Card.Title>
@@ -62,6 +63,13 @@ const ToDoItem = ({ title, subject, deadline, type, category, onClick }: ListIte
       </Card.Content>
     </Card>
   );
+
+  return onClick ? (
+    <Tooltip>
+      <TooltipTrigger render={card} />
+      <TooltipContent>View classwork</TooltipContent>
+    </Tooltip>
+  ) : card;
 };
 
 export default ToDoItem;
