@@ -45,14 +45,19 @@ function AdvisoryCatalogCard({
       onClick={onClick}
     >
       <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between">
-          <p className="text-2xl font-bold leading-tight mr-5">
-            {item.section_name}
-          </p>
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <Tooltip>
+            <TooltipTrigger render={
+              <p className="text-2xl font-bold leading-tight truncate" tabIndex={0}>
+                {item.section_name}
+              </p>
+            } />
+            <TooltipContent>{item.section_name}</TooltipContent>
+          </Tooltip>
           {item.is_archived ? (
-            <Badge variant="default" size="sm">Archived</Badge>
+            <Badge variant="default" size="sm" className="shrink-0">Archived</Badge>
           ) : (
-            <Badge variant="surface" size="sm">Active</Badge>
+            <Badge variant="surface" size="sm" className="shrink-0">Active</Badge>
           )}
         </div>
         <p className="text-sm">
@@ -202,7 +207,14 @@ const TeacherClasses = () => {
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
                   {/* Left: Subject Loads */}
-                  <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                  <div
+                    className={cn(
+                      "grid gap-4 items-start",
+                      advisoryClasses.length > 0
+                        ? "grid-cols-1 md:grid-cols-2 lg:col-span-8"
+                        : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 lg:col-span-12"
+                    )}
+                  >
                     {groupedSubjectLoads.length === 0 ? (
                       <div className="col-span-full">
                         <EmptyStateCard title="No subject teaching sections assigned." />
@@ -216,11 +228,16 @@ const TeacherClasses = () => {
                             group.loads.length === 1 ? "col-span-1" : "col-span-1 md:col-span-2"
                           )}
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex min-w-0 flex-col items-start gap-1">
-                              <h2 className="text-xl font-bold">
-                                {group.subjectName}
-                              </h2>
+                          <div className="flex items-start justify-between gap-2 -mb-2">
+                            <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
+                              <Tooltip>
+                                <TooltipTrigger render={
+                                  <h2 className="text-xl font-bold truncate max-w-full" tabIndex={0}>
+                                    {group.subjectName}
+                                  </h2>
+                                } />
+                                <TooltipContent>{group.subjectName}</TooltipContent>
+                              </Tooltip>
                             </div>
                             <div className="flex shrink-0 flex-row items-center gap-3">
                               <Badge variant="secondary" size="sm">
@@ -285,24 +302,19 @@ const TeacherClasses = () => {
                   </div>
 
                   {/* Right: Advisory Class */}
-                  <Card className="lg:col-span-4 gap-3 flex flex-col bg-primary">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-bold">Advisory Class</h2>
-                      <div className="flex flex-row gap-3">
-                        <Badge variant="outline">
-                          {advisoryClasses.length} section
-                          {advisoryClasses.length !== 1 ? "s" : ""}
-                        </Badge>
+                  {advisoryClasses.length > 0 && (
+                    <Card className="lg:col-span-4 gap-3 flex flex-col bg-primary">
+                      <div className="flex items-center justify-between">
+                        <h2 className="text-xl font-bold">Advisory Class</h2>
+                        <div className="flex flex-row gap-3">
+                          <Badge variant="outline">
+                            {advisoryClasses.length} section
+                            {advisoryClasses.length !== 1 ? "s" : ""}
+                          </Badge>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      {advisoryClasses.length === 0 ? (
-                        <EmptyStateCard
-                          title="No advisory classes assigned."
-                          className="border-0 bg-transparent shadow-none"
-                        />
-                      ) : (
-                        advisoryClasses.map((item) => (
+                      <div className="flex flex-col gap-3">
+                        {advisoryClasses.map((item) => (
                           <AdvisoryCatalogCard
                             key={item.class_id}
                             item={item}
@@ -310,10 +322,10 @@ const TeacherClasses = () => {
                               navigate(`/teacher/advisory-class/${item.class_id}`)
                             }
                           />
-                        ))
-                      )}
-                    </div>
-                  </Card>
+                        ))}
+                      </div>
+                    </Card>
+                  )}
                 </div>
               )}
             </div>

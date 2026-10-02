@@ -13,6 +13,7 @@ import { Badge } from "@/components/retroui/Badge";
 import type { QuizAnalysis } from "./classworks/quiz-builder-types";
 import QuizGradingModal from "@/components/quiz-grading-modal";
 import {
+  formatDate,
   isQuizType,
   isReadingType,
   submissionStatusLabel,
@@ -26,6 +27,7 @@ import type {
 import { Button } from "@/components/retroui/Button";
 import { Table } from "@/components/retroui/Table";
 import { Card } from "@/components/retroui/Card";
+import { Progress } from "@/components/retroui/Progress";
 import { Select } from "@/components/retroui/Select";
 import { Alert } from "@/components/retroui/Alert";
 import { Avatar } from "@/components/retroui/Avatar";
@@ -46,6 +48,14 @@ export type ClassworkViewProps = {
   onArchived?: (classworkId: number) => void;
 };
 
+function toTitleCase(str?: string | null, fallback = "Classwork") {
+  if (!str) return fallback;
+  return str
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export default function ClassworkView({
   classwork,
   onClose,
@@ -61,7 +71,13 @@ export default function ClassworkView({
   const [isClassworkLoading, setIsClassworkLoading] = useState(!classwork);
   const [classworkFetchError, setClassworkFetchError] = useState("");
   const [tracking, setTracking] = useState<AssignmentTracking | null>(null);
-  const [_isTrackingLoading, setIsTrackingLoading] = useState(false);
+  const [isTrackingLoading, setIsTrackingLoading] = useState(false);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<
+    number | "all"
+  >("all");
+  const [readingStatusFilter, setReadingStatusFilter] = useState<
+    "all" | "opened" | "not_opened"
+  >("all");
   const [quizAnalysis, setQuizAnalysis] = useState<QuizAnalysis | null>(null);
   const [isQuizAnalysisLoading, setIsQuizAnalysisLoading] = useState(false);
   const [quizAnalysisError, setQuizAnalysisError] = useState("");
@@ -157,19 +173,23 @@ export default function ClassworkView({
     };
   }, [classwork, params.classworkId]);
 
+  useEffect(() => {
+    setSelectedAssignmentId("all");
+  }, [selected?.classwork_id]);
+
   const loadTrackingAndAnalysis = useCallback(async () => {
     if (!selected) return;
-    const assignmentId = selected.assignments?.[0]?.classwork_assignment_id;
-    if (!assignmentId) return;
+    const trackingUrl =
+      selectedAssignmentId !== "all"
+        ? `/api/v1/submissions/assignment/${selectedAssignmentId}/tracking`
+        : `/api/v1/submissions/classwork/${selected.classwork_id}/tracking`;
 
     setIsTrackingLoading(true);
     if (isQuizType(selected.classwork_type)) {
       setIsQuizAnalysisLoading(true);
     }
     try {
-      const response = await apiFetch(
-        `/api/v1/submissions/assignment/${assignmentId}/tracking`,
-      );
+      const response = await apiFetch(trackingUrl);
       if (!response.ok) {
         throw new Error("Unable to load student submissions.");
       }
@@ -198,7 +218,7 @@ export default function ClassworkView({
       setIsTrackingLoading(false);
       setIsQuizAnalysisLoading(false);
     }
-  }, [selected]);
+  }, [selected, selectedAssignmentId]);
 
   useEffect(() => {
     loadTrackingAndAnalysis();
@@ -289,6 +309,11 @@ export default function ClassworkView({
     setSelectedStudent(null);
     setSelectedSubmissionDetail(null);
     setSubmissionDetailError("");
+  };
+
+  const handleSelectSection = (id: number | "all") => {
+    setSelectedAssignmentId(id);
+    closeStudentSubmission();
   };
 
   const postGrade = async () => {
@@ -414,6 +439,59 @@ export default function ClassworkView({
     });
   }, [statusFilter, trackingRows]);
 
+  const isReading = Boolean(selected && isReadingType(selected.classwork_type));
+  const totalStudents = tracking?.total_students ?? 0;
+  const submittedCount = tracking?.submitted_count ?? 0;
+  const submissionRate =
+    totalStudents > 0 ? Math.round((submittedCount / totalStudents) * 100) : 0;
+
+  const needsGrading = Boolean(
+    selected &&
+    (selected as any).is_graded !== false &&
+    !isReading,
+  );
+
+  const gradedCount =
+    tracking?.submitted?.filter(
+      (student) =>
+        (student.grade !== null && student.grade !== undefined) ||
+        student.status === "graded",
+    ).length ?? 0;
+
+  const gradingRate =
+    submittedCount > 0 ? Math.round((gradedCount / submittedCount) * 100) : 0;
+
+  const isStudentOpened = (student: TrackingStudent) => {
+    return (
+      student.status === "submitted" ||
+      student.status === "late" ||
+      student.status === "graded" ||
+      Boolean(student.submitted_at)
+    );
+  };
+
+  const readingFilterCounts = useMemo(() => {
+    const all = [...(tracking?.submitted ?? []), ...(tracking?.missing ?? [])];
+    const opened = all.filter(isStudentOpened).length;
+    const notOpened = all.length - opened;
+    return {
+      all: all.length,
+      opened,
+      not_opened: notOpened,
+    };
+  }, [tracking]);
+
+  const filteredReadingRows = useMemo(() => {
+    const rows = [...(tracking?.submitted ?? []), ...(tracking?.missing ?? [])];
+    rows.sort((a, b) => a.student_name.localeCompare(b.student_name));
+    return rows.filter((student) => {
+      const opened = isStudentOpened(student);
+      if (readingStatusFilter === "opened") return opened;
+      if (readingStatusFilter === "not_opened") return !opened;
+      return true;
+    });
+  }, [readingStatusFilter, tracking]);
+
   if (isClassworkLoading) {
     const loadingContent = (
       <main className="flex flex-1 items-center justify-center p-8">
@@ -502,11 +580,11 @@ export default function ClassworkView({
                   <Breadcrumb.Item className="min-w-0">
                     <Tooltip>
                       <TooltipTrigger render={<Breadcrumb.Page
-                      className="block max-w-[200px] truncate sm:max-w-[350px] lg:max-w-[400px]"
-                      tabIndex={0}
-                    >
-                      {selected?.title ?? "Classwork Title"}
-                    </Breadcrumb.Page>} />
+                        className="block max-w-[200px] truncate sm:max-w-[350px] lg:max-w-[400px]"
+                        tabIndex={0}
+                      >
+                        {selected?.title ?? "Classwork Title"}
+                      </Breadcrumb.Page>} />
                       <TooltipContent>{selected?.title ?? "Classwork Title"}</TooltipContent>
                     </Tooltip>
                   </Breadcrumb.Item>
@@ -538,312 +616,596 @@ export default function ClassworkView({
             </div>
           </header>
 
-          <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-            <Card className="mx-auto w-full space-y-4">
-            <Card className="block w-full bg-primary shadow-none">
-              <Card.Content>
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <Card.Title className="flex flex-row gap-2 mb-0 text-2xl font-extrabold">
-                      <FileText className="size-7" />
+          <div className="-mt-[1px] flex flex-col min-w-0 border-t-2 border-border px-3 py-3 gap-3 sm:px-4 sm:py-4 md:px-6">
+            <Card className="mx-auto w-full space-y-4 px-5 py-6">
+              <Card className="w-full border-0 p-0 shadow-none">
+                <Card.Content className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <Card.Title className="flex flex-row items-center gap-3 mb-0 text-3xl font-abold">
+                      <FileText className="size-14 shrink-0" strokeWidth={1.70} />
+                      <div className="flex flex-col gap-1">
+                        <div className="flex flex-row items-center gap-2">
+                          <span>{selected.title}</span>
+                          <Badge variant="secondary" size="sm" className="h-fit ml-1">
+                            {toTitleCase(selected.classwork_type)}
+                          </Badge>
+                        </div>
+                        <div className="gap-3">
+                          {(() => {
+                            const activeAssignment =
+                              selectedAssignmentId !== "all"
+                                ? selected.assignments?.find(
+                                  (a) =>
+                                    a.classwork_assignment_id === selectedAssignmentId,
+                                )
+                                : selected.assignments?.find((a) => a.due_date);
+                            const due = activeAssignment?.due_date;
+                            if (!due) return null;
+                            return (
+                              <div className="rounded! border-2 border-black bg-background p-2 px-3 rounded">
+                                <p className="font-bold text-sm">
+                                  {new Date(due).toLocaleString()} |
+                                </p>
+                              </div>
+                            );
+                          })()}
+                          {selected.created_at && selected.is_published && (
+                            <div className="">
+                              <p className="font-normal text-sm">Created on
+                                <span className="ml-1">
+                                  {selected.created_at
+                                    ? formatDate(selected.created_at)
+                                    : selected.is_published
+                                      ? "Published"
+                                      : "No published date"}
+                                </span>
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
 
-                      {selected.title}
                     </Card.Title>
-                  </div>
-                </div>
-              </Card.Content>
-            </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-              <Card className="block shadow-none md:col-span-4">
-                <Card.Content>
-                  <Card.Title className="mb-3 text-xl">
-                    Instructions
-                  </Card.Title>
-                  <p className="text-sm">
-                    {selected.instructions ||
-                      selected.description ||
-                      "No instructions provided."}
-                  </p>
+                    <div className="flex flex-wrap items-center gap-2 px-2">
+                      <Badge
+                        variant="outline"
+                        size="md"
+                        className="w-fit"
+                      >
+                        {toTitleCase(selected.classwork_category)}
+                      </Badge>
+                      <Badge variant="solid" size="md">
+                        {selected.is_published ? "Published" : "Draft"}
+                      </Badge>
+                      {selected.is_locked && (
+                        <Badge variant="outline" size="sm" className="bg-white">
+                          Locked
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
                 </Card.Content>
               </Card>
 
-              <Card className="block shadow-none md:col-span-2">
-                <Card.Content className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <Card.Title className="mb-0 text-xl">
+              <div className="flex flex-col gap-4 pt-1">
+                <Card className="w-full p-0 border-0 shadow-none px-2">
+                  <Card.Content>
+                    <Card.Title className="mb-1 text-lg">
+                      Instructions
+                    </Card.Title>
+                    <Card className=" shadow-none w-full p-2">
+                      <p className="text-sm px-2">
+                        {selected.instructions ||
+                          selected.description ||
+                          "No instructions provided."}
+                      </p>
+                    </Card>
+                  </Card.Content>
+                </Card>
+
+                <Card className="w-full p-0 border-0 shadow-none px-2">
+                  <Card.Content className="space-y-3">
+                    <Card.Title className="mb-1 text-lg">
                       Attached Files
                     </Card.Title>
 
-                    <Badge variant="secondary" size="sm">
-                      File {selected.attachments.length}
-                    </Badge>
-                  </div>
+                    {selected.attachments.length > 0 ? (
+                      <AttachmentDisplay
+                        attachments={selected.attachments}
+                        type="classwork"
+                        downloadUrl={(attachmentId) =>
+                          `${API_URL}/api/v1/classwork-assignments/classwork/${selected.classwork_id}/attachments/${attachmentId}/download`
+                        }
+                      />
+                    ) : (
+                      <div className="py-8 text-center">
+                        <p className="text-sm text-muted-foreground">
+                          No files attached.
+                        </p>
+                      </div>
+                    )}
+                  </Card.Content>
+                </Card>
 
-                  {selected.attachments.length > 0 ? (
-                    <AttachmentDisplay
-                      attachments={selected.attachments}
-                      type="classwork"
-                      downloadUrl={(attachmentId) =>
-                        `${API_URL}/api/v1/classwork-assignments/classwork/${selected.classwork_id}/attachments/${attachmentId}/download`
-                      }
-                    />
-                  ) : (
-                    <div className="py-8 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        No files attached.
+              </div>
+
+              <RubricsScoreBoard
+                totalPoints={selected.total_points}
+                rubricLevels={
+                  selected.classwork_type === "ACTIVITY"
+                    ? selected.rubric_levels
+                    : undefined
+                }
+              />
+              {showArchiveConfirm && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4">
+                  <Card className="block w-full max-w-md border-border bg-background p-0 text-foreground shadow-[4px_4px_0_#000] transition-none hover:shadow-[4px_4px_0_#000]">
+                    <div className="flex items-center justify-between border-b-2 border-black bg-red-100 px-5 py-3">
+                      <div className="flex items-center gap-2 text-red-800">
+                        <Archive size={18} />
+                        <h2 className="font-bold">Archive Classwork?</h2>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setShowArchiveConfirm(false)}
+                        disabled={isArchiving}
+                        className="hover:bg-white/60 disabled:opacity-50"
+                        aria-label="Close archive confirmation"
+                      >
+                        <X size={16} />
+                      </Button>
+                    </div>
+                    <div className="space-y-3 p-5">
+                      <p className="text-sm font-medium">
+                        Are you sure you want to archive{" "}
+                        <span className="font-bold">"{selected.title}"</span>?
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        This only works while no student work is turned in. If
+                        there are submissions, ask students to unsubmit first.
+                        Linked lessons stay intact.
                       </p>
                     </div>
-                  )}
-                </Card.Content>
-              </Card>
-            </div>
-
-
-            {isReadingType(selected.classwork_type) ? (
-              <div className="rounded border border-black bg-[#F6E9B2] p-4 text-sm font-semibold shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-                This is a reading material, so scores, attempts, and
-                student submissions are not required.
-              </div>
-            ) : isQuizType(selected.classwork_type) ? (
-              <QuizAnalysisView
-                quizAnalysis={quizAnalysis}
-                isQuizAnalysisLoading={isQuizAnalysisLoading}
-                quizAnalysisError={quizAnalysisError}
-                selected={selected}
-                setSelectedGradingSubmissionId={setSelectedGradingSubmissionId}
-              />
-            ) : (
-              <>
-                <RubricsScoreBoard
-                  totalPoints={selected.total_points}
-                  rubricLevels={
-                    selected.classwork_type === "ACTIVITY"
-                      ? selected.rubric_levels
-                      : undefined
-                  }
-                />
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h2 className="text-xl font-bold">Submissions</h2>
-                      {(filterCounts.late > 0 || filterCounts.missing > 0) && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setIsDeadlineSummaryOpen(true)}
-                          className="h-7 gap-1 px-2.5 text-xs font-bold border-black bg-[#F6E9B2] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#F6E9B2]/80"
-                        >
-                          <AlertTriangle className="size-3.5" />
-                          <span>Deadline Summary</span>
-                        </Button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm font-semibold">
-                        Sort by
-                      </label>
-                      <Select
-                        value={submissionSort}
-                        onValueChange={(value) =>
-                          setSubmissionSort(value as "name" | "score")
-                        }
+                    <div className="flex justify-end gap-3 border-t-2 border-black px-5 py-4">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowArchiveConfirm(false)}
+                        disabled={isArchiving}
+                        className="border-black font-semibold disabled:opacity-50"
                       >
-                        <Select.Trigger className="h-8 text-sm shadow-none">
-                          <Select.Value placeholder="Sort by" />
-                        </Select.Trigger>
-                        <Select.Content>
-                          <Select.Item value="name">Name</Select.Item>
-                          <Select.Item value="score">Score</Select.Item>
-                        </Select.Content>
-                      </Select>
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        onClick={archiveSelectedClasswork}
+                        disabled={isArchiving}
+                        className="border-black bg-red-600 font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {isArchiving ? "Archiving..." : "Archive Classwork"}
+                      </Button>
                     </div>
-                  </div>
-
-                  {/* Status Filter Chips */}
-                  <div className="flex flex-wrap items-center gap-2 pt-1 pb-1">
-                    {[
-                      { id: "all" as const, label: "All", count: filterCounts.all },
-                      { id: "graded" as const, label: "Graded", count: filterCounts.graded },
-                      { id: "on_time" as const, label: "On Time", count: filterCounts.on_time },
-                      { id: "late" as const, label: "Late", count: filterCounts.late },
-                      { id: "missing" as const, label: "Missing", count: filterCounts.missing },
-                    ].map((chip) => {
-                      const isActive = statusFilter === chip.id;
-                      return (
-                        <button
-                          key={chip.id}
-                          type="button"
-                          onClick={() => setStatusFilter(chip.id)}
-                          className={`flex items-center gap-1.5 rounded border-2 border-black px-3 py-1 text-xs font-bold transition-all cursor-pointer ${
-                            isActive
-                              ? "bg-primary text-primary-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5"
-                              : "bg-background text-foreground hover:bg-muted shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
-                          }`}
-                        >
-                          <span>{chip.label}</span>
-                          <span
-                            className={`rounded-full px-1.5 py-0.2 text-[10px] ${
-                              isActive
-                                ? "bg-black/20 text-current"
-                                : "bg-muted-foreground/15 text-muted-foreground font-semibold"
-                            }`}
-                          >
-                            {chip.count}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <Table wrapperClassName="border-black">
-                    <Table.Header className="border-black">
-                      <Table.Row>
-                        <Table.Head>Student</Table.Head>
-                        <Table.Head className="text-center">Status</Table.Head>
-                        <Table.Head className="min-w-20 text-right">
-                          Grade
-                        </Table.Head>
-                      </Table.Row>
-                    </Table.Header>
-                    <Table.Body>
-                      {detailError ? (
-                        <Table.Row className="hover:bg-transparent">
-                          <Table.Cell colSpan={3} className="p-4">
-                            <Alert status="error">
-                              <Alert.Description>{detailError}</Alert.Description>
-                            </Alert>
-                          </Table.Cell>
-                        </Table.Row>
-                      ) : filteredTrackingRows.length > 0 ? (
-                        filteredTrackingRows.map((student) => {
-                          const isGraded =
-                            student.grade !== null &&
-                            student.grade !== undefined;
-                          const scoreLabel = isGraded
-                            ? `${student.grade} / ${selected.total_points ?? 0}`
-                            : "Not graded";
-
-                          return (
-                            <Table.Row
-                              className="cursor-pointer"
-                              key={student.student_id}
-                              onClick={() =>
-                                openStudentSubmission(student)
-                              }
-                            >
-                              <Table.Cell>
-                                <div className="flex items-center gap-3">
-                                  <Avatar variant="student" className="size-8 shrink-0">
-                                    <Avatar.Image
-                                      src={student.avatar || "/avatars/student-avatars/1.svg"}
-                                      alt={student.student_name}
-                                    />
-                                    <Avatar.Fallback>
-                                      {student.student_name.slice(0, 1).toUpperCase()}
-                                    </Avatar.Fallback>
-                                  </Avatar>
-                                  <span className="text-base font-semibold">
-                                    {student.student_name}
-                                  </span>
-                                </div>
-                              </Table.Cell>
-                              <Table.Cell className="text-center">
-                                <Badge
-                                  variant="outline"
-                                  size="sm"
-                                  className="w-fit rounded font-medium"
-                                >
-                                  {submissionStatusLabel(
-                                    isGraded
-                                      ? "graded"
-                                      : student.status,
-                                  )}
-                                </Badge>
-                              </Table.Cell>
-                              <Table.Cell className="min-w-20 text-right text-sm font-semibold text-gray-700">
-                                {scoreLabel}
-                              </Table.Cell>
-                            </Table.Row>
-                          );
-                        })
-                      ) : (
-                        <Table.Row className="hover:bg-transparent">
-                          <Table.Cell
-                            colSpan={3}
-                            className="py-6 text-center text-sm font-semibold text-gray-500"
-                          >
-                            {statusFilter === "all"
-                              ? "No submissions found for this classwork yet."
-                              : `No students match the "${statusFilter.replace("_", " ")}" filter.`}
-                          </Table.Cell>
-                        </Table.Row>
-                      )}
-                    </Table.Body>
-                  </Table>
+                  </Card>
                 </div>
-              </>
-            )}
+              )}
+            </Card>
 
-            {showArchiveConfirm && (
-              <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4">
-                <Card className="block w-full max-w-md border-border bg-background p-0 text-foreground shadow-[4px_4px_0_#000] transition-none hover:shadow-[4px_4px_0_#000]">
-                  <div className="flex items-center justify-between border-b-2 border-black bg-red-100 px-5 py-3">
-                    <div className="flex items-center gap-2 text-red-800">
-                      <Archive size={18} />
-                      <h2 className="font-bold">Archive Classwork?</h2>
+            {/* Submissions & Grading / Reading Engagement Progress Card */}
+            <Card className="w-full">
+              <Card.Header className="pb-1 flex flex-row flex-wrap items-center justify-between gap-2">
+                <Card.Title className="text-lg font-bold">
+                  {isReadingType(selected.classwork_type)
+                    ? "Reading Engagement Rate"
+                    : isQuizType(selected.classwork_type)
+                      ? "Quiz Analysis"
+                      : "Submissions & Grading"}
+                </Card.Title>
+                {tracking && totalStudents > 0 && (
+                  <Badge
+                    variant="outline"
+                    size="sm"
+                    className="bg-white"
+                  >
+                    <span className="font-bold! mr-1.5">{submittedCount} / {totalStudents}</span>
+                    {isReadingType(selected.classwork_type) ? "Opened" : "Submitted"}
+                  </Badge>
+                )}
+              </Card.Header>
+
+              {/* Assigned Sections Filter */}
+              {selected.assignments && selected.assignments.length > 0 && (
+                <div className="flex flex-row items-center gap-2 overflow-x-auto pb-1 px-2">
+                  <span className="shrink-0 text-sm font-regular text-muted-foreground">
+                    Section:
+                  </span>
+                  {selected.assignments.length > 1 && (
+                    <Button
+                      autoIcon={false}
+                      variant={selectedAssignmentId === "all" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handleSelectSection("all")}
+                      className="shrink-0 border-black shadow-none h-fit!"
+                    >
+                      All Sections
+                    </Button>
+                  )}
+                  {selected.assignments.map((assignment) => {
+                    const isSelected =
+                      selectedAssignmentId === assignment.classwork_assignment_id ||
+                      (selected.assignments!.length === 1 && selectedAssignmentId === "all");
+                    return (
+                      <Button
+                        key={assignment.classwork_assignment_id}
+                        autoIcon={false}
+                        variant={isSelected ? "default" : "outline"}
+                        size="sm"
+                        onClick={() =>
+                          handleSelectSection(assignment.classwork_assignment_id)
+                        }
+                        className="shrink-0 border-black shadow-none h-fit!"
+                      >
+                        {assignment.title || `Section ${assignment.class_id}`}
+                      </Button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Submissions & Grading / Reading Engagement Progress Card */}
+              {isReadingType(selected.classwork_type) ? (
+                <div className="space-y-6">
+                  <Card className="w-full shadow-none bg-primary">
+                    <Card.Content className="space-y-3">
+
+                      {/* Reading Engagement Progress */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center text-sm text-foreground">
+                          <span>Engagement Rate</span>
+                          <span>
+                            {isTrackingLoading && !tracking
+                              ? "Loading..."
+                              : totalStudents > 0
+                                ? `${submissionRate}%`
+                                : "0%"}
+                          </span>
+                        </div>
+                        <Progress
+                          value={submissionRate}
+                          className="w-full h-3 border-2 border-black bg-gray-100"
+                          indicatorClassName="bg-black"
+                        />
+                      </div>
+                    </Card.Content>
+                  </Card>
+
+                  {/* Reading Students Table */}
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h2 className="text-xl font-bold">Reading Status</h2>
+                        {totalStudents > 0 && (
+                          <span className="text-sm font-semibold text-muted-foreground">
+                            {submittedCount} of {totalStudents} students opened
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setShowArchiveConfirm(false)}
-                      disabled={isArchiving}
-                      className="hover:bg-white/60 disabled:opacity-50"
-                      aria-label="Close archive confirmation"
-                    >
-                      <X size={16} />
-                    </Button>
+
+                    {/* Reading Status Filter Chips */}
+                    <div className="flex flex-row items-center gap-2 overflow-x-auto pb-1 px-2">
+                      <span className="shrink-0 text-sm font-regular text-muted-foreground">
+                        Status:
+                      </span>
+                      {[
+                        { id: "all" as const, label: "All" },
+                        { id: "opened" as const, label: "Opened" },
+                        { id: "not_opened" as const, label: "Not Opened" },
+                      ].map((chip) => (
+                        <Button
+                          key={chip.id}
+                          autoIcon={false}
+                          variant={readingStatusFilter === chip.id ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setReadingStatusFilter(chip.id)}
+                          className="shrink-0 border-black shadow-none h-fit!"
+                        >
+                          {chip.label}
+                        </Button>
+                      ))}
+                    </div>
+
+                    <Table wrapperClassName="border-black">
+                      <Table.Header className="border-black">
+                        <Table.Row>
+                          <Table.Head>Student</Table.Head>
+                          <Table.Head className="text-center">Status</Table.Head>
+                          <Table.Head className="min-w-32 text-right">
+                            Date Opened
+                          </Table.Head>
+                        </Table.Row>
+                      </Table.Header>
+                      <Table.Body>
+                        {detailError ? (
+                          <Table.Row className="hover:bg-transparent">
+                            <Table.Cell colSpan={3} className="p-4">
+                              <Alert status="error">
+                                <Alert.Description>{detailError}</Alert.Description>
+                              </Alert>
+                            </Table.Cell>
+                          </Table.Row>
+                        ) : filteredReadingRows.length > 0 ? (
+                          filteredReadingRows.map((student) => {
+                            const opened = isStudentOpened(student);
+                            return (
+                              <Table.Row key={student.student_id}>
+                                <Table.Cell>
+                                  <div className="flex items-center gap-3">
+                                    <Avatar variant="student" className="size-8 shrink-0">
+                                      <Avatar.Image
+                                        src={student.avatar || "/avatars/student-avatars/1.svg"}
+                                        alt={student.student_name}
+                                      />
+                                      <Avatar.Fallback>
+                                        {student.student_name.slice(0, 1).toUpperCase()}
+                                      </Avatar.Fallback>
+                                    </Avatar>
+                                    <span className="text-base font-semibold">
+                                      {student.student_name}
+                                    </span>
+                                  </div>
+                                </Table.Cell>
+                                <Table.Cell className="text-center">
+                                  <Badge
+                                    variant={opened ? "solid" : "outline"}
+                                    size="sm"
+                                    className={`w-fit rounded font-medium ${opened
+                                      ? "bg-[#8BCB88] text-black border-black"
+                                      : "bg-muted/30 text-muted-foreground"
+                                      }`}
+                                  >
+                                    {opened ? "Opened" : "Not Opened"}
+                                  </Badge>
+                                </Table.Cell>
+                                <Table.Cell className="min-w-32 text-right text-sm font-semibold text-gray-700">
+                                  {opened && student.submitted_at
+                                    ? new Date(student.submitted_at).toLocaleString()
+                                    : "—"}
+                                </Table.Cell>
+                              </Table.Row>
+                            );
+                          })
+                        ) : (
+                          <Table.Row className="hover:bg-transparent">
+                            <Table.Cell
+                              colSpan={3}
+                              className="py-8 text-center text-sm text-muted-foreground"
+                            >
+                              {isTrackingLoading
+                                ? "Loading students..."
+                                : readingStatusFilter !== "all"
+                                  ? `No students found with status "${readingStatusFilter === "opened" ? "Opened" : "Not Opened"}".`
+                                  : "No student records found."}
+                            </Table.Cell>
+                          </Table.Row>
+                        )}
+                      </Table.Body>
+                    </Table>
                   </div>
-                  <div className="space-y-3 p-5">
-                    <p className="text-sm font-medium">
-                      Are you sure you want to archive{" "}
-                      <span className="font-bold">"{selected.title}"</span>?
-                    </p>
-                    <p className="text-xs text-gray-600">
-                      This only works while no student work is turned in. If
-                      there are submissions, ask students to unsubmit first.
-                      Linked lessons stay intact.
-                    </p>
+                </div>
+              ) : isQuizType(selected.classwork_type) ? (
+                <QuizAnalysisView
+                  quizAnalysis={quizAnalysis}
+                  isQuizAnalysisLoading={isQuizAnalysisLoading}
+                  quizAnalysisError={quizAnalysisError}
+                  selected={selected}
+                  setSelectedGradingSubmissionId={setSelectedGradingSubmissionId}
+                />
+              ) : (
+                <>
+                  {/* Submissions & Grading Progress Card */}
+                  <Card className="w-full shadow-none bg-primary">
+                    <Card.Content className="space-y-3">
+                      {/* Submission Rate */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center text-sm text-foreground">
+                          <span>Submission Rate</span>
+                          <span>
+                            {isTrackingLoading && !tracking
+                              ? "Loading..."
+                              : totalStudents > 0
+                                ? `${submissionRate}%`
+                                : "0%"}
+                          </span>
+                        </div>
+                        <Progress
+                          value={submissionRate}
+                          className="w-full h-3 border-2 border-black bg-gray-100"
+                          indicatorClassName="bg-black"
+                        />
+                      </div>
+
+                      {/* Grading Completion Progress */}
+                      {needsGrading && (
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center text-sm text-gray-800">
+                            <span>Grading Completion</span>
+                            <span>
+                              {isTrackingLoading && !tracking
+                                ? "Loading..."
+                                : submittedCount > 0
+                                  ? `${gradingRate}%`
+                                  : "0%"}
+                            </span>
+                          </div>
+                          <Progress
+                            value={gradingRate}
+                            className="w-full h-3 border-2 border-black bg-gray-100"
+                            indicatorClassName="bg-black"
+                          />
+                        </div>
+                      )}
+                    </Card.Content>
+                  </Card>
+
+                  <div className="space-y-4 mt-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-wrap items-center gap-3">
+                        {(filterCounts.late > 0 || filterCounts.missing > 0) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsDeadlineSummaryOpen(true)}
+                            className="h-7 gap-1 px-2.5 text-xs font-bold border-black bg-[#F6E9B2] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#F6E9B2]/80"
+                          >
+                            <AlertTriangle className="size-3.5" />
+                            <span>Deadline Summary</span>
+                          </Button>
+                        )}
+
+                        {/* Status Filter Chips */}
+                        <div className="flex flex-row items-center gap-2 overflow pb-1 px-2">
+                          <span className="shrink-0 text-sm font-regular text-muted-foreground">
+                            Status:
+                          </span>
+                          {[
+                            { id: "all" as const, label: "All" },
+                            { id: "graded" as const, label: "Graded" },
+                            { id: "on_time" as const, label: "On Time" },
+                            { id: "late" as const, label: "Late" },
+                            { id: "missing" as const, label: "Missing" },
+                          ].map((chip) => (
+                            <Button
+                              key={chip.id}
+                              autoIcon={false}
+                              variant={statusFilter === chip.id ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setStatusFilter(chip.id)}
+                              className="shrink-0 border-black shadow-none"
+                            >
+                              {chip.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm font-semibold">
+                          Sort by
+                        </label>
+                        <Select
+                          value={submissionSort}
+                          onValueChange={(value) =>
+                            setSubmissionSort(value as "name" | "score")
+                          }
+                        >
+                          <Select.Trigger className="h-8 text-sm shadow-none">
+                            <Select.Value placeholder="Sort by" />
+                          </Select.Trigger>
+                          <Select.Content>
+                            <Select.Item value="name">Name</Select.Item>
+                            <Select.Item value="score">Score</Select.Item>
+                          </Select.Content>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <Table wrapperClassName="border-black shadow-none">
+                      <Table.Header className="border-black">
+                        <Table.Row>
+                          <Table.Head>Student</Table.Head>
+                          <Table.Head className="text-center">Status</Table.Head>
+                          <Table.Head className="min-w-20 text-right">
+                            Grade
+                          </Table.Head>
+                        </Table.Row>
+                      </Table.Header>
+                      <Table.Body>
+                        {detailError ? (
+                          <Table.Row className="hover:bg-accent">
+                            <Table.Cell colSpan={3} className="p-4">
+                              <Alert status="error">
+                                <Alert.Description>{detailError}</Alert.Description>
+                              </Alert>
+                            </Table.Cell>
+                          </Table.Row>
+                        ) : filteredTrackingRows.length > 0 ? (
+                          filteredTrackingRows.map((student) => {
+                            const isGraded =
+                              student.grade !== null &&
+                              student.grade !== undefined;
+                            const scoreLabel = isGraded
+                              ? `${student.grade} / ${selected.total_points ?? 0}`
+                              : "Not graded";
+
+                            return (
+                              <Table.Row
+                                className="cursor-pointer"
+                                key={student.student_id}
+                                onClick={() =>
+                                  openStudentSubmission(student)
+                                }
+                              >
+                                <Table.Cell>
+                                  <div className="flex items-center gap-3">
+                                    <Avatar variant="student" className="size-8 shrink-0">
+                                      <Avatar.Image
+                                        src={student.avatar || "/avatars/student-avatars/1.svg"}
+                                        alt={student.student_name}
+                                      />
+                                      <Avatar.Fallback>
+                                        {student.student_name.slice(0, 1).toUpperCase()}
+                                      </Avatar.Fallback>
+                                    </Avatar>
+                                    <span className="text-base font-semibold">
+                                      {student.student_name}
+                                    </span>
+                                  </div>
+                                </Table.Cell>
+                                <Table.Cell className="text-center">
+                                  <Badge
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-fit rounded font-medium"
+                                  >
+                                    {submissionStatusLabel(
+                                      isGraded
+                                        ? "graded"
+                                        : student.status,
+                                    )}
+                                  </Badge>
+                                </Table.Cell>
+                                <Table.Cell className="min-w-20 text-right text-sm font-semibold text-gray-700">
+                                  {scoreLabel}
+                                </Table.Cell>
+                              </Table.Row>
+                            );
+                          })
+                        ) : (
+                          <Table.Row className="hover:bg-transparent">
+                            <Table.Cell
+                              colSpan={3}
+                              className="py-6 text-center text-sm font-semibold text-gray-500"
+                            >
+                              {statusFilter === "all"
+                                ? "No submissions found for this classwork yet."
+                                : `No students match the "${statusFilter.replace("_", " ")}" filter.`}
+                            </Table.Cell>
+                          </Table.Row>
+                        )}
+                      </Table.Body>
+                    </Table>
                   </div>
-                  <div className="flex justify-end gap-3 border-t-2 border-black px-5 py-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowArchiveConfirm(false)}
-                      disabled={isArchiving}
-                      className="border-black font-semibold disabled:opacity-50"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="default"
-                      size="sm"
-                      onClick={archiveSelectedClasswork}
-                      disabled={isArchiving}
-                      className="border-black bg-red-600 font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 disabled:opacity-50"
-                    >
-                      {isArchiving ? "Archiving..." : "Archive Classwork"}
-                    </Button>
-                  </div>
-                </Card>
-              </div>
-            )}
-          </Card>
+                </>
+              )}
+            </Card>
+          </div>
         </div>
-      </div>
       </div>
 
       {/* Edit Classwork Modal */}
@@ -873,9 +1235,15 @@ export default function ClassworkView({
         isOpen={isDeadlineSummaryOpen}
         onClose={handleCloseDeadlineSummary}
         tracking={tracking}
-        isLoading={_isTrackingLoading}
         classworkTitle={selected?.title}
-        dueDate={selected?.assignments?.[0]?.due_date}
+        dueDate={
+          (selectedAssignmentId !== "all"
+            ? selected?.assignments?.find(
+              (a) => a.classwork_assignment_id === selectedAssignmentId,
+            )
+            : selected?.assignments?.[0]
+          )?.due_date
+        }
         totalPoints={selected?.total_points}
         onSelectStudent={handleSelectStudentFromSummary}
       />
