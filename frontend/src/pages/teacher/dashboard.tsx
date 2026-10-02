@@ -1,10 +1,11 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Calendar, AlertCircle } from "lucide-react";
+import { Calendar, AlertCircle, ArrowUpRight } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Select } from "@/components/retroui/Select";
 import { Progress } from "@/components/retroui/Progress";
 import { OverviewCard } from "@/components/overview-cards";
@@ -12,6 +13,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { routes } from "@/../routes";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 import {
   getTeacherDashboardHealth,
   type TeacherDashboardHealthResponse,
@@ -24,7 +26,7 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   ResponsiveContainer,
 } from "recharts";
 import { cn } from "@/lib/utils";
@@ -86,18 +88,30 @@ const defaultTeacherCards: OverviewCardData[] = [
 
 const defaultStudentsNeedingSupport = [
   {
+    grade_level: 9,
+    class_id: 1,
+    student_id: 1,
+    prediction_id: 1,
     name: "Jose Reyes",
     section: "Archimedes · 3 missing tasks",
     score: 52,
     variant: "destructive",
   },
   {
+    grade_level: 9,
+    class_id: 2,
+    student_id: 2,
+    prediction_id: 2,
     name: "Ana Lim",
     section: "Newton · falling 12 pts",
     score: 61,
     variant: "destructive",
   },
   {
+    grade_level: 9,
+    class_id: 3,
+    student_id: 3,
+    prediction_id: 3,
     name: "Paolo Cruz",
     section: "Curie · low attendance",
     score: 68,
@@ -133,11 +147,11 @@ const defaultDueThisWeek = [
 ];
 
 const defaultTopicMastery = [
-  { topic: "Pang-uri", rate: 91 },
-  { topic: "Fractions", rate: 88 },
-  { topic: "Cells", rate: 80 },
-  { topic: "Geometry", rate: 64 },
-  { topic: "Essay writing", rate: 59 },
+  { topic: "Pang-uri", rate: 91, subject_id: 1, subject_name: "Filipino 9" },
+  { topic: "Fractions", rate: 88, subject_id: 2, subject_name: "Mathematics 9" },
+  { topic: "Cells", rate: 80, subject_id: 3, subject_name: "Science 9" },
+  { topic: "Geometry", rate: 64, subject_id: 2, subject_name: "Mathematics 9" },
+  { topic: "Essay writing", rate: 59, subject_id: 1, subject_name: "Filipino 9" },
 ];
 
 const defaultSubmissionsWeekday = [
@@ -247,18 +261,21 @@ const defaultHardestQuestions = [
 
 const defaultReviewSubmissions = [
   {
+    classwork_id: 1,
     title: "Panganganak ng Pang-uri",
     section: "Archimedes · Filipino 9",
     badge: "6 new",
     variant: "destructive",
   },
   {
+    classwork_id: 2,
     title: "Fractions Quiz",
     section: "Newton · Mathematics 9",
     badge: "5 new",
     variant: "destructive",
   },
   {
+    classwork_id: 3,
     title: "Lab Report: Cells",
     section: "Curie · Science 9",
     badge: "3 new",
@@ -283,13 +300,20 @@ const defaultAttendanceBySection = [
 export default function Dashboard() {
   const navigate = useNavigate();
   const { selectedPeriodId } = useAcademicPeriod();
+  const { classes: loads } = useTeacherClasses({ includeAdvisory: false });
 
   const [data, setData] = useState<TeacherDashboardHealthResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Subject filter state for Topic Mastery
+  const [subjectFilter, setSubjectFilter] = useState<string>("1");
+
   // Filter state for the trend chart
   const [selectedFilterKey, setSelectedFilterKey] = useState<string>("");
+
+  // Section health display limit state
+  const [showAllSectionHealth, setShowAllSectionHealth] = useState<boolean>(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -411,16 +435,70 @@ export default function Dashboard() {
     ];
   }, [data]);
 
+  // Derive unique subjects from teacher's loads / available filters
+  const subjects = useMemo(() => {
+    if (loads && loads.length > 0) {
+      return Array.from(
+        new Map(
+          loads.map((load) => [
+            load.subject_id,
+            { id: load.subject_id, name: load.subject_name },
+          ]),
+        ).values(),
+      ).sort((a, b) => a.name.localeCompare(b.name));
+    }
+    if (data?.trend_chart?.available_filters?.length) {
+      const map = new Map<number, { id: number; name: string }>();
+      data.trend_chart.available_filters.forEach((f) => {
+        if (f.subject_id && f.subject_name) {
+          map.set(f.subject_id, { id: f.subject_id, name: f.subject_name });
+        }
+      });
+      return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return [
+      { id: 1, name: "Filipino 9" },
+      { id: 2, name: "Mathematics 9" },
+      { id: 3, name: "Science 9" },
+    ];
+  }, [loads, data]);
+
+  // Keep subjectFilter synced to first valid subject
+  useEffect(() => {
+    if (
+      subjects.length > 0 &&
+      (!subjectFilter || !subjects.some((s) => String(s.id) === subjectFilter))
+    ) {
+      setSubjectFilter(String(subjects[0].id));
+    }
+  }, [subjects, subjectFilter]);
+
   const studentsSupport =
     data?.details?.students_needing_support || defaultStudentsNeedingSupport;
   const topPerformers = data?.details?.top_performers || defaultTopPerformers;
   const dueWeek = data?.details?.due_this_week || defaultDueThisWeek;
-  const topicMastery = data?.details?.topic_mastery || defaultTopicMastery;
+  const rawTopicMastery = data?.details?.topic_mastery || defaultTopicMastery;
+  const topicMastery = useMemo(() => {
+    if (subjectFilter === "all") return rawTopicMastery;
+    return rawTopicMastery.filter((item: any) => {
+      if (item.subject_id !== undefined) {
+        return String(item.subject_id) === subjectFilter;
+      }
+      if (item.subject_name) {
+        const activeSub = subjects.find((s) => String(s.id) === subjectFilter);
+        return activeSub
+          ? item.subject_name.toLowerCase().includes(activeSub.name.toLowerCase())
+          : true;
+      }
+      return true;
+    });
+  }, [rawTopicMastery, subjectFilter, subjects]);
   const submissionsWeekday =
     data?.details?.submissions_by_weekday || defaultSubmissionsWeekday;
   const hardestQuestions =
     data?.details?.hardest_questions || defaultHardestQuestions;
-  const reviewSubmissions = defaultReviewSubmissions;
+  const reviewSubmissions =
+    data?.details?.review_submissions || defaultReviewSubmissions;
   const gradeDistribution =
     data?.details?.grade_distribution || defaultGradeDistribution;
   const attendanceSections =
@@ -461,7 +539,7 @@ export default function Dashboard() {
               </Button>
             </header>
 
-            <main className="-mt-[1px] flex min-w-0 flex-col gap-5 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-3 md:gap-6 md:px-6">
+            <main className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-3 md:gap-6 md:px-6">
               {error && (
                 <Alert status="error" className="flex items-center gap-2">
                   <AlertCircle className="size-4 shrink-0" />
@@ -472,30 +550,55 @@ export default function Dashboard() {
               )}
 
               {/* 2-Column Responsive Layout: Left/Center Main Analytics & Right Overview Cards */}
-              <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12 md:gap-6">
+              <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12 md:gap-4">
                 {/* Left to Center Column: Main Statistical Cards & Charts */}
-                <div className="flex min-w-0 flex-col gap-5 lg:col-span-9 xl:col-span-9 md:gap-6">
+                <div className="flex min-w-0 flex-col gap-3 lg:col-span-9 xl:col-span-9 md:gap-4">
                   {/* 1. Students Support, Top Performers, Due this Week, Topic Mastery */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {/* Students needing support */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
-                          Students needing support
+                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
+                        <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                          Students Needing Support
                         </Card.Title>
+                        <Tooltip >
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                autoIcon={false}
+                                onClick={() => navigate(routes.teacher.predictions)}
+                                className="text-foreground shadow-none px-1.5"
+                              >
+                                <ArrowUpRight className="size-4" />
+                              </Button>
+                            }
+                          />
+                          <TooltipContent side="right">View at risk students</TooltipContent>
+                        </Tooltip>
                       </Card.Header>
 
-                      <Card.Content className="mt-3 flex flex-col gap-2.5 p-0">
+                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
                         {studentsSupport.map((s: any, idx: number) => (
-                          <div
+                          <Card
                             key={idx}
-                            className="flex items-center justify-between rounded-xl border border-border/80 bg-card/60 px-3 py-2.5 text-xs sm:text-sm"
+                            onClick={() => {
+                              const grade = s.grade_level || 9;
+                              const classId = s.class_id || (idx + 1);
+                              const params = new URLSearchParams();
+                              if (s.prediction_id) params.set("predictionId", String(s.prediction_id));
+                              if (s.student_id) params.set("studentId", String(s.student_id));
+                              if (s.name) params.set("studentName", s.name);
+                              navigate(`/teacher/predictions/${grade}/${classId}?${params.toString()}`);
+                            }}
+                            className="flex items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm cursor-pointer hover:bg-retro hover:-translate-y-1"
                           >
                             <div className="flex flex-col min-w-0 pr-2">
                               <span className="font-semibold text-foreground truncate">
                                 {s.name}
                               </span>
-                              <span className="text-[11px] text-muted-foreground truncate">
+                              <span className="text-xs text-muted-foreground truncate">
                                 {s.section}
                               </span>
                             </div>
@@ -510,122 +613,80 @@ export default function Dashboard() {
                             >
                               {s.score}%
                             </Badge>
-                          </div>
+                          </Card>
                         ))}
+
                       </Card.Content>
                     </Card>
-
-                    {/* Top performers */}
+                    {/* Submissions to Review */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
-                          Top performers
+                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
+                        <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                          Submissions to Review
                         </Card.Title>
+                        <Tooltip >
+                          <TooltipTrigger
+
+                            render={
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                autoIcon={false}
+                                onClick={() => navigate(routes.teacher.classworks)}
+                                className="text-foreground shadow-none px-1.5"
+                              >
+                                <ArrowUpRight className="size-4" />
+                              </Button>
+                            }
+                          />
+                          <TooltipContent side="right">View classworks</TooltipContent>
+                        </Tooltip>
                       </Card.Header>
 
-                      <Card.Content className="mt-3 flex flex-col gap-2.5 p-0">
-                        {topPerformers.map((p: any, idx: number) => (
-                          <div
+                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
+                        {reviewSubmissions.map((item: any, idx: number) => (
+                          <Card
                             key={idx}
-                            className="flex items-center justify-between rounded-xl border border-border/80 bg-card/60 px-3 py-2.5 text-xs sm:text-sm"
+                            onClick={() =>
+                              item.classwork_id
+                                ? navigate(`/teacher/classworks/${item.classwork_id}`)
+                                : navigate(routes.teacher.classworks)
+                            }
+                            className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm transition-all hover:-translate-y-0.5 hover:bg-retro"
                           >
                             <div className="flex flex-col min-w-0 pr-2">
                               <span className="font-semibold text-foreground truncate">
-                                {p.name}
+                                {item.title}
                               </span>
                               <span className="text-[11px] text-muted-foreground truncate">
-                                {p.section}
-                              </span>
-                            </div>
-                            <Badge size="sm" variant="success" className="shrink-0">
-                              {p.score}%
-                            </Badge>
-                          </div>
-                        ))}
-                      </Card.Content>
-                    </Card>
-
-                    {/* Due this week */}
-                    <Card className="flex flex-col justify-between p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
-                          Due this week
-                        </Card.Title>
-                      </Card.Header>
-
-                      <Card.Content className="mt-3 flex flex-col gap-2.5 p-0">
-                        {dueWeek.map((d: any, idx: number) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between rounded-xl border border-border/80 bg-card/60 px-3 py-2.5 text-xs sm:text-sm"
-                          >
-                            <div className="flex flex-col min-w-0 pr-2">
-                              <span className="font-semibold text-foreground truncate">
-                                {d.title}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground truncate">
-                                {d.section}
+                                {item.section}
                               </span>
                             </div>
                             <Badge
                               size="sm"
                               variant={
-                                d.due_label === "Tomorrow" ||
-                                  d.variant === "destructive"
+                                item.variant === "destructive"
                                   ? "destructive"
                                   : "default"
                               }
                               className="shrink-0"
                             >
-                              {d.due_label}
+                              {item.badge}
                             </Badge>
-                          </div>
+                          </Card>
                         ))}
                       </Card.Content>
-                    </Card>
-
-                    {/* Topic mastery */}
-                    <Card className="flex flex-col justify-between p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
-                          Topic mastery
-                        </Card.Title>
-                      </Card.Header>
-
-                      <Card.Content className="mt-3 flex flex-col justify-between gap-2.5 p-0">
-                        {topicMastery.map((item: any) => (
-                          <div
-                            key={item.topic}
-                            className="flex items-center justify-between gap-3 text-xs sm:text-sm"
-                          >
-                            <span className="font-medium text-foreground/90 shrink-0 w-24 truncate">
-                              {item.topic}
-                            </span>
-                            <Progress value={item.rate} className="h-2.5 flex-1" />
-                            <span className="font-semibold text-foreground text-right w-10 shrink-0">
-                              {item.rate}%
-                            </span>
-                          </div>
-                        ))}
-                      </Card.Content>
-                      <Card.Description className="mt-3 text-[11px] text-muted-foreground">
-                        Lowest topics may need reteaching
-                      </Card.Description>
                     </Card>
                   </div>
 
                   {/* 2. Mastery & Completion Trend Chart */}
                   <Card className="flex flex-col justify-between p-4 sm:p-5">
-                    <Card.Header className="mb-2 p-0">
+                    <Card.Header className="p-0">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
                         <div>
                           <Card.Title className="text-base font-bold sm:text-lg">
                             Classwork Mastery & Completion Trend
                           </Card.Title>
-                          <Card.Description className="text-xs text-muted-foreground mt-0.5">
-                            Class score averages vs. task submission completion,
-                            last 6 classworks
-                          </Card.Description>
                         </div>
 
                         {data &&
@@ -637,7 +698,7 @@ export default function Dashboard() {
                               >
                                 <Select.Trigger
                                   id="trend-filter"
-                                  className="h-8 text-xs font-semibold sm:min-w-44"
+                                  className="h-8 text-xs font-semibold sm:min-w-44 shadow-none"
                                 >
                                   <Select.Value placeholder="Select section" />
                                 </Select.Trigger>
@@ -657,15 +718,15 @@ export default function Dashboard() {
                       </div>
 
                       {/* Chart Legend */}
-                      <div className="flex flex-wrap items-center gap-4 mb-3 text-xs text-muted-foreground font-medium">
+                      <div className="flex flex-wrap items-center gap-4 mb-1 text-xs text-muted-foreground font-medium">
                         <div className="flex items-center gap-1.5">
-                          <span className="size-2.5 rounded-full bg-emerald-400 inline-block" />
+                          <span className="size-2.5 rounded-full bg-primary inline-block" />
                           <span className="text-foreground">
                             Class Mastery Average (%)
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className="w-3.5 h-0.5 border-t-2 border-dashed border-amber-400 inline-block" />
+                          <span className="size-2.5 rounded-full bg-muted inline-block" />
                           <span className="text-foreground">
                             Submission Completion (%)
                           </span>
@@ -674,8 +735,8 @@ export default function Dashboard() {
                     </Card.Header>
 
                     {/* Line Chart Body */}
-                    <Card.Content className="h-56 w-full pt-1 p-0">
-                      <ResponsiveContainer width="100%" height="100%">
+                    <Card.Content className="h-52 w-full p-0 pb-4">
+                      <ResponsiveContainer width="100%" height="100%" className="-mx-2 text-foreground!">
                         <LineChart
                           data={
                             data?.trend_chart.points &&
@@ -688,7 +749,7 @@ export default function Dashboard() {
                           <CartesianGrid
                             strokeDasharray="3 3"
                             vertical={false}
-                            stroke="var(--border)"
+                            stroke="var(--muted-foreground)"
                             strokeOpacity={0.4}
                           />
                           <XAxis
@@ -698,7 +759,7 @@ export default function Dashboard() {
                               stroke: "var(--foreground)",
                               strokeWidth: 1,
                             }}
-                            tick={{ fontSize: 11, fontWeight: 500 }}
+                            tick={{ fontSize: 11, fontWeight: 500, fill: "var(--foreground)" }}
                           />
                           <YAxis
                             domain={[50, 100]}
@@ -708,9 +769,9 @@ export default function Dashboard() {
                               stroke: "var(--foreground)",
                               strokeWidth: 1,
                             }}
-                            tick={{ fontSize: 11 }}
+                            tick={{ fontSize: 11, fill: "var(--foreground)" }}
                           />
-                          <Tooltip
+                          <RechartsTooltip
                             content={({ active, payload }) => {
                               if (!active || !payload || !payload.length)
                                 return null;
@@ -734,13 +795,13 @@ export default function Dashboard() {
                             type="monotone"
                             dataKey="avg_score_percent"
                             name="Mastery %"
-                            stroke="#34d399"
+                            stroke="var(--primary)"
                             strokeWidth={2.5}
                             dot={{
                               r: 4,
                               stroke: "var(--background)",
                               strokeWidth: 1.5,
-                              fill: "#34d399",
+                              fill: "var(--primary)",
                             }}
                             activeDot={{ r: 6 }}
                           />
@@ -748,155 +809,365 @@ export default function Dashboard() {
                             type="monotone"
                             dataKey="completion_rate_percent"
                             name="Completion %"
-                            stroke="#f59e0b"
-                            strokeWidth={2}
-                            strokeDasharray="4 4"
+                            stroke="var(--muted)"
+                            strokeWidth={2.5}
                             dot={{
-                              r: 3,
+                              r: 4,
                               stroke: "var(--background)",
-                              strokeWidth: 1,
-                              fill: "#f59e0b",
+                              strokeWidth: 1.5,
+                              fill: "var(--muted)",
                             }}
                           />
                         </LineChart>
                       </ResponsiveContainer>
+                      <Card.Description className="text-xs text-muted-foreground mt-0.5 pb-2">
+                        Class score averages vs. task submission completion
+                      </Card.Description>
                     </Card.Content>
                   </Card>
 
-                  {/* 3. Section-by-Section Health */}
-                  <Card className="flex flex-col justify-between p-4 sm:p-5">
-                    <Card.Header className="mb-0 p-0">
-                      <Card.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
-                        Section-by-Section Health
-                      </Card.Title>
-                      <Card.Description className="mt-0.5 text-xs text-muted-foreground">
-                        Performance, completion, and attendance across your classes
-                      </Card.Description>
-                    </Card.Header>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {/* Topic mastery */}
+                    <Card className="flex flex-col p-4 sm:p-5">
+                      <Card.Header className="mb-0 p-0 flex flex-col gap-2">
+                        <div className="flex flex-row items-center justify-between">
+                          <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                            Lesson Mastery
+                          </Card.Title>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  autoIcon={false}
+                                  onClick={() => {
+                                    const activeSubjectId = Number(subjectFilter) || subjects[0]?.id;
+                                    const activeClassId =
+                                      loads.find((l) => String(l.subject_id) === String(activeSubjectId))?.class_id ||
+                                      data?.trend_chart?.available_filters?.find((f) => String(f.subject_id) === String(activeSubjectId))?.class_id ||
+                                      1;
+                                    if (activeSubjectId && activeClassId) {
+                                      navigate(`/teacher/classes/${activeClassId}/subjects/${activeSubjectId}`);
+                                    } else {
+                                      navigate(routes.teacher.classes);
+                                    }
+                                  }}
+                                  className="text-foreground shadow-none px-1.5"
+                                >
+                                  <ArrowUpRight className="size-4" />
+                                </Button>
+                              }
+                            />
+                            <TooltipContent side="right">View subject</TooltipContent>
+                          </Tooltip>
+                        </div>
 
-                    <Card.Content className="mt-3 flex flex-col gap-3 p-0">
-                      {(data?.section_matrix && data.section_matrix.length > 0
-                        ? data.section_matrix
-                        : [
-                          {
-                            section_name: "Archimedes",
-                            grade_level: "Grade 9",
-                            subject_name: "Filipino 9",
-                            student_count: 17,
-                            completion_rate_percent: 82,
-                            attendance_rate_percent: 94,
-                            avg_score_percent: 84,
-                            passing_rate_percent: 91,
-                            published_classworks: 6,
-                          },
-                          {
-                            section_name: "Newton",
-                            grade_level: "Grade 9",
-                            subject_name: "Mathematics 9",
-                            student_count: 10,
-                            completion_rate_percent: 76,
-                            attendance_rate_percent: 90,
-                            avg_score_percent: 78,
-                            passing_rate_percent: 80,
-                            published_classworks: 5,
-                          },
-                          {
-                            section_name: "Curie",
-                            grade_level: "Grade 9",
-                            subject_name: "Science 9",
-                            student_count: 9,
-                            completion_rate_percent: 88,
-                            attendance_rate_percent: 97,
-                            avg_score_percent: 86,
-                            passing_rate_percent: 100,
-                            published_classworks: 4,
-                          },
-                        ]
-                      ).map((sec: any, idx: number) => (
-                        <div
-                          key={idx}
-                          className="rounded-xl border border-border/80 bg-card/60 p-3 text-xs"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-sm text-foreground">
-                                {sec.section_name}
+                        <div className="flex flex-row flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                          {subjects.map((subject) => (
+                            <Button
+                              key={subject.id}
+                              autoIcon={false}
+                              variant={
+                                subjectFilter === String(subject.id)
+                                  ? "default"
+                                  : "outline"
+                              }
+                              size="sm"
+                              onClick={() => setSubjectFilter(String(subject.id))}
+                              className="shrink-0 border-black shadow-none text-[11px] px-2 py-0.5"
+                            >
+                              {subject.name}
+                            </Button>
+                          ))}
+                        </div>
+                      </Card.Header>
+
+                      <Card.Content className="flex flex-col justify-between gap-2.5 p-0 justify-between h-full">
+                        <div className="flex flex-col gap-2.5 ">
+                          {topicMastery.slice(0, 5).map((item: any) => (
+                            <div
+                              key={item.topic}
+                              className="flex items-center justify-between gap-3 text-xs sm:text-sm"
+                            >
+                              <span className="font-medium text-foreground/90 shrink-0 w-24 truncate">
+                                {item.topic}
                               </span>
-                              <Badge
+                              <Progress value={item.rate} className="h-2.5 flex-1" />
+                              <span className="font-semibold text-foreground text-right w-10 shrink-0">
+                                {item.rate}%
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <Card.Description className="text-[11px] text-muted-foreground">
+                          Lowest topics may need reteaching
+                        </Card.Description>
+                      </Card.Content>
+
+                    </Card>
+
+                    {/* Due this week */}
+                    <Card className="flex flex-col justify-between p-4 sm:p-5">
+                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
+                        <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                          Due this week
+                        </Card.Title>
+                        <Tooltip >
+                          <TooltipTrigger
+
+                            render={
+                              <Button
                                 variant="secondary"
                                 size="sm"
-                                className="px-1.5 py-0 text-[10px]"
+                                autoIcon={false}
+                                onClick={() => navigate(routes.teacher.classworks)}
+                                className="text-foreground shadow-none px-1.5"
                               >
-                                {sec.grade_level || "Grade 9"}
-                              </Badge>
-                              <span className="text-muted-foreground text-[11px]">
-                                {sec.subject_name}
+                                <ArrowUpRight className="size-4" />
+                              </Button>
+                            }
+                          />
+                          <TooltipContent side="right">View classworks</TooltipContent>
+                        </Tooltip>
+                      </Card.Header>
+
+                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
+                        {dueWeek.map((d: any, idx: number) => (
+                          <Card
+                            key={idx}
+                            className="flex items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm cursor-pointer hover:bg-retro hover:-translate-y-1"
+                          >
+                            <div className="flex flex-col min-w-0 pr-2">
+                              <span className="font-semibold text-foreground truncate">
+                                {d.title}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground truncate">
+                                {d.section}
                               </span>
                             </div>
-                            <span className="font-semibold text-muted-foreground">
-                              {sec.student_count} Students
-                            </span>
-                          </div>
+                            <Badge
+                              size="sm"
+                              variant={
+                                d.due_label === "Tomorrow" ||
+                                  d.variant === "destructive"
+                                  ? "destructive"
+                                  : "default"
+                              }
+                              className="shrink-0"
+                            >
+                              {d.due_label}
+                            </Badge>
+                          </Card>
+                        ))}
+                      </Card.Content>
+                    </Card>
+                  </div>
 
-                          {/* Task completion & attendance progress */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2.5">
-                            <div className="space-y-1">
-                              <div className="flex justify-between text-[11px]">
-                                <span className="text-muted-foreground">
-                                  Task Completion
-                                </span>
-                                <span className="font-semibold">
-                                  {sec.completion_rate_percent}%
-                                </span>
-                              </div>
-                              <Progress
-                                value={sec.completion_rate_percent}
-                                className="h-2"
-                              />
-                            </div>
+                  {/* 3. Section-by-Section Health */}
+                  <Card className="flex flex-col justify-between p-4 sm:p-5">
+                    <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
+                      <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                        Section-by-Section Health
+                      </Card.Title>
+                      <Tooltip >
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              autoIcon={false}
+                              onClick={() => navigate(routes.teacher.classes)}
+                              className="text-foreground shadow-none px-1.5"
+                            >
+                              <ArrowUpRight className="size-4" />
+                            </Button>
+                          }
+                        />
+                        <TooltipContent side="right">View all sections</TooltipContent>
+                      </Tooltip>
+                    </Card.Header>
 
-                            <div className="space-y-1">
-                              <div className="flex justify-between text-[11px]">
-                                <span className="text-muted-foreground">
-                                  Attendance
-                                </span>
-                                <span className="font-semibold">
-                                  {sec.attendance_rate_percent}%
-                                </span>
-                              </div>
-                              <Progress
-                                value={sec.attendance_rate_percent}
-                                className="h-2"
-                              />
-                            </div>
-                          </div>
+                    <Card.Content className="mt-1 flex flex-col gap-3 p-0">
+                      {(() => {
+                        const sections =
+                          data?.section_matrix && data.section_matrix.length > 0
+                            ? data.section_matrix
+                            : [
+                              {
+                                class_id: 1,
+                                subject_id: 1,
+                                section_name: "Archimedes",
+                                grade_level: "Grade 9",
+                                subject_name: "Filipino 9",
+                                student_count: 17,
+                                completion_rate_percent: 82,
+                                attendance_rate_percent: 94,
+                                avg_score_percent: 84,
+                                passing_rate_percent: 91,
+                                published_classworks: 6,
+                              },
+                              {
+                                class_id: 2,
+                                subject_id: 2,
+                                section_name: "Newton",
+                                grade_level: "Grade 9",
+                                subject_name: "Mathematics 9",
+                                student_count: 10,
+                                completion_rate_percent: 76,
+                                attendance_rate_percent: 90,
+                                avg_score_percent: 78,
+                                passing_rate_percent: 80,
+                                published_classworks: 5,
+                              },
+                              {
+                                class_id: 3,
+                                subject_id: 3,
+                                section_name: "Curie",
+                                grade_level: "Grade 9",
+                                subject_name: "Science 9",
+                                student_count: 9,
+                                completion_rate_percent: 88,
+                                attendance_rate_percent: 97,
+                                avg_score_percent: 86,
+                                passing_rate_percent: 100,
+                                published_classworks: 4,
+                              },
+                            ];
+                        const displayed = showAllSectionHealth ? sections : sections.slice(0, 2);
 
-                          {/* Bottom Info Bar */}
-                          <div className="flex items-center justify-between border-t border-border/50 pt-2 text-[11px] text-muted-foreground">
-                            <div className="flex items-center gap-3">
-                              <span>
-                                Class Average:{" "}
-                                <Badge
-                                  variant="outline"
+                        return (
+                          <>
+                            {displayed.map((sec: any, idx: number) => (
+                              <Card
+                                key={idx}
+                                className="shadow-none p-4 text-xs hover:bg-retro hover:-translate-y-1 cursor-pointer transition-all"
+                                onClick={() => {
+                                  if (sec.class_id && sec.subject_id) {
+                                    navigate(`/teacher/classes/${sec.class_id}/${sec.subject_id}`);
+                                  } else if (sec.class_id) {
+                                    navigate(`/teacher/advisory-class/${sec.class_id}`);
+                                  } else {
+                                    navigate(routes.teacher.classes);
+                                  }
+                                }}
+                              >
+                                <div className="flex items-center justify-between mb-4">
+                                  <div className="flex items-center gap-3">
+                                    <span className="font-bold text-xl text-foreground">
+                                      {sec.section_name}
+                                    </span>
+                                    <Badge
+                                      variant="secondary"
+                                      size="sm"
+                                      className="px-1.5 py-0.5"
+                                    >
+                                      {sec.subject_name}
+                                    </Badge>
+                                  </div>
+                                  <span className="font-semibold text-xs text-muted-foreground">
+                                    {sec.student_count} Students
+                                  </span>
+                                </div>
+
+                                {/* Task completion & attendance progress */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-2.5">
+                                  <div className="space-y-1">
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-foreground">
+                                        Task Completion
+                                      </span>
+                                      <span className="font-semibold">
+                                        {sec.completion_rate_percent}%
+                                      </span>
+                                    </div>
+                                    <Progress
+                                      value={sec.completion_rate_percent}
+                                      className="h-2"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-foreground">
+                                        Attendance
+                                      </span>
+                                      <span className="font-semibold">
+                                        {sec.attendance_rate_percent}%
+                                      </span>
+                                    </div>
+                                    <Progress
+                                      value={sec.attendance_rate_percent}
+                                      className="h-2"
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Bottom Info Bar */}
+                                <div className="flex items-center justify-between text-sm text-muted-foreground pt-2">
+                                  <div className="flex items-center gap-4">
+                                    <span className="text-foreground font-semibold">
+                                      Class Average:{" "}
+                                      <Badge
+                                        variant={
+                                          sec.avg_score_percent < 75
+                                            ? "destructive"
+                                            : sec.avg_score_percent > 87
+                                              ? "success"
+                                              : "surface"
+                                        }
+                                        size="sm"
+                                        className="ml-1"
+                                      >
+                                        {sec.avg_score_percent}%
+                                      </Badge>
+                                    </span>
+                                    <span className="text-foreground font-semibold">
+                                      Passing Rate:{" "}
+                                      <Badge
+                                        variant={
+                                          sec.passing_rate_percent < 75
+                                            ? "destructive"
+                                            : sec.passing_rate_percent > 87
+                                              ? "success"
+                                              : "surface"
+                                        }
+                                        size="sm"
+                                        className="ml-1"
+                                      >
+                                        {sec.passing_rate_percent}%
+                                      </Badge>
+                                    </span>
+                                  </div>
+                                  <span className="text-foreground">
+                                    <span className="text-foreground font-bold mr-1">
+                                      {sec.published_classworks}
+                                    </span>
+                                    published tasks
+                                  </span>
+                                </div>
+                              </Card>
+                            ))}
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
+                              <Card.Description className="text-xs text-muted-foreground">
+                                Performance, completion, and attendance across your classes
+                              </Card.Description>
+                              {sections.length > 2 && (
+                                <Button
+                                  variant="secondary"
                                   size="sm"
-                                  className="px-1.5 py-0 text-[10px]"
+                                  autoIcon={false}
+                                  onClick={() => setShowAllSectionHealth((prev) => !prev)}
+                                  className="self-end sm:self-auto text-xs font-semibold px-2.5 py-1 h-7 text-foreground shadow-none"
                                 >
-                                  {sec.avg_score_percent}%
-                                </Badge>
-                              </span>
-                              <span>
-                                Passing Rate:{" "}
-                                <span className="font-semibold text-foreground">
-                                  {sec.passing_rate_percent}%
-                                </span>
-                              </span>
+                                  {showAllSectionHealth ? "Show less" : "Show all classes"}
+                                </Button>
+                              )}
                             </div>
-                            <span>
-                              {sec.published_classworks} published tasks
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                          </>
+                        );
+                      })()}
                     </Card.Content>
                   </Card>
 
@@ -939,81 +1210,32 @@ export default function Dashboard() {
                       </Card.Content>
                     </Card>
 
-                    {/* Hardest questions */}
+                    {/* Top performers */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
-                          Hardest questions
+                        <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                          Top Performers
                         </Card.Title>
                       </Card.Header>
 
-                      <Card.Content className="mt-3 flex flex-col gap-2.5 p-0">
-                        {hardestQuestions.map((q: any, idx: number) => (
-                          <div
+                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
+                        {topPerformers.map((p: any, idx: number) => (
+                          <Card
                             key={idx}
-                            className="flex items-center justify-between rounded-xl border border-border/80 bg-card/60 px-3 py-2.5 text-xs sm:text-sm"
+                            className="flex items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm"
                           >
                             <div className="flex flex-col min-w-0 pr-2">
                               <span className="font-semibold text-foreground truncate">
-                                {q.code}
+                                {p.name}
                               </span>
                               <span className="text-[11px] text-muted-foreground truncate">
-                                {q.quiz}
+                                {p.section}
                               </span>
                             </div>
-                            <Badge
-                              size="sm"
-                              variant={
-                                q.variant === "destructive"
-                                  ? "destructive"
-                                  : "default"
-                              }
-                              className="shrink-0"
-                            >
-                              {q.rate}
+                            <Badge size="sm" variant="success" className="shrink-0">
+                              {p.score}%
                             </Badge>
-                          </div>
-                        ))}
-                      </Card.Content>
-                    </Card>
-                  </div>
-
-                  {/* 5. Submissions to Review, Grade Distribution, Attendance by Section */}
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {/* Submissions to Review */}
-                    <Card className="flex flex-col justify-between p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
-                          Submissions to Review
-                        </Card.Title>
-                      </Card.Header>
-
-                      <Card.Content className="mt-3 flex flex-col gap-2.5 p-0">
-                        {reviewSubmissions.map((item: any, idx: number) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between rounded-xl border border-border/80 bg-card/60 px-3 py-2.5 text-xs sm:text-sm"
-                          >
-                            <div className="flex flex-col min-w-0 pr-2">
-                              <span className="font-semibold text-foreground truncate">
-                                {item.title}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground truncate">
-                                {item.section}
-                              </span>
-                            </div>
-                            <Badge
-                              size="sm"
-                              variant={
-                                item.variant === "destructive"
-                                  ? "destructive"
-                                  : "default"
-                              }
-                              className="shrink-0"
-                            >
-                              {item.badge}
-                            </Badge>
-                          </div>
+                          </Card>
                         ))}
                       </Card.Content>
                     </Card>
@@ -1084,7 +1306,6 @@ export default function Dashboard() {
                           </div>
                         ))}
                       </Card.Content>
-
                       <Card.Description className="mt-3 text-[11px] text-muted-foreground">
                         Last 20 school days
                       </Card.Description>
