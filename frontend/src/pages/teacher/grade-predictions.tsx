@@ -302,37 +302,158 @@ function TeacherCurrentTermGradePredictions() {
   const candidateId = useTeacherCandidateShortcut(selected);
 
   useEffect(() => {
-    if (!selectedPeriodId || numericGrade === undefined) { Promise.resolve().then(() => setLoading(false)); return; }
+    if (!selectedPeriodId || numericGrade === undefined) {
+      Promise.resolve().then(() => setLoading(false));
+      return;
+    }
+
     let cancelled = false;
-    Promise.resolve().then(() => { if (!cancelled) { setLoading(true); setLoadError(null); } });
+    Promise.resolve().then(() => {
+      if (!cancelled) {
+        setLoading(true);
+        setLoadError(null);
+      }
+    });
+
     loadAuthorizedCurrentTermPredictions(selectedPeriodId, { gradeLevel: numericGrade })
-      .then((result) => { if (!cancelled) { setRows(result.rows); setFilters(result.filters); } })
-      .catch((error: unknown) => { if (!cancelled) { setRows([]); setLoadError(currentTermPredictionErrorMessage(error)); } })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .then((result) => {
+        if (!cancelled) {
+          setRows(result.rows);
+          setFilters(result.filters);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setRows([]);
+          setLoadError(currentTermPredictionErrorMessage(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [numericGrade, selectedPeriodId]);
 
-  const scopedRows = rows.filter((row) => (classId === undefined || row.class_id === classId) && (subjectId === undefined || row.subject_id === subjectId));
-  const data = buildCurrentTermDashboard(scopedRows, { search, interventionLevel: riskLevel, limit: Math.max(10, scopedRows.length) });
+  const scopedRows = rows.filter(
+    (row) =>
+      (classId === undefined || row.class_id === classId) &&
+      (subjectId === undefined || row.subject_id === subjectId)
+  );
+  const data = buildCurrentTermDashboard(scopedRows, {
+    search,
+    interventionLevel: riskLevel,
+    limit: Math.max(10, scopedRows.length),
+  });
   const gradeSummary = buildCurrentTermGradeSummaries(rows)[0];
 
-  return <AppLayout>
-    <div className="flex flex-1 flex-col">
-      <header className="flex items-center gap-3 bg-background px-4 py-4 md:px-6"><SidebarTrigger className="md:hidden" /><Breadcrumb><Breadcrumb.List><Breadcrumb.Item><Breadcrumb.Link asChild><Link to="/teacher/predictions">AI Predictions</Link></Breadcrumb.Link></Breadcrumb.Item><Breadcrumb.Separator /><Breadcrumb.Item><Breadcrumb.Page>Grade {grade}</Breadcrumb.Page></Breadcrumb.Item></Breadcrumb.List></Breadcrumb></header>
-      <div className="-mt-[1px] border-t-2 border-border px-4 py-4 md:px-6">
-        <div className="flex flex-col items-start gap-5 lg:flex-row">
-          <div className="flex min-w-0 flex-1 flex-col gap-4">
-            <PredictionFilters filters={filters} gradeLevel={numericGrade} classId={classId} subjectId={subjectId} academicPeriodId={selectedPeriodId ?? undefined} riskLevel={riskLevel} search={search} hideGradeFilter hidePeriodFilter riskSummary={data.risk_summary} onClassChange={setClassId} onSubjectChange={setSubjectId} onRiskChange={setRiskLevel} onSearchChange={setSearch} onClearAll={() => { setClassId(undefined); setSubjectId(undefined); setRiskLevel(undefined); setSearch(""); }} />
-            {loadError && <div role="alert" className="border-2 border-red-600 bg-red-50 p-4 font-semibold">{loadError}</div>}
-            {loading ? <div className="py-20 text-center font-semibold text-gray-500">Loading Grade {grade} projections...</div> : loadError ? null : <PredictionTable items={data.items} total={data.total} limit={Math.max(10, data.total)} offset={0} currentTerm hidePagination onSort={() => undefined} onPageChange={() => undefined} onRowClick={(predictionId) => setSelected(rows.find((row) => row.prediction_id === predictionId) || null)} />}
+  return (
+    <AppLayout>
+      <div className="flex flex-1 flex-col">
+        <header className="flex items-center gap-3 bg-background px-4 py-4 md:px-6">
+          <SidebarTrigger className="md:hidden" />
+          <Breadcrumb>
+            <Breadcrumb.List>
+              <Breadcrumb.Item>
+                <Breadcrumb.Link asChild>
+                  <Link to="/teacher/predictions">AI Predictions</Link>
+                </Breadcrumb.Link>
+              </Breadcrumb.Item>
+              <Breadcrumb.Separator />
+              <Breadcrumb.Item>
+                <Breadcrumb.Page>Grade {grade}</Breadcrumb.Page>
+              </Breadcrumb.Item>
+            </Breadcrumb.List>
+          </Breadcrumb>
+        </header>
+
+        <div className="-mt-[1px] border-t-2 border-border px-4 py-4 md:px-6">
+          <div className="flex flex-col items-start gap-5 lg:flex-row">
+            <div className="flex min-w-0 flex-1 flex-col gap-4">
+              <PredictionFilters
+                filters={filters}
+                gradeLevel={numericGrade}
+                classId={classId}
+                subjectId={subjectId}
+                academicPeriodId={selectedPeriodId ?? undefined}
+                riskLevel={riskLevel}
+                search={search}
+                hideGradeFilter
+                hidePeriodFilter
+                riskSummary={data.risk_summary}
+                onClassChange={setClassId}
+                onSubjectChange={setSubjectId}
+                onRiskChange={setRiskLevel}
+                onSearchChange={setSearch}
+                onClearAll={() => {
+                  setClassId(undefined);
+                  setSubjectId(undefined);
+                  setRiskLevel(undefined);
+                  setSearch("");
+                }}
+              />
+
+              {loadError && (
+                <div role="alert" className="border-2 border-red-600 bg-red-50 p-4 font-semibold">
+                  {loadError}
+                </div>
+              )}
+
+              {loading ? (
+                <div className="py-20 text-center font-semibold text-gray-500">
+                  Loading Grade {grade} projections...
+                </div>
+              ) : loadError ? null : (
+                <PredictionTable
+                  items={data.items}
+                  total={data.total}
+                  limit={Math.max(10, data.total)}
+                  offset={0}
+                  currentTerm
+                  hidePagination
+                  onSort={() => undefined}
+                  onPageChange={() => undefined}
+                  onRowClick={(predictionId) =>
+                    setSelected(rows.find((row) => row.prediction_id === predictionId) || null)
+                  }
+                />
+              )}
+            </div>
+
+            <Card className="w-full shrink-0 border-2 border-black bg-white p-4 shadow-[4px_4px_0px_#000] lg:w-80">
+              <Text as="h4" className="mb-3 border-b-2 border-black pb-2 font-head text-base font-bold">
+                Grade {grade} Sections
+              </Text>
+              <div className="flex flex-col gap-2">
+                {gradeSummary?.sections.map((section) => (
+                  <Link
+                    key={section.class_id}
+                    to={`/teacher/predictions/${grade}/${section.class_id}`}
+                    className="flex items-center justify-between border-2 border-black bg-yellow-50 p-2.5 hover:bg-yellow-100"
+                  >
+                    <span className="font-bold">{section.section_name}</span>
+                    <Badge size="sm" variant="surface">
+                      {section.total_students} projections
+                    </Badge>
+                  </Link>
+                ))}
+              </div>
+            </Card>
           </div>
-          <Card className="w-full shrink-0 border-2 border-black bg-white p-4 shadow-[4px_4px_0px_#000] lg:w-80">
-            <Text as="h4" className="mb-3 border-b-2 border-black pb-2 font-head text-base font-bold">Grade {grade} Sections</Text>
-            <div className="flex flex-col gap-2">{gradeSummary?.sections.map((section) => <Link key={section.class_id} to={`/teacher/predictions/${grade}/${section.class_id}`} className="flex items-center justify-between border-2 border-black bg-yellow-50 p-2.5 hover:bg-yellow-100"><span className="font-bold">{section.section_name}</span><Badge size="sm" variant="surface">{section.total_students} projections</Badge></Link>)}</div>
-          </Card>
         </div>
       </div>
-    </div>
-    <PredictionDetailSheet predictionId={selected?.prediction_id ?? null} currentTermPrediction={selected} candidateId={candidateId} open={selected !== null} onOpenChange={(open) => { if (!open) setSelected(null); }} />
-  </AppLayout>;
+
+      <PredictionDetailSheet
+        predictionId={selected?.prediction_id ?? null}
+        currentTermPrediction={selected}
+        candidateId={candidateId}
+        open={selected !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null);
+        }}
+      />
+    </AppLayout>
+  );
 }

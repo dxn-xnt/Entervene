@@ -57,84 +57,71 @@ export default function ClassworkCard({
   return (
     <Tooltip>
       <TooltipTrigger render={<Card
-      className="flex h-full w-full cursor-pointer flex-col"
-      role="button"
-      tabIndex={0}
-      onClick={openCard}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          openCard();
-        }
-      }}
-      aria-label={`Open ${item.title}`}
-    >
-      <Card.Header className="flex-col items-stretch gap-2">
-        <div className="flex items-center gap-1.5">
-          <Badge variant="secondary" size="sm">
-            {displayType(item.classwork_type)}
-          </Badge>
-          <Badge variant={item.is_published ? "success" : "outline"} size="sm">
-            {item.is_published ? "Published" : "Draft"}
-          </Badge>
-        </div>
-
-        <div className="min-w-0">
-          <Card.Title className="mb-0.5 line-clamp-2 break-words text-base font-bold [overflow-wrap:anywhere]">
-            {item.title}
-          </Card.Title>
-          <Card.Description className="truncate text-xs font-medium text-muted-foreground">
-            {[item.subject_name, sections].filter(Boolean).join(" · ") ||
-              "Subject or section unavailable"}
-          </Card.Description>
-        </div>
-      </Card.Header>
-
-      <Card.Content className="mt-auto flex flex-col gap-3">
-        {tracking && (
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">
-                Submitted{" "}
-                <span className="font-bold text-foreground">
-                  {tracking.submitted_count}/{tracking.total_students}
-                </span>
-              </span>
-              <span className="font-bold text-foreground">
-                {completionRate === null ? "No students" : `${completionRate}%`}
-              </span>
-            </div>
-            <Progress value={completionRate ?? 0} className="h-3" />
+        className="flex h-full w-full cursor-pointer flex-col"
+        tabIndex={0}
+        onClick={openCard}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openCard();
+          }
+        }}
+        aria-label={`Open ${item.title}`}
+      >
+        <Card.Header className="flex-col items-stretch gap-1">
+          <div className="min-w-0">
+            <Card.Title className="line-clamp-2 break-words text-lg font-bold [overflow-wrap:anywhere]">
+              {item.title}
+            </Card.Title>
           </div>
-        )}
+          <div className="flex items-center gap-1.5">
+            {/* <Badge variant="secondary" size="sm">
+              {displayType(item.classwork_type)}
+            </Badge> */}
+            <Badge variant={item.is_published ? "solid" : "default"} size="sm">
+              {item.is_published ? "Published" : "Draft"}
+            </Badge>
+          </div>
+        </Card.Header>
 
-        {!tracking && hasAssignments && (
-          <p className="text-xs text-muted-foreground">
-            Loading submission summary…
-          </p>
-        )}
-        {!hasAssignments && (
-          <p className="text-xs text-muted-foreground">
-            Not assigned to a section
-          </p>
-        )}
+        <Card.Content className="mt-auto flex flex-col gap-3 mt-1">
+          {tracking && (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-foreground">
+                  Submitted{" "}
+                  <span className="font-bold text-foreground">
+                    {tracking.submitted_count}/{tracking.total_students}
+                  </span>
+                </span>
+                <span className="font-bold text-foreground">
+                  {completionRate === null ? "No students" : `${completionRate}%`}
+                </span>
+              </div>
+              <Progress value={completionRate ?? 0} className="h-3" />
+            </div>
+          )}
 
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          {item.total_points !== null && item.total_points !== undefined && (
-            <span>
-              <span className="font-bold text-foreground">
-                {item.total_points}
-              </span>{" "}
-              pts
-            </span>
+          {!tracking && hasAssignments && (
+            <p className="text-xs text-muted-foreground">
+              Loading submission summary…
+            </p>
           )}
-          <span>Created {formatDate(item.created_at)}</span>
-          {dueLabel && (
-            <span className="font-bold text-foreground">{dueLabel}</span>
+          {!hasAssignments && (
+            <p className="text-xs text-muted-foreground">
+              Not assigned to a section
+            </p>
           )}
-        </div>
-      </Card.Content>
-    </Card>} />
+
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            {dueLabel ? (
+              <span className="text-sm text-muted-foreground">{dueLabel}</span>
+            ) : (
+              <span className="text-sm text-muted-foreground">Created {formatDate(item.created_at)}</span>
+            )}
+          </div>
+        </Card.Content>
+      </Card>} />
       <TooltipContent>View classwork</TooltipContent>
     </Tooltip>
   );
