@@ -402,89 +402,169 @@ function TeacherCurrentTermDashboard() {
   const candidateId = useTeacherCandidateShortcut(selected);
 
   useEffect(() => {
-    if (!selectedPeriodId) { Promise.resolve().then(() => setLoading(false)); return; }
+    if (!selectedPeriodId) {
+      Promise.resolve().then(() => setLoading(false));
+      return;
+    }
+
     let cancelled = false;
-    Promise.resolve().then(() => { if (!cancelled) { setLoading(true); setLoadError(null); } });
+    Promise.resolve().then(() => {
+      if (!cancelled) {
+        setLoading(true);
+        setLoadError(null);
+      }
+    });
+
     loadAuthorizedCurrentTermPredictions(selectedPeriodId)
-      .then((result) => { if (!cancelled) { setRows(result.rows); setFilters(result.filters); } })
-      .catch((error: unknown) => { if (!cancelled) { setRows([]); setLoadError(currentTermPredictionErrorMessage(error)); } })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .then((result) => {
+        if (!cancelled) {
+          setRows(result.rows);
+          setFilters(result.filters);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setRows([]);
+          setLoadError(currentTermPredictionErrorMessage(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedPeriodId]);
 
-  const scopedRows = rows.filter((row) =>
-    (gradeLevel === undefined || row.grade_level === gradeLevel)
-    && (classId === undefined || row.class_id === classId)
-    && (subjectId === undefined || row.subject_id === subjectId));
-  const data = buildCurrentTermDashboard(scopedRows, { search, interventionLevel: riskLevel, limit: Math.max(10, scopedRows.length) });
+  const scopedRows = rows.filter(
+    (row) =>
+      (gradeLevel === undefined || row.grade_level === gradeLevel) &&
+      (classId === undefined || row.class_id === classId) &&
+      (subjectId === undefined || row.subject_id === subjectId)
+  );
+  const data = buildCurrentTermDashboard(scopedRows, {
+    search,
+    interventionLevel: riskLevel,
+    limit: Math.max(10, scopedRows.length),
+  });
   const summary = currentTermRiskSummary(scopedRows);
   const gradeSummaries = buildCurrentTermGradeSummaries(rows);
-  const filtered = gradeLevel !== undefined || classId !== undefined || subjectId !== undefined || riskLevel !== undefined || search.trim() !== "";
+  const filtered =
+    gradeLevel !== undefined ||
+    classId !== undefined ||
+    subjectId !== undefined ||
+    riskLevel !== undefined ||
+    search.trim() !== "";
 
-  return <AppLayout>
-    <div className="flex flex-1 flex-col">
-      <header className="flex items-center gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6"><SidebarTrigger className="shrink-0 md:hidden" /><h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1></header>
-      <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-        <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
-          {RISK_CARDS.filter((card) => card.key !== "INSUFFICIENT_DATA").map((card) => <button key={card.key} type="button" onClick={() => setRiskLevel(riskLevel === card.key ? undefined : card.key)} className="w-full cursor-pointer text-left"><OverviewCard title={card.label} count={String(summary[card.key])} className={cn("w-full border-2 border-black shadow-[4px_4px_0px_#000]", riskLevel === card.key && card.activeClass)} /></button>)}
-        </div>
-        <div className="flex flex-col gap-4">
-          <PredictionFilters
-            filters={filters}
-            gradeLevel={gradeLevel}
-            classId={classId}
-            subjectId={subjectId}
-            academicPeriodId={selectedPeriodId ?? undefined}
-            riskLevel={riskLevel}
-            search={search}
-            hidePeriodFilter
-            riskSummary={summary}
-            onGradeChange={setGradeLevel}
-            onClassChange={setClassId}
-            onSubjectChange={setSubjectId}
-            onRiskChange={setRiskLevel}
-            onSearchChange={setSearch}
-            onClearAll={() => { setGradeLevel(undefined); setClassId(undefined); setSubjectId(undefined); setRiskLevel(undefined); setSearch(""); }}
-          />
-          {loadError && <Alert status="error" className="font-semibold">{loadError}</Alert>}
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3 font-semibold text-gray-500">
-              <Loader size="md" />
-              <span>Loading current-term projections...</span>
-            </div>
-          ) : loadError ? null : !selectedPeriodId ? (
-            <Card className="border-2 border-black bg-white p-6 text-center font-semibold text-gray-700">
-              Select an academic term to view projections.
-            </Card>
-          ) : filtered ? (
-            <PredictionTable
-              items={data.items}
-              total={data.total}
-              limit={Math.max(10, data.total)}
-              offset={0}
-              currentTerm
-              hidePagination
-              onSort={() => undefined}
-              onPageChange={() => undefined}
-              onRowClick={(predictionId) => setSelected(rows.find((row) => row.prediction_id === predictionId) || null)}
+  return (
+    <AppLayout>
+      <div className="flex flex-1 flex-col">
+        <header className="flex items-center gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+          <SidebarTrigger className="shrink-0 md:hidden" />
+          <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1>
+        </header>
+
+        <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+            {RISK_CARDS.filter((card) => card.key !== "INSUFFICIENT_DATA").map((card) => (
+              <button
+                key={card.key}
+                type="button"
+                onClick={() => setRiskLevel(riskLevel === card.key ? undefined : card.key)}
+                className="w-full cursor-pointer text-left"
+              >
+                <OverviewCard
+                  title={card.label}
+                  count={String(summary[card.key])}
+                  className={cn(
+                    "w-full border-2 border-black shadow-[4px_4px_0px_#000]",
+                    riskLevel === card.key && card.activeClass
+                  )}
+                />
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <PredictionFilters
+              filters={filters}
+              gradeLevel={gradeLevel}
+              classId={classId}
+              subjectId={subjectId}
+              academicPeriodId={selectedPeriodId ?? undefined}
+              riskLevel={riskLevel}
+              search={search}
+              hidePeriodFilter
+              riskSummary={summary}
+              onGradeChange={setGradeLevel}
+              onClassChange={setClassId}
+              onSubjectChange={setSubjectId}
+              onRiskChange={setRiskLevel}
+              onSearchChange={setSearch}
+              onClearAll={() => {
+                setGradeLevel(undefined);
+                setClassId(undefined);
+                setSubjectId(undefined);
+                setRiskLevel(undefined);
+                setSearch("");
+              }}
             />
-          ) : (
-            <div className="flex flex-col gap-3">
-              <h2 className="text-xl font-black">Grade Cohort Summaries</h2>
-              {gradeSummaries.length ? (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {gradeSummaries.map((group) => <PredictionGradeSection key={group.grade_level} group={group} />)}
-                </div>
-              ) : (
-                <Card className="border-2 border-black bg-white p-6 text-center font-semibold">
-                  No current-term projections are available for this scope.
-                </Card>
-              )}
-            </div>
-          )}
+
+            {loadError && <Alert status="error" className="font-semibold">{loadError}</Alert>}
+
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3 font-semibold text-gray-500">
+                <Loader size="md" />
+                <span>Loading current-term projections...</span>
+              </div>
+            ) : loadError ? null : !selectedPeriodId ? (
+              <Card className="border-2 border-black bg-white p-6 text-center font-semibold text-gray-700">
+                Select an academic term to view projections.
+              </Card>
+            ) : filtered ? (
+              <PredictionTable
+                items={data.items}
+                total={data.total}
+                limit={Math.max(10, data.total)}
+                offset={0}
+                currentTerm
+                hidePagination
+                onSort={() => undefined}
+                onPageChange={() => undefined}
+                onRowClick={(predictionId) =>
+                  setSelected(rows.find((row) => row.prediction_id === predictionId) || null)
+                }
+              />
+            ) : (
+              <div className="flex flex-col gap-3">
+                <h2 className="text-xl font-black">Grade Cohort Summaries</h2>
+                {gradeSummaries.length ? (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {gradeSummaries.map((group) => (
+                      <PredictionGradeSection key={group.grade_level} group={group} />
+                    ))}
+                  </div>
+                ) : (
+                  <Card className="border-2 border-black bg-white p-6 text-center font-semibold">
+                    No current-term projections are available for this scope.
+                  </Card>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-    <PredictionDetailSheet predictionId={selected?.prediction_id ?? null} currentTermPrediction={selected} candidateId={candidateId} open={selected !== null} onOpenChange={(open) => { if (!open) setSelected(null); }} />
-  </AppLayout>;
+
+      <PredictionDetailSheet
+        predictionId={selected?.prediction_id ?? null}
+        currentTermPrediction={selected}
+        candidateId={candidateId}
+        open={selected !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null);
+        }}
+      />
+    </AppLayout>
+  );
 }

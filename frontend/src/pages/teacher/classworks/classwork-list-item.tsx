@@ -49,56 +49,50 @@ export default function ClassworkListItem({
   return (
     <Tooltip>
       <TooltipTrigger render={<Card
-      className="w-full cursor-pointer transition-all p-3.5 sm:p-4 hover:shadow-none"
-      role="button"
-      tabIndex={0}
-      onClick={openItem}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          openItem();
-        }
-      }}
-      aria-label={`Open ${item.title}`}
-    >
-      <div className="flex items-start justify-between gap-3 sm:gap-6 min-w-0">
-        {/* Left Side: Title & Subtitle Metadata */}
-        <div className="min-w-0 flex-1 flex flex-col justify-center gap-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-bold text-base text-foreground line-clamp-1 break-words [overflow-wrap:anywhere]">
-              {item.title}
-            </h3>
-            {item.total_points !== null && item.total_points !== undefined && (
-              <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                · {item.total_points} pts
-              </span>
-            )}
+        className="w-full cursor-pointer transition-all p-3.5 sm:p-4 hover:shadow-none"
+        role="button"
+        tabIndex={0}
+        onClick={openItem}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openItem();
+          }
+        }}
+        aria-label={`Open ${item.title}`}
+      >
+        <div className="flex items-start justify-between gap-3 sm:gap-6 min-w-0">
+          {/* Left Side: Title & Subtitle Metadata */}
+          <div className="min-w-0 flex-1 flex flex-col justify-center gap-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-bold text-lg text-foreground line-clamp-1 break-words [overflow-wrap:anywhere]">
+                {item.title}
+              </h3>
+            </div>
+
+            <div className="text-sm  text-muted-foreground font-medium line-clamp-2">
+              {"Created "}
+              {formatDate(item.created_at)}
+            </div>
           </div>
 
-          <div className="text-xs text-muted-foreground font-medium line-clamp-2">
-            {[item.subject_name, sections].filter(Boolean).join(" · ") ||
-              "Subject unavailable"}
-            {" · Created "}
-            {formatDate(item.created_at)}
-            {dueLabel && ` · ${dueLabel}`}
+          {/* Right Side: Badges (top right) */}
+          <div className="flex flex-col items-right align-right gap-2">
+            <div className="flex flex-row gap-1.5">
+              {/* <Badge variant="secondary" size="sm" className="whitespace-nowrap">
+                {displayType(item.classwork_type)}
+              </Badge> */}
+              <Badge
+                variant={item.is_published ? "solid" : "default"}
+                size="sm"
+                className="whitespace-nowrap"
+              >
+                {item.is_published ? "Published" : "Draft"}
+              </Badge>
+            </div>
           </div>
         </div>
-
-        {/* Right Side: Badges (top right) */}
-        <div className="flex items-center gap-1.5 shrink-0 self-start">
-          <Badge variant="secondary" size="sm" className="whitespace-nowrap">
-            {displayType(item.classwork_type)}
-          </Badge>
-          <Badge
-            variant={item.is_published ? "success" : "outline"}
-            size="sm"
-            className="whitespace-nowrap"
-          >
-            {item.is_published ? "Published" : "Draft"}
-          </Badge>
-        </div>
-      </div>
-    </Card>} />
+      </Card>} />
       <TooltipContent>View classwork</TooltipContent>
     </Tooltip>
   );
