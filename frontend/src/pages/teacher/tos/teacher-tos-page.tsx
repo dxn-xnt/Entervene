@@ -19,8 +19,8 @@ import {
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
-import { TOSGeneratorScreen } from "../classes-view/subject-details/tos-generator-screen";
-import type { CompetencyItem } from "../classes-view/subject-details/types";
+import { TOSGeneratorScreen } from "../subject-details/tos-generator-screen";
+import type { CompetencyItem } from "../subject-details/types";
 import { Text } from "@/components/retroui/Text";
 import { getTeacherActive, getRemediationWorkspace, type RemediationFocus } from "@/lib/teacher-interventions-api";
 
@@ -484,15 +484,15 @@ export const TeacherTOSPage: React.FC = () => {
                           <div className="flex items-center gap-1.5">
                             <Tooltip>
                               <TooltipTrigger render={<span className="inline-flex"><Button
-                              size="sm"
-                              variant="outline"
-                              onClick={(e) => handleDeleteExam(e, ex.tos_exam_id)}
-                              disabled={deletingId === ex.tos_exam_id}
-                              className="h-7 border-2 border-black bg-red-50 px-2 text-red-700 hover:bg-red-100"
-                              aria-label="Delete exam"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button></span>} />
+                                size="sm"
+                                variant="outline"
+                                onClick={(e) => handleDeleteExam(e, ex.tos_exam_id)}
+                                disabled={deletingId === ex.tos_exam_id}
+                                className="h-7 border-2 border-black bg-red-50 px-2 text-red-700 hover:bg-red-100"
+                                aria-label="Delete exam"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button></span>} />
                               <TooltipContent>Delete exam</TooltipContent>
                             </Tooltip>
                             <Button
