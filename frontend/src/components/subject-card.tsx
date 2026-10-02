@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { Link } from "react-router-dom";
 import { Avatar } from "@/components/retroui/Avatar";
 import { cn } from "@/lib/utils";
@@ -24,11 +26,13 @@ export type ActiveClassworkInfo = {
   title: string;
   dueLabel?: string;
   due_label?: string;
-  status?: "ongoing" | "due_soon" | "past_due" | "no_due_date" | string;
+  status?: "ongoing" | "due_soon" | "past_due" | "no_due_date" | "completed" | string;
   submittedCount?: number;
   submitted_count?: number;
   totalStudents?: number;
   total_students?: number;
+  classwork_type?: string;
+  classworkType?: string;
 };
 
 export type SubjectCardProps = {
@@ -52,7 +56,8 @@ export type SubjectCardProps = {
   latestActivityTitle?: string;
   latestActivityDue?: string;
   activeClasswork?: ActiveClassworkInfo | null;
-  onClassworkClick?: () => void;
+  activeClassworks?: ActiveClassworkInfo[];
+  onClassworkClick?: (classworkId?: number) => void;
   onClick?: () => void;
   className?: string;
   showPattern?: boolean;
@@ -77,6 +82,7 @@ export function SubjectCard({
   latestActivityTitle,
   latestActivityDue,
   activeClasswork,
+  activeClassworks,
   onClassworkClick,
   onClick,
   className,
@@ -86,9 +92,9 @@ export function SubjectCard({
       <Link
         to={to}
         aria-label={`Open ${title}${teacher ? `, taught by ${teacher}` : ""}`}
-        className="group block h-full min-w-0 text-card-foreground no-underline outline-offset-4 focus-visible:outline-3 focus-visible:outline-ring"
+        className="group block h-full min-w-0 text-foreground no-underline outline-offset-4 focus-visible:outline-3 focus-visible:outline-ring"
       >
-        <Card variant="retro" className={cn("flex h-full min-h-60 min-w-0 flex-col gap-0 p-0", className)}>
+        <Card className={cn("flex h-full min-h-60 min-w-0 flex-col gap-0 p-0", className)}>
           <div className="retro-theme-stripes h-20 shrink-0 border-b-2 border-black bg-primary p-2.5 transition-colors group-hover:bg-primary-hover">
             <div className="flex items-start justify-between gap-2">
               <Badge size="sm" variant="outline" className="min-w-0 max-w-[60%] break-words">
@@ -139,14 +145,57 @@ export function SubjectCard({
     }
     : null;
 
-  const noClasswork = isTeacher ? !activeCw : !latestActivityTitle && !hasPending;
+  // Build carousel items from activeClassworks (array) or fall back to single activeClasswork,
+  // excluding reading classworks, completed classworks, and classworks where all students have submitted
+  const carouselItems = (() => {
+    const raw = activeClassworks && activeClassworks.length > 0
+      ? activeClassworks
+      : activeClasswork
+        ? [activeClasswork]
+        : [];
+    return raw
+      .filter((cw) => {
+        // Exclude reading classworks
+        const type = (cw.classwork_type || cw.classworkType || "").toUpperCase();
+        if (type === "READING") return false;
+
+        // Exclude completed classworks
+        const status = (cw.status || "").toLowerCase();
+        if (status === "completed") return false;
+
+        // Exclude classworks where all students have submitted already
+        const total = cw.totalStudents ?? cw.total_students ?? 0;
+        const submitted = cw.submittedCount ?? cw.submitted_count ?? 0;
+        if (total > 0 && submitted >= total) return false;
+
+        return true;
+      })
+      .map((cw) => ({
+        classworkId: cw.classwork_id ?? cw.id,
+        title: cw.title,
+        status: cw.status || "ongoing",
+        dueLabel: cw.dueLabel || cw.due_label || "",
+        submittedCount: cw.submittedCount ?? cw.submitted_count ?? 0,
+        totalStudents: cw.totalStudents ?? cw.total_students ?? 0,
+        classworkType: cw.classwork_type || cw.classworkType,
+      }));
+  })();
+
+  const [carouselIdx, setCarouselIdx] = useState(0);
+  const activeIdx = carouselItems.length > 0
+    ? Math.min(carouselIdx, carouselItems.length - 1)
+    : 0;
+  const currentCw = carouselItems.length > 0 ? carouselItems[activeIdx] : null;
+  const hasMultiple = carouselItems.length > 1;
+
+  const noClasswork = isTeacher ? !currentCw : !latestActivityTitle && !hasPending;
   const displayProgressLabel = progressLabel || (isTeacher ? "Classwork Completion" : "Completion");
 
   return (
     <Card
       variant={defaultCardVariant}
       className={cn(
-        "group relative flex w-full min-w-0 flex-1 flex-col justify-between shadow-none hover:-translate-y-1 cursor-pointer transition-all",
+        "group relative flex w-full min-w-0 flex-1 flex-col justify-between shadow-none hover:bg-retro hover:shadow-none hover:-translate-y-1 cursor-pointer transition-all",
         isTeacher ? "min-w-[240px] p-3" : "p-3.5",
         className
       )}
@@ -161,11 +210,7 @@ export function SubjectCard({
               <TooltipContent>{title}</TooltipContent>
             </Tooltip>
             <div className="flex items-center gap-1.5 shrink-0">
-              {isAdvisory && (
-                <Badge size="sm" variant="solid">
-                  Advisory
-                </Badge>
-              )}
+
               {gradeLevel && (
                 <Badge size="sm" variant="secondary" className="shrink-0">
                   {gradeLevel}
@@ -201,64 +246,40 @@ export function SubjectCard({
         {/* Inner Card */}
         <div className="flex flex-col w-full gap-1 mt-1">
           {isTeacher ? (
-            activeCw ? (
+            currentCw ? (
               <Card
                 className="bg-primary w-full shadow-none py-2 px-3 hover:opacity-95 transition-opacity"
                 onClick={(e) => {
                   if (onClassworkClick) {
                     e.stopPropagation();
-                    onClassworkClick();
+                    onClassworkClick(currentCw.classworkId);
                   }
                 }}
               >
                 <div className="flex flex-col w-full gap-2">
                   <div className="flex flex-row justify-between items-center gap-2">
                     <Tooltip>
-                      <TooltipTrigger render={<p className="text-md font-semibold truncate flex-1 min-w-0" tabIndex={0}>{activeCw.title}</p>} />
-                      <TooltipContent>{activeCw.title}</TooltipContent>
+                      <TooltipTrigger render={<p className="text-md font-semibold truncate flex-1 min-w-0" tabIndex={0}>{currentCw.title}</p>} />
+                      <TooltipContent>{currentCw.title}</TooltipContent>
                     </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger render={<span className="inline-flex"><Button
-                      variant="secondary"
-                      className="shadow-none p-1 shrink-0"
-                      size="sm"
-                      aria-label="View classwork"
-                      onClick={(e) => {
-                        if (onClassworkClick) {
-                          e.stopPropagation();
-                          onClassworkClick();
-                        }
-                      }}
-                    >
-                      <ArrowUpRight className="size-3" />
-                    </Button></span>} />
-                      <TooltipContent>View classwork</TooltipContent>
-                    </Tooltip>
+
                   </div>
                   <div className="flex flex-wrap gap-1.5 items-center">
-                    <Badge
-                      size="sm"
-                      variant={activeCw.status === "due_soon" ? "solid" : "outline"}
-                    >
-                      {activeCw.status === "past_due"
-                        ? "Closed"
-                        : activeCw.status === "due_soon"
-                          ? "Due Soon"
-                          : "Ongoing"}
-                    </Badge>
-                    {activeCw.dueLabel && activeCw.status !== "past_due" && (
+                    {currentCw.dueLabel && currentCw.status !== "past_due" && (
                       <Badge size="sm" variant="solid">
-                        {activeCw.dueLabel}
+                        {currentCw.dueLabel}
                       </Badge>
                     )}
-                    {activeCw.totalStudents > 0 && (
+                    {currentCw.totalStudents > 0 && (
                       <span className="text-[11px] font-medium text-black/70 ml-auto">
-                        {activeCw.submittedCount}/{activeCw.totalStudents} turned in
+                        {currentCw.submittedCount}/{currentCw.totalStudents} turned in
                       </span>
                     )}
                   </div>
                 </div>
+
               </Card>
+
             ) : (
               <Card className="bg-primary w-full shadow-none py-2 px-3">
                 <div className="flex flex-col w-full gap-2 items-center text-center justify-center">
@@ -284,7 +305,7 @@ export function SubjectCard({
               </div>
             </Card>
           ) : (
-            <Card className="bg-primary w-full shadow-none py-2 px-3 hover:-translate-y-0.5 hover:shadow-none transition-all">
+            <Card className="bg-primary w-full shadow-none py-2 px-3 hover:-translate-y-0.5 transition-all">
               <div className="flex flex-col w-full gap-1.5">
                 <div className="flex flex-row justify-between items-center">
                   <p className="text-sm font-semibold truncate">
@@ -309,6 +330,31 @@ export function SubjectCard({
             </Card>
           )}
         </div>
+        {hasMultiple && (
+          <div className="flex w-full items-start justify-start gap-0.5 shrink-0 -my-2 -mb-1">
+            {carouselItems.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                aria-label={`Go to classwork ${i + 1}`}
+                className="p-1 cursor-pointer focus:outline-none group"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCarouselIdx(i);
+                }}
+              >
+                <span
+                  className={cn(
+                    "block rounded-full transition-all duration-200",
+                    i === activeIdx
+                      ? "w-8 h-2 border bg-primary"
+                      : "w-3 h-2 bg-muted border hover:bg-accent hover:w-8 "
+                  )}
+                />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </Card>
   );

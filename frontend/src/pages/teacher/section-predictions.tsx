@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import PredictionFilters from "@/components/predictions/prediction-filters";
@@ -64,13 +64,53 @@ function LegacySectionPredictions() {
   const [selectedPrediction, setSelectedPrediction] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  // Auto-open via search params (e.g. from dashboard)
+  const [searchParams] = useSearchParams();
+  const queryPredictionId = searchParams.get("predictionId");
+  const queryStudentId = searchParams.get("studentId");
+  const queryStudentName = searchParams.get("studentName");
+
+  useEffect(() => {
+    if (!data?.items?.length) return;
+    if (queryPredictionId) {
+      const match = data.items.find((item) => String(item.prediction_id) === queryPredictionId);
+      if (match) {
+        setSelectedPrediction(match.prediction_id);
+        setSheetOpen(true);
+        return;
+      }
+    }
+    if (queryStudentId) {
+      const match = data.items.find((item) => String(item.student_id) === queryStudentId);
+      if (match) {
+        setSelectedPrediction(match.prediction_id);
+        setSheetOpen(true);
+        return;
+      }
+    }
+    if (queryStudentName) {
+      const match = data.items.find((item) =>
+        item.student_name.toLowerCase().includes(queryStudentName.toLowerCase())
+      );
+      if (match) {
+        setSelectedPrediction(match.prediction_id);
+        setSheetOpen(true);
+        return;
+      }
+    }
+    if (queryPredictionId || queryStudentId || queryStudentName) {
+      setSelectedPrediction(data.items[0].prediction_id);
+      setSheetOpen(true);
+    }
+  }, [data, queryPredictionId, queryStudentId, queryStudentName]);
+
   // Resolve numeric class ID from route param
   const resolvedClassId =
     classSlug && !isNaN(Number(classSlug))
       ? Number(classSlug)
       : filters?.classes.find(
-          (c) => c.section_name.toLowerCase() === decodeURIComponent(classSlug || "").toLowerCase()
-        )?.class_id;
+        (c) => c.section_name.toLowerCase() === decodeURIComponent(classSlug || "").toLowerCase()
+      )?.class_id;
 
   const sectionDisplayName =
     filters?.classes.find((c) => c.class_id === resolvedClassId)?.section_name ||
@@ -372,6 +412,44 @@ function TeacherCurrentTermSectionPredictions() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
   const candidateId = useTeacherCandidateShortcut(selected);
+
+  // Auto-open via search params (e.g. from dashboard)
+  const [searchParams] = useSearchParams();
+  const queryPredictionId = searchParams.get("predictionId");
+  const queryStudentId = searchParams.get("studentId");
+  const queryStudentName = searchParams.get("studentName");
+
+  useEffect(() => {
+    if (!rows.length) return;
+    if (queryPredictionId) {
+      const match = rows.find((r) => String(r.prediction_id) === queryPredictionId);
+      if (match) {
+        setSelected(match);
+        return;
+      }
+    }
+    if (queryStudentId) {
+      const match = rows.find((r) => String(r.student_id) === queryStudentId);
+      if (match) {
+        setSelected(match);
+        return;
+      }
+    }
+    if (queryStudentName) {
+      const normalizedQuery = queryStudentName.toLowerCase();
+      const match = rows.find((r) => {
+        const name = r.student_name?.toLowerCase();
+        return name ? (name.includes(normalizedQuery) || normalizedQuery.includes(name)) : false;
+      });
+      if (match) {
+        setSelected(match);
+        return;
+      }
+    }
+    if (queryPredictionId || queryStudentId || queryStudentName) {
+      setSelected(rows[0]);
+    }
+  }, [rows, queryPredictionId, queryStudentId, queryStudentName]);
 
   useEffect(() => {
     if (!selectedPeriodId || !resolvedClassId) {

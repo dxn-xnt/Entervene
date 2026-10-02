@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
@@ -11,39 +10,10 @@ type ClassworkListItemProps = {
   onOpen: (item: TeacherClasswork) => void;
 };
 
-function displayType(value: string) {
-  return value.charAt(0) + value.slice(1).toLowerCase();
-}
-
 export default function ClassworkListItem({
   item,
   onOpen,
 }: ClassworkListItemProps) {
-  const sections = useMemo(() => {
-    const names = Array.from(
-      new Set(
-        (item.assignments ?? [])
-          .map((assignment) => assignment.title?.trim())
-          .filter((title): title is string => Boolean(title)),
-      ),
-    );
-    if (names.length <= 2) return names.join(", ");
-    return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
-  }, [item.assignments]);
-
-  const dueLabel = useMemo(() => {
-    const dueDates = Array.from(
-      new Set(
-        (item.assignments ?? [])
-          .map((assignment) => assignment.due_date)
-          .filter((date): date is string => Boolean(date)),
-      ),
-    );
-    if (!dueDates.length) return null;
-    if (dueDates.length === 1) return `Due ${formatDate(dueDates[0])}`;
-    return `${dueDates.length} section due dates`;
-  }, [item.assignments]);
-
   const openItem = () => onOpen(item);
 
   return (

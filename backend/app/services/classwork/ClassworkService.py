@@ -1221,6 +1221,7 @@ def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None =
         progress_pct = round((total_submitted / total_expected) * 100) if total_expected > 0 else 0
 
         active_cw_info = None
+        active_cw_list = []
         if c_assignments:
             def sort_key(item):
                 a, _ = item
@@ -1233,42 +1234,53 @@ def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None =
                 return (1, 0, -a.classwork_assignment_id)
 
             sorted_assignments = sorted(c_assignments, key=sort_key)
-            featured_assignment, featured_cw = sorted_assignments[0]
 
-            due_label = "No due date"
-            cw_status = "ongoing"
-            if featured_assignment.due_date:
-                due = featured_assignment.due_date if featured_assignment.due_date.tzinfo else featured_assignment.due_date.replace(tzinfo=timezone.utc)
-                if due < now:
-                    cw_status = "past_due"
-                    due_label = f"Closed ({due.strftime('%b %d')})"
-                else:
-                    delta = due - now
-                    if delta.days == 0:
-                        cw_status = "due_soon"
-                        due_label = "Due today"
-                    elif delta.days == 1:
-                        cw_status = "due_soon"
-                        due_label = "Due tomorrow"
-                    elif delta.days <= 7:
-                        cw_status = "ongoing"
-                        due_label = f"Due in {delta.days} days"
+            for assignment_item, cw_item in sorted_assignments:
+                # Exclude reading classworks
+                if cw_item.classwork_type and cw_item.classwork_type.upper() == "READING":
+                    continue
+
+                sub_count = submission_counts.get(assignment_item.classwork_assignment_id, 0)
+                # Exclude if all students have submitted already
+                if total_students > 0 and sub_count >= total_students:
+                    continue
+
+                due_label = "No due date"
+                cw_status = "ongoing"
+                if assignment_item.due_date:
+                    due = assignment_item.due_date if assignment_item.due_date.tzinfo else assignment_item.due_date.replace(tzinfo=timezone.utc)
+                    if due < now:
+                        cw_status = "past_due"
+                        due_label = f"Closed ({due.strftime('%b %d')})"
                     else:
-                        cw_status = "ongoing"
-                        due_label = f"Due {due.strftime('%b %d')}"
+                        delta = due - now
+                        if delta.days == 0:
+                            cw_status = "due_soon"
+                            due_label = "Due today"
+                        elif delta.days == 1:
+                            cw_status = "due_soon"
+                            due_label = "Due tomorrow"
+                        elif delta.days <= 7:
+                            cw_status = "ongoing"
+                            due_label = f"Due in {delta.days} days"
+                        else:
+                            cw_status = "ongoing"
+                            due_label = f"Due {due.strftime('%b %d')}"
 
-            active_cw_info = {
-                "classwork_id": featured_cw.classwork_id,
-                "classwork_assignment_id": featured_assignment.classwork_assignment_id,
-                "title": featured_cw.title,
-                "classwork_type": featured_cw.classwork_type,
-                "classwork_category": featured_cw.classwork_category,
-                "due_date": featured_assignment.due_date.isoformat() if featured_assignment.due_date else None,
-                "submitted_count": submission_counts.get(featured_assignment.classwork_assignment_id, 0),
-                "total_students": total_students,
-                "status": cw_status,
-                "due_label": due_label,
-            }
+                active_cw_list.append({
+                    "classwork_id": cw_item.classwork_id,
+                    "classwork_assignment_id": assignment_item.classwork_assignment_id,
+                    "title": cw_item.title,
+                    "classwork_type": cw_item.classwork_type,
+                    "classwork_category": cw_item.classwork_category,
+                    "due_date": assignment_item.due_date.isoformat() if assignment_item.due_date else None,
+                    "submitted_count": sub_count,
+                    "total_students": total_students,
+                    "status": cw_status,
+                    "due_label": due_label,
+                })
+
+            active_cw_info = active_cw_list[0] if active_cw_list else None
 
         results.append({
             "subject_load_id": subject_load.subject_load_id,
@@ -1283,6 +1295,7 @@ def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None =
             "total_classworks": total_cw,
             "progress": progress_pct,
             "active_classwork": active_cw_info,
+            "active_classworks": active_cw_list,
         })
 
     return results

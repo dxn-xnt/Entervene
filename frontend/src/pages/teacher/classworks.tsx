@@ -529,7 +529,6 @@ export default function Classworks() {
                     ))}
                   </div>
 
-
                   <div className="flex ">
                     <SegmentedControl
                       size="sm"

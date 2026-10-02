@@ -46,10 +46,10 @@ import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 
 import CompetencyModal from "./subject-details/competency-modal";
 import CreateLessonModal from "@/pages/teacher/create-lesson";
-import ClassworkCard from "../classworks/classwork-card";
-import ClassworkView from "../classwork-view";
-import CreateClassworkModal from "../forms/create-classwork";
-import CreateClassworkQuizModal from "../forms/create-classwork-quiz";
+import ClassworkCard from "./classworks/classwork-card";
+import ClassworkView from "./classwork-view";
+import CreateClassworkModal from "./forms/create-classwork";
+import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
 import { isQuizType } from "@/lib/classwork-utils";
 import type {
   ClassworkKind,
@@ -368,11 +368,11 @@ export default function TeacherClassDetail() {
                       <div className="min-w-0 flex-1">
                         <Tooltip>
                           <TooltipTrigger render={<Card.Title
-                          className="mb-0 truncate text-2xl font-extrabold sm:text-3xl"
-                          tabIndex={0}
-                        >
-                          {currentSubject?.subject_name || detail.section_name}
-                        </Card.Title>} />
+                            className="mb-0 truncate text-2xl font-extrabold sm:text-3xl"
+                            tabIndex={0}
+                          >
+                            {currentSubject?.subject_name || detail.section_name}
+                          </Card.Title>} />
                           <TooltipContent>{currentSubject?.subject_name || detail.section_name}</TooltipContent>
                         </Tooltip>
                       </div>
@@ -386,20 +386,20 @@ export default function TeacherClassDetail() {
                         </Badge>
                         <Tooltip>
                           <TooltipTrigger render={<span className="inline-flex"><Button
-                          variant="secondary"
-                          className="shadow-none w-7 p-1"
-                          size="sm"
-                          aria-label={`View ${currentSubject?.subject_name || detail.section_name}`}
-                          onClick={() => {
-                            if (currentSubject) {
-                              navigate(
-                                `/teacher/classes/${detail.class_id}/subjects/${currentSubject.subject_id}`,
-                              );
-                            }
-                          }}
-                        >
-                          <ArrowUpRight className="size-4" />
-                        </Button></span>} />
+                            variant="secondary"
+                            className="shadow-none w-7 p-1"
+                            size="sm"
+                            aria-label={`View ${currentSubject?.subject_name || detail.section_name}`}
+                            onClick={() => {
+                              if (currentSubject) {
+                                navigate(
+                                  `/teacher/classes/${detail.class_id}/subjects/${currentSubject.subject_id}`,
+                                );
+                              }
+                            }}
+                          >
+                            <ArrowUpRight className="size-4" />
+                          </Button></span>} />
                           <TooltipContent>View subject</TooltipContent>
                         </Tooltip>
                       </div>
@@ -1469,195 +1469,195 @@ function OverviewTab({
             </Dialog.Header>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
-            {detailLoadingId ? (
-              <div className="p-8 text-center text-sm font-semibold text-gray-600">
-                Loading classwork details...
-              </div>
-            ) : detailError ? (
-              <div className="m-5 border-2 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700 font-medium">
-                {detailError}
-              </div>
-            ) : selectedClasswork ? (
-              <div className="flex flex-col gap-5 p-5">
-                <div className="space-y-4">
-                  <Card className="block border-2 border-black">
-                    <Card.Content className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          variant="secondary"
-                          className="bg-[#7ABA78] text-xs font-bold border border-black text-black"
-                        >
-                          {selectedClasswork.classwork_type || "Classwork"}
-                        </Badge>
-                        {selectedClasswork.classwork_category && (
+              {detailLoadingId ? (
+                <div className="p-8 text-center text-sm font-semibold text-gray-600">
+                  Loading classwork details...
+                </div>
+              ) : detailError ? (
+                <div className="m-5 border-2 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700 font-medium">
+                  {detailError}
+                </div>
+              ) : selectedClasswork ? (
+                <div className="flex flex-col gap-5 p-5">
+                  <div className="space-y-4">
+                    <Card className="block border-2 border-black">
+                      <Card.Content className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant="secondary"
+                            className="bg-[#7ABA78] text-xs font-bold border border-black text-black"
+                          >
+                            {selectedClasswork.classwork_type || "Classwork"}
+                          </Badge>
+                          {selectedClasswork.classwork_category && (
+                            <Badge
+                              variant="solid"
+                              className="text-xs font-bold border border-black bg-[#F6E9B2] text-black"
+                            >
+                              {selectedClasswork.classwork_category.replace(
+                                /_/g,
+                                " ",
+                              )}
+                            </Badge>
+                          )}
                           <Badge
                             variant="solid"
-                            className="text-xs font-bold border border-black bg-[#F6E9B2] text-black"
+                            className="text-xs font-bold border border-black bg-white text-black"
                           >
-                            {selectedClasswork.classwork_category.replace(
-                              /_/g,
-                              " ",
-                            )}
+                            {selectedClasswork.is_published
+                              ? "Published"
+                              : "Draft"}
                           </Badge>
-                        )}
-                        <Badge
-                          variant="solid"
-                          className="text-xs font-bold border border-black bg-white text-black"
-                        >
-                          {selectedClasswork.is_published
-                            ? "Published"
-                            : "Draft"}
-                        </Badge>
-                        {selectedClasswork.is_locked && (
-                          <Badge className="rounded border border-red-600 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
-                            Locked
-                          </Badge>
-                        )}
-                      </div>
-
-                      <Card.Title className="text-2xl font-bold">
-                        {selectedClasswork.title}
-                      </Card.Title>
-                      <div className="grid gap-3 text-sm sm:grid-cols-3">
-                        <div className="border-2 border-black bg-gray-50 p-3 rounded">
-                          <p className="font-semibold text-gray-600 text-xs">
-                            Due date
-                          </p>
-                          <p className="font-bold text-sm">
-                            {selectedClasswork.due_date
-                              ? new Date(
-                                selectedClasswork.due_date,
-                              ).toLocaleString()
-                              : "No due date"}
-                          </p>
-                        </div>
-                        <div className="border-2 border-black bg-gray-50 p-3 rounded">
-                          <p className="font-semibold text-gray-600 text-xs">
-                            Points
-                          </p>
-                          <p className="font-bold text-sm">
-                            {selectedClasswork.total_points ?? "Not set"}
-                          </p>
-                        </div>
-                        <div className="border-2 border-black bg-gray-50 p-3 rounded">
-                          <p className="font-semibold text-gray-600 text-xs">
-                            Section
-                          </p>
-                          <p className="font-bold text-sm truncate">
-                            {selectedClasswork.section_name ||
-                              detail.section_name ||
-                              "Class"}
-                          </p>
-                        </div>
-                      </div>
-                    </Card.Content>
-                  </Card>
-
-                  {(selectedClasswork.description ||
-                    selectedClasswork.instructions) && (
-                      <Card className="block border-2 border-black">
-                        <Card.Content className="space-y-3">
-                          {selectedClasswork.description && (
-                            <div>
-                              <Card.Title className="mb-1 font-bold text-sm">
-                                Description
-                              </Card.Title>
-                              <p className="text-sm text-gray-800">
-                                {selectedClasswork.description}
-                              </p>
-                            </div>
+                          {selectedClasswork.is_locked && (
+                            <Badge className="rounded border border-red-600 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                              Locked
+                            </Badge>
                           )}
-                          {selectedClasswork.instructions && (
-                            <div>
-                              <Card.Title className="mb-1 font-bold text-sm">
-                                Instructions
-                              </Card.Title>
-                              <p className="whitespace-pre-wrap text-sm text-gray-800 bg-gray-50 p-3 border border-gray-200 rounded">
-                                {selectedClasswork.instructions}
-                              </p>
-                            </div>
-                          )}
-                        </Card.Content>
-                      </Card>
-                    )}
+                        </div>
 
-                  {/* Reference Materials / Attachments */}
-                  <Card className="block border-2 border-black">
-                    <Card.Content className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <Paperclip size={18} />
-                        <Card.Title className="mb-0 text-base font-bold">
-                          Reference Files
+                        <Card.Title className="text-2xl font-bold">
+                          {selectedClasswork.title}
                         </Card.Title>
-                        <Badge
-                          variant="outline"
-                          size="sm"
-                          className="border border-black font-bold"
-                        >
-                          {selectedClasswork.attachments?.length || 0}
-                        </Badge>
-                      </div>
-                      {selectedClasswork.attachments &&
-                        selectedClasswork.attachments.length > 0 ? (
-                        <div className="space-y-2">
-                          {selectedClasswork.attachments.map((file) => (
-                            <div
-                              key={file.classwork_attachment_id}
-                              className="flex items-center justify-between border-2 border-black p-3 bg-gray-50 rounded"
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <FileText size={16} className="shrink-0" />
-                                <span className="text-sm font-semibold truncate">
-                                  {file.file_name}
-                                </span>
-                              </div>
-                              <a
-                                href={`${API_URL}/api/v1/classworks/attachments/${file.classwork_attachment_id}/download`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-xs font-bold text-blue-700 underline shrink-0 hover:text-blue-900"
-                              >
-                                Download
-                              </a>
-                            </div>
-                          ))}
+                        <div className="grid gap-3 text-sm sm:grid-cols-3">
+                          <div className="border-2 border-black bg-gray-50 p-3 rounded">
+                            <p className="font-semibold text-gray-600 text-xs">
+                              Due date
+                            </p>
+                            <p className="font-bold text-sm">
+                              {selectedClasswork.due_date
+                                ? new Date(
+                                  selectedClasswork.due_date,
+                                ).toLocaleString()
+                                : "No due date"}
+                            </p>
+                          </div>
+                          <div className="border-2 border-black bg-gray-50 p-3 rounded">
+                            <p className="font-semibold text-gray-600 text-xs">
+                              Points
+                            </p>
+                            <p className="font-bold text-sm">
+                              {selectedClasswork.total_points ?? "Not set"}
+                            </p>
+                          </div>
+                          <div className="border-2 border-black bg-gray-50 p-3 rounded">
+                            <p className="font-semibold text-gray-600 text-xs">
+                              Section
+                            </p>
+                            <p className="font-bold text-sm truncate">
+                              {selectedClasswork.section_name ||
+                                detail.section_name ||
+                                "Class"}
+                            </p>
+                          </div>
                         </div>
-                      ) : (
-                        <p className="text-xs font-semibold text-gray-500">
-                          No reference files attached to this classwork.
-                        </p>
-                      )}
-                    </Card.Content>
-                  </Card>
-                </div>
+                      </Card.Content>
+                    </Card>
 
-                <div className="space-y-4">
-                  <Card className="block border-2 border-black bg-primary">
-                    <Card.Content className="space-y-3">
-                      <Card.Title className="text-lg font-bold">
-                        Submissions & Grading
-                      </Card.Title>
-                      <p className="text-xs text-gray-800 leading-relaxed">
-                        To view student submissions, grade written works, or review quiz results, click the button below.
-                      </p>
-                      <Button
-                        type="button"
-                        variant="default"
-                        size="sm"
-                        onClick={() =>
-                          navigate(
-                            `/teacher/classworks/${selectedClasswork.classwork_id}`,
-                          )
-                        }
-                        className="w-full border-2 border-black bg-black text-white font-bold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-800"
-                      >
-                        Open Submissions Workspace
-                      </Button>
-                    </Card.Content>
-                  </Card>
+                    {(selectedClasswork.description ||
+                      selectedClasswork.instructions) && (
+                        <Card className="block border-2 border-black">
+                          <Card.Content className="space-y-3">
+                            {selectedClasswork.description && (
+                              <div>
+                                <Card.Title className="mb-1 font-bold text-sm">
+                                  Description
+                                </Card.Title>
+                                <p className="text-sm text-gray-800">
+                                  {selectedClasswork.description}
+                                </p>
+                              </div>
+                            )}
+                            {selectedClasswork.instructions && (
+                              <div>
+                                <Card.Title className="mb-1 font-bold text-sm">
+                                  Instructions
+                                </Card.Title>
+                                <p className="whitespace-pre-wrap text-sm text-gray-800 bg-gray-50 p-3 border border-gray-200 rounded">
+                                  {selectedClasswork.instructions}
+                                </p>
+                              </div>
+                            )}
+                          </Card.Content>
+                        </Card>
+                      )}
+
+                    {/* Reference Materials / Attachments */}
+                    <Card className="block border-2 border-black">
+                      <Card.Content className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Paperclip size={18} />
+                          <Card.Title className="mb-0 text-base font-bold">
+                            Reference Files
+                          </Card.Title>
+                          <Badge
+                            variant="outline"
+                            size="sm"
+                            className="border border-black font-bold"
+                          >
+                            {selectedClasswork.attachments?.length || 0}
+                          </Badge>
+                        </div>
+                        {selectedClasswork.attachments &&
+                          selectedClasswork.attachments.length > 0 ? (
+                          <div className="space-y-2">
+                            {selectedClasswork.attachments.map((file) => (
+                              <div
+                                key={file.classwork_attachment_id}
+                                className="flex items-center justify-between border-2 border-black p-3 bg-gray-50 rounded"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <FileText size={16} className="shrink-0" />
+                                  <span className="text-sm font-semibold truncate">
+                                    {file.file_name}
+                                  </span>
+                                </div>
+                                <a
+                                  href={`${API_URL}/api/v1/classworks/attachments/${file.classwork_attachment_id}/download`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-xs font-bold text-blue-700 underline shrink-0 hover:text-blue-900"
+                                >
+                                  Download
+                                </a>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs font-semibold text-gray-500">
+                            No reference files attached to this classwork.
+                          </p>
+                        )}
+                      </Card.Content>
+                    </Card>
+                  </div>
+
+                  <div className="space-y-4">
+                    <Card className="block border-2 border-black bg-primary">
+                      <Card.Content className="space-y-3">
+                        <Card.Title className="text-lg font-bold">
+                          Submissions & Grading
+                        </Card.Title>
+                        <p className="text-xs text-gray-800 leading-relaxed">
+                          To view student submissions, grade written works, or review quiz results, click the button below.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          onClick={() =>
+                            navigate(
+                              `/teacher/classworks/${selectedClasswork.classwork_id}`,
+                            )
+                          }
+                          className="w-full border-2 border-black bg-black text-white font-bold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-800"
+                        >
+                          Open Submissions Workspace
+                        </Button>
+                      </Card.Content>
+                    </Card>
+                  </div>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
             </div>
             <Dialog.Footer className="mt-0">
               <Button
@@ -2502,13 +2502,13 @@ function ClassworkTab({
                   </Text>
                   <Tooltip>
                     <TooltipTrigger render={<button
-                    type="button"
-                    onClick={closeCreateWizard}
-                    className={dialogHeaderCloseButtonClassName}
-                    aria-label="Close modal"
-                  >
-                    <X className="size-4" />
-                  </button>} />
+                      type="button"
+                      onClick={closeCreateWizard}
+                      className={dialogHeaderCloseButtonClassName}
+                      aria-label="Close modal"
+                    >
+                      <X className="size-4" />
+                    </button>} />
                     <TooltipContent>Close modal</TooltipContent>
                   </Tooltip>
                 </div>

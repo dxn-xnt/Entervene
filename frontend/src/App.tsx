@@ -38,10 +38,9 @@ const TeacherDashboard = lazy(() => import("./pages/teacher/dashboard"));
 const TeacherProfile = lazy(() => import("./pages/teacher/profile-view"));
 // import TeacherClasses from "./pages/teacher/Classworks";
 const ClassesPage = lazy(() => import("./pages/teacher/classes"));
-const TeacherClassDetail = lazy(() => import("./pages/teacher/classes-view/class-view"));
-const SubjectDetails = lazy(() => import("./pages/teacher/classes-view/subject-details"));
-const AdvisoryClassDetail = lazy(() => import("./pages/teacher/classes-view/advisory-class-view"));
-const ClassSections = lazy(() => import("./pages/teacher/classes-view/class-section"));
+const TeacherClassDetail = lazy(() => import("./pages/teacher/class-view"));
+const SubjectDetails = lazy(() => import("./pages/teacher/subject-details"));
+const AdvisoryClassDetail = lazy(() => import("./pages/teacher/advisory-class-view"));
 const TeacherClassworks = lazy(() => import("./pages/teacher/classworks"));
 // import TeacherLessons from "./pages/teacher/lessons";
 const TeacherInterventions = lazy(() => import("./pages/teacher/interventions"));
@@ -123,7 +122,7 @@ const App = () => {
                 <Route element={<ProtectedRoute allowedRoles={["teacher"]} />}>
                   <Route path={routes.teacher.dashboard} element={<TeacherDashboard />} />
                   <Route path={routes.teacher.classes} element={<ClassesPage />} />
-                  <Route path={routes.teacher.classSections} element={<ClassSections />} />
+                  <Route path={routes.teacher.classSections} element={<Navigate to={routes.teacher.classes} replace />} />
                   <Route path={routes.teacher.classDetail} element={<TeacherClassDetail />} />
                   <Route path={routes.teacher.advisoryClassDetail} element={<AdvisoryClassDetail />} />
                   <Route path={routes.teacher.subjectDetail} element={<SubjectDetails />} />
