@@ -43,8 +43,6 @@ import {
   XCircle,
   Loader2,
   RefreshCw,
-  LayoutGrid,
-  List,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingPanel } from "@/components/loading-panel";

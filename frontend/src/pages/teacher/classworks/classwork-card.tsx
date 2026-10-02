@@ -12,27 +12,11 @@ type ClassworkCardProps = {
   onOpen: (item: TeacherClasswork) => void;
 };
 
-function displayType(value: string) {
-  return value.charAt(0) + value.slice(1).toLowerCase();
-}
-
 export default function ClassworkCard({
   item,
   tracking,
   onOpen,
 }: ClassworkCardProps) {
-  const sections = useMemo(() => {
-    const names = Array.from(
-      new Set(
-        (item.assignments ?? [])
-          .map((assignment) => assignment.title?.trim())
-          .filter((title): title is string => Boolean(title)),
-      ),
-    );
-    if (names.length <= 2) return names.join(", ");
-    return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
-  }, [item.assignments]);
-
   const dueLabel = useMemo(() => {
     const dueDates = Array.from(
       new Set(

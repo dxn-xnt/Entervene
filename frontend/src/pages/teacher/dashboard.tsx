@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Calendar, AlertCircle, FileText } from "lucide-react";
+import { Calendar, AlertCircle } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
@@ -345,40 +345,36 @@ export default function Dashboard() {
     };
   }, [selectedPeriodId, selectedFilterKey]);
 
-  // Derived 12 Stat Cards (Retaining original stat cards and adding new ones)
+  // Derived 8 Stat Cards
   const statCards = useMemo<OverviewCardData[]>(() => {
-    if (data?.cards && data.cards.length > 0) {
-      return data.cards;
-    }
     if (!data) return defaultTeacherCards;
 
+    const allowedTitles = new Set(defaultTeacherCards.map((c) => c.title));
+
+    if (data.cards && data.cards.length > 0) {
+      const filtered = data.cards.filter((c) => allowedTitles.has(c.title));
+      if (filtered.length > 0) return filtered;
+    }
+
     return [
-      // Row 1 (Original retained)
       {
         title: "Active Classes",
-        count: String(data.kpis.active_classes || 3),
-        stat: `${data.kpis.active_classes || 3} sections`,
+        count: String(data.kpis?.active_classes || 3),
+        stat: `${data.kpis?.active_classes || 3} sections`,
         statDescription: `in ${data.term_info?.period_name || "Term 1"}`,
       },
       {
-        title: "Enrolled Students",
-        count: String(data.kpis.enrolled_students || 36),
-        stat: `${data.kpis.enrolled_students || 36} learners`,
-        statDescription: "total across sections",
-      },
-      {
         title: "Overall Completion",
-        count: `${Math.round(data.kpis.overall_completion_rate || 87)}%`,
+        count: `${Math.round(data.kpis?.overall_completion_rate || 87)}%`,
         stat: "31 of 36 submitted",
         statDescription: "across all published work",
       },
       {
         title: "Ungraded Queue",
-        count: String(data.kpis.ungraded_count || 14),
-        stat: `${data.kpis.ungraded_count || 14} submissions`,
+        count: String(data.kpis?.ungraded_count || 14),
+        stat: `${data.kpis?.ungraded_count || 14} submissions`,
         statDescription: "pending teacher grading",
       },
-      // Row 2 (New cards)
       {
         title: "Class Average",
         count: "82%",
@@ -400,22 +396,10 @@ export default function Dashboard() {
         trend: "down",
       },
       {
-        title: "Grading Turnaround",
-        count: "1.8 days",
-        statDescription: "Median wait from submission to score",
-      },
-      // Row 3 (New cards)
-      {
         title: "Attendance Today",
         count: "33 / 36",
         stat: "2 late · 1 absent",
         statDescription: "logged for this morning",
-      },
-      {
-        title: "Feedback Coverage",
-        count: "71%",
-        stat: "25 of 35 graded",
-        statDescription: "have written comments",
       },
       {
         title: "Term Progress",
@@ -423,12 +407,6 @@ export default function Dashboard() {
         stat: "of 10",
         statDescription: "1 published classwork planned this week",
         progressValue: 60,
-      },
-      {
-        title: "Published Work",
-        count: "12",
-        stat: "9 classworks · 3 quizzes",
-        statDescription: "this term, 2 still in draft",
       },
     ];
   }, [data]);
@@ -1118,7 +1096,7 @@ export default function Dashboard() {
                 <div className="flex min-w-0 flex-col gap-3.5 lg:col-span-3 xl:col-span-3">
                   <div className="grid grid-cols-1 gap-3.5">
                     {isLoading && !data
-                      ? Array.from({ length: 12 }).map((_, i) => (
+                      ? Array.from({ length: defaultTeacherCards.length }).map((_, i) => (
                         <Card key={i} className="@container/card animate-pulse">
                           <Card.Header>
                             <Card.Description className="h-4 w-24 bg-muted text-transparent">
