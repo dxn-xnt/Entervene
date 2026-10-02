@@ -688,23 +688,25 @@ export default function ClassworkView({
                 </Card.Content>
               </Card>
 
-              <div className="flex flex-col gap-8 pt-1">
+              <div className="flex flex-col gap-4 pt-1">
                 <Card className="w-full p-0 border-0 shadow-none px-2">
                   <Card.Content>
-                    <Card.Title className="mb-3 text-lg">
+                    <Card.Title className="mb-1 text-lg">
                       Instructions
                     </Card.Title>
-                    <p className="text-sm px-2">
-                      {selected.instructions ||
-                        selected.description ||
-                        "No instructions provided."}
-                    </p>
+                    <Card className=" shadow-none w-full p-2">
+                      <p className="text-sm px-2">
+                        {selected.instructions ||
+                          selected.description ||
+                          "No instructions provided."}
+                      </p>
+                    </Card>
                   </Card.Content>
                 </Card>
 
                 <Card className="w-full p-0 border-0 shadow-none px-2">
                   <Card.Content className="space-y-3">
-                    <Card.Title className="mb-0 text-lg mb-3">
+                    <Card.Title className="mb-1 text-lg">
                       Attached Files
                     </Card.Title>
 
