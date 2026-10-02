@@ -75,7 +75,6 @@ export function SubjectCard({
   yearLabel,
   isCurrentPeriod,
   gradeLevel,
-  isAdvisory,
   pendingCount,
   completionRate = 0,
   progressLabel,
@@ -133,17 +132,6 @@ export function SubjectCard({
   const hasPending = (pendingCount ?? 0) > 0;
   const isTeacher = variant === "teacher";
   const defaultCardVariant = cardVariant || (isTeacher ? "retro" : "squares");
-
-  // Normalized active classwork for teacher/student
-  const activeCw = activeClasswork
-    ? {
-      title: activeClasswork.title,
-      status: activeClasswork.status || "ongoing",
-      dueLabel: activeClasswork.dueLabel || activeClasswork.due_label || "",
-      submittedCount: activeClasswork.submittedCount ?? activeClasswork.submitted_count ?? 0,
-      totalStudents: activeClasswork.totalStudents ?? activeClasswork.total_students ?? 0,
-    }
-    : null;
 
   // Build carousel items from activeClassworks (array) or fall back to single activeClasswork,
   // excluding reading classworks, completed classworks, and classworks where all students have submitted
@@ -233,7 +221,7 @@ export function SubjectCard({
 
         {/* Progress Bar */}
         <div className="flex flex-col w-full gap-1">
-          <div className="flex justify-between items-center text-xs">
+          <div className="flex justify-between items-center text-sm">
             <span className="font-normal text-muted-foreground">{displayProgressLabel}</span>
             <span className="font-bold">{completionRate}%</span>
           </div>

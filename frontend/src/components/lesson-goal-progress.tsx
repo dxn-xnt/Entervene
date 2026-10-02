@@ -3,6 +3,14 @@ import { ClipboardList, BookOpen, FileText, GraduationCap, Pencil, Sparkles } fr
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import type { StudentLesson as Lesson } from "@/types/student-subject";
 import type { LessonGoalItemResponse } from "@/lib/api";
 
@@ -172,42 +180,40 @@ export function LessonGoalProgress({
   return (
     <div className={className}>
       <div className="flex items-center justify-between mb-1.5">
-        <h3 className="text-xl font-bold">{title}</h3>
-        {isTeacher && onSetGoal && (
-          <button
-            type="button"
-            onClick={onSetGoal}
-            className="flex items-center gap-1 text-xs font-bold text-black hover:underline cursor-pointer"
-          >
-            <Pencil className="size-3.5" />
-            Edit
-          </button>
-        )}
+        <h3 className="text-xl sm:text-2xl font-bold">{title}</h3>
       </div>
 
       <Card className="block w-full min-w-0">
         {/* State 1: Curated Mode is empty */}
         {isCuratedEmpty ? (
-          <Card.Content className="flex flex-col items-center justify-center p-6 text-center">
-            <Sparkles className="size-8 text-gray-400 mb-2" />
-            <p className="text-sm font-bold text-gray-800">
-              {isTeacher ? "No goals set for this term" : "No lesson goals set yet"}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1 mb-4 max-w-xs">
-              {isTeacher
-                ? "Curate the specific lessons and exams you want highlighted for your students this term."
-                : "Your teacher has not highlighted any goals for this term yet."}
-            </p>
+          <Empty className="border-0 bg-transparent p-6 shadow-none">
+            <EmptyHeader>
+              <EmptyMedia>
+                <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
+                  <Sparkles className="size-5 text-black" />
+                </div>
+              </EmptyMedia>
+              <EmptyTitle>
+                {isTeacher ? "No goals set for this term" : "No lesson goals set yet"}
+              </EmptyTitle>
+              <EmptyDescription>
+                {isTeacher
+                  ? "Curate specific lessons and exams to be highlighted for this week."
+                  : "Your teacher has not highlighted any lesson goal yet."}
+              </EmptyDescription>
+            </EmptyHeader>
             {isTeacher && onSetGoal && (
-              <Button
-                size="sm"
-                onClick={onSetGoal}
-                className="border-black bg-primary font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-primary-hover"
-              >
-                <Pencil className="mr-1.5 size-3.5" /> Set Lesson Goal
-              </Button>
+              <EmptyContent className="mt-4">
+                <Button
+                  size="sm"
+                  onClick={onSetGoal}
+                  className="border-black bg-primary"
+                >
+                  <Pencil className="mr-1.5 size-3.5" /> Set Lesson Goal
+                </Button>
+              </EmptyContent>
             )}
-          </Card.Content>
+          </Empty>
         ) : hasCuratedMode && goalItems && goalItems.length > 0 ? (
           /* State 2: Curated Mode with Teacher-Selected Items */
           <Card.Content className="p-4 flex flex-col gap-3">
@@ -254,11 +260,10 @@ export function LessonGoalProgress({
                   >
                     <div
                       onClick={() => onClassworkClick && onClassworkClick(cw.classwork_id, cw.classwork_assignment_id)}
-                      className={`flex items-center justify-between gap-2 w-full border-2 px-3 py-2 transition-all ${
-                        isExam
-                          ? "bg-purple-50/70 border-purple-900 hover:bg-purple-100"
-                          : "bg-white border-black hover:bg-accent"
-                      } ${onClassworkClick ? "cursor-pointer" : ""}`}
+                      className={`flex items-center justify-between gap-2 w-full border-2 px-3 py-2 transition-all ${isExam
+                        ? "bg-purple-50/70 border-purple-900 hover:bg-purple-100"
+                        : "bg-white border-black hover:bg-accent"
+                        } ${onClassworkClick ? "cursor-pointer" : ""}`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <ClassworkIcon type={cw.classwork_type} isExam={isExam} />

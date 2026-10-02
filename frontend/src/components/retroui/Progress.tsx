@@ -9,12 +9,13 @@ interface ProgressProps
   extends React.ComponentPropsWithoutRef<typeof ProgressPrimitive.Root> {
   variant?: "default" | "circular";
   strokeWidth?: number;
+  indicatorClassName?: string;
 }
 
 const Progress = React.forwardRef<
   React.ElementRef<typeof ProgressPrimitive.Root>,
   ProgressProps
->(({ className, value = 0, variant = "default", strokeWidth = 12, ...props }, ref) => {
+>(({ className, indicatorClassName, value = 0, variant = "default", strokeWidth = 12, ...props }, ref) => {
   if (variant === "circular") {
     const safeValue = Math.min(100, Math.max(0, value || 0));
     const radius = 35;
@@ -127,7 +128,10 @@ const Progress = React.forwardRef<
       {...props}
     >
       <ProgressPrimitive.Indicator
-        className="h-full w-full flex-1 bg-primary transition-all border-r-2 border-border"
+        className={cn(
+          "h-full w-full flex-1 bg-primary transition-all border-r-2 border-border",
+          indicatorClassName,
+        )}
         style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
       />
     </ProgressPrimitive.Root>

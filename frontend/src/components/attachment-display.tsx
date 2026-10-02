@@ -290,7 +290,7 @@ export default function AttachmentDisplay({
             {previewError}
           </div>
         )}
-        <div className="grid gap-2">
+        <div className="grid gap-2 min-w-0 w-full">
           {attachments.map((attachment, idx) => {
             const documentKind = getDocumentKind(attachment.file_name);
             const isPdfFile = documentKind === "pdf";
@@ -300,16 +300,16 @@ export default function AttachmentDisplay({
             return (
               <Card
                 key={idx}
-                className="flex min-w-0 flex-col shadow-none transition-colors hover:bg-accent sm:flex-row sm:items-center sm:justify-between"
+                className="flex w-full min-w-0 flex-row gap-2 p-3 shadow-none transition-colors hover:bg-retro overflow-hidden"
               >
-                <div className="flex min-w-0 flex-1 items-center gap-3">
+                <div className="flex w-full min-w-0 items-center gap-3">
                   {isPdfFile ? (
                     <FileText
                       className="flex-shrink-0"
                       size={24}
                     />
                   ) : (
-                    <File className="text-blue-500 flex-shrink-0" size={20} />
+                    <File className="text-blue-500 flex-shrink-0" size={24} />
                   )}
                   <div className="flex-1 min-w-0">
                     <p
@@ -324,13 +324,13 @@ export default function AttachmentDisplay({
                   </div>
                 </div>
 
-                <div className="flex shrink-0 flex-wrap gap-2 sm:ml-2 sm:justify-end">
+                <div className="flex shrink-0 flex-wrap gap-2 sm:ml-2 sm:justify-end items-center">
                   {(documentKind || isImageFile) && url && (
                     <Button
                       asChild
                       variant="outline"
                       size="sm"
-                      className={`shadow-none ${imageLoadingName === attachment.file_name ? "pointer-events-none opacity-50" : ""}`}
+                      className={`shadow-none h-fit ${imageLoadingName === attachment.file_name ? "pointer-events-none opacity-50" : ""}`}
                     >
                       <a
                         href={documentKind === "pptx"
@@ -354,20 +354,18 @@ export default function AttachmentDisplay({
                           }
                         }}
                       >
-                        <Eye className="mr-2 size-4 shrink-0" aria-hidden="true" />
                         View
                       </a>
                     </Button>
                   )}
                   {url && (
                     <Button
-                      type="button"
                       size="sm"
+                      autoIcon={false}
                       onClick={() => handleDownload(attachment)}
                       disabled={downloadLoadingName === attachment.file_name}
-                      className="gap-1.5 shadow-none"
+                      className="gap-1.5 h-fit shadow-none"
                     >
-                      <Download size={14} />
                       Download
                     </Button>
                   )}

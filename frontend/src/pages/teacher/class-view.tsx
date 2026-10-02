@@ -50,6 +50,7 @@ import ClassworkCard from "./classworks/classwork-card";
 import ClassworkView from "./classwork-view";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
+import ClassworkDetailModal from "./forms/classwork-detail-modal";
 import { isQuizType } from "@/lib/classwork-utils";
 import type {
   ClassworkKind,
@@ -315,12 +316,34 @@ export default function TeacherClassDetail() {
                       displayMode="header"
                     />
                   ) : tab === "lessons" ? (
-                    <Button
-                      className="w-full md:w-auto"
-                      onClick={() => setIsSetGoalModalOpen(true)}
-                    >
-                      <Pencil className="mr-2 size-4" /> Set Lesson Goal
-                    </Button>
+                    <>
+                      <div className="flex flex-row gap-2">
+                        <Button
+                          className="w-full md:w-auto whitespace-nowrap"
+                          onClick={() => setIsSetGoalModalOpen(true)}
+                        >
+                          <Pencil className="mr-2 size-4" /> Set Lesson Goal
+                        </Button>
+                        {(detail.subject_loads[0]?.subject_id) && (
+                          <Button
+                            variant="default"
+                            onClick={() => {
+                              const targetId =
+                                detail.subject_loads[0]?.subject_id;
+                              if (targetId) {
+                                navigate(
+                                  `/teacher/classes/${detail.class_id}/subjects/${targetId}`,
+                                );
+                              }
+                            }}
+                            className="h-10 w-full gap-2 whitespace-nowrap"
+                          >
+                            <BookOpen size={16} />
+                            View Subject
+                          </Button>
+                        )}
+                      </div>
+                    </>
                   ) : null}
                 </div>
               </header>
@@ -362,7 +385,7 @@ export default function TeacherClassDetail() {
             >
 
               {!studentInterfaceStudent && (
-                <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
+                <Card className="block w-full border-black bg-primary transition-none hover:shadow-md pt-3 pb-4">
                   <Card.Content>
                     <div className="flex min-w-0 items-center justify-between gap-2">
                       <div className="min-w-0 flex-1">
@@ -405,9 +428,8 @@ export default function TeacherClassDetail() {
                       </div>
 
                     </div>
-                    <p className="text-xs">
-                      {detail.section_name} | {detail.academic_level} |  Active
-                      since {activeSince}
+                    <p className="text-sm mt-1">
+                      {detail.section_name} | {detail.academic_level}
                     </p>
                   </Card.Content>
                 </Card>
@@ -474,7 +496,7 @@ function OverviewTab({
   const [loadingClassworkId, setLoadingClassworkId] = useState<number | null>(
     null,
   );
-  const [lessonSearch, setLessonSearch] = useState("");
+  const [lessonFilter, setLessonFilter] = useState("all");
   const [lessonSort, setLessonSort] = useState<
     "order" | "newest" | "oldest" | "title"
   >("order");
@@ -482,6 +504,15 @@ function OverviewTab({
     Record<number, boolean>
   >({});
   const [isUnassignedExpanded, setIsUnassignedExpanded] = useState(true);
+
+  useEffect(() => {
+    if (
+      lessonFilter !== "all" &&
+      !lessons.some((l) => String(l.lesson_id) === lessonFilter)
+    ) {
+      setLessonFilter("all");
+    }
+  }, [lessons, lessonFilter]);
 
   // Drill-down states
   const [activeCompetency, setActiveCompetency] =
@@ -904,14 +935,10 @@ function OverviewTab({
   };
 
   const filteredLessons = useMemo(() => {
-    const query = lessonSearch.trim().toLowerCase();
-    const list = query
-      ? lessons.filter((l) =>
-        [l.title, l.description, l.competency_statement, l.competency_code]
-          .filter(Boolean)
-          .some((v) => v?.toLowerCase().includes(query)),
-      )
-      : lessons;
+    const list =
+      lessonFilter === "all"
+        ? lessons
+        : lessons.filter((l) => String(l.lesson_id) === lessonFilter);
 
     return [...list].sort((a, b) => {
       if (lessonSort === "title") return a.title.localeCompare(b.title);
@@ -932,7 +959,7 @@ function OverviewTab({
         a.title.localeCompare(b.title)
       );
     });
-  }, [lessonSearch, lessonSort, lessons]);
+  }, [lessonFilter, lessonSort, lessons]);
 
   const { lessonsByCompetency, unassignedLessons } = useMemo(() => {
     const byComp = new Map<number, LessonItem[]>();
@@ -966,9 +993,9 @@ function OverviewTab({
       >
         <Accordion.Item
           value={String(lesson.lesson_id)}
-          className="border-2 border-black bg-primary"
+          className="border-2 border-black bg-primary shadow-md!"
         >
-          <Accordion.Header className="p-4 items-center">
+          <Accordion.Header className="p-4 items-center shadow-none">
             <div className="flex flex-col w-full items-start gap-1 min-w-0 text-left">
               <div className="flex flex-wrap items-center w-full justify-between gap-2 min-w-0 pr-3">
                 <h4 className="text-xl sm:text-2xl font-semibold text-black break-words line-clamp-2">
@@ -985,7 +1012,7 @@ function OverviewTab({
                   {lesson.attachments && lesson.attachments.length > 0 && (
                     <Badge
                       size="sm"
-                      className="bg-white text-black font-bold text-xs shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0 gap-1"
+                      variant="solid"
                     >
                       <Paperclip size={10} />
                       {lesson.attachments.length} material
@@ -995,14 +1022,12 @@ function OverviewTab({
                   <Badge
                     variant="outline"
                     size="sm"
-                    className="bg-white text-black font-bold text-xs shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
+                    className=""
                   >
                     {classworks.length} classwork{classworks.length === 1 ? "" : "s"}
                   </Badge>
                 </div>
-
               </div>
-
             </div>
           </Accordion.Header>
 
@@ -1018,7 +1043,7 @@ function OverviewTab({
                 <Card
                   key={cw.classwork_assignment_id}
                   onClick={() => openClassworkDetail(cw)}
-                  className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3 hover:bg-accent shadow-sm hover:translate-x-0.5 transition-all cursor-pointer min-w-0 group"
+                  className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3 hover:bg-retro shadow-none hover:translate-x-0.5 transition-all cursor-pointer min-w-0 group"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="shrink-0 text-black">
@@ -1095,37 +1120,6 @@ function OverviewTab({
       ) : (
         /* ── State 3: Default All-Competencies Overview (Image 1 Layout) ── */
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:grid-rows-[auto_1fr] items-stretch min-w-0">
-          <div className="flex flex-col gap-1 min-w-0">
-            <h3 className="text-xl font-semibold">Overview</h3>
-            <div className="grid gap-4 md:grid-cols-2 min-w-0">
-              <OverviewCard
-                title="Total Students"
-                count={String(detail.student_count ?? 0)}
-                statDescription="Assigned to section"
-              />
-              <OverviewCard
-                title="Total Lessons"
-                count={String(lessons.length)}
-                statDescription="In this subject"
-              />
-              {/* <OverviewCard
-                title="Total Subjects"
-                count={String(detail.subject_count ?? 0)}
-                statDescription="Active subject lo`ads"
-              /> */}
-            </div>
-          </div>
-
-          {/* Weekly Goals Sidebar Progress */}
-          <aside className="flex flex-col gap-2 min-w-0 xl:row-span-2">
-            <LessonGoalProgress
-              goalItems={curatedGoals}
-              isTeacher
-              onSetGoal={() => setGoalModalOpen(true)}
-              className="w-full flex-1 min-w-0"
-            />
-          </aside>
-
           {/* Main Content Area */}
           <section className="flex flex-col gap-4 min-w-0">
             <div className="flex flex-col gap-4 min-w-0">
@@ -1139,41 +1133,31 @@ function OverviewTab({
                   </div>
                 </div>
 
-                {/* Search & Sort Controls */}
-                <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <label className="relative w-full min-w-0 flex-1 lg:max-w-md">
-                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
-                    <Input
-                      value={lessonSearch}
-                      onChange={(e) => setLessonSearch(e.target.value)}
-                      placeholder="Search competencies or lessons..."
-                      className="h-10 w-full min-w-0 border-2 border-black bg-white pl-9 pr-3"
-                    />
-                  </label>
+                {/* Filter & Sort Controls */}
+                <div className="-mt-1 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="w-full min-w-0 flex-1 lg:max-w-md">
+                    <Select
+                      value={lessonFilter}
+                      onValueChange={(val) => setLessonFilter(val)}
+                    >
+                      <Select.Trigger className="h-10 w-full border-2 border-black bg-white text-sm">
+                        <Select.Value placeholder="Filter by lesson" />
+                      </Select.Trigger>
+                      <Select.Content className="border-2 border-black bg-white max-h-72 overflow-y-auto">
+                        <Select.Item value="all">All Lessons</Select.Item>
+                        {lessons.map((lesson) => (
+                          <Select.Item
+                            key={lesson.lesson_id}
+                            value={String(lesson.lesson_id)}
+                          >
+                            {lesson.title}
+                          </Select.Item>
+                        ))}
+                      </Select.Content>
+                    </Select>
+                  </div>
 
                   <div className="grid w-full grid-cols-2 items-stretch gap-2 lg:flex lg:w-auto lg:items-center">
-                    {/* {(selectedSubjectId || currentSubjectLoad?.subject_id || detail.subject_loads[0]?.subject_id) && (
-                      <Button
-                        variant="link"
-                        size="sm"
-                        onClick={() => {
-                          const targetId =
-                            selectedSubjectId ||
-                            currentSubjectLoad?.subject_id ||
-                            detail.subject_loads[0]?.subject_id;
-                          if (targetId) {
-                            navigate(
-                              `/teacher/classes/${detail.class_id}/subjects/${targetId}`,
-                            );
-                          }
-                        }}
-                        className="whitespace-nowrap shadow-none gap-1"
-                        title="Go to Subject View"
-                      >
-                        View Subject
-                        <ArrowUpRight size={20} />
-                      </Button>
-                    )} */}
                     <Select
                       value={lessonSort}
                       onValueChange={(v) =>
@@ -1192,27 +1176,6 @@ function OverviewTab({
                         <Select.Item value="title">Title A-Z</Select.Item>
                       </Select.Content>
                     </Select>
-
-                    {(selectedSubjectId || currentSubjectLoad?.subject_id || detail.subject_loads[0]?.subject_id) && (
-                      <Button
-                        variant="default"
-                        onClick={() => {
-                          const targetId =
-                            selectedSubjectId ||
-                            currentSubjectLoad?.subject_id ||
-                            detail.subject_loads[0]?.subject_id;
-                          if (targetId) {
-                            navigate(
-                              `/teacher/classes/${detail.class_id}/subjects/${targetId}`,
-                            );
-                          }
-                        }}
-                        className="h-10 w-full gap-2 whitespace-nowrap text-sm"
-                      >
-                        <BookOpen size={16} />
-                        Subject View
-                      </Button>
-                    )}
                   </div>
                 </div>
               </div>
@@ -1231,15 +1194,12 @@ function OverviewTab({
                     const compLessons =
                       lessonsByCompetency.get(comp.competency_id) || [];
                     const isCollapsed =
-                      collapsedCompetencies[comp.competency_id] ?? true;
+                      lessonFilter !== "all"
+                        ? false
+                        : (collapsedCompetencies[comp.competency_id] ?? true);
 
-                    if (lessonSearch.trim()) {
-                      const query = lessonSearch.toLowerCase();
-                      const matches =
-                        comp.statement.toLowerCase().includes(query) ||
-                        (comp.competency_code &&
-                          comp.competency_code.toLowerCase().includes(query));
-                      if (!matches && compLessons.length === 0) return null;
+                    if (lessonFilter !== "all" && compLessons.length === 0) {
+                      return null;
                     }
 
                     return (
@@ -1338,7 +1298,7 @@ function OverviewTab({
                           >
                             <div className="flex items-center gap-2 min-w-0">
                               <div className="rounded border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors shrink-0">
-                                {isUnassignedExpanded ? (
+                                {isUnassignedExpanded || lessonFilter !== "all" ? (
                                   <ChevronDown
                                     size={16}
                                     className="text-black"
@@ -1367,7 +1327,7 @@ function OverviewTab({
                             </div>
                           </div>
 
-                          {isUnassignedExpanded && (
+                          {(isUnassignedExpanded || lessonFilter !== "all") && (
                             <div className="flex flex-col gap-3 p-4 bg-white min-w-0 w-full">
                               {unassignedLessons.map(renderLessonCard)}
                             </div>
@@ -1384,295 +1344,78 @@ function OverviewTab({
                   {/* Empty state when no competencies and no lessons */}
                   {competencies.length === 0 &&
                     unassignedLessons.length === 0 && (
-                      <Card className="block w-full border-2 border-black bg-white px-6 py-12 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                        <div className="flex flex-col items-center justify-center gap-3 text-gray-500">
-                          <Award size={40} className="text-gray-400" />
-                          <Card.Title className="text-base font-bold text-black">
-                            No Competencies or Lessons Yet
-                          </Card.Title>
-                          <p className="max-w-md text-sm font-normal text-gray-500">
-                            No learning competencies or lessons have been added
-                            for this subject yet. Manage them in the Subject
-                            View.
-                          </p>
-                          {(selectedSubjectId || currentSubjectLoad?.subject_id || detail.subject_loads[0]?.subject_id) && (
-                            <div className="flex gap-2 mt-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  const targetId =
-                                    selectedSubjectId ||
-                                    currentSubjectLoad?.subject_id ||
-                                    detail.subject_loads[0]?.subject_id;
-                                  if (targetId) {
-                                    navigate(
-                                      `/teacher/classes/${detail.class_id}/subjects/${targetId}`,
-                                    );
-                                  }
-                                }}
-                                className="border-2 border-black bg-[#F6E9B2] hover:bg-[#fae498] text-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                              >
-                                <BookOpen size={14} className="mr-1.5" />
-                                Go to Subject View
-                              </Button>
+                      <Empty className="shadow-md hover:shadow-none transition-shadow">
+                        <EmptyHeader>
+                          <EmptyMedia>
+                            <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
+                              <Award className="size-5 text-black" />
                             </div>
-                          )}
-                        </div>
-                      </Card>
+                          </EmptyMedia>
+                          <EmptyTitle>No Competencies or Lessons Yet</EmptyTitle>
+                          <EmptyDescription className="w-full whitespace-nowrap text-center">
+                            No learning competencies or lessons have been added for this subject yet.
+                          </EmptyDescription>
+                        </EmptyHeader>
+                        {(selectedSubjectId || currentSubjectLoad?.subject_id || detail.subject_loads[0]?.subject_id) && (
+                          <EmptyContent className="mt-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => {
+                                const targetId =
+                                  selectedSubjectId ||
+                                  currentSubjectLoad?.subject_id ||
+                                  detail.subject_loads[0]?.subject_id;
+                                if (targetId) {
+                                  navigate(
+                                    `/teacher/classes/${detail.class_id}/subjects/${targetId}`,
+                                  );
+                                }
+                              }}
+                              className=""
+                            >
+                              <BookOpen size={14} className="mr-1.5" />
+                              Go to Subject View
+                            </Button>
+                          </EmptyContent>
+                        )}
+                      </Empty>
                     )}
                 </div>
               )}
             </div>
           </section>
+
+          {/* Weekly Goals Sidebar Progress */}
+          <aside className="flex flex-col gap-3 min-w-0 xl:row-span-2">
+            <LessonGoalProgress
+              goalItems={curatedGoals}
+              isTeacher
+              onSetGoal={() => setGoalModalOpen(true)}
+              className="w-full flex-1 min-w-0"
+            />
+            <OverviewCard
+              title="Total Students"
+              count={String(detail.student_count ?? 0)}
+              statDescription="Assigned to section"
+            />
+            <OverviewCard
+              title="Total Lessons"
+              count={String(lessons.length)}
+              statDescription="In this subject"
+            />
+          </aside>
         </div>
       )}
 
-      {/* ── Reused Classwork Detail & Tracking Dialog (From Image 2) ── */}
-      {(selectedClasswork || detailLoadingId || detailError) && (
-        <Dialog
-          open={Boolean(selectedClasswork || detailLoadingId || detailError)}
-          onOpenChange={(open) => {
-            if (!open) closeClassworkDetail();
-          }}
-        >
-          <Dialog.Content
-            size="4xl"
-            className="no-scrollbar overflow-x-hidden"
-            overlay={{ className: "bg-black/50" }}
-          >
-            <Dialog.Header asChild className="border-black">
-              <>
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-black/70">
-                    Teacher Classwork Detail
-                  </p>
-                  <p className="text-xl font-bold text-black">
-                    {selectedClasswork?.title || "Classwork"}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Tooltip>
-                    <TooltipTrigger render={<button
-                      type="button"
-                      onClick={closeClassworkDetail}
-                      aria-label="Close modal"
-                      className={dialogHeaderCloseButtonClassName}
-                    >
-                      <X className="size-4" />
-                    </button>} />
-                    <TooltipContent>Close modal</TooltipContent>
-                  </Tooltip>
-                </div>
-              </>
-            </Dialog.Header>
-
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {detailLoadingId ? (
-                <div className="p-8 text-center text-sm font-semibold text-gray-600">
-                  Loading classwork details...
-                </div>
-              ) : detailError ? (
-                <div className="m-5 border-2 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700 font-medium">
-                  {detailError}
-                </div>
-              ) : selectedClasswork ? (
-                <div className="flex flex-col gap-5 p-5">
-                  <div className="space-y-4">
-                    <Card className="block border-2 border-black">
-                      <Card.Content className="space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge
-                            variant="secondary"
-                            className="bg-[#7ABA78] text-xs font-bold border border-black text-black"
-                          >
-                            {selectedClasswork.classwork_type || "Classwork"}
-                          </Badge>
-                          {selectedClasswork.classwork_category && (
-                            <Badge
-                              variant="solid"
-                              className="text-xs font-bold border border-black bg-[#F6E9B2] text-black"
-                            >
-                              {selectedClasswork.classwork_category.replace(
-                                /_/g,
-                                " ",
-                              )}
-                            </Badge>
-                          )}
-                          <Badge
-                            variant="solid"
-                            className="text-xs font-bold border border-black bg-white text-black"
-                          >
-                            {selectedClasswork.is_published
-                              ? "Published"
-                              : "Draft"}
-                          </Badge>
-                          {selectedClasswork.is_locked && (
-                            <Badge className="rounded border border-red-600 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
-                              Locked
-                            </Badge>
-                          )}
-                        </div>
-
-                        <Card.Title className="text-2xl font-bold">
-                          {selectedClasswork.title}
-                        </Card.Title>
-                        <div className="grid gap-3 text-sm sm:grid-cols-3">
-                          <div className="border-2 border-black bg-gray-50 p-3 rounded">
-                            <p className="font-semibold text-gray-600 text-xs">
-                              Due date
-                            </p>
-                            <p className="font-bold text-sm">
-                              {selectedClasswork.due_date
-                                ? new Date(
-                                  selectedClasswork.due_date,
-                                ).toLocaleString()
-                                : "No due date"}
-                            </p>
-                          </div>
-                          <div className="border-2 border-black bg-gray-50 p-3 rounded">
-                            <p className="font-semibold text-gray-600 text-xs">
-                              Points
-                            </p>
-                            <p className="font-bold text-sm">
-                              {selectedClasswork.total_points ?? "Not set"}
-                            </p>
-                          </div>
-                          <div className="border-2 border-black bg-gray-50 p-3 rounded">
-                            <p className="font-semibold text-gray-600 text-xs">
-                              Section
-                            </p>
-                            <p className="font-bold text-sm truncate">
-                              {selectedClasswork.section_name ||
-                                detail.section_name ||
-                                "Class"}
-                            </p>
-                          </div>
-                        </div>
-                      </Card.Content>
-                    </Card>
-
-                    {(selectedClasswork.description ||
-                      selectedClasswork.instructions) && (
-                        <Card className="block border-2 border-black">
-                          <Card.Content className="space-y-3">
-                            {selectedClasswork.description && (
-                              <div>
-                                <Card.Title className="mb-1 font-bold text-sm">
-                                  Description
-                                </Card.Title>
-                                <p className="text-sm text-gray-800">
-                                  {selectedClasswork.description}
-                                </p>
-                              </div>
-                            )}
-                            {selectedClasswork.instructions && (
-                              <div>
-                                <Card.Title className="mb-1 font-bold text-sm">
-                                  Instructions
-                                </Card.Title>
-                                <p className="whitespace-pre-wrap text-sm text-gray-800 bg-gray-50 p-3 border border-gray-200 rounded">
-                                  {selectedClasswork.instructions}
-                                </p>
-                              </div>
-                            )}
-                          </Card.Content>
-                        </Card>
-                      )}
-
-                    {/* Reference Materials / Attachments */}
-                    <Card className="block border-2 border-black">
-                      <Card.Content className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Paperclip size={18} />
-                          <Card.Title className="mb-0 text-base font-bold">
-                            Reference Files
-                          </Card.Title>
-                          <Badge
-                            variant="outline"
-                            size="sm"
-                            className="border border-black font-bold"
-                          >
-                            {selectedClasswork.attachments?.length || 0}
-                          </Badge>
-                        </div>
-                        {selectedClasswork.attachments &&
-                          selectedClasswork.attachments.length > 0 ? (
-                          <div className="space-y-2">
-                            {selectedClasswork.attachments.map((file) => (
-                              <div
-                                key={file.classwork_attachment_id}
-                                className="flex items-center justify-between border-2 border-black p-3 bg-gray-50 rounded"
-                              >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <FileText size={16} className="shrink-0" />
-                                  <span className="text-sm font-semibold truncate">
-                                    {file.file_name}
-                                  </span>
-                                </div>
-                                <a
-                                  href={`${API_URL}/api/v1/classworks/attachments/${file.classwork_attachment_id}/download`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-xs font-bold text-blue-700 underline shrink-0 hover:text-blue-900"
-                                >
-                                  Download
-                                </a>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-xs font-semibold text-gray-500">
-                            No reference files attached to this classwork.
-                          </p>
-                        )}
-                      </Card.Content>
-                    </Card>
-                  </div>
-
-                  <div className="space-y-4">
-                    <Card className="block border-2 border-black bg-primary">
-                      <Card.Content className="space-y-3">
-                        <Card.Title className="text-lg font-bold">
-                          Submissions & Grading
-                        </Card.Title>
-                        <p className="text-xs text-gray-800 leading-relaxed">
-                          To view student submissions, grade written works, or review quiz results, click the button below.
-                        </p>
-                        <Button
-                          type="button"
-                          variant="default"
-                          size="sm"
-                          onClick={() =>
-                            navigate(
-                              `/teacher/classworks/${selectedClasswork.classwork_id}`,
-                            )
-                          }
-                          className="w-full border-2 border-black bg-black text-white font-bold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-800"
-                        >
-                          Open Submissions Workspace
-                        </Button>
-                      </Card.Content>
-                    </Card>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-            <Dialog.Footer className="mt-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="header"
-                onClick={() => selectedClasswork && navigate(`/teacher/classworks/${selectedClasswork.classwork_id}`)}
-                disabled={!selectedClasswork}
-              >
-                View classwork details
-              </Button>
-            </Dialog.Footer>
-          </Dialog.Content>
-        </Dialog>
-      )}
+      {/* ── Reused Classwork Detail & Tracking Dialog ── */}
+      <ClassworkDetailModal
+        selectedClasswork={selectedClasswork}
+        detailLoadingId={detailLoadingId}
+        detailError={detailError}
+        onClose={closeClassworkDetail}
+        sectionName={detail.section_name}
+      />
 
       {/* ── Classwork Form Modal ── */}
       {classworkLesson && (
@@ -1841,7 +1584,7 @@ function OverviewTab({
                   disabled={isSavingLesson}
                   className="font-bold"
                 >
-                  {isSavingLesson ? "Saving..." : "Save Changes"}
+                  Save Changes
                 </Button>
               </div>
             </Dialog.Footer>
@@ -1895,7 +1638,7 @@ function OverviewTab({
                 disabled={isArchivingLesson}
                 className="border-2 border-black bg-red-600 font-bold text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700"
               >
-                {isArchivingLesson ? "Archiving..." : "Archive Lesson"}
+                Archive Lesson
               </Button>
             </div>
           </Card>
@@ -2125,12 +1868,69 @@ function StudentsTab({
   }
 
   return (
-    <div className="grid gap-4">
-      <div className="flex flex-col gap-2">
-        <Text as="h3" className="text-xl font-semibold">
-          Overview
-        </Text>
-        <div className="grid gap-4 md:grid-cols-3">
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] items-start min-w-0">
+      <section className="flex flex-col min-w-0">
+        <div className="mb-4 flex flex-col gap-2 sm:items-start sm:justify-between">
+          <h3 className="text-xl sm:text-2xl font-bold sm:-mb-">Students</h3>
+          <label className="relative flex-1 sm:min-w-sm">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50 z-10" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search students"
+              className="h-10 w-full border-black pl-9 pr-3"
+            />
+          </label>
+        </div>
+        {!detail.students.length ? (
+          <StateInline message="No students are currently enrolled in this class." />
+        ) : !filteredStudents.length ? (
+          <StateInline message="No students match your search." />
+        ) : (
+          <Accordion
+            multiple
+            defaultValue={groupedStudents.map(([gender]) => gender)}
+            className="flex flex-col gap-3 no-scrollbar"
+          >
+            {groupedStudents.map(([gender, students]) => (
+              <Accordion.Item
+                key={gender}
+                value={gender}
+                className="overflow-hidden rounded border-2 border-black bg-white shadow-none no-scrollbar"
+              >
+                <Accordion.Header className="items-center bg-primary px-4 py-3 text-base font-black">
+                  <div className="flex items-center justify-between w-full mr-2">
+                    <span>{gender}</span>
+                    <Badge variant="outline" size="sm">
+                      {students.length} student{students.length !== 1 ? "s" : ""}
+                    </Badge>
+                  </div>
+                </Accordion.Header>
+                <Accordion.Content className="p-0 border-t-2 border-black overflow-hidden no-scrollbar">
+                  <div className="w-full overflow-x-auto overflow-y-hidden no-scrollbar">
+                    <table className="w-full border-collapse caption-bottom text-sm border-0 shadow-none">
+                      <Table.Body>
+                        {students.map((student) => (
+                          <StudentRow
+                            key={student.student_id}
+                            student={student}
+                            classId={detail.class_id}
+                            subjectLoads={detail.subject_loads}
+                            onSelectStudent={handleSelectStudent}
+                          />
+                        ))}
+                      </Table.Body>
+                    </table>
+                  </div>
+                </Accordion.Content>
+              </Accordion.Item>
+            ))}
+          </Accordion>
+        )}
+      </section>
+
+      <aside className="flex flex-col gap-3 min-w-0">
+        <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
           <OverviewCard
             title="Students"
             count={String(detail.student_count ?? 0)}
@@ -2145,66 +1945,7 @@ function StudentsTab({
             count={String(detail.female_count ?? 0)}
           />
         </div>
-      </div>
-
-      <section>
-        <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <h3 className="text-xl font-bold">Students</h3>
-          <Input
-            className="w-[400px]!"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search students"
-          />
-        </div>
-        <Card className="block w-full border-black">
-          <Card.Content>
-            {!detail.students.length ? (
-              <StateInline message="No students are currently enrolled in this class." />
-            ) : !filteredStudents.length ? (
-              <StateInline message="No students match your search." />
-            ) : (
-              <div className="grid items-start gap-3">
-                {groupedStudents.map(([gender, students]) => (
-                  <details
-                    key={gender}
-                    open
-                    className="group overflow-hidden border-2 border-black bg-white"
-                  >
-                    <summary className="flex cursor-pointer list-none items-center justify-between bg-primary px-4 py-3 text-base font-black">
-                      <span>{gender}</span>
-                      <span className="flex items-center gap-3">
-                        <Badge variant="outline" size="sm">
-                          {students.length} student
-                          {students.length !== 1 ? "s" : ""}
-                        </Badge>
-                        <ChevronRight className="size-4 transition-transform duration-200 group-open:rotate-90" />
-                      </span>
-                    </summary>
-                    <Table
-                      rounded="none"
-                      wrapperClassName="h-auto overflow-hidden border-0 shadow-none"
-                      className="w-full border-0 shadow-none"
-                    >
-                      <Table.Body>
-                        {students.map((student) => (
-                          <StudentRow
-                            key={student.student_id}
-                            student={student}
-                            classId={detail.class_id}
-                            subjectLoads={detail.subject_loads}
-                            onSelectStudent={handleSelectStudent}
-                          />
-                        ))}
-                      </Table.Body>
-                    </Table>
-                  </details>
-                ))}
-              </div>
-            )}
-          </Card.Content>
-        </Card>
-      </section>
+      </aside>
     </div>
   );
 }
@@ -2385,19 +2126,10 @@ function ClassworkTab({
     <div className="flex flex-col gap-2 min-w-0">
       <header className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Text as="h3" className="text-xl font-bold ">
+          <Text as="h3" className="text-xl sm:text-2xl font-bold ">
             Classwork
           </Text>
         </div>
-        {/* <Button
-          type="button"
-          onClick={openCreateWizard}
-          className="gap-2"
-        >
-          <Plus className="size-4" />
-          <span className="hidden sm:inline">New Classwork</span>
-          <span className="sm:hidden">New</span>
-        </Button> */}
       </header>
 
       <main className="flex flex-col gap-4">
