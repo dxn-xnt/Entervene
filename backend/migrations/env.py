@@ -32,7 +32,9 @@ if config.config_file_name is not None:
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 target_metadata = Base.metadata
-config.set_main_option("sqlalchemy.url", settings.database_url)
+url_opt = config.get_main_option("sqlalchemy.url")
+if not url_opt or url_opt == "driver://user:pass@localhost/dbname":
+    config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

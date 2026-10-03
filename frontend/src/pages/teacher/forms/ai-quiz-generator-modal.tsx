@@ -28,12 +28,14 @@ import type {
   QuizQuestionType,
   QuizDifficulty,
 } from "../classworks/quiz-builder-types";
+import { mapGeneratedQuizQuestions } from "../classworks/quiz-question-rules";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type AIQuizPartType =
   | "MULTIPLE_CHOICE"
   | "TRUE_FALSE"
+  | "IDENTIFICATION"
   | "SHORT_ANSWER"
   | "ESSAY";
 
@@ -315,7 +317,7 @@ export default function AIQuizGeneratorModal({
   const addTestPart = () => {
     const used = new Set(testParts.map((p) => p.type));
     const next =
-      (["MULTIPLE_CHOICE", "TRUE_FALSE", "SHORT_ANSWER", "ESSAY"] as AIQuizPartType[]).find(
+      (["MULTIPLE_CHOICE", "TRUE_FALSE", "IDENTIFICATION", "SHORT_ANSWER", "ESSAY"] as AIQuizPartType[]).find(
         (t) => !used.has(t)
       ) ?? "MULTIPLE_CHOICE";
     setTestParts((prev) => [
@@ -340,7 +342,7 @@ export default function AIQuizGeneratorModal({
     setTestParts((prev) =>
       prev.map((p) => {
         if (p.id !== id) return p;
-        let updated = { ...p, ...patch };
+        const updated = { ...p, ...patch };
 
         // Auto-adjust points when type changes
         if (patch.type && patch.type !== p.type) {
@@ -442,24 +444,7 @@ export default function AIQuizGeneratorModal({
         throw new Error("AI returned an empty question list. Please try again.");
       }
 
-      const drafts: QuizQuestionDraft[] = data.questions.map((q, idx) => ({
-        id: `ai-q-${Date.now()}-${idx + 1}`,
-        lesson_id: null,
-        question_text: q.question_text || `Question ${idx + 1}`,
-        question_type: q.question_type || "MULTIPLE_CHOICE",
-        points: String(q.points ?? 1),
-        display_order: idx + 1,
-        difficulty_level: q.difficulty_level || "EASY",
-        explanation: q.explanation || "",
-        options:
-          q.question_type === "MULTIPLE_CHOICE"
-            ? (q.options ?? []).map((opt, oIdx) => ({
-                option_text: opt.option_text || `Option ${oIdx + 1}`,
-                is_correct: Boolean(opt.is_correct),
-                option_order: opt.option_order ?? oIdx + 1,
-              }))
-            : [],
-      }));
+      const drafts: QuizQuestionDraft[] = mapGeneratedQuizQuestions(data.questions);
 
       // Derive lessons from chosen source
       let derivedLessonIds: number[] = [];
@@ -847,7 +832,8 @@ export default function AIQuizGeneratorModal({
                       >
                         <option value="MULTIPLE_CHOICE">Multiple Choice (4 Options)</option>
                         <option value="TRUE_FALSE">True or False (2 Options)</option>
-                        <option value="SHORT_ANSWER">Short Answer / Identification</option>
+                        <option value="IDENTIFICATION">Identification (Auto-graded key)</option>
+                        <option value="SHORT_ANSWER">Short Answer (Essay)</option>
                         <option value="ESSAY">Essay / Open-ended Response</option>
                       </select>
 

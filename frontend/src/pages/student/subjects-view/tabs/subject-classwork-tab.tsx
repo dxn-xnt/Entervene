@@ -25,6 +25,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/use-toast";
+import { QuizTextAnswerInput, QuizTextAnswerSummary } from "@/components/quiz/student-quiz-answer";
 import { API_URL, apiFetch } from "@/lib/api";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { LoadingPanel } from "@/components/loading-panel";
@@ -909,9 +910,6 @@ export default function SubjectClassworkTab({
                     (option) =>
                       option.option_id === question.selected_option_id,
                   );
-                  const correctOption = question.options.find(
-                    (option) => option.is_correct,
-                  );
                   const revealsCorrectKey = question.options.some(
                     (option) =>
                       option.is_correct !== null &&
@@ -977,36 +975,7 @@ export default function SubjectClassworkTab({
                           )}
                         </div>
                       ) : (
-                        <div className="mt-3 space-y-2 text-sm">
-                          <div className="border border-gray-200 bg-gray-50 px-3 py-2">
-                            <p className="text-xs font-bold uppercase text-gray-500">
-                              Your answer
-                            </p>
-                            <p className="mt-1 whitespace-pre-wrap break-words">
-                              {question.answer_text?.trim() ||
-                                "No answer recorded."}
-                            </p>
-                          </div>
-                          {correctOption ? (
-                            <p className="border border-green-500 bg-green-50 px-3 py-2 font-semibold">
-                              Expected answer: {correctOption.option_text}
-                            </p>
-                          ) : null}
-                          {question.is_correct !== null &&
-                          question.is_correct !== undefined ? (
-                            <p
-                              className={
-                                question.is_correct
-                                  ? "font-bold text-green-700"
-                                  : "font-bold text-red-700"
-                              }
-                            >
-                              {question.is_correct
-                                ? "Marked correct"
-                                : "Needs review"}
-                            </p>
-                          ) : null}
-                        </div>
+                        <QuizTextAnswerSummary question={question} />
                       )}
                     </Card>
                   );
@@ -1117,23 +1086,19 @@ export default function SubjectClassworkTab({
                     ))}
                   </div>
                 ) : (
-                  <textarea
-                    value={
-                      quizAnswers[currentQuestion.quiz_question_id]
-                        ?.answer_text ?? ""
-                    }
-                    onChange={(event) =>
+                  <QuizTextAnswerInput
+                    question={currentQuestion}
+                    value={quizAnswers[currentQuestion.quiz_question_id]?.answer_text ?? ""}
+                    onChange={(text) =>
                       setQuizAnswers((current) => ({
                         ...current,
                         [currentQuestion.quiz_question_id]: {
                           ...current[currentQuestion.quiz_question_id],
-                          answer_text: event.target.value,
+                          answer_text: text,
                         },
                       }))
                     }
                     disabled={isQuizSubmitting}
-                    placeholder="Type your answer here..."
-                    className="min-h-36 w-full rounded border border-black bg-white p-3 text-sm outline-none shadow-md transition-shadow hover:shadow-none"
                   />
                 )}
               </section>

@@ -273,7 +273,13 @@ export default function QuizAnalysisView({
                           <div className="flex flex-wrap items-center gap-4">
                             <div className="border border-black rounded px-2 py-1 flex flex-col text-xs bg-white">
                               <span className="text-gray-500">Question Type</span>
-                              <span className="font-bold text-base">{q.question_type === "MULTIPLE_CHOICE" ? "Multiple Choice" : "Short Answer"}</span>
+                              <span className="font-bold text-base">
+                                {q.question_type === "MULTIPLE_CHOICE"
+                                  ? "Multiple Choice"
+                                  : q.question_type === "IDENTIFICATION"
+                                  ? "Identification (Auto-graded)"
+                                  : "Short Answer (Manual)"}
+                              </span>
                             </div>
                             <div className="border border-black rounded px-2 py-1 flex flex-col text-xs bg-white">
                               <span className="text-gray-500">points</span>
@@ -387,7 +393,9 @@ export default function QuizAnalysisView({
                             </div>
                           ) : (
                             <div className="rounded border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500 italic">
-                              No reference answer key provided.
+                              {q.question_type === "SHORT_ANSWER"
+                                ? "Open-ended response (graded manually by teacher)."
+                                : "No reference answer key provided."}
                             </div>
                           )}
                           {q.needs_grading_count > 0 && (

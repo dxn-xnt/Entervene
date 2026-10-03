@@ -5,7 +5,7 @@ from app.schemas.Quiz import QuizQuestionIn
 
 
 class AIQuizTestPart(BaseModel):
-    type: str = "MULTIPLE_CHOICE"  # MULTIPLE_CHOICE | TRUE_FALSE | SHORT_ANSWER | ESSAY
+    type: str = "MULTIPLE_CHOICE"  # MULTIPLE_CHOICE | TRUE_FALSE | IDENTIFICATION | SHORT_ANSWER | ESSAY
     count: int = Field(default=5, ge=1, le=50)
     points_per_item: float = Field(default=1.0, ge=0.5, le=100.0)
     difficulty_breakdown: dict[str, int] = Field(default_factory=dict)
@@ -46,6 +46,8 @@ class AIQuizGenerateRequest(BaseModel):
         for part in self.test_parts:
             if set(part.difficulty_breakdown) - {"EASY", "MEDIUM", "HARD"} or sum(part.difficulty_breakdown.values()) != part.count:
                 raise ValueError("Difficulty counts must match the requested question count")
+            if part.type.upper() not in {"MULTIPLE_CHOICE", "TRUE_FALSE", "IDENTIFICATION", "SHORT_ANSWER", "ESSAY"}:
+                raise ValueError(f"Unsupported question type: {part.type}")
         return self
 
 

@@ -28,6 +28,7 @@ from app.services.quiz.QuizBuilderService import get_teacher_quiz_classwork
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
 from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
+from app.services.quiz.quiz_normalization import normalize_answer
 
 
 TURNED_IN_STATUSES = {"submitted", "late", "graded"}
@@ -211,11 +212,22 @@ def _question_analysis(
         if evaluated_count > 0
         else None
     )
+    is_effective_ident = (
+        question.question_type == "IDENTIFICATION"
+        or (
+            question.question_type == "SHORT_ANSWER"
+            and any(
+                bool(opt.is_correct) and bool(opt.option_text and opt.option_text.strip())
+                for opt in (getattr(question, "options", None) or [])
+            )
+        )
+    )
+    effective_question_type = "IDENTIFICATION" if is_effective_ident else question.question_type
     needs_grading_count = sum(1 for answer in answers if answer.points_awarded is None)
     return QuizQuestionAnalysisOut(
         quiz_question_id=link.quiz_question_id,
         question_text=question.question_text,
-        question_type=question.question_type,
+        question_type=effective_question_type,
         points=float(question.points),
         answered_count=answered_count,
         correct_count=correct_count,
@@ -232,9 +244,9 @@ def _question_analysis(
                     and (
                         answer.answer_text == option.option_text
                         or (
-                            question.question_type == "SHORT_ANSWER"
+                            is_effective_ident
                             and (
-                                answer.answer_text.strip().lower() == option.option_text.strip().lower()
+                                (normalize_answer(answer.answer_text) and normalize_answer(answer.answer_text) == normalize_answer(option.option_text))
                                 or (option.is_correct and answer.is_correct is True)
                             )
                         )
@@ -315,12 +327,24 @@ def get_teacher_quiz_submission_detail(
                     selected_opt_id = opt.option_id
                     break
 
+        is_ans_effective_ident = (
+            question.question_type == "IDENTIFICATION"
+            or (
+                question.question_type == "SHORT_ANSWER"
+                and any(
+                    bool(opt.is_correct) and bool(opt.option_text and opt.option_text.strip())
+                    for opt in (getattr(question, "options", None) or [])
+                )
+            )
+        )
+        effective_q_type = "IDENTIFICATION" if is_ans_effective_ident else question.question_type
+
         answers_out.append(
             TeacherQuizAnswerOut(
                 answer_id=ans.answer_id if ans else None,
                 quiz_question_id=link.quiz_question_id,
                 question_text=question.question_text,
-                question_type=question.question_type,
+                question_type=effective_q_type,
                 max_points=float(question.points),
                 answer_text=ans.answer_text if ans else None,
                 selected_option_id=selected_opt_id,

@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class Question(Base):
     __tablename__ = "question"
     __table_args__ = (
-        CheckConstraint("question_type IN ('MULTIPLE_CHOICE', 'SHORT_ANSWER')", name="ck_question_type"),
+        CheckConstraint("question_type IN ('MULTIPLE_CHOICE', 'SHORT_ANSWER', 'IDENTIFICATION')", name="ck_question_type"),
         CheckConstraint("difficulty_level IS NULL OR difficulty_level IN ('EASY', 'MEDIUM', 'HARD')", name="ck_question_difficulty"),
         CheckConstraint("points > 0", name="ck_question_points_positive"),
         CheckConstraint("max_file_size_mb IS NULL OR max_file_size_mb > 0", name="ck_question_max_file_size_positive"),
