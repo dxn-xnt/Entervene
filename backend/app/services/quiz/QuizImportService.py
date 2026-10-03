@@ -18,10 +18,28 @@ SECTION_HEADER_RE = re.compile(
     r"^\s*(?:part\s+[ivxlcdm\d]+|section\s+\d+|chapter\s+\d+)\b.*$",
     re.IGNORECASE,
 )
+STANDALONE_SECTION_RE = re.compile(
+    r"^\s*(?:multiple\s+choice|true\s+or\s+false|true\s*/\s*false|identification|essay(?:\s*/\s*open-ended)?|short\s+answer)\s*[:\-]?\s*$",
+    re.IGNORECASE,
+)
+ESSAY_RULE_LINE_RE = re.compile(r"^\s*[_~–—-]{5,}\s*$")
 DIRECTIONS_START_RE = re.compile(
     r"^\s*(?:directions|instructions|general\s+instructions)\s*[:\-]?.*$",
     re.IGNORECASE,
 )
+
+def _detect_section_type(heading: str) -> str | None:
+    u = heading.upper()
+    if "IDENTIFICATION" in u:
+        return "IDENTIFICATION"
+    if any(k in u for k in ("ESSAY", "OPEN-ENDED", "OPEN ENDED", "SHORT ANSWER")):
+        return "SHORT_ANSWER"
+    if any(k in u for k in ("TRUE OR FALSE", "TRUE/FALSE", "TRUE-FALSE", "TRUE AND FALSE")):
+        return "TRUE_FALSE"
+    if any(k in u for k in ("MULTIPLE CHOICE", "MULTIPLE-CHOICE")):
+        return "MULTIPLE_CHOICE"
+    return None
+
 PAGE_FOOTER_RE = re.compile(
     r"^\s*(?:page\s+\d+(?:\s*(?:of|/)\s*\d+)?|[-–—~*\[\(]+\s*page\s+\d+\s*[-–—~*\]\)]+|[-–—~*]+\s*\d+\s*[-–—~*]+|\d+\s*(?:of|/)\s*\d+)\s*$",
     re.IGNORECASE,
@@ -73,7 +91,7 @@ def _parse_trailing_keys(text: str) -> dict[int, str]:
         num = int(match.group(1))
         val = match.group(2).strip()
         val = re.sub(
-            r"^(?:\[(?:key/rubric|key|rubric)\]|key|rubric)\s*[:\-]?\s*",
+            r"^(?:\[\s*(?:sample\s+answer\s*(?:/\s*rubric)?|key\s*/\s*rubric|key|rubric)\s*\]|key|rubric|sample\s+answer)\s*[:\-]?\s*",
             "",
             val,
             flags=re.IGNORECASE,
@@ -254,6 +272,7 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
     parsed: list[dict] = []
     current: dict | None = None
     in_directions = False
+    current_section_type: str | None = None
 
     for raw_line in body_text.splitlines():
         line = raw_line.strip()
@@ -263,11 +282,14 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
         if DOC_HEADER_RE.match(line):
             continue
 
-        if SECTION_HEADER_RE.match(line):
+        if SECTION_HEADER_RE.match(line) or STANDALONE_SECTION_RE.match(line):
             if current:
                 parsed.append(current)
                 current = None
             in_directions = False
+            detected = _detect_section_type(line)
+            if detected:
+                current_section_type = detected
             continue
 
         if DIRECTIONS_START_RE.match(line):
@@ -301,6 +323,8 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
                 "inline_key": inline_key,
                 "has_answer_line": False,
                 "has_explanation_line": False,
+                "has_essay_rules": False,
+                "section_type": current_section_type,
             }
             continue
 
@@ -319,8 +343,12 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
                 continue
 
         if current and BLANK_ANSWER_RE.match(line):
-            # A blank "Answer: ____" line is NOT an answer key; ignore it
-            current["has_answer_line"] = True
+            # A blank "Answer: ____" line is NOT an answer key; it marks an identification question
+            current["has_blank_answer_line"] = True
+            continue
+
+        if current and ESSAY_RULE_LINE_RE.match(line):
+            current["has_essay_rules"] = True
             continue
 
         if current and ANSWER_LINE_RE.match(line):
@@ -330,7 +358,7 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
                 current["inline_key"] = m_letter.group(1).upper()
             else:
                 current["inline_key"] = ans_val
-            current["has_answer_line"] = True
+            current["has_explicit_answer_line"] = True
             continue
 
         if current and EXPLANATION_RE.match(line):
@@ -357,6 +385,32 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
         options = item["options"]
         inline_key = item.get("inline_key")
         trailing_key = answer_key_map.get(num)
+        section_type = item.get("section_type")
+        raw_q_text = item["question_text"]
+
+        extracted_explanation: str | None = None
+        has_scoring_criteria = False
+
+        # Extract [Scoring Criteria: ...], [Rubric: ...], [Key/Rubric]: ..., etc. blocks (multiline)
+        sc_match = re.search(
+            r"\[\s*(?:scoring\s+criteria|rubric|key\s*/\s*rubric|sample\s+answer(?:\s*/\s*rubric)?)\s*[:\-]?\s*\]?\s*[:\-]?\s*(.*?)(?:\]|\n\n|$)",
+            raw_q_text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if sc_match:
+            has_scoring_criteria = True
+            extracted_explanation = sc_match.group(1).strip()
+            raw_q_text = raw_q_text[: sc_match.start()] + " " + raw_q_text[sc_match.end() :]
+
+        # Check for essay rule lines inside the text before stripping
+        has_essay_rules = item.get("has_essay_rules", False) or bool(re.search(r"[_~–—-]{5,}", raw_q_text))
+
+        # Strip runs of 5+ underscores or dashes (writing lines)
+        # Note: 3-4 underscores like "___," represent a sentence fill-in blank and must be preserved!
+        cleaned_q_text = re.sub(r"[_~–—-]{5,}", " ", raw_q_text)
+        cleaned_q_text = re.sub(r"[ \t]+", " ", cleaned_q_text).strip()
+        cleaned_q_text = re.sub(r"\n\s*\n+", "\n\n", cleaned_q_text).strip()
+        has_blank_answer_line = item.get("has_blank_answer_line", False)
 
         resolved_key = None
         if inline_key and trailing_key:
@@ -396,7 +450,74 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
                 f"Question {num} has no answer key. Please select the correct answer in the builder."
             )
 
-        if len(options) >= 2:
+        # Decide question type in required order:
+        # (a) Section heading:
+        #     - "IDENTIFICATION" gives IDENTIFICATION
+        #     - "ESSAY", "OPEN-ENDED" or "SHORT ANSWER" gives SHORT_ANSWER
+        #     - "TRUE OR FALSE" gives a two-option True/False question
+        #     - "MULTIPLE CHOICE" gives MCQ
+        # (b) If there's no usable heading:
+        #     - scoring-criteria block or essay answer rules is SHORT_ANSWER
+        #     - len(options) >= 2 is MULTIPLE_CHOICE
+        #     - "Answer: ____" line is IDENTIFICATION
+        #     - fallback: IDENTIFICATION if resolved_key else SHORT_ANSWER
+
+        if section_type == "SHORT_ANSWER" or (not section_type and (has_scoring_criteria or has_essay_rules)):
+            final_explanation = extracted_explanation or (resolved_key.strip() if resolved_key else None)
+            questions.append(
+                QuizQuestionIn(
+                    question_text=cleaned_q_text,
+                    question_type="SHORT_ANSWER",
+                    points=1,
+                    display_order=len(questions) + 1,
+                    difficulty_level="MEDIUM",
+                    explanation=final_explanation,
+                    options=[],
+                )
+            )
+        elif section_type == "TRUE_FALSE":
+            tf_options = list(options)
+            if len(tf_options) < 2:
+                tf_options = [
+                    {"label": "A", "text": "True"},
+                    {"label": "B", "text": "False"},
+                ]
+            correct_label = None
+            if resolved_key:
+                rk_upper = resolved_key.strip().upper()
+                rk_lower = resolved_key.strip().lower()
+                for opt in tf_options:
+                    if opt["label"].upper() == rk_upper:
+                        correct_label = opt["label"]
+                        break
+                    if opt["text"].strip().lower() == rk_lower:
+                        correct_label = opt["label"]
+                        break
+                    if rk_upper in ("T", "TRUE") and opt["text"].strip().lower() in ("true", "t"):
+                        correct_label = opt["label"]
+                        break
+                    if rk_upper in ("F", "FALSE") and opt["text"].strip().lower() in ("false", "f"):
+                        correct_label = opt["label"]
+                        break
+            questions.append(
+                QuizQuestionIn(
+                    question_text=cleaned_q_text,
+                    question_type="MULTIPLE_CHOICE",
+                    points=1,
+                    display_order=len(questions) + 1,
+                    difficulty_level="MEDIUM",
+                    explanation=extracted_explanation,
+                    options=[
+                        QuizOptionIn(
+                            option_text=option["text"],
+                            is_correct=(option["label"] == correct_label) if correct_label else False,
+                            option_order=option_index,
+                        )
+                        for option_index, option in enumerate(tf_options, start=1)
+                    ],
+                )
+            )
+        elif section_type == "MULTIPLE_CHOICE" or len(options) >= 2:
             correct_label = None
             if resolved_key:
                 rk_upper = resolved_key.strip().upper()
@@ -420,11 +541,12 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
 
             questions.append(
                 QuizQuestionIn(
-                    question_text=item["question_text"],
+                    question_text=cleaned_q_text,
                     question_type="MULTIPLE_CHOICE",
                     points=1,
                     display_order=len(questions) + 1,
                     difficulty_level="MEDIUM",
+                    explanation=extracted_explanation,
                     options=[
                         QuizOptionIn(
                             option_text=option["text"],
@@ -435,17 +557,37 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
                     ],
                 )
             )
-        else:
-            # Determine type based on whether an answer key was resolved
+        elif section_type == "IDENTIFICATION" or (not section_type and has_blank_answer_line):
+            ident_options = []
             if resolved_key and resolved_key.strip():
-                # Has a key → Identification (auto-gradeable)
+                ident_options.append(
+                    QuizOptionIn(
+                        option_text=resolved_key.strip(),
+                        is_correct=True,
+                        option_order=1,
+                    )
+                )
+            questions.append(
+                QuizQuestionIn(
+                    question_text=cleaned_q_text,
+                    question_type="IDENTIFICATION",
+                    points=1,
+                    display_order=len(questions) + 1,
+                    difficulty_level="MEDIUM",
+                    explanation=extracted_explanation,
+                    options=ident_options,
+                )
+            )
+        else:
+            if resolved_key and resolved_key.strip():
                 questions.append(
                     QuizQuestionIn(
-                        question_text=item["question_text"],
+                        question_text=cleaned_q_text,
                         question_type="IDENTIFICATION",
                         points=1,
                         display_order=len(questions) + 1,
                         difficulty_level="MEDIUM",
+                        explanation=extracted_explanation,
                         options=[
                             QuizOptionIn(
                                 option_text=resolved_key.strip(),
@@ -456,14 +598,14 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
                     )
                 )
             else:
-                # No key → Short Answer (manual grading, no options stored)
                 questions.append(
                     QuizQuestionIn(
-                        question_text=item["question_text"],
+                        question_text=cleaned_q_text,
                         question_type="SHORT_ANSWER",
                         points=1,
                         display_order=len(questions) + 1,
                         difficulty_level="MEDIUM",
+                        explanation=extracted_explanation,
                         options=[],
                     )
                 )
