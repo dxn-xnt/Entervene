@@ -333,7 +333,7 @@ def test_import_science_fixture_pdf():
     }
     for q_num, expected_val in expected_sa_keys.items():
         q = questions[q_num - 1]
-        assert q["question_type"] == "SHORT_ANSWER"
+        assert q["question_type"] == "IDENTIFICATION"
         assert len(q["options"]) == 1
         assert q["options"][0]["option_text"] == expected_val
         assert q["options"][0]["is_correct"] is True
@@ -440,7 +440,7 @@ ANSWER KEY
     assert len(body["questions"]) == 3
     assert body["questions"][0]["options"][0]["is_correct"] is True
     assert body["questions"][1]["options"][0]["is_correct"] is True
-    assert body["questions"][2]["question_type"] == "SHORT_ANSWER"
+    assert body["questions"][2]["question_type"] == "IDENTIFICATION"
     assert body["questions"][2]["options"][0]["option_text"] == "HTTPS"
     assert body["questions"][2]["options"][0]["is_correct"] is True
     assert body["warnings"] == []
@@ -474,7 +474,7 @@ Answer: Paris
     body = response.json()
     assert len(body["questions"]) == 2
     assert body["questions"][0]["options"][0]["is_correct"] is True
-    assert body["questions"][1]["question_type"] == "SHORT_ANSWER"
+    assert body["questions"][1]["question_type"] == "IDENTIFICATION"
     assert body["questions"][1]["options"][0]["option_text"] == "Paris"
     assert body["warnings"] == []
 
@@ -612,7 +612,7 @@ def test_import_special_characters_exported_pdf():
     q3 = questions[2]
     assert "carbon" in q3["question_text"] and "12" in q3["question_text"]
     assert any(b in q3["question_text"] for b in ("•", "*"))
-    assert q3["question_type"] == "SHORT_ANSWER"
+    assert q3["question_type"] == "IDENTIFICATION"
     assert "carbon" in q3["options"][0]["option_text"] and "12" in q3["options"][0]["option_text"]
     assert q3["options"][0]["is_correct"] is True
 

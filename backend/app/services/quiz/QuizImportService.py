@@ -436,25 +436,37 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
                 )
             )
         else:
-            sa_options = []
+            # Determine type based on whether an answer key was resolved
             if resolved_key and resolved_key.strip():
-                sa_options.append(
-                    QuizOptionIn(
-                        option_text=resolved_key.strip(),
-                        is_correct=True,
-                        option_order=1,
+                # Has a key → Identification (auto-gradeable)
+                questions.append(
+                    QuizQuestionIn(
+                        question_text=item["question_text"],
+                        question_type="IDENTIFICATION",
+                        points=1,
+                        display_order=len(questions) + 1,
+                        difficulty_level="MEDIUM",
+                        options=[
+                            QuizOptionIn(
+                                option_text=resolved_key.strip(),
+                                is_correct=True,
+                                option_order=1,
+                            )
+                        ],
                     )
                 )
-            questions.append(
-                QuizQuestionIn(
-                    question_text=item["question_text"],
-                    question_type="SHORT_ANSWER",
-                    points=1,
-                    display_order=len(questions) + 1,
-                    difficulty_level="MEDIUM",
-                    options=sa_options,
+            else:
+                # No key → Short Answer (manual grading, no options stored)
+                questions.append(
+                    QuizQuestionIn(
+                        question_text=item["question_text"],
+                        question_type="SHORT_ANSWER",
+                        points=1,
+                        display_order=len(questions) + 1,
+                        difficulty_level="MEDIUM",
+                        options=[],
+                    )
                 )
-            )
 
     return questions, warnings
 

@@ -18,6 +18,7 @@ class QuizQuestionIn(BaseModel):
     difficulty_level: Optional[str] = None
     explanation: Optional[str] = None
     lesson_id: Optional[int] = None
+    is_ai_generated: bool = False
     options: list[QuizOptionIn] = Field(default_factory=list)
 
 
@@ -63,6 +64,7 @@ class QuizQuestionOut(BaseModel):
     difficulty_level: Optional[str] = None
     explanation: Optional[str] = None
     lesson_id: Optional[int] = None
+    is_ai_generated: bool = False
     options: list[QuizOptionOut] = Field(default_factory=list)
 
 

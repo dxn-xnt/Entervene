@@ -281,6 +281,7 @@ def test_quiz_builder_rejects_invalid_manual_questions(quiz_api_context):
     c = quiz_api_context
     payload = _valid_payload(c["lesson"].lesson_id)
     payload["questions"][0]["options"][1]["is_correct"] = True
+    payload["questions"][1]["question_type"] = "IDENTIFICATION"
     payload["questions"][1]["options"] = [
         {"option_text": "   ", "is_correct": True, "option_order": 1}
     ]
