@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Text } from "@/components/retroui/Text";
 import { Table } from "@/components/retroui/Table";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -138,30 +139,36 @@ export default function AttendanceModal({
 
                     <Table.Cell className="text-right py-3 pr-6">
                       <div className="flex items-center justify-end gap-3">
-                        <button
+                        <Tooltip>
+                          <TooltipTrigger render={<button
                           type="button"
                           onClick={() => toggleStudent(st.student_id, true)}
                           className="transition-transform active:scale-95 focus:outline-none"
-                          title="Mark Present"
+                          aria-label={`Mark ${st.name} present`}
                         >
                           <CheckCircle2
                             className={`size-7 transition-colors ${
                               isPresent ? "text-[#22C55E] fill-green-100" : "text-gray-300 hover:text-green-500"
                             }`}
                           />
-                        </button>
-                        <button
+                        </button>} />
+                          <TooltipContent>Mark present</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger render={<button
                           type="button"
                           onClick={() => toggleStudent(st.student_id, false)}
                           className="transition-transform active:scale-95 focus:outline-none"
-                          title="Mark Absent"
+                          aria-label={`Mark ${st.name} absent`}
                         >
                           <XCircle
                             className={`size-7 transition-colors ${
                               !isPresent ? "text-[#EF4444] fill-red-100" : "text-gray-300 hover:text-red-500"
                             }`}
                           />
-                        </button>
+                        </button>} />
+                          <TooltipContent>Mark absent</TooltipContent>
+                        </Tooltip>
                       </div>
                     </Table.Cell>
                   </Table.Row>

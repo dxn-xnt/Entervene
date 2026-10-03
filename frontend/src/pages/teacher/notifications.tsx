@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs } from "@/components/retroui/Tabs";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { NotificationCard } from "@/components/notification-card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
@@ -122,7 +123,8 @@ const Notifications = () => {
                   Notifications
                 </h1>
               </div>
-              <Button
+              <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex"><Button
                 variant="default"
                 size="header"
                 onClick={handleMarkAll}
@@ -132,7 +134,9 @@ const Notifications = () => {
                 {markingAll ? <Loader2 className="size-4 animate-spin" /> : null}
                 <span className="hidden sm:inline">Mark All as Read</span>
                 <span className="sm:hidden">Read All</span>
-              </Button>
+              </Button></span>} />
+                <TooltipContent>{markingAll ? "Marking as read" : notifications.every((n) => n.is_read) ? "No unread notifications" : "Mark all as read"}</TooltipContent>
+              </Tooltip>
             </header>
             <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs

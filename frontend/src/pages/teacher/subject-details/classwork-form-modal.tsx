@@ -5,6 +5,7 @@ import type { ClassworkDraft, Lesson } from "./types";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 
 type ClassworkFormModalProps = {
   classworkLesson: Lesson;
@@ -367,7 +368,8 @@ export default function ClassworkFormModal({
                           {(material.size / 1024 / 1024).toFixed(2)} MB
                         </p>
                       </div>
-                      <button
+                      <Tooltip>
+                        <TooltipTrigger render={<span className="inline-flex"><button
                         type="button"
                         onClick={() => removeClassworkMaterial(index)}
                         disabled={isCreatingClasswork}
@@ -375,7 +377,9 @@ export default function ClassworkFormModal({
                         aria-label={`Remove ${material.name}`}
                       >
                         <Trash2 size={16} />
-                      </button>
+                      </button></span>} />
+                        <TooltipContent>Remove file</TooltipContent>
+                      </Tooltip>
                     </div>
                   ))}
                 </div>

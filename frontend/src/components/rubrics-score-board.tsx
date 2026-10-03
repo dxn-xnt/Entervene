@@ -52,8 +52,8 @@ export default function RubricsScoreBoard({
   ];
   const bands = rubricLevels?.length
     ? [...rubricLevels]
-        .sort((a, b) => b.points - a.points)
-        .map((level) => ({ label: level.level_name, points: `${level.points} pts`, description: level.description }))
+      .sort((a, b) => b.points - a.points)
+      .map((level) => ({ label: level.level_name, points: `${level.points} pts`, description: level.description }))
     : fallbackBands;
 
   return (
@@ -65,8 +65,8 @@ export default function RubricsScoreBoard({
           {rightSlot ? (
             rightSlot
           ) : (
-            <Badge variant="secondary" size="sm">
-              Total: {totalPoints ?? 0} pts
+            <Badge variant="secondary" size="sm" className="py-1">
+              {totalPoints ?? 0} pts
             </Badge>
           )}
         </div>
@@ -91,11 +91,11 @@ export default function RubricsScoreBoard({
                   }`}
                 title={onSelectScore ? `Click to set score to ${points}` : undefined}
               >
-                <div className="mb-1 flex items-center justify-between gap-2">
+                <div className="mb-1 flex items-start justify-between gap-2">
                   <p className="font-bold">{label}</p>
-                  <p className="text-sm font-bold">{points}</p>
+                  <p className="text-sm font-bold whitespace-nowrap">{points}</p>
                 </div>
-                <p className={`text-xs
+                <p className={`text-sm
                   ${isSelected
                     ? " text-foreground"
                     : "text-muted-foreground"

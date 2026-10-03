@@ -17,6 +17,7 @@ import {
   type SubjectStatus,
 } from "@/lib/api";
 import { Badge } from "@/components/retroui/Badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 
 const NONE_VALUE = "none";
 
@@ -382,17 +383,20 @@ export default function AddGradingComponentModal({
                   placeholder={String(index + 1)}
                   disabled={isLocked}
                 /> */}
-                <Button
+                <Tooltip>
+                  <TooltipTrigger render={<span className="inline-flex"><Button
                   type="button"
                   size="icon"
                   variant="outline"
                   className="w-fit"
                   onClick={() => removeComponent(component.local_id)}
                   disabled={isLocked || form.components.length <= 1}
-                  title={isLocked ? "Component weights are locked" : "Remove component"}
+                  aria-label="Remove component"
                 >
                   <Trash2 className="size-4" />
-                </Button>
+                </Button></span>} />
+                  <TooltipContent>{isLocked ? "Weights locked" : form.components.length <= 1 ? "Keep one component" : "Remove component"}</TooltipContent>
+                </Tooltip>
               </div>
             ))}
           </div>

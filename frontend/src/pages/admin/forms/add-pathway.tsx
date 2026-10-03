@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Text } from "@/components/retroui/Text";
@@ -17,6 +18,7 @@ export default function AddPathwayModal({
   onClose,
   onSaved,
 }: AddPathwayModalProps) {
+  const toast = useToast();
   const [pathwayCode, setPathwayCode] = React.useState("");
   const [pathwayName, setPathwayName] = React.useState("");
   const [pathwayError, setPathwayError] = React.useState<string | null>(null);
@@ -39,14 +41,17 @@ export default function AddPathwayModal({
 
     setIsSaving(true);
     setPathwayError(null);
+    let created = false;
 
     try {
       await createPathway({ code, name });
+      created = true;
       handleReset();
       await onSaved?.();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to create pathway.";
       setPathwayError(msg);
+      if (!created) toast.error({ title: "Unable to create pathway", description: msg });
     } finally {
       setIsSaving(false);
     }

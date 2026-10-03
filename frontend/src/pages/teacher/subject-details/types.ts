@@ -80,6 +80,13 @@ export type ClassworkAttachment = {
   uploaded_at?: string;
 };
 
+export type LinkedLesson = {
+  lesson_id: number;
+  title: string;
+  description?: string | null;
+  attachments?: LessonAttachment[];
+};
+
 export type ClassworkDetail = {
   classwork_assignment_id: number;
   classwork_id: number;
@@ -94,11 +101,15 @@ export type ClassworkDetail = {
   activity_mode?: string | null;
   total_points?: number | null;
   due_date?: string | null;
+  publish_date?: string | null;
+  created_at?: string | null;
   is_published: boolean;
+  is_graded?: boolean;
   show_scores: boolean;
   is_locked?: boolean;
   teacher_name?: string | null;
   attachments: ClassworkAttachment[];
+  linked_lessons?: LinkedLesson[];
 };
 
 export type TrackingStudent = {

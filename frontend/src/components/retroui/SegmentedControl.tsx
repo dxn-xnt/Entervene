@@ -57,7 +57,7 @@ export function SegmentedControl<T extends string = string>({
   );
 
   const sizeContainerClasses = {
-    sm: "p-1 gap-1",
+    sm: "px-1.5 py-1 py-1 gap-1",
     md: "p-1.5 gap-1.5",
     lg: "p-2 gap-2",
   }[size];
@@ -109,6 +109,7 @@ export function SegmentedControlItem({
   children,
   className,
   disabled,
+  onClick,
   ...props
 }: SegmentedControlItemProps) {
   const context = React.useContext(SegmentedControlContext);
@@ -120,9 +121,9 @@ export function SegmentedControlItem({
   const size = context.size || "md";
 
   const sizeItemClasses = {
-    sm: "px-2 py-0.5 text-xs",
-    md: "px-3 py-1 text-xs md:text-sm",
-    lg: "px-4 py-1.5 text-sm md:text-base",
+    sm: "px-4 py-0.5 text-xs",
+    md: "px-5 py-1 text-xs md:text-sm",
+    lg: "px-6 py-1.5 text-sm md:text-base",
   }[size];
 
   return (
@@ -131,13 +132,16 @@ export function SegmentedControlItem({
       role="radio"
       aria-checked={isSelected}
       disabled={disabled}
-      onClick={() => context.onValueChange?.(value)}
+      onClick={(event) => {
+        onClick?.(event);
+        if (!event.defaultPrevented) context.onValueChange?.(value);
+      }}
       className={cn(
         "font-bold transition-all flex items-center rounded justify-center whitespace-nowrap cursor-pointer",
         sizeItemClasses,
         isSelected
           ? cn(
-            "border-2 border-black bg-primary text-black shadow-none",
+            "border-2 border-black bg-primary text-black shadow-none ",
             context.activeClassName
           )
           : cn(

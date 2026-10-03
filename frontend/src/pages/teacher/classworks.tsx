@@ -32,10 +32,11 @@ import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Input } from "@/components/retroui/Input";
-import { Dialog } from "@/components/retroui/Dialog";
+import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
 import { Select } from "@/components/retroui/Select";
 import SegmentedControl from "@/components/retroui/SegmentedControl";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { DialogueSelect } from "@/components/dialogue-select";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
@@ -494,54 +495,65 @@ export default function Classworks() {
                       </Select.Group>
                     </Select.Content>
                   </Select>
-
-                  <SegmentedControl
-                    size="sm"
-                    value={viewMode}
-                    onValueChange={(val) => setViewMode(val as "grid" | "list")}
-                    className="shrink-0"
-                    aria-label="Classwork view switcher"
-                  >
-                    <SegmentedControl.Item value="grid" title="Grid View">
-                      <LayoutGrid className="size-4" />
-                      <span className="ml-1.5 hidden sm:inline">Grid</span>
-                    </SegmentedControl.Item>
-                    <SegmentedControl.Item value="list" title="List View">
-                      <List className="size-4" />
-                      <span className="ml-1.5 hidden sm:inline">List</span>
-                    </SegmentedControl.Item>
-                  </SegmentedControl>
                 </div>
 
-                <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                  <span className="shrink-0 text-sm font-regular text-muted-foreground">
-                    Subject:
-                  </span>
-                  <Button
-                    autoIcon={false}
-                    variant={subjectFilter === "all" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setSubjectFilter("all")}
-                    className="shrink-0 border-black shadow-none"
-                  >
-                    All subjects
-                  </Button>
-                  {subjects.map((subject) => (
+                <div className="flex items-center gap-2 overflow-x-auto -mb-2 justify-between">
+                  <div className="flex flex-row gap-2 pb-1">
+                    <span className="shrink-0 text-sm font-regular text-muted-foreground">
+                      Subject:
+                    </span>
                     <Button
-                      key={subject.id}
                       autoIcon={false}
-                      variant={
-                        subjectFilter === String(subject.id)
-                          ? "default"
-                          : "outline"
-                      }
+                      variant={subjectFilter === "all" ? "default" : "outline"}
                       size="sm"
-                      onClick={() => setSubjectFilter(String(subject.id))}
+                      onClick={() => setSubjectFilter("all")}
                       className="shrink-0 border-black shadow-none"
                     >
-                      {subject.name}
+                      All
                     </Button>
-                  ))}
+                    {subjects.map((subject) => (
+                      <Button
+                        key={subject.id}
+                        autoIcon={false}
+                        variant={
+                          subjectFilter === String(subject.id)
+                            ? "default"
+                            : "outline"
+                        }
+                        size="sm"
+                        onClick={() => setSubjectFilter(String(subject.id))}
+                        className="shrink-0 border-black shadow-none"
+                      >
+                        {subject.name}
+                      </Button>
+                    ))}
+                  </div>
+
+                  <div className="flex ">
+                    <SegmentedControl
+                      size="sm"
+                      value={viewMode}
+                      onValueChange={(val) => setViewMode(val as "grid" | "list")}
+                      className="shrink-0"
+                      aria-label="Classwork view switcher"
+                    >
+                      <Tooltip>
+                        <TooltipTrigger render={
+                          <SegmentedControl.Item value="grid" aria-label="Grid view">
+                            <LayoutGrid className="size-4" />
+                            <span className="ml-1.5 hidden sm:inline">Grid</span>
+                          </SegmentedControl.Item>} />
+                        <TooltipContent>Grid view</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger render={<SegmentedControl.Item value="list" aria-label="List view">
+                          <List className="size-4" />
+                          <span className="ml-1.5 hidden sm:inline">List</span>
+                        </SegmentedControl.Item>} />
+                        <TooltipContent>List view</TooltipContent>
+                      </Tooltip>
+                    </SegmentedControl>
+                  </div>
                 </div>
 
                 {isLoading ? (
@@ -550,7 +562,7 @@ export default function Classworks() {
                   </p>
                 ) : filteredItems.length > 0 ? (
                   viewMode === "grid" ? (
-                    <section className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] items-stretch gap-4">
+                    <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-stretch gap-4">
                       {filteredItems.map((item) => (
                         <ClassworkCard
                           key={item.classwork_id}
@@ -597,13 +609,17 @@ export default function Classworks() {
                           <Text as="h5" className="font-sans text-xl font-bold">
                             Choose Classwork Type
                           </Text>
-                          <button
-                            type="button"
-                            onClick={closeCreateWizard}
-                            className="cursor-pointer text-black hover:text-gray-200"
-                          >
-                            <X size={18} />
-                          </button>
+                          <Tooltip>
+                            <TooltipTrigger render={<button
+                              type="button"
+                              onClick={closeCreateWizard}
+                              className={dialogHeaderCloseButtonClassName}
+                              aria-label="Close modal"
+                            >
+                              <X className="size-4" />
+                            </button>} />
+                            <TooltipContent>Close modal</TooltipContent>
+                          </Tooltip>
                         </div>
                       </Dialog.Header>
                       <section className="p-5">

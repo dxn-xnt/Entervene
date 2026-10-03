@@ -3,7 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { type HTMLAttributes } from "react";
 
 export const cardVariants = cva(
-  "inline-block gap-2 rounded border-2 border-border p-4 shadow-md transition-all hover:shadow-none",
+  "inline-block gap-2 rounded! border-2 border-border p-4 shadow-md transition-all hover:shadow-none",
   {
     variants: {
       variant: {

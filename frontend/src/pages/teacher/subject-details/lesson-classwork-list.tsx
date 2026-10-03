@@ -18,6 +18,7 @@ import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Select } from "@/components/retroui/Select";
 import { Badge } from "@/components/retroui/Badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { OverviewCard } from "@/components/overview-cards";
 import type { CompetencyItem, Lesson, LinkedClasswork } from "./types";
 
@@ -181,14 +182,17 @@ export default function LessonClassworkList({
                       : "Lesson folder")}
                 </p>
               </div>
-              <button
+              <Tooltip>
+                <TooltipTrigger render={<button
                 type="button"
                 onClick={() => toggleLesson(lesson.lesson_id)}
                 className="p-1 text-gray-800 hover:text-black cursor-pointer ml-2 shrink-0"
-                title={isExpanded ? "Collapse classwork list" : "Expand classwork list"}
+                aria-label={isExpanded ? "Collapse classwork list" : "Expand classwork list"}
               >
                 {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
-              </button>
+              </button>} />
+                <TooltipContent>{isExpanded ? "Collapse classworks" : "Expand classworks"}</TooltipContent>
+              </Tooltip>
             </div>
             <Button
               type="button"
@@ -537,30 +541,34 @@ export default function LessonClassworkList({
                       </Button>
                     )}
                     {openCompetencyForm && (
-                      <Button
+                      <Tooltip>
+                        <TooltipTrigger render={<span className="inline-flex"><Button
                         type="button"
                         variant="outline"
                         size="icon"
                         onClick={() => openCompetencyForm(comp)}
-                        title="Edit Competency"
                         aria-label="Edit competency"
                         className="border-black bg-white text-black hover:bg-yellow-50"
                       >
                         <Pencil size={14} />
-                      </Button>
+                      </Button></span>} />
+                        <TooltipContent>Edit competency</TooltipContent>
+                      </Tooltip>
                     )}
                     {onArchiveCompetency && (
-                      <Button
+                      <Tooltip>
+                        <TooltipTrigger render={<span className="inline-flex"><Button
                         type="button"
                         variant="outline"
                         size="icon"
                         onClick={() => onArchiveCompetency(comp.competency_id)}
-                        title="Archive Competency"
                         aria-label="Archive competency"
                         className="border-black bg-white text-red-600 hover:bg-red-50"
                       >
                         <Trash2 size={14} />
-                      </Button>
+                      </Button></span>} />
+                        <TooltipContent>Archive competency</TooltipContent>
+                      </Tooltip>
                     )}
                   </div>
                 </Card.Header>

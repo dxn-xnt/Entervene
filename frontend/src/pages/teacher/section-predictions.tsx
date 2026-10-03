@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { cn } from "@/lib/utils";
+import { Card } from "@/components/retroui/Card";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
@@ -20,6 +20,7 @@ import {
   fetchDashboardFilters,
 } from "@/lib/prediction-api";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { Button } from "@/components/retroui/Button";
 import {
   buildCurrentTermDashboard,
   loadAuthorizedCurrentTermPredictions,
@@ -64,13 +65,53 @@ function LegacySectionPredictions() {
   const [selectedPrediction, setSelectedPrediction] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  // Auto-open via search params (e.g. from dashboard)
+  const [searchParams] = useSearchParams();
+  const queryPredictionId = searchParams.get("predictionId");
+  const queryStudentId = searchParams.get("studentId");
+  const queryStudentName = searchParams.get("studentName");
+
+  useEffect(() => {
+    if (!data?.items?.length) return;
+    if (queryPredictionId) {
+      const match = data.items.find((item) => String(item.prediction_id) === queryPredictionId);
+      if (match) {
+        setSelectedPrediction(match.prediction_id);
+        setSheetOpen(true);
+        return;
+      }
+    }
+    if (queryStudentId) {
+      const match = data.items.find((item) => String(item.student_id) === queryStudentId);
+      if (match) {
+        setSelectedPrediction(match.prediction_id);
+        setSheetOpen(true);
+        return;
+      }
+    }
+    if (queryStudentName) {
+      const match = data.items.find((item) =>
+        item.student_name.toLowerCase().includes(queryStudentName.toLowerCase())
+      );
+      if (match) {
+        setSelectedPrediction(match.prediction_id);
+        setSheetOpen(true);
+        return;
+      }
+    }
+    if (queryPredictionId || queryStudentId || queryStudentName) {
+      setSelectedPrediction(data.items[0].prediction_id);
+      setSheetOpen(true);
+    }
+  }, [data, queryPredictionId, queryStudentId, queryStudentName]);
+
   // Resolve numeric class ID from route param
   const resolvedClassId =
     classSlug && !isNaN(Number(classSlug))
       ? Number(classSlug)
       : filters?.classes.find(
-          (c) => c.section_name.toLowerCase() === decodeURIComponent(classSlug || "").toLowerCase()
-        )?.class_id;
+        (c) => c.section_name.toLowerCase() === decodeURIComponent(classSlug || "").toLowerCase()
+      )?.class_id;
 
   const sectionDisplayName =
     filters?.classes.find((c) => c.class_id === resolvedClassId)?.section_name ||
@@ -289,28 +330,29 @@ function LegacySectionPredictions() {
 
                 {/* ── Subject Tabs ── */}
                 {sortedSubjects.length > 0 && (
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-                    {sortedSubjects.map((s) => {
-                      const isActive = subjectId === s.subject_id;
-                      return (
-                        <button
-                          key={s.subject_id}
-                          type="button"
-                          onClick={() => {
-                            setSubjectId(s.subject_id);
-                            setOffset(0);
-                          }}
-                          className={cn(
-                            "px-4 py-1.5 text-xs md:text-sm font-bold rounded-md whitespace-nowrap transition-all cursor-pointer border-2",
-                            isActive
-                              ? "bg-yellow-400 border-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                              : "bg-white border-transparent text-gray-700 hover:bg-gray-100 hover:border-black"
-                          )}
-                        >
-                          {s.subject_name}
-                        </button>
-                      );
-                    })}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    <span className="shrink-0 text-sm font-regular text-muted-foreground">
+                      Subject:
+                    </span>
+                    {sortedSubjects.map((s) => (
+                      <Button
+                        key={s.subject_id}
+                        autoIcon={false}
+                        variant={
+                          subjectId === s.subject_id
+                            ? "default"
+                            : "outline"
+                        }
+                        size="sm"
+                        onClick={() => {
+                          setSubjectId(s.subject_id);
+                          setOffset(0);
+                        }}
+                        className="shrink-0 border-black shadow-none"
+                      >
+                        {s.subject_name}
+                      </Button>
+                    ))}
                   </div>
                 )}
 
@@ -320,14 +362,14 @@ function LegacySectionPredictions() {
                     Loading {sectionDisplayName} predictions...
                   </div>
                 ) : sortedSubjects.length === 0 ? (
-                  <div className="p-8 bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-center">
+                  <Card className="flex flex-col items-center justify-center gap-2 p-8 text-center">
                     <p className="text-lg font-bold text-gray-900">
                       No subjects available for {sectionDisplayName}.
                     </p>
                     <p className="text-sm text-gray-600 mt-1 max-w-md mx-auto">
                       There are no subjects offered or assigned for this section in the selected term.
                     </p>
-                  </div>
+                  </Card>
                 ) : (
                   <PredictionTable
                     items={data?.items ?? []}
@@ -372,69 +414,215 @@ function TeacherCurrentTermSectionPredictions() {
   const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
   const candidateId = useTeacherCandidateShortcut(selected);
 
+  // Auto-open via search params (e.g. from dashboard)
+  const [searchParams] = useSearchParams();
+  const queryPredictionId = searchParams.get("predictionId");
+  const queryStudentId = searchParams.get("studentId");
+  const queryStudentName = searchParams.get("studentName");
+
   useEffect(() => {
-    if (!selectedPeriodId || !resolvedClassId) { Promise.resolve().then(() => setLoading(false)); return; }
+    if (!rows.length) return;
+    if (queryPredictionId) {
+      const match = rows.find((r) => String(r.prediction_id) === queryPredictionId);
+      if (match) {
+        setSelected(match);
+        return;
+      }
+    }
+    if (queryStudentId) {
+      const match = rows.find((r) => String(r.student_id) === queryStudentId);
+      if (match) {
+        setSelected(match);
+        return;
+      }
+    }
+    if (queryStudentName) {
+      const normalizedQuery = queryStudentName.toLowerCase();
+      const match = rows.find((r) => {
+        const name = r.student_name?.toLowerCase();
+        return name ? (name.includes(normalizedQuery) || normalizedQuery.includes(name)) : false;
+      });
+      if (match) {
+        setSelected(match);
+        return;
+      }
+    }
+    if (queryPredictionId || queryStudentId || queryStudentName) {
+      setSelected(rows[0]);
+    }
+  }, [rows, queryPredictionId, queryStudentId, queryStudentName]);
+
+  useEffect(() => {
+    if (!selectedPeriodId || !resolvedClassId) {
+      Promise.resolve().then(() => setLoading(false));
+      return;
+    }
+
     let cancelled = false;
-    Promise.resolve().then(() => { if (!cancelled) { setLoading(true); setLoadError(null); } });
+    Promise.resolve().then(() => {
+      if (!cancelled) {
+        setLoading(true);
+        setLoadError(null);
+      }
+    });
+
     loadAuthorizedCurrentTermPredictions(selectedPeriodId, { classId: resolvedClassId })
-      .then(({ rows: loaded }) => { if (!cancelled) setRows(loaded); })
-      .catch((error: unknown) => { if (!cancelled) { setRows([]); setLoadError(currentTermPredictionErrorMessage(error)); } })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .then(({ rows: loaded }) => {
+        if (!cancelled) setRows(loaded);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setRows([]);
+          setLoadError(currentTermPredictionErrorMessage(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [resolvedClassId, selectedPeriodId]);
 
-  const subjects = useMemo(() => [...new Map(rows.map((row) => [row.subject_id, { subject_id: row.subject_id, subject_name: row.subject_name }])).values()], [rows]);
-  const effectiveSubjectId = subjects.some((item) => item.subject_id === subjectId) ? subjectId : subjects[0]?.subject_id;
-  const scopedRows = rows.filter((row) => effectiveSubjectId === undefined || row.subject_id === effectiveSubjectId);
-  const data = buildCurrentTermDashboard(scopedRows, { search, interventionLevel: riskLevel, limit: Math.max(10, scopedRows.length) });
+  const subjects = useMemo(
+    () => [
+      ...new Map(
+        rows.map((row) => [
+          row.subject_id,
+          { subject_id: row.subject_id, subject_name: row.subject_name },
+        ])
+      ).values(),
+    ],
+    [rows]
+  );
+  const effectiveSubjectId = subjects.some((item) => item.subject_id === subjectId)
+    ? subjectId
+    : subjects[0]?.subject_id;
+  const scopedRows = rows.filter(
+    (row) => effectiveSubjectId === undefined || row.subject_id === effectiveSubjectId
+  );
+  const data = buildCurrentTermDashboard(scopedRows, {
+    search,
+    interventionLevel: riskLevel,
+    limit: Math.max(10, scopedRows.length),
+  });
   const sectionName = rows[0]?.class_name || `Section ${classSlug}`;
 
-  return <AppLayout>
-    <div className="flex flex-1 flex-col">
-      <header className="flex items-center gap-3 bg-background px-4 py-4 md:px-6">
-        <SidebarTrigger className="md:hidden" />
-        <Breadcrumb><Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
-          <Breadcrumb.Item><Breadcrumb.Link asChild><Link to="/teacher/predictions">AI Predictions</Link></Breadcrumb.Link></Breadcrumb.Item>
-          <Breadcrumb.Separator />
-          <Breadcrumb.Item><Breadcrumb.Link asChild><Link to={`/teacher/predictions/${grade}`}>Grade {grade}</Link></Breadcrumb.Link></Breadcrumb.Item>
-          <Breadcrumb.Separator />
-          <Breadcrumb.Item><Breadcrumb.Page>{sectionName}</Breadcrumb.Page></Breadcrumb.Item>
-        </Breadcrumb.List></Breadcrumb>
-      </header>
-      <div className="-mt-[1px] border-t-2 border-border px-4 py-4 md:px-6">
-        <div className="flex flex-col gap-4">
-          <PredictionFilters
-            filters={null}
-            gradeLevel={grade ? Number(grade) : undefined}
-            classId={resolvedClassId}
-            subjectId={effectiveSubjectId}
-            academicPeriodId={selectedPeriodId ?? undefined}
-            riskLevel={riskLevel}
-            search={search}
-            hideClassFilter hideGradeFilter hideSubjectFilter hidePeriodFilter
-            riskSummary={data.risk_summary}
-            onSubjectChange={setSubjectId}
-            onRiskChange={setRiskLevel}
-            onSearchChange={setSearch}
-            onClearAll={() => { setRiskLevel(undefined); setSearch(""); }}
-          />
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            {subjects.map((subject) => <button key={subject.subject_id} type="button" onClick={() => setSubjectId(subject.subject_id)} className={cn("whitespace-nowrap rounded-md border-2 px-4 py-1.5 text-sm font-bold", effectiveSubjectId === subject.subject_id ? "border-black bg-yellow-400 shadow-[2px_2px_0px_#000]" : "border-transparent bg-white hover:border-black")}>{subject.subject_name}</button>)}
+  return (
+    <AppLayout>
+      <div className="flex flex-1 flex-col">
+        <header className="flex items-center gap-3 bg-background px-4 py-4 md:px-6">
+          <SidebarTrigger className="md:hidden" />
+          <Breadcrumb>
+            <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
+              <Breadcrumb.Item>
+                <Breadcrumb.Link asChild>
+                  <Link to="/teacher/predictions">AI Predictions</Link>
+                </Breadcrumb.Link>
+              </Breadcrumb.Item>
+              <Breadcrumb.Separator />
+              <Breadcrumb.Item>
+                <Breadcrumb.Link asChild>
+                  <Link to={`/teacher/predictions/${grade}`}>Grade {grade}</Link>
+                </Breadcrumb.Link>
+              </Breadcrumb.Item>
+              <Breadcrumb.Separator />
+              <Breadcrumb.Item>
+                <Breadcrumb.Page>{sectionName}</Breadcrumb.Page>
+              </Breadcrumb.Item>
+            </Breadcrumb.List>
+          </Breadcrumb>
+        </header>
+
+        <div className="-mt-[1px] border-t-2 border-border px-4 py-4 md:px-6">
+          <div className="flex flex-col gap-4">
+            <PredictionFilters
+              filters={null}
+              gradeLevel={grade ? Number(grade) : undefined}
+              classId={resolvedClassId}
+              subjectId={effectiveSubjectId}
+              academicPeriodId={selectedPeriodId ?? undefined}
+              riskLevel={riskLevel}
+              search={search}
+              hideClassFilter
+              hideGradeFilter
+              hideSubjectFilter
+              hidePeriodFilter
+              riskSummary={data.risk_summary}
+              onSubjectChange={setSubjectId}
+              onRiskChange={setRiskLevel}
+              onSearchChange={setSearch}
+              onClearAll={() => {
+                setRiskLevel(undefined);
+                setSearch("");
+              }}
+            />
+
+            {subjects.length > 0 && (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <span className="shrink-0 text-sm font-regular text-muted-foreground">
+                  Subject:
+                </span>
+                {subjects.map((subject) => (
+                  <Button
+                    key={subject.subject_id}
+                    autoIcon={false}
+                    variant={
+                      effectiveSubjectId === subject.subject_id
+                        ? "default"
+                        : "outline"
+                    }
+                    size="sm"
+                    onClick={() => setSubjectId(subject.subject_id)}
+                    className="shrink-0 border-black shadow-none"
+                  >
+                    {subject.subject_name}
+                  </Button>
+                ))}
+              </div>
+            )}
+
+            {loadError && (
+              <div role="alert" className="border-2 border-red-600 bg-red-50 p-4 font-semibold">
+                {loadError}
+              </div>
+            )}
+
+            {loading ? (
+              <div className="py-20 text-center font-semibold text-gray-500">
+                Loading current-term projections...
+              </div>
+            ) : loadError ? null : (
+              <PredictionTable
+                items={data.items}
+                total={data.total}
+                limit={Math.max(10, data.total)}
+                offset={0}
+                hideClass
+                hideSubject
+                hidePagination
+                currentTerm
+                onSort={() => undefined}
+                onPageChange={() => undefined}
+                onRowClick={(predictionId) =>
+                  setSelected(rows.find((row) => row.prediction_id === predictionId) || null)
+                }
+              />
+            )}
           </div>
-          {loadError && <div role="alert" className="border-2 border-red-600 bg-red-50 p-4 font-semibold">{loadError}</div>}
-          {loading ? <div className="py-20 text-center font-semibold text-gray-500">Loading current-term projections...</div> : loadError ? null : <PredictionTable
-            items={data.items}
-            total={data.total}
-            limit={Math.max(10, data.total)}
-            offset={0}
-            hideClass hideSubject hidePagination currentTerm
-            onSort={() => undefined}
-            onPageChange={() => undefined}
-            onRowClick={(predictionId) => setSelected(rows.find((row) => row.prediction_id === predictionId) || null)}
-          />}
         </div>
       </div>
-    </div>
-    <PredictionDetailSheet predictionId={selected?.prediction_id ?? null} currentTermPrediction={selected} candidateId={candidateId} open={selected !== null} onOpenChange={(open) => { if (!open) setSelected(null); }} />
-  </AppLayout>;
+
+      <PredictionDetailSheet
+        predictionId={selected?.prediction_id ?? null}
+        currentTermPrediction={selected}
+        candidateId={candidateId}
+        open={selected !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null);
+        }}
+      />
+    </AppLayout>
+  );
 }

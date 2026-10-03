@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Badge } from "@/components/retroui/Badge";
 import { toast } from "sonner";
 import {
@@ -335,7 +336,8 @@ export function SetLessonGoalModal({
                           </span>
                         </label>
                         {cws.length > 0 && (
-                          <button
+                          <Tooltip>
+                            <TooltipTrigger render={<button
                             type="button"
                             onClick={() =>
                               setExpandedLessons((prev) => ({
@@ -344,14 +346,16 @@ export function SetLessonGoalModal({
                               }))
                             }
                             className="p-1 text-muted-foreground hover:bg-muted"
-                            title="Toggle classworks"
+                            aria-label={isExpanded ? "Hide classworks" : "Show classworks"}
                           >
                             {isExpanded ? (
                               <ChevronDown className="size-3.5" />
                             ) : (
                               <ChevronRight className="size-3.5" />
                             )}
-                          </button>
+                          </button>} />
+                            <TooltipContent>{isExpanded ? "Hide classworks" : "Show classworks"}</TooltipContent>
+                          </Tooltip>
                         )}
                       </div>
 
@@ -506,32 +510,41 @@ export function SetLessonGoalModal({
 
                     {/* Reorder & Remove Controls */}
                     <div className="flex items-center gap-1 shrink-0">
-                      <button
+                      <Tooltip>
+                        <TooltipTrigger render={<span className="inline-flex"><button
                         type="button"
                         disabled={index === 0}
                         onClick={() => moveItem(index, "up")}
                         className="p-1 text-foreground hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent"
-                        title="Move Up"
+                        aria-label="Move up"
                       >
                         <ArrowUp className="size-3.5" />
-                      </button>
-                      <button
+                      </button></span>} />
+                        <TooltipContent>{index === 0 ? "Already first" : "Move up"}</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger render={<span className="inline-flex"><button
                         type="button"
                         disabled={index === selectedItems.length - 1}
                         onClick={() => moveItem(index, "down")}
                         className="p-1 text-foreground hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent"
-                        title="Move Down"
+                        aria-label="Move down"
                       >
                         <ArrowDown className="size-3.5" />
-                      </button>
-                      <button
+                      </button></span>} />
+                        <TooltipContent>{index === selectedItems.length - 1 ? "Already last" : "Move down"}</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger render={<button
                         type="button"
                         onClick={() => removeItem(item.id)}
                         className="p-1 text-destructive hover:bg-destructive/10"
-                        title="Remove"
+                        aria-label="Remove goal item"
                       >
                         <Trash2 className="size-3.5" />
-                      </button>
+                      </button>} />
+                        <TooltipContent>Remove item</TooltipContent>
+                      </Tooltip>
                     </div>
                   </div>
                 ))}

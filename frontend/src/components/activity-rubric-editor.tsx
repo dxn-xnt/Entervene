@@ -2,6 +2,7 @@ import { Plus, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import {
   activityRubricMaximum,
   defaultActivityRubric,
@@ -45,12 +46,14 @@ export function ActivityRubricEditor({ levels, onChange, disabled }: Props) {
               <textarea value={level.description} disabled={disabled} onChange={(event) => update(index, { description: event.target.value })} className="mt-1 min-h-10 w-full border-2 border-border bg-background px-3 py-2 text-sm outline-none focus:border-ring" />
             </label>
             <div className="flex gap-1 md:pt-5">
-              <Button
+              <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex"><Button
                 type="button"
                 size="icon"
                 variant="destructive"
                 aria-label={`Remove ${level.level_name || "level"}`}
                 disabled={disabled || levels.length === 1}
+                className={disabled || levels.length === 1 ? "pointer-events-none" : undefined}
                 onClick={() => {
                   if (!window.confirm(`Remove ${level.level_name || "this performance level"}?`)) return;
                   onChange(
@@ -61,7 +64,11 @@ export function ActivityRubricEditor({ levels, onChange, disabled }: Props) {
                 }}
               >
                 <Trash2 />
-              </Button>
+              </Button></span>} />
+                <TooltipContent>
+                  {disabled ? "Editing unavailable" : levels.length === 1 ? "Keep one level" : "Remove level"}
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
         ))}

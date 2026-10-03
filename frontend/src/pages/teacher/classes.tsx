@@ -1,6 +1,7 @@
 import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Card } from "@/components/retroui/Card";
 import { ArrowUpRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -28,6 +29,7 @@ type TeacherClassLoad = {
   total_classworks?: number;
   progress?: number;
   active_classwork?: ActiveClassworkSummary | null;
+  active_classworks?: ActiveClassworkSummary[];
 };
 
 function AdvisoryCatalogCard({
@@ -39,29 +41,41 @@ function AdvisoryCatalogCard({
 }) {
   return (
     <Card
-      className="group relative flex w-full min-w-0 flex-col justify-between shadow-none p-3 hover:-translate-y-1 cursor-pointer"
+      className="group relative flex w-full min-w-0 flex-col justify-between shadow-none p-3 hover:-translate-y-1 hover:bg-retro cursor-pointer"
       onClick={onClick}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-2xl font-bold leading-tight mr-5">
-            {item.section_name}
-          </p>
-          <p className="text-sm font-semibold">
-            {item.academic_level} · {item.academic_year}
-          </p>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <Tooltip>
+            <TooltipTrigger render={
+              <p className="text-2xl font-bold leading-tight truncate" tabIndex={0}>
+                {item.section_name}
+              </p>
+            } />
+            <TooltipContent>{item.section_name}</TooltipContent>
+          </Tooltip>
+          {item.is_archived ? (
+            <Badge variant="default" size="sm" className="shrink-0">Archived</Badge>
+          ) : (
+            <Badge variant="surface" size="sm" className="shrink-0">Active</Badge>
+          )}
         </div>
-        <Badge variant="solid">Advisory</Badge>
+        <p className="text-sm">
+          {item.academic_level} · {item.academic_year}
+        </p>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-        <span className="font-semibold">
-          {item.is_archived ? "Archived" : "Active"}
+      <div className="mt-1 flex flex-row justify-between w-full gap-2 text-sm">
+        <span className="">
+          <span className="font-bold mr-1">
+            {item.subject_count}
+          </span>
+          subjects
         </span>
-        <span className="text-right font-semibold">
-          {item.student_count} students
-        </span>
-        <span className="col-span-2 font-semibold">
-          {item.subject_count} subjects
+        <span className="text-right">
+          <span className="font-bold mr-1">
+            {item.student_count}
+          </span>
+          students
         </span>
       </div>
     </Card>
@@ -193,7 +207,14 @@ const TeacherClasses = () => {
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
                   {/* Left: Subject Loads */}
-                  <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                  <div
+                    className={cn(
+                      "grid gap-4 items-start",
+                      advisoryClasses.length > 0
+                        ? "grid-cols-1 md:grid-cols-2 lg:col-span-8"
+                        : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 lg:col-span-12"
+                    )}
+                  >
                     {groupedSubjectLoads.length === 0 ? (
                       <div className="col-span-full">
                         <EmptyStateCard title="No subject teaching sections assigned." />
@@ -207,32 +228,40 @@ const TeacherClasses = () => {
                             group.loads.length === 1 ? "col-span-1" : "col-span-1 md:col-span-2"
                           )}
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex min-w-0 flex-col items-start gap-1">
-                              <h2 className="text-xl font-bold">
-                                {group.subjectName}
-                              </h2>
+                          <div className="flex items-start justify-between gap-2 -mb-2">
+                            <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
+                              <Tooltip>
+                                <TooltipTrigger render={
+                                  <h2 className="text-xl font-bold truncate max-w-full" tabIndex={0}>
+                                    {group.subjectName}
+                                  </h2>
+                                } />
+                                <TooltipContent>{group.subjectName}</TooltipContent>
+                              </Tooltip>
                             </div>
                             <div className="flex shrink-0 flex-row items-center gap-3">
                               <Badge variant="secondary" size="sm">
                                 {group.loads.length} section{group.loads.length !== 1 ? "s" : ""}
                               </Badge>
 
-                              <Button
-                                variant="secondary"
-                                className="shadow-none px-1"
-                                size="sm"
-                                title={`View ${group.subjectName}`}
-                                onClick={() => {
-                                  if (group.loads[0]) {
-                                    navigate(
-                                      `/teacher/classes/${group.loads[0].class_id}/subjects/${group.subjectId}`,
-                                    );
-                                  }
-                                }}
-                              >
-                                <ArrowUpRight className="size-4" />
-                              </Button>
+                              <Tooltip>
+                                <TooltipTrigger render={<span className="inline-flex"><Button
+                                  variant="secondary"
+                                  className="shadow-none px-1"
+                                  size="sm"
+                                  aria-label={`View ${group.subjectName}`}
+                                  onClick={() => {
+                                    if (group.loads[0]) {
+                                      navigate(
+                                        `/teacher/classes/${group.loads[0].class_id}/subjects/${group.subjectId}`,
+                                      );
+                                    }
+                                  }}
+                                >
+                                  <ArrowUpRight className="size-4" />
+                                </Button></span>} />
+                                <TooltipContent side="right">View subject</TooltipContent>
+                              </Tooltip>
                             </div>
                           </div>
                           <div
@@ -252,9 +281,11 @@ const TeacherClasses = () => {
                                 isAdvisory={advisoryByClass.has(load.class_id)}
                                 completionRate={load.progress ?? 0}
                                 activeClasswork={load.active_classwork}
-                                onClassworkClick={() => {
-                                  if (load.active_classwork) {
-                                    navigate(`/teacher/classworks/${load.active_classwork.classwork_id}`);
+                                activeClassworks={load.active_classworks}
+                                onClassworkClick={(classworkId) => {
+                                  const cwId = classworkId ?? load.active_classwork?.classwork_id;
+                                  if (cwId) {
+                                    navigate(`/teacher/classworks/${cwId}`);
                                   }
                                 }}
                                 onClick={() =>
@@ -271,24 +302,19 @@ const TeacherClasses = () => {
                   </div>
 
                   {/* Right: Advisory Class */}
-                  <Card className="lg:col-span-4 gap-3 flex flex-col bg-primary">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-bold">Advisory Class</h2>
-                      <div className="flex flex-row gap-3">
-                        <Badge variant="outline">
-                          {advisoryClasses.length} section
-                          {advisoryClasses.length !== 1 ? "s" : ""}
-                        </Badge>
+                  {advisoryClasses.length > 0 && (
+                    <Card className="lg:col-span-4 gap-3 flex flex-col bg-primary">
+                      <div className="flex items-center justify-between">
+                        <h2 className="text-xl font-bold">Advisory Class</h2>
+                        <div className="flex flex-row gap-3">
+                          <Badge variant="outline">
+                            {advisoryClasses.length} section
+                            {advisoryClasses.length !== 1 ? "s" : ""}
+                          </Badge>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      {advisoryClasses.length === 0 ? (
-                        <EmptyStateCard
-                          title="No advisory classes assigned."
-                          className="border-0 bg-transparent shadow-none"
-                        />
-                      ) : (
-                        advisoryClasses.map((item) => (
+                      <div className="flex flex-col gap-3">
+                        {advisoryClasses.map((item) => (
                           <AdvisoryCatalogCard
                             key={item.class_id}
                             item={item}
@@ -296,10 +322,10 @@ const TeacherClasses = () => {
                               navigate(`/teacher/advisory-class/${item.class_id}`)
                             }
                           />
-                        ))
-                      )}
-                    </div>
-                  </Card>
+                        ))}
+                      </div>
+                    </Card>
+                  )}
                 </div>
               )}
             </div>

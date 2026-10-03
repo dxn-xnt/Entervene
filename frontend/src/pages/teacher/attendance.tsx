@@ -4,6 +4,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
 import { OverviewCard } from "@/components/overview-cards";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Badge } from "@/components/retroui/Badge";
 import { Input } from "@/components/retroui/Input";
 import { Table } from "@/components/retroui/Table";
@@ -47,6 +48,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import "./attendance.css";
+import { SegmentedControl } from "@/components/retroui/SegmentedControl";
 
 type StudentInfo = {
   student_id: string;
@@ -452,8 +454,8 @@ export default function TeacherAttendancePage() {
       const scanType: "success" | "duplicate" | "excused" = isExcused
         ? "excused"
         : isDuplicate
-        ? "duplicate"
-        : "success";
+          ? "duplicate"
+          : "success";
 
       // Update studentList status in-place if marked present
       if (!isExcused && res.status === "present") {
@@ -507,12 +509,12 @@ export default function TeacherAttendancePage() {
           stream.getTracks().forEach((track) => {
             try {
               track.stop();
-            } catch (_) {}
+            } catch (_) { }
           });
           videoElem.srcObject = null;
         }
       }
-    } catch (_) {}
+    } catch (_) { }
   };
 
   const stopScanner = async () => {
@@ -529,7 +531,7 @@ export default function TeacherAttendancePage() {
         }
         try {
           instance.clear();
-        } catch (_) {}
+        } catch (_) { }
         scannerRef.current = null;
       }
     } catch (err) {
@@ -556,7 +558,7 @@ export default function TeacherAttendancePage() {
       if (scannerRef.current) {
         try {
           scannerRef.current.clear();
-        } catch (_) {}
+        } catch (_) { }
         scannerRef.current = null;
       }
 
@@ -575,12 +577,12 @@ export default function TeacherAttendancePage() {
         (decodedText: string) => {
           handleQrScan(decodedText);
         },
-        () => {}
+        () => { }
       );
 
       // If a stop was requested while start() was awaiting, stop immediately
       if (isStoppingRef.current) {
-        await html5QrCode.stop().catch(() => {});
+        await html5QrCode.stop().catch(() => { });
         releaseMediaTracks();
         setScannerRunning(false);
         return;
@@ -731,435 +733,435 @@ export default function TeacherAttendancePage() {
         <div className="@container/main flex min-w-0 flex-1 flex-col">
           <div className="flex min-w-0 flex-1 flex-col">
             <div data-page-tabs-sticky-region>
-            {/* Header */}
-            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 md:px-6">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="shrink-0 md:hidden" />
-                <div>
-                  <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">Attendance</h1>
+              {/* Header */}
+              <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 md:px-6">
+                <div className="flex items-center gap-3">
+                  <SidebarTrigger className="shrink-0 md:hidden" />
+                  <div>
+                    <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">Attendance</h1>
+                  </div>
                 </div>
+              </header>
+              <div className="hidden -mt-[1px] bg-background px-3 sm:px-4 md:block md:px-6">
+                <Tabs
+                  tabs={[
+                    {
+                      id: "marking",
+                      label: "Mark Attendance",
+                      icon: Users,
+                    },
+                    {
+                      id: "scan",
+                      label: "QR Scanner",
+                      icon: QrCode,
+                    },
+                    {
+                      id: "summary",
+                      label: "Attendance Summary & Logs",
+                      icon: BarChart3,
+                    },
+                  ]}
+                  activeTab={activeTab}
+                  onTabChange={changeAttendanceTab}
+                />
               </div>
-            </header>
-            <div className="hidden -mt-[1px] bg-background px-3 sm:px-4 md:block md:px-6">
-              <Tabs
-                tabs={[
-                  {
-                    id: "marking",
-                    label: "Mark Attendance",
-                    icon: Users,
-                  },
-                  {
-                    id: "scan",
-                    label: "QR Scanner",
-                    icon: QrCode,
-                  },
-                  {
-                    id: "summary",
-                    label: "Attendance Summary & Logs",
-                    icon: BarChart3,
-                  },
-                ]}
-                activeTab={activeTab}
-                onTabChange={changeAttendanceTab}
-              />
-            </div>
-            <nav aria-label="Attendance views" className="attendance-mobile-tabs sticky top-0 z-30 bg-background md:hidden">
-              {([
-                { id: "marking", label: "Mark", name: "Mark attendance", icon: Users },
-                { id: "scan", label: "Scan QR", name: "QR Scanner", icon: QrCode },
-                { id: "summary", label: "Logs", name: "Attendance summary and logs", icon: BarChart3 },
-              ] as const).map(({ id, label, name, icon: Icon }) => (
-                <button key={id} type="button" aria-label={name} aria-pressed={activeTab === id}
-                  onClick={() => changeAttendanceTab(id)}>
-                  <Icon size={16} aria-hidden="true" />{label}
-                </button>
-              ))}
-            </nav>
+              <nav aria-label="Attendance views" className="attendance-mobile-tabs sticky top-0 z-30 bg-background md:hidden">
+                {([
+                  { id: "marking", label: "Mark", name: "Mark attendance", icon: Users },
+                  { id: "scan", label: "Scan QR", name: "QR Scanner", icon: QrCode },
+                  { id: "summary", label: "Logs", name: "Attendance summary and logs", icon: BarChart3 },
+                ] as const).map(({ id, label, name, icon: Icon }) => (
+                  <button key={id} type="button" aria-label={name} aria-pressed={activeTab === id}
+                    onClick={() => changeAttendanceTab(id)}>
+                    <Icon size={16} aria-hidden="true" />{label}
+                  </button>
+                ))}
+              </nav>
             </div>
 
             <div className="border-t-1 border-border -mt-[1px] flex min-w-0 flex-1 flex-col gap-3 px-3 py-4 sm:px-4 md:px-6">
 
-            {/* Stats Overview */}
-            <div className="mb-1 grid min-w-0 grid-cols-2 gap-3 [&_h3]:text-2xl [&_p]:text-xs sm:grid-cols-5 sm:[&_h3]:text-3xl sm:[&_p]:text-sm">
-              <OverviewCard
-                title="Present"
-                count={String(stats.present)}
-                statDescription="Students present"
-              />
-              <OverviewCard
-                title="Absent"
-                count={String(stats.absent)}
-                statDescription="Students absent"
-              />
-              <OverviewCard
-                title="Late"
-                count={String(stats.late)}
-                statDescription="Students arrived late"
-              />
-              <OverviewCard
-                title="Excused"
-                count={String(stats.excused)}
-                statDescription="Excused absences"
-              />
-              <OverviewCard
-                title="Daily Rate"
-                count={`${stats.rate}%`}
-                statDescription="Overall attendance rate"
-                className="col-span-2 sm:col-span-1"
-              />
-            </div>
+              {/* Stats Overview */}
+              <div className="mb-1 grid min-w-0 grid-cols-2 gap-3 [&_h3]:text-2xl [&_p]:text-xs sm:grid-cols-5 sm:[&_h3]:text-3xl sm:[&_p]:text-sm">
+                <OverviewCard
+                  title="Present"
+                  count={String(stats.present)}
+                  statDescription="Students present"
+                />
+                <OverviewCard
+                  title="Absent"
+                  count={String(stats.absent)}
+                  statDescription="Students absent"
+                />
+                <OverviewCard
+                  title="Late"
+                  count={String(stats.late)}
+                  statDescription="Students arrived late"
+                />
+                <OverviewCard
+                  title="Excused"
+                  count={String(stats.excused)}
+                  statDescription="Excused absences"
+                />
+                <OverviewCard
+                  title="Daily Rate"
+                  count={`${stats.rate}%`}
+                  statDescription="Overall attendance rate"
+                  className="col-span-2 sm:col-span-1"
+                />
+              </div>
 
-            {activeTab === "marking" && (
-              <>
-                {/* Filters & Control Bar */}
-                <div className="grid w-full min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(260px,1.25fr)_minmax(190px,0.75fr)_minmax(220px,1fr)] lg:gap-4">
-                  {/* Class Selector */}
-                  <div className="flex min-w-0 flex-col gap-1 sm:col-span-2 lg:col-span-1">
-                    <div className="flex items-center justify-between">
-                      <Label className="font-sans text-sm font-semibold">
-                        Classes
-                      </Label>
-                      {loadingClasses && (
-                        <span className="flex items-center text-xs text-muted-foreground animate-pulse">
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Loading classes...
-                        </span>
-                      )}
-                      {isDirty && (
-                        <span className="text-[11px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                          Unsaved Changes
-                        </span>
+              {activeTab === "marking" && (
+                <>
+                  {/* Filters & Control Bar */}
+                  <div className="grid w-full min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(260px,1.25fr)_minmax(190px,0.75fr)_minmax(220px,1fr)] lg:gap-4">
+                    {/* Class Selector */}
+                    <div className="flex min-w-0 flex-col gap-1 sm:col-span-2 lg:col-span-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="font-sans text-sm font-semibold">
+                          Classes
+                        </Label>
+                        {loadingClasses && (
+                          <span className="flex items-center text-xs text-muted-foreground animate-pulse">
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Loading classes...
+                          </span>
+                        )}
+                        {isDirty && (
+                          <span className="text-[11px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            Unsaved Changes
+                          </span>
+                        )}
+                      </div>
+                      {classesError ? (
+                        <div className="flex items-center justify-between rounded border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                          <span className="truncate mr-2">Failed to load classes: {classesError.message}</span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void refetchClasses()}
+                            className="h-7 px-2 text-xs border-destructive text-destructive hover:bg-destructive hover:text-white"
+                          >
+                            <RefreshCw className="mr-1 h-3 w-3" /> Retry
+                          </Button>
+                        </div>
+                      ) : (
+                        <Select
+                          value={selectedTargetKey}
+                          onValueChange={handleTargetChange}
+                          disabled={loadingClasses || targets.length === 0}
+                        >
+                          <Select.Trigger className="w-full min-w-0">
+                            <Select.Value
+                              placeholder={
+                                loadingClasses
+                                  ? "Loading classes for selected term..."
+                                  : targets.length === 0
+                                    ? "No classes available for this term"
+                                    : "Select class / subject"
+                              }
+                            />
+                          </Select.Trigger>
+                          <Select.Content className="attendance-select-options">
+                            {advisoryTargets.length > 0 && (
+                              <Select.Group>
+                                <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
+                                  Advisory Classes (Homeroom Attendance)
+                                </Select.Label>
+                                {advisoryTargets.map((t) => (
+                                  <Select.Item key={t.key} value={t.key} className="text-sm">
+                                    {t.label}
+                                  </Select.Item>
+                                ))}
+                              </Select.Group>
+                            )}
+                            {subjectTargets.length > 0 && (
+                              <Select.Group>
+                                <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
+                                  Subject Teaching Classes
+                                </Select.Label>
+                                {subjectTargets.map((t) => (
+                                  <Select.Item key={t.key} value={t.key} className="text-sm">
+                                    {t.label}
+                                  </Select.Item>
+                                ))}
+                              </Select.Group>
+                            )}
+                          </Select.Content>
+                        </Select>
                       )}
                     </div>
-                    {classesError ? (
-                      <div className="flex items-center justify-between rounded border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                        <span className="truncate mr-2">Failed to load classes: {classesError.message}</span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void refetchClasses()}
-                          className="h-7 px-2 text-xs border-destructive text-destructive hover:bg-destructive hover:text-white"
-                        >
-                          <RefreshCw className="mr-1 h-3 w-3" /> Retry
-                        </Button>
-                      </div>
-                    ) : (
-                      <Select
-                        value={selectedTargetKey}
-                        onValueChange={handleTargetChange}
-                        disabled={loadingClasses || targets.length === 0}
-                      >
-                        <Select.Trigger className="w-full min-w-0">
-                          <Select.Value
-                            placeholder={
-                              loadingClasses
-                                ? "Loading classes for selected term..."
-                                : targets.length === 0
-                                ? "No classes available for this term"
-                                : "Select class / subject"
-                            }
-                          />
-                        </Select.Trigger>
-                        <Select.Content className="attendance-select-options">
-                          {advisoryTargets.length > 0 && (
-                            <Select.Group>
-                              <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
-                                Advisory Classes (Homeroom Attendance)
-                              </Select.Label>
-                              {advisoryTargets.map((t) => (
-                                <Select.Item key={t.key} value={t.key} className="text-sm">
-                                  {t.label}
-                                </Select.Item>
-                              ))}
-                            </Select.Group>
-                          )}
-                          {subjectTargets.length > 0 && (
-                            <Select.Group>
-                              <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
-                                Subject Teaching Classes
-                              </Select.Label>
-                              {subjectTargets.map((t) => (
-                                <Select.Item key={t.key} value={t.key} className="text-sm">
-                                  {t.label}
-                                </Select.Item>
-                              ))}
-                            </Select.Group>
-                          )}
-                        </Select.Content>
-                      </Select>
-                    )}
-                  </div>
 
-                  {/* Date Selector (Only shown for Marking tab) */}
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <Label className="font-sans text-sm font-semibold">
-                      Attendance Date
-                    </Label>
-                    <Input
-                      type="date"
-                      aria-label="Attendance date"
-                      value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      className="rounded border-black h-10 w-full bg-white text-md font-sans"
-                    />
-                  </div>
-
-                  {/* Search */}
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <Label className="font-sans text-sm font-semibold">
-                      Search
-                    </Label>
-                    <div className="relative w-full">
-                      <Search className="w-4 h-4 absolute left-3 top-3 text-gray-500" />
+                    {/* Date Selector (Only shown for Marking tab) */}
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <Label className="font-sans text-sm font-semibold">
+                        Attendance Date
+                      </Label>
                       <Input
-                        type="text"
-                        aria-label="Search students by name or LRN"
-                        placeholder="Search name or LRN..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="rounded border-black h-10 w-full bg-white pl-9"
+                        type="date"
+                        aria-label="Attendance date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="rounded border-black h-10 w-full bg-white text-md font-sans"
                       />
                     </div>
-                  </div>
-                </div>
 
-                <Card className="block min-w-0 w-full overflow-hidden border-black bg-white transition-none shadow-md hover:shadow-none">
-                  <div className="flex w-full flex-col gap-3 border-black bg-white py-3 transition-none sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                      <span className="text-sm font-semibold">
-                        Mark All:
-                      </span>
-                      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row">
-                        <Button
-                          size="sm"
-                          onClick={() => markAll("present")}
-                          className="bg-success/80 shadow-none hover:bg-success"
-                        >
-                          <Check size="14" className="mr-2" />
-                          Present
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => markAll("absent")}
-                          className="bg-destructive/80 shadow-none hover:bg-destructive"
-                        >
-                          <X size="14" className="mr-2" />
-                          Absent
-                        </Button>
+                    {/* Search */}
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <Label className="font-sans text-sm font-semibold">
+                        Search
+                      </Label>
+                      <div className="relative w-full">
+                        <Search className="w-4 h-4 absolute left-3 top-3 text-gray-500" />
+                        <Input
+                          type="text"
+                          aria-label="Search students by name or LRN"
+                          placeholder="Search name or LRN..."
+                          value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                          className="rounded border-black h-10 w-full bg-white pl-9"
+                        />
                       </div>
                     </div>
+                  </div>
 
-                    <Button
-                      size="sm"
-                      onClick={handleSaveAttendance}
-                      disabled={saving || studentList.length === 0}
-                      className="flex w-full items-center justify-center gap-2 shadow-none sm:w-auto"
-                    >
-                      {saveSuccess ? (
-                        <>
-                          <Check className="w-4 h-4 text-emerald-400" /> Saved
-                          Successfully!
-                        </>
-                      ) : (
-                        <>
-                          <Save className="w-4 h-4" /> Save Attendance Log
-                        </>
-                      )}
+                  <Card className="block min-w-0 w-full overflow-hidden border-black bg-white transition-none shadow-md hover:shadow-none">
+                    <div className="flex w-full flex-col gap-3 border-black bg-white py-3 transition-none sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                        <span className="text-sm font-semibold">
+                          Mark All:
+                        </span>
+                        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row">
+                          <Button
+                            size="sm"
+                            onClick={() => markAll("present")}
+                            className="bg-success/80 shadow-none hover:bg-success"
+                          >
+                            <Check size="14" className="mr-2" />
+                            Present
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => markAll("absent")}
+                            className="bg-destructive/80 shadow-none hover:bg-destructive"
+                          >
+                            <X size="14" className="mr-2" />
+                            Absent
+                          </Button>
+                        </div>
+                      </div>
+
+                      <Button
+                        size="sm"
+                        onClick={handleSaveAttendance}
+                        disabled={saving || studentList.length === 0}
+                        className="flex w-full items-center justify-center gap-2 shadow-none sm:w-auto"
+                      >
+                        {saveSuccess ? (
+                          <>
+                            <Check className="w-4 h-4 text-emerald-400" /> Saved
+                            Successfully!
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4" /> Save Attendance Log
+                          </>
+                        )}
+                      </Button>
+                    </div>
+
+                    {/* Attendance Roster Table */}
+                    {loadingLogs ? (
+                      <LoadingPanel label="Loading student roster..." />
+                    ) : filteredStudents.length === 0 ? (
+                      <Empty className="">
+                        <EmptyHeader>
+                          <EmptyMedia>
+                            <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background *:data-[slot=avatar]:grayscale">
+                              <Avatar variant="student" >
+                                <Avatar.Image
+                                  src="/avatars/student-avatars/3.svg"
+                                  alt="@shadcn" />
+                                <Avatar.Fallback>CN</Avatar.Fallback>
+                              </Avatar>
+                              <Avatar variant="student" >
+                                <Avatar.Image
+                                  src="/avatars/student-avatars/2.svg"
+                                  alt="@maxleiter"
+                                />
+                                <Avatar.Fallback>LR</Avatar.Fallback>
+                              </Avatar>
+                              <Avatar variant="student" >
+                                <Avatar.Image
+                                  src="/avatars/student-avatars/1.svg"
+                                  alt="@evilrabbit"
+                                />
+                                <Avatar.Fallback>ER</Avatar.Fallback>
+                              </Avatar>
+                            </div>
+                          </EmptyMedia>
+                          <EmptyTitle>No Students Found</EmptyTitle>
+
+                        </EmptyHeader>
+                      </Empty>
+                    ) : (
+                      <Table
+                        wrapperClassName="h-auto max-w-full overflow-x-auto overscroll-x-contain shadow-none [scrollbar-width:thin]"
+                        className="min-w-[660px] bg-background shadow-none"
+                      >
+                        <Table.Header>
+                          <Table.Row>
+                            <Table.Head className="min-w-[260px]">
+                              Student Name
+                            </Table.Head>
+                            <Table.Head className="text-center">
+                              Status
+                            </Table.Head>
+                            <Table.Head>
+                              Remarks
+                            </Table.Head>
+                          </Table.Row>
+                        </Table.Header>
+                        <Table.Body className="text-sm">
+                          {(() => {
+                            const { males, females } = groupStudentsByGender(filteredStudents);
+
+                            const renderRow = (student: StudentAttendanceState) => (
+                              <Table.Row
+                                key={student.student_id}
+                                className={`border-b-2 border-black transition-colors ${student.status === "absent"
+                                  ? "bg-red-50/50"
+                                  : student.status === "late"
+                                    ? "bg-amber-50/50"
+                                    : student.status === "excused"
+                                      ? "bg-blue-50/50"
+                                      : ""
+                                  }`}
+                              >
+                                <Table.Cell className="min-w-[260px]">
+                                  <div className="flex items-center gap-3">
+                                    <Avatar variant="student" className="size-8 shrink-0">
+                                      <Avatar.Image
+                                        src={student.avatar || "/avatars/student-avatars/1.svg"}
+                                        alt={student.student_name}
+                                      />
+                                      <Avatar.Fallback>
+                                        {(student.avatar_initial || student.student_name || "?")
+                                          .charAt(0)
+                                          .toUpperCase()}
+                                      </Avatar.Fallback>
+                                    </Avatar>
+                                    <div className="min-w-0">
+                                      <span className="block text-base font-semibold leading-tight">
+                                        {student.student_name}
+                                      </span>
+                                      {student.student_lrn && (
+                                        <span className="text-[11px] text-muted-foreground font-mono">
+                                          LRN: {student.student_lrn}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </Table.Cell>
+
+                                {/* Status Select */}
+                                <Table.Cell className="text-center" data-label="Status">
+                                  <Select
+                                    value={student.status}
+                                    onValueChange={(value) =>
+                                      setStatus(student.student_id, value as AttendanceStatus)
+                                    }
+                                  >
+                                    <Select.Trigger
+                                      aria-label={`Attendance status for ${student.student_name}`}
+                                      className={cn(
+                                        "w-36 mx-auto font-semibold border-2 border-black shadow-none",
+
+                                      )}
+                                    >
+                                      <Select.Value />
+                                    </Select.Trigger>
+                                    <Select.Content className="attendance-select-options">
+                                      <Select.Group>
+                                        <Select.Item value="present">Present</Select.Item>
+                                        <Select.Item value="absent">Absent</Select.Item>
+                                        <Select.Item value="late">Late</Select.Item>
+                                        <Select.Item value="excused">Excused</Select.Item>
+                                      </Select.Group>
+                                    </Select.Content>
+                                  </Select>
+                                </Table.Cell>
+
+                                <Table.Cell className="" data-label="Remarks">
+                                  <Input
+                                    type="text"
+                                    aria-label={`Remarks for ${student.student_name}`}
+                                    className="w-full text-sm border-transparent hover:border-gray-300 focus:border-black outline-none bg-transparent transition-colors placeholder:text-gray-400 rounded shadow-none focus:shadow-none"
+                                    placeholder={
+                                      student.status !== "present"
+                                        ? "Add remarks..."
+                                        : "-"
+                                    }
+                                    value={student.remarks}
+                                    onChange={(e) =>
+                                      setRemarks(student.student_id, e.target.value)
+                                    }
+                                  />
+                                </Table.Cell>
+                              </Table.Row>
+                            );
+
+                            return (
+                              <>
+                                {males.length > 0 && (
+                                  <>
+                                    <Table.Row className="hover:bg-accent border-y-2">
+                                      <Table.Cell
+                                        colSpan={3}
+                                        className="p-1! text-sm font-semibold text-center bg-primary pr-10!"
+                                      >
+                                        Male
+                                      </Table.Cell>
+                                    </Table.Row>
+                                    {males.map((student) => renderRow(student))}
+                                  </>
+                                )}
+                                {females.length > 0 && (
+                                  <>
+                                    <Table.Row className="hover:bg-accent border-b-2 p-0!">
+                                      <Table.Cell
+                                        colSpan={3}
+                                        className="p-1! text-sm font-semibold text-center bg-primary pr-10!"
+                                      >
+                                        Female
+                                      </Table.Cell>
+                                    </Table.Row>
+                                    {females.map((student) => renderRow(student))}
+                                  </>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </Table.Body>
+                      </Table>
+                    )}
+                  </Card>
+                  <div className="attendance-save-bar md:hidden">
+                    <div className="attendance-save-context">
+                      <strong>{selectedTarget?.label || "Select a class"}</strong>
+                      <span>{selectedDate} · {studentList.length} students</span>
+                    </div>
+                    <Button onClick={handleSaveAttendance} disabled={saving || studentList.length === 0}
+                      className="w-full gap-2 shadow-none" aria-live="polite">
+                      {saveSuccess ? <Check size={18} /> : <Save size={18} />}
+                      {saving ? "Saving attendance…" : saveSuccess ? "Attendance saved" : "Save Attendance"}
                     </Button>
                   </div>
 
-                  {/* Attendance Roster Table */}
-                  {loadingLogs ? (
-                    <LoadingPanel label="Loading student roster..." />
-                  ) : filteredStudents.length === 0 ? (
-                    <Empty className="">
-                      <EmptyHeader>
-                        <EmptyMedia>
-                          <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background *:data-[slot=avatar]:grayscale">
-                            <Avatar variant="student" >
-                              <Avatar.Image
-                                src="/avatars/student-avatars/3.svg"
-                                alt="@shadcn" />
-                              <Avatar.Fallback>CN</Avatar.Fallback>
-                            </Avatar>
-                            <Avatar variant="student" >
-                              <Avatar.Image
-                                src="/avatars/student-avatars/2.svg"
-                                alt="@maxleiter"
-                              />
-                              <Avatar.Fallback>LR</Avatar.Fallback>
-                            </Avatar>
-                            <Avatar variant="student" >
-                              <Avatar.Image
-                                src="/avatars/student-avatars/1.svg"
-                                alt="@evilrabbit"
-                              />
-                              <Avatar.Fallback>ER</Avatar.Fallback>
-                            </Avatar>
-                          </div>
-                        </EmptyMedia>
-                        <EmptyTitle>No Students Found</EmptyTitle>
+                </>
+              )}
 
-                      </EmptyHeader>
-                    </Empty>
-                  ) : (
-                    <Table
-                      wrapperClassName="h-auto max-w-full overflow-x-auto overscroll-x-contain shadow-none [scrollbar-width:thin]"
-                      className="min-w-[660px] bg-background shadow-none"
-                    >
-                      <Table.Header>
-                        <Table.Row>
-                          <Table.Head className="min-w-[260px]">
-                            Student Name
-                          </Table.Head>
-                          <Table.Head className="text-center">
-                            Status
-                          </Table.Head>
-                          <Table.Head>
-                            Remarks
-                          </Table.Head>
-                        </Table.Row>
-                      </Table.Header>
-                      <Table.Body className="text-sm">
-                        {(() => {
-                          const { males, females } = groupStudentsByGender(filteredStudents);
-
-                          const renderRow = (student: StudentAttendanceState) => (
-                            <Table.Row
-                              key={student.student_id}
-                              className={`border-b-2 border-black transition-colors ${student.status === "absent"
-                                ? "bg-red-50/50"
-                                : student.status === "late"
-                                  ? "bg-amber-50/50"
-                                  : student.status === "excused"
-                                    ? "bg-blue-50/50"
-                                    : ""
-                                }`}
-                            >
-                              <Table.Cell className="min-w-[260px]">
-                                <div className="flex items-center gap-3">
-                                  <Avatar variant="student" className="size-8 shrink-0">
-                                    <Avatar.Image
-                                      src={student.avatar || "/avatars/student-avatars/1.svg"}
-                                      alt={student.student_name}
-                                    />
-                                    <Avatar.Fallback>
-                                      {(student.avatar_initial || student.student_name || "?")
-                                        .charAt(0)
-                                        .toUpperCase()}
-                                    </Avatar.Fallback>
-                                  </Avatar>
-                                  <div className="min-w-0">
-                                    <span className="block text-base font-semibold leading-tight">
-                                      {student.student_name}
-                                    </span>
-                                    {student.student_lrn && (
-                                      <span className="text-[11px] text-muted-foreground font-mono">
-                                        LRN: {student.student_lrn}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </Table.Cell>
-
-                              {/* Status Select */}
-                              <Table.Cell className="text-center" data-label="Status">
-                                <Select
-                                  value={student.status}
-                                  onValueChange={(value) =>
-                                    setStatus(student.student_id, value as AttendanceStatus)
-                                  }
-                                >
-                                  <Select.Trigger
-                                    aria-label={`Attendance status for ${student.student_name}`}
-                                    className={cn(
-                                      "w-36 mx-auto font-semibold border-2 border-black shadow-none",
-
-                                    )}
-                                  >
-                                    <Select.Value />
-                                  </Select.Trigger>
-                                  <Select.Content className="attendance-select-options">
-                                    <Select.Group>
-                                      <Select.Item value="present">Present</Select.Item>
-                                      <Select.Item value="absent">Absent</Select.Item>
-                                      <Select.Item value="late">Late</Select.Item>
-                                      <Select.Item value="excused">Excused</Select.Item>
-                                    </Select.Group>
-                                  </Select.Content>
-                                </Select>
-                              </Table.Cell>
-
-                              <Table.Cell className="" data-label="Remarks">
-                                <Input
-                                  type="text"
-                                  aria-label={`Remarks for ${student.student_name}`}
-                                  className="w-full text-sm border-transparent hover:border-gray-300 focus:border-black outline-none bg-transparent transition-colors placeholder:text-gray-400 rounded shadow-none focus:shadow-none"
-                                  placeholder={
-                                    student.status !== "present"
-                                      ? "Add remarks..."
-                                      : "-"
-                                  }
-                                  value={student.remarks}
-                                  onChange={(e) =>
-                                    setRemarks(student.student_id, e.target.value)
-                                  }
-                                />
-                              </Table.Cell>
-                            </Table.Row>
-                          );
-
-                          return (
-                            <>
-                              {males.length > 0 && (
-                                <>
-                                  <Table.Row className="hover:bg-accent border-y-2">
-                                    <Table.Cell
-                                      colSpan={3}
-                                      className="p-1! text-sm font-semibold text-center bg-primary pr-10!"
-                                    >
-                                      Male
-                                    </Table.Cell>
-                                  </Table.Row>
-                                  {males.map((student) => renderRow(student))}
-                                </>
-                              )}
-                              {females.length > 0 && (
-                                <>
-                                  <Table.Row className="hover:bg-accent border-b-2 p-0!">
-                                    <Table.Cell
-                                      colSpan={3}
-                                      className="p-1! text-sm font-semibold text-center bg-primary pr-10!"
-                                    >
-                                      Female
-                                    </Table.Cell>
-                                  </Table.Row>
-                                  {females.map((student) => renderRow(student))}
-                                </>
-                              )}
-                            </>
-                          );
-                        })()}
-                      </Table.Body>
-                    </Table>
-                  )}
-                </Card>
-                <div className="attendance-save-bar md:hidden">
-                  <div className="attendance-save-context">
-                    <strong>{selectedTarget?.label || "Select a class"}</strong>
-                    <span>{selectedDate} · {studentList.length} students</span>
-                  </div>
-                  <Button onClick={handleSaveAttendance} disabled={saving || studentList.length === 0}
-                    className="w-full gap-2 shadow-none" aria-live="polite">
-                    {saveSuccess ? <Check size={18} /> : <Save size={18} />}
-                    {saving ? "Saving attendance…" : saveSuccess ? "Attendance saved" : "Save Attendance"}
-                  </Button>
-                </div>
-
-              </>
-            )}
-
-            {/* Scan Mode Tab */}
-            <div className={activeTab === "scan" ? "attendance-scanner flex flex-col gap-4" : "hidden"}>
+              {/* Scan Mode Tab */}
+              <div className={activeTab === "scan" ? "attendance-scanner flex flex-col gap-4" : "hidden"}>
                 {/* Session Context Bar */}
                 <Card className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex flex-col gap-1 min-w-[280px] max-w-md w-full sm:w-auto">
@@ -1313,8 +1315,8 @@ export default function TeacherAttendancePage() {
                                 scan.type === "success"
                                   ? "border-emerald-500/60 bg-emerald-500/10 text-foreground"
                                   : scan.type === "duplicate" || scan.type === "excused"
-                                  ? "border-amber-500/60 bg-amber-500/10 text-foreground"
-                                  : "border-destructive/60 bg-destructive/10 text-foreground"
+                                    ? "border-amber-500/60 bg-amber-500/10 text-foreground"
+                                    : "border-destructive/60 bg-destructive/10 text-foreground"
                               )}
                             >
                               <div className="flex items-start gap-2.5">
@@ -1339,8 +1341,8 @@ export default function TeacherAttendancePage() {
                                     scan.type === "success"
                                       ? "solid"
                                       : scan.type === "error"
-                                      ? "outline"
-                                      : "surface"
+                                        ? "outline"
+                                        : "surface"
                                   }
                                   className={cn(
                                     "text-[10px] uppercase font-bold mt-1",
@@ -1351,10 +1353,10 @@ export default function TeacherAttendancePage() {
                                   {scan.type === "success"
                                     ? "Present"
                                     : scan.type === "excused"
-                                    ? "Excused"
-                                    : scan.type === "duplicate"
-                                    ? "Duplicate"
-                                    : "Rejected"}
+                                      ? "Excused"
+                                      : scan.type === "duplicate"
+                                        ? "Duplicate"
+                                        : "Rejected"}
                                 </Badge>
                               </div>
                             </div>
@@ -1366,360 +1368,387 @@ export default function TeacherAttendancePage() {
                 </div>
               </div>
 
-            {/* Summary Tab */}
-            {activeTab === "summary" && (
-              <>
-                <div className="mb-1 grid min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
-                  {/* Class Selector */}
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <Label className="font-sans text-sm font-semibold">
-                      Classes
-                    </Label>
-                    <Select
-                      value={selectedTargetKey}
-                      onValueChange={(val) => setSelectedTargetKey(val)}
-                    >
-                      <Select.Trigger className="w-full min-w-0">
-                        <Select.Value placeholder="Select class / subject" />
-                      </Select.Trigger>
-                      <Select.Content className="attendance-select-options">
-                        {advisoryTargets.length > 0 && (
-                          <Select.Group>
-                            <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
-                              Advisory Classes (Homeroom Attendance)
-                            </Select.Label>
-                            {advisoryTargets.map((t) => (
-                              <Select.Item key={t.key} value={t.key} className="text-sm">
-                                {t.label}
-                              </Select.Item>
-                            ))}
-                          </Select.Group>
-                        )}
-                        {subjectTargets.length > 0 && (
-                          <Select.Group>
-                            <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
-                              Subject Teaching Classes
-                            </Select.Label>
-                            {subjectTargets.map((t) => (
-                              <Select.Item key={t.key} value={t.key} className="text-sm">
-                                {t.label}
-                              </Select.Item>
-                            ))}
-                          </Select.Group>
-                        )}
-                      </Select.Content>
-                    </Select>
-                  </div>
-
-                  {/* Search */}
-                  <div className="flex min-w-0 flex-col gap-1 sm:col-span-1 lg:col-span-2">
-                    <Label className="font-sans text-sm font-semibold">
-                      Search
-                    </Label>
-                    <div className="relative">
-                      <Search className="w-4 h-4 absolute left-3 top-3 text-gray-500" />
-                      <Input
-                        type="text"
-                        placeholder="Search name or LRN..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="rounded border-black h-10 w-full bg-white pl-9"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Filters & Control Bar */}
-                <Card className="block min-w-0 w-full overflow-hidden border-black bg-white transition-none">
-
-                  {/* Attendance Summary & Report Matrix */}
-                  <div className="flex flex-col gap-4 mt-3">
-                    {/* Global Controls & Layout Switcher */}
-                    <div className="flex flex-col gap-3 border-2 border-black bg-gray-50 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                      <div>
-                        <h2 className="text-lg font-extrabold">
-                          Attendance Summary & Log Explorer
-                        </h2>
-                        <p className="text-xs text-gray-500 font-semibold">
-                          View cumulative totals or switch to the complete Date Grid
-                          Log Sheet.
-                        </p>
-                      </div>
-
-                      <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
-                        {/* Status Filter */}
-                        <div className="flex min-w-0 items-center gap-1">
-                          <Select
-                            value={statusFilter}
-                            onValueChange={(val) =>
-                              setStatusFilter(
-                                val as "all" | "absent" | "late" | "excused",
-                              )
-                            }
-                          >
-                            <Select.Trigger className="h-9 w-full min-w-0 border-2 border-black bg-white text-xs font-bold shadow-none sm:w-36">
-                              <Select.Value />
-                            </Select.Trigger>
-                            <Select.Content className="attendance-select-options">
-                              <Select.Group>
-                                <Select.Item value="all" className="text-xs font-semibold">
-                                  All Students
+              {/* Summary Tab */}
+              {activeTab === "summary" && (
+                <>
+                  <div className="mb-1 grid min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
+                    {/* Class Selector */}
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <Label className="font-sans text-sm font-semibold">
+                        Classes
+                      </Label>
+                      <Select
+                        value={selectedTargetKey}
+                        onValueChange={(val) => setSelectedTargetKey(val)}
+                      >
+                        <Select.Trigger className="w-full min-w-0">
+                          <Select.Value placeholder="Select class / subject" />
+                        </Select.Trigger>
+                        <Select.Content className="attendance-select-options">
+                          {advisoryTargets.length > 0 && (
+                            <Select.Group>
+                              <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
+                                Advisory Classes (Homeroom Attendance)
+                              </Select.Label>
+                              {advisoryTargets.map((t) => (
+                                <Select.Item key={t.key} value={t.key} className="text-sm">
+                                  {t.label}
                                 </Select.Item>
-                                <Select.Item value="absent" className="text-xs font-semibold">
-                                  Has Absences
+                              ))}
+                            </Select.Group>
+                          )}
+                          {subjectTargets.length > 0 && (
+                            <Select.Group>
+                              <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
+                                Subject Teaching Classes
+                              </Select.Label>
+                              {subjectTargets.map((t) => (
+                                <Select.Item key={t.key} value={t.key} className="text-sm">
+                                  {t.label}
                                 </Select.Item>
-                                <Select.Item value="late" className="text-xs font-semibold">
-                                  Has Tardies
-                                </Select.Item>
-                                <Select.Item value="excused" className="text-xs font-semibold">
-                                  Has Excused
-                                </Select.Item>
-                              </Select.Group>
-                            </Select.Content>
-                          </Select>
-                        </div>
-
-                        {/* View Switcher: Summary Matrix vs Date Grid Sheet */}
-                        <div className="grid grid-cols-2 sm:flex sm:items-center">
-                          <Button
-                            size="sm"
-                            variant={summaryLayout === "summary" ? "default" : "outline"}
-                            onClick={() => setSummaryLayout("summary")}
-                            className="min-w-0 text-xs font-bold border-black rounded-r border-r-0 shadow-none hover:shadow-none"
-                          >
-                            <BarChart3 className="w-3.5 h-3.5 inline mr-1" />{" "}
-                            Summary
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={summaryLayout === "date_grid" ? "default" : "outline"}
-                            onClick={() => setSummaryLayout("date_grid")}
-                            className="min-w-0 text-xs font-bold border-black rounded-l shadow-none hover:shadow-none"
-                          >
-                            <TableIcon className="w-3.5 h-3.5 inline mr-1" /> Full Date Sheet
-                          </Button>
-                        </div>
-                      </div>
+                              ))}
+                            </Select.Group>
+                          )}
+                        </Select.Content>
+                      </Select>
                     </div>
 
-                    {loadingLogs ? (
-                      <LoadingPanel label="Calculating attendance summaries..." />
-                    ) : summaryMatrix.length === 0 ? (
-                      <Empty>
-                        <EmptyHeader>
-                          <EmptyMedia>
-                            <BarChart3 className="w-10 h-10 opacity-50" />
-                          </EmptyMedia>
-                          <EmptyTitle>No attendance records found</EmptyTitle>
-                          <EmptyDescription>
-                            Mark attendance for this class to populate the summary report.
-                          </EmptyDescription>
-                        </EmptyHeader>
-                      </Empty>
-                    ) : summaryLayout === "summary" ? (
-                      /* Standard Summary Table with Individual or Global Expand */
-                      <Table
-                        wrapperClassName="h-auto max-w-full overflow-x-auto overscroll-x-contain shadow-none [scrollbar-width:thin]"
-                        className="min-w-[820px] bg-background shadow-none"
-                      >
-                        <Table.Header>
-                          <Table.Row>
-                            <Table.Head className="min-w-[260px]">
-                              Student Name
-                            </Table.Head>
-                            <Table.Head className="text-center">
-                              Present
-                            </Table.Head>
-                            <Table.Head className="text-center">
-                              Absent
-                            </Table.Head>
-                            <Table.Head className="text-center">
-                              Late
-                            </Table.Head>
-                            <Table.Head className="text-center">
-                              Excused
-                            </Table.Head>
-                            <Table.Head className="text-center">
-                              Attendance Rate
-                            </Table.Head>
-                            <Table.Head className="w-16 text-right pr-4">
-                              Logs
-                            </Table.Head>
-                          </Table.Row>
-                        </Table.Header>
-                        <Table.Body className="divide-y-2 divide-black text-sm">
-                          {summaryMatrix.map((item) => (
-                            <Table.Row key={item.student_id}>
-                              <Table.Cell className="min-w-[260px]">
-                                <div className="flex items-center gap-3">
-                                  <Avatar variant="student" className="size-8 shrink-0">
-                                    <Avatar.Image
-                                      src={item.avatar || "/avatars/student-avatars/1.svg"}
-                                      alt={item.student_name}
-                                    />
-                                    <Avatar.Fallback>
-                                      {(item.avatar_initial || item.student_name || "?")
-                                        .charAt(0)
-                                        .toUpperCase()}
-                                    </Avatar.Fallback>
-                                  </Avatar>
-                                  <span className="font-semibold text-base">
-                                    {item.student_name}
+                    {/* Search */}
+                    <div className="flex min-w-0 flex-col gap-1 sm:col-span-1 lg:col-span-2">
+                      <Label className="font-sans text-sm font-semibold">
+                        Search
+                      </Label>
+                      <div className="relative">
+                        <Search className="w-4 h-4 absolute left-3 top-3 text-gray-500" />
+                        <Input
+                          type="text"
+                          placeholder="Search name or LRN..."
+                          value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                          className="rounded border-black h-10 w-full bg-white pl-9"
+                        />
+                      </div>
+                    </div>
+                  </div>
 
-                                  </span>
-                                </div>
+                  {/* Filters & Control Bar */}
+                  <Card className="block min-w-0 w-full overflow-hidden border-black bg-white transition-none">
 
-                              </Table.Cell>
-                              <Table.Cell className="text-center" data-label="Present">
-                                {item.present}
-                              </Table.Cell>
-                              <Table.Cell className="text-center" data-label="Absent">
-                                {item.absent}
-                              </Table.Cell>
-                              <Table.Cell className="text-center" data-label="Late">
-                                {item.late}
-                              </Table.Cell>
-                              <Table.Cell className="text-center" data-label="Excused">
-                                {item.excused}
-                              </Table.Cell>
-                              <Table.Cell className="text-center" data-label="Attendance rate">
-                                <Badge
-                                  size="sm"
-                                  variant={
-                                    item.rate >= 90
-                                      ? "surface"
-                                      : item.rate >= 75
-                                        ? "surface"
-                                        : "outline"
-                                  }
-                                  className={` ${item.rate < 75
-                                    ? "border-red-600 bg-red-100 text-red-900"
-                                    : ""
-                                    }`}
-                                >
-                                  {item.rate}%
-                                </Badge>
-                              </Table.Cell>
-                              <Table.Cell className="text-right pr-4">
-                                <Button
-                                  size="sm"
-                                  onClick={() => setSelectedStudentLogs(item)}
-                                  className="shadow-none p-1 ml-auto"
-                                  title="View attendance log"
-                                  aria-label={`View attendance log for ${item.student_name}`}
-                                >
-                                  <span className="md:hidden">View logs</span>
-                                  <ArrowUpRight size={16} />
-                                </Button>
-                              </Table.Cell>
-                            </Table.Row>
-                          ))}
-                        </Table.Body>
-                      </Table>
-                    ) : (
-                      /* Full Date Grid Log Sheet Matrix (Dates as columns, Students as rows) */
-                      <div className="min-w-0">
-                      <p className="mb-2 text-sm md:hidden">Swipe the table to compare dates. P: Present · A: Absent · L: Late · E: Excused · –: No record.</p>
-                      <div className="attendance-date-region" role="region" aria-label="Attendance by date, scroll horizontally to see all dates" tabIndex={0}>
-                      <Table
-                        wrapperClassName="attendance-date-grid overflow-x-auto h-auto shadow-none border-2 border-black bg-background shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
-                        className="bg-background min-w-[700px] border-collapse shadow-none"
-                      >
-                        <Table.Header className="bg-primary text-black border-b-2 border-black">
-                          <Table.Row className="hover:bg-transparent">
-                            <Table.Head className="p-3 border-r-2 border-black sticky left-0 bg-primary z-10 text-black font-extrabold text-xs uppercase">
-                              #
-                            </Table.Head>
-                            <Table.Head className="min-w-[220px] border-r-2 border-black p-3 text-xs font-extrabold uppercase text-black">
-                              Student Name
-                            </Table.Head>
-                            {uniqueDates.map((date) => (
-                              <Table.Head
-                                key={date}
-                                className="p-2 border-r-2 border-black text-center text-[11px] min-w-[70px] text-black font-extrabold uppercase"
-                              >
-                                {date}
-                              </Table.Head>
-                            ))}
-                            <Table.Head className="p-3 text-center sticky right-0 bg-primary z-10 text-black font-extrabold text-xs uppercase">
-                              Rate
-                            </Table.Head>
-                          </Table.Row>
-                        </Table.Header>
-                        <Table.Body className="divide-y-2 divide-black text-xs">
-                          {summaryMatrix.map((student, idx) => (
-                            <Table.Row
-                              key={student.student_id}
-                              className="hover:bg-primary/50 border-b-2 border-black"
+                    {/* Attendance Summary & Report Matrix */}
+                    <div className="flex flex-col gap-4 mt-3">
+                      {/* Global Controls & Layout Switcher */}
+                      <div className="flex flex-col gap-3 border-2 border-black bg-gray-50 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                        <div>
+                          <h2 className="text-lg font-extrabold">
+                            Attendance Summary & Log Explorer
+                          </h2>
+                          <p className="text-xs text-gray-500 font-semibold">
+                            View cumulative totals or switch to the complete Date Grid
+                            Log Sheet.
+                          </p>
+                        </div>
+
+                        <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+                          {/* Status Filter */}
+                          <div className="flex min-w-0 items-center gap-1">
+                            <Select
+                              value={statusFilter}
+                              onValueChange={(val) =>
+                                setStatusFilter(
+                                  val as "all" | "absent" | "late" | "excused",
+                                )
+                              }
                             >
-                              <Table.Cell className="p-2 font-bold border-r-2 border-black sticky left-0 bg-background z-10">
-                                {idx + 1}
-                              </Table.Cell>
-                              <Table.Cell className="min-w-[220px] border-r-2 border-black p-2 font-bold">
-                                {student.student_name}
-                              </Table.Cell>
-                              {uniqueDates.map((date) => {
-                                const log = student.logByDate.get(date);
-                                const st = log?.status;
-                                return (
-                                  <Table.Cell
-                                    key={date}
-                                    className="p-2 border-r-2 border-black text-center font-bold"
-                                  >
-                                    {st === "present" ? (
-                                      <Badge
-                                        variant="default"
-                                        size="sm"
-                                        className="rounded bg-emerald-600 border-black text-white px-1.5 py-0.5 text-[11px] font-bold"
-                                      >
-                                        P
-                                      </Badge>
-                                    ) : st === "absent" ? (
-                                      <Badge
-                                        variant="outline"
-                                        size="sm"
-                                        className="rounded bg-red-600 border-black text-white px-1.5 py-0.5 text-[11px] font-bold"
-                                      >
-                                        A
-                                      </Badge>
-                                    ) : st === "late" ? (
-                                      <Badge
-                                        variant="surface"
-                                        size="sm"
-                                        className="rounded bg-amber-400 border-black text-black px-1.5 py-0.5 text-[11px] font-bold"
-                                      >
-                                        L
-                                      </Badge>
-                                    ) : st === "excused" ? (
-                                      <Badge
-                                        variant="default"
-                                        size="sm"
-                                        className="rounded bg-blue-600 border-black text-white px-1.5 py-0.5 text-[11px] font-bold"
-                                      >
-                                        E
-                                      </Badge>
-                                    ) : (
-                                      <span className="text-gray-400 font-normal">
-                                        -
+                              <Select.Trigger className="h-9 w-full min-w-0 border-2 border-black bg-white text-xs font-bold shadow-none sm:w-36">
+                                <Select.Value />
+                              </Select.Trigger>
+                              <Select.Content className="attendance-select-options">
+                                <Select.Group>
+                                  <Select.Item value="all" className="text-xs font-semibold">
+                                    All Students
+                                  </Select.Item>
+                                  <Select.Item value="absent" className="text-xs font-semibold">
+                                    Has Absences
+                                  </Select.Item>
+                                  <Select.Item value="late" className="text-xs font-semibold">
+                                    Has Tardies
+                                  </Select.Item>
+                                  <Select.Item value="excused" className="text-xs font-semibold">
+                                    Has Excused
+                                  </Select.Item>
+                                </Select.Group>
+                              </Select.Content>
+                            </Select>
+                          </div>
+
+                          {/* View Switcher: Summary Matrix vs Date Grid Sheet */}
+                          <div className="flex items-center">
+                            <SegmentedControl
+                              size="sm"
+                              value={summaryLayout}
+                              onValueChange={(val) =>
+                                setSummaryLayout(val as "summary" | "date_grid")
+                              }
+                              className="shrink-0"
+                              aria-label="Attendance summary view switcher"
+                            >
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={
+                                    <SegmentedControl.Item
+                                      value="summary"
+                                      aria-label="Summary view"
+                                    >
+                                      <BarChart3 className="size-4" />
+                                      <span className="ml-1.5 hidden sm:inline">
+                                        Summary
                                       </span>
-                                    )}
-                                  </Table.Cell>
-                                );
-                              })}
-                              <Table.Cell className="p-2 text-center font-bold sticky right-0 bg-background z-10 border-l-2 border-black">
-                                {student.rate}%
-                              </Table.Cell>
+                                    </SegmentedControl.Item>
+                                  }
+                                />
+                                <TooltipContent>Summary view</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={
+                                    <SegmentedControl.Item
+                                      value="date_grid"
+                                      aria-label="Full Date Sheet view"
+                                    >
+                                      <TableIcon className="size-4" />
+                                      <span className="ml-1.5 hidden sm:inline">
+                                        Full Date Sheet
+                                      </span>
+                                    </SegmentedControl.Item>
+                                  }
+                                />
+                                <TooltipContent>Full Date Sheet</TooltipContent>
+                              </Tooltip>
+                            </SegmentedControl>
+                          </div>
+                        </div>
+                      </div>
+
+                      {loadingLogs ? (
+                        <LoadingPanel label="Calculating attendance summaries..." />
+                      ) : summaryMatrix.length === 0 ? (
+                        <Empty>
+                          <EmptyHeader>
+                            <EmptyMedia>
+                              <BarChart3 className="w-10 h-10 opacity-50" />
+                            </EmptyMedia>
+                            <EmptyTitle>No attendance records found</EmptyTitle>
+                            <EmptyDescription>
+                              Mark attendance for this class to populate the summary report.
+                            </EmptyDescription>
+                          </EmptyHeader>
+                        </Empty>
+                      ) : summaryLayout === "summary" ? (
+                        /* Standard Summary Table with Individual or Global Expand */
+                        <Table
+                          wrapperClassName="h-auto max-w-full overflow-x-auto overscroll-x-contain shadow-none [scrollbar-width:thin]"
+                          className="min-w-[820px] bg-background shadow-none"
+                        >
+                          <Table.Header>
+                            <Table.Row>
+                              <Table.Head className="min-w-[260px]">
+                                Student Name
+                              </Table.Head>
+                              <Table.Head className="text-center">
+                                Present
+                              </Table.Head>
+                              <Table.Head className="text-center">
+                                Absent
+                              </Table.Head>
+                              <Table.Head className="text-center">
+                                Late
+                              </Table.Head>
+                              <Table.Head className="text-center">
+                                Excused
+                              </Table.Head>
+                              <Table.Head className="text-center">
+                                Attendance Rate
+                              </Table.Head>
+                              <Table.Head className="w-16 text-right pr-4">
+                                Logs
+                              </Table.Head>
                             </Table.Row>
-                          ))}
-                        </Table.Body>
-                      </Table>
-                      </div>
-                      </div>
-                    )}
-                  </div>
-                </Card>
-              </>
-            )}
+                          </Table.Header>
+                          <Table.Body className="divide-y-2 divide-black text-sm">
+                            {summaryMatrix.map((item) => (
+                              <Table.Row key={item.student_id}>
+                                <Table.Cell className="min-w-[260px]">
+                                  <div className="flex items-center gap-3">
+                                    <Avatar variant="student" className="size-8 shrink-0">
+                                      <Avatar.Image
+                                        src={item.avatar || "/avatars/student-avatars/1.svg"}
+                                        alt={item.student_name}
+                                      />
+                                      <Avatar.Fallback>
+                                        {(item.avatar_initial || item.student_name || "?")
+                                          .charAt(0)
+                                          .toUpperCase()}
+                                      </Avatar.Fallback>
+                                    </Avatar>
+                                    <span className="font-semibold text-base">
+                                      {item.student_name}
+
+                                    </span>
+                                  </div>
+
+                                </Table.Cell>
+                                <Table.Cell className="text-center" data-label="Present">
+                                  {item.present}
+                                </Table.Cell>
+                                <Table.Cell className="text-center" data-label="Absent">
+                                  {item.absent}
+                                </Table.Cell>
+                                <Table.Cell className="text-center" data-label="Late">
+                                  {item.late}
+                                </Table.Cell>
+                                <Table.Cell className="text-center" data-label="Excused">
+                                  {item.excused}
+                                </Table.Cell>
+                                <Table.Cell className="text-center" data-label="Attendance rate">
+                                  <Badge
+                                    size="sm"
+                                    variant={
+                                      item.rate >= 90
+                                        ? "surface"
+                                        : item.rate >= 75
+                                          ? "surface"
+                                          : "outline"
+                                    }
+                                    className={` ${item.rate < 75
+                                      ? "border-red-600 bg-red-100 text-red-900"
+                                      : ""
+                                      }`}
+                                  >
+                                    {item.rate}%
+                                  </Badge>
+                                </Table.Cell>
+                                <Table.Cell className="text-right pr-4">
+                                  <Tooltip>
+                                    <TooltipTrigger render={<span className="inline-flex"><Button
+                                      size="sm"
+                                      onClick={() => setSelectedStudentLogs(item)}
+                                      className="shadow-none p-1 ml-auto"
+                                      aria-label={`View attendance log for ${item.student_name}`}
+                                    >
+                                      <span className="md:hidden">View logs</span>
+                                      <ArrowUpRight size={16} />
+                                    </Button></span>} />
+                                    <TooltipContent>View logs</TooltipContent>
+                                  </Tooltip>
+                                </Table.Cell>
+                              </Table.Row>
+                            ))}
+                          </Table.Body>
+                        </Table>
+                      ) : (
+                        /* Full Date Grid Log Sheet Matrix (Dates as columns, Students as rows) */
+                        <div className="min-w-0">
+                          <p className="mb-2 text-sm md:hidden">Swipe the table to compare dates. P: Present · A: Absent · L: Late · E: Excused · –: No record.</p>
+                          <div className="attendance-date-region" role="region" aria-label="Attendance by date, scroll horizontally to see all dates" tabIndex={0}>
+                            <Table
+                              wrapperClassName="attendance-date-grid overflow-x-auto h-auto shadow-none border-2 border-black bg-background shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                              className="bg-background min-w-[700px] border-collapse shadow-none"
+                            >
+                              <Table.Header className="bg-primary text-black border-b-2 border-black">
+                                <Table.Row className="hover:bg-transparent">
+                                  <Table.Head className="p-3 border-r-2 border-black sticky left-0 bg-primary z-10 text-black font-extrabold text-xs uppercase">
+                                    #
+                                  </Table.Head>
+                                  <Table.Head className="min-w-[220px] border-r-2 border-black p-3 text-xs font-extrabold uppercase text-black">
+                                    Student Name
+                                  </Table.Head>
+                                  {uniqueDates.map((date) => (
+                                    <Table.Head
+                                      key={date}
+                                      className="p-2 border-r-2 border-black text-center text-[11px] min-w-[70px] text-black font-extrabold uppercase"
+                                    >
+                                      {date}
+                                    </Table.Head>
+                                  ))}
+                                  <Table.Head className="p-3 text-center sticky right-0 bg-primary z-10 text-black font-extrabold text-xs uppercase">
+                                    Rate
+                                  </Table.Head>
+                                </Table.Row>
+                              </Table.Header>
+                              <Table.Body className="divide-y-2 divide-black text-xs">
+                                {summaryMatrix.map((student, idx) => (
+                                  <Table.Row
+                                    key={student.student_id}
+                                    className="hover:bg-primary/50 border-b-2 border-black"
+                                  >
+                                    <Table.Cell className="p-2 font-bold border-r-2 border-black sticky left-0 bg-background z-10">
+                                      {idx + 1}
+                                    </Table.Cell>
+                                    <Table.Cell className="min-w-[220px] border-r-2 border-black p-2 font-bold">
+                                      {student.student_name}
+                                    </Table.Cell>
+                                    {uniqueDates.map((date) => {
+                                      const log = student.logByDate.get(date);
+                                      const st = log?.status;
+                                      return (
+                                        <Table.Cell
+                                          key={date}
+                                          className="p-2 border-r-2 border-black text-center font-bold"
+                                        >
+                                          {st === "present" ? (
+                                            <Badge
+                                              variant="default"
+                                              size="sm"
+                                              className="rounded bg-emerald-600 border-black text-white px-1.5 py-0.5 text-[11px] font-bold"
+                                            >
+                                              P
+                                            </Badge>
+                                          ) : st === "absent" ? (
+                                            <Badge
+                                              variant="outline"
+                                              size="sm"
+                                              className="rounded bg-red-600 border-black text-white px-1.5 py-0.5 text-[11px] font-bold"
+                                            >
+                                              A
+                                            </Badge>
+                                          ) : st === "late" ? (
+                                            <Badge
+                                              variant="surface"
+                                              size="sm"
+                                              className="rounded bg-amber-400 border-black text-black px-1.5 py-0.5 text-[11px] font-bold"
+                                            >
+                                              L
+                                            </Badge>
+                                          ) : st === "excused" ? (
+                                            <Badge
+                                              variant="default"
+                                              size="sm"
+                                              className="rounded bg-blue-600 border-black text-white px-1.5 py-0.5 text-[11px] font-bold"
+                                            >
+                                              E
+                                            </Badge>
+                                          ) : (
+                                            <span className="text-gray-400 font-normal">
+                                              -
+                                            </span>
+                                          )}
+                                        </Table.Cell>
+                                      );
+                                    })}
+                                    <Table.Cell className="p-2 text-center font-bold sticky right-0 bg-background z-10 border-l-2 border-black">
+                                      {student.rate}%
+                                    </Table.Cell>
+                                  </Table.Row>
+                                ))}
+                              </Table.Body>
+                            </Table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                </>
+              )}
             </div>
           </div>
         </div>

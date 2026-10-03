@@ -10,6 +10,7 @@ import {
 import type { GradingTemplateListItem } from "@/lib/api";
 import { scopeLabel, statusBadge } from "./subject-utils";
 import { Badge } from "@/components/retroui/Badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 
 export function GradingTemplateRow({
   template,
@@ -43,18 +44,22 @@ export function GradingTemplateRow({
             ) : null}
             <div className="flex shrink-0">
               <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger render={<span className="inline-flex">
                 <DropdownMenuTrigger asChild>
                   <Button
                     size="sm"
                     variant="secondary"
                     className="h-6.5 w-6.5 p-0 shadow-none"
                     disabled={readOnly}
-                    title={readOnly ? readOnlyReason : "Actions"}
                     aria-label="Actions"
                   >
                     <Ellipsis className="size-4" />
                   </Button>
                 </DropdownMenuTrigger>
+                  </span>} />
+                  <TooltipContent>{readOnly ? readOnlyReason || "Read-only" : "Template actions"}</TooltipContent>
+                </Tooltip>
                 <DropdownMenuContent align="end" className="border-2 min-w-[140px]">
                   {onEdit ? (
                     <DropdownMenuItem

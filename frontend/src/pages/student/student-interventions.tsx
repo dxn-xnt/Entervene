@@ -3,6 +3,7 @@ import { OverviewCard } from "@/components/overview-cards";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Select } from "@/components/retroui/Select";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
@@ -31,6 +32,7 @@ import StudentResolvedInterventions from "./student-resolved-interventions";
 
 export default function StudentInterventions() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [items, setItems] = useState<StudentSuggestionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,9 +47,9 @@ export default function StudentInterventions() {
     try {
       const res = await fetchMyInterventions(statusFilter === "All" ? undefined : statusFilter);
       setItems(res.suggestions || []);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Failed to load study recommendations.");
+      setError(err instanceof Error ? err.message : "Failed to load study recommendations.");
     } finally {
       setLoading(false);
     }
@@ -61,9 +63,10 @@ export default function StudentInterventions() {
     setCompletingId(id);
     try {
       await completeMyIntervention(id);
-      loadData();
+      toast.success({ title: "Study recommendation completed" });
+      void loadData();
     } catch (err) {
-      console.error(err);
+      toast.error({ title: "Unable to complete recommendation", description: err instanceof Error ? err.message : "Please try again." });
     } finally {
       setCompletingId(null);
     }

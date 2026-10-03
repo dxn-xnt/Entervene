@@ -20,6 +20,7 @@ import {
 import { Card } from "@/components/retroui/Card";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
 import { Switch } from "@/components/retroui/Switch";
@@ -868,12 +869,12 @@ export function TOSGeneratorScreen({
             </Breadcrumb.Item>
             <Breadcrumb.Separator />
             <Breadcrumb.Item className="min-w-0 flex-1">
-              <Breadcrumb.Page
-                className="block truncate"
-                title={step === "saved-list" ? "My TOS Exams" : (title || "New Assessment Blueprint")}
-              >
-                {step === "saved-list" ? "My TOS Exams" : (title || "New Assessment Blueprint")}
-              </Breadcrumb.Page>
+              <Tooltip>
+                <TooltipTrigger render={<Breadcrumb.Page className="block truncate" tabIndex={0}>
+                  {step === "saved-list" ? "My TOS Exams" : (title || "New Assessment Blueprint")}
+                </Breadcrumb.Page>} />
+                <TooltipContent>{step === "saved-list" ? "My TOS Exams" : (title || "New Assessment Blueprint")}</TooltipContent>
+              </Tooltip>
             </Breadcrumb.Item>
           </Breadcrumb.List>
         </Breadcrumb>
@@ -1141,16 +1142,19 @@ export function TOSGeneratorScreen({
                           </span>
 
                           <div className="flex items-center gap-1.5">
-                            <Button
+                            <Tooltip>
+                              <TooltipTrigger render={<span className="inline-flex"><Button
                               size="sm"
                               variant="outline"
                               onClick={() => handleDeleteExam(ex.tos_exam_id)}
                               disabled={deletingExamId === ex.tos_exam_id}
                               className="rounded h-7 border-2 border-border bg-destructive/10 px-2 text-xs font-bold text-destructive hover:bg-destructive/10 shadow-xs"
-                              title="Delete Draft"
+                              aria-label="Delete draft exam"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            </Button></span>} />
+                              <TooltipContent>Delete draft</TooltipContent>
+                            </Tooltip>
                             <Button
                               size="sm"
                               onClick={() => handleLoadExam(ex.tos_exam_id)}
@@ -1215,12 +1219,12 @@ export function TOSGeneratorScreen({
                 <div>
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-muted-foreground block">Exam Title</label>
-                    <button
+                    <Tooltip>
+                      <TooltipTrigger render={<span className="inline-flex"><button
                       type="button"
                       onClick={handleSuggestTitle}
                       disabled={isSuggestingTitle || !currentSubjectName}
                       className="flex items-center gap-1 text-[11px] font-black text-purple-600 dark:text-purple-400 hover:underline disabled:opacity-40 cursor-pointer"
-                      title="AI suggest a standard DepEd title"
                     >
                       {isSuggestingTitle ? (
                         <RefreshCw className="h-3 w-3 animate-spin" />
@@ -1228,7 +1232,9 @@ export function TOSGeneratorScreen({
                         <Sparkles className="h-3 w-3" />
                       )}
                       <span>AI Suggest</span>
-                    </button>
+                    </button></span>} />
+                      <TooltipContent>Suggest exam title</TooltipContent>
+                    </Tooltip>
                   </div>
                   <Input
                     value={title}
@@ -1262,14 +1268,14 @@ export function TOSGeneratorScreen({
                       Total Items Target: <span className="text-lg font-black text-foreground">{totalItems}</span>
                     </span>
                   </div>
-                  <Button
+                  <Tooltip>
+                    <TooltipTrigger render={<span className="inline-flex"><Button
                     type="button"
                     size="sm"
                     variant="outline"
                     onClick={handleSuggestTestParts}
                     disabled={isSuggestingParts}
                     className="rounded border-2 border-border bg-card font-bold shadow-xs hover:bg-accent text-xs h-8 text-foreground shrink-0 cursor-pointer"
-                    title="AI suggest standard question type breakdown"
                   >
                     {isSuggestingParts ? (
                       <>
@@ -1280,7 +1286,9 @@ export function TOSGeneratorScreen({
                         <Sparkles className="mr-1.5 h-3 w-3 text-purple-600 dark:text-purple-400" /> AI Recommend Parts
                       </>
                     )}
-                  </Button>
+                  </Button></span>} />
+                    <TooltipContent>Suggest question types</TooltipContent>
+                  </Tooltip>
                 </div>
 
                 <div className="mt-4 space-y-3">
@@ -1407,14 +1415,14 @@ export function TOSGeneratorScreen({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                  <Button
+                  <Tooltip>
+                    <TooltipTrigger render={<span className="inline-flex"><Button
                     type="button"
                     size="sm"
                     variant="outline"
                     onClick={handleSuggestCompetencies}
                     disabled={isSuggestingComps || !currentSubjectName}
                     className="rounded border-2 border-border bg-card font-bold shadow-sm hover:bg-accent h-9 text-xs cursor-pointer text-foreground"
-                    title="AI suggest topics and days taught for this term"
                   >
                     {isSuggestingComps ? (
                       <>
@@ -1425,7 +1433,9 @@ export function TOSGeneratorScreen({
                         <Sparkles className="mr-1.5 h-3.5 w-3.5 text-purple-600 dark:text-purple-400" /> AI Suggest Topics & Days
                       </>
                     )}
-                  </Button>
+                  </Button></span>} />
+                    <TooltipContent>Suggest topics and days</TooltipContent>
+                  </Tooltip>
 
                   <Button
                     type="button"
@@ -1492,12 +1502,12 @@ export function TOSGeneratorScreen({
                             <div>
                               <div className="flex items-center justify-between mb-1">
                                 <label className="text-[11px] font-bold text-muted-foreground block">Topic Description</label>
-                                <button
+                                <Tooltip>
+                                  <TooltipTrigger render={<span className="inline-flex"><button
                                   type="button"
                                   onClick={() => handleRefineTopic(idx)}
                                   disabled={refiningCompIdx === idx}
                                   className="flex items-center gap-1 text-[11px] font-bold text-purple-600 dark:text-purple-400 hover:underline disabled:opacity-50 cursor-pointer"
-                                  title="AI refine or complete this topic statement"
                                 >
                                   {refiningCompIdx === idx ? (
                                     <RefreshCw className="h-3 w-3 animate-spin" />
@@ -1505,7 +1515,9 @@ export function TOSGeneratorScreen({
                                     <Sparkles className="h-3 w-3" />
                                   )}
                                   <span>AI Refine</span>
-                                </button>
+                                </button></span>} />
+                                  <TooltipContent>Refine topic</TooltipContent>
+                                </Tooltip>
                               </div>
                               <textarea
                                 rows={2}
@@ -1547,7 +1559,6 @@ export function TOSGeneratorScreen({
                               setCompInputs(compInputs.filter((_, i) => i !== idx));
                             }}
                             className="rounded h-8 border-2 border-border bg-destructive/10 px-2.5 text-xs font-bold text-destructive hover:bg-destructive/10 shadow-xs"
-                            title="Remove Competency"
                           >
                             <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
                           </Button>

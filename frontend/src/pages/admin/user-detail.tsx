@@ -15,6 +15,7 @@ import { ToggleSwitch } from "@/components/retroui/ToggleSwitch";
 import { OverviewCard } from "@/components/overview-cards";
 import { useToast } from "@/components/retroui/use-toast";
 import { UserProfileHeader } from "@/components/profile-header";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import {
   archiveUser,
   getUserAnalytics,
@@ -39,7 +40,7 @@ import {
   Line,
   LineChart,
   ResponsiveContainer,
-  Tooltip,
+  Tooltip as ChartTooltip,
   XAxis,
   YAxis,
 } from "recharts";
@@ -284,7 +285,6 @@ export default function AdminUserDetail() {
                       onClick={handleResendInvitation}
                       disabled={resending}
                       className="gap-2"
-                      title="Send a new invitation email with an updated 48-hour activation link"
                     >
                       <RefreshCw className={cn("size-3.5", resending && "animate-spin")} />
                       Resend Invitation
@@ -707,7 +707,7 @@ function SmallLineChart({ data, xKey }: { data: Array<Record<string, number | st
           <CartesianGrid stroke="#e5e1d8" vertical={false} />
           <XAxis dataKey={xKey} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
           <YAxis hide domain={[0, 100]} />
-          <Tooltip />
+          <ChartTooltip />
           <Line type="monotone" dataKey="score" stroke="#dc2626" strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>
@@ -813,9 +813,12 @@ function TeacherHandledSideCard({
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
-                    <h4 className="font-bold text-md truncate leading-tight block" title={subject.subject_name}>
+                    <Tooltip>
+                      <TooltipTrigger render={<h4 className="font-bold text-md truncate leading-tight block" tabIndex={0}>
                       {subject.subject_name}
-                    </h4>
+                    </h4>} />
+                      <TooltipContent>{subject.subject_name}</TooltipContent>
+                    </Tooltip>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {subject.is_core ? (
@@ -882,7 +885,10 @@ function TeacherHandledSideCard({
               >
                 <div className="flex flex-col items-start justify-between gap-2">
                   <div className="w-full flex-1 flex flex-row gap-2 items-center justify-between">
-                    <h4 className="font-bold text-lg truncate leading-tight block" title={cls.section_name}>{cls.section_name}</h4>
+                    <Tooltip>
+                      <TooltipTrigger render={<h4 className="font-bold text-lg truncate leading-tight block" tabIndex={0}>{cls.section_name}</h4>} />
+                      <TooltipContent>{cls.section_name}</TooltipContent>
+                    </Tooltip>
                     {cls.is_adviser && (
                       <Badge variant="solid" size="sm" className="text-[11px] shrink-0">
                         Adviser

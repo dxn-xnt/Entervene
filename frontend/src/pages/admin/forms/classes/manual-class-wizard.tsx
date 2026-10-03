@@ -6,6 +6,7 @@ import { getClassFormOptions, fetchPathways, type AcademicPathwayRead } from "@/
 import type { AdviserOption, ClassFormOptions, ManualClassSetup, ManualSectionDraft } from "@/types/adminClasses";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -269,7 +270,8 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
                 </Select>
                 {rowErrors?.adviserStaffId && <InlineError message={rowErrors.adviserStaffId} />}
               </div>
-              <Button
+              <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex"><Button
                 aria-label="Remove section"
                 variant={"outline"}
                 size={"icon"}
@@ -277,7 +279,9 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
                 onClick={() => setSections((current) => current.filter((item) => item.localId !== section.localId))}
               >
                 <Trash2 className="size-4 text-destructive" />
-              </Button>
+              </Button></span>} />
+                <TooltipContent>{sections.length === 1 ? "Keep one section" : "Remove section"}</TooltipContent>
+              </Tooltip>
             </div>
           );
         })}

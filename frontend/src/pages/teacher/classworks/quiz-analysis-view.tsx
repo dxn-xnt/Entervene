@@ -7,6 +7,7 @@ import { Select } from "@/components/retroui/Select";
 import { OverviewCard } from "@/components/overview-cards";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Card } from "@/components/retroui/Card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 
 const QUIZ_TABS: Array<TabItem<"overview" | "questions" | "students">> = [
   { id: "overview", label: "Overview", icon: BarChart3 },
@@ -234,8 +235,8 @@ export default function QuizAnalysisView({
                           const accuracy = q.accuracy_percent ?? 0;
                           const colorClass = getAccuracyColorClass(q.accuracy_percent, q.answered_count);
                           return (
-                            <button
-                              key={q.quiz_question_id}
+                            <Tooltip key={q.quiz_question_id}>
+                              <TooltipTrigger render={<button
                               type="button"
                               data-testid={`navigator-btn-${displayNum}`}
                               onClick={() => {
@@ -243,15 +244,12 @@ export default function QuizAnalysisView({
                                 el?.scrollIntoView?.({ behavior: "smooth", block: "start" });
                               }}
                               className={`relative flex h-8 min-w-8 items-center justify-center rounded border-2 border-black px-2 text-xs font-black transition-all cursor-pointer ${colorClass} hover:opacity-90 hover:scale-105 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-1 active:scale-95`}
-                              title={
-                                q.answered_count === 0
-                                  ? `Question ${displayNum} (No attempts yet)`
-                                  : `Question ${displayNum} (${accuracy}% Accuracy)`
-                              }
                               aria-label={`Jump to question ${displayNum} (${accuracy}% Accuracy)`}
                             >
                               {displayNum}
-                            </button>
+                            </button>} />
+                              <TooltipContent>{q.answered_count === 0 ? `Question ${displayNum}: no attempts` : `Question ${displayNum}: ${accuracy}% accuracy`}</TooltipContent>
+                            </Tooltip>
                           );
                         })}
                       </div>
@@ -462,7 +460,6 @@ export default function QuizAnalysisView({
                                     type="button"
                                     onClick={() => setSelectedGradingSubmissionId(student.submission_id!)}
                                     className="font-bold whitespace-nowrap hover:underline text-left"
-                                    title="Click to view and grade quiz attempt"
                                   >
                                     {student.student_name}
                                   </button>

@@ -327,7 +327,6 @@ export default function AdminInterventions() {
                                                 size="sm"
                                                 disabled={actionLoadingId === item.suggestion_id}
                                                 onClick={() => handleApprove(item.suggestion_id)}
-                                                title="Approve / Confirm Remediation"
                                                 className="h-7 px-2 bg-emerald-400 hover:bg-emerald-500 text-black border-2 border-black font-extrabold text-[11px] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
                                               >
                                                 {actionLoadingId === item.suggestion_id ? (
@@ -341,7 +340,6 @@ export default function AdminInterventions() {
                                                 size="sm"
                                                 disabled={actionLoadingId === item.suggestion_id}
                                                 onClick={() => handleDismiss(item.suggestion_id)}
-                                                title="Dismiss Remediation"
                                                 className="h-7 px-2 bg-rose-300 hover:bg-rose-400 text-black border-2 border-black font-extrabold text-[11px] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
                                               >
                                                 {actionLoadingId === item.suggestion_id ? (
@@ -358,7 +356,6 @@ export default function AdminInterventions() {
                                               size="sm"
                                               disabled={actionLoadingId === item.suggestion_id}
                                               onClick={() => handleArchive(item.suggestion_id)}
-                                              title="Archive Intervention"
                                               className="h-7 px-2 bg-gray-200 hover:bg-gray-300 text-black border-2 border-black font-extrabold text-[11px] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
                                             >
                                               {actionLoadingId === item.suggestion_id ? (

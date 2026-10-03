@@ -17,6 +17,7 @@ import {
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import type { CompetencyItem } from "./types";
 
 export interface CompetencyLessonItem {
@@ -166,22 +167,24 @@ export default function TeacherCompetencyDetailScreen({
                 size="sm"
                 onClick={() => onEditCompetency(competency)}
                 className="gap-1.5 border-2 border-black bg-white hover:bg-yellow-50 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                title="Edit Competency statement or code"
               >
                 <Pencil size={14} />
                 Edit
               </Button>
               {onArchiveCompetency && (
-                <Button
+                <Tooltip>
+                  <TooltipTrigger render={<span className="inline-flex"><Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => onArchiveCompetency(competency.competency_id)}
                   className="gap-1.5 border-2 border-black bg-red-100 hover:bg-red-200 text-red-800 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                  title="Archive Competency"
+                  aria-label="Archive competency"
                 >
                   <Trash2 size={14} />
-                </Button>
+                </Button></span>} />
+                  <TooltipContent>Archive competency</TooltipContent>
+                </Tooltip>
               )}
               <Button
                 type="button"
@@ -342,36 +345,41 @@ export default function TeacherCompetencyDetailScreen({
                             size="sm"
                             onClick={() => onOpenClassworkForm(lesson)}
                             className="gap-1 border-2 border-black bg-white hover:bg-yellow-50 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                            title="Add Classwork to this lesson"
                           >
                             <Plus size={14} />
                             Classwork
                           </Button>
                         )}
                         {onOpenLessonManager && (
-                          <Button
+                          <Tooltip>
+                            <TooltipTrigger render={<span className="inline-flex"><Button
                             type="button"
                             variant="outline"
                             size="sm"
                             onClick={() => onOpenLessonManager(lesson)}
                             className="p-1.5 border-2 border-black bg-white hover:bg-yellow-50 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                            title="Manage Lesson Details & Materials"
+                            aria-label="Manage lesson"
                           >
                             <Pencil size={14} />
-                          </Button>
+                          </Button></span>} />
+                            <TooltipContent>Manage lesson</TooltipContent>
+                          </Tooltip>
                         )}
-                        <button
+                        <Tooltip>
+                          <TooltipTrigger render={<button
                           type="button"
                           onClick={() => toggleLesson(lesson.lesson_id)}
                           className="p-1.5 rounded-full border-2 border-black bg-white hover:bg-yellow-50 transition-colors cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shrink-0"
-                          title={isExpanded ? "Hide classworks" : "Show classworks"}
+                          aria-label={isExpanded ? "Hide classworks" : "Show classworks"}
                         >
                           {isExpanded ? (
                             <ChevronDown size={16} />
                           ) : (
                             <ChevronRight size={16} />
                           )}
-                        </button>
+                        </button>} />
+                          <TooltipContent>{isExpanded ? "Hide classworks" : "Show classworks"}</TooltipContent>
+                        </Tooltip>
                       </div>
                     </div>
                   </div>

@@ -5,6 +5,7 @@ import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Alert } from "@/components/retroui/Alert";
@@ -78,22 +79,27 @@ export default function StudentSubmissionView({
                   </Breadcrumb.Item>
                   <Breadcrumb.Separator className="shrink-0" />
                   <Breadcrumb.Item className="shrink-0">
-                    <Breadcrumb.Link
+                    <Tooltip>
+                      <TooltipTrigger render={<Breadcrumb.Link
                       onClick={onClose}
                       className="cursor-pointer max-w-[200px] truncate sm:max-w-[250px]"
-                      title={selected?.title}
                     >
                       {selected?.title ?? "Classwork"}
-                    </Breadcrumb.Link>
+                    </Breadcrumb.Link>} />
+                      <TooltipContent>{selected?.title ?? "Classwork"}</TooltipContent>
+                    </Tooltip>
                   </Breadcrumb.Item>
                   <Breadcrumb.Separator className="shrink-0" />
                   <Breadcrumb.Item className="min-w-0">
-                    <Breadcrumb.Page
+                    <Tooltip>
+                      <TooltipTrigger render={<Breadcrumb.Page
                       className="block max-w-[150px] truncate sm:max-w-[250px] lg:max-w-[350px]"
-                      title={`${selectedStudent.student_name} Submission`}
+                      tabIndex={0}
                     >
                       {selectedStudent.student_name}
-                    </Breadcrumb.Page>
+                    </Breadcrumb.Page>} />
+                      <TooltipContent>{selectedStudent.student_name} submission</TooltipContent>
+                    </Tooltip>
                   </Breadcrumb.Item>
                 </Breadcrumb.List>
               </Breadcrumb>
