@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, ArrowRight, FileDown, FileText, Loader2, Pencil, Plus, Sparkles, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, FileDown, FileText, Loader2, Pencil, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/use-toast";
 import { Text } from "@/components/retroui/Text";
@@ -30,6 +30,11 @@ import {
     createEmptyQuizQuestion,
     defaultQuizSettings,
 } from "../classworks/quiz-builder-utils";
+import {
+    isUnkeyed,
+    normalizeIncomingQuestions,
+    switchQuestionType,
+} from "../classworks/quiz-question-rules";
 import { exportQuizPdf, exportQuizDocx } from "@/lib/quiz-export";
 import AIQuizGeneratorModal from "./ai-quiz-generator-modal";
 import type { TeacherInterventionDetail, RemediationFocus, RemediationResource, OriginalExamination } from "@/lib/teacher-interventions-api";
@@ -126,6 +131,14 @@ export default function CreateClassworkQuizModal({
     const [isCreating, setIsCreating] = useState(false);
     const [createError, setCreateError] = useState("");
 
+    const unkeyedIdCount = useMemo(
+        () =>
+            quizQuestions.filter(
+                (q) => q.question_type === "IDENTIFICATION" && isUnkeyed(q),
+            ).length,
+        [quizQuestions],
+    );
+
     const selectedSubjectLoads = useMemo(
         () =>
             loads
@@ -168,7 +181,8 @@ export default function CreateClassworkQuizModal({
                 throw new Error(body.detail || "Unable to import quiz file.");
             }
             const preview = (await response.json()) as QuizImportPreview;
-            const importedQuestions = preview.questions.map((question, index) => {
+            const normalizedQuestions = normalizeIncomingQuestions(preview.questions || []);
+            const importedQuestions = normalizedQuestions.map((question, index) => {
                 const qDraft = createEmptyQuizQuestion(index + 1, question.question_type);
                 return {
                     ...qDraft,
@@ -424,6 +438,15 @@ export default function CreateClassworkQuizModal({
             }
         }
 
+        if (draft.is_published) {
+            const unkeyedIdQuestions = quizQuestions.filter(
+                (q) => q.question_type === "IDENTIFICATION" && isUnkeyed(q)
+            );
+            if (unkeyedIdQuestions.length > 0) {
+                return `Cannot publish: ${unkeyedIdQuestions.length} Identification question(s) have no answer key. Add at least one acceptable answer before publishing, or save as draft.`;
+            }
+        }
+
         return "";
     };
 
@@ -566,7 +589,7 @@ export default function CreateClassworkQuizModal({
         duration_minutes: quizSettings.duration_minutes
             ? Number(quizSettings.duration_minutes)
             : null,
-        status: "READY",
+        status: draft.is_published ? "PUBLISHED" : "DRAFT",
         settings: {
             is_shuffle_questions: quizSettings.is_shuffle_questions,
             enable_per_question_scoring: quizSettings.enable_per_question_scoring,
@@ -589,6 +612,7 @@ export default function CreateClassworkQuizModal({
             difficulty_level: question.difficulty_level,
             explanation: question.explanation.trim() || null,
             lesson_id: question.lesson_id && selectedLessonIds.includes(question.lesson_id) ? question.lesson_id : null,
+            is_ai_generated: Boolean(question.is_ai_generated),
             options:
                 question.question_type === "MULTIPLE_CHOICE"
                     ? question.options.map((option, optionIndex) => ({
@@ -596,13 +620,15 @@ export default function CreateClassworkQuizModal({
                         is_correct: option.is_correct,
                         option_order: optionIndex + 1,
                     }))
-                    : question.options
+                    : question.question_type === "IDENTIFICATION"
+                    ? question.options
                         .filter((opt) => opt.option_text.trim().length > 0)
                         .map((option, optionIndex) => ({
                             option_text: option.option_text.trim(),
                             is_correct: true,
                             option_order: optionIndex + 1,
-                        })),
+                        }))
+                    : [],
         })),
     });
 
@@ -1332,23 +1358,31 @@ export default function CreateClassworkQuizModal({
                         </div>
 
                         <div className="space-y-4">
+                            {quizImportWarnings.length > 0 && (
+                                <div className="rounded border-2 border-amber-400 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900 shadow-sm">
+                                    <p className="font-bold flex items-center gap-1.5">
+                                        <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" /> Generation / Import notes
+                                    </p>
+                                    <ul className="mt-1.5 list-disc pl-5 space-y-0.5">
+                                        {quizImportWarnings.map((warning, wIdx) => (
+                                            <li key={`${warning}-${wIdx}`}>{warning}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
                             {quizQuestions.map((question, questionIndex) => {
-                                const isUnkeyed =
-                                    question.question_type === "MULTIPLE_CHOICE"
-                                        ? !question.options.some((o) => o.is_correct)
-                                        : question.options.length === 0 ||
-                                          !question.options.some((o) => o.option_text.trim());
+                                const unkeyed = isUnkeyed(question);
                                 return (
                                 <div
                                     key={question.id}
-                                    className={`rounded border-2 ${isUnkeyed ? "border-amber-500 bg-amber-50/20" : "border-black bg-white"} p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]`}
+                                    className={`rounded border-2 ${unkeyed ? "border-amber-500 bg-amber-50/20" : "border-black bg-white"} p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]`}
                                 >
                                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                                         <div className="flex items-center gap-2">
                                             <h3 className="text-base font-bold">
                                                 Question {questionIndex + 1}
                                             </h3>
-                                            {isUnkeyed && (
+                                            {unkeyed && (
                                                 <span className="rounded border-2 border-amber-600 bg-amber-100 px-2 py-0.5 text-xs font-black text-amber-900 shadow-xs">
                                                     ⚠️ Needs answer key
                                                 </span>
@@ -1390,11 +1424,18 @@ export default function CreateClassworkQuizModal({
                                                 </label>
                                                 <Select
                                                     value={question.question_type}
-                                                    onValueChange={(val) =>
-                                                        updateQuizQuestion(question.id, {
-                                                            question_type: val as QuizQuestionType,
-                                                        })
-                                                    }
+                                                    onValueChange={(val) => {
+                                                        const nextType = val as QuizQuestionType;
+                                                        const switched = switchQuestionType(question, nextType, {
+                                                            confirmOverwrite: () =>
+                                                                window.confirm(
+                                                                    "This question already has a sample answer / rubric. Overwrite it with the primary answer key?"
+                                                                ),
+                                                        });
+                                                        setQuizQuestions((current) =>
+                                                            current.map((q) => (q.id === question.id ? switched : q))
+                                                        );
+                                                    }}
                                                     disabled={isCreating}
                                                 >
                                                     <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
@@ -1405,8 +1446,11 @@ export default function CreateClassworkQuizModal({
                                                             <Select.Item value="MULTIPLE_CHOICE">
                                                                 Multiple Choice
                                                             </Select.Item>
+                                                            <Select.Item value="IDENTIFICATION">
+                                                                Identification
+                                                            </Select.Item>
                                                             <Select.Item value="SHORT_ANSWER">
-                                                                Short Answer
+                                                                Short Answer (Essay)
                                                             </Select.Item>
                                                         </Select.Group>
                                                     </Select.Content>
@@ -1440,7 +1484,7 @@ export default function CreateClassworkQuizModal({
                                         <div className="mt-4 space-y-2">
                                             <div className="flex items-center justify-between">
                                                 <p className="text-xs font-bold text-gray-700">Choices</p>
-                                                {isUnkeyed && (
+                                                {unkeyed && (
                                                     <span className="text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-400 rounded px-2 py-0.5">
                                                         Select the correct choice below
                                                     </span>
@@ -1500,15 +1544,20 @@ export default function CreateClassworkQuizModal({
                                                 Add choice
                                             </Button>
                                         </div>
-                                    ) : (
+                                    ) : question.question_type === "IDENTIFICATION" ? (
                                         <div className="mt-4 space-y-2">
-                                            <div className="flex items-center justify-between">
-                                                <p className="text-xs font-bold text-gray-700">
-                                                    Acceptable Correct Answer(s) / Key
+                                            <div className="flex flex-col gap-0.5">
+                                                <div className="flex items-center justify-between">
+                                                    <p className="text-xs font-bold text-gray-700">
+                                                        Acceptable Correct Answer(s) / Key
+                                                    </p>
+                                                    <span className="text-[10px] text-gray-500 font-medium">
+                                                        Auto-grades student submission if spelling matches
+                                                    </span>
+                                                </div>
+                                                <p className="text-[11px] text-gray-600">
+                                                    One correct concept only. Add alternates only for spelling variants or synonyms.
                                                 </p>
-                                                <span className="text-[10px] text-gray-500 font-medium">
-                                                    Auto-grades student submission if spelling matches
-                                                </span>
                                             </div>
 
                                             {question.options.map((option, optionIndex) => (
@@ -1541,7 +1590,7 @@ export default function CreateClassworkQuizModal({
                                                         onClick={() =>
                                                             removeQuizOption(question.id, optionIndex)
                                                         }
-                                                        disabled={isCreating}
+                                                        disabled={isCreating || question.options.length <= 1}
                                                         className="rounded border-2 border-black p-2 text-xs font-bold bg-white cursor-pointer hover:bg-gray-100 disabled:opacity-40 transition"
                                                         title="Remove alternative answer"
                                                     >
@@ -1559,34 +1608,59 @@ export default function CreateClassworkQuizModal({
                                                     disabled={isCreating}
                                                     className="bg-[#8BCB88]/25 border-black border-2 rounded hover:bg-[#8BCB88]/40 text-xs font-bold"
                                                 >
-                                                    + Add Alternate Answer / Spelling
+                                                    + Add alternate answer / spelling
                                                 </Button>
                                             </div>
 
-                                            {question.options.length === 0 && (
+                                            {unkeyed && (
                                                 <p className="rounded border border-amber-300 bg-amber-50/70 p-2.5 text-[11px] font-medium text-amber-900">
-                                                    ℹ️ No answer key specified. This question will be marked for manual grading upon student submission. Click the button above to add acceptable spelling(s) for automatic correction.
+                                                    ⚠️ No answer key specified. Add at least one acceptable answer before publishing.
                                                 </p>
                                             )}
                                         </div>
+                                    ) : (
+                                        /* SHORT_ANSWER (Essay) */
+                                        <div className="mt-4 space-y-2">
+                                            <div className="flex flex-col gap-0.5">
+                                                <p className="text-xs font-bold text-gray-700">
+                                                    Sample answer / rubric (optional)
+                                                </p>
+                                                <p className="text-[11px] text-gray-500 font-medium">
+                                                    Graded manually. Visible to teachers only during grading; not shown to students.
+                                                </p>
+                                            </div>
+                                            <textarea
+                                                value={question.explanation}
+                                                onChange={(event) =>
+                                                    updateQuizQuestion(question.id, {
+                                                        explanation: event.target.value,
+                                                    })
+                                                }
+                                                disabled={isCreating}
+                                                placeholder="Optional sample answer, scoring criteria, or rubric for grading student responses..."
+                                                className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-md transition focus:outline-hidden focus:shadow-xs min-h-20 text-sm"
+                                            />
+                                        </div>
                                     )}
 
-                                    <div className="mt-3 flex flex-col gap-1 w-full">
-                                        <label className="text-xs font-bold text-gray-700">
-                                            Explanation or answer guide
-                                        </label>
-                                        <textarea
-                                            value={question.explanation}
-                                            onChange={(event) =>
-                                                updateQuizQuestion(question.id, {
-                                                    explanation: event.target.value,
-                                                })
-                                            }
-                                            disabled={isCreating}
-                                            placeholder="Optional guidance for review or grading"
-                                            className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-md transition focus:outline-hidden focus:shadow-xs min-h-16 text-sm"
-                                        />
-                                    </div>
+                                    {question.question_type !== "SHORT_ANSWER" && (
+                                        <div className="mt-3 flex flex-col gap-1 w-full">
+                                            <label className="text-xs font-bold text-gray-700">
+                                                Explanation or answer guide (optional)
+                                            </label>
+                                            <textarea
+                                                value={question.explanation}
+                                                onChange={(event) =>
+                                                    updateQuizQuestion(question.id, {
+                                                        explanation: event.target.value,
+                                                    })
+                                                }
+                                                disabled={isCreating}
+                                                placeholder="Optional guidance for review or grading"
+                                                className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-md transition focus:outline-hidden focus:shadow-xs min-h-16 text-sm"
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             );
                             })}
@@ -1603,11 +1677,19 @@ export default function CreateClassworkQuizModal({
                             </Button>
                             <Button
                                 type="button"
+                                onClick={() => addQuizQuestion("IDENTIFICATION")}
+                                disabled={isCreating}
+                                className="bg-[#F6E9B2] hover:bg-[#ebd88d] border-black border-2 text-black font-bold"
+                            >
+                                Add identification
+                            </Button>
+                            <Button
+                                type="button"
                                 onClick={() => addQuizQuestion("SHORT_ANSWER")}
                                 disabled={isCreating}
                                 className="bg-white hover:bg-gray-50 border-black border-2"
                             >
-                                Add short answer
+                                Add short answer (essay)
                             </Button>
                         </div>
 
@@ -1719,6 +1801,11 @@ export default function CreateClassworkQuizModal({
                                         </Select.Group>
                                     </Select.Content>
                                 </Select>
+                                {draft.is_published && unkeyedIdCount > 0 && (
+                                    <div className="mt-2 rounded border-2 border-amber-500 bg-amber-50 p-2.5 text-xs text-amber-900 font-semibold shadow-xs">
+                                        ⚠️ <strong>Cannot publish:</strong> {unkeyedIdCount} Identification question(s) have no answer key. Add at least one answer key or select &quot;Keep hidden from students&quot; to save as draft.
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -2157,15 +2244,24 @@ export default function CreateClassworkQuizModal({
                     <Button
                         type="button"
                         onClick={handleCreateQuiz}
-                        disabled={isCreating}
-                        className="gap-2 bg-[#7ABA78] hover:bg-[#6ab368]"
+                        disabled={isCreating || (draft.is_published && unkeyedIdCount > 0)}
+                        title={
+                            draft.is_published && unkeyedIdCount > 0
+                                ? `Cannot publish: ${unkeyedIdCount} Identification question(s) have no answer key. Add keys or save as draft.`
+                                : undefined
+                        }
+                        className="gap-2 bg-[#7ABA78] hover:bg-[#6ab368] disabled:opacity-50"
                     >
                         {isCreating ? (
                             <Loader2 className="size-4 animate-spin" />
                         ) : (
                             <Plus className="size-4" />
                         )}
-                        {isCreating ? "Creating..." : "Assign"}
+                        {isCreating
+                            ? "Creating..."
+                            : draft.is_published
+                            ? "Assign"
+                            : "Save Draft"}
                     </Button>
                 )}
             </Dialog.Footer>

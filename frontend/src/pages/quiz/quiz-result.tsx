@@ -355,7 +355,7 @@ const StudentQuizResult = () => {
                               <div>
                                 <p className="font-semibold text-base">{q.question_text}</p>
                                 <span className="text-xs text-black/50 uppercase font-medium">
-                                  {q.question_type === "MULTIPLE_CHOICE" ? "Multiple Choice" : "Short Answer"}
+                                  {q.question_type === "MULTIPLE_CHOICE" ? "Multiple Choice" : q.question_type === "IDENTIFICATION" ? "Identification" : "Short Answer (Essay)"}
                                 </span>
                               </div>
                             </div>
@@ -376,7 +376,7 @@ const StudentQuizResult = () => {
                               {isNeedsGrading && (
                                 <Badge variant="surface" className="bg-amber-100 text-amber-800 border-amber-400 font-bold text-xs flex items-center gap-1">
                                   <Clock className="w-3.5 h-3.5" />
-                                  Needs Grading ({q.points} pts)
+                                  Pending Teacher Review ({q.points} pts)
                                 </Badge>
                               )}
                             </div>
@@ -422,8 +422,8 @@ const StudentQuizResult = () => {
                             </div>
                           )}
 
-                          {/* Short answer text */}
-                          {q.question_type === "SHORT_ANSWER" && (
+                          {/* Text submission for short answer or identification */}
+                          {q.question_type !== "MULTIPLE_CHOICE" && (
                             <div className="bg-neutral-50 border border-neutral-300 p-3 text-xs">
                               <span className="font-semibold text-black/60 block mb-1">Your Submission:</span>
                               <p className="text-black/90 whitespace-pre-wrap">{q.answer_text || "(No answer provided)"}</p>

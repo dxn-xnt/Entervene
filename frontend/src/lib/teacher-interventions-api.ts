@@ -82,7 +82,7 @@ export type MaterialKind = "STUDENT_REVIEWER" | "REMEDIAL_ASSESSMENT";
 export interface ReviewerDraft { title: string; introduction: string; body: string }
 export interface RemedialQuestion {
   question_text: string;
-  question_type: "MULTIPLE_CHOICE" | "SHORT_ANSWER";
+  question_type: "MULTIPLE_CHOICE" | "IDENTIFICATION" | "SHORT_ANSWER";
   points: number;
   display_order: number;
   difficulty_level: "EASY" | "MEDIUM" | "HARD" | null;

@@ -1,4 +1,4 @@
-export type QuizQuestionType = "MULTIPLE_CHOICE" | "SHORT_ANSWER";
+export type QuizQuestionType = "MULTIPLE_CHOICE" | "IDENTIFICATION" | "SHORT_ANSWER";
 export type QuizDifficulty = "EASY" | "MEDIUM" | "HARD";
 
 export type QuizOptionDraft = {
@@ -16,6 +16,7 @@ export type QuizQuestionDraft = {
   display_order: number;
   difficulty_level: QuizDifficulty;
   explanation: string;
+  is_ai_generated?: boolean;
   options: QuizOptionDraft[];
 };
 
@@ -92,6 +93,7 @@ export type QuizImportPreview = {
     display_order: number;
     difficulty_level?: QuizDifficulty | null;
     explanation?: string | null;
+    is_ai_generated?: boolean;
     options: QuizOptionDraft[];
   }>;
   warnings: string[];

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { sanitize, cleanDocxText } from "./quiz-export";
+import { sanitize, cleanDocxText, groupQuestions } from "./quiz-export";
+import type { QuizQuestionDraft } from "@/pages/teacher/classworks/quiz-builder-types";
 
 describe("quiz-export text sanitization", () => {
   it("normalizes mathematical, punctuation, and non-WinAnsi characters to safe ASCII equivalents in fallback mode", () => {
@@ -99,5 +100,76 @@ describe("quiz-export text sanitization", () => {
     expect(cleaned).toBe("m/s² 25°C π Δ √ µ ½ Niño José 中文 🚀 ");
     expect(cleaned).not.toContain("\x00");
     expect(cleaned).not.toContain("\x08");
+  });
+});
+
+describe("quiz-export groupQuestions", () => {
+  it("separates MULTIPLE_CHOICE, TRUE_FALSE, IDENTIFICATION, and SHORT_ANSWER (ESSAY) into distinct parts", () => {
+    const questions: QuizQuestionDraft[] = [
+      {
+        id: "1",
+        question_text: "What is 2+2?",
+        question_type: "MULTIPLE_CHOICE",
+        points: "1",
+        display_order: 1,
+        options: [
+          { option_text: "3", is_correct: false },
+          { option_text: "4", is_correct: true },
+          { option_text: "5", is_correct: false },
+          { option_text: "6", is_correct: false },
+        ],
+      },
+      {
+        id: "2",
+        question_text: "The sky is blue.",
+        question_type: "MULTIPLE_CHOICE",
+        points: "1",
+        display_order: 2,
+        options: [
+          { option_text: "True", is_correct: true },
+          { option_text: "False", is_correct: false },
+        ],
+      },
+      {
+        id: "3",
+        question_text: "Identify the powerhouse of the cell.",
+        question_type: "IDENTIFICATION",
+        points: "1",
+        display_order: 3,
+        options: [{ option_text: "Mitochondria", is_correct: true }],
+      },
+      {
+        id: "4",
+        question_text: "Explain cellular respiration in depth.",
+        question_type: "SHORT_ANSWER",
+        points: "5",
+        display_order: 4,
+        explanation: "Sample rubric",
+        options: [],
+      },
+    ];
+
+    const groups = groupQuestions(questions);
+    expect(groups).toHaveLength(4);
+
+    expect(groups[0].heading).toBe("PART I. MULTIPLE CHOICE");
+    expect(groups[0].directions).toContain("Choose the letter of the best answer");
+    expect(groups[0].questions).toHaveLength(1);
+    expect(groups[0].questions[0].display_order).toBe(1);
+
+    expect(groups[1].heading).toBe("PART II. TRUE OR FALSE");
+    expect(groups[1].directions).toContain("Write TRUE if the statement is correct");
+    expect(groups[1].questions).toHaveLength(1);
+    expect(groups[1].questions[0].display_order).toBe(2);
+
+    expect(groups[2].heading).toBe("PART III. IDENTIFICATION");
+    expect(groups[2].directions).toContain("Provide the concise and accurate answer");
+    expect(groups[2].questions).toHaveLength(1);
+    expect(groups[2].questions[0].display_order).toBe(3);
+
+    expect(groups[3].heading).toBe("PART IV. SHORT ANSWER (ESSAY)");
+    expect(groups[3].directions).toContain("Write a clear and comprehensive response");
+    expect(groups[3].questions).toHaveLength(1);
+    expect(groups[3].questions[0].display_order).toBe(4);
   });
 });

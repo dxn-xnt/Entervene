@@ -21,7 +21,7 @@ export type QuizAttemptOption = {
 export type QuizAttemptQuestion = {
   quiz_question_id: number;
   question_text: string;
-  question_type: string; // "MULTIPLE_CHOICE" | "SHORT_ANSWER"
+  question_type: string; // "MULTIPLE_CHOICE" | "IDENTIFICATION" | "SHORT_ANSWER"
   points: number;
   display_order: number;
   options: QuizAttemptOption[];
