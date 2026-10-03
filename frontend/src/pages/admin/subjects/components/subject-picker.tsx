@@ -3,6 +3,7 @@ import { Search, X } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Input } from "@/components/retroui/Input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import type { SubjectListItem } from "@/lib/api";
 
 type SubjectPickerProps = {
@@ -106,15 +107,18 @@ export function SubjectPicker({
               className="inline-flex max-w-full items-center gap-2 rounded border-2 border-black bg-[#fff1b8] px-2 py-1 text-xs font-semibold shadow-[2px_2px_0_#000]"
             >
               <span className="truncate">{subject.subject_name}</span>
-              <button
+              <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex shrink-0"><button
                 type="button"
                 className="grid size-5 shrink-0 place-items-center rounded-full border border-black bg-background"
                 onClick={() => clearSubject(String(subject.subject_id))}
                 disabled={disabled}
-                title={`Remove ${subject.subject_name}`}
+                aria-label={`Remove ${subject.subject_name}`}
               >
                 <X className="size-3" />
-              </button>
+              </button></span>} />
+                <TooltipContent>Remove subject</TooltipContent>
+              </Tooltip>
             </span>
           ))}
         </div>

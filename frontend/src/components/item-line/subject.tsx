@@ -1,5 +1,6 @@
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Card as RetroCard } from "@/components/retroui/Card";
 import {
     DropdownMenu,
@@ -79,49 +80,6 @@ const SubjectItemLine = ({
                                 </Badge>
                             ) : null}
 
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        className="p-2 shadow-none"
-                                        aria-label="More options"
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                        }}
-                                    >
-                                        <EllipsisIcon className="size-4" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="border-2">
-                                    {onEdit ? (
-                                        <DropdownMenuItem
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onEdit();
-                                            }}
-                                            className="gap-2"
-                                        >
-                                            <PenIcon className="size-4" /> Edit
-                                        </DropdownMenuItem>
-                                    ) : null}
-                                    {onArchive ? (
-                                        <DropdownMenuItem
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onArchive();
-                                            }}
-                                            disabled={archived}
-                                            className="gap-2"
-                                        >
-                                            <ArchiveIcon className="size-4" /> Archive
-                                        </DropdownMenuItem>
-                                    ) : null}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-
-
                         </div>
 
                     </div>
@@ -135,6 +93,35 @@ const SubjectItemLine = ({
                         </div>
                     ) : null}
                 </button>
+                <DropdownMenu>
+                    <Tooltip>
+                        <TooltipTrigger render={<span className="inline-flex self-end md:self-start">
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    className="p-2 shadow-none"
+                                    aria-label="Subject actions"
+                                >
+                                    <EllipsisIcon className="size-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                        </span>} />
+                        <TooltipContent>Subject actions</TooltipContent>
+                    </Tooltip>
+                    <DropdownMenuContent align="end" className="border-2">
+                        {onEdit ? (
+                            <DropdownMenuItem onClick={onEdit} className="gap-2">
+                                <PenIcon className="size-4" /> Edit
+                            </DropdownMenuItem>
+                        ) : null}
+                        {onArchive ? (
+                            <DropdownMenuItem onClick={onArchive} disabled={archived} className="gap-2">
+                                <ArchiveIcon className="size-4" /> Archive
+                            </DropdownMenuItem>
+                        ) : null}
+                    </DropdownMenuContent>
+                </DropdownMenu>
 
             </div>
         </RetroCard>

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ArchiveIcon, EllipsisIcon, PenIcon } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 
 export default function ClassCard({ item, onEdit, onArchive }: {
   item: ClassListItem;
@@ -41,6 +42,8 @@ export default function ClassCard({ item, onEdit, onArchive }: {
             {isArchived ? "Archived" : "Active"}
           </Badge>
           <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger render={<span className="inline-flex">
             <DropdownMenuTrigger asChild>
               <Button
                 size="sm"
@@ -52,6 +55,9 @@ export default function ClassCard({ item, onEdit, onArchive }: {
                 <EllipsisIcon className="size-4" />
               </Button>
             </DropdownMenuTrigger>
+              </span>} />
+              <TooltipContent>Class actions</TooltipContent>
+            </Tooltip>
             <DropdownMenuContent align="end" className="border-2">
               <DropdownMenuItem onClick={onEdit} className="gap-2">
                 <PenIcon className="size-4" /> Edit

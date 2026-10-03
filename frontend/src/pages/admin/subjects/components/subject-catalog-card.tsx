@@ -6,6 +6,7 @@ import type { SubjectListItem } from "@/lib/api";
 import { subjectCode, subjectRouteGrade } from "./subject-utils";
 import { Badge } from "@/components/retroui/Badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 
 export function SubjectCatalogCard({
   subject,
@@ -38,6 +39,8 @@ export function SubjectCatalogCard({
               {subject.status === "active" ? "Active" : "Archived"}
             </Badge>
             <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex">
               <DropdownMenuTrigger asChild>
                 <Button
                   size="sm"
@@ -49,6 +52,9 @@ export function SubjectCatalogCard({
                   <EllipsisIcon className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
+                </span>} />
+                <TooltipContent>Subject actions</TooltipContent>
+              </Tooltip>
               <DropdownMenuContent align="end" className="border-2">
                 {onEdit ? (
                   <DropdownMenuItem

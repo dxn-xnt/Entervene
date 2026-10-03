@@ -355,7 +355,6 @@ export default function AdminSubstitutions() {
                                       size="sm"
                                       variant="outline"
                                       onClick={() => setSelectedAdjustTarget({ type: "single", substitution: sub })}
-                                      title="Adjust this specific load's end date"
                                       className="h-7 px-2 text-xs"
                                     >
                                       <Edit className="h-3 w-3 mr-1" />
@@ -368,7 +367,6 @@ export default function AdminSubstitutions() {
                                       variant="outline"
                                       onClick={() => handleEndEarly(sub)}
                                       disabled={Boolean(isActionLoading)}
-                                      title="End this load today"
                                       className="h-7 px-2 text-xs text-amber-600 border-amber-300 hover:bg-amber-50"
                                     >
                                       <StopCircle className="h-3 w-3 mr-1" />
@@ -392,7 +390,6 @@ export default function AdminSubstitutions() {
                                               currentEndDate: sub.end_date,
                                             })
                                           }
-                                          title="Adjust end date for all loads in this program takeover"
                                           className="h-7 px-2 text-xs text-primary border-primary/30 hover:bg-primary/5"
                                         >
                                           <Layers className="h-3 w-3 mr-1" />
@@ -404,7 +401,6 @@ export default function AdminSubstitutions() {
                                           variant="outline"
                                           onClick={() => handleEndBatchEarly(sub.batch_id!, batchTotal, sub.original_staff_name)}
                                           disabled={Boolean(isActionLoading)}
-                                          title="End all loads in this program takeover today"
                                           className="h-7 px-2 text-xs text-amber-700 border-amber-400 bg-amber-50/50 hover:bg-amber-100"
                                         >
                                           End All ({batchTotal})
@@ -418,7 +414,6 @@ export default function AdminSubstitutions() {
                                         variant="outline"
                                         onClick={() => handleCancel(sub)}
                                         disabled={Boolean(isActionLoading)}
-                                        title="Cancel future substitution"
                                         className="h-7 px-2 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
                                       >
                                         <XCircle className="h-3 w-3 mr-1" />

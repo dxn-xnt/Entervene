@@ -23,6 +23,7 @@ import { Alert } from "@/components/retroui/Alert";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { TimePickerSingle, type TimeValue } from "@/components/retroui/TimePicker";
 import { SegmentedControl } from "@/components/retroui/SegmentedControl";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import {
   apiFetch,
   getSubjectLoadStudioData,
@@ -237,30 +238,34 @@ function GradeGroupCarousel({
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex flex-row items-center gap-2">
           {!hideGradeNav && (
-            <Button
+            <Tooltip>
+              <TooltipTrigger render={<span className="inline-flex"><Button
               size="sm"
               variant="outline"
               disabled={!hasPrevGrade}
               onClick={handlePrevGrade}
               className="size-8 p-0 border-black shadow-none disabled:opacity-40"
               aria-label="Previous grade level"
-              title="Previous Grade Level"
             >
               <ChevronsLeft className="size-4" />
-            </Button>
+            </Button></span>} />
+              <TooltipContent>Previous grade</TooltipContent>
+            </Tooltip>
           )}
           {!hideSectionNav && (
-            <Button
+            <Tooltip>
+              <TooltipTrigger render={<span className="inline-flex"><Button
               size="sm"
               variant="outline"
               disabled={!canScrollPrev}
               onClick={() => setActiveIdx((prev) => Math.max(0, prev - 1))}
               className="size-8 p-0 border-black shadow-none disabled:opacity-40"
               aria-label="Previous section"
-              title="Previous Section"
             >
               <ChevronLeft className="size-4" />
-            </Button>
+            </Button></span>} />
+              <TooltipContent>Previous section</TooltipContent>
+            </Tooltip>
           )}
           <Badge size="md" variant="outline" className="border-border font-bold px-5">
             <div className="flex flex-col text-left">
@@ -270,30 +275,34 @@ function GradeGroupCarousel({
             </div>
           </Badge>
           {!hideSectionNav && (
-            <Button
+            <Tooltip>
+              <TooltipTrigger render={<span className="inline-flex"><Button
               size="sm"
               variant="outline"
               disabled={!canScrollNext}
               onClick={() => setActiveIdx((prev) => Math.min(classes.length - 1, prev + 1))}
               className="size-8 p-0 border-black shadow-none disabled:opacity-40"
               aria-label="Next section"
-              title="Next Section"
             >
               <ChevronRight className="size-4" />
-            </Button>
+            </Button></span>} />
+              <TooltipContent>Next section</TooltipContent>
+            </Tooltip>
           )}
           {!hideGradeNav && (
-            <Button
+            <Tooltip>
+              <TooltipTrigger render={<span className="inline-flex"><Button
               size="sm"
               variant="outline"
               disabled={!hasNextGrade}
               onClick={handleNextGrade}
               className="size-8 p-0 border-black shadow-none disabled:opacity-40"
               aria-label="Next grade level"
-              title="Next Grade Level"
             >
               <ChevronsRight className="size-4" />
-            </Button>
+            </Button></span>} />
+              <TooltipContent>Next grade</TooltipContent>
+            </Tooltip>
           )}
         </div>
         {/* View Switcher: Timetable Grid vs List */}
@@ -303,10 +312,10 @@ function GradeGroupCarousel({
             value={viewMode}
             onValueChange={(val) => onViewModeChange(val as "grid" | "list")}
           >
-            <SegmentedControl.Item value="grid" title="Timetable Grid View">
+            <SegmentedControl.Item value="grid">
               Timetable
             </SegmentedControl.Item>
-            <SegmentedControl.Item value="list" title="Subject List & Schedule Editor">
+            <SegmentedControl.Item value="list">
               List
             </SegmentedControl.Item>
           </SegmentedControl>
@@ -1673,13 +1682,6 @@ export default function AdminSubjectLoadStudio() {
                     }
                     void handleSave("publish", "all");
                   }}
-                  title={
-                    unassignedTotal > 0
-                      ? `Cannot publish master schedule: ${unassignedTotal} subject(s) school-wide have no assigned teacher`
-                      : errorConflictsCount > 0
-                        ? "Fix all schedule conflicts before publishing master schedule"
-                        : "Publish all sections & grades school-wide"
-                  }
                 >
                   <Send className="size-3.5" />
                   Publish Master Schedule
@@ -1801,41 +1803,47 @@ export default function AdminSubjectLoadStudio() {
                     <div className="flex flex-wrap items-center gap-2 justify-between">
                       <div className="flex flex-wrap items-center gap-2 font-bold">
                         {activeSectionErrorConflictsCount > 0 && (
-                          <Badge
+                          <Tooltip>
+                            <TooltipTrigger render={<span className="inline-flex"><Badge
                             size="sm"
                             variant="solid"
                             onClick={() => handleJumpToItem("error")}
                             className="bg-destructive inline-flex items-center gap-1.5 cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
-                            title="Click to jump to conflicting subject in timetable/list"
                           >
                             <AlertCircle className="size-3.5" />
                             {activeSectionErrorConflictsCount} conflicts — must resolve to publish
-                          </Badge>
+                          </Badge></span>} />
+                            <TooltipContent>Jump to conflict</TooltipContent>
+                          </Tooltip>
                         )}
 
                         {activeSectionWarningConflictsCount > 0 && (
-                          <Badge
+                          <Tooltip>
+                            <TooltipTrigger render={<span className="inline-flex"><Badge
                             size="sm"
                             variant="surface"
                             onClick={() => handleJumpToItem("warning")}
                             className="inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
-                            title="Click to jump to warning subject in timetable/list"
                           >
                             <AlertTriangle className="size-3.5" />
                             {activeSectionWarningConflictsCount} warnings
-                          </Badge>
+                          </Badge></span>} />
+                            <TooltipContent>Jump to warning</TooltipContent>
+                          </Tooltip>
                         )}
 
                         {activeSectionUnassignedTotal > 0 && (
-                          <Badge
+                          <Tooltip>
+                            <TooltipTrigger render={<span className="inline-flex"><Badge
                             size="sm"
                             variant="default"
                             onClick={() => handleJumpToItem("unassigned")}
                             className="cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
-                            title="Click to jump to unassigned subject in timetable/list"
                           >
                             {activeSectionUnassignedTotal} unassigned
-                          </Badge>
+                          </Badge></span>} />
+                            <TooltipContent>Jump to unassigned</TooltipContent>
+                          </Tooltip>
                         )}
                       </div>
                       {/* Auto-Generate All */}
@@ -1917,7 +1925,6 @@ export default function AdminSubjectLoadStudio() {
                               disabled={isSaving}
                               className="shadow-sm"
                               onClick={() => void handleUnlockSection(cls.class_id)}
-                              title="Unlock this section to create an isolated working draft without disrupting live student/teacher portal access"
                             >
                               <Unlock className="size-3.5 mr-1" />
                               Unlock Section
@@ -1934,7 +1941,6 @@ export default function AdminSubjectLoadStudio() {
                                     sectionName: cls.section_name,
                                   })
                                 }
-                                title="Discard all unpublished draft edits and restore published baseline"
                                 className="text-red-600 hover:text-red-700 hover:bg-red-50 shadow-none cursor-pointer"
                               >
                                 <RotateCcw className="size-3.5 mr-1" />
@@ -1946,13 +1952,6 @@ export default function AdminSubjectLoadStudio() {
                                 disabled={isSaving}
                                 className="gap-2 shadow-none"
                                 onClick={handlePublishSectionClick}
-                                title={
-                                  sectionUnassignedCount > 0
-                                    ? `Assign all ${sectionUnassignedCount} unassigned teacher(s) in this section before publishing`
-                                    : sectionHasErrors
-                                      ? `Fix schedule conflicts in this section before publishing: ${sectionErrors[0]?.message || ""}`
-                                      : "Publish draft changes to live schedule"
-                                }
                               >
                                 <Send className="size-3.5" />
                                 Publish
@@ -1965,19 +1964,14 @@ export default function AdminSubjectLoadStudio() {
                               disabled={isSaving}
                               className="gap-2"
                               onClick={handlePublishSectionClick}
-                              title={
-                                sectionUnassignedCount > 0
-                                  ? `Assign all ${sectionUnassignedCount} unassigned teacher(s) in this section before publishing`
-                                  : sectionHasErrors
-                                    ? `Fix schedule conflicts in this section before publishing: ${sectionErrors[0]?.message || ""}`
-                                    : "Publish only this section's schedule"
-                              }
                             >
                               <Send className="size-3.5" />
                               Publish Section
                             </Button>
                           )}
                           <DropdownMenu>
+                            <Tooltip>
+                              <TooltipTrigger render={<span className="inline-flex">
                             <DropdownMenuTrigger asChild>
                               <Button
                                 size="sm"
@@ -1989,6 +1983,9 @@ export default function AdminSubjectLoadStudio() {
                                 <EllipsisIcon className="size-3.5" />
                               </Button>
                             </DropdownMenuTrigger>
+                              </span>} />
+                              <TooltipContent>Section actions</TooltipContent>
+                            </Tooltip>
                             <DropdownMenuContent align="end" className="border-2 min-w-[200px]">
                               <DropdownMenuItem
                                 className="gap-2 cursor-pointer"
@@ -2564,14 +2561,17 @@ export default function AdminSubjectLoadStudio() {
 
                                                         {/* Delete slot button */}
                                                         {subjectSlots.length > 1 && (
-                                                          <button
-                                                            type="button"
-                                                            onClick={() => handleRemoveSlot(slotKey)}
-                                                            className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 border border-red-300 rounded ml-1"
-                                                            title="Remove this time slot"
-                                                          >
-                                                            <Trash2 className="size-3.5" />
-                                                          </button>
+                                                          <Tooltip>
+                                                            <TooltipTrigger render={<button
+                                                              type="button"
+                                                              onClick={() => handleRemoveSlot(slotKey)}
+                                                              className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 border border-red-300 rounded ml-1"
+                                                              aria-label="Remove time slot"
+                                                            >
+                                                              <Trash2 className="size-3.5" />
+                                                            </button>} />
+                                                            <TooltipContent>Remove time slot</TooltipContent>
+                                                          </Tooltip>
                                                         )}
                                                       </div>
                                                     );
@@ -2637,15 +2637,18 @@ export default function AdminSubjectLoadStudio() {
 
                                                     {/* Row Action Overflow Menu (⋯) */}
                                                     <div className="flex">
-                                                      <Button
+                                                      <Tooltip>
+                                                        <TooltipTrigger render={<Button
                                                         onClick={() => setOpenRowKey(isRowMenuOpen ? null : rowKey)}
                                                         size="sm"
                                                         variant="outline"
                                                         className="bg-background w-8"
-                                                        title="Row Presets & Options"
+                                                        aria-label="Row options"
                                                       >
                                                         ⋯
-                                                      </Button>
+                                                      </Button>} />
+                                                        <TooltipContent>Row options</TooltipContent>
+                                                      </Tooltip>
 
                                                       {isRowMenuOpen && (
                                                         <div

@@ -299,13 +299,17 @@ export function SubjectCard({
                   <p className="text-sm font-semibold truncate">
                     {latestActivityTitle || `${pendingCount} Ongoing Tasks`}
                   </p>
-                  <Button
-                    variant="secondary"
-                    className="shadow-none p-1 shrink-0"
-                    size="sm"
-                  >
-                    <ArrowUpRight className="size-3" />
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger render={<Button
+                      variant="secondary"
+                      className="shadow-none p-1 shrink-0"
+                      size="sm"
+                      aria-label={`View ${title} subject`}
+                    >
+                      <ArrowUpRight className="size-3" />
+                    </Button>} />
+                    <TooltipContent>View subject</TooltipContent>
+                  </Tooltip>
                 </div>
                 <div className="flex flex-row gap-1.5 items-center flex-wrap">
                   {latestActivityDue && (

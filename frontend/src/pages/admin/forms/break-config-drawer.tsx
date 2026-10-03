@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { useToast } from "@/components/retroui/use-toast";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
@@ -377,7 +378,6 @@ export default function BreakConfigDrawer({
                 size="sm"
                 onClick={handleAddTemplateGroup}
                 className="text-xs gap-2 shrink-0 mb-1 shadow-sm"
-                title="Create a new section template group"
               >
                 <FolderPlus className="size-3.5" />
                 New Group
@@ -538,16 +538,19 @@ export default function BreakConfigDrawer({
                             }
                           />
 
-                          <Button
+                          <Tooltip>
+                            <TooltipTrigger render={<Button
                             variant="outline"
                             size="sm"
                             type="button"
                             onClick={() => handleRemoveSlot(slot.display_order, slot.slot_id)}
                             className="h-7 w-7 p-0 text-destructive hover:bg-destructive hover:text-destructive-foreground ml-1 shadow-none"
-                            title="Remove slot"
+                            aria-label="Remove slot"
                           >
                             <Trash2 className="size-4" />
-                          </Button>
+                          </Button>} />
+                            <TooltipContent>Remove slot</TooltipContent>
+                          </Tooltip>
                         </div>
                       </Card>
                     );
