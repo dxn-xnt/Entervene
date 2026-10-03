@@ -25,6 +25,7 @@ import type {
   TrackingStudent,
 } from "@/types/classwork";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Table } from "@/components/retroui/Table";
 import { Card } from "@/components/retroui/Card";
 import { Progress } from "@/components/retroui/Progress";
@@ -62,6 +63,7 @@ export default function ClassworkView({
   onUpdated,
   onArchived,
 }: ClassworkViewProps = {}) {
+  const toast = useToast();
   const navigate = useNavigate();
   const params = useParams<{ classworkId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -240,15 +242,16 @@ export default function ClassworkView({
       }
 
       setShowArchiveConfirm(false);
+      toast.success({ title: "Classwork archived" });
       if (onArchived) {
         onArchived(selected.classwork_id);
       } else {
         navigate("/teacher/classworks");
       }
     } catch (err) {
-      setDetailError(
-        err instanceof Error ? err.message : "Unable to archive classwork.",
-      );
+      const message = err instanceof Error ? err.message : "Unable to archive classwork.";
+      setDetailError(message);
+      toast.error({ title: "Unable to archive classwork", description: message });
     } finally {
       setIsArchiving(false);
     }
@@ -372,10 +375,11 @@ export default function ClassworkView({
         };
       });
       setGradeSuccess("Grade and feedback saved.");
+      toast.success({ title: "Grade and feedback saved" });
     } catch (err) {
-      setGradeError(
-        err instanceof Error ? err.message : "Unable to post grade.",
-      );
+      const message = err instanceof Error ? err.message : "Unable to post grade.";
+      setGradeError(message);
+      toast.error({ title: "Unable to save grade", description: message });
     } finally {
       setIsPostingGrade(false);
     }

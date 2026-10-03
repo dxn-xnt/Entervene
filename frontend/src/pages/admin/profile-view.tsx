@@ -2,6 +2,7 @@ import { ProfileHeader } from "@/components/profile-header";
 import { useMemo, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { useToast } from "@/components/retroui/use-toast";
 import { Card } from "@/components/retroui/Card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -228,13 +229,17 @@ export default function AdminProfile() {
           <div className="w-full max-w-md border-2 border-black bg-[#fffdf5] rounded shadow-[8px_8px_0_0_#000] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between border-b-2 border-black bg-[#79bd80] px-4 py-3 text-black">
               <h2 className="font-bold text-lg">Edit Profile Avatar</h2>
-              <button
+              <Tooltip>
+                <TooltipTrigger render={<button
+                type="button"
                 aria-label="Close modal"
                 className="rounded p-1 hover:bg-white/30 transition-colors cursor-pointer"
                 onClick={() => setIsModalOpen(false)}
               >
                 <X className="size-5" />
-              </button>
+              </button>} />
+                <TooltipContent>Close modal</TooltipContent>
+              </Tooltip>
             </div>
 
             <div className="p-6 flex flex-col gap-6">

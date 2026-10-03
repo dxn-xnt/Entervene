@@ -5,6 +5,7 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import type { GradingTemplateSubjectOption, SubjectAcademicLevel } from "@/lib/api";
 import { Badge } from "@/components/retroui/Badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 
 const ANY_GRADE = "any";
 
@@ -103,15 +104,18 @@ export function TemplateSubjectPicker({
                 className="flex gap-2"
               >
                 <span>{subject.subject_name}</span>
-                <button
+                <Tooltip>
+                  <TooltipTrigger render={<span className="inline-flex"><button
                   type="button"
                   onClick={() => removeSubject(String(subject.subject_id))}
                   disabled={disabled}
                   className="ml-1 rounded p-0.5 hover:bg-red-100 disabled:opacity-50"
-                  title="Remove subject"
+                  aria-label={`Remove ${subject.subject_name}`}
                 >
                   <X className="size-3.5" />
-                </button>
+                </button></span>} />
+                  <TooltipContent>Remove subject</TooltipContent>
+                </Tooltip>
               </Badge>
             ))}
           </div>

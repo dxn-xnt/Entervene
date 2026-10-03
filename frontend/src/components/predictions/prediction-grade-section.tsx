@@ -4,6 +4,7 @@ import { Card } from "@/components/retroui/Card";
 import { ArrowUpRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { GradeCard } from "./grade-card";
 import type { DashboardGradeGroupSummary } from "@/lib/prediction-api";
 
@@ -42,24 +43,27 @@ export function PredictionGradeSection({ group, role }: PredictionGradeSectionPr
         <h2 className="text-xl font-bold">{levelName}</h2>
         <div className="flex flex-row gap-3">
           {highRiskTotal > 0 && (
-            <Badge size="sm" variant={"surface"} className="bg-destructive text-black font-bold" title="High Risk">
+            <Badge size="sm" variant={"surface"} className="bg-destructive text-black font-bold">
               {highRiskTotal} {highRiskTotal === 1 ? "High Risk" : "High Risks"}
             </Badge>
           )}
           {monitoringTotal > 0 && (
-            <Badge size="sm" variant={"outline"} className="border-border font-bold" title="Monitoring">
+            <Badge size="sm" variant={"outline"} className="border-border font-bold">
               {monitoringTotal} Monitoring
             </Badge>
           )}
-          <Button
+          <Tooltip>
+            <TooltipTrigger render={<span className="inline-flex"><Button
             variant="secondary"
             className="shadow-none h-6 w-6 p-1 border-2 border-black"
             size="sm"
             onClick={() => navigate(`/${activeRole}/predictions/${gradeLevel}`)}
-            title={`View ${levelName}`}
+            aria-label={`View ${levelName} predictions`}
           >
             <ArrowUpRight className="size-4" />
-          </Button>
+          </Button></span>} />
+            <TooltipContent>View {levelName} predictions</TooltipContent>
+          </Tooltip>
         </div>
       </div>
       <div className="flex flex-wrap gap-3 pt-1">

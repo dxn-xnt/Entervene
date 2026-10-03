@@ -12,6 +12,11 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Switch } from "@/components/retroui/Switch";
 import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/retroui/tooltip";
 import { Alert } from "@/components/retroui/Alert";
 import { useToast } from "@/components/retroui/use-toast";
 import { ArrowUpRight, Lock, Plus, Calendar, Save } from "lucide-react";
@@ -82,14 +87,22 @@ export default function AdminSystemSettings() {
   const [maxMinutes, setMaxMinutes] = React.useState("360");
   const [isSavingTeacherCaps, setIsSavingTeacherCaps] = React.useState(false);
 
-  const [academicYears, setAcademicYears] = React.useState<AcademicYearSettingItem[]>([]);
+  const [academicYears, setAcademicYears] = React.useState<
+    AcademicYearSettingItem[]
+  >([]);
   const [selectedYearId, setSelectedYearId] = React.useState<string>("");
-  const [academicPeriods, setAcademicPeriods] = React.useState<AcademicPeriodSettingItem[]>([]);
+  const [academicPeriods, setAcademicPeriods] = React.useState<
+    AcademicPeriodSettingItem[]
+  >([]);
   const [selectedPeriodId, setSelectedPeriodId] = React.useState<string>("");
-  const [pendingPeriodId, setPendingPeriodId] = React.useState<string | null>(null);
+  const [pendingPeriodId, setPendingPeriodId] = React.useState<string | null>(
+    null,
+  );
 
   // Academic Levels
-  const [academicLevels, setAcademicLevels] = React.useState<AcademicLevelSettingItem[]>([]);
+  const [academicLevels, setAcademicLevels] = React.useState<
+    AcademicLevelSettingItem[]
+  >([]);
 
   // Curriculum scope
   const [jhsEnabled, setJhsEnabled] = React.useState(true);
@@ -107,7 +120,9 @@ export default function AdminSystemSettings() {
   };
 
   // Subject Groups state
-  const [subjectGroups, setSubjectGroups] = React.useState<SubjectGroupRead[]>([]);
+  const [subjectGroups, setSubjectGroups] = React.useState<SubjectGroupRead[]>(
+    [],
+  );
   const [isLoadingGroups, setIsLoadingGroups] = React.useState(false);
   const [isAddGroupOpen, setIsAddGroupOpen] = React.useState(false);
   const [newGroupName, setNewGroupName] = React.useState("");
@@ -124,7 +139,9 @@ export default function AdminSystemSettings() {
   const [isAddPathwayOpen, setIsAddPathwayOpen] = React.useState(false);
 
   // Pathway Scopes state
-  const [pathwayScopes, setPathwayScopes] = React.useState<PathwayScopeRead[]>([]);
+  const [pathwayScopes, setPathwayScopes] = React.useState<PathwayScopeRead[]>(
+    [],
+  );
   const [_isLoadingScopes, setIsLoadingScopes] = React.useState(false);
 
   const loadSubjectGroups = React.useCallback(async () => {
@@ -189,9 +206,11 @@ export default function AdminSystemSettings() {
         is_enabled: !pathway.is_enabled,
       });
       setPathways((prev) =>
-        prev.map((p) => (p.id === pathway.id ? updated : p))
+        prev.map((p) => (p.id === pathway.id ? updated : p)),
       );
-      showToast(`Pathway ${pathway.name} ${updated.is_enabled ? "enabled" : "disabled"}.`);
+      showToast(
+        `Pathway ${pathway.name} ${updated.is_enabled ? "enabled" : "disabled"}.`,
+      );
     } catch (err) {
       console.error("Failed to toggle pathway", err);
       showToast("Failed to toggle pathway.", "error");
@@ -203,20 +222,32 @@ export default function AdminSystemSettings() {
       const templatesRes = await getGradingTemplates({ status: "active" });
       const list = templatesRes.grading_templates || [];
       const mappedTemplates: Template[] = list.map((gt) => {
-        const wwComp = gt.components.find((c) => c.component_name.toLowerCase().includes("written"))?.weight ?? 0;
-        const ptComp = gt.components.find((c) => c.component_name.toLowerCase().includes("performance"))?.weight ?? 0;
-        const qaComp = gt.components.find((c) =>
-          c.component_name.toLowerCase().includes("quarter") ||
-          c.component_name.toLowerCase().includes("term") ||
-          c.component_name.toLowerCase().includes("exam")
-        )?.weight ?? 0;
+        const wwComp =
+          gt.components.find((c) =>
+            c.component_name.toLowerCase().includes("written"),
+          )?.weight ?? 0;
+        const ptComp =
+          gt.components.find((c) =>
+            c.component_name.toLowerCase().includes("performance"),
+          )?.weight ?? 0;
+        const qaComp =
+          gt.components.find(
+            (c) =>
+              c.component_name.toLowerCase().includes("quarter") ||
+              c.component_name.toLowerCase().includes("term") ||
+              c.component_name.toLowerCase().includes("exam"),
+          )?.weight ?? 0;
         return {
           id: gt.grading_template_id,
           name: gt.template_name,
           ww: wwComp,
           pt: ptComp,
           qa: qaComp,
-          scope: gt.description || (gt.academic_level?.level_name ? `Level: ${gt.academic_level.level_name}` : "General Template"),
+          scope:
+            gt.description ||
+            (gt.academic_level?.level_name
+              ? `Level: ${gt.academic_level.level_name}`
+              : "General Template"),
           is_locked: gt.is_locked,
           lock_reason: gt.lock_reason,
         };
@@ -227,18 +258,21 @@ export default function AdminSystemSettings() {
     }
   }, []);
 
-  const loadAcademicPeriodsForYear = React.useCallback(async (yearId?: number) => {
-    try {
-      const periods = await getAcademicPeriodsSettings(yearId);
-      setAcademicPeriods(periods);
-      const active = periods.find((p) => p.is_active) || periods[0];
-      if (active) {
-        setSelectedPeriodId(String(active.id));
+  const loadAcademicPeriodsForYear = React.useCallback(
+    async (yearId?: number) => {
+      try {
+        const periods = await getAcademicPeriodsSettings(yearId);
+        setAcademicPeriods(periods);
+        const active = periods.find((p) => p.is_active) || periods[0];
+        if (active) {
+          setSelectedPeriodId(String(active.id));
+        }
+      } catch (err) {
+        console.error("Failed to load academic periods", err);
       }
-    } catch (err) {
-      console.error("Failed to load academic periods", err);
-    }
-  }, []);
+    },
+    [],
+  );
 
   const loadSettingsFromBackend = React.useCallback(async () => {
     try {
@@ -255,16 +289,27 @@ export default function AdminSystemSettings() {
         });
       });
 
-      if (flatSettings["general_average_passing_grade"]) setAveragePassing(flatSettings["general_average_passing_grade"]);
-      if (flatSettings["jhs_enabled"]) setJhsEnabled(flatSettings["jhs_enabled"] === "true");
-      if (flatSettings["shs_enabled"]) setShsEnabled(flatSettings["shs_enabled"] === "true");
-      if (flatSettings["medical_pathway_enabled"]) setMedicalEnabled(flatSettings["medical_pathway_enabled"] === "true");
-      if (flatSettings["engineering_pathway_enabled"]) setEngineeringEnabled(flatSettings["engineering_pathway_enabled"] === "true");
-      if (flatSettings["school_day_start"]) setSchoolDayStart(flatSettings["school_day_start"]);
-      if (flatSettings["school_day_end"]) setSchoolDayEnd(flatSettings["school_day_end"]);
+      if (flatSettings["general_average_passing_grade"])
+        setAveragePassing(flatSettings["general_average_passing_grade"]);
+      if (flatSettings["jhs_enabled"])
+        setJhsEnabled(flatSettings["jhs_enabled"] === "true");
+      if (flatSettings["shs_enabled"])
+        setShsEnabled(flatSettings["shs_enabled"] === "true");
+      if (flatSettings["medical_pathway_enabled"])
+        setMedicalEnabled(flatSettings["medical_pathway_enabled"] === "true");
+      if (flatSettings["engineering_pathway_enabled"])
+        setEngineeringEnabled(
+          flatSettings["engineering_pathway_enabled"] === "true",
+        );
+      if (flatSettings["school_day_start"])
+        setSchoolDayStart(flatSettings["school_day_start"]);
+      if (flatSettings["school_day_end"])
+        setSchoolDayEnd(flatSettings["school_day_end"]);
 
-      if (flatSettings["min_subjects_per_day"]) setMinSubjects(flatSettings["min_subjects_per_day"]);
-      if (flatSettings["max_subjects_per_day"]) setMaxSubjects(flatSettings["max_subjects_per_day"]);
+      if (flatSettings["min_subjects_per_day"])
+        setMinSubjects(flatSettings["min_subjects_per_day"]);
+      if (flatSettings["max_subjects_per_day"])
+        setMaxSubjects(flatSettings["max_subjects_per_day"]);
       if (flatSettings["max_hours_per_day"]) {
         const hrs = parseFloat(flatSettings["max_hours_per_day"]);
         setMaxMinutes(!isNaN(hrs) ? String(Math.round(hrs * 60)) : "360");
@@ -282,14 +327,16 @@ export default function AdminSystemSettings() {
         ]);
       }
 
-      await Promise.all([
-        fetchGradingTemplatesList(),
-        loadPathways(),
-      ]);
+      await Promise.all([fetchGradingTemplatesList(), loadPathways()]);
     } catch (err) {
       console.error("Failed to load system settings", err);
     }
-  }, [fetchGradingTemplatesList, loadAcademicPeriodsForYear, loadPathwayScopes, loadPathways]);
+  }, [
+    fetchGradingTemplatesList,
+    loadAcademicPeriodsForYear,
+    loadPathwayScopes,
+    loadPathways,
+  ]);
 
   React.useEffect(() => {
     loadSettingsFromBackend();
@@ -312,7 +359,10 @@ export default function AdminSystemSettings() {
       await saveSingleSetting("general_average_passing_grade", averagePassing);
       showToast("General average threshold saved");
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to save threshold.", "error");
+      showToast(
+        err instanceof Error ? err.message : "Failed to save threshold.",
+        "error",
+      );
     } finally {
       setIsSavingThresholds(false);
     }
@@ -325,7 +375,9 @@ export default function AdminSystemSettings() {
     }
     setIsSavingTeacherCaps(true);
     try {
-      const hoursFromMinutes = String(Number(((parseFloat(maxMinutes) || 0) / 60).toFixed(2)));
+      const hoursFromMinutes = String(
+        Number(((parseFloat(maxMinutes) || 0) / 60).toFixed(2)),
+      );
       await Promise.all([
         updateSetting("min_subjects_per_day", minSubjects),
         updateSetting("max_subjects_per_day", maxSubjects),
@@ -345,8 +397,12 @@ export default function AdminSystemSettings() {
     setIsSavingSchoolHours(true);
     try {
       // Basic client-side validation to prevent obvious errors before hitting the backend
-      const startMins = (parseInt(schoolDayStart.split(":")[0]) || 0) * 60 + (parseInt(schoolDayStart.split(":")[1]) || 0);
-      const endMins = (parseInt(schoolDayEnd.split(":")[0]) || 0) * 60 + (parseInt(schoolDayEnd.split(":")[1]) || 0);
+      const startMins =
+        (parseInt(schoolDayStart.split(":")[0]) || 0) * 60 +
+        (parseInt(schoolDayStart.split(":")[1]) || 0);
+      const endMins =
+        (parseInt(schoolDayEnd.split(":")[0]) || 0) * 60 +
+        (parseInt(schoolDayEnd.split(":")[1]) || 0);
       if (startMins >= endMins) {
         showToast("Start time must be before end time.", "error");
         return;
@@ -355,23 +411,37 @@ export default function AdminSystemSettings() {
       await saveSingleSetting("school_day_end", schoolDayEnd);
       showToast("School operational hours saved");
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to save school hours.", "error");
+      showToast(
+        err instanceof Error ? err.message : "Failed to save school hours.",
+        "error",
+      );
     } finally {
       setIsSavingSchoolHours(false);
     }
   };
 
-  const handleUpdateGroupThreshold = async (groupId: number, passingThreshold: number) => {
+  const handleUpdateGroupThreshold = async (
+    groupId: number,
+    passingThreshold: number,
+  ) => {
     try {
-      await updateSubjectGroup(groupId, { passing_threshold: passingThreshold });
+      await updateSubjectGroup(groupId, {
+        passing_threshold: passingThreshold,
+      });
       showToast("Subject group passing threshold updated");
       await loadSubjectGroups();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to update threshold", "error");
+      showToast(
+        err instanceof Error ? err.message : "Failed to update threshold",
+        "error",
+      );
     }
   };
 
-  const handleToggleGroupActive = async (groupId: number, currentActive: boolean) => {
+  const handleToggleGroupActive = async (
+    groupId: number,
+    currentActive: boolean,
+  ) => {
     if (currentActive) {
       try {
         await deactivateSubjectGroup(groupId);
@@ -379,13 +449,18 @@ export default function AdminSystemSettings() {
         await loadSubjectGroups();
       } catch (err: unknown) {
         if (err && typeof err === "object" && "affectedSubjects" in err) {
-          const customErr = err as Error & { affectedSubjects: AffectedSubject[] };
+          const customErr = err as Error & {
+            affectedSubjects: AffectedSubject[];
+          };
           setDeactivateErrorDialog({
             message: customErr.message,
             affectedSubjects: customErr.affectedSubjects,
           });
         } else {
-          showToast(err instanceof Error ? err.message : "Failed to deactivate group", "error");
+          showToast(
+            err instanceof Error ? err.message : "Failed to deactivate group",
+            "error",
+          );
         }
       }
     } else {
@@ -394,7 +469,10 @@ export default function AdminSystemSettings() {
         showToast("Subject group activated");
         await loadSubjectGroups();
       } catch (err) {
-        showToast(err instanceof Error ? err.message : "Failed to activate group", "error");
+        showToast(
+          err instanceof Error ? err.message : "Failed to activate group",
+          "error",
+        );
       }
     }
   };
@@ -422,8 +500,13 @@ export default function AdminSystemSettings() {
       setIsAddGroupOpen(false);
       await loadSubjectGroups();
     } catch (err) {
-      setGroupError(err instanceof Error ? err.message : "Failed to create group");
-      showToast(err instanceof Error ? err.message : "Failed to create group", "error");
+      setGroupError(
+        err instanceof Error ? err.message : "Failed to create group",
+      );
+      showToast(
+        err instanceof Error ? err.message : "Failed to create group",
+        "error",
+      );
     }
   };
 
@@ -432,11 +515,20 @@ export default function AdminSystemSettings() {
     try {
       await saveSingleSetting("jhs_enabled", jhsEnabled ? "true" : "false");
       await saveSingleSetting("shs_enabled", shsEnabled ? "true" : "false");
-      await saveSingleSetting("medical_pathway_enabled", medicalEnabled ? "true" : "false");
-      await saveSingleSetting("engineering_pathway_enabled", engineeringEnabled ? "true" : "false");
+      await saveSingleSetting(
+        "medical_pathway_enabled",
+        medicalEnabled ? "true" : "false",
+      );
+      await saveSingleSetting(
+        "engineering_pathway_enabled",
+        engineeringEnabled ? "true" : "false",
+      );
       showToast("Curriculum scope saved");
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to save curriculum scope.", "error");
+      showToast(
+        err instanceof Error ? err.message : "Failed to save curriculum scope.",
+        "error",
+      );
     } finally {
       setIsSavingScope(false);
     }
@@ -447,16 +539,20 @@ export default function AdminSystemSettings() {
     setSelectedYearId(yearIdStr);
     try {
       await setActiveAcademicYear(yearId);
-      const selectedYear = academicYears.find((y) => y.academic_year_id === yearId);
+      const selectedYear = academicYears.find(
+        (y) => y.academic_year_id === yearId,
+      );
       setAcademicYears((prev) =>
         prev.map((y) => ({
           ...y,
           is_active: y.academic_year_id === yearId,
-        }))
+        })),
       );
       await loadAcademicPeriodsForYear(yearId);
       await loadPathwayScopes(yearId);
-      showToast(`Active academic year changed to ${selectedYear?.year_label || yearIdStr}`);
+      showToast(
+        `Active academic year changed to ${selectedYear?.year_label || yearIdStr}`,
+      );
     } catch (err) {
       console.error("Failed to change academic year", err);
       showToast("Failed to change academic year.", "error");
@@ -478,10 +574,12 @@ export default function AdminSystemSettings() {
             ...p,
             is_active: p.id === periodId,
             status: p.id === periodId ? "Active" : p.status,
-          }))
+          })),
         );
         const selectedP = academicPeriods.find((p) => p.id === periodId);
-        showToast(`Active period changed to ${selectedP?.period || `Period ${periodId}`}`);
+        showToast(
+          `Active period changed to ${selectedP?.period || `Period ${periodId}`}`,
+        );
       } catch (err) {
         console.error("Failed to change academic period", err);
         showToast("Failed to change academic period.", "error");
@@ -491,9 +589,18 @@ export default function AdminSystemSettings() {
   };
 
   // Dynamic progress calculation based on active period
-  const activePeriod = academicPeriods.find((p) => String(p.id) === selectedPeriodId || p.is_active) || academicPeriods[0];
+  const activePeriod =
+    academicPeriods.find(
+      (p) => String(p.id) === selectedPeriodId || p.is_active,
+    ) || academicPeriods[0];
   const progressRatio = activePeriod
-    ? Math.min(1, Math.max(0, activePeriod.period_sequence / (activePeriod.total_periods || 3)))
+    ? Math.min(
+        1,
+        Math.max(
+          0,
+          activePeriod.period_sequence / (activePeriod.total_periods || 3),
+        ),
+      )
     : 0.33;
   const progressPercent = Math.round(progressRatio * 100);
 
@@ -534,11 +641,14 @@ export default function AdminSystemSettings() {
                 <Card.Header className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <Card.Title className="flex min-w-0 w-full flex-col gap-1 leading-tight">
                     School Operational Hours
-                    <Text as="p" className="text-sm font-normal text-muted-foreground">
-                      Set the bounds for valid class schedules. Attempting to schedule classes outside these bounds will be rejected.
+                    <Text
+                      as="p"
+                      className="text-sm font-normal text-muted-foreground"
+                    >
+                      Set the bounds for valid class schedules. Attempting to
+                      schedule classes outside these bounds will be rejected.
                     </Text>
-
-                  </Card.Title >
+                  </Card.Title>
                   <Button
                     size="sm"
                     className="w-full justify-center whitespace-nowrap sm:w-auto"
@@ -585,8 +695,12 @@ export default function AdminSystemSettings() {
                 <Card.Header className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <Card.Title className="min-w-0 leading-tight">
                     General Average Passing Grade
-                    <Text as="p" className="mt-1 text-sm font-normal leading-normal text-muted-foreground">
-                      Used for general promotion/completion reports. Adjust only if the client confirms a different rule.
+                    <Text
+                      as="p"
+                      className="mt-1 text-sm font-normal leading-normal text-muted-foreground"
+                    >
+                      Used for general promotion/completion reports. Adjust only
+                      if the client confirms a different rule.
                     </Text>
                   </Card.Title>
                   <Button
@@ -615,25 +729,31 @@ export default function AdminSystemSettings() {
                         }
                       />
                     </div>
-
                   </div>
                 </Card.Content>
               </Card>
-
-
 
               {/* Subject Groups & Passing Thresholds */}
               <Card className="@container/card w-full">
                 <Card.Header className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <Card.Title className="flex min-w-0 w-full flex-col gap-1 leading-tight">
                     Subject Groups & Passing Thresholds
-                    <Text as="p" className="text-sm font-normal text-muted-foreground">
-                      Threshold changes apply to grades finalized from this point forward. Already-finalized period grades are not re-evaluated.
+                    <Text
+                      as="p"
+                      className="text-sm font-normal text-muted-foreground"
+                    >
+                      Threshold changes apply to grades finalized from this
+                      point forward. Already-finalized period grades are not
+                      re-evaluated.
                     </Text>
-
-                  </Card.Title >
-                  <Button size="sm" className="w-full justify-center whitespace-nowrap sm:w-auto" onClick={() => setIsAddGroupOpen(true)}>
-                    <Plus className="size-3.5 mr-2" />Add Group
+                  </Card.Title>
+                  <Button
+                    size="sm"
+                    className="w-full justify-center whitespace-nowrap sm:w-auto"
+                    onClick={() => setIsAddGroupOpen(true)}
+                  >
+                    <Plus className="size-3.5 mr-2" />
+                    Add Group
                   </Button>
                 </Card.Header>
 
@@ -646,26 +766,36 @@ export default function AdminSystemSettings() {
                           <Table.Head>Passing Threshold</Table.Head>
                           <Table.Head>Subjects Assigned</Table.Head>
                           <Table.Head>Status</Table.Head>
-                          <Table.Head className="text-right">Actions</Table.Head>
+                          <Table.Head className="text-right">
+                            Actions
+                          </Table.Head>
                         </Table.Row>
                       </Table.Header>
                       <Table.Body>
                         {isLoadingGroups ? (
                           <Table.Row>
-                            <Table.Cell colSpan={5} className="text-center py-4 text-sm text-muted-foreground">
+                            <Table.Cell
+                              colSpan={5}
+                              className="text-center py-4 text-sm text-muted-foreground"
+                            >
                               Loading subject groups...
                             </Table.Cell>
                           </Table.Row>
                         ) : subjectGroups.length === 0 ? (
                           <Table.Row>
-                            <Table.Cell colSpan={5} className="text-center py-4 text-sm text-muted-foreground">
+                            <Table.Cell
+                              colSpan={5}
+                              className="text-center py-4 text-sm text-muted-foreground"
+                            >
                               No subject groups found.
                             </Table.Cell>
                           </Table.Row>
                         ) : (
                           subjectGroups.map((g) => (
                             <Table.Row key={g.subject_group_id}>
-                              <Table.Cell className="font-medium">{g.name}</Table.Cell>
+                              <Table.Cell className="font-medium">
+                                {g.name}
+                              </Table.Cell>
                               <Table.Cell>
                                 <div className="flex items-center gap-2">
                                   <Input
@@ -675,17 +805,39 @@ export default function AdminSystemSettings() {
                                     max={100}
                                     step="0.5"
                                     defaultValue={g.passing_threshold}
-                                    onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+                                    onBlur={(
+                                      e: React.FocusEvent<HTMLInputElement>,
+                                    ) => {
                                       const val = Number(e.target.value);
-                                      if (!isNaN(val) && val !== g.passing_threshold && val >= 0 && val <= 100) {
-                                        handleUpdateGroupThreshold(g.subject_group_id, val);
+                                      if (
+                                        !isNaN(val) &&
+                                        val !== g.passing_threshold &&
+                                        val >= 0 &&
+                                        val <= 100
+                                      ) {
+                                        handleUpdateGroupThreshold(
+                                          g.subject_group_id,
+                                          val,
+                                        );
                                       }
                                     }}
-                                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                                    onKeyDown={(
+                                      e: React.KeyboardEvent<HTMLInputElement>,
+                                    ) => {
                                       if (e.key === "Enter") {
-                                        const val = Number(e.currentTarget.value);
-                                        if (!isNaN(val) && val !== g.passing_threshold && val >= 0 && val <= 100) {
-                                          handleUpdateGroupThreshold(g.subject_group_id, val);
+                                        const val = Number(
+                                          e.currentTarget.value,
+                                        );
+                                        if (
+                                          !isNaN(val) &&
+                                          val !== g.passing_threshold &&
+                                          val >= 0 &&
+                                          val <= 100
+                                        ) {
+                                          handleUpdateGroupThreshold(
+                                            g.subject_group_id,
+                                            val,
+                                          );
                                         }
                                       }
                                     }}
@@ -694,7 +846,11 @@ export default function AdminSystemSettings() {
                               </Table.Cell>
                               <Table.Cell>{g.subject_count}</Table.Cell>
                               <Table.Cell>
-                                <Badge variant={g.is_active ? "secondary" : "default"}>
+                                <Badge
+                                  variant={
+                                    g.is_active ? "secondary" : "default"
+                                  }
+                                >
                                   {g.is_active ? "Active" : "Inactive"}
                                 </Badge>
                               </Table.Cell>
@@ -702,7 +858,12 @@ export default function AdminSystemSettings() {
                                 <Button
                                   size="sm"
                                   variant={g.is_active ? "outline" : "default"}
-                                  onClick={() => handleToggleGroupActive(g.subject_group_id, g.is_active)}
+                                  onClick={() =>
+                                    handleToggleGroupActive(
+                                      g.subject_group_id,
+                                      g.is_active,
+                                    )
+                                  }
                                 >
                                   {g.is_active ? "Deactivate" : "Activate"}
                                 </Button>
@@ -716,7 +877,6 @@ export default function AdminSystemSettings() {
                 </Card.Content>
               </Card>
 
-
               {/* Default Grading Templates */}
               <Card className="@container/card w-full">
                 <Card.Header className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -726,7 +886,8 @@ export default function AdminSystemSettings() {
                       as="p"
                       className="text-sm font-normal text-muted-foreground"
                     >
-                      Reusable grade-weight templates stored in database. Assigned to subjects during grading setup.
+                      Reusable grade-weight templates stored in database.
+                      Assigned to subjects during grading setup.
                     </Text>
                   </Card.Title>
                   <div className="flex w-full items-center gap-4 sm:w-auto">
@@ -759,48 +920,86 @@ export default function AdminSystemSettings() {
                           key={t.id || i}
                           className="shadow-none bg-primary p-3 flex flex-col gap-3 w-full cursor-pointer hover:border-black transition-colors"
                           onClick={() => {
-                            if (t.id) navigate(`/admin/subjects?tab=grading&editId=${t.id}`);
+                            if (t.id)
+                              navigate(
+                                `/admin/subjects?tab=grading&editId=${t.id}`,
+                              );
                           }}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex flex-col gap-0.5 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <Text as="h6" className="font-sans font-bold truncate">
+                                <Text
+                                  as="h6"
+                                  className="font-sans font-bold truncate"
+                                >
                                   {t.name}
                                 </Text>
                                 {t.is_locked && (
-                                  <Badge
-                                    variant="outline"
-                                    className="bg-amber-100 text-amber-950 border-black/40 text-[10px] py-0 px-1.5 flex items-center gap-1 font-semibold shrink-0"
-                                    title={t.lock_reason || "Weights locked because student grades have been recorded."}
-                                  >
-                                    <Lock className="size-2.5" /> Locked
-                                  </Badge>
+                                  <Tooltip>
+                                    <TooltipTrigger
+                                      render={
+                                        <span
+                                          className="inline-flex"
+                                          tabIndex={0}
+                                        >
+                                          <Badge
+                                            variant="outline"
+                                            className="bg-amber-100 text-amber-950 border-black/40 text-[10px] py-0 px-1.5 flex items-center gap-1 font-semibold shrink-0"
+                                          >
+                                            <Lock className="size-2.5" /> Locked
+                                          </Badge>
+                                        </span>
+                                      }
+                                    />
+                                    <TooltipContent>
+                                      {t.lock_reason ||
+                                        "Weights locked after grades are recorded"}
+                                    </TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
-                              <Text as="p" className="font-sans text-xs text-foreground">
+                              <Text
+                                as="p"
+                                className="font-sans text-xs text-foreground"
+                              >
                                 {t.scope}
                               </Text>
                             </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="bg-background shrink-0"
-                              title="Edit in Subjects"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (t.id) navigate(`/admin/subjects?tab=grading&editId=${t.id}`);
-                              }}
-                            >
-                              <ArrowUpRight className="w-3.5 h-3.5" />
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <span className="inline-flex">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="bg-background shrink-0"
+                                      aria-label={`Edit ${t.name} in Subjects`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (t.id)
+                                          navigate(
+                                            `/admin/subjects?tab=grading&editId=${t.id}`,
+                                          );
+                                      }}
+                                    >
+                                      <ArrowUpRight className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </span>
+                                }
+                              />
+                              <TooltipContent>Edit in Subjects</TooltipContent>
+                            </Tooltip>
                           </div>
                           <div className="grid grid-cols-3 gap-2">
                             <Card className="flex flex-col shadow-none p-2 items-center justify-center w-full">
                               <Text as="p" className="font-bold text-lg">
                                 {t.ww}%
                               </Text>
-                              <Text as="p" className="text-xs text-muted-foreground">
+                              <Text
+                                as="p"
+                                className="text-xs text-muted-foreground"
+                              >
                                 WW
                               </Text>
                             </Card>
@@ -808,7 +1007,10 @@ export default function AdminSystemSettings() {
                               <Text as="p" className="font-bold text-lg">
                                 {t.pt}%
                               </Text>
-                              <Text as="p" className="text-xs text-muted-foreground">
+                              <Text
+                                as="p"
+                                className="text-xs text-muted-foreground"
+                              >
                                 PT
                               </Text>
                             </Card>
@@ -816,7 +1018,10 @@ export default function AdminSystemSettings() {
                               <Text as="p" className="font-bold text-lg">
                                 {t.qa}%
                               </Text>
-                              <Text as="p" className="text-xs text-muted-foreground">
+                              <Text
+                                as="p"
+                                className="text-xs text-muted-foreground"
+                              >
                                 QA
                               </Text>
                             </Card>
@@ -842,7 +1047,8 @@ export default function AdminSystemSettings() {
                       as="p"
                       className="text-sm font-normal text-muted-foreground"
                     >
-                      Set the active school year and active term. This determines the current academic period system-wide.
+                      Set the active school year and active term. This
+                      determines the current academic period system-wide.
                     </Text>
                   </Card.Title>
                   <div className="flex w-full items-center gap-4 sm:w-auto">
@@ -851,8 +1057,12 @@ export default function AdminSystemSettings() {
                       onOpenChange={setIsPeriodModalOpen}
                     >
                       <Dialog.Trigger className="w-full sm:w-auto">
-                        <Button size="sm" className="w-full justify-center whitespace-nowrap sm:w-auto">
-                          <Calendar className="size-3 mr-2" /> New Academic Period
+                        <Button
+                          size="sm"
+                          className="w-full justify-center whitespace-nowrap sm:w-auto"
+                        >
+                          <Calendar className="size-3 mr-2" /> New Academic
+                          Period
                         </Button>
                       </Dialog.Trigger>
                       <AddAcademicPeriodModal
@@ -860,7 +1070,9 @@ export default function AdminSystemSettings() {
                         onSaved={async () => {
                           await loadSettingsFromBackend();
                           setIsPeriodModalOpen(false);
-                          showToast("New academic periods created successfully.");
+                          showToast(
+                            "New academic periods created successfully.",
+                          );
                         }}
                       />
                     </Dialog>
@@ -882,10 +1094,15 @@ export default function AdminSystemSettings() {
                         <Select.Content>
                           <Select.Group>
                             {academicYears.length === 0 ? (
-                              <Select.Item value="0" disabled>No Academic Years found</Select.Item>
+                              <Select.Item value="0" disabled>
+                                No Academic Years found
+                              </Select.Item>
                             ) : (
                               academicYears.map((y) => (
-                                <Select.Item key={y.academic_year_id} value={String(y.academic_year_id)}>
+                                <Select.Item
+                                  key={y.academic_year_id}
+                                  value={String(y.academic_year_id)}
+                                >
                                   {y.year_label} {y.is_active ? "(Active)" : ""}
                                 </Select.Item>
                               ))
@@ -903,7 +1120,10 @@ export default function AdminSystemSettings() {
                         <Lock className="w-3.5 h-3.5" />
                         Three-Term Academic Calendar
                       </div>
-                      <Text as="p" className="font-sans text-xs text-muted-foreground">
+                      <Text
+                        as="p"
+                        className="font-sans text-xs text-muted-foreground"
+                      >
                         Standard DepEd trimestral schedule.
                       </Text>
                     </div>
@@ -912,14 +1132,19 @@ export default function AdminSystemSettings() {
                       <Text as="h6" className="font-sans font-medium">
                         Active Period
                       </Text>
-                      <Select value={selectedPeriodId} onValueChange={handlePeriodSelect}>
+                      <Select
+                        value={selectedPeriodId}
+                        onValueChange={handlePeriodSelect}
+                      >
                         <Select.Trigger className="w-full shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md data-[state=open]:shadow-md transition-all">
                           <Select.Value placeholder="Select Active Period" />
                         </Select.Trigger>
                         <Select.Content>
                           <Select.Group>
                             {academicPeriods.length === 0 ? (
-                              <Select.Item value="0" disabled>No periods for this year</Select.Item>
+                              <Select.Item value="0" disabled>
+                                No periods for this year
+                              </Select.Item>
                             ) : (
                               academicPeriods.map((p) => (
                                 <Select.Item key={p.id} value={String(p.id)}>
@@ -952,13 +1177,16 @@ export default function AdminSystemSettings() {
                     <Progress value={progressPercent} className="w-full" />
                   </div>
                   <div className="flex flex-row justify-between w-full items-center -my-2">
-                    <Text as="p" className="font-sans text-sm text-muted-foreground">
+                    <Text
+                      as="p"
+                      className="font-sans text-sm text-muted-foreground"
+                    >
                       Applies to Junior High School and Senior High School.
                     </Text>
                     <Button
                       size="sm"
                       variant="link"
-                      className="shadow-none -mr-2"
+                      className="shadow-none text-black -mr-2"
                       onClick={() => navigate(`/admin/academic-periods`)}
                     >
                       View All Periods
@@ -1016,8 +1244,12 @@ export default function AdminSystemSettings() {
                           onCheckedChange={() => setShsEnabled((v) => !v)}
                         />
                       </div>
-                      <Text as="p" className="font-sans text-xs text-foreground">
-                        Enabled levels control available grade levels across classes, subjects, and reports.
+                      <Text
+                        as="p"
+                        className="font-sans text-xs text-foreground"
+                      >
+                        Enabled levels control available grade levels across
+                        classes, subjects, and reports.
                       </Text>
                     </div>
 
@@ -1026,9 +1258,17 @@ export default function AdminSystemSettings() {
                         <Text as="h6" className="text-xl font-bold">
                           Senior High School Pathways
                         </Text>
-                        <Dialog open={isAddPathwayOpen} onOpenChange={setIsAddPathwayOpen}>
+                        <Dialog
+                          open={isAddPathwayOpen}
+                          onOpenChange={setIsAddPathwayOpen}
+                        >
                           <Dialog.Trigger>
-                            <Button variant="outline" className="bg-background" size="sm" disabled={!shsEnabled}>
+                            <Button
+                              variant="outline"
+                              className="bg-background"
+                              size="sm"
+                              disabled={!shsEnabled}
+                            >
                               Add Pathway
                             </Button>
                           </Dialog.Trigger>
@@ -1044,31 +1284,47 @@ export default function AdminSystemSettings() {
                       </div>
 
                       {isLoadingPathways ? (
-                        <Text as="p" className="text-xs text-muted-foreground">Loading pathways...</Text>
+                        <Text as="p" className="text-xs text-muted-foreground">
+                          Loading pathways...
+                        </Text>
                       ) : pathways.length === 0 ? (
-                        <Text as="p" className="text-xs text-muted-foreground">No pathways configured.</Text>
+                        <Text as="p" className="text-xs text-muted-foreground">
+                          No pathways configured.
+                        </Text>
                       ) : (
                         pathways.map((p) => (
-                          <div key={p.id} className="flex items-center justify-between border-2 border-black px-3 py-2 bg-white">
+                          <div
+                            key={p.id}
+                            className="flex items-center justify-between border-2 border-black px-3 py-2 bg-white"
+                          >
                             <div className="flex flex-row gap-2 items-end">
                               <Text as="p" className="font-sans font-medium">
                                 {p.name}
                               </Text>
-                              <Text as="p" className="font-sans text-xs text-muted-foreground pb-0.5">
+                              <Text
+                                as="p"
+                                className="font-sans text-xs text-muted-foreground pb-0.5"
+                              >
                                 ({p.code})
                               </Text>
                             </div>
                             <Switch
                               checked={p.is_enabled}
-                              onCheckedChange={() => handleTogglePathwayEnabled(p)}
+                              onCheckedChange={() =>
+                                handleTogglePathwayEnabled(p)
+                              }
                               disabled={!shsEnabled}
                             />
                           </div>
                         ))
                       )}
 
-                      <Text as="p" className="font-sans text-xs text-foreground">
-                        Admin-configurable SHS Academic Pathways (DepEd Order No. 017 s. 2026).
+                      <Text
+                        as="p"
+                        className="font-sans text-xs text-foreground"
+                      >
+                        Admin-configurable SHS Academic Pathways (DepEd Order
+                        No. 017 s. 2026).
                       </Text>
                     </div>
                   </div>
@@ -1078,7 +1334,9 @@ export default function AdminSystemSettings() {
               {/* Academic Levels */}
               <Card className="@container/card w-full">
                 <Card.Header className="mb-4">
-                  <Card.Title className="flex flex-row justify-between w-full items-center">Academic Levels</Card.Title>
+                  <Card.Title className="flex flex-row justify-between w-full items-center">
+                    Academic Levels
+                  </Card.Title>
                 </Card.Header>
                 <Card.Content className="flex flex-col gap-4">
                   <Table>
@@ -1093,8 +1351,13 @@ export default function AdminSystemSettings() {
                     </Table.Header>
                     <Table.Body>
                       {academicLevels.map((item) => {
-                        const stageEnabled = item.stage === "Junior High" ? jhsEnabled : shsEnabled;
-                        const scope = pathwayScopes.find((s) => s.grade_level === item.grade_level);
+                        const stageEnabled =
+                          item.stage === "Junior High"
+                            ? jhsEnabled
+                            : shsEnabled;
+                        const scope = pathwayScopes.find(
+                          (s) => s.grade_level === item.grade_level,
+                        );
                         return (
                           <Table.Row key={item.academic_level_id}>
                             <Table.Cell className="font-bold">
@@ -1103,10 +1366,7 @@ export default function AdminSystemSettings() {
                             <Table.Cell>{item.stage}</Table.Cell>
                             <Table.Cell className="text-center">
                               {item.stage === "Junior High" ? (
-                                <Badge
-                                  size="sm"
-                                  variant="default"
-                                >
+                                <Badge size="sm" variant="default">
                                   Standard JHS setup
                                 </Badge>
                               ) : (
@@ -1117,28 +1377,46 @@ export default function AdminSystemSettings() {
                             </Table.Cell>
                             <Table.Cell>
                               {item.grade_level < 11 ? (
-                                <Text as="p" className="text-xs text-muted-foreground">
+                                <Text
+                                  as="p"
+                                  className="text-xs text-muted-foreground"
+                                >
                                   N/A (SHS only)
                                 </Text>
                               ) : scope ? (
                                 <div className="flex items-center gap-2">
                                   <Switch
                                     checked={scope.requires_pathway}
-                                    onCheckedChange={() => handleTogglePathwayScope(scope)}
+                                    onCheckedChange={() =>
+                                      handleTogglePathwayScope(scope)
+                                    }
                                     disabled={!shsEnabled}
                                   />
-                                  <Text as="p" className="text-xs text-muted-foreground">
-                                    {scope.requires_pathway ? "Required" : "General"}
+                                  <Text
+                                    as="p"
+                                    className="text-xs text-muted-foreground"
+                                  >
+                                    {scope.requires_pathway
+                                      ? "Required"
+                                      : "General"}
                                   </Text>
                                 </div>
                               ) : (
-                                <Text as="p" className="text-xs text-muted-foreground">
-                                  {item.grade_level === 11 ? "Required" : "General"}
+                                <Text
+                                  as="p"
+                                  className="text-xs text-muted-foreground"
+                                >
+                                  {item.grade_level === 11
+                                    ? "Required"
+                                    : "General"}
                                 </Text>
                               )}
                             </Table.Cell>
                             <Table.Cell>
-                              <Badge variant={stageEnabled ? "secondary" : "outline"} size="sm">
+                              <Badge
+                                variant={stageEnabled ? "secondary" : "outline"}
+                                size="sm"
+                              >
                                 {stageEnabled ? "Enabled" : "Disabled"}
                               </Badge>
                             </Table.Cell>
@@ -1155,25 +1433,33 @@ export default function AdminSystemSettings() {
                 <Card.Header className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <Card.Title className="flex min-w-0 w-full flex-col gap-1 leading-tight">
                     Teacher Workload Caps
-                    <Text as="p" className="text-sm font-normal text-muted-foreground">
-                      These limits are enforced globally across all subjects during scheduling.
+                    <Text
+                      as="p"
+                      className="text-sm font-normal text-muted-foreground"
+                    >
+                      These limits are enforced globally across all subjects
+                      during scheduling.
                     </Text>
-                  </Card.Title >
+                  </Card.Title>
                   <Button
                     size="sm"
                     className="w-full justify-center whitespace-nowrap sm:w-auto"
                     onClick={handleSaveTeacherCaps}
-                    disabled={isSavingTeacherCaps || parseInt(minSubjects) > parseInt(maxSubjects)}
+                    disabled={
+                      isSavingTeacherCaps ||
+                      parseInt(minSubjects) > parseInt(maxSubjects)
+                    }
                   >
                     <Save className="size-3.5 mr-2" />
                     Save Workload Caps
                   </Button>
                 </Card.Header>
                 <Card.Content className="flex flex-col gap-6 w-full">
-
                   <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                     <div className="flex flex-col gap-2 w-full">
-                      <label className="text-sm font-semibold">Min Subjects/Day</label>
+                      <label className="text-sm font-semibold">
+                        Min Subjects/Day
+                      </label>
                       <Input
                         type="number"
                         min={0}
@@ -1183,7 +1469,9 @@ export default function AdminSystemSettings() {
                       />
                     </div>
                     <div className="flex flex-col gap-2 w-full">
-                      <label className="text-sm font-semibold">Max Subjects/Day</label>
+                      <label className="text-sm font-semibold">
+                        Max Subjects/Day
+                      </label>
                       <Input
                         type="number"
                         min={1}
@@ -1193,7 +1481,9 @@ export default function AdminSystemSettings() {
                       />
                     </div>
                     <div className="flex flex-col gap-2 w-full">
-                      <label className="text-sm font-semibold">Max Minutes/Day</label>
+                      <label className="text-sm font-semibold">
+                        Max Minutes/Day
+                      </label>
                       <Input
                         type="number"
                         min={1}
@@ -1216,7 +1506,9 @@ export default function AdminSystemSettings() {
               {/* Module Responsibility Map */}
               <Card className="@container/card w-full">
                 <Card.Header>
-                  <Card.Title className="flex flex-row justify-between w-full items-center">Module Responsibility Map</Card.Title>
+                  <Card.Title className="flex flex-row justify-between w-full items-center">
+                    Module Responsibility Map
+                  </Card.Title>
                 </Card.Header>
                 <Card.Content className="flex flex-col gap-4">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -1287,9 +1579,11 @@ export default function AdminSystemSettings() {
             <p>
               Change the active academic period to{" "}
               <strong>
-                {academicPeriods.find((p) => String(p.id) === pendingPeriodId)?.period || "selected period"}
-              </strong>?
-              This will update the active term system-wide across all student, teacher, and admin views.
+                {academicPeriods.find((p) => String(p.id) === pendingPeriodId)
+                  ?.period || "selected period"}
+              </strong>
+              ? This will update the active term system-wide across all student,
+              teacher, and admin views.
             </p>
           </section>
           <Dialog.Footer position="static">
@@ -1323,11 +1617,16 @@ export default function AdminSystemSettings() {
                 id="new-group-name"
                 placeholder="e.g. Elective, Practicum"
                 value={newGroupName}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewGroupName(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setNewGroupName(e.target.value)
+                }
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label htmlFor="new-group-threshold" className="font-medium text-xs">
+              <label
+                htmlFor="new-group-threshold"
+                className="font-medium text-xs"
+              >
                 Passing Threshold (Grade)
               </label>
               <Input
@@ -1338,7 +1637,9 @@ export default function AdminSystemSettings() {
                 step="0.5"
                 placeholder="83"
                 value={newGroupThreshold}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewGroupThreshold(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setNewGroupThreshold(e.target.value)
+                }
               />
             </div>
           </section>
@@ -1372,23 +1673,30 @@ export default function AdminSystemSettings() {
           </Dialog.Header>
           <section className="flex flex-col gap-3 p-4 text-sm">
             <p>{deactivateErrorDialog?.message}</p>
-            {deactivateErrorDialog?.affectedSubjects && deactivateErrorDialog.affectedSubjects.length > 0 && (
-              <div className="flex flex-col gap-2 max-h-48 overflow-y-auto border p-2 rounded bg-muted/20">
-                <Text as="p" className="font-semibold text-xs text-muted-foreground">
-                  Assigned Subjects:
-                </Text>
-                <ul className="list-disc list-inside space-y-1 text-xs">
-                  {deactivateErrorDialog.affectedSubjects.map((s) => (
-                    <li key={s.subject_id}>
-                      {s.subject_name} {s.subject_codename ? `(${s.subject_codename})` : ""}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {deactivateErrorDialog?.affectedSubjects &&
+              deactivateErrorDialog.affectedSubjects.length > 0 && (
+                <div className="flex flex-col gap-2 max-h-48 overflow-y-auto border p-2 rounded bg-muted/20">
+                  <Text
+                    as="p"
+                    className="font-semibold text-xs text-muted-foreground"
+                  >
+                    Assigned Subjects:
+                  </Text>
+                  <ul className="list-disc list-inside space-y-1 text-xs">
+                    {deactivateErrorDialog.affectedSubjects.map((s) => (
+                      <li key={s.subject_id}>
+                        {s.subject_name}{" "}
+                        {s.subject_codename ? `(${s.subject_codename})` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
           </section>
           <Dialog.Footer position="static">
-            <Button onClick={() => setDeactivateErrorDialog(null)}>Close</Button>
+            <Button onClick={() => setDeactivateErrorDialog(null)}>
+              Close
+            </Button>
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>

@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { CalendarDays } from "lucide-react";
 import { Popover } from "@base-ui/react/popover";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
@@ -155,6 +156,7 @@ interface AddAcademicPeriodModalProps {
 }
 
 export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademicPeriodModalProps = {}) {
+    const toast = useToast();
     const [academicYears, setAcademicYears] = React.useState<AcademicYearSettingItem[]>([]);
     const [academicYear, setAcademicYear] = React.useState<string>("");
     const [periodType, setPeriodType] = React.useState<string>("TERM");
@@ -302,6 +304,7 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
 
         setIsSaving(true);
         setError(null);
+        let created = false;
         try {
             const payload = {
                 academic_year_id: selectedAyObj.academic_year_id,
@@ -314,6 +317,7 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
             };
 
             await createAcademicPeriods(payload);
+            created = true;
             if (onSaved) {
                 await onSaved();
             }
@@ -324,6 +328,7 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
             console.error("Failed to save academic periods:", err);
             const msg = err instanceof Error ? err.message : "Failed to create academic periods.";
             setError(msg);
+            if (!created) toast.error({ title: "Unable to create academic periods", description: msg });
         } finally {
             setIsSaving(false);
         }

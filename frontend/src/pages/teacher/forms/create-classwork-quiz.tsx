@@ -706,9 +706,9 @@ export default function CreateClassworkQuizModal({
             toast.success({ title: "Quiz created successfully." });
             onSuccess();
         } catch (err) {
-            setCreateError(
-                err instanceof Error ? err.message : "Unable to create quiz.",
-            );
+            const message = err instanceof Error ? err.message : "Unable to create quiz.";
+            setCreateError(message);
+            toast.error({ title: "Unable to create quiz", description: message });
         } finally {
             setIsCreating(false);
         }

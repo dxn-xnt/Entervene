@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Save, X } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/use-toast";
 import { Dialog } from "@/components/retroui/Dialog";
 import { apiFetch } from "@/lib/api";
 import type { TeacherQuizSubmissionDetail } from "@/pages/teacher/classworks/quiz-builder-types";
@@ -22,6 +23,7 @@ export default function QuizGradingModal({
   onClose,
   onSuccess,
 }: QuizGradingModalProps) {
+  const toast = useToast();
   const [detail, setDetail] = useState<TeacherQuizSubmissionDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -119,10 +121,13 @@ export default function QuizGradingModal({
         throw new Error(body.detail || "Failed to save grades.");
       }
 
+      toast.success({ title: "Quiz grades saved" });
       onSuccess();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save grades.");
+      const message = err instanceof Error ? err.message : "Failed to save grades.";
+      setError(message);
+      toast.error({ title: "Unable to save quiz grades", description: message });
     } finally {
       setSaving(false);
     }

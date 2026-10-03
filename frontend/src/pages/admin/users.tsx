@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import AssignSubstituteModal from "./forms/assign-substitute-modal";
 import { useToast } from "@/components/retroui/use-toast";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -797,7 +798,8 @@ function StatusBadge({
         {style.label}
       </Badge>
       {isPending && emailStatus === "failed" && (
-        <Badge
+        <Tooltip>
+          <TooltipTrigger render={<span className="inline-flex"><Badge
           size="sm"
           variant="solid"
           className="bg-red-600 hover:bg-red-700 text-white text-[10px] px-1.5 py-0 font-bold cursor-pointer transition-colors shadow-none"
@@ -805,10 +807,12 @@ function StatusBadge({
             e.stopPropagation();
             onResend?.();
           }}
-          title="Email delivery failed. Click to resend invitation."
+          aria-label="Resend failed invitation email"
         >
           {isResending ? "Resending..." : "Email Failed ↺"}
-        </Badge>
+        </Badge></span>} />
+          <TooltipContent>Resend invitation</TooltipContent>
+        </Tooltip>
       )}
       {isPending && emailStatus === "pending" && (
         <span className="text-[10px] text-amber-600 font-semibold animate-pulse">

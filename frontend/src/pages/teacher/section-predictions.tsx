@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Card } from "@/components/retroui/Card";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
@@ -361,14 +362,14 @@ function LegacySectionPredictions() {
                     Loading {sectionDisplayName} predictions...
                   </div>
                 ) : sortedSubjects.length === 0 ? (
-                  <div className="p-8 bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-center">
+                  <Card className="flex flex-col items-center justify-center gap-2 p-8 text-center">
                     <p className="text-lg font-bold text-gray-900">
                       No subjects available for {sectionDisplayName}.
                     </p>
                     <p className="text-sm text-gray-600 mt-1 max-w-md mx-auto">
                       There are no subjects offered or assigned for this section in the selected term.
                     </p>
-                  </div>
+                  </Card>
                 ) : (
                   <PredictionTable
                     items={data?.items ?? []}
