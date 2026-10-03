@@ -48,7 +48,7 @@ function optionLetter(order: number): string {
 export async function exportTosBlueprintPdf(
   draft: TOSDraft,
   options?: { save?: boolean }
-): Promise<any> {
+): Promise<unknown> {
   const { jsPDF } = await import("jspdf");
 
   // Landscape Legal: 330.2 × 215.9 mm
@@ -407,6 +407,32 @@ type TOSQuestionGroup = {
   questions: TOSExportQuestion[];
 };
 
+/**
+ * One answer-key line for the exam answer key (PDF and DOCX share this).
+ * - Multiple choice / true-false: the correct letter / TRUE / FALSE.
+ * - Identification: the accepted answer(s) taken from the option text (never the explanation).
+ * - Essay / short answer: "[Sample Answer / Rubric]: ..." (same label as quiz-export.ts).
+ */
+export function formatTosAnswerKeyLine(groupType: string, q: TOSExportQuestion, num: number): string {
+  if (groupType === "MULTIPLE_CHOICE" || groupType === "TRUE_FALSE") {
+    const opts = q.options || [];
+    const correctIdx = opts.findIndex((o) => o.is_correct);
+    const correctOpt = opts[correctIdx];
+    const ans = correctOpt
+      ? groupType === "TRUE_FALSE"
+        ? correctOpt.option_text.toUpperCase()
+        : optionLetter(correctOpt.option_order || correctIdx + 1)
+      : "-";
+    return `${num}. ${ans}`;
+  }
+  if (groupType === "ESSAY") {
+    const rubric = (q.explanation || "").trim() || "(See rubric)";
+    return `${num}. [Sample Answer / Rubric]: ${rubric}`;
+  }
+  const keys = (q.options || []).map((o) => (o.option_text || "").trim()).filter(Boolean);
+  return `${num}. ${keys.length > 0 ? keys.join(" / ") : "(No answer key)"}`;
+}
+
 function groupExamQuestions(questions: TOSExportQuestion[]): TOSQuestionGroup[] {
   const mc: TOSExportQuestion[] = [];
   const tf: TOSExportQuestion[] = [];
@@ -418,8 +444,13 @@ function groupExamQuestions(questions: TOSExportQuestion[]): TOSQuestionGroup[] 
     const t = (q.question_type || "MULTIPLE_CHOICE").toUpperCase();
     if (t === "TRUE_FALSE") {
       tf.push(q);
-    } else if (t === "IDENTIFICATION" || t === "SHORT_ANSWER") {
+    } else if (t === "IDENTIFICATION") {
       idn.push(q);
+    } else if (t === "SHORT_ANSWER") {
+      // A legacy SHORT_ANSWER that still carries answer keys is an Identification item;
+      // an open-ended one belongs with the essays (its sample answer/rubric is teacher-only).
+      const hasKey = (q.options || []).some((o) => (o.option_text || "").trim().length > 0);
+      (hasKey ? idn : ess).push(q);
     } else if (t === "MATCHING") {
       mat.push(q);
     } else if (t === "ESSAY") {
@@ -431,7 +462,11 @@ function groupExamQuestions(questions: TOSExportQuestion[]): TOSQuestionGroup[] 
         opts.length === 2 &&
         opts.some((o) => o.option_text.trim().toLowerCase() === "true") &&
         opts.some((o) => o.option_text.trim().toLowerCase() === "false");
-      isTF ? tf.push(q) : mc.push(q);
+      if (isTF) {
+        tf.push(q);
+      } else {
+        mc.push(q);
+      }
     }
   }
 
@@ -473,7 +508,7 @@ function groupExamQuestions(questions: TOSExportQuestion[]): TOSQuestionGroup[] 
   if (ess.length > 0) {
     groups.push({
       heading: `PART ${roman[groups.length]}. ESSAY / OPEN-ENDED`,
-      directions: "Directions: Answer the following questions in complete sentences. Refer to the scoring criteria.",
+      directions: "Directions: Answer the following questions in complete sentences.",
       type: "ESSAY",
       questions: ess,
     });
@@ -486,7 +521,7 @@ export async function exportTosExamPdf(
   questions: TOSExportQuestion[],
   meta: TOSExamMeta,
   options?: { save?: boolean }
-): Promise<any> {
+): Promise<unknown> {
   const { jsPDF } = await import("jspdf");
 
   // Legal Portrait: 215.9 × 330.2 mm
@@ -614,12 +649,10 @@ export async function exportTosExamPdf(
             y += 1.5;
           }
         } else if (group.type === "ESSAY") {
+          // Blank writing lines only: the rubric is teacher-only and lives in the answer key.
           write("__________________________________________________________________________________________", 9, false, 6, 2.5);
           write("__________________________________________________________________________________________", 9, false, 6, 2.5);
           write("__________________________________________________________________________________________", 9, false, 6, 4);
-          if (q.explanation) {
-            write(`[Scoring Criteria: ${clean(q.explanation)}]`, 8.5, false, 6, 3);
-          }
         } else {
           // Identification
           write("Answer: __________________________________________________________________", 9.5, false, 6, 4);
@@ -640,20 +673,7 @@ export async function exportTosExamPdf(
     let currNum = 1;
     for (const group of groups) {
       for (const q of group.questions) {
-        if (group.type === "MULTIPLE_CHOICE" || group.type === "TRUE_FALSE") {
-          const opts = q.options || [];
-          const correctIdx = opts.findIndex((o) => o.is_correct);
-          const correctOpt = opts[correctIdx];
-          const ans = correctOpt
-            ? group.type === "TRUE_FALSE"
-              ? correctOpt.option_text.toUpperCase()
-              : optionLetter(correctOpt.option_order || correctIdx + 1)
-            : "-";
-          write(`${currNum}. ${ans}`, 9.5, false, 4, 1.8);
-        } else {
-          const ans = q.explanation || (q.options && q.options[0]?.option_text) || "(See Rubric)";
-          write(`${currNum}. [Key/Rubric]: ${clean(ans)}`, 9, false, 4, 1.8);
-        }
+        write(formatTosAnswerKeyLine(group.type, q, currNum), 9.5, false, 4, 1.8);
         currNum++;
       }
     }
@@ -668,8 +688,9 @@ export async function exportTosExamPdf(
 
 export async function exportTosExamDocx(
   questions: TOSExportQuestion[],
-  meta: TOSExamMeta
-): Promise<void> {
+  meta: TOSExamMeta,
+  options?: { save?: boolean }
+): Promise<unknown> {
   const {
     Document,
     Packer,
@@ -730,11 +751,9 @@ export async function exportTosExamDocx(
           children.push(p(`${optionLetter(opt.option_order || 1)}) ${cleanDocxText(opt.option_text)}`, { size: 20, indent: 0.35, space: 35 }));
         }
       } else if (group.type === "ESSAY") {
+        // Blank writing lines only: the rubric is teacher-only and lives in the answer key.
         children.push(p("Answer: __________________________________________________________________", { size: 19, space: 60 }));
         children.push(p("__________________________________________________________________________", { size: 19, space: 60 }));
-        if (q.explanation) {
-          children.push(p(`[Rubric: ${cleanDocxText(q.explanation)}]`, { size: 18, indent: 0.2, space: 60 }));
-        }
       } else {
         children.push(p("Answer: __________________________________________________________________", { size: 19, space: 100 }));
       }
@@ -750,20 +769,7 @@ export async function exportTosExamDocx(
     let currNum = 1;
     for (const group of groups) {
       for (const q of group.questions) {
-        if (group.type === "MULTIPLE_CHOICE" || group.type === "TRUE_FALSE") {
-          const opts = q.options || [];
-          const correctIdx = opts.findIndex((o) => o.is_correct);
-          const correctOpt = opts[correctIdx];
-          const ans = correctOpt
-            ? group.type === "TRUE_FALSE"
-              ? correctOpt.option_text.toUpperCase()
-              : optionLetter(correctOpt.option_order || correctIdx + 1)
-            : "-";
-          children.push(p(`${currNum}. ${ans}`, { size: 20, space: 40 }));
-        } else {
-          const ans = q.explanation || (q.options && q.options[0]?.option_text) || "(See Rubric)";
-          children.push(p(`${currNum}. [Key/Rubric]: ${cleanDocxText(ans)}`, { size: 19, space: 40 }));
-        }
+        children.push(p(formatTosAnswerKeyLine(group.type, q, currNum), { size: 20, space: 40 }));
         currNum++;
       }
     }
@@ -792,13 +798,18 @@ export async function exportTosExamDocx(
     ],
   });
 
-  const blob = await Packer.toBlob(doc);
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${(title || "Exam").replace(/[/\\:*?"<>|]/g, "_")}_Exam.docx`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  if (options?.save !== false && typeof document !== "undefined") {
+    const blob = await Packer.toBlob(doc);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(title || "Exam").replace(/[/\\:*?"<>|]/g, "_")}_Exam.docx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  (doc as unknown as { toBuffer: () => Promise<Uint8Array | Buffer> }).toBuffer = () => Packer.toBuffer(doc);
+  return doc;
 }

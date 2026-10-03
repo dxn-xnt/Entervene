@@ -83,6 +83,21 @@ export function normalizeIncomingQuestions<
   return questions.map(normalizeIncomingQuestion);
 }
 
+/**
+ * Effective question type for student-facing screens. Uses normalizeIncomingQuestion so a legacy
+ * SHORT_ANSWER that still carries answer keys is treated as IDENTIFICATION everywhere.
+ */
+export function getEffectiveQuestionType(question: {
+  question_type: string;
+  options?: Array<{ option_text?: string | null }> | null;
+}): string {
+  const normalized = normalizeIncomingQuestion({
+    question_type: question.question_type,
+    options: (question.options ?? []).map((o) => ({ option_text: o.option_text ?? undefined })),
+  });
+  return (normalized.question_type || "").trim().toUpperCase();
+}
+
 export interface PublishReadinessResult {
   is_publish_ready: boolean;
   canProceed: boolean;

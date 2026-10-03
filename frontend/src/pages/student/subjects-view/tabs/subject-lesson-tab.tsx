@@ -18,6 +18,7 @@ import AttachmentDisplay from "@/components/attachment-display";
 import SubmissionForm from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
 import { StudentLessonDetailScreen } from "@/pages/student/lesson-view";
+import { QuizTextAnswerInput, QuizTextAnswerSummary } from "@/components/quiz/student-quiz-answer";
 import {
   API_URL,
   apiFetch,
@@ -1014,9 +1015,6 @@ export default function SubjectLessonTab({
                     (option) =>
                       option.option_id === question.selected_option_id,
                   );
-                  const correctOption = question.options.find(
-                    (option) => option.is_correct,
-                  );
                   const revealsCorrectKey = question.options.some(
                     (option) =>
                       option.is_correct !== null &&
@@ -1086,36 +1084,7 @@ export default function SubjectLessonTab({
                           )}
                         </div>
                       ) : (
-                        <div className="mt-3 space-y-2 text-sm">
-                          <div className="border border-gray-200 bg-gray-50 px-3 py-2">
-                            <p className="text-xs font-bold uppercase text-gray-500">
-                              Your answer
-                            </p>
-                            <p className="mt-1 whitespace-pre-wrap break-words">
-                              {question.answer_text?.trim() ||
-                                "No answer recorded."}
-                            </p>
-                          </div>
-                          {correctOption ? (
-                            <p className="border border-green-500 bg-green-50 px-3 py-2 font-semibold">
-                              Expected answer: {correctOption.option_text}
-                            </p>
-                          ) : null}
-                          {question.is_correct !== null &&
-                          question.is_correct !== undefined ? (
-                            <p
-                              className={
-                                question.is_correct
-                                  ? "font-bold text-green-700"
-                                  : "font-bold text-red-700"
-                              }
-                            >
-                              {question.is_correct
-                                ? "Marked correct"
-                                : "Needs review"}
-                            </p>
-                          ) : null}
-                        </div>
+                        <QuizTextAnswerSummary question={question} />
                       )}
                     </Card>
                   );
@@ -1250,23 +1219,22 @@ export default function SubjectLessonTab({
                     ))}
                   </div>
                 ) : (
-                  <textarea
+                  <QuizTextAnswerInput
+                    question={currentQuestion}
                     value={
                       quizAnswers[currentQuestion.quiz_question_id]
                         ?.answer_text ?? ""
                     }
-                    onChange={(event) =>
+                    onChange={(text) =>
                       setQuizAnswers((current) => ({
                         ...current,
                         [currentQuestion.quiz_question_id]: {
                           ...current[currentQuestion.quiz_question_id],
-                          answer_text: event.target.value,
+                          answer_text: text,
                         },
                       }))
                     }
                     disabled={isQuizSubmitting}
-                    className="min-h-32 w-full rounded border border-black bg-white px-4 py-4 text-center text-lg font-bold shadow-md transition-shadow hover:shadow-none"
-                    placeholder="Type answer"
                   />
                 )}
               </section>
