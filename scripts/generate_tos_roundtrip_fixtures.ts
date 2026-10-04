@@ -11,7 +11,10 @@
  * 2. Exam PDF with answer key
  * 3. Exam DOCX with answer key
  *
- * Saves into a temp directory outside the repository.
+ * The backend round-trip test reads a committed snapshot from
+ * backend/tests/fixtures/tos_roundtrip. To regenerate it, temporarily install
+ * tsx plus the exporter dependencies without saving package metadata, then run:
+ *   npx --no-install tsx scripts/generate_tos_roundtrip_fixtures.ts backend/tests/fixtures/tos_roundtrip
  */
 
 import os from "os";
