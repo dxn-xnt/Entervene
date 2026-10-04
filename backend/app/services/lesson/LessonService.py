@@ -141,6 +141,11 @@ def teacher_lesson_linked_classwork(
             "classwork_type": classwork.classwork_type,
             "classwork_category": classwork.classwork_category,
             "due_date": assignment.due_date.isoformat() if assignment.due_date else None,
+            "created_at": (
+                assignment.created_at.isoformat()
+                if assignment.created_at
+                else (classwork.created_at.isoformat() if classwork.created_at else None)
+            ),
             "is_locked": assignment.is_locked,
             "total_points": classwork.total_points,
             "attachment_count": len(classwork.attachments),

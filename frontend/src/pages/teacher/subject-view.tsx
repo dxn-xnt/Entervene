@@ -21,7 +21,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import ClassworkFormModal from "./subject-details/classwork-form-modal";
 import CompetencyModal from "./subject-details/competency-modal";
-import LessonClassworkList from "./subject-details/lesson-classwork-list";
+import SubjectLessonList from "./subject-details/lesson-classwork-list";
 import SubjectClassworkTab from "./subject-details/subject-classwork-tab";
 import TeacherLessonDetailScreen from "./subject-details/teacher-lesson-detail-screen";
 import TOSGeneratorScreen from "./subject-details/tos-generator-screen";
@@ -1045,7 +1045,7 @@ export default function SubjectDetails() {
                       onCloseCreate={() => setIsCreatingSubjectClasswork(false)}
                     />
                   ) : (
-                    <LessonClassworkList
+                    <SubjectLessonList
                       lessonSearch={lessonSearch}
                       setLessonSearch={setLessonSearch}
                       lessonSort={lessonSort}
