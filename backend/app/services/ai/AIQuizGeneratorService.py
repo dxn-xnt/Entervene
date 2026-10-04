@@ -9,12 +9,20 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections import Counter
 from typing import Any
 
 from fastapi import HTTPException
 
 from app.services.ai.option_shuffle import shuffle_options
 from app.services.ai.Provider import generate_text
+from app.services.ai.question_quality_validation import (
+    identification_issue,
+    option_text_issue,
+    self_containment_issue,
+    true_false_answers_are_mixed,
+    validate_true_false,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +33,7 @@ OUTPUT FORMAT REQUIREMENTS:
 2. Structure of each question item:
 {
   "question_text": "Clear and concise question prompt",
-  "question_type": "MULTIPLE_CHOICE" | "IDENTIFICATION" | "SHORT_ANSWER",
+  "question_type": "MULTIPLE_CHOICE" | "TRUE_FALSE" | "IDENTIFICATION" | "SHORT_ANSWER",
   "points": 1.0,
   "display_order": 1,
   "difficulty_level": "EASY" | "MEDIUM" | "HARD",
@@ -33,13 +41,16 @@ OUTPUT FORMAT REQUIREMENTS:
   "options": [...]
 }
 3. Rules for Question Types:
-- MULTIPLE_CHOICE: question_type="MULTIPLE_CHOICE", exactly 4 options, exactly 1 marked is_correct: true. The position of the correct answer MUST be evenly and unpredictably distributed (vary across options A, B, C, and D) across questions. NEVER default to always placing the correct answer in Option A.
-- TRUE_FALSE: question_type="MULTIPLE_CHOICE", exactly 2 options: [{"option_text": "True", "is_correct": bool, "option_order": 1}, {"option_text": "False", "is_correct": bool, "option_order": 2}], exactly 1 marked is_correct: true.
-- IDENTIFICATION: question_type="IDENTIFICATION", options MUST contain exactly 1 option with the accepted answer: {"option_text": "Exact Answer/Term", "is_correct": true, "option_order": 1}. Use this for questions that have ONE definite correct concept (e.g. "What is the term for…?" or "Name the process…"). IMPORTANT: Each IDENTIFICATION question must have exactly ONE correct concept as its answer. If a question naturally has multiple distinct valid answers (for example "Identify the nouns in: 'The dog chased the ball'" has two nouns), you MUST rewrite the question so that only ONE noun is the target OR omit it entirely. NEVER emit options: [] for IDENTIFICATION. If you cannot determine a single unambiguous answer, change the question type to SHORT_ANSWER instead.
-- SHORT_ANSWER: question_type="SHORT_ANSWER", options MUST be []. Use for open-ended questions requiring explanation, analysis, or opinion — questions where there is no single exact correct answer. Put a model answer or scoring rubric in "explanation".
+- MULTIPLE_CHOICE: question_type="MULTIPLE_CHOICE", exactly 4 distinct, meaningful options and exactly 1 marked is_correct: true. Never use placeholder options. Vary the correct answer position across the four options.
+- TRUE_FALSE: question_type="TRUE_FALSE", a declarative statement with exactly these 2 options in this order: [{"option_text": "True", "is_correct": bool, "option_order": 1}, {"option_text": "False", "is_correct": bool, "option_order": 2}], with exactly 1 correct. Never use a blank, question, or instruction such as "identify"; those belong in Identification. For a part with 3 or more items, include both true and false answers, roughly half of each. Write false statements as plausible misconceptions, not simple negations.
+- IDENTIFICATION: question_type="IDENTIFICATION", options MUST contain exactly 1 accepted answer: {"option_text": "Exact Answer/Term", "is_correct": true, "option_order": 1}. The answer must be one concise term or phrase, normally at most 5 words, and the question must have one objectively correct concept. Open-ended prompts such as explain, describe, main idea, name one, give an example, or list are SHORT_ANSWER, not Identification. NEVER emit options: [] for IDENTIFICATION.
+- SHORT_ANSWER: question_type="SHORT_ANSWER", options MUST be []. Use for open-ended questions requiring explanation, analysis, or opinion - questions where there is no single exact correct answer. Put a model answer or scoring rubric in "explanation".
+
+SELF-CONTAINED QUESTION REQUIREMENT:
+Every question must be answerable using only its own text. Never refer to a story, passage, poem, text, article, graph, table, picture, or "the following/above" unless it is included in that question. If context is needed, include a short passage of 1-4 sentences inside question_text.
 
 ANSWER POSITION RANDOMIZATION REQUIREMENT:
-For MULTIPLE_CHOICE questions, the correct answer must NOT always be in the first option (Option A). You MUST vary the correct answer position across options A, B, C, and D throughout the quiz items.
+For MULTIPLE_CHOICE questions, vary the correct answer position across all four choices throughout the quiz.
 """
 
 
@@ -66,7 +77,10 @@ def _build_quiz_prompt(
             diff_str = " + ".join(diff_parts)
 
         if ptype == "TRUE_FALSE":
-            label = "True or False (exactly 2 options: True / False)"
+            label = (
+                "True or False (question_type=\"TRUE_FALSE\"; declarative statement; exactly 2 options: "
+                "True then False; exactly one correct; never a blank or Identification instruction)"
+            )
         elif ptype == "ESSAY":
             # ESSAY from the UI maps to SHORT_ANSWER in the DB
             label = "Short Answer / Essay / Open-Ended Response (options=[], rubric / key points in explanation)"
@@ -74,7 +88,8 @@ def _build_quiz_prompt(
         elif ptype == "IDENTIFICATION":
             label = (
                 "Identification (question_type=\"IDENTIFICATION\"; exactly ONE accepted answer key in options; "
-                "single concise word or phrase; the question must have ONE definite correct concept)"
+                "single concise term or phrase of about 5 words or fewer; one objectively correct concept; "
+                "never an open-ended main-idea, name-one, example, list, explain, or describe prompt)"
             )
         elif ptype == "SHORT_ANSWER":
             label = (
@@ -85,7 +100,7 @@ def _build_quiz_prompt(
             label = "Multiple Choice (exactly 4 options, exactly 1 marked is_correct: true)"
 
         parts_desc.append(
-            f"  • {count} × {label} ({ptype}) — Difficulty: {diff_str} — {points} pt(s) each"
+            f"  - {count} x {label} ({ptype}) - Difficulty: {diff_str} - {points} pt(s) each"
         )
 
     lessons_str = ", ".join(lessons) if lessons else "General curriculum topics"
@@ -95,9 +110,10 @@ def _build_quiz_prompt(
         f"Subject: {subject or 'General'}\n"
         f"Connected Lessons / Source Material: {lessons_str}\n"
         f"Required Test Parts:\n" + "\n".join(parts_desc) + "\n\n"
-        f"IMPORTANT — For each difficulty bucket listed above, generate exactly that many questions "
+        f"IMPORTANT - For each difficulty bucket listed above, generate exactly that many questions "
         f"at that difficulty_level. Set the difficulty_level field accordingly: EASY, MEDIUM, or HARD.\n\n"
         f"Reference Content:\n\"\"\"\n{trimmed_content}\n\"\"\"\n\n"
+        f"Every question must be self-contained. Include any needed 1-4 sentence passage inside question_text. "
         f"Generate exactly the requested questions and return valid JSON."
     )
 
@@ -106,6 +122,8 @@ def _extract_and_validate_json(
     raw_text: str,
     test_parts: list[dict[str, Any]] | None = None,
     warnings: list[str] | None = None,
+    *,
+    allow_empty: bool = False,
 ) -> list[dict[str, Any]]:
     """Parse JSON from AI output and validate question items, applying teacher configured points."""
     # 1. Check for markdown json block
@@ -135,32 +153,61 @@ def _extract_and_validate_json(
     if not isinstance(raw_questions, list):
         raise HTTPException(status_code=502, detail="AI output does not contain a valid questions list.")
 
-    # Build sequence of expected points per item from test_parts
-    expected_points_sequence: list[float] = []
-    if test_parts:
-        for p in test_parts:
-            count = int(p.get("count", 1))
-            pts = float(p.get("points_per_item", 1.0))
-            expected_points_sequence.extend([pts] * count)
+    expected_items: list[dict[str, Any]] = []
+    for part_index, part in enumerate(test_parts or []):
+        requested_type = str(part.get("type", "MULTIPLE_CHOICE")).strip().upper()
+        if requested_type == "ESSAY":
+            requested_type = "SHORT_ANSWER"
+        for _ in range(int(part.get("count", 1))):
+            expected_items.append({
+                "type": requested_type,
+                "points": float(part.get("points_per_item", 1.0)),
+                "part_index": part_index,
+            })
 
-    # Normalize ESSAY → SHORT_ANSWER from the test_parts UI mapping
-    _essay_as_short = {"ESSAY", "SHORT_ANSWER"}
-
-    discarded_no_key_count = 0
+    discard_reasons: Counter[str] = Counter()
     valid_questions: list[dict[str, Any]] = []
 
     for idx, item in enumerate(raw_questions, start=1):
         if not isinstance(item, dict):
             continue
-        q_type = str(item.get("question_type", "MULTIPLE_CHOICE")).upper()
-        # ESSAY from older AI responses maps to SHORT_ANSWER
-        if q_type == "ESSAY":
-            q_type = "SHORT_ANSWER"
-        if q_type not in {"MULTIPLE_CHOICE", "SHORT_ANSWER", "IDENTIFICATION"}:
-            q_type = "MULTIPLE_CHOICE"
+
+        expected = expected_items[idx - 1] if idx - 1 < len(expected_items) else None
+        returned_type = str(item.get("question_type", "MULTIPLE_CHOICE")).strip().upper()
+        if returned_type == "ESSAY":
+            returned_type = "SHORT_ANSWER"
+        requested_type = expected["type"] if expected else returned_type
+        if requested_type not in {"MULTIPLE_CHOICE", "TRUE_FALSE", "SHORT_ANSWER", "IDENTIFICATION"}:
+            requested_type = "MULTIPLE_CHOICE"
+        output_type = "MULTIPLE_CHOICE" if requested_type == "TRUE_FALSE" else requested_type
+        question_text = str(item.get("question_text", f"Question {idx}")).strip()
+
+        # Preserve the more specific Identification warning when a stem is both
+        # open-ended and dependent on external material.
+        if requested_type == "IDENTIFICATION":
+            raw_identification_options = item.get("options", [])
+            identification_key = str(item.get("answer", "")).strip()
+            if isinstance(raw_identification_options, list):
+                correct = next(
+                    (option for option in raw_identification_options if option.get("is_correct")),
+                    raw_identification_options[0] if raw_identification_options else None,
+                )
+                if correct is not None:
+                    identification_key = str(correct.get("option_text", "")).strip()
+            reason = identification_issue(question_text, identification_key)
+            if reason:
+                discard_reasons[reason] += 1
+                logger.warning("Quiz question %r discarded: %s", question_text, reason)
+                continue
+
+        containment_reason = self_containment_issue(question_text)
+        if containment_reason:
+            discard_reasons[containment_reason] += 1
+            logger.warning("Quiz question %r discarded: %s", question_text, containment_reason)
+            continue
 
         raw_options = item.get("options", [])
-        validated_options = []
+        validated_options: list[dict[str, Any]] = []
         if isinstance(raw_options, list):
             for o_idx, opt in enumerate(raw_options, start=1):
                 if isinstance(opt, dict):
@@ -175,118 +222,116 @@ def _extract_and_validate_json(
                             is_corr = bool(raw_correct)
                         validated_options.append({
                             "option_text": opt_text,
-                            "is_correct": True if q_type == "IDENTIFICATION" else is_corr,
+                            "is_correct": is_corr,
                             "option_order": int(opt.get("option_order", o_idx)),
                         })
 
-            if q_type == "MULTIPLE_CHOICE":
-                while len(validated_options) < 4:
-                    order = len(validated_options) + 1
-                    fallback_label = "None of the above" if order == 4 else f"Option {chr(64 + order)}"
-                    validated_options.append({
-                        "option_text": fallback_label,
-                        "is_correct": False,
-                        "option_order": order,
-                    })
-                if len(validated_options) > 4:
-                    correct_idx = next((i for i, o in enumerate(validated_options) if o["is_correct"]), -1)
-                    if correct_idx >= 4:
-                        validated_options[3] = validated_options[correct_idx]
-                    validated_options = validated_options[:4]
+        option_issue = option_text_issue(validated_options)
+        if option_issue:
+            discard_reasons[option_issue] += 1
+            logger.warning("Quiz question %r discarded: %s", question_text, option_issue)
+            continue
 
-                correct_count = sum(1 for o in validated_options if o["is_correct"])
-                if correct_count == 0:
-                    hint = str(item.get("correct_answer") or item.get("answer") or "").strip().upper()
-                    matched = False
-                    if hint:
-                        for o in validated_options:
-                            if o["option_text"].strip().upper().startswith(hint):
-                                o["is_correct"] = True
-                                matched = True
-                                break
-                    if not matched:
-                        logger.warning(
-                            "Quiz question '%s' has no correct option marked by AI and hint '%s' did not resolve. Question discarded.",
-                            item.get("question_text", f"Question {idx}"),
-                            hint,
-                        )
-                        continue
-                elif correct_count > 1:
-                    found_first = False
-                    for o in validated_options:
-                        if o["is_correct"]:
-                            if not found_first:
-                                found_first = True
-                            else:
-                                o["is_correct"] = False
+        if requested_type == "TRUE_FALSE":
+            validated, reason = validate_true_false(question_text, validated_options)
+            if reason:
+                discard_reasons[reason] += 1
+                logger.warning("Quiz question %r discarded: %s", question_text, reason)
+                continue
+            validated_options = validated or []
 
-                # Server-side shuffle for MULTIPLE_CHOICE if options do not reference positions or each other
-                validated_options = shuffle_options(validated_options, q_type)
+        elif requested_type == "MULTIPLE_CHOICE":
+            if len(validated_options) < 4:
+                reason = "multiple choice requires at least 4 distinct non-empty options"
+                discard_reasons[reason] += 1
+                logger.warning("Quiz question %r discarded: %s", question_text, reason)
+                continue
+            correct_count = sum(1 for option in validated_options if option["is_correct"])
+            if correct_count != 1:
+                reason = "multiple choice has multiple correct options" if correct_count > 1 else "multiple choice has no correct option"
+                discard_reasons[reason] += 1
+                logger.warning("Quiz question %r discarded: %s", question_text, reason)
+                continue
+            if len(validated_options) > 4:
+                correct = next(option for option in validated_options if option["is_correct"])
+                kept_ids = {id(correct)}
+                for option in validated_options:
+                    if not option["is_correct"] and len(kept_ids) < 4:
+                        kept_ids.add(id(option))
+                validated_options = [option for option in validated_options if id(option) in kept_ids]
+            validated_options = shuffle_options(validated_options, output_type)
 
-            elif q_type == "SHORT_ANSWER":
-                # SHORT_ANSWER is always manual grading and stores no options (decision #6)
-                recovered_sample = ""
-                if validated_options:
-                    opt_texts = [o["option_text"].strip() for o in validated_options if o.get("option_text")]
-                    if opt_texts:
-                        recovered_sample = ", ".join(opt_texts)
-                if not recovered_sample:
-                    fallback_ans = str(item.get("answer") or item.get("correct_answer") or "").strip()
-                    if fallback_ans:
-                        recovered_sample = fallback_ans
+        elif requested_type == "SHORT_ANSWER":
+            # SHORT_ANSWER is always manual grading and stores no options (decision #6)
+            recovered_sample = ""
+            if validated_options:
+                opt_texts = [o["option_text"].strip() for o in validated_options if o.get("option_text")]
+                if opt_texts:
+                    recovered_sample = ", ".join(opt_texts)
+            if not recovered_sample:
+                fallback_ans = str(item.get("answer") or item.get("correct_answer") or "").strip()
+                if fallback_ans:
+                    recovered_sample = fallback_ans
 
-                if recovered_sample:
+            if recovered_sample:
+                logger.warning(
+                    "AI generator returned SHORT_ANSWER question '%s' with an answer key/options (%s). "
+                    "Because SHORT_ANSWER is designated for open-ended manual grading, options are discarded and preserved in explanation. "
+                    "The model prompt instructs the AI to use IDENTIFICATION when an exact answer key is required.",
+                    item.get("question_text", f"Question {idx}"),
+                    recovered_sample,
+                )
+                curr_exp = str(item.get("explanation") or "").strip()
+                if not curr_exp:
+                    item["explanation"] = f"Sample answer: {recovered_sample}"
+                else:
+                    item["explanation"] = f"{curr_exp}\n\nSample answer: {recovered_sample}"
+            validated_options = []
+
+        elif requested_type == "IDENTIFICATION":
+            # IDENTIFICATION MUST have an answer key (decision #1, #5).
+            # If options is empty, accept an explicit short 'answer' field as the key (single line, up to about 100 characters).
+            # Never derive a key from explanation.
+            if not validated_options:
+                fallback_key = str(item.get("answer") or item.get("correct_answer") or "").strip()
+                if fallback_key and len(fallback_key) <= 100 and "\n" not in fallback_key:
+                    validated_options = [{
+                        "option_text": fallback_key,
+                        "is_correct": True,
+                        "option_order": 1,
+                    }]
                     logger.warning(
-                        "AI generator returned SHORT_ANSWER question '%s' with an answer key/options (%s). "
-                        "Because SHORT_ANSWER is designated for open-ended manual grading, options are discarded and preserved in explanation. "
-                        "The model prompt instructs the AI to use IDENTIFICATION when an exact answer key is required.",
+                        "IDENTIFICATION question '%s' had no options array; recovered key from 'answer' field: %r",
                         item.get("question_text", f"Question {idx}"),
-                        recovered_sample,
+                        fallback_key,
                     )
-                    curr_exp = str(item.get("explanation") or "").strip()
-                    if not curr_exp:
-                        item["explanation"] = f"Sample answer: {recovered_sample}"
-                    else:
-                        item["explanation"] = f"{curr_exp}\n\nSample answer: {recovered_sample}"
-                validated_options = []
+                else:
+                    discard_reasons["no answer key"] += 1
+                    logger.warning(
+                        "IDENTIFICATION question '%s' has no valid answer key in options or explicit answer field. Question discarded.",
+                        item.get("question_text", f"Question {idx}"),
+                    )
+                    continue
+            else:
+                validated_options = [validated_options[0]]
+                validated_options[0]["is_correct"] = True
+                validated_options[0]["option_order"] = 1
 
-            elif q_type == "IDENTIFICATION":
-                # IDENTIFICATION MUST have an answer key (decision #1, #5).
-                # If options is empty, accept an explicit short 'answer' field as the key (single line, up to about 100 characters).
-                # Never derive a key from explanation.
-                if not validated_options:
-                    fallback_key = str(item.get("answer") or item.get("correct_answer") or "").strip()
-                    if fallback_key and len(fallback_key) <= 100 and "\n" not in fallback_key:
-                        validated_options = [{
-                            "option_text": fallback_key,
-                            "is_correct": True,
-                            "option_order": 1,
-                        }]
-                        logger.warning(
-                            "IDENTIFICATION question '%s' had no options array; recovered key from 'answer' field: %r",
-                            item.get("question_text", f"Question {idx}"),
-                            fallback_key,
-                        )
-                    else:
-                        discarded_no_key_count += 1
-                        logger.warning(
-                            "IDENTIFICATION question '%s' has no valid answer key in options or explicit answer field. Question discarded.",
-                            item.get("question_text", f"Question {idx}"),
-                        )
-                        continue  # Discard — unkeyed IDENTIFICATION is not accepted
+            reason = identification_issue(question_text, validated_options[0]["option_text"])
+            if reason:
+                discard_reasons[reason] += 1
+                logger.warning("Quiz question %r discarded: %s", question_text, reason)
+                continue
 
-        if idx - 1 < len(expected_points_sequence):
-            points = expected_points_sequence[idx - 1]
-        else:
-            points = float(item.get("points", 1.0))
+        points = expected["points"] if expected else float(item.get("points", 1.0))
 
         explanation_val = item.get("explanation")
-        if q_type == "SHORT_ANSWER" and not (explanation_val and str(explanation_val).strip()):
+        if output_type == "SHORT_ANSWER" and not (explanation_val and str(explanation_val).strip()):
             explanation_val = "Sample answer / rubric to be provided by teacher."
 
         valid_questions.append({
-            "question_text": str(item.get("question_text", f"Question {idx}")).strip(),
-            "question_type": q_type,
+            "question_text": question_text,
+            "question_type": output_type,
             "points": max(0.5, points),
             "display_order": len(valid_questions) + 1,
             "difficulty_level": str(item.get("difficulty_level", "MEDIUM")).upper(),
@@ -294,12 +339,14 @@ def _extract_and_validate_json(
             "lesson_id": item.get("lesson_id"),
             "is_ai_generated": True,
             "options": validated_options,
+            "_requested_part_index": expected["part_index"] if expected else None,
         })
 
-    if discarded_no_key_count > 0 and warnings is not None:
-        warnings.append(f"{discarded_no_key_count} question(s) discarded: no answer key")
+    if warnings is not None:
+        for reason, count in discard_reasons.items():
+            warnings.append(f"{count} question(s) discarded: {reason}")
 
-    if not valid_questions:
+    if not valid_questions and not allow_empty:
         raise HTTPException(status_code=502, detail="AI service could not generate valid quiz questions.")
 
     return valid_questions
@@ -318,13 +365,67 @@ async def generate_quiz_questions(
     Generate structured quiz questions using AI.
     Uses one configured provider with durable usage reservations.
     """
+    response_warnings = warnings if warnings is not None else []
     prompt = _build_quiz_prompt(subject, lessons, content_text, test_parts)
     raw = await generate_text(prompt, _SYSTEM_PROMPT, json_output=True)
 
     try:
-        questions = _extract_and_validate_json(raw, test_parts, warnings=warnings)
-        if len(questions) != sum(part["count"] for part in test_parts):
-            raise HTTPException(502, "AI returned an incomplete question set. Try a smaller set.")
+        questions = _extract_and_validate_json(
+            raw,
+            test_parts,
+            warnings=response_warnings,
+            allow_empty=True,
+        )
+
+        for part_index, part in enumerate(test_parts):
+            part_type = str(part.get("type", "MULTIPLE_CHOICE")).strip().upper()
+            part_count = int(part.get("count", 0))
+            if part_type != "TRUE_FALSE" or part_count < 3:
+                continue
+            group = [q for q in questions if q.get("_requested_part_index") == part_index]
+            if len(group) != part_count or true_false_answers_are_mixed(group):
+                continue
+
+            missing_kind = "False" if any(
+                option["option_text"] == "True" and option["is_correct"]
+                for question in group
+                for option in question["options"]
+            ) else "True"
+            retry_part = dict(part)
+            retry_prompt = _build_quiz_prompt(subject, lessons, content_text, [retry_part])
+            retry_prompt += (
+                f"\n\nRETRY REQUIREMENT: The previous True/False part had identical answers. "
+                f"Generate all {part_count} items again and include at least one {missing_kind} answer."
+            )
+            retry_raw = await generate_text(retry_prompt, _SYSTEM_PROMPT, json_output=True)
+            retry_warnings: list[str] = []
+            retry_questions = _extract_and_validate_json(
+                retry_raw,
+                [retry_part],
+                warnings=retry_warnings,
+                allow_empty=True,
+            )
+            if len(retry_questions) == part_count and true_false_answers_are_mixed(retry_questions):
+                for question in retry_questions:
+                    question["_requested_part_index"] = part_index
+                replacement = iter(retry_questions)
+                questions = [
+                    next(replacement) if question.get("_requested_part_index") == part_index else question
+                    for question in questions
+                ]
+            else:
+                response_warnings.extend(retry_warnings)
+                response_warnings.append("all True/False answers are the same")
+
+        expected_count = sum(int(part["count"]) for part in test_parts)
+        if len(questions) != expected_count:
+            response_warnings.append(
+                f"Requested {expected_count} question(s) but produced {len(questions)} valid question(s)."
+            )
+
+        for display_order, question in enumerate(questions, start=1):
+            question["display_order"] = display_order
+            question.pop("_requested_part_index", None)
         return questions
     except (ValueError, TypeError, KeyError, OverflowError):
         raise HTTPException(502, "AI returned invalid question data.") from None
