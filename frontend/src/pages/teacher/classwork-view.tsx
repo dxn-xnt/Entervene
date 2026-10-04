@@ -474,17 +474,6 @@ export default function ClassworkView({
     );
   };
 
-  const readingFilterCounts = useMemo(() => {
-    const all = [...(tracking?.submitted ?? []), ...(tracking?.missing ?? [])];
-    const opened = all.filter(isStudentOpened).length;
-    const notOpened = all.length - opened;
-    return {
-      all: all.length,
-      opened,
-      not_opened: notOpened,
-    };
-  }, [tracking]);
-
   const filteredReadingRows = useMemo(() => {
     const rows = [...(tracking?.submitted ?? []), ...(tracking?.missing ?? [])];
     rows.sort((a, b) => a.student_name.localeCompare(b.student_name));

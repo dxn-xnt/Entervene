@@ -84,7 +84,6 @@ import type {
 import { SuggestionPanel } from "@/components/teacher/suggestions/suggestion-panel-modal";
 import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
 import {
-  API_URL,
   apiFetch,
   getLessonGoals,
   getTeacherAdvisoryClassDetail,
@@ -248,9 +247,7 @@ export default function TeacherClassDetail() {
       </AppLayout>
     );
   }
-
   const statusLabel = detail.is_archived ? "Archived" : "Active";
-  const activeSince = detail.active_since || formatClassDate(detail.created_at);
 
   return (
     <AppLayout>
@@ -2654,15 +2651,4 @@ function groupStudents(students: TeacherAdvisoryStudentItem[]) {
         ] as const,
     )
     .filter(([, group]) => group.length > 0);
-}
-
-function formatClassDate(value: string | null) {
-  if (!value) return "N/A";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "N/A";
-  return new Intl.DateTimeFormat("en", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
 }
