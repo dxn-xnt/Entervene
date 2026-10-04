@@ -28,13 +28,16 @@ export const createEmptyQuizQuestion = (
   display_order: displayOrder,
   difficulty_level: "MEDIUM",
   explanation: "",
+  is_ai_generated: false,
   options:
     questionType === "MULTIPLE_CHOICE"
       ? [
           { option_text: "", is_correct: true, option_order: 1 },
           { option_text: "", is_correct: false, option_order: 2 },
         ]
-      : [
+      : questionType === "IDENTIFICATION"
+      ? [
           { option_text: "", is_correct: true, option_order: 1 },
-        ],
+        ]
+      : [],
 });

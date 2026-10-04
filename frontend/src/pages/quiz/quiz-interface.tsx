@@ -4,6 +4,7 @@ import { ChevronLeft, SkipBack, SkipForward, Flag, Loader2, AlertCircle } from "
 import { LoadingPanel } from "@/components/loading-panel";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
+import { QuizTextAnswerInput } from "@/components/quiz/student-quiz-answer";
 import { useToast } from "@/components/retroui/use-toast";
 import { routes } from "@/../routes";
 import {
@@ -374,14 +375,11 @@ const StudentQuizTake = () => {
             })}
         </div>
       ) : (
-        /* SHORT_ANSWER */
         <div className="px-12 py-6 md:px-24">
-          <textarea
+          <QuizTextAnswerInput
+            question={currentQuestion}
             value={answers.get(currentQuestion.quiz_question_id)?.answer_text ?? ""}
-            onChange={(e) => setAnswerText(currentQuestion.quiz_question_id, e.target.value)}
-            placeholder="Type your answer here..."
-            rows={4}
-            className="w-full border-2 border-black p-4 text-sm focus:outline-none focus:border-[#F6E9B2] resize-none"
+            onChange={(text) => setAnswerText(currentQuestion.quiz_question_id, text)}
           />
         </div>
       )}

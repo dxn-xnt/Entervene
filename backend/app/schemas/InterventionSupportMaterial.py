@@ -29,7 +29,7 @@ class QuestionProvenance(StrictModel):
 
 class RemedialQuestion(StrictModel):
     question_text: str
-    question_type: Literal["MULTIPLE_CHOICE", "SHORT_ANSWER"]
+    question_type: Literal["MULTIPLE_CHOICE", "SHORT_ANSWER", "IDENTIFICATION"]
     points: float = Field(gt=0)
     display_order: int = Field(gt=0)
     difficulty_level: Literal["EASY", "MEDIUM", "HARD"] | None = None

@@ -184,13 +184,13 @@ export default function LessonClassworkList({
               </div>
               <Tooltip>
                 <TooltipTrigger render={<button
-                type="button"
-                onClick={() => toggleLesson(lesson.lesson_id)}
-                className="p-1 text-gray-800 hover:text-black cursor-pointer ml-2 shrink-0"
-                aria-label={isExpanded ? "Collapse classwork list" : "Expand classwork list"}
-              >
-                {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
-              </button>} />
+                  type="button"
+                  onClick={() => toggleLesson(lesson.lesson_id)}
+                  className="p-1 text-gray-800 hover:text-black cursor-pointer ml-2 shrink-0"
+                  aria-label={isExpanded ? "Collapse classwork list" : "Expand classwork list"}
+                >
+                  {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+                </button>} />
                 <TooltipContent>{isExpanded ? "Collapse classworks" : "Expand classworks"}</TooltipContent>
               </Tooltip>
             </div>
@@ -404,27 +404,9 @@ export default function LessonClassworkList({
         </>
       )}
 
-      {/* ── Subject Overview ── */}
-      <section>
-        <h2 className="mb-3 text-xl font-bold">Subject Overview</h2>
-        <div className="grid gap-4 md:grid-cols-3">
-          <OverviewCard
-            title="Lesson Mastery"
-            count={`${overviewMastery}%`}
-            statDescription="Average graded classwork performance"
-          />
-          <OverviewCard
-            title="Classwork Assigned"
-            count={String(classworkCount ?? 0)}
-            statDescription="Active classworks in this subject"
-          />
-          <OverviewCard
-            title="Completion Percentage"
-            count={`${overviewCompletion}%`}
-            statDescription="Average submitted classwork completion"
-          />
-        </div>
-      </section>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] items-start min-w-0">
+        {/* ── Main Panel (Left to Center): Toolbar, Competencies, and Lessons ── */}
+        <div className="flex flex-col gap-5 min-w-0">
 
       {/* ── Search, Sort, and Add Competency Toolbar ── */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -498,33 +480,33 @@ export default function LessonClassworkList({
                     }}
                     className="min-w-0 flex-1 cursor-pointer text-left"
                   >
-                      <div className="mb-1 flex flex-wrap items-center gap-2 min-w-0">
-                        <Award size={20} className="text-black shrink-0" />
-                        <Card.Title className="text-base font-bold text-gray-950 sm:text-lg md:text-xl break-words line-clamp-2">
-                          {comp.competency_code || comp.statement}
-                        </Card.Title>
+                    <div className="mb-1 flex flex-wrap items-center gap-2 min-w-0">
+                      <Award size={20} className="text-black shrink-0" />
+                      <Card.Title className="text-base font-bold text-gray-950 sm:text-lg md:text-xl break-words line-clamp-2">
+                        {comp.competency_code || comp.statement}
+                      </Card.Title>
+                      <Badge
+                        variant="secondary"
+                        size="sm"
+                        className="bg-white text-xs font-bold text-black"
+                      >
+                        {compLessons.length} lesson{compLessons.length === 1 ? "" : "s"}
+                      </Badge>
+                      {(comp.target_hours || 0) > 0 && (
                         <Badge
                           variant="secondary"
                           size="sm"
                           className="bg-white text-xs font-bold text-black"
                         >
-                          {compLessons.length} lesson{compLessons.length === 1 ? "" : "s"}
+                          {comp.target_hours} hrs
                         </Badge>
-                        {(comp.target_hours || 0) > 0 && (
-                          <Badge
-                            variant="secondary"
-                            size="sm"
-                            className="bg-white text-xs font-bold text-black"
-                          >
-                            {comp.target_hours} hrs
-                          </Badge>
-                        )}
-                      </div>
-                      {comp.competency_code && comp.statement && (
-                        <p className="text-xs font-medium text-gray-700 break-words line-clamp-2">
-                          {comp.statement}
-                        </p>
                       )}
+                    </div>
+                    {comp.competency_code && comp.statement && (
+                      <p className="text-xs font-medium text-gray-700 break-words line-clamp-2">
+                        {comp.statement}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
@@ -543,30 +525,30 @@ export default function LessonClassworkList({
                     {openCompetencyForm && (
                       <Tooltip>
                         <TooltipTrigger render={<span className="inline-flex"><Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        onClick={() => openCompetencyForm(comp)}
-                        aria-label="Edit competency"
-                        className="border-black bg-white text-black hover:bg-yellow-50"
-                      >
-                        <Pencil size={14} />
-                      </Button></span>} />
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => openCompetencyForm(comp)}
+                          aria-label="Edit competency"
+                          className="border-black bg-white text-black hover:bg-yellow-50"
+                        >
+                          <Pencil size={14} />
+                        </Button></span>} />
                         <TooltipContent>Edit competency</TooltipContent>
                       </Tooltip>
                     )}
                     {onArchiveCompetency && (
                       <Tooltip>
                         <TooltipTrigger render={<span className="inline-flex"><Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        onClick={() => onArchiveCompetency(comp.competency_id)}
-                        aria-label="Archive competency"
-                        className="border-black bg-white text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 size={14} />
-                      </Button></span>} />
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => onArchiveCompetency(comp.competency_id)}
+                          aria-label="Archive competency"
+                          className="border-black bg-white text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 size={14} />
+                        </Button></span>} />
                         <TooltipContent>Archive competency</TooltipContent>
                       </Tooltip>
                     )}
@@ -669,6 +651,27 @@ export default function LessonClassworkList({
             </Card.Content>
           </Card>
         )}
+        </div>
+        </div>
+
+        {/* ── Right Side: Subject Overview ── */}
+        <aside className="order-first flex flex-col gap-3 sm:grid sm:grid-cols-3 lg:flex lg:flex-col min-w-0 lg:order-none lg:sticky lg:top-4">
+          <OverviewCard
+            title="Lesson Mastery"
+            count={`${overviewMastery}%`}
+            statDescription="Average graded classwork performance"
+          />
+          <OverviewCard
+            title="Classwork Assigned"
+            count={String(classworkCount ?? 0)}
+            statDescription="Active classworks in this subject"
+          />
+          <OverviewCard
+            title="Completion Percentage"
+            count={`${overviewCompletion}%`}
+            statDescription="Average submitted classwork completion"
+          />
+        </aside>
       </div>
     </section>
   );

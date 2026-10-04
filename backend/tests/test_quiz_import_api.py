@@ -333,7 +333,7 @@ def test_import_science_fixture_pdf():
     }
     for q_num, expected_val in expected_sa_keys.items():
         q = questions[q_num - 1]
-        assert q["question_type"] == "SHORT_ANSWER"
+        assert q["question_type"] == "IDENTIFICATION"
         assert len(q["options"]) == 1
         assert q["options"][0]["option_text"] == expected_val
         assert q["options"][0]["is_correct"] is True
@@ -440,7 +440,7 @@ ANSWER KEY
     assert len(body["questions"]) == 3
     assert body["questions"][0]["options"][0]["is_correct"] is True
     assert body["questions"][1]["options"][0]["is_correct"] is True
-    assert body["questions"][2]["question_type"] == "SHORT_ANSWER"
+    assert body["questions"][2]["question_type"] == "IDENTIFICATION"
     assert body["questions"][2]["options"][0]["option_text"] == "HTTPS"
     assert body["questions"][2]["options"][0]["is_correct"] is True
     assert body["warnings"] == []
@@ -474,7 +474,7 @@ Answer: Paris
     body = response.json()
     assert len(body["questions"]) == 2
     assert body["questions"][0]["options"][0]["is_correct"] is True
-    assert body["questions"][1]["question_type"] == "SHORT_ANSWER"
+    assert body["questions"][1]["question_type"] == "IDENTIFICATION"
     assert body["questions"][1]["options"][0]["option_text"] == "Paris"
     assert body["warnings"] == []
 
@@ -612,7 +612,7 @@ def test_import_special_characters_exported_pdf():
     q3 = questions[2]
     assert "carbon" in q3["question_text"] and "12" in q3["question_text"]
     assert any(b in q3["question_text"] for b in ("•", "*"))
-    assert q3["question_type"] == "SHORT_ANSWER"
+    assert q3["question_type"] == "IDENTIFICATION"
     assert "carbon" in q3["options"][0]["option_text"] and "12" in q3["options"][0]["option_text"]
     assert q3["options"][0]["is_correct"] is True
 
@@ -644,6 +644,390 @@ def test_legacy_pdf_workaround_preserves_words_in_quotes():
     assert ">=" in text
     assert "subset of" in text
     assert "->" in text
+
+
+def test_english_7_exam_structure_import():
+    """
+    Test fixture mirroring the exported English 7 exam structure:
+    - Part I: Multiple Choice with A-D options
+    - Part II: True/False items with A) True B) False
+    - Part III: Identification items with 'Answer: ____' lines, including a blank '___,' inside a sentence
+    - Part IV: Essays with underscore rules and [Scoring Criteria: ...] multiline block
+    - Answer Key section with lines like '4. TRUE', '7. <key>', '10. [Sample Answer / Rubric]: ...',
+      plus old-format '[Key/Rubric]: ...' for backward compatibility.
+    Asserts:
+    - Imported types match expected
+    - Options count and correct options match
+    - Question text has NO scoring criteria or 5+ underscore rules
+    - '___,' inside sentences is preserved
+    - Essay explanations capture the rubric/sample answer with 0 options stored
+    """
+    from app.services.quiz.QuizImportService import _parse_questions
+
+    raw_exam = """ENGLISH 7 EXAM
+Name: _________________________________________   Grade & Section: __________________   Score: _________
+
+PART I. MULTIPLE CHOICE
+Directions: Read each question carefully. Write the letter of the correct answer on the line provided.
+1. What is the central message or lesson of a literary text?
+A) Theme
+B) Plot
+C) Setting
+D) Conflict
+
+2. Which element describes where and when the story takes place?
+A) Theme
+B) Climax
+C) Setting
+D) Point of View
+
+PART II. TRUE OR FALSE
+Directions: Write TRUE if the statement is correct and FALSE if the statement is incorrect.
+3. An autobiography is written by the author about someone else's life.
+A) True
+B) False
+
+4. A metaphor makes a direct comparison without using like or as.
+A) True
+B) False
+
+PART III. IDENTIFICATION
+Directions: Provide the exact term or concise answer in the space provided.
+5. The comparison of two unlike things using the words like or as is called a:
+Answer: __________________________________________________________________
+
+6. ___, the team decided to postpone the championship match due to the storm.
+Answer: __________________________________________________________________
+
+PART IV. ESSAY / OPEN-ENDED
+Directions: Answer the following questions in complete sentences.
+7. Explain the importance of analyzing characters' motivations in a story.
+__________________________________________________________________________________________
+__________________________________________________________________________________________
+[Scoring Criteria: Analysis of motivation (3 pts), textual evidence (2 pts), clarity and grammar (1 pt)]
+
+8. Describe how the setting influences the mood of a narrative.
+__________________________________________________________________________________________
+__________________________________________________________________________________________
+[Key/Rubric]: Detailed explanation connecting atmosphere, sensory details, and emotional impact.
+
+ANSWER KEY
+ENGLISH 7 EXAM (8 Items)
+1. A
+2. C
+3. FALSE
+4. TRUE
+5. Simile
+6. Consequently
+7. [Sample Answer / Rubric]: Analysis of motivation (3 pts), textual evidence (2 pts), clarity and grammar (1 pt)
+8. [Key/Rubric]: Detailed explanation connecting atmosphere, sensory details, and emotional impact.
+"""
+
+    questions, warnings = _parse_questions(raw_exam)
+    assert len(questions) == 8
+
+    # Q1: MC
+    assert questions[0].question_type == "MULTIPLE_CHOICE"
+    assert len(questions[0].options) == 4
+    assert questions[0].options[0].option_text == "Theme"
+    assert questions[0].options[0].is_correct is True
+
+    # Q2: MC
+    assert questions[1].question_type == "MULTIPLE_CHOICE"
+    assert len(questions[1].options) == 4
+    assert questions[1].options[2].option_text == "Setting"
+    assert questions[1].options[2].is_correct is True
+
+    # Q3: TF
+    assert questions[2].question_type == "MULTIPLE_CHOICE"
+    assert len(questions[2].options) == 2
+    assert questions[2].options[1].option_text == "False"
+    assert questions[2].options[1].is_correct is True
+
+    # Q4: TF
+    assert questions[3].question_type == "MULTIPLE_CHOICE"
+    assert len(questions[3].options) == 2
+    assert questions[3].options[0].option_text == "True"
+    assert questions[3].options[0].is_correct is True
+
+    # Q5: Identification
+    assert questions[4].question_type == "IDENTIFICATION"
+    assert len(questions[4].options) == 1
+    assert questions[4].options[0].option_text == "Simile"
+    assert questions[4].options[0].is_correct is True
+    assert "Answer:" not in questions[4].question_text
+    assert "____" not in questions[4].question_text
+
+    # Q6: Identification with sentence blank preserved
+    assert questions[5].question_type == "IDENTIFICATION"
+    assert len(questions[5].options) == 1
+    assert questions[5].options[0].option_text == "Consequently"
+    assert questions[5].options[0].is_correct is True
+    assert "___, the team decided to postpone" in questions[5].question_text
+    assert "Answer:" not in questions[5].question_text
+
+    # Q7: Essay (new format rubric line + stripped multiline scoring criteria block)
+    assert questions[6].question_type == "SHORT_ANSWER"
+    assert len(questions[6].options) == 0
+    assert "Analysis of motivation" in (questions[6].explanation or "")
+    assert "[Scoring Criteria" not in questions[6].question_text
+    assert "Scoring Criteria" not in questions[6].question_text
+    assert "____" not in questions[6].question_text
+    assert questions[6].question_text == "Explain the importance of analyzing characters' motivations in a story."
+
+    # Q8: Essay (old format [Key/Rubric] line)
+    assert questions[7].question_type == "SHORT_ANSWER"
+    assert len(questions[7].options) == 0
+    assert "Detailed explanation connecting atmosphere" in (questions[7].explanation or "")
+    assert "[Key/Rubric]" not in questions[7].question_text
+    assert "Key/Rubric" not in questions[7].question_text
+    assert "____" not in questions[7].question_text
+    assert questions[7].question_text == "Describe how the setting influences the mood of a narrative."
+
+
+def test_exam_export_import_round_trip():
+    """
+    Test export -> import round trip simulating the exam text produced by the TOS exporter:
+    - Multiple choice, true/false, identification, and essay items
+    - Student exam body contains NO 'Scoring Criteria'
+    - Answer key contains correct letters, TRUE/FALSE, accepted identification words, and [Sample Answer / Rubric]
+    - Importing it reconstructs all questions with exact types, keys, and teacher-only rubrics.
+    """
+    from app.services.quiz.QuizImportService import _parse_questions
+
+    exported_text = """SUMMATIVE ASSESSMENT 1
+ENGLISH 7
+
+Name: _________________________________________   Grade & Section: __________________   Score: _________
+------------------------------------------------------------------------------------------
+PART I. MULTIPLE CHOICE
+Directions: Read each question carefully. Write the letter of the correct answer on the line provided.
+
+____ 1. What figure of speech gives human qualities to inanimate objects?
+A) Personification
+B) Simile
+C) Metaphor
+D) Hyperbole
+
+PART II. TRUE OR FALSE
+Directions: Write TRUE if the statement is correct and FALSE if the statement is incorrect.
+
+____ 2. A haiku typically consists of three lines with a 5-7-5 syllable structure.
+A) True
+B) False
+
+PART III. IDENTIFICATION
+Directions: Provide the exact term or concise answer in the space provided.
+
+3. The perspective from which a story is told is known as the:
+Answer: __________________________________________________________________
+
+PART IV. ESSAY / OPEN-ENDED
+Directions: Answer the following questions in complete sentences.
+
+4. Discuss the theme of friendship in the excerpt studied in class.
+__________________________________________________________________________________________
+__________________________________________________________________________________________
+__________________________________________________________________________________________
+
+------------------------------------------------------------------------------------------
+ANSWER KEY
+SUMMATIVE ASSESSMENT 1 (4 Items)
+1. A
+2. TRUE
+3. Point of View
+4. [Sample Answer / Rubric]: The student should describe mutual loyalty, sacrifices made, and character growth.
+"""
+
+    student_body = exported_text.split("ANSWER KEY")[0]
+    assert "Scoring Criteria" not in student_body
+    assert "[Scoring Criteria" not in student_body
+
+    questions, warnings = _parse_questions(exported_text)
+    assert len(questions) == 4
+
+    assert questions[0].question_type == "MULTIPLE_CHOICE"
+    assert questions[0].options[0].option_text == "Personification"
+    assert questions[0].options[0].is_correct is True
+
+    assert questions[1].question_type == "MULTIPLE_CHOICE"
+    assert questions[1].options[0].option_text == "True"
+    assert questions[1].options[0].is_correct is True
+
+    assert questions[2].question_type == "IDENTIFICATION"
+    assert len(questions[2].options) == 1
+    assert questions[2].options[0].option_text == "Point of View"
+    assert questions[2].options[0].is_correct is True
+
+    assert questions[3].question_type == "SHORT_ANSWER"
+    assert len(questions[3].options) == 0
+    assert questions[3].explanation == "The student should describe mutual loyalty, sacrifices made, and character growth."
+
+
+def test_real_tos_exporters_round_trip():
+    """
+    Real round trip using actual exported PDF and DOCX files produced by the REAL exporters:
+    - 3 Multiple Choice (A-D)
+    - 3 True/False (2-option)
+    - 3 Identification (single-term keys)
+    - 3 Essays with scoring criteria in explanations
+    Asserts:
+    - Student PDF extracted text has no 'Scoring Criteria' and no rubric
+    - Imported PDF questions match types, keys, and teacher-only rubrics
+    - Imported DOCX questions match types, keys, and teacher-only rubrics
+    - All imported question texts have no 'Scoring Criteria' and no underscore runs
+    """
+    import shutil
+    import subprocess
+    import sys
+    import tempfile
+    import pytest
+    from app.services.quiz.QuizImportService import _extract_text
+
+    identity = {"sub": uuid.uuid4(), "role": "teacher"}
+    app = FastAPI()
+    app.include_router(quizzes_router, prefix="/api/v1/quizzes")
+    app.dependency_overrides[get_current_user] = lambda: identity
+    app.dependency_overrides[get_db] = lambda: None
+    app.dependency_overrides[get_staff_id] = lambda: "T-IMPORT"
+
+    repo_root = Path(__file__).resolve().parents[2]
+    gen_script = repo_root / "scripts" / "generate_tos_roundtrip_fixtures.ts"
+
+    if not gen_script.exists():
+        pytest.skip(f"generate_tos_roundtrip_fixtures.ts not found at {gen_script} (deferred to frontend commit)")
+
+    npx_bin = shutil.which("npx") or shutil.which("npx.cmd")
+    if not npx_bin:
+        pytest.skip("npx not available in environment")
+
+    # Generate fixtures in a dedicated temp directory outside the repo and ensure automatic cleanup
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        tmp_dir = Path(temp_dir_str)
+        try:
+            res = subprocess.run(
+                [npx_bin, "--no-install", "tsx", str(gen_script), str(tmp_dir)],
+                shell=(sys.platform == "win32"),
+                capture_output=True,
+                text=True,
+                timeout=35,
+                cwd=str(repo_root),
+            )
+            if res.returncode != 0:
+                pytest.skip(
+                    f"generate_tos_roundtrip_fixtures.ts failed (exit code {res.returncode}): "
+                    f"stdout={res.stdout.strip()!r} stderr={res.stderr.strip()!r}"
+                )
+        except subprocess.TimeoutExpired:
+            pytest.skip("Timed out waiting for generate_tos_roundtrip_fixtures.ts execution")
+        except FileNotFoundError as fnf_err:
+            pytest.skip(f"Required runner executable not found: {fnf_err}")
+        except Exception as exc:
+            pytest.skip(f"Could not execute fixture generation script: {exc}")
+
+        student_pdf = tmp_dir / "real_student_exam.pdf"
+        teacher_pdf = tmp_dir / "real_teacher_exam_with_key.pdf"
+        teacher_docx = tmp_dir / "real_teacher_exam_with_key.docx"
+
+        if not (student_pdf.exists() and teacher_pdf.exists() and teacher_docx.exists()):
+            pytest.skip("One or more generated fixture files missing after script execution")
+
+        student_pdf_bytes = student_pdf.read_bytes()
+        teacher_pdf_bytes = teacher_pdf.read_bytes()
+        teacher_docx_bytes = teacher_docx.read_bytes()
+
+        # 1. Assert student-copy extracted text has no "Scoring Criteria" and no rubric
+        student_text = _extract_text(student_pdf_bytes, ".pdf")
+        assert "Scoring Criteria" not in student_text
+        assert "scoring criteria" not in student_text.lower()
+        assert "Rubric:" not in student_text
+        assert "rubric:" not in student_text.lower()
+
+        # 2. Test import via API on teacher PDF
+        with TestClient(app, raise_server_exceptions=False) as client:
+            pdf_res = client.post(
+                "/api/v1/quizzes/import-preview",
+                files={"file": ("real_teacher_exam_with_key.pdf", teacher_pdf_bytes, "application/pdf")},
+            )
+        assert pdf_res.status_code == 200
+        pdf_body = pdf_res.json()
+        assert len(pdf_body["questions"]) == 12
+
+        def _verify_12_items(questions):
+            # Q1-Q3: MC
+            for i in range(3):
+                q = questions[i]
+                assert q["question_type"] == "MULTIPLE_CHOICE"
+                assert len(q["options"]) == 4
+                assert any(o["is_correct"] for o in q["options"])
+                assert "Scoring Criteria" not in q["question_text"]
+                assert "_____" not in q["question_text"]
+
+            assert questions[0]["options"][0]["option_text"] == "Simile" and questions[0]["options"][0]["is_correct"]
+            assert questions[1]["options"][1]["option_text"] == "Beowulf" and questions[1]["options"][1]["is_correct"]
+            assert questions[2]["options"][1]["option_text"] == "Climax" and questions[2]["options"][1]["is_correct"]
+
+            # Q4-Q6: TF (two-option MCQ)
+            for i in range(3, 6):
+                q = questions[i]
+                assert q["question_type"] == "MULTIPLE_CHOICE"
+                assert len(q["options"]) == 2
+                assert any(o["is_correct"] for o in q["options"])
+                assert "Scoring Criteria" not in q["question_text"]
+                assert "_____" not in q["question_text"]
+
+            assert questions[3]["options"][0]["option_text"] == "True" and questions[3]["options"][0]["is_correct"]
+            assert questions[4]["options"][1]["option_text"] == "False" and questions[4]["options"][1]["is_correct"]
+            assert questions[5]["options"][0]["option_text"] == "True" and questions[5]["options"][0]["is_correct"]
+
+            # Q7-Q9: IDENTIFICATION
+            for i in range(6, 9):
+                q = questions[i]
+                assert q["question_type"] == "IDENTIFICATION"
+                assert len(q["options"]) == 1
+                assert q["options"][0]["is_correct"] is True
+                assert "Scoring Criteria" not in q["question_text"]
+                assert "_____" not in q["question_text"]
+
+            assert questions[6]["options"][0]["option_text"] == "Plot"
+            assert questions[7]["options"][0]["option_text"] == "Alliteration"
+            assert questions[8]["options"][0]["option_text"] == "Point of View"
+
+            # Q10-Q12: SHORT_ANSWER (essays)
+            for i in range(9, 12):
+                q = questions[i]
+                assert q["question_type"] == "SHORT_ANSWER"
+                assert len(q["options"]) == 0
+                assert q["explanation"] is not None
+                assert len(q["explanation"]) > 10
+                assert "Scoring Criteria" not in q["question_text"]
+                assert "Rubric" not in q["question_text"]
+                assert "_____" not in q["question_text"]
+
+            assert "Defines dramatic irony" in questions[9]["explanation"]
+            assert "Identifies sensory details" in questions[10]["explanation"]
+            assert "Explains competing ethical values" in questions[11]["explanation"]
+
+        _verify_12_items(pdf_body["questions"])
+
+        # 3. Test import via API on teacher DOCX
+        with TestClient(app, raise_server_exceptions=False) as client:
+            docx_res = client.post(
+                "/api/v1/quizzes/import-preview",
+                files={
+                    "file": (
+                        "real_teacher_exam_with_key.docx",
+                        teacher_docx_bytes,
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    )
+                },
+            )
+        assert docx_res.status_code == 200
+        docx_body = docx_res.json()
+        assert len(docx_body["questions"]) == 12
+        _verify_12_items(docx_body["questions"])
+
+
 
 
 

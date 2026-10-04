@@ -18,6 +18,7 @@ from app.schemas.Quiz import (
     QuizBuilderResponse,
     QuizBuilderUpsert,
     QuizOptionOut,
+    QuizQuestionIn,
     QuizQuestionOut,
     QuizReadinessResponse,
     QuizSettingOut,
@@ -27,6 +28,7 @@ from app.services.classwork.ClassworkShared import is_quiz_type
 
 QUESTION_MULTIPLE_CHOICE = "MULTIPLE_CHOICE"
 QUESTION_SHORT_ANSWER = "SHORT_ANSWER"
+QUESTION_IDENTIFICATION = "IDENTIFICATION"
 QUIZ_STATUSES = {"DRAFT", "READY", "PUBLISHED", "ARCHIVED"}
 SUMMARY_RELEASE_MODES = {"IMMEDIATE", "SCHEDULED", "AFTER_DUE_DATE", "NEVER"}
 
@@ -73,7 +75,23 @@ def classwork_has_quiz_attempts(db: Session, classwork_id: int) -> bool:
     )
 
 
+def _coerce_legacy_short_answer_questions(questions: list[QuizQuestionIn]) -> None:
+    """Backward compatibility: if a payload question has question_type SHORT_ANSWER
+    but carries non-blank answer keys in options, coerce its question_type to IDENTIFICATION
+    so the answer keys are preserved rather than dropped.
+    """
+    for q in questions:
+        if q.question_type and q.question_type.strip().upper() == QUESTION_SHORT_ANSWER:
+            has_non_blank_key = any(
+                opt.option_text and opt.option_text.strip()
+                for opt in (q.options or [])
+            )
+            if has_non_blank_key:
+                q.question_type = QUESTION_IDENTIFICATION
+
+
 def validate_quiz_payload(db: Session, classwork: Classwork, payload: QuizBuilderUpsert) -> None:
+    _coerce_legacy_short_answer_questions(payload.questions)
     errors = _builder_errors(db, classwork, payload)
     if errors:
         raise HTTPException(status_code=400, detail=errors)
@@ -97,7 +115,9 @@ def upsert_quiz_builder(
 ) -> QuizBuilderResponse:
     if classwork_has_quiz_attempts(db, classwork.classwork_id):
         raise HTTPException(status_code=409, detail="Cannot edit quiz after attempts exist")
+    _coerce_legacy_short_answer_questions(payload.questions)
     validate_quiz_payload(db, classwork, payload)
+
 
     quiz = get_quiz_for_classwork(db, classwork.classwork_id)
     if not quiz:
@@ -183,17 +203,23 @@ def _replace_questions(db: Session, quiz: Quiz, questions) -> None:
             points=Decimal(str(item.points)),
             explanation=item.explanation,
             lesson_id=item.lesson_id,
-            is_ai_generated=False,
+            is_ai_generated=bool(getattr(item, "is_ai_generated", False)),
         )
         db.add(question)
         db.flush()
-        for option in item.options:
-            db.add(QuestionOption(
-                question_id=question.question_id,
-                option_text=option.option_text.strip(),
-                is_correct=True if question_type == QUESTION_SHORT_ANSWER else option.is_correct,
-                option_order=option.option_order,
-            ))
+        # SHORT_ANSWER is always manual-graded — options are never stored (decision #6)
+        if question_type != QUESTION_SHORT_ANSWER:
+            for option in item.options:
+                opt_text = option.option_text.strip() if option.option_text else ""
+                if question_type == QUESTION_IDENTIFICATION and not opt_text:
+                    # Blank-text options count as missing (decision #1)
+                    continue
+                db.add(QuestionOption(
+                    question_id=question.question_id,
+                    option_text=opt_text,
+                    is_correct=True if question_type == QUESTION_IDENTIFICATION else option.is_correct,
+                    option_order=option.option_order,
+                ))
         db.add(QuizQuestion(
             quiz_id=quiz.quiz_id,
             question_id=question.question_id,
@@ -228,8 +254,8 @@ def _builder_errors(db: Session, classwork: Classwork, payload: QuizBuilderUpser
 
     for index, question in enumerate(payload.questions, start=1):
         question_type = question.question_type.strip().upper()
-        if question_type not in {QUESTION_MULTIPLE_CHOICE, QUESTION_SHORT_ANSWER}:
-            errors.append(f"Question {index} type must be MULTIPLE_CHOICE or SHORT_ANSWER")
+        if question_type not in {QUESTION_MULTIPLE_CHOICE, QUESTION_SHORT_ANSWER, QUESTION_IDENTIFICATION}:
+            errors.append(f"Question {index} type must be MULTIPLE_CHOICE, SHORT_ANSWER, or IDENTIFICATION")
         if not question.question_text.strip():
             errors.append(f"Question {index} text is required")
         if question.points <= 0:
@@ -238,11 +264,23 @@ def _builder_errors(db: Session, classwork: Classwork, payload: QuizBuilderUpser
             errors.append(f"Question {index} difficulty must be EASY, MEDIUM, or HARD")
         if question.lesson_id is not None and not _lesson_belongs_to_classwork(db, classwork, question.lesson_id):
             errors.append(f"Question {index} lesson must belong to the same teacher and subject")
-        errors.extend(_option_errors(index, question_type, question.options))
+        errors.extend(_option_errors(index, question_type, question.options, status))
+    if status == "PUBLISHED":
+        for index, question in enumerate(payload.questions, start=1):
+            if question.question_type.strip().upper() == QUESTION_IDENTIFICATION:
+                has_key = any(
+                    opt.option_text and opt.option_text.strip()
+                    for opt in (question.options or [])
+                )
+                if not has_key:
+                    errors.append(
+                        f"Question {index} is an Identification question with no answer key. "
+                        "Add at least one acceptable answer before publishing."
+                    )
     return errors
 
 
-def _option_errors(index: int, question_type: str, options: Iterable) -> list[str]:
+def _option_errors(index: int, question_type: str, options: Iterable, status: str = "DRAFT") -> list[str]:
     errors: list[str] = []
     options = list(options) if options else []
     if question_type == QUESTION_MULTIPLE_CHOICE:
@@ -257,14 +295,16 @@ def _option_errors(index: int, question_type: str, options: Iterable) -> list[st
             errors.append(f"Question {index} option order must be greater than zero")
         if any(not option.option_text.strip() for option in options):
             errors.append(f"Question {index} option text is required")
-    elif question_type == QUESTION_SHORT_ANSWER and options:
+    elif question_type == QUESTION_IDENTIFICATION and options:
+        # IDENTIFICATION: all options are acceptable answer keys
         option_orders = [option.option_order for option in options]
         if len(option_orders) != len(set(option_orders)):
             errors.append(f"Question {index} answer key order must be unique")
         if any(order <= 0 for order in option_orders):
             errors.append(f"Question {index} answer key order must be greater than zero")
-        if any(not option.option_text.strip() for option in options):
+        if status != "DRAFT" and any(not option.option_text.strip() for option in options):
             errors.append(f"Question {index} answer key text is required")
+    # SHORT_ANSWER: options are ignored and never validated (always manual grading)
     return errors
 
 
@@ -284,6 +324,22 @@ def _readiness_errors(classwork: Classwork, quiz: Quiz | None) -> list[str]:
     )
     if classwork.total_points is not None and question_points != Decimal(str(classwork.total_points)):
         errors.append("Sum of question points must match classwork total points")
+
+    # Block publish when an IDENTIFICATION question has no non-blank answer key (decision #1)
+    for link in quiz.questions:
+        q = link.question
+        if not q:
+            continue
+        if q.question_type == QUESTION_IDENTIFICATION:
+            has_key = any(
+                opt.option_text and opt.option_text.strip()
+                for opt in q.options
+            )
+            if not has_key:
+                errors.append(
+                    f"Question {link.display_order} is an Identification question with no answer key. "
+                    "Add at least one acceptable answer before publishing."
+                )
     return errors
 
 
@@ -321,16 +377,28 @@ def _setting_out(setting: QuizSetting) -> QuizSettingOut:
 
 def _question_out(link: QuizQuestion) -> QuizQuestionOut:
     question = link.question
+    effective_question_type = (
+        "IDENTIFICATION"
+        if (
+            question.question_type == "SHORT_ANSWER"
+            and any(
+                bool(opt.is_correct) and bool(opt.option_text and opt.option_text.strip())
+                for opt in (getattr(question, "options", None) or [])
+            )
+        )
+        else question.question_type
+    )
     return QuizQuestionOut(
         quiz_question_id=link.quiz_question_id,
         question_id=question.question_id,
         question_text=question.question_text,
-        question_type=question.question_type,
+        question_type=effective_question_type,
         points=float(question.points),
         display_order=link.display_order,
         difficulty_level=question.difficulty_level,
         explanation=question.explanation,
         lesson_id=question.lesson_id,
+        is_ai_generated=bool(question.is_ai_generated),
         options=[
             QuizOptionOut(
                 option_id=option.option_id,

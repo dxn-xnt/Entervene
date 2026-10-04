@@ -214,12 +214,29 @@ def _extract_and_validate_tos_json(raw_text: str) -> list[dict[str, Any]]:
             validated_options = []
         elif q_type == "IDENTIFICATION":
             if not validated_options:
-                answer_text = str(item.get("explanation") or item.get("answer") or "Answer").strip()
-                validated_options = [{"option_text": answer_text, "is_correct": True, "option_order": 1}]
+                fallback_key = str(item.get("answer") or item.get("correct_answer") or "").strip()
+                if fallback_key and len(fallback_key) <= 100 and "\n" not in fallback_key:
+                    validated_options = [{
+                        "option_text": fallback_key,
+                        "is_correct": True,
+                        "option_order": 1,
+                    }]
+                    logger.warning(
+                        "TOS IDENTIFICATION question '%s' had no options array; recovered key from 'answer' field: %r",
+                        item.get("question_text", f"Question {idx}"),
+                        fallback_key,
+                    )
+                else:
+                    logger.warning(
+                        "TOS IDENTIFICATION question '%s' has no valid answer key in options or explicit answer field. Question discarded.",
+                        item.get("question_text", f"Question {idx}"),
+                    )
+                    continue
             else:
                 validated_options = [validated_options[0]]
                 validated_options[0]["is_correct"] = True
                 validated_options[0]["option_order"] = 1
+
         elif q_type == "TRUE_FALSE":
             is_true_correct = True
             for o in validated_options:

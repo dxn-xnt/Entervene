@@ -236,10 +236,12 @@ async def generate_quiz(
         lessons=lesson_titles,
         content_text=combined_content,
         test_parts=test_parts,
+        warnings=warnings,
     )
 
     questions = [QuizQuestionIn(**q) for q in generated_raw]
     return AIQuizGenerateResponse(questions=questions, warnings=warnings)
+
 
 
 @router.post("/generate-tos-questions", response_model=AITOSGenerateResponse, dependencies=[Depends(ai_identity)])

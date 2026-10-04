@@ -147,9 +147,10 @@ type QuestionGroup = {
   questions: QuizQuestionDraft[];
 };
 
-function groupQuestions(questions: QuizQuestionDraft[]): QuestionGroup[] {
+export function groupQuestions(questions: QuizQuestionDraft[]): QuestionGroup[] {
   const mc: QuizQuestionDraft[] = [];
   const tf: QuizQuestionDraft[] = [];
+  const id: QuizQuestionDraft[] = [];
   const sa: QuizQuestionDraft[] = [];
 
   for (const q of questions) {
@@ -160,6 +161,8 @@ function groupQuestions(questions: QuizQuestionDraft[]): QuestionGroup[] {
         opts.some((o) => o.option_text.trim().toLowerCase() === "true") &&
         opts.some((o) => o.option_text.trim().toLowerCase() === "false");
       isTF ? tf.push(q) : mc.push(q);
+    } else if (q.question_type === "IDENTIFICATION") {
+      id.push(q);
     } else {
       sa.push(q);
     }
@@ -188,11 +191,20 @@ function groupQuestions(questions: QuizQuestionDraft[]): QuestionGroup[] {
     });
     cursor += tf.length;
   }
-  if (sa.length) {
+  if (id.length) {
     groups.push({
-      heading: `PART ${prefix(groups.length + 1)}. IDENTIFICATION / SHORT ANSWER`,
+      heading: `PART ${prefix(groups.length + 1)}. IDENTIFICATION`,
       directions:
         "Directions: Provide the concise and accurate answer for each question in the space provided.",
+      questions: id.map((q, i) => ({ ...q, display_order: cursor + i })),
+    });
+    cursor += id.length;
+  }
+  if (sa.length) {
+    groups.push({
+      heading: `PART ${prefix(groups.length + 1)}. SHORT ANSWER (ESSAY)`,
+      directions:
+        "Directions: Write a clear and comprehensive response for each question in the space provided.",
       questions: sa.map((q, i) => ({ ...q, display_order: cursor + i })),
     });
   }
@@ -362,9 +374,13 @@ export async function exportQuizPdf(
           }
           y += 1.5;
         }
-      } else {
-        // SA / Essay — writing line
+      } else if (q.question_type === "IDENTIFICATION") {
+        // Identification — single writing line
         write("Answer: __________________________________________________________________", 10, false, 6, 4);
+      } else {
+        // Short Answer / Essay — writing lines
+        write("Response: ________________________________________________________________", 10, false, 6, 3);
+        write("__________________________________________________________________________", 10, false, 6, 4);
       }
     }
     y += 4;
@@ -378,7 +394,10 @@ export async function exportQuizPdf(
     write(`${title} (${questions.length} Items)`, 9.5, false, 0, 4);
 
     // Collect all answers
-    const keyItems: Array<{ num: number; ans: string; isChoice: boolean }> = [];
+    const choiceItems: Array<{ num: number; ans: string }> = [];
+    const idItems: Array<{ num: number; ans: string }> = [];
+    const saItems: Array<{ num: number; ans: string }> = [];
+
     for (const group of groups) {
       for (const q of group.questions) {
         if (q.question_type === "MULTIPLE_CHOICE") {
@@ -392,18 +411,21 @@ export async function exportQuizPdf(
             sorted.length === 2 &&
             sorted.some((o) => o.option_text.trim().toLowerCase() === "true");
           const ansText = isTF && correct ? correct.option_text.toUpperCase() : letter;
-          keyItems.push({ num: q.display_order, ans: ansText, isChoice: true });
+          choiceItems.push({ num: q.display_order, ans: ansText });
+        } else if (q.question_type === "IDENTIFICATION") {
+          const keys = (q.options ?? [])
+            .map((o) => o.option_text.trim())
+            .filter(Boolean);
+          const ansText = keys.length > 0 ? keys.join(" / ") : (q.explanation || "-");
+          idItems.push({ num: q.display_order, ans: ansText });
         } else {
           const text = q.explanation || "(See rubric)";
-          keyItems.push({ num: q.display_order, ans: text, isChoice: false });
+          saItems.push({ num: q.display_order, ans: text });
         }
       }
     }
 
     // Render Multiple Choice / True-False items in a compact 5-column grid
-    const choiceItems = keyItems.filter((k) => k.isChoice);
-    const nonChoiceItems = keyItems.filter((k) => !k.isChoice);
-
     if (choiceItems.length > 0) {
       const COLS = 5;
       const colW = TW / COLS;
@@ -423,10 +445,20 @@ export async function exportQuizPdf(
       y += 3;
     }
 
-    // Non-choice items (Short Answer / Essay)
-    if (nonChoiceItems.length > 0) {
-      for (const item of nonChoiceItems) {
-        write(`${item.num}. [Key/Rubric]: ${item.ans}`, 9.5, false, 0, 2);
+    // Identification items
+    if (idItems.length > 0) {
+      write("IDENTIFICATION:", 10, true, 0, 2);
+      for (const item of idItems) {
+        write(`${item.num}. [Key]: ${item.ans}`, 9.5, false, 0, 2);
+      }
+      y += 2;
+    }
+
+    // Short Answer / Essay items
+    if (saItems.length > 0) {
+      write("SHORT ANSWER (ESSAY):", 10, true, 0, 2);
+      for (const item of saItems) {
+        write(`${item.num}. [Sample Answer / Rubric]: ${item.ans}`, 9.5, false, 0, 2);
       }
     }
   }
@@ -532,11 +564,24 @@ export async function exportQuizDocx(
           );
         }
         children.push(p("", { space: 60 }));
-      } else {
+      } else if (q.question_type === "IDENTIFICATION") {
         children.push(
           p("Answer: __________________________________________________________________", {
             size: 20,
             space: 140,
+          })
+        );
+      } else {
+        children.push(
+          p("Response: ________________________________________________________________", {
+            size: 20,
+            space: 60,
+          })
+        );
+        children.push(
+          p("__________________________________________________________________________", {
+            size: 20,
+            space: 120,
           })
         );
       }
@@ -552,7 +597,8 @@ export async function exportQuizDocx(
 
     // Collect keys
     const choiceItems: Array<{ num: number; ans: string }> = [];
-    const nonChoiceItems: Array<{ num: number; ans: string }> = [];
+    const idItems: Array<{ num: number; ans: string }> = [];
+    const saItems: Array<{ num: number; ans: string }> = [];
 
     for (const group of groups) {
       for (const q of group.questions) {
@@ -571,8 +617,14 @@ export async function exportQuizDocx(
             ? optionLetter(idx + 1)
             : "-";
           choiceItems.push({ num: q.display_order, ans: ansText });
+        } else if (q.question_type === "IDENTIFICATION") {
+          const keys = (q.options ?? [])
+            .map((o) => o.option_text.trim())
+            .filter(Boolean);
+          const ansText = keys.length > 0 ? keys.join(" / ") : (q.explanation || "-");
+          idItems.push({ num: q.display_order, ans: ansText });
         } else {
-          nonChoiceItems.push({
+          saItems.push({
             num: q.display_order,
             ans: q.explanation || "(See rubric)",
           });
@@ -588,11 +640,22 @@ export async function exportQuizDocx(
       children.push(p(rowText, { bold: true, size: 21, space: 60 }));
     }
 
-    if (nonChoiceItems.length > 0) {
+    if (idItems.length > 0) {
       children.push(p("", { space: 60 }));
-      for (const item of nonChoiceItems) {
+      children.push(p("IDENTIFICATION:", { bold: true, size: 22, space: 40 }));
+      for (const item of idItems) {
         children.push(
-          p(`${item.num}. [Key/Rubric]: ${item.ans}`, { size: 20, space: 50 })
+          p(`${item.num}. [Key]: ${item.ans}`, { size: 20, space: 50 })
+        );
+      }
+    }
+
+    if (saItems.length > 0) {
+      children.push(p("", { space: 60 }));
+      children.push(p("SHORT ANSWER (ESSAY):", { bold: true, size: 22, space: 40 }));
+      for (const item of saItems) {
+        children.push(
+          p(`${item.num}. [Sample Answer / Rubric]: ${item.ans}`, { size: 20, space: 50 })
         );
       }
     }

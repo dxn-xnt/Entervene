@@ -62,14 +62,11 @@ export default function SubjectDetails() {
   const [currentAcademicPeriodId, setCurrentAcademicPeriodId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"lessons" | "classwork">("lessons");
   const [isCreatingLesson, setIsCreatingLesson] = useState(false);
-  const [activeLessonDetail, setActiveLessonDetail] = useState<Lesson | null>(
-    null,
-  );
+  const [activeLessonDetail, setActiveLessonDetail] = useState<Lesson | null>(null);
+  const [isCreatingSubjectClasswork, setIsCreatingSubjectClasswork] = useState(false);
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [subjectAssignments, setSubjectAssignments] = useState<
-    LinkedClasswork[]
-  >([]);
+  const [subjectAssignments, setSubjectAssignments] = useState<LinkedClasswork[]>([]);
   const [classworkCount, setClassworkCount] = useState<number | null>(null);
   const [overviewMastery, setOverviewMastery] = useState<number>(0);
   const [overviewCompletion, setOverviewCompletion] = useState<number>(0);
@@ -79,31 +76,20 @@ export default function SubjectDetails() {
   const [isSavingLesson, setIsSavingLesson] = useState(false);
   const [isArchivingLesson, setIsArchivingLesson] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
-  const [removingLessonAttachmentId, setRemovingLessonAttachmentId] = useState<
-    number | null
-  >(null);
+  const [removingLessonAttachmentId, setRemovingLessonAttachmentId] = useState<number | null>(null);
   const [expandedLessonId, setExpandedLessonId] = useState<number | null>(null);
-  const [linkedClassworks, setLinkedClassworks] = useState<
-    Record<number, LinkedClasswork[]>
-  >({});
-  const [loadingClassworkId, setLoadingClassworkId] = useState<number | null>(
-    null,
-  );
+  const [linkedClassworks, setLinkedClassworks] = useState<Record<number, LinkedClasswork[]>>({});
+  const [loadingClassworkId, setLoadingClassworkId] = useState<number | null>(null);
   const [classworkLesson, setClassworkLesson] = useState<Lesson | null>(null);
-  const [classworkDraft, setClassworkDraft] =
-    useState<ClassworkDraft>(emptyClassworkDraft);
+  const [classworkDraft, setClassworkDraft] = useState<ClassworkDraft>(emptyClassworkDraft);
   const [classworkMaterials, setClassworkMaterials] = useState<File[]>([]);
   const [isCreatingClasswork, setIsCreatingClasswork] = useState(false);
-  const [selectedClasswork, setSelectedClasswork] =
-    useState<ClassworkDetail | null>(null);
-  const [selectedTracking, setSelectedTracking] =
-    useState<SubmissionTracking | null>(null);
+  const [selectedClasswork, setSelectedClasswork] = useState<ClassworkDetail | null>(null);
+  const [selectedTracking, setSelectedTracking] = useState<SubmissionTracking | null>(null);
   const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
   const [detailError, setDetailError] = useState("");
   const [lessonSearch, setLessonSearch] = useState("");
-  const [lessonSort, setLessonSort] = useState<
-    "order" | "newest" | "oldest" | "title"
-  >("order");
+  const [lessonSort, setLessonSort] = useState< "order" | "newest" | "oldest" | "title">("order");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   void isLoading;
@@ -900,6 +886,7 @@ export default function SubjectDetails() {
     }
   };
 
+
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
@@ -1000,6 +987,20 @@ export default function SubjectDetails() {
                           </Button>
                         </>
                       )}
+                      {activeTab === "classwork" && (
+                        <Button
+                          type="button"
+                          size="header"
+                          variant="default"
+                          onClick={() => setIsCreatingSubjectClasswork(true)}
+                          className="w-full whitespace-nowrap md:w-auto"
+                        >
+                          <Plus size={16} />
+                          New Classwork
+                        </Button>
+                      )}
+
+
                     </div>
                   </header>
                   <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
@@ -1040,6 +1041,8 @@ export default function SubjectDetails() {
                       subjectId={subjectId}
                       subjectName={subjectName}
                       sectionName={sectionName}
+                      isCreateOpen={isCreatingSubjectClasswork}
+                      onCloseCreate={() => setIsCreatingSubjectClasswork(false)}
                     />
                   ) : (
                     <LessonClassworkList

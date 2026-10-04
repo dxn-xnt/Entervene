@@ -31,6 +31,7 @@ from app.services.classwork.ClassworkShared import (
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
 from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
+from app.services.quiz.quiz_normalization import is_identification_correct
 
 
 def get_student_quiz_attempt(
@@ -133,6 +134,11 @@ def submit_student_quiz_attempt(
     for link in links:
         answer = answers_by_question[link.quiz_question_id]
         question = link.question
+        is_ident = (question.question_type == "IDENTIFICATION")
+        has_correct_options = any(
+            bool(opt.is_correct) and bool(opt.option_text and opt.option_text.strip())
+            for opt in (getattr(question, "options", None) or [])
+        )
         if question.question_type == "MULTIPLE_CHOICE":
             selected = _option_for_answer(question, answer.selected_option_id)
             # Timed autosubmit can include unanswered items; store them as zero.
@@ -155,8 +161,26 @@ def submit_student_quiz_attempt(
                 is_correct=is_correct,
                 points_awarded=points_awarded,
             ))
-        else:
+        elif is_ident or (question.question_type == "SHORT_ANSWER" and has_correct_options):
+            # IDENTIFICATION (and legacy keyed SHORT_ANSWER before migration): auto-graded using normalized comparison
+            accepted_keys = [
+                opt.option_text
+                for opt in (getattr(question, "options", None) or [])
+                if opt.option_text and opt.option_text.strip() and (opt.is_correct is None or opt.is_correct is True)
+            ]
             student_ans = (answer.answer_text or "").strip()
+            if not accepted_keys:
+                # Zero non-blank keys -> route to manual grading, never auto-fail students
+                has_manual = True
+                db.add(QuizAnswer(
+                    quiz_question_id=link.quiz_question_id,
+                    submission_id=submission.submission_id,
+                    answer_text=student_ans,
+                    is_correct=None,
+                    points_awarded=None,
+                ))
+                continue
+
             if not student_ans:
                 db.add(QuizAnswer(
                     quiz_question_id=link.quiz_question_id,
@@ -167,35 +191,37 @@ def submit_student_quiz_attempt(
                 ))
                 continue
 
-            # Check if this short answer / identification question has correct answer options
-            correct_options = [
-                opt.option_text.strip()
-                for opt in (getattr(question, "options", None) or [])
-                if opt.is_correct and opt.option_text and opt.option_text.strip()
-            ]
+            is_match = is_identification_correct(student_ans, accepted_keys)
+            points_awarded = Decimal(str(question.points)) if is_match else Decimal("0")
+            total_score += points_awarded
+            db.add(QuizAnswer(
+                quiz_question_id=link.quiz_question_id,
+                submission_id=submission.submission_id,
+                answer_text=student_ans,
+                is_correct=is_match,
+                points_awarded=points_awarded,
+            ))
 
-            if correct_options:
-                # Identification auto-grading: match spelling (case-insensitive & trimmed)
-                is_match = any(student_ans.lower() == opt.lower() for opt in correct_options)
-                points_awarded = Decimal(str(question.points)) if is_match else Decimal("0")
-                total_score += points_awarded
+        else:
+            # Unkeyed SHORT_ANSWER: manual grading
+            student_ans = (answer.answer_text or "").strip()
+            if not student_ans:
                 db.add(QuizAnswer(
                     quiz_question_id=link.quiz_question_id,
                     submission_id=submission.submission_id,
-                    answer_text=student_ans,
-                    is_correct=is_match,
-                    points_awarded=points_awarded,
+                    answer_text="",
+                    is_correct=False,
+                    points_awarded=Decimal("0"),
                 ))
-            else:
-                # No answer key provided by teacher -> subjective/essay requiring manual grading
-                has_manual = True
-                db.add(QuizAnswer(
-                    quiz_question_id=link.quiz_question_id,
-                    submission_id=submission.submission_id,
-                    answer_text=student_ans,
-                    is_correct=None,
-                    points_awarded=None,
-                ))
+                continue
+            has_manual = True
+            db.add(QuizAnswer(
+                quiz_question_id=link.quiz_question_id,
+                submission_id=submission.submission_id,
+                answer_text=student_ans,
+                is_correct=None,
+                points_awarded=None,
+            ))
 
     submission.attempt_count += 1
     submission.submitted_at = now
@@ -420,10 +446,21 @@ def _attempt_question_out(
             None,
         )
         selected_option_id = selected
+    effective_question_type = (
+        "IDENTIFICATION"
+        if (
+            question.question_type == "SHORT_ANSWER"
+            and any(
+                bool(opt.is_correct) and bool(opt.option_text and opt.option_text.strip())
+                for opt in (getattr(question, "options", None) or [])
+            )
+        )
+        else question.question_type
+    )
     return QuizAttemptQuestionOut(
         quiz_question_id=link.quiz_question_id,
         question_text=question.question_text,
-        question_type=question.question_type,
+        question_type=effective_question_type,
         points=float(question.points),
         display_order=link.display_order,
         options=[

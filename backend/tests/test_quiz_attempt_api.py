@@ -446,7 +446,8 @@ def test_quiz_identification_spelling_auto_grading(quiz_attempt_context):
     c = quiz_attempt_context
     assignment_id = c["assignment"].classwork_assignment_id
 
-    # Add correct option key to the short answer question (making it an Identification question)
+    # Set question to IDENTIFICATION and add correct option key
+    c["short_link"].question.question_type = "IDENTIFICATION"
     sa_option = QuestionOption(
         question_id=c["short_link"].question_id,
         option_text="Isaac Newton",
