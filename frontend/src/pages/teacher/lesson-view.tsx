@@ -32,6 +32,8 @@ import type { Lesson, LinkedClasswork } from "./subject-details/types";
 export interface TeacherLessonViewProps {
     lesson: Lesson;
     subjectName?: string;
+    sectionName?: string;
+    onSubjectClick?: () => void;
     closeLessonDetail: () => void;
     openLessonManager: (lesson: Lesson) => void;
     openClassworkForm: (lesson: Lesson) => void;
@@ -57,6 +59,8 @@ function getClassworkIcon(type?: string | null) {
 export function TeacherLessonView({
     lesson,
     subjectName = "Subject",
+    sectionName,
+    onSubjectClick,
     closeLessonDetail,
     openLessonManager,
     openClassworkForm,
@@ -82,12 +86,26 @@ export function TeacherLessonView({
                                 <Breadcrumb.Separator />
                                 <Breadcrumb.Item className="min-w-0 shrink-0">
                                     <Breadcrumb.Link
-                                        onClick={closeLessonDetail}
+                                        onClick={onSubjectClick || closeLessonDetail}
                                         className="cursor-pointer block max-w-[150px] sm:max-w-[200px] truncate"
                                     >
                                         {subjectName}
                                     </Breadcrumb.Link>
                                 </Breadcrumb.Item>
+
+                                {sectionName && (
+                                    <>
+                                        <Breadcrumb.Separator />
+                                        <Breadcrumb.Item className="min-w-0 shrink-0">
+                                            <Breadcrumb.Link
+                                                onClick={closeLessonDetail}
+                                                className="cursor-pointer block max-w-[150px] sm:max-w-[200px] truncate"
+                                            >
+                                                {sectionName}
+                                            </Breadcrumb.Link>
+                                        </Breadcrumb.Item>
+                                    </>
+                                )}
 
                                 <Breadcrumb.Separator />
                                 <Breadcrumb.Item className="min-w-0 flex-1">

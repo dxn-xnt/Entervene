@@ -1119,7 +1119,15 @@ function LessonsTab({
         <div className="flex flex-col flex-1 min-w-0 w-full animate-in fade-in-50 duration-200">
           <TeacherLessonDetailScreen
             lesson={activeLessonDetail as any}
-            subjectName={currentSubjectLoad?.subject_name || detail.section_name}
+            subjectName={currentSubjectLoad?.subject_name || "Subject"}
+            sectionName={detail.section_name}
+            onSubjectClick={() => {
+              if (currentSubjectLoad?.subject_id) {
+                navigate(
+                  `/teacher/classes/${detail.class_id}/subjects/${currentSubjectLoad.subject_id}`,
+                );
+              }
+            }}
             closeLessonDetail={() => {
               setActiveLessonDetail(null);
               onLessonViewChange?.(null);
