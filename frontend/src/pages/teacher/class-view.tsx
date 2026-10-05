@@ -891,15 +891,15 @@ function LessonsTab({
           setActiveLessonDetail((prev) =>
             prev
               ? {
-                  ...prev,
-                  title: lessonDraft.title,
-                  description: lessonDraft.description,
-                  content: lessonDraft.content,
-                  order_index: Number(lessonDraft.order_index) || 1,
-                  is_published: lessonDraft.is_published,
-                  show_scores: lessonDraft.show_scores,
-                  competency_id: lessonDraft.competency_id,
-                }
+                ...prev,
+                title: lessonDraft.title,
+                description: lessonDraft.description,
+                content: lessonDraft.content,
+                order_index: Number(lessonDraft.order_index) || 1,
+                is_published: lessonDraft.is_published,
+                show_scores: lessonDraft.show_scores,
+                competency_id: lessonDraft.competency_id,
+              }
               : null,
           );
         }
