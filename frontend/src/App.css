@@ -673,3 +673,13 @@ textarea::placeholder,
 .retro-theme-stripes {
   background-image: repeating-linear-gradient(135deg, transparent 0 12px, color-mix(in srgb, var(--primary-foreground) 9%, transparent) 12px 24px);
 }
+
+/* Flatten dialog content, not the popup or action buttons. */
+body:has(:is([data-teacher-page="true"], [data-student-page="true"], [data-admin-page="true"])) [data-slot="dialog-content"] :not(button):not([role="button"]) {
+  box-shadow: none !important;
+}
+
+body:has(:is([data-teacher-page="true"], [data-student-page="true"], [data-admin-page="true"])) [data-slot="dialog-content"] :is(input, textarea, select, [role="combobox"]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}

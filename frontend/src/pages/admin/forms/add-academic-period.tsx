@@ -10,7 +10,6 @@ import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Carousel } from "@/components/retroui/Carousel";
-import { Card } from "@/components/retroui/Card";
 import { Calendar } from "@/components/retroui/Calendar";
 import { formatPeriodLabel, periodTotal } from "@/lib/academic-periods";
 import {
@@ -49,7 +48,7 @@ function DatePicker({ id, selected, onSelect, placeholder = "Select date", minDa
         <Popover.Root open={isOpen} onOpenChange={setIsOpen}>
             <Popover.Trigger
                 id={id}
-                className="flex h-10 w-full rounded items-center shadow-md focus:shadow-xs justify-between border-2 border-input border-border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground outline-none focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 text-left cursor-pointer"
+                className="flex h-10 w-full rounded items-center justify-between border-2 border-input border-border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground outline-none focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 text-left cursor-pointer"
             >
                 <span className={selected ? "text-foreground" : "text-muted-foreground"}>
                     {selected ? format(selected, "PPP") : placeholder}
@@ -58,7 +57,7 @@ function DatePicker({ id, selected, onSelect, placeholder = "Select date", minDa
             </Popover.Trigger>
             <Popover.Portal>
                 <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-50">
-                    <Popover.Popup className="border-2 border-border bg-background text-popover-foreground shadow-md rounded overflow-hidden">
+                    <Popover.Popup className="border-2 border-border bg-background text-popover-foreground rounded overflow-hidden">
                         <Calendar
                             mode="single"
                             selected={selected}
@@ -109,10 +108,8 @@ function PeriodCard({
     periodType,
 }: PeriodCardProps) {
     return (
-        <div className="p-1">
-            <Card className="w-full block">
-                <Card.Content className="flex flex-col gap-4 p-2">
-                    <div className="flex items-center justify-between border-b pb-2 border-border/40">
+        <div className="flex flex-col gap-5 py-3">
+                    <div className="flex items-center justify-between border-b pb-3 border-border/40">
                         <Text className="font-bold text-md">
                             {formatPeriodLabel({ period_type: periodType, period_sequence: index + 1 })}
                         </Text>
@@ -120,7 +117,7 @@ function PeriodCard({
                             {index + 1} of {total}
                         </span>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div className="flex flex-col gap-1">
                             <label className="text-xs font-medium text-muted-foreground" htmlFor={`start-date-${index}`}>Start Date</label>
                             <DatePicker
@@ -144,8 +141,6 @@ function PeriodCard({
                             />
                         </div>
                     </div>
-                </Card.Content>
-            </Card>
         </div>
     );
 }
@@ -378,7 +373,8 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
                                 </Select.Content>
                             </Select>
                         </div>
-                        <Carousel className="w-full max-w-sm md:max-w-lg mx-auto relative">
+                        <Carousel className="relative mt-4 w-full">
+                            <div className="mx-14 min-w-0 sm:mx-16">
                             <Carousel.Content>
                                 {dates.map((period, index) => (
                                     <Carousel.Item key={index}>
@@ -398,8 +394,9 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
                                     </Carousel.Item>
                                 ))}
                             </Carousel.Content>
-                            <Carousel.Previous className="top-1/2" />
-                            <Carousel.Next className="top-1/2" />
+                            </div>
+                            <Carousel.Previous className="left-0 top-1/2 size-10" />
+                            <Carousel.Next className="right-0 top-1/2 size-10" />
                         </Carousel>
 
                         {error ? (
@@ -408,12 +405,12 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
                     </div>
                 </section>
             </section>
-            <Dialog.Footer>
-                <Button onClick={handleConfirm} disabled={isSaving || !academicYear}>
-                    Confirm
-                </Button>
+            <Dialog.Footer className="justify-end">
                 <Button variant={"outline"} onClick={onClose} disabled={isSaving}>
                     Close
+                </Button>
+                <Button onClick={handleConfirm} disabled={isSaving || !academicYear}>
+                    Confirm
                 </Button>
             </Dialog.Footer>
         </Dialog.Content>

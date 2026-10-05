@@ -265,10 +265,13 @@ export default function AssignSubstituteModal({
               </label>
 
               {availableLoads.length > 0 && (
-                <button
+                <Button
                   type="button"
+                  variant="link"
+                  size="sm"
+                  autoIcon={false}
                   onClick={handleToggleSelectAll}
-                  className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                  className="gap-1 px-0 text-xs font-semibold"
                 >
                   {allAvailableSelected ? (
                     <>
@@ -281,7 +284,7 @@ export default function AssignSubstituteModal({
                       <span>Select All (Entire Program)</span>
                     </>
                   )}
-                </button>
+                </Button>
               )}
             </div>
 

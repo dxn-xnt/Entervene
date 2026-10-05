@@ -13,7 +13,6 @@ import type {
   ManualAssignmentWorkspaceState,
   ManualClassSetup,
 } from "@/types/adminClasses";
-import { retroButton } from "../utils";
 import AssignmentToolbar from "./AssignmentToolbar";
 import { Button } from "@/components/retroui/Button";
 import AssignEvenlyConfirmationModal from "./AssignEvenlyConfirmationModal";
@@ -33,6 +32,7 @@ export default function StudentAssignmentWorkspace({
   onChange,
   onBack,
   onReview,
+  onClose,
 }: {
   setup: ManualClassSetup;
   state: ManualAssignmentWorkspaceState | null;
@@ -40,6 +40,7 @@ export default function StudentAssignmentWorkspace({
   onChange: (state: ManualAssignmentWorkspaceState) => void;
   onBack: () => void;
   onReview: () => void;
+  onClose: () => void;
 }) {
   const [loading, setLoading] = useState(
     !state || state.academicLevelId !== setup.academicLevelId,
@@ -170,12 +171,12 @@ export default function StudentAssignmentWorkspace({
         message="Unable to load unassigned students."
         detail={loadError}
       >
-        <button className={retroButton("bg-[#79bd80]")} onClick={retryLoading}>
+        <Button onClick={retryLoading}>
           Retry
-        </button>
-        <button className={retroButton()} onClick={onBack}>
+        </Button>
+        <Button variant="outline" onClick={onBack}>
           Back to Class Details
-        </button>
+        </Button>
       </StatePanel>
     );
   }
@@ -363,7 +364,7 @@ export default function StudentAssignmentWorkspace({
           </div>
         </div>
       </DndContext>
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-black pt-3">
+      <div className="-mx-4 -mb-4 flex w-[calc(100%+2rem)] shrink-0 flex-wrap items-center justify-between gap-3 border-t-2 px-4 py-4">
         <div>
           {reviewAttempted && !canContinueToReview && (
             <div className="grid gap-0.5 text-xs font-semibold text-red-700">
@@ -376,16 +377,19 @@ export default function StudentAssignmentWorkspace({
             </div>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button className="bg-white hover:bg-white" onClick={onBack}>Back to Class Details</Button>
-          <Button
-            aria-disabled={!canContinueToReview}
-            disabled={!canContinueToReview}
-            onClick={continueToReview}
-            className={canContinueToReview ? "" : "opacity-60"}
-          >
-            Continue to Review
-          </Button>
+        <div className="flex flex-1 flex-wrap items-center justify-between gap-2">
+          <Button variant="outline" onClick={onClose}>Close</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={onBack}>Back to Class Details</Button>
+            <Button
+              aria-disabled={!canContinueToReview}
+              disabled={!canContinueToReview}
+              onClick={continueToReview}
+              className={canContinueToReview ? "" : "opacity-60"}
+            >
+              Continue to Review
+            </Button>
+          </div>
         </div>
       </div>
       {showAssignEvenlyConfirmation && (

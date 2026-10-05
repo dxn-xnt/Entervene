@@ -90,11 +90,11 @@ export function NavUser() {
                 </span>
                   <RoleBadge role={user?.role} />
                 </div>
-                <span className="truncate text-xs text-muted-foreground">
+                <span className="block w-full min-w-0 truncate text-xs text-muted-foreground" title={user?.email || undefined}>
                   {user?.email || ""}
                 </span>
               </div>
-              <EllipsisVerticalIcon className="ml-auto size-4" />
+              <EllipsisVerticalIcon className="ml-auto size-4 shrink-0" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
 
@@ -115,7 +115,7 @@ export function NavUser() {
                     {initials}
                   </Avatar.Fallback>
                 </Avatar>
-                <div className="grid flex-1 text-left leading-tight">
+                <div className="grid min-w-0 flex-1 text-left leading-tight">
                   <span className="truncate text-sm font-semibold">
                     {user?.fullName || "Loading…"}
                   </span>
