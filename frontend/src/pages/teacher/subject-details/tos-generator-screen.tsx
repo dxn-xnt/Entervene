@@ -20,6 +20,8 @@ import {
 import { Card } from "@/components/retroui/Card";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
+import { Dialog } from "@/components/retroui/Dialog";
+import { computeTOSShortfall } from "@/lib/tos-shortfall";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
@@ -133,6 +135,16 @@ export function TOSGeneratorScreen({
 
   // Step 5: AI Questions & Inline Edit
   const [questions, setQuestions] = useState<TOSExportQuestion[]>([]);
+  const [generationWarnings, setGenerationWarnings] = useState<string[]>([]);
+  const shortfall = useMemo(() => computeTOSShortfall(rows, questions), [rows, questions]);
+  const [pendingAction, setPendingAction] = useState<{
+    run: () => void | Promise<void>;
+  } | null>(null);
+  const guardShortExam = (run: () => void | Promise<void>) => {
+    if (shortfall.missing > 0) setPendingAction({ run });
+    else void run();
+  };
+  const proceedToExport = () => guardShortExam(() => setStep("export"));
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState("");
   const [generationError, setGenerationError] = useState("");
@@ -350,6 +362,8 @@ export function TOSGeneratorScreen({
     setRows([]);
     setGrandTotal(null);
     setQuestions([]);
+    setGenerationWarnings([]);
+    setPendingAction(null);
     setStep("test-parts");
   };
 
@@ -420,6 +434,8 @@ export function TOSGeneratorScreen({
         }
         const loadedQuestions = exam.questions || [];
         setQuestions(loadedQuestions);
+        setGenerationWarnings([]);
+        setPendingAction(null);
 
         const computed = computeTOS({
           subject_id: exam.subject_id || currentSubjectId,
@@ -724,6 +740,7 @@ export function TOSGeneratorScreen({
 
       if (response && response.questions) {
         setQuestions(response.questions);
+        setGenerationWarnings(response.warnings || []);
         setStep("ai-review");
         toast.success(`Successfully generated ${response.questions.length} exam questions!`);
       }
@@ -764,7 +781,8 @@ export function TOSGeneratorScreen({
 
       if (!res.ok) throw new Error("AI single question generation failed");
 
-      const resData = (await res.json()) as { questions: TOSExportQuestion[] };
+      const resData = (await res.json()) as { questions: TOSExportQuestion[]; warnings?: string[] };
+      setGenerationWarnings((previous) => [...previous, ...(resData.warnings || [])]);
       if (resData && resData.questions && resData.questions[0]) {
         const updated = [...questions];
         updated[index] = {
@@ -913,7 +931,7 @@ export function TOSGeneratorScreen({
                 size="header"
                 variant="outline"
                 disabled={isSaving}
-                onClick={handleSaveDraft}
+                onClick={() => questions.length > 0 ? guardShortExam(handleSaveDraft) : void handleSaveDraft()}
                 className="min-w-0 whitespace-nowrap"
               >
                 <Save className="size-4" />
@@ -1002,7 +1020,7 @@ export function TOSGeneratorScreen({
               <span className="text-muted-foreground">→</span>
               <button
                 disabled={questions.length === 0}
-                onClick={() => setStep("export")}
+                onClick={proceedToExport}
                 className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${step === "export" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"} disabled:opacity-40`}
               >
                 <span className="flex h-4 w-4 items-center justify-center rounded bg-secondary text-[10px] text-secondary-foreground">6</span>
@@ -1018,6 +1036,21 @@ export function TOSGeneratorScreen({
 
         {/* Screen Content Body */}
         <div className="min-w-0 p-3 sm:p-6">
+          {(step === "ai-review" || step === "export") &&
+            (generationWarnings.length > 0 || shortfall.missing > 0) && (
+              <section aria-label="Generator warnings" role="status" className="mb-6 rounded border-2 border-amber-600 bg-amber-50 p-4 text-black">
+                <h3 className="font-bold">{shortfall.missing > 0 ? "Exam does not meet the blueprint target" : "Generator warnings"}</h3>
+                <p>Requested: {shortfall.requested} | Produced: {shortfall.produced} | Missing: {shortfall.missing}</p>
+                <table className="mt-2 w-full text-left text-sm" aria-label="Requested and produced question counts">
+                  <thead><tr><th>Type</th><th>Requested</th><th>Produced</th><th>Missing</th></tr></thead>
+                  <tbody>{shortfall.perType.map((item) => (
+                    <tr key={item.type}><th>{item.type.replaceAll("_", " ")}</th><td>{item.requested}</td><td>{item.produced}</td><td>{item.missing}</td></tr>
+                  ))}</tbody>
+                </table>
+                {generationWarnings.length > 0 && <ul className="mt-2 list-disc pl-5">{generationWarnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}
+                {shortfall.missing > 0 && <p className="mt-2">Regenerate or revise the blueprint, or explicitly confirm before exporting or finalizing this short exam.</p>}
+              </section>
+            )}
           {/* ══════════════════════════════════════════════════════════════════
               LANDING PAGE: MY TOS EXAMS ARCHIVE
              ══════════════════════════════════════════════════════════════════ */}
@@ -2017,7 +2050,7 @@ export function TOSGeneratorScreen({
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => setStep("export")}
+                    onClick={proceedToExport}
                     className="rounded border-2 border-border bg-primary text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary-hover"
                   >
                     Proceed to Export <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
@@ -2306,6 +2339,7 @@ export function TOSGeneratorScreen({
                                           onClick={() => {
                                             setQuestions(questions.filter((_, i) => i !== globalIdx));
                                           }}
+                                          aria-label={`Delete question ${globalIdx + 1}`}
                                           className="rounded h-7 border-2 border-border bg-destructive/10 px-2 text-xs font-bold text-destructive hover:bg-destructive/10 shadow-sm"
                                         >
                                           <Trash2 className="h-3.5 w-3.5" />
@@ -2361,7 +2395,7 @@ export function TOSGeneratorScreen({
                 </Button>
                 <Button
                   disabled={questions.length === 0}
-                  onClick={() => setStep("export")}
+                  onClick={proceedToExport}
                   className="rounded border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover"
                 >
                   Proceed to Final Export <ArrowRight className="ml-1.5 h-4 w-4" />
@@ -2441,7 +2475,7 @@ export function TOSGeneratorScreen({
                   <div className="mt-4 flex flex-col gap-2">
                     <Button
                       disabled={isExporting !== null || questions.length === 0}
-                      onClick={async () => {
+                      onClick={() => guardShortExam(async () => {
                         setIsExporting("exam-pdf");
                         await exportTosExamPdf(questions, {
                           title,
@@ -2450,14 +2484,14 @@ export function TOSGeneratorScreen({
                           includeAnswerKey,
                         });
                         setIsExporting(null);
-                      }}
+                      })}
                       className="rounded border-2 border-border bg-primary font-bold text-primary-foreground hover:bg-primary-hover shadow-sm"
                     >
                       <FileDown className="mr-2 h-4 w-4" /> Export Exam Paper PDF (Portrait Legal)
                     </Button>
                     <Button
                       disabled={isExporting !== null || questions.length === 0}
-                      onClick={async () => {
+                      onClick={() => guardShortExam(async () => {
                         setIsExporting("exam-docx");
                         await exportTosExamDocx(questions, {
                           title,
@@ -2466,7 +2500,7 @@ export function TOSGeneratorScreen({
                           includeAnswerKey,
                         });
                         setIsExporting(null);
-                      }}
+                      })}
                       className="rounded border-2 border-border bg-card font-bold text-foreground hover:bg-muted/20 shadow-sm"
                     >
                       <FileText className="mr-2 h-4 w-4" /> Export Exam Paper Word (.docx)
@@ -2484,10 +2518,10 @@ export function TOSGeneratorScreen({
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Review
                 </Button>
                 <Button
-                  onClick={() => {
+                  onClick={() => guardShortExam(() => {
                     handleSaveDraft();
                     setStep("saved-list");
-                  }}
+                  })}
                   className="rounded border-2 border-border bg-success/20 font-bold text-foreground shadow"
                 >
                   <CheckCircle2 className="mr-1.5 h-4 w-4" /> Save & Return to TOS Archive
@@ -2497,6 +2531,23 @@ export function TOSGeneratorScreen({
           )}
         </div>
       </Card>
+      <Dialog open={pendingAction !== null} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
+        <Dialog.Content size="sm">
+          <Dialog.Header><Dialog.Title>Continue with a short exam?</Dialog.Title></Dialog.Header>
+          <Dialog.Description className="px-5 pt-4">
+            The blueprint requests {shortfall.requested} questions, but this exam has {shortfall.produced}.
+            {" "}{shortfall.missing} requested question(s) are missing by type. Confirm to continue with the current questions.
+          </Dialog.Description>
+          <Dialog.Footer>
+            <Button variant="outline" onClick={() => setPendingAction(null)}>Cancel</Button>
+            <Button onClick={() => {
+              const action = pendingAction;
+              setPendingAction(null);
+              if (action) void action.run();
+            }}>Confirm short exam</Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
       </div>
     </div>
   );
