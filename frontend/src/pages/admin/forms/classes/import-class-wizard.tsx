@@ -38,10 +38,11 @@ const CLASS_IMPORT_TEMPLATE_HEADERS = [
 ];
 const CLASS_IMPORT_TEMPLATE_HEADER_ROW = CLASS_IMPORT_TEMPLATE_HEADERS.join(",");
 
-export default function ImportClassWizard({ onContinue, onValidationStale, onBack }: {
+export default function ImportClassWizard({ onContinue, onValidationStale, onBack, onClose }: {
   onContinue: (setup: ManualClassSetup, assignmentState: ManualAssignmentWorkspaceState) => void;
   onValidationStale?: () => void;
   onBack?: () => void;
+  onClose: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [options, setOptions] = useState<ClassFormOptions | null>(null);
@@ -251,14 +252,15 @@ export default function ImportClassWizard({ onContinue, onValidationStale, onBac
       {validationError && <ValidationErrorPanel error={validationError} onDownloadTemplate={downloadTemplate} />}
       {validationResult && <ValidationSuccessPanel result={validationResult} canContinue={canContinueToAssignments(validationResult) && !isValidating && !validationError} onContinue={continueToAssignments} />}
 
-      <Dialog.Footer className="px-0 border-t-0 pt-2 flex justify-between w-full">
-        <div className="flex gap-2">
+      <Dialog.Footer className="-mx-4 -mb-4 w-[calc(100%+2rem)] justify-between border-t-2 px-4 py-4">
+        <Button variant="outline" onClick={onClose}>Close</Button>
+        <div className="flex flex-wrap gap-2">
           {onBack && <Button variant={"outline"} onClick={onBack}>Back</Button>}
           <Button variant={"outline"} onClick={downloadTemplate}><Download className="size-4 mr-2" /> Download Template</Button>
+          <Button disabled={!canValidate} onClick={validateCsv}>
+            {isValidating ? "Validating CSV..." : "Validate CSV"}
+          </Button>
         </div>
-        <Button disabled={!canValidate} onClick={validateCsv}>
-          {isValidating ? "Validating CSV..." : "Validate CSV"}
-        </Button>
       </Dialog.Footer>
     </div>
   );

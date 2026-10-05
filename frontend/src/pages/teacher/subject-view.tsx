@@ -1239,14 +1239,14 @@ export default function SubjectDetails() {
                         {detailError}
                       </div>
                     ) : selectedClasswork ? (
-                      <div className="grid gap-5 p-5 lg:grid-cols-[1.4fr_1fr]">
+                      <div className="grid grid-cols-1 gap-5 p-5">
                         <div className="space-y-4">
                           <Card className="block">
                             <Card.Content className="space-y-3">
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge
                                   variant="secondary"
-                                  className="bg-[#7ABA78] text-xs font-semibold"
+                                  className="text-xs font-semibold"
                                 >
                                   {selectedClasswork.classwork_type || "Classwork"}
                                 </Badge>
@@ -1270,7 +1270,7 @@ export default function SubjectDetails() {
                                     : "Draft"}
                                 </Badge>
                                 {selectedClasswork.is_locked && (
-                                  <Badge className="rounded border-2 border-red-600 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                                  <Badge variant="destructive" size="sm" className="font-semibold">
                                     Locked
                                   </Badge>
                                 )}

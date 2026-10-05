@@ -1235,6 +1235,172 @@ function LessonsTab({
                       {(selectedSubjectId ||
                         currentSubjectLoad?.subject_id ||
                         detail.subject_loads[0]?.subject_id) && (
+                <div className="space-y-4 min-w-0">
+                  {/* Render Competency Accordions */}
+                  {competencies.map((comp) => {
+                    const compLessons =
+                      lessonsByCompetency.get(comp.competency_id) || [];
+                    const isCollapsed =
+                      lessonFilter !== "all"
+                        ? false
+                        : (collapsedCompetencies[comp.competency_id] ?? true);
+
+                    if (lessonFilter !== "all" && compLessons.length === 0) {
+                      return null;
+                    }
+
+                    return (
+                      <Card
+                        key={comp.competency_id}
+                        className="flex min-w-0 flex-col overflow-hidden border-2 border-black bg-white p-0 shadow-md hover:shadow-md"
+                      >
+                        {/* Competency Header Bar */}
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => toggleCompetencyCollapse(comp.competency_id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              toggleCompetencyCollapse(comp.competency_id);
+                            }
+                          }}
+                          className="group flex w-full min-w-0 cursor-pointer select-none items-center justify-between gap-3 border-b-2 border-black bg-primary px-3 py-3 sm:px-4 sm:py-3.5"
+                          aria-label={isCollapsed ? "Expand competency" : "Collapse competency"}
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                            <div className="min-w-0 flex-1">
+                              <div className="mb-1 flex flex-wrap items-center gap-2 min-w-0">
+                                <Award
+                                  size={20}
+                                  className="text-black shrink-0"
+                                />
+                                <Card.Title className="text-base font-bold text-gray-950 sm:text-lg md:text-xl break-words line-clamp-2">
+                                  {comp.competency_code || comp.statement}
+                                </Card.Title>
+                                <Badge
+                                  variant="secondary"
+                                  size="sm"
+                                  className="shrink-0 border border-black bg-white text-xs font-bold text-black"
+                                >
+                                  {compLessons.length} lesson
+                                  {compLessons.length === 1 ? "" : "s"}
+                                </Badge>
+                                {(comp.target_hours || 0) > 0 && (
+                                  <Badge
+                                    variant="secondary"
+                                    size="sm"
+                                    className="shrink-0 border border-black bg-white text-xs font-bold text-black"
+                                  >
+                                    {comp.target_hours} hrs
+                                  </Badge>
+                                )}
+                              </div>
+                              {comp.competency_code && comp.statement && (
+                                <p className="text-xs font-medium text-gray-700 break-words line-clamp-2">
+                                  {comp.statement}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Competency Body when expanded */}
+                        {!isCollapsed && (
+                          <Card.Content className="flex flex-col gap-3 bg-white p-4">
+                            {compLessons.length > 0 ? (
+                              compLessons.map(renderLessonCard)
+                            ) : (
+                              <div className="flex items-center justify-between border-2 border-dashed border-black bg-[#FFFDF0] p-4">
+                                <div className="flex items-center gap-2 text-xs font-bold text-black">
+                                  <BookOpen size={16} className="text-black" />
+                                  <span>
+                                    No lessons assigned to this competency yet.
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </Card.Content>
+                        )}
+                      </Card>
+                    );
+                  })}
+
+                  {/* Standalone / Unassigned Lessons Section */}
+                  {unassignedLessons.length > 0 && (
+                    <div className="flex flex-col p-0 min-w-0 w-full">
+                      {competencies.length > 0 ? (
+                        <>
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() =>
+                              setIsUnassignedExpanded((prev) => !prev)
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ")
+                                setIsUnassignedExpanded((prev) => !prev);
+                            }}
+                            className="flex items-center justify-between border-b-2 border-black bg-background text-left cursor-pointer group min-w-0 w-full"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="rounded border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors shrink-0">
+                                {isUnassignedExpanded || lessonFilter !== "all" ? (
+                                  <ChevronDown
+                                    size={16}
+                                    className="text-black"
+                                  />
+                                ) : (
+                                  <ChevronRight
+                                    size={16}
+                                    className="text-black"
+                                  />
+                                )}
+                              </div>
+                              <BookOpen
+                                size={18}
+                                className="text-black shrink-0"
+                              />
+                              <h4 className="text-sm md:text-base font-bold text-black">
+                                Unassigned Lessons
+                              </h4>
+                              <Badge
+                                variant="secondary"
+                                size="sm"
+                                className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
+                              >
+                                {unassignedLessons.length} to assign
+                              </Badge>
+                            </div>
+                          </div>
+
+                          {(isUnassignedExpanded || lessonFilter !== "all") && (
+                            <div className="flex flex-col gap-3 p-4 bg-white min-w-0 w-full">
+                              {unassignedLessons.map(renderLessonCard)}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="flex flex-col gap-3 bg-white min-w-0 w-full">
+                          {unassignedLessons.map(renderLessonCard)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Empty state when no competencies and no lessons */}
+                  {competencies.length === 0 &&
+                    unassignedLessons.length === 0 && (
+                      <Empty className="shadow-md hover:shadow-none transition-shadow">
+                        <EmptyHeader>
+                          <EmptyMedia>
+                          </EmptyMedia>
+                          <EmptyTitle>No Competencies or Lessons Yet</EmptyTitle>
+                          <EmptyDescription className="whitespace-nowrap text-center">
+                            No learning competencies or lessons have been added for this subject yet.
+                          </EmptyDescription>
+                        </EmptyHeader>
+                        {(selectedSubjectId || currentSubjectLoad?.subject_id || detail.subject_loads[0]?.subject_id) && (
                           <EmptyContent className="mt-2">
                             <Button
                               type="button"

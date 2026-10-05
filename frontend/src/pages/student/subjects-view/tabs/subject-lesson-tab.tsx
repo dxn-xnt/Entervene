@@ -1809,7 +1809,7 @@ export default function SubjectLessonTab({
           >
             <Dialog.Content size="3xl" className="max-h-[90vh] p-0">
               {/* Modal header */}
-              <Dialog.Header position="fixed" className="bg-primary text-black">
+              <Dialog.Header position="fixed" className="bg-primary text-primary-foreground">
                 <div>
                   <p className="text-xs">Student classwork detail</p>
                   <h2 className="text-xl font-bold">
@@ -2068,7 +2068,7 @@ export default function SubjectLessonTab({
                               finished, mark it as completed to update your
                               progress.
                             </p>
-                            <button
+                            <Button
                               type="button"
                               onClick={() =>
                                 handleCompleteReading(
@@ -2076,12 +2076,12 @@ export default function SubjectLessonTab({
                                 )
                               }
                               disabled={isMarkingRead}
-                              className="w-full rounded border border-black bg-[#7ABA78] hover:bg-[#68A866] text-black px-4 py-2 text-sm font-bold transition-colors disabled:opacity-50"
+                              className="w-full disabled:opacity-50"
                             >
                               {isMarkingRead
                                 ? "Marking as completed..."
                                 : "Mark as Completed"}
-                            </button>
+                            </Button>
                           </div>
                         )}
                       </div>

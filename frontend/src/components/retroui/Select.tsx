@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import { useInsideDialog } from "./dialog-surface-context";
 
 interface CustomSelectProps extends SelectPrimitive.SelectProps {
   onChange?: (event: { target: { value: string } }) => void;
@@ -29,11 +30,13 @@ const SelectTrigger = ({
   children,
   ...props
 }: SelectPrimitive.SelectTriggerProps) => {
+  const insideDialog = useInsideDialog();
   return (
     <SelectPrimitive.Trigger
       className={cn(
         "flex h-10 rounded min-w-40 items-center shadow-md bg-background focus:shadow-xs justify-between border-2 border-input border-border px-4 py-2 placeholder:text-muted-foreground outline-none focus:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 [&>span]:truncate text-left",
         className,
+        insideDialog && "shadow-none! focus:shadow-none! focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
       )}
       {...props}
     >
@@ -65,6 +68,7 @@ const SelectContent = ({
   sideOffset = 4,
   ...props
 }: SelectPrimitive.SelectContentProps) => {
+  const insideDialog = useInsideDialog();
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
@@ -75,6 +79,7 @@ const SelectContent = ({
           position === "popper" &&
           "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1 max-w-[var(--radix-select-trigger-width)] w-[var(--radix-select-trigger-width)]",
           className,
+          insideDialog && "shadow-none!",
         )}
         position={position}
         side={side}

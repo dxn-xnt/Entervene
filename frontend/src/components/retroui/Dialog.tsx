@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
 import React, { type HTMLAttributes, type ReactNode } from "react";
 import { X } from "lucide-react";
+import { DialogSurfaceContext } from "./dialog-surface-context";
 
 const Dialog = BaseDialog.Root;
 
@@ -166,10 +167,12 @@ const DialogContent = (inputProps: IDialogContentProps & { ref?: React.Ref<HTMLD
         ref={ref}
         {...props}
       >
-        <BaseDialog.Title className="sr-only" />
-        <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-          {children}
-        </div>
+        <DialogSurfaceContext.Provider value>
+          <BaseDialog.Title className="sr-only" />
+          <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+            {children}
+          </div>
+        </DialogSurfaceContext.Provider>
       </BaseDialog.Popup>
     </BaseDialog.Portal>
   );
