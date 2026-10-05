@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import {
   Archive,
+  ArchiveIcon,
   Award,
   BookOpen,
   ClipboardList,
@@ -10,14 +11,13 @@ import {
   MoreVertical,
   Pencil,
   Plus,
-  Search,
   Trash2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { formatDate, toTitleCase } from "@/lib/formatters";
-import { Input } from "@/components/retroui/Input";
+import { Text } from "@/components/retroui/Text";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Accordion } from "@/components/retroui/Accordion";
@@ -30,7 +30,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { OverviewCard } from "@/components/overview-cards";
 import { IconContainer } from "@/components/icon-container";
 import type { CompetencyItem, Lesson, LinkedClasswork } from "./types";
@@ -40,6 +46,8 @@ type SubjectLessonListProps = {
   setLessonSearch: (value: string) => void;
   lessonSort: "order" | "newest" | "oldest" | "title";
   setLessonSort: (value: "order" | "newest" | "oldest" | "title") => void;
+  competencyFilter?: string;
+  setCompetencyFilter?: (value: string) => void;
   filteredLessons: Lesson[];
   totalLessons?: number;
   expandedLessonId: number | null;
@@ -66,9 +74,10 @@ type SubjectLessonListProps = {
 
 export default function SubjectLessonList({
   lessonSearch,
-  setLessonSearch,
   lessonSort,
   setLessonSort,
+  competencyFilter,
+  setCompetencyFilter,
   filteredLessons,
   expandedLessonId,
   linkedClassworks,
@@ -89,10 +98,22 @@ export default function SubjectLessonList({
   classworkCount = 0,
   overviewCompletion = 0,
 }: SubjectLessonListProps) {
+  const [internalCompetencyFilter, setInternalCompetencyFilter] = useState("all");
+  const activeCompetencyFilter =
+    competencyFilter !== undefined
+      ? competencyFilter
+      : internalCompetencyFilter;
+  const handleCompetencyFilterChange =
+    setCompetencyFilter || setInternalCompetencyFilter;
+
   const [lessonToArchive, setLessonToArchive] = useState<Lesson | null>(null);
   const [isArchivingLesson, setIsArchivingLesson] = useState(false);
   const quarterlyAssessments = (subjectAssignments ?? []).filter(
     (cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT",
+  );
+  const quarterlyIds = useMemo(
+    () => new Set(quarterlyAssessments.map((q) => q.classwork_assignment_id)),
+    [quarterlyAssessments],
   );
 
   const sortOptions = [
@@ -102,28 +123,15 @@ export default function SubjectLessonList({
     { value: "title", label: "Title A-Z" },
   ];
 
-  const [collapsedCompetencies, setCollapsedCompetencies] = useState<Record<number, boolean>>({});
-  const [isUnassignedExpanded, setIsUnassignedExpanded] = useState<boolean>(false);
-
   useEffect(() => {
-    setCollapsedCompetencies((previous) => {
-      const next = { ...previous };
-      competencies.forEach((competency, index) => {
-        if (next[competency.competency_id] === undefined) {
-          next[competency.competency_id] = index !== 0;
-        }
-      });
-      return next;
-    });
-    setIsUnassignedExpanded(competencies.length === 0);
-  }, [competencies]);
-
-  const toggleCompetencyCollapse = (competencyId: number) => {
-    setCollapsedCompetencies((previous) => ({
-      ...previous,
-      [competencyId]: !previous[competencyId],
-    }));
-  };
+    if (
+      activeCompetencyFilter !== "all" &&
+      activeCompetencyFilter !== "unassigned" &&
+      !competencies.some((c) => String(c.competency_id) === activeCompetencyFilter)
+    ) {
+      handleCompetencyFilterChange("all");
+    }
+  }, [competencies, activeCompetencyFilter, handleCompetencyFilterChange]);
 
   // Group lessons by competency_id
   const { lessonsByCompetency, unassignedLessons } = useMemo(() => {
@@ -144,6 +152,10 @@ export default function SubjectLessonList({
 
     return { lessonsByCompetency: byComp, unassignedLessons: unassigned };
   }, [filteredLessons, competencies]);
+
+  const showUnassigned =
+    (activeCompetencyFilter === "all" || activeCompetencyFilter === "unassigned") &&
+    unassignedLessons.length > 0;
 
   // Reusable renderer for a Lesson card + linked classwork items
   const renderLessonItem = (lesson: Lesson) => {
@@ -231,12 +243,24 @@ export default function SubjectLessonList({
                       onClick={(e) => e.stopPropagation()}
                       className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] min-w-[150px] p-1 rounded font-semibold text-xs z-50"
                     >
+                      {openLessonDetail && (
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openLessonDetail(lesson);
+                          }}
+                          className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-yellow-100"
+                        >
+                          <Eye size={14} />
+                          <span>View Lesson</span>
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem
                         onClick={(e) => {
                           e.stopPropagation();
                           openLessonManager(lesson);
                         }}
-                        className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2"
+                        className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-yellow-100"
                       >
                         <Pencil size={14} />
                         <span>Manage</span>
@@ -265,9 +289,6 @@ export default function SubjectLessonList({
                 </p>
 
                 {(() => {
-                  const quarterlyIds = new Set(
-                    quarterlyAssessments.map((q) => q.classwork_assignment_id),
-                  );
                   const lessonClassworks = classworks.filter(
                     (cw) =>
                       cw.classwork_category !== "QUARTERLY_ASSESSMENT" &&
@@ -322,19 +343,19 @@ export default function SubjectLessonList({
                     ));
                   }
                   return (
-                    <Card className="block bg-white border border-black p-3">
-                      <Card.Content className="flex items-center gap-3">
-                        <ClipboardList size={20} />
-                        <div>
-                          <Card.Title className="text-base font-bold">
-                            No classworks yet
-                          </Card.Title>
-                          <p className="text-sm font-normal text-gray-500">
-                            Readings, activities, assignments, and quizzes linked to this lesson will appear here.
-                          </p>
-                        </div>
-                      </Card.Content>
-                    </Card>
+                    <Empty className="p-4 shadow-none bg-retro">
+                      <EmptyHeader>
+                        <EmptyMedia>
+                          <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
+                            <ClipboardList className="size-5 text-black" />
+                          </div>
+                        </EmptyMedia>
+                        <EmptyTitle>No classworks yet</EmptyTitle>
+                        <EmptyDescription className="whitespace-nowrap">
+                          Readings, activities, assignments, and quizzes linked to this lesson will appear here.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
                   );
                 })()}
                 <div className="flex justify-end">
@@ -354,6 +375,15 @@ export default function SubjectLessonList({
         </ContextMenu.Trigger>
 
         <ContextMenu.Content className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] min-w-[160px] p-1 rounded font-semibold text-xs z-50">
+          {openLessonDetail && (
+            <ContextMenu.Item
+              onClick={() => openLessonDetail(lesson)}
+              className="flex items-center gap-2 cursor-pointer px-2.5 py-2 hover:bg-yellow-100 rounded focus:bg-yellow-100 text-xs font-bold"
+            >
+              <Eye size={14} />
+              <span>View Lesson</span>
+            </ContextMenu.Item>
+          )}
           <ContextMenu.Item
             onClick={() => openLessonManager(lesson)}
             className="flex items-center gap-2 cursor-pointer px-2.5 py-2 hover:bg-yellow-100 rounded focus:bg-yellow-100 text-xs font-bold"
@@ -471,14 +501,22 @@ export default function SubjectLessonList({
         </>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] items-start min-w-0">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] items-start min-w-0">
         {/* ── Main Panel (Left to Center): Toolbar, Competencies, and Lessons ── */}
-        <div className="flex flex-col gap-5 min-w-0">
+        <div className="flex flex-col gap-4 min-w-0">
+          {/* Header toolbar */}
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Text as="h3" className="text-xl font-bold tracking-tight sm:text-2xl">
+                Lessons & Competencies
+              </Text>
+            </div>
+          </div>
 
           {/* ── Search, Sort, and Add Competency Toolbar ── */}
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex flex-1 items-center gap-3">
-              <label className="relative md:w-80">
+          <div className="-mt-2 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-row items-center justify-between gap-3 w-full">
+              {/* <label className="relative md:w-80">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                 <Input
                   value={lessonSearch}
@@ -486,7 +524,32 @@ export default function SubjectLessonList({
                   placeholder="Search competencies or lessons..."
                   className="h-10 w-full border-black pl-9 pr-3"
                 />
-              </label>
+              </label> */}
+
+              <Select
+                value={activeCompetencyFilter}
+                onValueChange={(val) => handleCompetencyFilterChange(val)}
+              >
+                <Select.Trigger className="h-10 text-sm w-full max-w-112">
+                  <Select.Value placeholder="Filter by competency" />
+                </Select.Trigger>
+                <Select.Content className="border-2 border-black bg-white overflow-y-auto">
+                  <Select.Item value="all">All Competencies</Select.Item>
+                  {competencies.map((comp) => (
+                    <Select.Item
+                      key={comp.competency_id}
+                      value={String(comp.competency_id)}
+                    >
+                      {comp.competency_code
+                        ? `${comp.competency_code} - ${comp.statement}`
+                        : comp.statement}
+                    </Select.Item>
+                  ))}
+                  {unassignedLessons.length > 0 && (
+                    <Select.Item value="unassigned">Unassigned Lessons</Select.Item>
+                  )}
+                </Select.Content>
+              </Select>
 
               <Select
                 value={lessonSort}
@@ -494,10 +557,10 @@ export default function SubjectLessonList({
                   setLessonSort(v as "order" | "newest" | "oldest" | "title")
                 }
               >
-                <Select.Trigger className="h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold">
+                <Select.Trigger className="h-10 text-sm">
                   <Select.Value placeholder="Sort by" />
                 </Select.Trigger>
-                <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <Select.Content className="border-2 border-black">
                   {sortOptions.map((option) => (
                     <Select.Item key={option.value} value={option.value}>
                       {option.label}
@@ -510,11 +573,29 @@ export default function SubjectLessonList({
           </div>
 
           {/* ── Hierarchy View: Competency Containers ── */}
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-3">
             {competencies.length > 0 &&
               competencies.map((comp) => {
                 const compLessons = lessonsByCompetency.get(comp.competency_id) || [];
-                const isCollapsed = collapsedCompetencies[comp.competency_id] ?? true;
+                const compClassworkCount = compLessons.reduce((acc, lesson) => {
+                  const cws = linkedClassworks[lesson.lesson_id] || [];
+                  return (
+                    acc +
+                    cws.filter(
+                      (cw) =>
+                        cw.classwork_category !== "QUARTERLY_ASSESSMENT" &&
+                        !quarterlyIds.has(cw.classwork_assignment_id),
+                    ).length
+                  );
+                }, 0);
+
+                // If competency filter is active and doesn't match this competency, hide
+                if (
+                  activeCompetencyFilter !== "all" &&
+                  String(comp.competency_id) !== activeCompetencyFilter
+                ) {
+                  return null;
+                }
 
                 // If search query is active and neither competency statement nor its lessons match, hide
                 if (lessonSearch.trim()) {
@@ -528,133 +609,160 @@ export default function SubjectLessonList({
                 }
 
                 return (
-                  <Card
-                    key={comp.competency_id}
-                    className="flex w-full min-w-0 flex-col overflow-hidden border-black bg-white p-0 transition-none hover:shadow-md"
-                  >
-                    {/* ── Competency Header ── */}
-                    <Card.Header className="mb-0 flex-row items-center justify-between gap-3 border-b-2 border-black bg-primary px-4 py-3.5">
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        aria-expanded={!isCollapsed}
-                        onClick={() => toggleCompetencyCollapse(comp.competency_id)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            toggleCompetencyCollapse(comp.competency_id);
-                          }
-                        }}
-                        className="min-w-0 flex-1 cursor-pointer text-left"
-                      >
-                        <div className="mb-1 flex flex-wrap items-center gap-2 min-w-0">
-                          <Award size={20} className="text-black shrink-0" />
-                          <Card.Title className="text-base font-bold text-gray-950 sm:text-lg md:text-xl break-words line-clamp-2">
-                            {comp.competency_code || comp.statement}
-                          </Card.Title>
-                          <Badge
-                            variant="secondary"
-                            size="sm"
-                            className="bg-white text-xs font-bold text-black"
-                          >
-                            {compLessons.length} lesson{compLessons.length === 1 ? "" : "s"}
-                          </Badge>
-                          {(comp.target_hours || 0) > 0 && (
-                            <Badge
-                              variant="secondary"
-                              size="sm"
-                              className="bg-white text-xs font-bold text-black"
-                            >
-                              {comp.target_hours} hrs
-                            </Badge>
-                          )}
-                        </div>
-                        {comp.competency_code && comp.statement && (
-                          <p className="text-xs font-medium text-gray-700 break-words line-clamp-2">
-                            {comp.statement}
-                          </p>
-                        )}
-                      </div>
+                  <ContextMenu key={comp.competency_id}>
+                    <ContextMenu.Trigger className="block w-full">
+                      <Card className="flex flex-col">
+                        {/* ── Competency Header ── */}
+                        <Card.Header className="flex flex-row items-center justify-between gap-3 px-1 mb-0">
+                          <div className="flex flex-col gap-1 min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2 min-w-0">
+                              <Card.Title className="text-base text-lg font-bold text-black break-words line-clamp-2">
+                                {comp.competency_code || comp.statement}
+                              </Card.Title>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        {onAddLessonToCompetency && (
-                          <Button
-                            type="button"
-                            variant="default"
-                            size="sm"
-                            onClick={() => onAddLessonToCompetency(comp.competency_id)}
-                            className="gap-1 border-2 border-black bg-white hover:bg-yellow-50 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                          >
-                            <Plus size={14} />
-                            Add Lesson
-                          </Button>
-                        )}
-                        {openCompetencyForm && (
-                          <Tooltip>
-                            <TooltipTrigger render={<span className="inline-flex"><Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              onClick={() => openCompetencyForm(comp)}
-                              aria-label="Edit competency"
-                              className="border-black bg-white text-black hover:bg-yellow-50"
-                            >
-                              <Pencil size={14} />
-                            </Button></span>} />
-                            <TooltipContent>Edit competency</TooltipContent>
-                          </Tooltip>
-                        )}
-                        {onArchiveCompetency && (
-                          <Tooltip>
-                            <TooltipTrigger render={<span className="inline-flex"><Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              onClick={() => onArchiveCompetency(comp.competency_id)}
-                              aria-label="Archive competency"
-                              className="border-black bg-white text-red-600 hover:bg-red-50"
-                            >
-                              <Trash2 size={14} />
-                            </Button></span>} />
-                            <TooltipContent>Archive competency</TooltipContent>
-                          </Tooltip>
-                        )}
-                      </div>
-                    </Card.Header>
 
-                    {/* ── Competency Lessons ── */}
-                    {!isCollapsed && (
-                      <Card.Content className="flex flex-col gap-3 bg-white p-4">
-                        {compLessons.length > 0 ? (
-                          compLessons.map(renderLessonItem)
-                        ) : (
-                          <div className="flex items-center justify-between border-2 border-dashed border-black bg-[#FFFDF0] p-4">
-                            <div className="flex items-center gap-2 text-xs font-bold text-black">
-                              <BookOpen size={16} className="text-black" />
-                              <span>No lessons assigned to this competency yet.</span>
                             </div>
-                            {onAddLessonToCompetency && (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => onAddLessonToCompetency(comp.competency_id)}
-                                className="border-2 border-black bg-white hover:bg-yellow-50 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                              >
-                                <Plus size={14} />
-                                Create First Lesson
-                              </Button>
+                            {comp.competency_code && comp.statement && (
+                              <p className="text-xs text-muted-foreground break-words line-clamp-2">
+                                {comp.statement}
+                              </p>
                             )}
                           </div>
-                        )}
-                      </Card.Content>
-                    )}
-                  </Card>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge
+                              variant="surface"
+                              size="sm"
+                            >
+                              {compClassworkCount}{" "}
+                              {compClassworkCount === 1 ? "classwork" : "classworks"}
+                            </Badge>
+                            {(openCompetencyForm || onArchiveCompetency) && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="icon"
+                                    className="p-1 shadow-none"
+                                    aria-label="Competency options"
+                                  >
+                                    <MoreVertical size={14} />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  align="end"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="border-2 border-black bg-white min-w-[180px] p-1 rounded font-semibold text-xs z-50"
+                                >
+                                  {onAddLessonToCompetency && (
+                                    <DropdownMenuItem
+                                      onClick={() => onAddLessonToCompetency(comp.competency_id)}
+                                      className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-yellow-100"
+                                    >
+                                      <Plus size={14} />
+                                      Add Lesson
+                                    </DropdownMenuItem>
+                                  )}
+                                  {openCompetencyForm && (
+                                    <DropdownMenuItem
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openCompetencyForm(comp);
+                                      }}
+                                      className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-yellow-100"
+                                    >
+                                      <Pencil size={14} />
+                                      <span>Edit Competency</span>
+                                    </DropdownMenuItem>
+                                  )}
+                                  {onArchiveCompetency && (
+                                    <DropdownMenuItem
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onArchiveCompetency(comp.competency_id);
+                                      }}
+                                      className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-red-50 hover:text-red-700"
+                                    >
+                                      <ArchiveIcon size={14} />
+                                      <span>Archive Competency</span>
+                                    </DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </div>
+                        </Card.Header>
+
+                        {/* ── Competency Lessons ── */}
+                        <div className="flex flex-col gap-3 bg-white">
+                          {compLessons.length > 0 ? (
+                            compLessons.map(renderLessonItem)
+                          ) : (
+                            <div className="flex items-center justify-between border-2 border-dashed border-black bg-[#FFFDF0] p-4">
+                              <div className="flex items-center gap-2 text-xs font-bold text-black">
+                                <BookOpen size={16} className="text-black" />
+                                <span>No lessons assigned to this competency yet.</span>
+                              </div>
+                              {onAddLessonToCompetency && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => onAddLessonToCompetency(comp.competency_id)}
+                                  className="border-2 border-black bg-white hover:bg-yellow-50 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                >
+                                  <Plus size={14} />
+                                  Create First Lesson
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+                    </ContextMenu.Trigger>
+
+                    <ContextMenu.Content className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] min-w-[160px] p-1 rounded font-semibold text-xs z-50">
+                      {onAddLessonToCompetency && (
+                        <ContextMenu.Item
+                          onClick={() => onAddLessonToCompetency(comp.competency_id)}
+                          className="flex items-center gap-2 cursor-pointer px-2.5 py-2 hover:bg-yellow-100 rounded focus:bg-yellow-100 text-xs font-bold"
+                        >
+                          <Plus size={14} />
+                          <span>Add Lesson</span>
+                        </ContextMenu.Item>
+                      )}
+                      {openCompetencyForm && (
+                        <ContextMenu.Item
+                          onClick={() => openCompetencyForm(comp)}
+                          className="flex items-center gap-2 cursor-pointer px-2.5 py-2 hover:bg-yellow-100 rounded focus:bg-yellow-100 text-xs font-bold"
+                        >
+                          <Pencil size={14} />
+                          <span>Edit Competency</span>
+                        </ContextMenu.Item>
+                      )}
+                      {onArchiveCompetency && (
+                        <>
+                          {(onAddLessonToCompetency || openCompetencyForm) && (
+                            <ContextMenu.Separator className="my-1 border-b border-black" />
+                          )}
+                          <ContextMenu.Item
+                            variant="destructive"
+                            onClick={() => onArchiveCompetency(comp.competency_id)}
+                            className="flex items-center gap-2 cursor-pointer px-2.5 py-2 text-red-600 hover:bg-red-50 hover:text-red-700 rounded focus:bg-red-50 focus:text-red-700 text-xs font-bold"
+                          >
+                            <Trash2 size={14} />
+                            <span>Archive Competency</span>
+                          </ContextMenu.Item>
+                        </>
+                      )}
+                    </ContextMenu.Content>
+                  </ContextMenu>
                 );
               })}
 
             {/* ── Standalone / Unassigned Lessons Section (Bottom, Collapsible) ── */}
-            {unassignedLessons.length > 0 && (
+            {showUnassigned && (
               <Card className="flex flex-col">
                 <Card.Header className="flex items-start gap-1 px-1 mb-0">
                   <Card.Title className="text-base text-lg font-bold text-black">
@@ -662,11 +770,9 @@ export default function SubjectLessonList({
                   </Card.Title>
                 </Card.Header>
 
-                {isUnassignedExpanded && (
-                  <div className="flex flex-col gap-3 bg-white">
-                    {unassignedLessons.map(renderLessonItem)}
-                  </div>
-                )}
+                <div className="flex flex-col gap-3 bg-white">
+                  {unassignedLessons.map(renderLessonItem)}
+                </div>
 
                 <p className="text-xs text-muted-foreground hidden sm:block px-1">
                   All lessons must belong to a learning competency.

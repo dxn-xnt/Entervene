@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import AppLayout from "@/layouts/app-layout";
 import { API_URL, apiFetch } from "@/lib/api";
 import AttachmentDisplay from "@/components/attachment-display";
-import CreateLessonModal from "@/pages/teacher/create-lesson";
+import CreateLessonModal from "@/pages/teacher/forms/create-lesson";
 import {
   getTeacherRecordPeriods,
   getTeacherStudentRoster,
@@ -19,11 +19,11 @@ import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Badge } from "@/components/retroui/Badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import ClassworkFormModal from "./subject-details/classwork-form-modal";
-import CompetencyModal from "./subject-details/competency-modal";
+import CompetencyModal from "./forms/competency-modal";
 import ManageLessonModal from "./forms/manage-lesson";
 import SubjectLessonList from "./subject-details/lesson-classwork-list";
 import SubjectClassworkTab from "./subject-details/subject-classwork-tab";
-import TeacherLessonDetailScreen from "./subject-details/teacher-lesson-detail-screen";
+import TeacherLessonDetailScreen from "./lesson-view";
 import TOSGeneratorScreen from "./subject-details/tos-generator-screen";
 import {
   LOCKED_CLASSWORK_MESSAGE,
@@ -89,7 +89,7 @@ export default function SubjectDetails() {
   const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
   const [detailError, setDetailError] = useState("");
   const [lessonSearch, setLessonSearch] = useState("");
-  const [lessonSort, setLessonSort] = useState< "order" | "newest" | "oldest" | "title">("order");
+  const [lessonSort, setLessonSort] = useState<"order" | "newest" | "oldest" | "title">("order");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   void isLoading;
@@ -103,7 +103,35 @@ export default function SubjectDetails() {
       ]);
       if (lessonsRes.ok) {
         const lessonData = (await lessonsRes.json()) as Lesson[];
-        setLessons(lessonData.filter((lesson) => !lesson.is_archived));
+        const validLessons = lessonData.filter((lesson) => !lesson.is_archived);
+        setLessons(validLessons);
+
+        if (classId) {
+          try {
+            const cwPromises = validLessons.map(async (l) => {
+              try {
+                const res = await apiFetch(
+                  `/api/v1/lessons/my-class/${classId}/lesson/${l.lesson_id}/linked-classwork`,
+                );
+                if (res.ok) {
+                  const cwList = (await res.json()) as LinkedClasswork[];
+                  return { lessonId: l.lesson_id, classworks: cwList };
+                }
+              } catch {
+                // ignore
+              }
+              return { lessonId: l.lesson_id, classworks: [] };
+            });
+            const cwResults = await Promise.all(cwPromises);
+            const map: Record<number, LinkedClasswork[]> = {};
+            cwResults.forEach(({ lessonId, classworks }) => {
+              map[lessonId] = classworks;
+            });
+            setLinkedClassworks(map);
+          } catch {
+            // ignore
+          }
+        }
       }
       if (compsRes.ok) {
         const compData = (await compsRes.json()) as CompetencyItem[];
@@ -221,7 +249,35 @@ export default function SubjectDetails() {
             throw new Error("Unable to load lessons.");
           }
           const lessonData = (await lessonsResponse.json()) as Lesson[];
-          setLessons(lessonData.filter((lesson) => !lesson.is_archived));
+          const validLessons = lessonData.filter((lesson) => !lesson.is_archived);
+          setLessons(validLessons);
+
+          if (classId) {
+            try {
+              const cwPromises = validLessons.map(async (l) => {
+                try {
+                  const res = await apiFetch(
+                    `/api/v1/lessons/my-class/${classId}/lesson/${l.lesson_id}/linked-classwork`,
+                  );
+                  if (res.ok) {
+                    const cwList = (await res.json()) as LinkedClasswork[];
+                    return { lessonId: l.lesson_id, classworks: cwList };
+                  }
+                } catch {
+                  // ignore
+                }
+                return { lessonId: l.lesson_id, classworks: [] };
+              });
+              const cwResults = await Promise.all(cwPromises);
+              const map: Record<number, LinkedClasswork[]> = {};
+              cwResults.forEach(({ lessonId, classworks }) => {
+                map[lessonId] = classworks;
+              });
+              setLinkedClassworks(map);
+            } catch {
+              // ignore
+            }
+          }
         }
 
         if (assignmentsResponse) {
@@ -897,9 +953,9 @@ export default function SubjectDetails() {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             {activeLessonDetail ? (
-              <main className="py-4 px-4 md:px-6">
+              <>
                 {error && (
-                  <div className="mb-4 rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <div className="mx-3 mt-3 sm:mx-4 md:mx-6 rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
                     {error}
                   </div>
                 )}
@@ -917,7 +973,7 @@ export default function SubjectDetails() {
                     loadingClassworkId === activeLessonDetail.lesson_id
                   }
                 />
-              </main>
+              </>
             ) : isTOSOpen && subjectId ? (
               <main>
                 <TOSGeneratorScreen
