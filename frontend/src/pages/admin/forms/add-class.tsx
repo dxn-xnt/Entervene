@@ -169,6 +169,7 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
                 initialSetup={manualSetup}
                 onComplete={continueFromDetails}
                 onBack={() => setMode("choice")}
+                onClose={handleClose}
               />
             ) : manualStep === "assignment" && manualSetup ? (
               <StudentAssignmentWorkspace
@@ -178,12 +179,14 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
                 onChange={setAssignmentState}
                 onBack={() => setManualStep("details")}
                 onReview={() => setManualStep("review")}
+                onClose={handleClose}
               />
             ) : manualSetup && assignmentState ? (
               <ManualReview
                 setup={manualSetup}
                 assignmentState={assignmentState}
                 onBack={() => setManualStep("assignment")}
+                onClose={handleClose}
                 onSaved={(result) => {
                   resetManualState();
                   setSaveSuccess(result);
@@ -198,6 +201,7 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
                 onContinue={continueFromImport}
                 onValidationStale={clearImportHydration}
                 onBack={() => setMode("choice")}
+                onClose={handleClose}
               />
             </div>
             {manualStep === "assignment" && manualSetup ? (
@@ -208,12 +212,14 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
                 onChange={setAssignmentState}
                 onBack={() => setManualStep("details")}
                 onReview={() => setManualStep("review")}
+                onClose={handleClose}
               />
             ) : manualStep === "review" && manualSetup && assignmentState ? (
               <ManualReview
                 setup={manualSetup}
                 assignmentState={assignmentState}
                 onBack={() => setManualStep("assignment")}
+                onClose={handleClose}
                 onSaved={(result) => {
                   resetManualState();
                   setSaveSuccess(result);
@@ -237,10 +243,11 @@ function sameImportedSetup(current: ManualClassSetup, next: ManualClassSetup) {
     });
 }
 
-function ManualReview({ setup, assignmentState, onSaved, onBack }: {
+function ManualReview({ setup, assignmentState, onSaved, onBack, onClose }: {
   setup: ManualClassSetup;
   assignmentState: ManualAssignmentWorkspaceState;
   onBack: () => void;
+  onClose: () => void;
   onSaved: (result: BatchCreateClassesResponse) => void;
 }) {
   const [isSaving, setIsSaving] = useState(false);
@@ -303,11 +310,14 @@ function ManualReview({ setup, assignmentState, onSaved, onBack }: {
         </div>
       )}
 
-      <div className="flex justify-between items-center pt-2">
-        <Button variant={"outline"} onClick={onBack}>Back</Button>
-        <Button variant={"default"} disabled={isSaving} onClick={saveClasses}>
-          {isSaving ? "Saving classes..." : saveError?.retryable ? "Retry Save Classes" : "Save Classes"}
-        </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+        <Button variant="outline" onClick={onClose}>Close</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={onBack}>Back</Button>
+          <Button variant="default" disabled={isSaving} onClick={saveClasses}>
+            {isSaving ? "Saving classes..." : saveError?.retryable ? "Retry Save Classes" : "Save Classes"}
+          </Button>
+        </div>
       </div>
     </div>
   );
