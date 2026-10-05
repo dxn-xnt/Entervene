@@ -3,17 +3,17 @@ import {
   Archive,
   ArrowLeft,
   ArrowUpRight,
-  Award,
   BookOpen,
   CheckCircle2,
   CheckSquare,
   ChevronDown,
-  ChevronRight,
   ClipboardList,
+  Eye,
   FileText,
   Lightbulb,
   Paperclip,
   Pencil,
+  Plus,
   Search,
   Users,
   X,
@@ -40,12 +40,12 @@ import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Avatar } from "@/components/retroui/Avatar";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
-import SetLessonGoalModal from "./subject-details/set-lesson-goal-modal";
+import SetLessonGoalModal from "./forms/set-lesson-goal-modal";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 
-import CompetencyModal from "./subject-details/competency-modal";
-import CreateLessonModal from "@/pages/teacher/create-lesson";
+import CompetencyModal from "./forms/competency-modal";
+import CreateLessonModal from "@/pages/teacher/forms/create-lesson";
 import ClassworkCard from "./classworks/classwork-card";
 import ClassworkView from "./classwork-view";
 import CreateClassworkModal from "./forms/create-classwork";
@@ -61,7 +61,6 @@ import type {
 } from "@/types/classwork";
 import ClassworkFormModal from "./subject-details/classwork-form-modal";
 import TeacherLessonDetailScreen from "./subject-details/teacher-lesson-detail-screen";
-import TeacherCompetencyDetailScreen from "./subject-details/teacher-competency-detail-screen";
 import { StudentRecordDetail } from "./subject-details/student-records-panel";
 import {
   getTeacherRecordPeriods,
@@ -171,6 +170,8 @@ export default function TeacherClassDetail() {
   const [isSetGoalModalOpen, setIsSetGoalModalOpen] = useState(false);
   const [studentInterfaceStudent, setStudentInterfaceStudent] =
     useState<TeacherAdvisoryStudentItem | null>(null);
+  const [lessonInterfaceLesson, setLessonInterfaceLesson] =
+    useState<LessonItem | null>(null);
   const [detail, setDetail] =
     useState<TeacherAdvisoryClassDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -254,134 +255,139 @@ export default function TeacherClassDetail() {
       <div className="flex min-w-0 max-w-full flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex min-w-0 max-w-full flex-1 flex-col">
           <div className="flex min-w-0 max-w-full flex-1 flex-col">
-            <div
-              data-page-tabs-sticky-region={
-                studentInterfaceStudent ? undefined : ""
-              }
-              data-student-detail-sticky-region={
-                studentInterfaceStudent ? "" : undefined
-              }
-              className={
-                studentInterfaceStudent
-                  ? "sticky top-0 z-40 shrink-0 bg-background"
-                  : undefined
-              }
-            >
-              <header
-                data-student-detail-header={
+            {!lessonInterfaceLesson && (
+              <div
+                data-page-tabs-sticky-region={
+                  studentInterfaceStudent ? undefined : ""
+                }
+                data-student-detail-sticky-region={
                   studentInterfaceStudent ? "" : undefined
                 }
-                className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6"
+                className={
+                  studentInterfaceStudent
+                    ? "sticky top-0 z-40 shrink-0 bg-background"
+                    : undefined
+                }
               >
-                <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                  <SidebarTrigger className="shrink-0 md:hidden" />
-                  <Breadcrumb className="min-w-0">
-                    <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
-                      <Breadcrumb.Item>
-                        <Breadcrumb.Link
-                          onClick={() => navigate("/teacher/classes")}
-                          className="cursor-pointer whitespace-nowrap text-muted-foreground hover:text-black"
-                        >
-                          Classes
-                        </Breadcrumb.Link>
-                      </Breadcrumb.Item>
-                      <Breadcrumb.Separator />
-                      <Breadcrumb.Item className="min-w-0">
-                        <Breadcrumb.Link
-                          onClick={() => navigate(`/teacher/classes/${detail.class_id}/subjects/${currentSubject?.subject_id}`)}
-                          className="cursor-pointer whitespace-nowrap !text-lg text-muted-foreground hover:text-black"
-                        >
-                          {currentSubject?.subject_name || "Subject"}
-                        </Breadcrumb.Link>
-                      </Breadcrumb.Item>
-                      <Breadcrumb.Separator />
-                      <Breadcrumb.Item className="min-w-0">
-                        <Breadcrumb.Page className="block truncate">
-                          {studentInterfaceStudent?.full_name || detail.section_name}
-                        </Breadcrumb.Page>
-                      </Breadcrumb.Item>
-                    </Breadcrumb.List>
-                  </Breadcrumb>
-                </div>
-
-                <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
-                  {studentInterfaceStudent ? (
-                    <ManualSuggestionPanel
-                      classId={detail.class_id}
-                      student={studentInterfaceStudent}
-                      subjectLoads={detail.subject_loads}
-                      displayMode="header"
-                    />
-                  ) : tab === "lessons" ? (
-                    <>
-                      <div className="flex flex-row gap-2">
-                        <Button
-                          className="w-full md:w-auto whitespace-nowrap"
-                          onClick={() => setIsSetGoalModalOpen(true)}
-                        >
-                          <Pencil className="mr-2 size-4" /> Set Lesson Goal
-                        </Button>
-                        {(detail.subject_loads[0]?.subject_id) && (
-                          <Button
-                            variant="default"
-                            onClick={() => {
-                              const targetId =
-                                detail.subject_loads[0]?.subject_id;
-                              if (targetId) {
-                                navigate(
-                                  `/teacher/classes/${detail.class_id}/subjects/${targetId}`,
-                                );
-                              }
-                            }}
-                            className="h-10 w-full gap-2 whitespace-nowrap"
+                <header
+                  data-student-detail-header={
+                    studentInterfaceStudent ? "" : undefined
+                  }
+                  className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6"
+                >
+                  <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                    <SidebarTrigger className="shrink-0 md:hidden" />
+                    <Breadcrumb className="min-w-0">
+                      <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
+                        <Breadcrumb.Item>
+                          <Breadcrumb.Link
+                            onClick={() => navigate("/teacher/classes")}
+                            className="cursor-pointer whitespace-nowrap text-muted-foreground hover:text-black"
                           >
-                            <BookOpen size={16} />
-                            View Subject
+                            Classes
+                          </Breadcrumb.Link>
+                        </Breadcrumb.Item>
+                        <Breadcrumb.Separator />
+                        <Breadcrumb.Item className="min-w-0">
+                          <Breadcrumb.Link
+                            onClick={() => navigate(`/teacher/classes/${detail.class_id}/subjects/${currentSubject?.subject_id}`)}
+                            className="cursor-pointer whitespace-nowrap !text-lg text-muted-foreground hover:text-black"
+                          >
+                            {currentSubject?.subject_name || "Subject"}
+                          </Breadcrumb.Link>
+                        </Breadcrumb.Item>
+                        <Breadcrumb.Separator />
+                        <Breadcrumb.Item className="min-w-0">
+                          <Breadcrumb.Page className="block truncate">
+                            {studentInterfaceStudent?.full_name || detail.section_name}
+                          </Breadcrumb.Page>
+                        </Breadcrumb.Item>
+                      </Breadcrumb.List>
+                    </Breadcrumb>
+                  </div>
+
+                  <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
+                    {studentInterfaceStudent ? (
+                      <ManualSuggestionPanel
+                        classId={detail.class_id}
+                        student={studentInterfaceStudent}
+                        subjectLoads={detail.subject_loads}
+                        displayMode="header"
+                      />
+                    ) : tab === "lessons" ? (
+                      <>
+                        <div className="flex flex-row gap-2">
+                          <Button
+                            className="w-full md:w-auto whitespace-nowrap"
+                            onClick={() => setIsSetGoalModalOpen(true)}
+                          >
+                            <Pencil className="mr-2 size-4" /> Set Lesson Goal
                           </Button>
-                        )}
-                      </div>
-                    </>
-                  ) : null}
-                </div>
-              </header>
-              {!studentInterfaceStudent && (
-                <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-                  <Tabs<DetailTab>
-                    tabs={[
-                      {
-                        id: "lessons",
-                        label: "Lessons",
-                        icon: BookOpen,
-                      },
-                      {
-                        id: "students",
-                        label: "Students",
-                        icon: Users,
-                      },
-                      {
-                        id: "classwork",
-                        label: "Classwork",
-                        icon: ClipboardList,
-                      },
-                    ]}
-                    activeTab={tab}
-                    onTabChange={(nextTab) => {
-                      setStudentInterfaceStudent(null);
-                      setTab(nextTab);
-                    }}
-                  />
-                </div>
-              )}
-            </div>
+                          {(detail.subject_loads[0]?.subject_id) && (
+                            <Button
+                              variant="default"
+                              onClick={() => {
+                                const targetId =
+                                  detail.subject_loads[0]?.subject_id;
+                                if (targetId) {
+                                  navigate(
+                                    `/teacher/classes/${detail.class_id}/subjects/${targetId}`,
+                                  );
+                                }
+                              }}
+                              className="h-10 w-full gap-2 whitespace-nowrap"
+                            >
+                              <BookOpen size={16} />
+                              View Subject
+                            </Button>
+                          )}
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                </header>
+                {!studentInterfaceStudent && (
+                  <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                    <Tabs<DetailTab>
+                      tabs={[
+                        {
+                          id: "lessons",
+                          label: "Lessons",
+                          icon: BookOpen,
+                        },
+                        {
+                          id: "students",
+                          label: "Students",
+                          icon: Users,
+                        },
+                        {
+                          id: "classwork",
+                          label: "Classwork",
+                          icon: ClipboardList,
+                        },
+                      ]}
+                      activeTab={tab}
+                      onTabChange={(nextTab) => {
+                        setStudentInterfaceStudent(null);
+                        setLessonInterfaceLesson(null);
+                        setTab(nextTab);
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             <div
-              className={`flex min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6 ${studentInterfaceStudent
+              className={`flex min-w-0 flex-col ${lessonInterfaceLesson
                 ? ""
-                : "-mt-[1px] border-t-1 border-border"
+                : studentInterfaceStudent
+                  ? "gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6"
+                  : "-mt-[1px] border-t-1 border-border gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6"
                 }`}
             >
 
-              {!studentInterfaceStudent && (
+              {!studentInterfaceStudent && !lessonInterfaceLesson && (
                 <Card className="block w-full border-black bg-primary transition-none hover:shadow-md pt-3 pb-4">
                   <Card.Content>
                     <div className="flex min-w-0 items-center justify-between gap-2">
@@ -433,11 +439,12 @@ export default function TeacherClassDetail() {
               )}
 
               {tab === "lessons" && (
-                <OverviewTab
+                <LessonsTab
                   detail={detail}
                   initialSubjectId={initialSubjectId}
                   isSetGoalModalOpen={isSetGoalModalOpen}
                   setIsSetGoalModalOpen={setIsSetGoalModalOpen}
+                  onLessonViewChange={setLessonInterfaceLesson}
                 />
               )}
               {tab === "students" && (
@@ -461,16 +468,18 @@ export default function TeacherClassDetail() {
   );
 }
 
-function OverviewTab({
+function LessonsTab({
   detail,
   initialSubjectId,
   isSetGoalModalOpen,
   setIsSetGoalModalOpen,
+  onLessonViewChange,
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
   initialSubjectId?: number | null;
   isSetGoalModalOpen?: boolean;
   setIsSetGoalModalOpen?: (open: boolean) => void;
+  onLessonViewChange?: (lesson: LessonItem | null) => void;
 }) {
   const navigate = useNavigate();
   const { selectedPeriodId, periods } = useAcademicPeriod();
@@ -497,10 +506,7 @@ function OverviewTab({
   const [lessonSort, setLessonSort] = useState<
     "order" | "newest" | "oldest" | "title"
   >("order");
-  const [collapsedCompetencies, setCollapsedCompetencies] = useState<
-    Record<number, boolean>
-  >({});
-  const [isUnassignedExpanded, setIsUnassignedExpanded] = useState(true);
+
 
   useEffect(() => {
     if (
@@ -512,8 +518,6 @@ function OverviewTab({
   }, [lessons, lessonFilter]);
 
   // Drill-down states
-  const [activeCompetency, setActiveCompetency] =
-    useState<CompetencyItem | null>(null);
   const [activeLessonDetail, setActiveLessonDetail] =
     useState<LessonItem | null>(null);
 
@@ -616,16 +620,6 @@ function OverviewTab({
       if (compRes.ok) {
         const compData = (await compRes.json()) as CompetencyItem[];
         setCompetencies(compData);
-        setCollapsedCompetencies((prev) => {
-          const next = { ...prev };
-          compData.forEach((c, idx) => {
-            if (next[c.competency_id] === undefined) {
-              next[c.competency_id] = idx !== 0;
-            }
-          });
-          return next;
-        });
-        setIsUnassignedExpanded(compData.length === 0);
       }
     } catch (err) {
       setLessonsError(
@@ -659,15 +653,7 @@ function OverviewTab({
     void loadCuratedGoals();
   }, [loadCuratedGoals]);
 
-  const toggleLesson = async (lessonId: number) => {
-    if (expandedLessonId === lessonId) {
-      setExpandedLessonId(null);
-      return;
-    }
-
-    setExpandedLessonId(lessonId);
-    if (linkedClassworks[lessonId] !== undefined) return;
-
+  const loadLessonClassworks = async (lessonId: number) => {
     setLoadingClassworkId(lessonId);
     try {
       const res = await apiFetch(
@@ -677,19 +663,34 @@ function OverviewTab({
         ? ((await res.json()) as LinkedClassworkItem[])
         : [];
       setLinkedClassworks((prev) => ({ ...prev, [lessonId]: data }));
+      return data;
     } catch {
       setLinkedClassworks((prev) => ({ ...prev, [lessonId]: [] }));
+      return [];
     } finally {
       setLoadingClassworkId(null);
     }
   };
 
-  const toggleCompetencyCollapse = (compId: number) => {
-    setCollapsedCompetencies((prev) => ({
-      ...prev,
-      [compId]: !prev[compId],
-    }));
+  const toggleLesson = async (lessonId: number) => {
+    if (expandedLessonId === lessonId) {
+      setExpandedLessonId(null);
+      return;
+    }
+
+    setExpandedLessonId(lessonId);
+    if (linkedClassworks[lessonId] !== undefined) return;
+    await loadLessonClassworks(lessonId);
   };
+
+  const openLessonDetail = async (lesson: LessonItem) => {
+    setActiveLessonDetail(lesson);
+    onLessonViewChange?.(lesson);
+    if (linkedClassworks[lesson.lesson_id] === undefined) {
+      await loadLessonClassworks(lesson.lesson_id);
+    }
+  };
+
 
   const openCompetencyForm = (comp?: CompetencyItem | null) => {
     setEditingCompetency(comp || null);
@@ -709,12 +710,6 @@ function OverviewTab({
         }
         return [...prev, savedComp];
       });
-      if (
-        activeCompetency &&
-        activeCompetency.competency_id === savedComp.competency_id
-      ) {
-        setActiveCompetency(savedComp);
-      }
     }
     void loadLessonsAndCompetencies();
   };
@@ -734,12 +729,6 @@ function OverviewTab({
         setCompetencies((prev) =>
           prev.filter((c) => c.competency_id !== competencyId),
         );
-        if (
-          activeCompetency &&
-          activeCompetency.competency_id === competencyId
-        ) {
-          setActiveCompetency(null);
-        }
       }
     } catch {
       alert("Failed to archive competency.");
@@ -847,13 +836,7 @@ function OverviewTab({
 
       if (res.ok) {
         closeClassworkForm();
-        // Refresh linked classworks for this lesson
-        setLinkedClassworks((prev) => {
-          const next = { ...prev };
-          delete next[classworkLesson.lesson_id];
-          return next;
-        });
-        await toggleLesson(classworkLesson.lesson_id);
+        await loadLessonClassworks(classworkLesson.lesson_id);
       }
     } catch {
       alert("Failed to create classwork.");
@@ -901,6 +884,25 @@ function OverviewTab({
       });
       if (res.ok) {
         closeLessonManager();
+        if (
+          activeLessonDetail &&
+          activeLessonDetail.lesson_id === selectedLesson.lesson_id
+        ) {
+          setActiveLessonDetail((prev) =>
+            prev
+              ? {
+                ...prev,
+                title: lessonDraft.title,
+                description: lessonDraft.description,
+                content: lessonDraft.content,
+                order_index: Number(lessonDraft.order_index) || 1,
+                is_published: lessonDraft.is_published,
+                show_scores: lessonDraft.show_scores,
+                competency_id: lessonDraft.competency_id,
+              }
+              : null,
+          );
+        }
         await loadLessonsAndCompetencies();
       }
     } catch {
@@ -921,6 +923,7 @@ function OverviewTab({
         closeLessonManager();
         if (activeLessonDetail?.lesson_id === selectedLesson.lesson_id) {
           setActiveLessonDetail(null);
+          onLessonViewChange?.(null);
         }
         await loadLessonsAndCompetencies();
       }
@@ -958,23 +961,6 @@ function OverviewTab({
     });
   }, [lessonFilter, lessonSort, lessons]);
 
-  const { lessonsByCompetency, unassignedLessons } = useMemo(() => {
-    const byComp = new Map<number, LessonItem[]>();
-    const unassigned: LessonItem[] = [];
-    const activeCompIds = new Set(competencies.map((c) => c.competency_id));
-
-    filteredLessons.forEach((lesson) => {
-      if (lesson.competency_id && activeCompIds.has(lesson.competency_id)) {
-        const list = byComp.get(lesson.competency_id) || [];
-        list.push(lesson);
-        byComp.set(lesson.competency_id, list);
-      } else {
-        unassigned.push(lesson);
-      }
-    });
-
-    return { lessonsByCompetency: byComp, unassignedLessons: unassigned };
-  }, [filteredLessons, competencies]);
 
   const renderLessonCard = (lesson: LessonItem) => {
     const isExpanded = expandedLessonId === lesson.lesson_id;
@@ -995,10 +981,38 @@ function OverviewTab({
           <Accordion.Header className="p-4 items-center shadow-none">
             <div className="flex flex-col w-full items-start gap-1 min-w-0 text-left">
               <div className="flex flex-wrap items-center w-full justify-between gap-2 min-w-0 pr-3">
-                <h4 className="text-xl sm:text-2xl font-semibold text-black break-words line-clamp-2">
+                <h4
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void openLessonDetail(lesson);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void openLessonDetail(lesson);
+                    }
+                  }}
+                  className="text-xl sm:text-2xl font-semibold text-black break-words line-clamp-2 hover:underline cursor-pointer"
+                >
                   {lesson.title}
                 </h4>
-                <div className="flex flex-row gap-2">
+                <div className="flex flex-row items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void openLessonDetail(lesson);
+                    }}
+                    className="h-7 border-2 border-black bg-white px-2.5 text-xs font-bold text-black shadow-none hover:bg-yellow-100 transition-colors"
+                  >
+                    <Eye size={12} className="mr-1.5" />
+                    View Lesson
+                  </Button>
                   <Badge
                     variant={lesson.is_published ? "solid" : "default"}
                     size="sm"
@@ -1070,6 +1084,28 @@ function OverviewTab({
                 </Card>
               ))
             )}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-black/10">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void openLessonDetail(lesson)}
+                className="h-8 border-2 border-black bg-white px-3 text-xs font-bold text-black shadow-none hover:bg-retro"
+              >
+                <Eye size={14} className="mr-1.5" />
+                View Lesson
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={() => openClassworkForm(lesson as any)}
+                className="h-8 border-2 border-black bg-primary px-3 text-xs font-bold text-black shadow-none hover:opacity-90"
+              >
+                <Plus size={14} className="mr-1.5" />
+                Add Classwork
+              </Button>
+            </div>
           </Accordion.Content>
         </Accordion.Item>
       </Accordion>
@@ -1077,45 +1113,38 @@ function OverviewTab({
   };
 
   return (
-    <div className="grid gap-4 min-w-0">
+    <>
       {activeLessonDetail ? (
-        /* ── State 1: Full-Screen Lesson Detail View ── */
-        <TeacherLessonDetailScreen
-          lesson={activeLessonDetail as any}
-          subjectName={currentSubjectLoad?.subject_name || "Subject"}
-          closeLessonDetail={() => setActiveLessonDetail(null)}
-          openLessonManager={(l) => openLessonManager(l as any)}
-          openClassworkForm={(l) => openClassworkForm(l as any)}
-          openClassworkDetail={(cw) => openClassworkDetail(cw as any)}
-          linkedClassworks={
-            (linkedClassworks[activeLessonDetail.lesson_id] || []) as any
-          }
-          isLoadingClasswork={
-            loadingClassworkId === activeLessonDetail.lesson_id
-          }
-        />
-      ) : activeCompetency ? (
-        /* ── State 2: Full-Screen Competency Detail View with Back Button ── */
-        <TeacherCompetencyDetailScreen
-          competency={activeCompetency}
-          lessons={lessons.filter(
-            (l) => l.competency_id === activeCompetency.competency_id,
-          )}
-          linkedClassworks={linkedClassworks}
-          loadingClassworkId={loadingClassworkId}
-          expandedLessonId={expandedLessonId}
-          toggleLesson={toggleLesson}
-          onBack={() => setActiveCompetency(null)}
-          onAddLesson={(compId) => openAddLessonForCompetency(compId)}
-          onEditCompetency={(comp) => openCompetencyForm(comp)}
-          onArchiveCompetency={handleArchiveCompetency}
-          onOpenClassworkForm={(l) => openClassworkForm(l as any)}
-          onOpenClassworkDetail={(cw) => openClassworkDetail(cw as any)}
-          onOpenLessonDetail={(l) => setActiveLessonDetail(l as any)}
-          onOpenLessonManager={(l) => openLessonManager(l as any)}
-        />
+        /* ── Dedicated Full-Screen Lesson Detail View ── */
+        <div className="flex flex-col flex-1 min-w-0 w-full animate-in fade-in-50 duration-200">
+          <TeacherLessonDetailScreen
+            lesson={activeLessonDetail as any}
+            subjectName={currentSubjectLoad?.subject_name || "Subject"}
+            sectionName={detail.section_name}
+            onSubjectClick={() => {
+              if (currentSubjectLoad?.subject_id) {
+                navigate(
+                  `/teacher/classes/${detail.class_id}/subjects/${currentSubjectLoad.subject_id}`,
+                );
+              }
+            }}
+            closeLessonDetail={() => {
+              setActiveLessonDetail(null);
+              onLessonViewChange?.(null);
+            }}
+            openLessonManager={(l) => openLessonManager(l as any)}
+            openClassworkForm={(l) => openClassworkForm(l as any)}
+            openClassworkDetail={(cw) => openClassworkDetail(cw as any)}
+            linkedClassworks={
+              (linkedClassworks[activeLessonDetail.lesson_id] || []) as any
+            }
+            isLoadingClasswork={
+              loadingClassworkId === activeLessonDetail.lesson_id
+            }
+          />
+        </div>
       ) : (
-        /* ── State 3: Default All-Competencies Overview (Image 1 Layout) ── */
+        /* ── Default All-Lessons Overview Layout ── */
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:grid-rows-[auto_1fr] items-stretch min-w-0">
           {/* Main Content Area */}
           <section className="flex flex-col gap-4 min-w-0">
@@ -1125,13 +1154,13 @@ function OverviewTab({
                 <div className="flex min-w-0 items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <Text as="h3" className="text-xl font-bold tracking-tight sm:text-2xl">
-                      Lessons & Competencies
+                      {/* Lessons */}
                     </Text>
                   </div>
                 </div>
 
                 {/* Filter & Sort Controls */}
-                <div className="-mt-1 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="mt-6.5 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="w-full min-w-0 flex-1 lg:max-w-md">
                     <Select
                       value={lessonFilter}
@@ -1177,7 +1206,7 @@ function OverviewTab({
                 </div>
               </div>
 
-              {/* Lessons List with Competencies Hierarchy */}
+              {/* Lessons List */}
               {isLoadingLessons ? (
                 <LoadingPanel label="Loading lessons..." />
               ) : lessonsError ? (
@@ -1185,172 +1214,27 @@ function OverviewTab({
                   {lessonsError}
                 </div>
               ) : (
-                <div className="space-y-4 min-w-0">
-                  {/* Render Competency Accordions */}
-                  {competencies.map((comp) => {
-                    const compLessons =
-                      lessonsByCompetency.get(comp.competency_id) || [];
-                    const isCollapsed =
-                      lessonFilter !== "all"
-                        ? false
-                        : (collapsedCompetencies[comp.competency_id] ?? true);
-
-                    if (lessonFilter !== "all" && compLessons.length === 0) {
-                      return null;
-                    }
-
-                    return (
-                      <Card
-                        key={comp.competency_id}
-                        className="flex min-w-0 flex-col overflow-hidden border-2 border-black bg-white p-0 shadow-md hover:shadow-md"
-                      >
-                        {/* Competency Header Bar */}
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => toggleCompetencyCollapse(comp.competency_id)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              toggleCompetencyCollapse(comp.competency_id);
-                            }
-                          }}
-                          className="group flex w-full min-w-0 cursor-pointer select-none items-center justify-between gap-3 border-b-2 border-black bg-primary px-3 py-3 sm:px-4 sm:py-3.5"
-                          aria-label={isCollapsed ? "Expand competency" : "Collapse competency"}
-                        >
-                          <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                            <div className="min-w-0 flex-1">
-                              <div className="mb-1 flex flex-wrap items-center gap-2 min-w-0">
-                                <Award
-                                  size={20}
-                                  className="text-black shrink-0"
-                                />
-                                <Card.Title className="text-base font-bold text-gray-950 sm:text-lg md:text-xl break-words line-clamp-2">
-                                  {comp.competency_code || comp.statement}
-                                </Card.Title>
-                                <Badge
-                                  variant="secondary"
-                                  size="sm"
-                                  className="shrink-0 border border-black bg-white text-xs font-bold text-black"
-                                >
-                                  {compLessons.length} lesson
-                                  {compLessons.length === 1 ? "" : "s"}
-                                </Badge>
-                                {(comp.target_hours || 0) > 0 && (
-                                  <Badge
-                                    variant="secondary"
-                                    size="sm"
-                                    className="shrink-0 border border-black bg-white text-xs font-bold text-black"
-                                  >
-                                    {comp.target_hours} hrs
-                                  </Badge>
-                                )}
-                              </div>
-                              {comp.competency_code && comp.statement && (
-                                <p className="text-xs font-medium text-gray-700 break-words line-clamp-2">
-                                  {comp.statement}
-                                </p>
-                              )}
-                            </div>
+                <div className="space-y-3 min-w-0">
+                  {filteredLessons.length > 0 ? (
+                    filteredLessons.map(renderLessonCard)
+                  ) : (
+                    <Empty className="shadow-md hover:shadow-none transition-shadow">
+                      <EmptyHeader>
+                        <EmptyMedia>
+                          <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
+                            <BookOpen className="size-5 text-black" />
                           </div>
-                        </div>
-
-                        {/* Competency Body when expanded */}
-                        {!isCollapsed && (
-                          <Card.Content className="flex flex-col gap-3 bg-white p-4">
-                            {compLessons.length > 0 ? (
-                              compLessons.map(renderLessonCard)
-                            ) : (
-                              <div className="flex items-center justify-between border-2 border-dashed border-black bg-[#FFFDF0] p-4">
-                                <div className="flex items-center gap-2 text-xs font-bold text-black">
-                                  <BookOpen size={16} className="text-black" />
-                                  <span>
-                                    No lessons assigned to this competency yet.
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-                          </Card.Content>
-                        )}
-                      </Card>
-                    );
-                  })}
-
-                  {/* Standalone / Unassigned Lessons Section */}
-                  {unassignedLessons.length > 0 && (
-                    <div className="flex flex-col p-0 min-w-0 w-full">
-                      {competencies.length > 0 ? (
-                        <>
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            onClick={() =>
-                              setIsUnassignedExpanded((prev) => !prev)
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ")
-                                setIsUnassignedExpanded((prev) => !prev);
-                            }}
-                            className="flex items-center justify-between border-b-2 border-black bg-background text-left cursor-pointer group min-w-0 w-full"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="rounded border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors shrink-0">
-                                {isUnassignedExpanded || lessonFilter !== "all" ? (
-                                  <ChevronDown
-                                    size={16}
-                                    className="text-black"
-                                  />
-                                ) : (
-                                  <ChevronRight
-                                    size={16}
-                                    className="text-black"
-                                  />
-                                )}
-                              </div>
-                              <BookOpen
-                                size={18}
-                                className="text-black shrink-0"
-                              />
-                              <h4 className="text-sm md:text-base font-bold text-black">
-                                Unassigned Lessons
-                              </h4>
-                              <Badge
-                                variant="secondary"
-                                size="sm"
-                                className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
-                              >
-                                {unassignedLessons.length} to assign
-                              </Badge>
-                            </div>
-                          </div>
-
-                          {(isUnassignedExpanded || lessonFilter !== "all") && (
-                            <div className="flex flex-col gap-3 p-4 bg-white min-w-0 w-full">
-                              {unassignedLessons.map(renderLessonCard)}
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div className="flex flex-col gap-3 bg-white min-w-0 w-full">
-                          {unassignedLessons.map(renderLessonCard)}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Empty state when no competencies and no lessons */}
-                  {competencies.length === 0 &&
-                    unassignedLessons.length === 0 && (
-                      <Empty className="shadow-md hover:shadow-none transition-shadow">
-                        <EmptyHeader>
-                          <EmptyMedia>
-                          </EmptyMedia>
-                          <EmptyTitle>No Competencies or Lessons Yet</EmptyTitle>
-                          <EmptyDescription className="whitespace-nowrap text-center">
-                            No learning competencies or lessons have been added for this subject yet.
-                          </EmptyDescription>
-                        </EmptyHeader>
-                        {(selectedSubjectId || currentSubjectLoad?.subject_id || detail.subject_loads[0]?.subject_id) && (
+                        </EmptyMedia>
+                        <EmptyTitle>No Lessons Found</EmptyTitle>
+                        <EmptyDescription className="w-full whitespace-nowrap text-center">
+                          {lessonFilter !== "all"
+                            ? "No lessons match the selected filter."
+                            : "No lessons have been added for this subject yet."}
+                        </EmptyDescription>
+                      </EmptyHeader>
+                      {(selectedSubjectId ||
+                        currentSubjectLoad?.subject_id ||
+                        detail.subject_loads[0]?.subject_id) && (
                           <EmptyContent className="mt-2">
                             <Button
                               type="button"
@@ -1373,8 +1257,8 @@ function OverviewTab({
                             </Button>
                           </EmptyContent>
                         )}
-                      </Empty>
-                    )}
+                    </Empty>
+                  )}
                 </div>
               )}
             </div>
@@ -1692,7 +1576,7 @@ function OverviewTab({
           }}
         />
       )}
-    </div>
+    </>
   );
 }
 

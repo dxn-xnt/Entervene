@@ -6,7 +6,7 @@ import { useToast } from "@/components/retroui/use-toast";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { apiFetch } from "@/lib/api";
-import type { CompetencyItem } from "./types";
+import type { CompetencyItem } from "../subject-details/types";
 
 interface CompetencyModalProps {
   open?: boolean;
@@ -146,9 +146,7 @@ export default function CompetencyModal({
             <h2 className="font-sans text-xl font-bold">
               {targetCompetency ? "Edit Learning Competency" : "Add Learning Competency"}
             </h2>
-            <p className="text-sm font-normal">
-              Define the learning standard used to group lessons and build the Table of Specifications.
-            </p>
+
           </div>
         </Dialog.Header>
 
@@ -160,13 +158,17 @@ export default function CompetencyModal({
               </Alert>
             )}
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-                <span>Competency Code <span className="text-muted-foreground">(e.g. M7AL-IIa-1)</span></span>
+            <p className="text-sm font-normal text-muted-foreground">
+              Define the learning standard used to group lessons and build the Table of Specifications
+            </p>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+              <label className="flex flex-col gap-1 text-sm sm:col-span-3">
+                <span>Competency Code <span className="text-muted-foreground"></span></span>
                 <Input
                   value={competencyCode}
                   onChange={(e) => setCompetencyCode(e.target.value)}
-                  placeholder="Optional MELC Code"
+                  placeholder="MELC Code (e.g. M7AL-IIa-1)"
                   className="w-full font-mono"
                 />
               </label>
@@ -195,9 +197,9 @@ export default function CompetencyModal({
               />
             </label>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-                <span>Description / Notes <span className="text-muted-foreground">(Optional)</span></span>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+              <label className="flex flex-col gap-1 text-sm sm:col-span-3">
+                <span>Description</span>
                 <Input
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -217,6 +219,8 @@ export default function CompetencyModal({
                 />
               </label>
             </div>
+
+
           </section>
 
           <Dialog.Footer position="static">

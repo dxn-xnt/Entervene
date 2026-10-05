@@ -153,9 +153,9 @@ export default function CreateLessonModal({
       }
       return String(
         contextSubject?.subject_id ||
-          contextClass?.subject_id ||
-          classLoads[0]?.subject_id ||
-          "",
+        contextClass?.subject_id ||
+        classLoads[0]?.subject_id ||
+        "",
       );
     });
 
@@ -283,13 +283,11 @@ export default function CreateLessonModal({
 
   return (
     <Dialog open disablePointerDismissal={true} onOpenChange={(open) => !open && handleClose()}>
-      <Dialog.Content size="md">
+      <Dialog.Content size="lg">
         <Dialog.Header position="static">
           <div>
             <h2 className="font-sans text-xl font-bold">Add Lesson</h2>
-            <p className="text-sm font-normal">
-              Create a draft or publish it to selected sections.
-            </p>
+
           </div>
         </Dialog.Header>
 
@@ -467,13 +465,6 @@ export default function CreateLessonModal({
               disabled={isSubmitting}
             />
           </div>
-
-          <Alert status="info">
-            <Alert.Description>
-              💡 Tip: Upload lesson materials as Reading classworks so they can be
-              scheduled, locked, and tracked alongside quizzes and activities.
-            </Alert.Description>
-          </Alert>
         </section>
 
         <Dialog.Footer position="static" className="flex-wrap">

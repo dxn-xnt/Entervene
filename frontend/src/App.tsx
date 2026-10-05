@@ -44,7 +44,7 @@ const AdvisoryClassDetail = lazy(() => import("./pages/teacher/advisory-class-vi
 const TeacherClassworks = lazy(() => import("./pages/teacher/classworks"));
 // import TeacherLessons from "./pages/teacher/lessons";
 const TeacherInterventions = lazy(() => import("./pages/teacher/interventions"));
-const CreateLesson = lazy(() => import("./pages/teacher/create-lesson"));
+const CreateLesson = lazy(() => import("./pages/teacher/forms/create-lesson"));
 const TeacherGrades = lazy(() => import("./pages/teacher/grades"));
 const TeacherGradeView = lazy(() => import("./pages/teacher/grade-view"));
 const TeacherNotifications = lazy(() => import("./pages/teacher/notifications"));
