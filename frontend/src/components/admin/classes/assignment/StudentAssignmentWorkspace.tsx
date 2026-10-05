@@ -364,7 +364,7 @@ export default function StudentAssignmentWorkspace({
           </div>
         </div>
       </DndContext>
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-black pt-3">
+      <div className="-mx-4 -mb-4 flex w-[calc(100%+2rem)] shrink-0 flex-wrap items-center justify-between gap-3 border-t-2 px-4 py-4">
         <div>
           {reviewAttempted && !canContinueToReview && (
             <div className="grid gap-0.5 text-xs font-semibold text-red-700">
@@ -377,7 +377,7 @@ export default function StudentAssignmentWorkspace({
             </div>
           )}
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-1 flex-wrap items-center justify-between gap-2">
           <Button variant="outline" onClick={onClose}>Close</Button>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={onBack}>Back to Class Details</Button>

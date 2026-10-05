@@ -310,7 +310,7 @@ function ManualReview({ setup, assignmentState, onSaved, onBack, onClose }: {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+      <div className="-mx-4 -mb-4 flex w-[calc(100%+2rem)] flex-wrap items-center justify-between gap-2 border-t-2 px-4 py-4">
         <Button variant="outline" onClick={onClose}>Close</Button>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={onBack}>Back</Button>

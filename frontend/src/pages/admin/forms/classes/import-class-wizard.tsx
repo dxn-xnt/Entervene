@@ -252,7 +252,7 @@ export default function ImportClassWizard({ onContinue, onValidationStale, onBac
       {validationError && <ValidationErrorPanel error={validationError} onDownloadTemplate={downloadTemplate} />}
       {validationResult && <ValidationSuccessPanel result={validationResult} canContinue={canContinueToAssignments(validationResult) && !isValidating && !validationError} onContinue={continueToAssignments} />}
 
-      <Dialog.Footer className="w-full justify-between border-t-0 px-0 pt-2">
+      <Dialog.Footer className="-mx-4 -mb-4 w-[calc(100%+2rem)] justify-between border-t-2 px-4 py-4">
         <Button variant="outline" onClick={onClose}>Close</Button>
         <div className="flex flex-wrap gap-2">
           {onBack && <Button variant={"outline"} onClick={onBack}>Back</Button>}
