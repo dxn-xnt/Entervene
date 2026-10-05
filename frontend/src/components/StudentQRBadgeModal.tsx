@@ -143,7 +143,7 @@ export default function StudentQRBadgeModal({
             size="sm"
             onClick={handleDownload}
             disabled={downloading}
-            className="gap-1.5 rounded border-black bg-success hover:bg-success text-black"
+            className="gap-1.5"
           >
             <Download className="size-4" />
             {downloading ? "Downloading..." : "Download Badge"}

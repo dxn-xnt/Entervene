@@ -674,12 +674,12 @@ textarea::placeholder,
   background-image: repeating-linear-gradient(135deg, transparent 0 12px, color-mix(in srgb, var(--primary-foreground) 9%, transparent) 12px 24px);
 }
 
-/* Teacher modal experiment: flatten content only; keep popup and action-button shadows. */
-body:has([data-teacher-page="true"]) [data-slot="dialog-content"] :not(button):not([role="button"]) {
+/* Flatten Teacher and Student dialog content, not the popup or action buttons. */
+body:has(:is([data-teacher-page="true"], [data-student-page="true"])) [data-slot="dialog-content"] :not(button):not([role="button"]) {
   box-shadow: none !important;
 }
 
-body:has([data-teacher-page="true"]) [data-slot="dialog-content"] :is(input, textarea, select, [role="combobox"]):focus-visible {
+body:has(:is([data-teacher-page="true"], [data-student-page="true"])) [data-slot="dialog-content"] :is(input, textarea, select, [role="combobox"]):focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
