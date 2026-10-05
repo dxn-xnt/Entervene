@@ -936,7 +936,7 @@ export default function CreateClassworkModal({
                 <Button
                   onClick={handleCreateClasswork}
                   disabled={isCreating}
-                  className="gap-2 bg-[#7ABA78] hover:bg-[#6ab368]"
+                  className="gap-2"
                 >
                   {isCreating ? (
                     <Loader2 className="size-4 animate-spin" />

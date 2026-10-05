@@ -636,7 +636,6 @@ export default function SubjectLessonList({
             {competencies.length === 0 && unassignedLessons.length === 0 && (
               <Card className="block border-2 border-black p-8 text-center bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                 <Card.Content className="flex flex-col items-center gap-3">
-                  <Award size={36} className="text-gray-400" />
                   <Card.Title className="text-base font-bold">
                     No Competencies or Lessons Yet
                   </Card.Title>

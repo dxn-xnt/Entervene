@@ -1344,12 +1344,9 @@ function OverviewTab({
                       <Empty className="shadow-md hover:shadow-none transition-shadow">
                         <EmptyHeader>
                           <EmptyMedia>
-                            <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
-                              <Award className="size-5 text-black" />
-                            </div>
                           </EmptyMedia>
                           <EmptyTitle>No Competencies or Lessons Yet</EmptyTitle>
-                          <EmptyDescription className="w-full whitespace-nowrap text-center">
+                          <EmptyDescription className="whitespace-nowrap text-center">
                             No learning competencies or lessons have been added for this subject yet.
                           </EmptyDescription>
                         </EmptyHeader>
