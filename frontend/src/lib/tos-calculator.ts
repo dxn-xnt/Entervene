@@ -312,6 +312,37 @@ export function computeTOS(
     rowTypeAllocations[part.type] = alloc;
   }
 
+  // Independent rounding of each type preserves columns but can leave a small
+  // competency with no questions. Transfer items between over/underfull rows,
+  // keeping the requested type totals AND each competency's item allocation.
+  const activeTypes = [...new Set(test_parts.filter((part) => part.count > 0).map((part) => part.type))];
+  const typeRowTotals = allocatedItems.map((_, index) =>
+    activeTypes.reduce((sum, type) => sum + rowTypeAllocations[type][index], 0));
+  if (typeRowTotals.reduce((sum, count) => sum + count, 0) === total_items) {
+    for (let receiver = 0; receiver < allocatedItems.length; receiver++) {
+      while (typeRowTotals[receiver] < allocatedItems[receiver]) {
+        let best: { donor: number; type: TestPartType; score: number } | undefined;
+        for (let donor = 0; donor < allocatedItems.length; donor++) {
+          if (typeRowTotals[donor] <= allocatedItems[donor]) continue;
+          for (const type of activeTypes) {
+            if (rowTypeAllocations[type][donor] === 0) continue;
+            const typeTotal = rowTypeAllocations[type].reduce((sum, count) => sum + count, 0);
+            const score = (allocatedItems[receiver] / total_items) * typeTotal - rowTypeAllocations[type][receiver]
+              + rowTypeAllocations[type][donor] - (allocatedItems[donor] / total_items) * typeTotal;
+            if (!best || score > best.score) best = { donor, type, score };
+          }
+        }
+        if (!best) break;
+        rowTypeAllocations[best.type][best.donor]--;
+        rowTypeAllocations[best.type][receiver]++;
+        typeRowTotals[best.donor]--;
+        typeRowTotals[receiver]++;
+        rowTypeNudges[best.type][best.donor] = "down";
+        rowTypeNudges[best.type][receiver] = "up";
+      }
+    }
+  }
+
   // STEP E & F & Row object assembly
   let currentPlacement = 1;
   const rows: TOSRow[] = [];

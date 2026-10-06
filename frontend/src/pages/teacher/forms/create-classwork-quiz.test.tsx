@@ -7,6 +7,7 @@ const api = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock("@/lib/api", () => ({ apiFetch: api.fetch }));
 vi.mock("./ai-quiz-generator-modal", () => ({ default: () => null }));
 vi.mock("@/components/retroui/Dialog", () => ({
+  dialogHeaderCloseButtonClassName: "",
   Dialog: {
     Content: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
     Header: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,

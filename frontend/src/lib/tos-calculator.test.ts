@@ -9,6 +9,39 @@ import {
   type TOSDraft,
 } from "./tos-calculator";
 
+describe("TOS question-type row reconciliation regressions", () => {
+  it("preserves the screenshot's [2, 10, 8] item allocation and every type quota", () => {
+    const parts = ["MULTIPLE_CHOICE", "TRUE_FALSE", "IDENTIFICATION", "ESSAY"] as const;
+    const result = computeTOS({
+      subject_id: 1, subject_name: "English", title: "Synthetic exam", quarter: "Q1",
+      total_items: 20, test_parts: parts.map((type) => ({ type, count: 5 })),
+      competencies: [{ label: "test", days: 1 }, { label: "Narrative", days: 5 }, { label: "Argument", days: 4 }],
+      difficulty_ratio: { easy: 0.6, average: 0.3, difficult: 0.1 },
+    });
+    expect(result.rows.map((row) => row.items)).toEqual([2, 10, 8]);
+    for (const row of result.rows) {
+      expect(Object.values(row.type_counts).reduce((sum, count) => sum + count, 0)).toBe(row.items);
+      expect(row.reconciled_type_total).toBe(row.items);
+    }
+    for (const type of parts) expect(result.rows.reduce((sum, row) => sum + (row.type_counts[type] || 0), 0)).toBe(5);
+  });
+  it("keeps both row and column totals across small and sparse blueprints", () => {
+    for (let total = 1; total <= 30; total++) {
+      for (let mc = 0; mc <= total; mc++) {
+        const result = computeTOS({
+          subject_id: 1, subject_name: "Science", title: "Synthetic", quarter: "Q1", total_items: total,
+          test_parts: [{ type: "MULTIPLE_CHOICE", count: mc }, { type: "TRUE_FALSE", count: total - mc }],
+          competencies: [{ label: "A", days: 1 }, { label: "B", days: 5 }, { label: "C", days: 4 }],
+          difficulty_ratio: { easy: 0.6, average: 0.3, difficult: 0.1 },
+        });
+        for (const row of result.rows) expect(row.reconciled_type_total).toBe(row.items);
+        expect(result.rows.reduce((sum, row) => sum + (row.type_counts.MULTIPLE_CHOICE || 0), 0)).toBe(mc);
+        expect(result.rows.reduce((sum, row) => sum + (row.type_counts.TRUE_FALSE || 0), 0)).toBe(total - mc);
+      }
+    }
+  });
+});
+
 describe("tos-calculator: Largest Remainder Method (LRM)", () => {
   it("allocates exactly 40 items across 3 competencies [3, 4, 5 days]", () => {
     // total days = 12, quotas: 3/12*40 = 10, 4/12*40 = 13.3333, 5/12*40 = 16.6666

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, fireEvent } from "@testing-library/react";
+import { act, cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import QuizAnalysisView, {
   ACCURACY_THRESHOLD_HIGH,
   ACCURACY_THRESHOLD_MEDIUM,
@@ -8,6 +8,18 @@ import QuizAnalysisView, {
 } from "./quiz-analysis-view";
 import type { QuizAnalysis } from "./quiz-builder-types";
 import type { TeacherClasswork } from "@/types/classwork";
+
+async function expectNavigatorTooltip(button: HTMLElement, text: string) {
+  act(() => button.focus());
+  // The custom Base UI popup has a data slot, not a native title or tooltip role.
+  await waitFor(() => expect(document.querySelector(
+    '[data-slot="tooltip-content"][data-open]',
+  )?.textContent).toBe(text));
+  act(() => button.blur());
+  await waitFor(() => expect(document.querySelector(
+    '[data-slot="tooltip-content"][data-open]',
+  )).toBeNull());
+}
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
@@ -460,7 +472,7 @@ describe("QuizAnalysisView - Questions tab numbered navigator", () => {
     expect(scrollSpy).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
   });
 
-  it("applies accuracy-tiered colors, legend, and shows accuracy percentage in tooltips", () => {
+  it("applies accuracy-tiered colors, legend, and shows accuracy percentage in tooltips", async () => {
     const tieredAnalysis: QuizAnalysis = {
       quiz_id: 1,
       classwork_id: 10,
@@ -543,25 +555,25 @@ describe("QuizAnalysisView - Questions tab numbered navigator", () => {
     // Verify button 1 (High accuracy >= 80%)
     const btn1 = screen.getByTestId("navigator-btn-1");
     expect(btn1.className).toContain("bg-[#8BCB88]");
-    expect(btn1.getAttribute("title")).toBe("Question 1 (90% Accuracy)");
+    await expectNavigatorTooltip(btn1, "Question 1: 90% accuracy");
     expect(btn1.getAttribute("aria-label")).toBe("Jump to question 1 (90% Accuracy)");
 
     // Verify button 2 (Medium accuracy 50-79%)
     const btn2 = screen.getByTestId("navigator-btn-2");
     expect(btn2.className).toContain("bg-[#FFD08A]");
-    expect(btn2.getAttribute("title")).toBe("Question 2 (60% Accuracy)");
+    await expectNavigatorTooltip(btn2, "Question 2: 60% accuracy");
     expect(btn2.getAttribute("aria-label")).toBe("Jump to question 2 (60% Accuracy)");
 
     // Verify button 3 (Low accuracy < 50%)
     const btn3 = screen.getByTestId("navigator-btn-3");
     expect(btn3.className).toContain("bg-[#FF6B6B]");
-    expect(btn3.getAttribute("title")).toBe("Question 3 (30% Accuracy)");
+    await expectNavigatorTooltip(btn3, "Question 3: 30% accuracy");
     expect(btn3.getAttribute("aria-label")).toBe("Jump to question 3 (30% Accuracy)");
 
     // Verify button 4 (Unattempted)
     const btn4 = screen.getByTestId("navigator-btn-4");
     expect(btn4.className).toContain("bg-gray-100");
-    expect(btn4.getAttribute("title")).toBe("Question 4 (No attempts yet)");
+    await expectNavigatorTooltip(btn4, "Question 4: no attempts");
 
     // Test getAccuracyColorClass helper directly with boundary cases
     expect(getAccuracyColorClass(80)).toBe("bg-[#8BCB88] text-black");
@@ -663,7 +675,7 @@ describe("QuizAnalysisView - Questions tab high-wrong-answer flags", () => {
     expect(screen.queryByText("10% of students got this wrong")).toBeNull();
   });
 
-  it("correctly renders navigator colors, high-wrong flags, and answer displays for mixed question types across all positions", () => {
+  it("correctly renders navigator colors, high-wrong flags, and answer displays for mixed question types across all positions", async () => {
     const mixedAnalysis: QuizAnalysis = {
       quiz_id: 1,
       classwork_id: 10,
@@ -771,22 +783,22 @@ describe("QuizAnalysisView - Questions tab high-wrong-answer flags", () => {
     // Q1 (Short Answer, 25%) -> RED
     const btn1 = screen.getByTestId("navigator-btn-1");
     expect(btn1.className).toContain("bg-[#FF6B6B]");
-    expect(btn1.getAttribute("title")).toBe("Question 1 (25% Accuracy)");
+    await expectNavigatorTooltip(btn1, "Question 1: 25% accuracy");
 
     // Q2 (Short Answer, 90%) -> GREEN
     const btn2 = screen.getByTestId("navigator-btn-2");
     expect(btn2.className).toContain("bg-[#8BCB88]");
-    expect(btn2.getAttribute("title")).toBe("Question 2 (90% Accuracy)");
+    await expectNavigatorTooltip(btn2, "Question 2: 90% accuracy");
 
     // Q11 (Multiple Choice after 10, 30%) -> RED
     const btn11 = screen.getByTestId("navigator-btn-11");
     expect(btn11.className).toContain("bg-[#FF6B6B]");
-    expect(btn11.getAttribute("title")).toBe("Question 11 (30% Accuracy)");
+    await expectNavigatorTooltip(btn11, "Question 11: 30% accuracy");
 
     // Q12 (Multiple Choice after 10, 95%) -> GREEN
     const btn12 = screen.getByTestId("navigator-btn-12");
     expect(btn12.className).toContain("bg-[#8BCB88]");
-    expect(btn12.getAttribute("title")).toBe("Question 12 (95% Accuracy)");
+    await expectNavigatorTooltip(btn12, "Question 12: 95% accuracy");
 
     // 2. Verify High-Wrong Flags
     // Q1 (Short Answer, 25%) -> flagged with 75%

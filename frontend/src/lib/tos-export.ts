@@ -32,6 +32,8 @@ export type TOSExportQuestion = {
   display_order?: number;
   explanation?: string | null;
   competency_label?: string;
+  passage_id?: string | null;
+  passage?: { id: string; title: string; text: string } | null;
   options?: Array<{
     option_text: string;
     is_correct?: boolean;
@@ -405,6 +407,7 @@ type TOSQuestionGroup = {
   directions: string;
   type: string;
   questions: TOSExportQuestion[];
+  passage?: NonNullable<TOSExportQuestion["passage"]>;
 };
 
 /**
@@ -433,7 +436,31 @@ export function formatTosAnswerKeyLine(groupType: string, q: TOSExportQuestion, 
   return `${num}. ${keys.length > 0 ? keys.join(" / ") : "(No answer key)"}`;
 }
 
-function groupExamQuestions(questions: TOSExportQuestion[]): TOSQuestionGroup[] {
+export function groupExamQuestions(questions: TOSExportQuestion[]): TOSQuestionGroup[] {
+  // Keep shared-source items together, even across different question types.
+  // Without passages the original ordering/headings are completely unchanged.
+  if (questions.some((q) => q.passage && q.passage_id === q.passage.id)) {
+    const buckets = new Map<string, TOSExportQuestion[]>();
+    for (const q of questions) {
+      const key = q.passage && q.passage_id === q.passage.id ? q.passage.id : "";
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key)!.push(q);
+    }
+    const groups: TOSQuestionGroup[] = [];
+    for (const [key, bucket] of buckets) {
+      const parts = groupByQuestionType(bucket);
+      for (const part of parts) {
+        part.heading = part.heading.replace(/^PART [IVX]+\./, `PART ${groups.length + 1}.`);
+        if (key && part === parts[0]) part.passage = bucket[0].passage!;
+        groups.push(part);
+      }
+    }
+    return groups;
+  }
+  return groupByQuestionType(questions);
+}
+
+function groupByQuestionType(questions: TOSExportQuestion[]): TOSQuestionGroup[] {
   const mc: TOSExportQuestion[] = [];
   const tf: TOSExportQuestion[] = [];
   const idn: TOSExportQuestion[] = [];
@@ -594,6 +621,10 @@ export async function exportTosExamPdf(
 
   for (const group of groups) {
     checkPage(25);
+    if (group.passage) {
+      write(group.passage.title, 12, true, 0, 2);
+      write(group.passage.text, 10.5, false, 0, 5);
+    }
     write(group.heading, 12, true, 0, 2);
     write(group.directions, 9.5, false, 0, 4);
 
@@ -737,6 +768,10 @@ export async function exportTosExamDocx(
   let qNum = 1;
 
   for (const group of groups) {
+    if (group.passage) {
+      children.push(p(group.passage.title, { bold: true, size: 24, space: 60 }));
+      children.push(p(group.passage.text, { size: 21, space: 160 }));
+    }
     children.push(p(group.heading, { bold: true, size: 24, space: 40 }));
     children.push(p(group.directions, { size: 19, space: 120 }));
 
