@@ -33,10 +33,11 @@ function adviserName(adviser?: AdviserOption) {
   return [adviser.first_name, adviser.middle_name, adviser.last_name, adviser.suffix].filter(Boolean).join(" ");
 }
 
-export default function ManualClassWizard({ initialSetup, onComplete, onBack }: {
+export default function ManualClassWizard({ initialSetup, onComplete, onBack, onClose }: {
   initialSetup: ManualClassSetup | null;
   onComplete: (setup: ManualClassSetup) => void;
   onBack: () => void;
+  onClose: () => void;
 }) {
   const [options, setOptions] = useState<ClassFormOptions | null>(null);
   const [activePathways, setActivePathways] = useState<AcademicPathwayRead[]>([]);
@@ -294,15 +295,18 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
         </Button>
       </section>
 
-      <Dialog.Footer className="px-0 border-t-0 pt-3">
-        <Button variant={"outline"} onClick={onBack}>Back</Button>
-        <Button
-          variant={"default"}
-          disabled={noLevels || noAdvisers}
-          onClick={continueToStudents}
-        >
-          Next
-        </Button>
+      <Dialog.Footer className="-mx-4 -mb-4 w-[calc(100%+2rem)] justify-between border-t-2 px-4 py-4">
+        <Button variant="outline" onClick={onClose}>Close</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={onBack}>Back</Button>
+          <Button
+            variant="default"
+            disabled={noLevels || noAdvisers}
+            onClick={continueToStudents}
+          >
+            Next
+          </Button>
+        </div>
       </Dialog.Footer>
     </div>
   );

@@ -2,18 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
-  BookOpen,
   ChevronDown,
   ChevronRight,
-  GraduationCap,
-  ListChecks,
-  Sparkles,
   Trash2,
 } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Badge } from "@/components/retroui/Badge";
+import { Card } from "@/components/retroui/Card";
+import { Checkbox } from "@/components/retroui/Checkbox";
 import { toast } from "sonner";
 import {
   apiFetch,
@@ -284,25 +282,27 @@ export function SetLessonGoalModal({
           </div>
         </Dialog.Header>
 
-        {/* Modal Body - 2 Columns */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 divide-y-2 divide-border overflow-y-auto md:grid-cols-2 md:divide-x-2 md:divide-y-0">
-          {/* LEFT: Distinctly Grouped Source Picker */}
-          <div className="flex min-w-0 flex-col p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-black uppercase tracking-wider text-foreground">
+        {/* Modal Body - stacked sections */}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-5">
+          {/* Available source items */}
+          <Card className="block w-full min-w-0 rounded-none! bg-card p-4 shadow-none hover:shadow-none">
+            <Card.Header className="mb-4 gap-1">
+              <Card.Title className="text-base font-bold">
                 Available Items
-              </h4>
-              <span className="text-xs text-muted-foreground">Check to add</span>
-            </div>
+              </Card.Title>
+              <Card.Description className="text-sm font-normal text-muted-foreground">
+                Select the lessons and classworks to include.
+              </Card.Description>
+            </Card.Header>
+            <Card.Content className="min-w-0">
 
             {/* GROUP 1: Lessons & Linked Classworks */}
             <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2 border-b border-border pb-1">
-                <BookOpen className="size-4 text-primary" />
-                <span className="text-xs font-black uppercase tracking-wide text-foreground">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-foreground">
                   Lessons & Classworks
                 </span>
-                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                <Badge variant="secondary" size="sm" className="rounded-none!">
                   {lessons.length}
                 </Badge>
               </div>
@@ -320,16 +320,17 @@ export function SetLessonGoalModal({
                   return (
                     <div
                       key={lesson.lesson_id}
-                      className="border-2 border-border bg-card text-card-foreground shadow-sm"
+                      className="w-full overflow-hidden border-2 border-border bg-background"
                     >
                       {/* Lesson Row */}
                       <div className="flex items-center justify-between bg-muted/50 p-2.5">
                         <label className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
+                          <Checkbox
+                            size="sm"
                             checked={isLessonSelected}
-                            onChange={() => toggleLesson(lesson)}
-                            className="size-4 accent-black rounded-none cursor-pointer"
+                            onCheckedChange={() => toggleLesson(lesson)}
+                            aria-label={`Add ${lesson.title} to lesson goals`}
+                            className="shrink-0 cursor-pointer"
                           />
                           <span className="truncate text-xs font-bold text-foreground">
                             {lesson.title}
@@ -337,15 +338,17 @@ export function SetLessonGoalModal({
                         </label>
                         {cws.length > 0 && (
                           <Tooltip>
-                            <TooltipTrigger render={<button
+                            <TooltipTrigger render={<Button
                             type="button"
+                            variant="ghost"
+                            size="icon"
                             onClick={() =>
                               setExpandedLessons((prev) => ({
                                 ...prev,
                                 [lesson.lesson_id]: !prev[lesson.lesson_id],
                               }))
                             }
-                            className="p-1 text-muted-foreground hover:bg-muted"
+                            className="size-7 p-1 text-muted-foreground"
                             aria-label={isExpanded ? "Hide classworks" : "Show classworks"}
                           >
                             {isExpanded ? (
@@ -353,7 +356,7 @@ export function SetLessonGoalModal({
                             ) : (
                               <ChevronRight className="size-3.5" />
                             )}
-                          </button>} />
+                          </Button>} />
                             <TooltipContent>{isExpanded ? "Hide classworks" : "Show classworks"}</TooltipContent>
                           </Tooltip>
                         )}
@@ -370,20 +373,18 @@ export function SetLessonGoalModal({
                                 className="flex cursor-pointer select-none items-center justify-between gap-2 p-1.5 text-xs hover:bg-muted/50"
                               >
                                 <div className="flex items-center gap-2 min-w-0">
-                                  <input
-                                    type="checkbox"
+                                  <Checkbox
+                                    size="sm"
                                     checked={isCwSelected}
-                                    onChange={() => toggleClasswork(cw, false)}
-                                    className="size-3.5 accent-black rounded-none cursor-pointer"
+                                    onCheckedChange={() => toggleClasswork(cw, false)}
+                                    aria-label={`Add ${cw.title} to lesson goals`}
+                                    className="shrink-0 cursor-pointer"
                                   />
                                   <span className="truncate font-medium text-foreground">
                                     {cw.title}
                                   </span>
                                 </div>
-                                <Badge
-                                  variant="secondary"
-                                  className="shrink-0 px-1.5 py-0 text-[9px]"
-                                >
+                                <Badge variant="outline" size="sm" className="shrink-0 rounded-none!">
                                   {cw.classwork_type || "Task"}
                                 </Badge>
                               </label>
@@ -397,12 +398,11 @@ export function SetLessonGoalModal({
               )}
 
               {/* GROUP 2: Clearly-labeled Exams / Term Assessments */}
-              <div className="mt-4 flex items-center gap-2 border-b border-border pb-1">
-                <GraduationCap className="size-4 text-primary" />
-                <span className="text-xs font-black uppercase tracking-wide text-foreground">
+              <div className="mt-4 flex items-center gap-2">
+                <span className="text-sm font-bold text-foreground">
                   Exams / Term Assessments
                 </span>
-                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                <Badge variant="secondary" size="sm" className="rounded-none!">
                   {subjectLevelExams.length}
                 </Badge>
               </div>
@@ -421,14 +421,15 @@ export function SetLessonGoalModal({
                   return (
                     <label
                       key={exam.classwork_id}
-                      className="flex cursor-pointer select-none items-center justify-between gap-2 border-2 border-border bg-card p-2.5"
+                      className="flex cursor-pointer select-none items-center justify-between gap-2 border-2 border-border bg-background p-3"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <input
-                          type="checkbox"
+                        <Checkbox
+                          size="sm"
                           checked={isExamSelected}
-                          onChange={() => toggleClasswork(exam, true)}
-                          className="size-4 accent-black rounded-none cursor-pointer"
+                          onCheckedChange={() => toggleClasswork(exam, true)}
+                          aria-label={`Add ${exam.title} to lesson goals`}
+                          className="shrink-0 cursor-pointer"
                         />
                         <div className="min-w-0">
                           <p className="truncate text-xs font-bold text-foreground">{exam.title}</p>
@@ -439,7 +440,7 @@ export function SetLessonGoalModal({
                           )}
                         </div>
                       </div>
-                      <Badge className="shrink-0 px-1.5 py-0.5 text-[10px]">
+                      <Badge variant="outline" size="sm" className="shrink-0 rounded-none!">
                         Exam
                       </Badge>
                     </label>
@@ -447,37 +448,38 @@ export function SetLessonGoalModal({
                 })
               )}
             </div>
-          </div>
+            </Card.Content>
+          </Card>
 
-          {/* RIGHT: Selected & Ordered Goals List */}
-          <div className="flex min-w-0 flex-col bg-muted/30 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <ListChecks className="size-4" />
-                <h4 className="text-sm font-black uppercase tracking-wider text-foreground">
+          {/* Selected and ordered goals */}
+          <Card className="block w-full min-w-0 rounded-none! bg-card p-4 shadow-none hover:shadow-none">
+            <Card.Header className="mb-4 flex-row flex-wrap items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <Card.Title className="text-base font-bold">
                   Curated Goal Layout
-                </h4>
-                <Badge className="text-xs font-extrabold">
+                </Card.Title>
+                <Badge variant="secondary" size="sm" className="rounded-none!">
                   {selectedItems.length}
                 </Badge>
               </div>
               {selectedItems.length > 0 && (
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={() => setSelectedItems([])}
-                  className="text-xs font-bold text-destructive"
                 >
                   Clear All
-                </button>
+                </Button>
               )}
-            </div>
+            </Card.Header>
+            <Card.Content className="min-w-0">
 
             {selectedItems.length === 0 ? (
-              <div className="flex flex-1 flex-col items-center justify-center border-2 border-dashed border-border bg-background p-8 text-center">
-                <Sparkles className="mb-2 size-8 text-muted-foreground" />
+              <div className="border-2 border-dashed border-border bg-background px-4 py-8 text-center">
                 <p className="text-sm font-bold text-foreground">No goals selected yet</p>
-                <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                  Check items from the left panel to add them. You can reorder them to dictate the exact order shown to students.
+                <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+                  Check items above to add them. You can reorder them to dictate the exact order shown to students.
                 </p>
               </div>
             ) : (
@@ -485,20 +487,17 @@ export function SetLessonGoalModal({
                 {selectedItems.map((item, index) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between gap-2 border-2 border-border bg-card p-2.5 text-card-foreground shadow-[2px_2px_0_#000]"
+                    className="flex flex-wrap items-center justify-between gap-2 border-2 border-border bg-background p-3 text-card-foreground"
                   >
                     {/* Index & Title */}
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <span className="flex size-5 shrink-0 items-center justify-center bg-black text-[10px] font-black text-white">
+                      <Badge variant="solid" size="sm" className="shrink-0 rounded-none!">
                         {index + 1}
-                      </span>
+                      </Badge>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <p className="truncate text-xs font-bold text-foreground">{item.title}</p>
-                          <Badge
-                            variant="secondary"
-                            className="px-1 py-0 text-[9px]"
-                          >
+                          <Badge variant="outline" size="sm" className="shrink-0 rounded-none!">
                             {item.typeBadge}
                           </Badge>
                         </div>
@@ -511,38 +510,44 @@ export function SetLessonGoalModal({
                     {/* Reorder & Remove Controls */}
                     <div className="flex items-center gap-1 shrink-0">
                       <Tooltip>
-                        <TooltipTrigger render={<span className="inline-flex"><button
+                        <TooltipTrigger render={<span className="inline-flex"><Button
                         type="button"
+                        variant="ghost"
+                        size="icon"
                         disabled={index === 0}
                         onClick={() => moveItem(index, "up")}
-                        className="p-1 text-foreground hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent"
+                        className="size-7 p-1 text-foreground disabled:opacity-30"
                         aria-label="Move up"
                       >
                         <ArrowUp className="size-3.5" />
-                      </button></span>} />
+                      </Button></span>} />
                         <TooltipContent>{index === 0 ? "Already first" : "Move up"}</TooltipContent>
                       </Tooltip>
                       <Tooltip>
-                        <TooltipTrigger render={<span className="inline-flex"><button
+                        <TooltipTrigger render={<span className="inline-flex"><Button
                         type="button"
+                        variant="ghost"
+                        size="icon"
                         disabled={index === selectedItems.length - 1}
                         onClick={() => moveItem(index, "down")}
-                        className="p-1 text-foreground hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent"
+                        className="size-7 p-1 text-foreground disabled:opacity-30"
                         aria-label="Move down"
                       >
                         <ArrowDown className="size-3.5" />
-                      </button></span>} />
+                      </Button></span>} />
                         <TooltipContent>{index === selectedItems.length - 1 ? "Already last" : "Move down"}</TooltipContent>
                       </Tooltip>
                       <Tooltip>
-                        <TooltipTrigger render={<button
+                        <TooltipTrigger render={<Button
                         type="button"
+                        variant="ghost"
+                        size="icon"
                         onClick={() => removeItem(item.id)}
-                        className="p-1 text-destructive hover:bg-destructive/10"
+                        className="size-7 p-1 text-destructive hover:bg-destructive/10"
                         aria-label="Remove goal item"
                       >
                         <Trash2 className="size-3.5" />
-                      </button>} />
+                      </Button>} />
                         <TooltipContent>Remove item</TooltipContent>
                       </Tooltip>
                     </div>
@@ -550,7 +555,8 @@ export function SetLessonGoalModal({
                 ))}
               </div>
             )}
-          </div>
+            </Card.Content>
+          </Card>
         </div>
 
         <Dialog.Footer className="mt-0 justify-between">

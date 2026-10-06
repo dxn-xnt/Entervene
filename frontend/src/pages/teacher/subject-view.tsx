@@ -1,18 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { Archive, Award, BookOpen, BookOpenCheck, ClipboardList, Info, Paperclip, Plus, Trash2, Users, X } from "lucide-react";
+import { Award, BookOpen, BookOpenCheck, ClipboardList, Info, Paperclip, Plus, Users, X } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import AppLayout from "@/layouts/app-layout";
 import { API_URL, apiFetch } from "@/lib/api";
 import AttachmentDisplay from "@/components/attachment-display";
-import CreateLessonModal from "@/pages/teacher/create-lesson";
+import CreateLessonModal from "@/pages/teacher/forms/create-lesson";
 import {
   getTeacherRecordPeriods,
   getTeacherStudentRoster,
 } from "@/lib/student-record-api";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
-import { Input } from "@/components/retroui/Input";
 import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Card } from "@/components/retroui/Card";
@@ -20,10 +19,11 @@ import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Badge } from "@/components/retroui/Badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import ClassworkFormModal from "./subject-details/classwork-form-modal";
-import CompetencyModal from "./subject-details/competency-modal";
-import LessonClassworkList from "./subject-details/lesson-classwork-list";
+import CompetencyModal from "./forms/competency-modal";
+import ManageLessonModal from "./forms/manage-lesson";
+import SubjectLessonList from "./subject-details/lesson-classwork-list";
 import SubjectClassworkTab from "./subject-details/subject-classwork-tab";
-import TeacherLessonDetailScreen from "./subject-details/teacher-lesson-detail-screen";
+import TeacherLessonDetailScreen from "./lesson-view";
 import TOSGeneratorScreen from "./subject-details/tos-generator-screen";
 import {
   LOCKED_CLASSWORK_MESSAGE,
@@ -62,14 +62,11 @@ export default function SubjectDetails() {
   const [currentAcademicPeriodId, setCurrentAcademicPeriodId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"lessons" | "classwork">("lessons");
   const [isCreatingLesson, setIsCreatingLesson] = useState(false);
-  const [activeLessonDetail, setActiveLessonDetail] = useState<Lesson | null>(
-    null,
-  );
+  const [activeLessonDetail, setActiveLessonDetail] = useState<Lesson | null>(null);
+  const [isCreatingSubjectClasswork, setIsCreatingSubjectClasswork] = useState(false);
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [subjectAssignments, setSubjectAssignments] = useState<
-    LinkedClasswork[]
-  >([]);
+  const [subjectAssignments, setSubjectAssignments] = useState<LinkedClasswork[]>([]);
   const [classworkCount, setClassworkCount] = useState<number | null>(null);
   const [overviewMastery, setOverviewMastery] = useState<number>(0);
   const [overviewCompletion, setOverviewCompletion] = useState<number>(0);
@@ -79,31 +76,20 @@ export default function SubjectDetails() {
   const [isSavingLesson, setIsSavingLesson] = useState(false);
   const [isArchivingLesson, setIsArchivingLesson] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
-  const [removingLessonAttachmentId, setRemovingLessonAttachmentId] = useState<
-    number | null
-  >(null);
+  const [removingLessonAttachmentId, setRemovingLessonAttachmentId] = useState<number | null>(null);
   const [expandedLessonId, setExpandedLessonId] = useState<number | null>(null);
-  const [linkedClassworks, setLinkedClassworks] = useState<
-    Record<number, LinkedClasswork[]>
-  >({});
-  const [loadingClassworkId, setLoadingClassworkId] = useState<number | null>(
-    null,
-  );
+  const [linkedClassworks, setLinkedClassworks] = useState<Record<number, LinkedClasswork[]>>({});
+  const [loadingClassworkId, setLoadingClassworkId] = useState<number | null>(null);
   const [classworkLesson, setClassworkLesson] = useState<Lesson | null>(null);
-  const [classworkDraft, setClassworkDraft] =
-    useState<ClassworkDraft>(emptyClassworkDraft);
+  const [classworkDraft, setClassworkDraft] = useState<ClassworkDraft>(emptyClassworkDraft);
   const [classworkMaterials, setClassworkMaterials] = useState<File[]>([]);
   const [isCreatingClasswork, setIsCreatingClasswork] = useState(false);
-  const [selectedClasswork, setSelectedClasswork] =
-    useState<ClassworkDetail | null>(null);
-  const [selectedTracking, setSelectedTracking] =
-    useState<SubmissionTracking | null>(null);
+  const [selectedClasswork, setSelectedClasswork] = useState<ClassworkDetail | null>(null);
+  const [selectedTracking, setSelectedTracking] = useState<SubmissionTracking | null>(null);
   const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
   const [detailError, setDetailError] = useState("");
   const [lessonSearch, setLessonSearch] = useState("");
-  const [lessonSort, setLessonSort] = useState<
-    "order" | "newest" | "oldest" | "title"
-  >("order");
+  const [lessonSort, setLessonSort] = useState<"order" | "newest" | "oldest" | "title">("order");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   void isLoading;
@@ -117,7 +103,35 @@ export default function SubjectDetails() {
       ]);
       if (lessonsRes.ok) {
         const lessonData = (await lessonsRes.json()) as Lesson[];
-        setLessons(lessonData.filter((lesson) => !lesson.is_archived));
+        const validLessons = lessonData.filter((lesson) => !lesson.is_archived);
+        setLessons(validLessons);
+
+        if (classId) {
+          try {
+            const cwPromises = validLessons.map(async (l) => {
+              try {
+                const res = await apiFetch(
+                  `/api/v1/lessons/my-class/${classId}/lesson/${l.lesson_id}/linked-classwork`,
+                );
+                if (res.ok) {
+                  const cwList = (await res.json()) as LinkedClasswork[];
+                  return { lessonId: l.lesson_id, classworks: cwList };
+                }
+              } catch {
+                // ignore
+              }
+              return { lessonId: l.lesson_id, classworks: [] };
+            });
+            const cwResults = await Promise.all(cwPromises);
+            const map: Record<number, LinkedClasswork[]> = {};
+            cwResults.forEach(({ lessonId, classworks }) => {
+              map[lessonId] = classworks;
+            });
+            setLinkedClassworks(map);
+          } catch {
+            // ignore
+          }
+        }
       }
       if (compsRes.ok) {
         const compData = (await compsRes.json()) as CompetencyItem[];
@@ -235,7 +249,35 @@ export default function SubjectDetails() {
             throw new Error("Unable to load lessons.");
           }
           const lessonData = (await lessonsResponse.json()) as Lesson[];
-          setLessons(lessonData.filter((lesson) => !lesson.is_archived));
+          const validLessons = lessonData.filter((lesson) => !lesson.is_archived);
+          setLessons(validLessons);
+
+          if (classId) {
+            try {
+              const cwPromises = validLessons.map(async (l) => {
+                try {
+                  const res = await apiFetch(
+                    `/api/v1/lessons/my-class/${classId}/lesson/${l.lesson_id}/linked-classwork`,
+                  );
+                  if (res.ok) {
+                    const cwList = (await res.json()) as LinkedClasswork[];
+                    return { lessonId: l.lesson_id, classworks: cwList };
+                  }
+                } catch {
+                  // ignore
+                }
+                return { lessonId: l.lesson_id, classworks: [] };
+              });
+              const cwResults = await Promise.all(cwPromises);
+              const map: Record<number, LinkedClasswork[]> = {};
+              cwResults.forEach(({ lessonId, classworks }) => {
+                map[lessonId] = classworks;
+              });
+              setLinkedClassworks(map);
+            } catch {
+              // ignore
+            }
+          }
         }
 
         if (assignmentsResponse) {
@@ -620,31 +662,35 @@ export default function SubjectDetails() {
     }
   };
 
+  const handleArchiveLessonDirect = async (lesson: Lesson) => {
+    const response = await apiFetch(
+      `/api/v1/lessons/${lesson.lesson_id}/archive`,
+      {
+        method: "PUT",
+      },
+    );
+    if (!response.ok) {
+      throw new Error("Unable to archive lesson.");
+    }
+    setLessons((current) =>
+      current.filter((item) => item.lesson_id !== lesson.lesson_id),
+    );
+    if (selectedLesson?.lesson_id === lesson.lesson_id) {
+      setSelectedLesson(null);
+      setLessonDraft(null);
+      setLessonClassIds([]);
+      setShowArchiveConfirm(false);
+    }
+    toast.success("Lesson archived.");
+  };
+
   const archiveLesson = async () => {
     if (!selectedLesson) return;
 
     setIsArchivingLesson(true);
     setError("");
     try {
-      const response = await apiFetch(
-        `/api/v1/lessons/${selectedLesson.lesson_id}/archive`,
-        {
-          method: "PUT",
-        },
-      );
-      if (!response.ok) {
-        throw new Error("Unable to archive lesson.");
-      }
-      setLessons((current) =>
-        current.filter(
-          (lesson) => lesson.lesson_id !== selectedLesson.lesson_id,
-        ),
-      );
-      setSelectedLesson(null);
-      setLessonDraft(null);
-      setLessonClassIds([]);
-      setShowArchiveConfirm(false);
-      toast.success("Lesson archived.");
+      await handleArchiveLessonDirect(selectedLesson);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Unable to archive lesson.",
@@ -900,15 +946,16 @@ export default function SubjectDetails() {
     }
   };
 
+
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             {activeLessonDetail ? (
-              <main className="py-4 px-4 md:px-6">
+              <>
                 {error && (
-                  <div className="mb-4 rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <div className="mx-3 mt-3 sm:mx-4 md:mx-6 rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
                     {error}
                   </div>
                 )}
@@ -926,7 +973,7 @@ export default function SubjectDetails() {
                     loadingClassworkId === activeLessonDetail.lesson_id
                   }
                 />
-              </main>
+              </>
             ) : isTOSOpen && subjectId ? (
               <main>
                 <TOSGeneratorScreen
@@ -1000,6 +1047,20 @@ export default function SubjectDetails() {
                           </Button>
                         </>
                       )}
+                      {activeTab === "classwork" && (
+                        <Button
+                          type="button"
+                          size="header"
+                          variant="default"
+                          onClick={() => setIsCreatingSubjectClasswork(true)}
+                          className="w-full whitespace-nowrap md:w-auto"
+                        >
+                          <Plus size={16} />
+                          New Classwork
+                        </Button>
+                      )}
+
+
                     </div>
                   </header>
                   <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
@@ -1040,9 +1101,11 @@ export default function SubjectDetails() {
                       subjectId={subjectId}
                       subjectName={subjectName}
                       sectionName={sectionName}
+                      isCreateOpen={isCreatingSubjectClasswork}
+                      onCloseCreate={() => setIsCreatingSubjectClasswork(false)}
                     />
                   ) : (
-                    <LessonClassworkList
+                    <SubjectLessonList
                       lessonSearch={lessonSearch}
                       setLessonSearch={setLessonSearch}
                       lessonSort={lessonSort}
@@ -1062,6 +1125,7 @@ export default function SubjectDetails() {
                       openCompetencyForm={openCompetencyForm}
                       onAddLessonToCompetency={handleAddLessonToCompetency}
                       onArchiveCompetency={handleArchiveCompetency}
+                      onArchiveLesson={handleArchiveLessonDirect}
                       overviewMastery={overviewMastery}
                       classworkCount={classworkCount}
                       overviewCompletion={overviewCompletion}
@@ -1072,392 +1136,25 @@ export default function SubjectDetails() {
             )}
 
             {selectedLesson && lessonDraft && (
-              <Dialog
-                open
-                onOpenChange={(open) => {
-                  if (!open) closeLessonManager();
-                }}
-              >
-                <Dialog.Content className="w-full max-w-4xl p-0 transition-none">
-                  <Dialog.Header className="border-border">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wide">
-                        Teacher lesson management
-                      </p>
-                      <h2 className="text-xl font-bold">
-                        {selectedLesson.title}
-                      </h2>
-                    </div>
-                  </Dialog.Header>
-
-                  <div className="flex flex-col gap-5 p-5">
-                    <div className="space-y-4">
-                      {error && (
-                        <div className="border-2 border-red-600 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-                          {error}
-                        </div>
-                      )}
-
-                      <Card className="block w-full shadow-none">
-                        <Card.Content className="space-y-4">
-                          <div className="grid gap-4 sm:grid-cols-[1fr_130px]">
-                            <div>
-                              <label
-                                htmlFor="manage-lesson-title"
-                                className="mb-1 block text-sm font-semibold"
-                              >
-                                Lesson title
-                              </label>
-                              <Input
-                                id="manage-lesson-title"
-                                value={lessonDraft.title}
-                                onChange={(event) =>
-                                  setLessonDraft((current) =>
-                                    current
-                                      ? { ...current, title: event.target.value }
-                                      : current,
-                                  )
-                                }
-                                disabled={isSavingLesson}
-                                className="h-10 w-full rounded-none border-border bg-background text-foreground !shadow-none"
-                              />
-                            </div>
-                            <div>
-                              <label
-                                htmlFor="manage-lesson-order"
-                                className="mb-1 block text-sm font-semibold"
-                              >
-                                Order
-                              </label>
-                              <Input
-                                id="manage-lesson-order"
-                                type="number"
-                                min="1"
-                                step="1"
-                                value={lessonDraft.order_index}
-                                onChange={(event) =>
-                                  setLessonDraft((current) =>
-                                    current
-                                      ? {
-                                        ...current,
-                                        order_index: event.target.value,
-                                      }
-                                      : current,
-                                  )
-                                }
-                                disabled={isSavingLesson}
-                                className="h-10 w-full rounded-none border-border bg-background text-foreground !shadow-none"
-                              />
-                            </div>
-                          </div>
-
-                          <div>
-                            <label
-                              htmlFor="manage-lesson-description"
-                              className="mb-1 block text-sm font-semibold"
-                            >
-                              Description
-                            </label>
-                            <textarea
-                              id="manage-lesson-description"
-                              value={lessonDraft.description}
-                              onChange={(event) =>
-                                setLessonDraft((current) =>
-                                  current
-                                    ? {
-                                      ...current,
-                                      description: event.target.value,
-                                    }
-                                    : current,
-                                )
-                              }
-                              disabled={isSavingLesson}
-                              className="min-h-20 w-full rounded-none border-2 border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/35"
-                              placeholder="Short lesson summary"
-                            />
-                          </div>
-
-                          <div>
-                            <label
-                              htmlFor="manage-lesson-content"
-                              className="mb-1 block text-sm font-semibold"
-                            >
-                              Lesson content
-                            </label>
-                            <textarea
-                              id="manage-lesson-content"
-                              value={lessonDraft.content}
-                              onChange={(event) =>
-                                setLessonDraft((current) =>
-                                  current
-                                    ? { ...current, content: event.target.value }
-                                    : current,
-                                )
-                              }
-                              disabled={isSavingLesson}
-                              className="min-h-52 w-full rounded-none border-2 border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/35"
-                              placeholder="Write the lesson notes or learning content students will read."
-                            />
-                          </div>
-                        </Card.Content>
-                      </Card>
-
-                      <Card className="block w-full shadow-none">
-                        <Card.Content className="space-y-3">
-                          <div className="flex items-center gap-2">
-                            <Paperclip size={18} />
-                            <Card.Title className="mb-0 text-base font-bold">
-                              Current Materials
-                            </Card.Title>
-                            <Badge
-                              variant="outline"
-                              size="sm"
-                              className="ml-auto rounded-none"
-                            >
-                              {selectedLesson.attachments.length}
-                            </Badge>
-                          </div>
-                          {selectedLesson.attachments.length > 0 ? (
-                            <>
-                              <AttachmentDisplay
-                                attachments={selectedLesson.attachments}
-                                type="lesson"
-                                downloadUrl={(attachmentId) =>
-                                  `${API_URL}/api/v1/lessons/${selectedLesson.lesson_id}/attachments/${attachmentId}/download`
-                                }
-                              />
-                              <div className="mt-3 space-y-2 border-t border-border pt-3">
-                                {selectedLesson.attachments.map((attachment) => (
-                                  <div
-                                    key={attachment.lesson_attachment_id}
-                                    className="flex items-center justify-between gap-3 border border-border bg-background px-3 py-2"
-                                  >
-                                    <p className="truncate text-sm font-semibold">
-                                      {attachment.file_name}
-                                    </p>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        removeLessonAttachment(
-                                          attachment.lesson_attachment_id,
-                                        )
-                                      }
-                                      disabled={
-                                        removingLessonAttachmentId !== null ||
-                                        isSavingLesson
-                                      }
-                                      className="inline-flex shrink-0 items-center gap-1 border-2 border-red-600 bg-red-50 px-2 py-1 text-xs font-bold text-red-700 disabled:opacity-50"
-                                    >
-                                      <Trash2 size={14} />
-                                      {removingLessonAttachmentId ===
-                                        attachment.lesson_attachment_id
-                                        ? "Removing..."
-                                        : "Remove"}
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            </>
-                          ) : (
-                            <p className="text-sm text-gray-600">
-                              No lesson materials attached.
-                            </p>
-                          )}
-                        </Card.Content>
-                      </Card>
-
-                      <Card className="block w-full shadow-none">
-                        Lesson file uploads now live under Reading classworks so
-                        materials can be scheduled, locked, and tracked like the
-                        rest of the classwork flow.
-                      </Card>
-                    </div>
-
-                    <aside className="space-y-4">
-                      <Card className="block w-full shadow-none">
-                        <Card.Content>
-                          <Card.Title className="mb-0 text-base font-bold">
-                            Publication
-                          </Card.Title>
-                          <label className="mt-3 flex items-start gap-3 border border-border bg-background px-3 py-3 text-sm font-semibold">
-                            <input
-                              type="checkbox"
-                              checked={lessonDraft.is_published}
-                              onChange={(event) =>
-                                setLessonDraft((current) =>
-                                  current
-                                    ? {
-                                      ...current,
-                                      is_published: event.target.checked,
-                                    }
-                                    : current,
-                                )
-                              }
-                              disabled={isSavingLesson}
-                            />
-                            <span>
-                              {lessonDraft.is_published
-                                ? "Published to assigned sections"
-                                : "Saved as draft"}
-                              <span className="mt-1 block text-xs font-normal text-gray-600">
-                                Draft lessons stay hidden from students.
-                              </span>
-                            </span>
-                          </label>
-                        </Card.Content>
-                      </Card>
-
-                      <Card className="block w-full shadow-none">
-                        <Card.Content>
-                          <Card.Title className="mb-0 text-base font-bold">
-                            Assigned Sections
-                          </Card.Title>
-                          <p className="mt-1 text-xs text-gray-600">
-                            Select sections to keep or add. Existing assignments
-                            cannot be removed by the current lesson API.
-                          </p>
-                          <div className="mt-3 space-y-2">
-                            {classesForSubject.map((item) => (
-                              <label
-                                key={item.subject_load_id}
-                                className="flex items-center gap-2 border border-border bg-background px-3 py-2 text-sm"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={lessonClassIds.includes(item.class_id)}
-                                  onChange={() =>
-                                    toggleLessonClass(item.class_id)
-                                  }
-                                  disabled={
-                                    isSavingLesson ||
-                                    item.class_id === Number(classId)
-                                  }
-                                />
-                                <span className="flex-1">
-                                  {item.section_name}
-                                </span>
-                                {item.class_id === Number(classId) && (
-                                  <span className="text-[10px] font-bold uppercase text-gray-500">
-                                    Current
-                                  </span>
-                                )}
-                              </label>
-                            ))}
-                          </div>
-                        </Card.Content>
-                      </Card>
-
-                      <Card className="block w-full shadow-none">
-                        <Card.Content>
-                          <div className="flex items-center gap-2 text-red-800">
-                            <Archive size={17} />
-                            <Card.Title className="mb-0 text-base font-bold text-red-800">
-                              Archive Lesson
-                            </Card.Title>
-                          </div>
-                          <p className="mt-2 text-xs text-red-700">
-                            Archive hides this lesson from the routed teacher list
-                            and student lesson views.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setShowArchiveConfirm(true)}
-                            disabled={isArchivingLesson || isSavingLesson}
-                            className="mt-3 w-full rounded-none border-2 border-red-600 bg-background px-3 py-2 text-sm font-bold text-red-700 transition hover:bg-red-600 hover:text-white disabled:opacity-50 disabled:hover:bg-background disabled:hover:text-red-700"
-                          >
-                            {isArchivingLesson
-                              ? "Archiving..."
-                              : "Archive Lesson"}
-                          </button>
-                        </Card.Content>
-                      </Card>
-                    </aside>
-                  </div>
-
-                  <Dialog.Footer>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={closeLessonManager}
-                      disabled={
-                        isSavingLesson ||
-                        isArchivingLesson ||
-                        removingLessonAttachmentId !== null
-                      }
-                    >
-                      Close
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={saveLesson}
-                      disabled={
-                        isSavingLesson ||
-                        isArchivingLesson ||
-                        removingLessonAttachmentId !== null
-                      }
-                    >
-                      {isSavingLesson
-                        ? "Saving..."
-                        : lessonDraft.is_published
-                          ? "Save and Publish"
-                          : "Save Draft"}
-                    </Button>
-                  </Dialog.Footer>
-                </Dialog.Content>
-              </Dialog>
-            )}
-
-            {showArchiveConfirm && selectedLesson && (
-              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4">
-                <Card className="block w-full max-w-md border-border bg-background text-foreground shadow-[4px_4px_0_#000] hover:shadow-[4px_4px_0_#000]">
-                  <div className="flex items-center justify-between border-b border-black bg-red-100 px-5 py-3">
-                    <div className="flex items-center gap-2 text-red-800">
-                      <Archive size={18} />
-                      <Card.Title className="mb-0 text-base font-bold text-red-800">
-                        Archive Lesson?
-                      </Card.Title>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowArchiveConfirm(false)}
-                      disabled={isArchivingLesson}
-                      className="rounded p-1 hover:bg-white/60 disabled:opacity-50"
-                      aria-label="Close archive confirmation"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                  <Card.Content className="space-y-3">
-                    <p className="text-sm font-medium">
-                      Are you sure you want to archive{" "}
-                      <span className="font-bold">"{selectedLesson.title}"</span>?
-                    </p>
-                    <p className="text-xs text-gray-600">
-                      This hides the lesson from the teacher lesson list and
-                      student lesson views. You can restore it later from the
-                      backend archive flow.
-                    </p>
-                  </Card.Content>
-                  <div className="flex justify-end gap-3 border-t border-black px-5 py-4">
-                    <button
-                      type="button"
-                      onClick={() => setShowArchiveConfirm(false)}
-                      disabled={isArchivingLesson}
-                      className="rounded border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={archiveLesson}
-                      disabled={isArchivingLesson}
-                      className="rounded border border-black bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 disabled:opacity-50"
-                    >
-                      {isArchivingLesson ? "Archiving..." : "Archive Lesson"}
-                    </button>
-                  </div>
-                </Card>
-              </div>
+              <ManageLessonModal
+                selectedLesson={selectedLesson}
+                lessonDraft={lessonDraft}
+                setLessonDraft={setLessonDraft}
+                classesForSubject={classesForSubject}
+                classId={classId}
+                lessonClassIds={lessonClassIds}
+                isSavingLesson={isSavingLesson}
+                isArchivingLesson={isArchivingLesson}
+                removingLessonAttachmentId={removingLessonAttachmentId}
+                error={error}
+                showArchiveConfirm={showArchiveConfirm}
+                setShowArchiveConfirm={setShowArchiveConfirm}
+                closeLessonManager={closeLessonManager}
+                saveLesson={saveLesson}
+                archiveLesson={archiveLesson}
+                toggleLessonClass={toggleLessonClass}
+                removeLessonAttachment={removeLessonAttachment}
+              />
             )}
 
             {classworkLesson && (
@@ -1542,14 +1239,14 @@ export default function SubjectDetails() {
                         {detailError}
                       </div>
                     ) : selectedClasswork ? (
-                      <div className="grid gap-5 p-5 lg:grid-cols-[1.4fr_1fr]">
+                      <div className="grid grid-cols-1 gap-5 p-5">
                         <div className="space-y-4">
                           <Card className="block">
                             <Card.Content className="space-y-3">
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge
                                   variant="secondary"
-                                  className="bg-[#7ABA78] text-xs font-semibold"
+                                  className="text-xs font-semibold"
                                 >
                                   {selectedClasswork.classwork_type || "Classwork"}
                                 </Badge>
@@ -1573,7 +1270,7 @@ export default function SubjectDetails() {
                                     : "Draft"}
                                 </Badge>
                                 {selectedClasswork.is_locked && (
-                                  <Badge className="rounded border-2 border-red-600 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                                  <Badge variant="destructive" size="sm" className="font-semibold">
                                     Locked
                                   </Badge>
                                 )}

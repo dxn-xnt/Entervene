@@ -178,6 +178,7 @@ class ClassworkAssignmentResponse(BaseModel):
     total_points: Optional[float]
     due_date: Optional[datetime]
     lock_date: Optional[datetime] = None
+    created_at: Optional[datetime] = None
     allow_late_submissions: bool = False
     is_published: bool
     show_scores: bool

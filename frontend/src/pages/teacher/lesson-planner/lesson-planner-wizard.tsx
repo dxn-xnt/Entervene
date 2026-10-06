@@ -267,17 +267,6 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
 
       {/* Dialog Footer using default Dialog structure */}
       <Dialog.Footer className="w-full items-stretch sm:flex-wrap sm:items-center sm:justify-between">
-        <div className="grid grid-cols-2 items-center gap-2 sm:flex">
-          <Button
-            type="button"
-            variant="default"
-            onClick={goPrev}
-            disabled={isFirst}
-            className="w-full justify-center gap-2 sm:w-auto"
-          >
-            <ChevronLeft className="size-4" />
-            Previous
-          </Button>
           {onClose && (
             <Button
               type="button"
@@ -290,9 +279,18 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
               Cancel
             </Button>
           )}
-        </div>
 
-        <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap sm:justify-end">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={goPrev}
+            disabled={isFirst}
+            className="w-full justify-center gap-2 sm:w-auto"
+          >
+            <ChevronLeft className="size-4" />
+            Previous
+          </Button>
           <Button
             type="button"
             variant="outline"

@@ -1457,6 +1457,7 @@ def _assignment_response(
         total_points=float(cast(Any, classwork.total_points)) if classwork.total_points else None,
         due_date=cast(Optional[datetime], assignment.due_date),
         lock_date=cast(Optional[datetime], assignment.lock_date),
+        created_at=cast(Optional[datetime], assignment.created_at or classwork.created_at),
         allow_late_submissions=cast(bool, assignment.allow_late_submissions),
         is_published=cast(bool, assignment.is_published),
         show_scores=cast(bool, classwork.show_scores),

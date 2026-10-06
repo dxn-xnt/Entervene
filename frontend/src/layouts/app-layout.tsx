@@ -19,7 +19,12 @@ export default function AppLayout({
     >
 
       <AppSidebar variant="inset" />
-      <SidebarInset className="h-svh overflow-hidden">
+      <SidebarInset
+        className="h-svh overflow-hidden"
+        data-teacher-page={window.location.pathname.startsWith('/teacher') || undefined}
+        data-student-page={window.location.pathname.startsWith('/student') || undefined}
+        data-admin-page={window.location.pathname.startsWith('/admin') || undefined}
+      >
         <AppContent>
           {/* <SiteHeader breadcrumbs={breadcrumbs}/> */}
           {children}

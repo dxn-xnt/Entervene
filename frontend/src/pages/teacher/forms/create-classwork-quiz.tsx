@@ -6,7 +6,7 @@ import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { useToast } from "@/components/retroui/use-toast";
 import { Text } from "@/components/retroui/Text";
-import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
+import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { Alert } from "@/components/retroui/Alert";
@@ -755,28 +755,14 @@ export default function CreateClassworkQuizModal({
             {!isAIModalOpen && (
                 <Dialog.Content size="3xl">
                     <Dialog.Header position="fixed" asChild>
-                <div className="flex items-center justify-between w-full">
-                    <div>
-                        <Text as="h5" className="font-sans text-xl font-bold">
-                            Create Quiz
-                        </Text>
-                        <p className="text-xs font-semibold text-black">
-                            Step {createStepNumber} of {createStepTotal}
-                        </p>
-                    </div>
-                    <Tooltip>
-                      <TooltipTrigger render={<span className="inline-flex"><button
-                        type="button"
-                        onClick={onClose}
-                        disabled={isCreating}
-                        className={dialogHeaderCloseButtonClassName}
-                        aria-label="Close modal"
-                    >
-                        <X className="size-4" />
-                    </button></span>} />
-                      <TooltipContent>{isCreating ? "Creating classwork" : "Close modal"}</TooltipContent>
-                    </Tooltip>
-                </div>
+                        <div className="flex w-full items-center justify-between gap-3">
+                            <Text as="h5" className="min-w-0 font-sans text-xl font-bold">
+                                Create Quiz
+                            </Text>
+                            <p className="shrink-0 whitespace-nowrap text-sm font-semibold sm:text-base">
+                                Step {createStepNumber} of {createStepTotal}
+                            </p>
+                        </div>
             </Dialog.Header>
 
             <section className="flex flex-col gap-4 p-5">
@@ -876,7 +862,7 @@ export default function CreateClassworkQuizModal({
                 {createStep === "details" && (
                     <div className="space-y-4">
                         {(aiLinkedSubjectName || (aiLinkedLessonTitles && aiLinkedLessonTitles.length > 0) || aiPromptScope) && (
-                            <div className="rounded border-2 border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] space-y-2">
+                            <div className="rounded border-2 border-black bg-[#F6E9B2] p-3 space-y-2">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
                                         <Sparkles className="w-3.5 h-3.5 text-amber-700" />
@@ -923,10 +909,10 @@ export default function CreateClassworkQuizModal({
                                 }}
                                 disabled={isCreating || Boolean(remediationTarget)}
                             >
-                                <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm font-medium">
+                                <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-none focus:shadow-none text-sm font-medium">
                                     <Select.Value placeholder="Choose subject" />
                                 </Select.Trigger>
-                                <Select.Content className="border-2 border-black rounded bg-white">
+                                <Select.Content className="border-2 border-black rounded bg-white shadow-none">
                                     <Select.Group>
                                         {subjects.map((subject) => (
                                             <Select.Item key={subject.id} value={String(subject.id)}>
@@ -952,7 +938,7 @@ export default function CreateClassworkQuizModal({
                                 }
                                 disabled={isCreating}
                                 placeholder="Introduction to Programming Quiz"
-                                className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
+                                className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
                             />
                         </div>
 
@@ -970,7 +956,7 @@ export default function CreateClassworkQuizModal({
                                 }
                                 disabled={isCreating}
                                 placeholder="Short context for students"
-                                className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
+                                className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
                             />
                         </div>
 
@@ -988,7 +974,7 @@ export default function CreateClassworkQuizModal({
                                 }
                                 disabled={isCreating}
                                 placeholder="What students need to read, answer, or submit"
-                                className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-md transition focus:outline-hidden focus:shadow-xs min-h-20 text-sm"
+                                className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-none transition focus:outline-hidden focus:shadow-none min-h-20 text-sm"
                             />
                         </div>
 
@@ -1007,10 +993,10 @@ export default function CreateClassworkQuizModal({
                                     }
                                     disabled={isCreating || remediationDraft}
                                 >
-                                    <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
+                                    <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-none focus:shadow-none text-sm">
                                         <Select.Value placeholder="Select Category" />
                                     </Select.Trigger>
-                                    <Select.Content className="border-2 border-black rounded bg-white">
+                                    <Select.Content className="border-2 border-black rounded bg-white shadow-none">
                                         <Select.Group>
                                             <Select.Item value="WRITTEN_WORK">
                                                 Written Works
@@ -1041,10 +1027,10 @@ export default function CreateClassworkQuizModal({
                                         }
                                         disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
                                     >
-                                        <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
+                                        <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-none focus:shadow-none text-sm">
                                             <Select.Value placeholder="Select Sub-type" />
                                         </Select.Trigger>
-                                        <Select.Content className="border-2 border-black rounded bg-white">
+                                        <Select.Content className="border-2 border-black rounded bg-white shadow-none">
                                             <Select.Group>
                                                 <Select.Item value="SUMMATIVE_1">
                                                     Summative 1 (30%)
@@ -1079,7 +1065,7 @@ export default function CreateClassworkQuizModal({
                                         }))
                                     }
                                     disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
-                                    className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
+                                    className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
                                 />
                             </div>
 
@@ -1104,7 +1090,7 @@ export default function CreateClassworkQuizModal({
                                         }));
                                     }}
                                     disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
-                                    className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
+                                    className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
                                 />
                             </div>
                         </div>
@@ -2206,7 +2192,12 @@ export default function CreateClassworkQuizModal({
                 )}
             </section>
 
-            <Dialog.Footer position="fixed" variant="default">
+            <Dialog.Footer position="fixed" variant="default" className="sm:justify-between">
+                <Button type="button" variant="outline" onClick={onClose} disabled={isCreating} className="gap-2">
+                    <X className="size-4" />
+                    Close
+                </Button>
+                <div className="flex flex-wrap items-center justify-end gap-2">
                 <Button
                     type="button"
                     variant="outline"
@@ -2261,7 +2252,7 @@ export default function CreateClassworkQuizModal({
                                 ? `Cannot publish: ${unkeyedIdCount} Identification question(s) have no answer key. Add keys or save as draft.`
                                 : undefined
                         }
-                        className="gap-2 bg-[#7ABA78] hover:bg-[#6ab368] disabled:opacity-50"
+                        className="gap-2 disabled:opacity-50"
                     >
                         {isCreating ? (
                             <Loader2 className="size-4 animate-spin" />
@@ -2275,6 +2266,7 @@ export default function CreateClassworkQuizModal({
                             : "Save Draft"}
                     </Button>
                 )}
+                </div>
             </Dialog.Footer>
         </Dialog.Content>
             )}

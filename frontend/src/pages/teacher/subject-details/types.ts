@@ -1,3 +1,5 @@
+import type { ClassworkAttachment } from "@/types/classwork";
+
 export type TeacherClassLoad = {
   subject_load_id: number;
   subject_id: number;
@@ -69,16 +71,11 @@ export type LinkedClasswork = {
   classwork_type?: string | null;
   classwork_category?: string | null;
   due_date?: string | null;
+  created_at?: string | null;
   attachment_count?: number;
 };
 
-export type ClassworkAttachment = {
-  classwork_attachment_id: number;
-  file_name: string;
-  file_type?: string;
-  file_size: number;
-  uploaded_at?: string;
-};
+export type { ClassworkAttachment };
 
 export type LinkedLesson = {
   lesson_id: number;
@@ -88,9 +85,9 @@ export type LinkedLesson = {
 };
 
 export type ClassworkDetail = {
-  classwork_assignment_id: number;
+  classwork_assignment_id?: number;
   classwork_id: number;
-  class_id: number;
+  class_id?: number;
   section_name?: string | null;
   title: string;
   description?: string | null;
