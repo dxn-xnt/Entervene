@@ -20,6 +20,9 @@ import {
 import { Card } from "@/components/retroui/Card";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
+import { Dialog } from "@/components/retroui/Dialog";
+import { computeTOSShortfall } from "@/lib/tos-shortfall";
+import { buildTOSGenerationRows, tosGenerationErrorMessage } from "@/lib/tos-generation-request";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
@@ -133,6 +136,16 @@ export function TOSGeneratorScreen({
 
   // Step 5: AI Questions & Inline Edit
   const [questions, setQuestions] = useState<TOSExportQuestion[]>([]);
+  const [generationWarnings, setGenerationWarnings] = useState<string[]>([]);
+  const shortfall = useMemo(() => computeTOSShortfall(rows, questions), [rows, questions]);
+  const [pendingAction, setPendingAction] = useState<{
+    run: () => void | Promise<void>;
+  } | null>(null);
+  const guardShortExam = (run: () => void | Promise<void>) => {
+    if (shortfall.missing > 0) setPendingAction({ run });
+    else void run();
+  };
+  const proceedToExport = () => guardShortExam(() => setStep("export"));
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState("");
   const [generationError, setGenerationError] = useState("");
@@ -350,6 +363,8 @@ export function TOSGeneratorScreen({
     setRows([]);
     setGrandTotal(null);
     setQuestions([]);
+    setGenerationWarnings([]);
+    setPendingAction(null);
     setStep("test-parts");
   };
 
@@ -420,6 +435,8 @@ export function TOSGeneratorScreen({
         }
         const loadedQuestions = exam.questions || [];
         setQuestions(loadedQuestions);
+        setGenerationWarnings([]);
+        setPendingAction(null);
 
         const computed = computeTOS({
           subject_id: exam.subject_id || currentSubjectId,
@@ -431,8 +448,34 @@ export function TOSGeneratorScreen({
           competencies: exam.competencies || [],
           difficulty_ratio: exam.difficulty_ratio || { easy: 0.6, average: 0.3, difficult: 0.1 },
         });
-        setRows(computed.rows);
-        setGrandTotal(computed.grand_total);
+        const savedBlueprint = (Array.isArray(exam.difficulty_ratio?.blueprint_rows)
+          ? exam.difficulty_ratio.blueprint_rows : []) as ReturnType<typeof buildTOSGenerationRows>;
+        const restoredRows = computed.rows.map((row) => {
+          const saved = savedBlueprint.find((item) => item.competency_id
+            ? item.competency_id === row.competency_id : item.label === row.label);
+          if (!saved?.bloom_targets || !saved.type_counts) return row;
+          const blooms = saved.bloom_targets;
+          const remember = blooms.REMEMBER || 0, understand = blooms.UNDERSTAND || 0;
+          const apply = blooms.APPLY || 0, analyze = blooms.ANALYZE || 0;
+          const evaluate = blooms.EVALUATE || 0, create_ = blooms.CREATE || 0;
+          return { ...row, type_counts: saved.type_counts,
+            remember, understand, apply, analyze, evaluate, create_,
+            easy: remember + understand, average: apply + analyze, difficult: evaluate + create_,
+            reconciled_band_total: remember + understand + apply + analyze + evaluate + create_,
+          };
+        });
+        setRows(restoredRows);
+        setGrandTotal({ ...computed.grand_total,
+          easy: restoredRows.reduce((sum, row) => sum + row.easy, 0),
+          average: restoredRows.reduce((sum, row) => sum + row.average, 0),
+          difficult: restoredRows.reduce((sum, row) => sum + row.difficult, 0),
+          remember: restoredRows.reduce((sum, row) => sum + row.remember, 0),
+          understand: restoredRows.reduce((sum, row) => sum + row.understand, 0),
+          apply: restoredRows.reduce((sum, row) => sum + row.apply, 0),
+          analyze: restoredRows.reduce((sum, row) => sum + row.analyze, 0),
+          evaluate: restoredRows.reduce((sum, row) => sum + row.evaluate, 0),
+          create_: restoredRows.reduce((sum, row) => sum + row.create_, 0),
+        });
 
         // Resume at the appropriate wizard step
         if (loadedQuestions.length > 0) {
@@ -466,19 +509,24 @@ export function TOSGeneratorScreen({
     }
   };
 
-  const handleSaveDraft = async () => {
-    setIsSaving(true);
-    setSaveSuccessMsg("");
-    try {
-      const payload = {
+  const buildExamPayload = (status: string) => ({
         title,
         quarter,
-        status: questions.length > 0 ? "FINALIZED" : "DRAFT",
+        status,
         test_parts: testParts,
         competencies: compInputs,
         difficulty_ratio: {
           ...ratioDecimal,
           language: language,
+          // Persist targets without applying paid-generation limits to ordinary
+          // draft saves (teachers may save larger/manual exams).
+          blueprint_rows: rows.filter((row) => row.items > 0).map((row) => ({
+            competency_id: row.competency_id || null, label: row.label, code: row.code || null,
+            type_counts: row.type_counts, bloom_targets: {
+              REMEMBER: row.remember, UNDERSTAND: row.understand, APPLY: row.apply,
+              ANALYZE: row.analyze, EVALUATE: row.evaluate, CREATE: row.create_,
+            },
+          })),
         },
         questions: questions.map((q, idx) => ({
           competency_id: (q as any).competency_id || null,
@@ -490,13 +538,21 @@ export function TOSGeneratorScreen({
           display_order: q.display_order || idx + 1,
           points: q.points || 1.0,
           explanation: q.explanation || null,
+          passage_id: q.passage_id || null,
+          passage: q.passage || null,
           options: (q.options || []).map((o, oIdx) => ({
             option_text: o.option_text,
             is_correct: !!o.is_correct,
             option_order: o.option_order || oIdx + 1,
           })),
         })),
-      };
+      });
+
+  const handleSaveDraft = async () => {
+    setIsSaving(true);
+    setSaveSuccessMsg("");
+    try {
+      const payload = buildExamPayload(questions.length > 0 ? "FINALIZED" : "DRAFT");
 
       let res: Response;
       if (examId) {
@@ -676,31 +732,12 @@ export function TOSGeneratorScreen({
 
   const handleGenerateQuestions = async () => {
     if (isGenerating) return;
-    if (rows.length > 12 || totalItems > 50 || rows.some((row) => Object.values(row.type_counts).reduce((sum, count) => sum + count, 0) > 20)) {
-      const err = `AI generation supports up to 12 competency rows, 20 questions per row, and 50 questions total (currently ${rows.length} rows, ${totalItems} items). Please adjust before generating.`;
-      setGenerationError(err);
-      toast.error(err);
-      return;
-    }
     setIsGenerating(true);
     setGenerationError("");
     setGenerationProgress("Preparing blueprint payload for AI assessment specialist...");
 
     try {
-      const rowRequests = rows.map((r) => ({
-        competency_id: r.competency_id || null,
-        label: r.label,
-        code: r.code || null,
-        type_counts: r.type_counts,
-        bloom_targets: {
-          REMEMBER: r.remember,
-          UNDERSTAND: r.understand,
-          APPLY: r.apply,
-          ANALYZE: r.analyze,
-          EVALUATE: r.evaluate,
-          CREATE: r.create_,
-        },
-      }));
+      const rowRequests = buildTOSGenerationRows(rows);
 
       setGenerationProgress(`Calling AI engine (${language}) for ${totalItems} question(s) across ${rows.length} competency row(s)...`);
 
@@ -717,13 +754,14 @@ export function TOSGeneratorScreen({
 
       if (!res.ok) {
         const errData = await res.json().catch(() => null);
-        throw new Error(errData?.detail || "AI question generation failed. Please retry.");
+        throw new Error(tosGenerationErrorMessage(errData));
       }
 
       const response = (await res.json()) as { questions: TOSExportQuestion[]; warnings: string[] };
 
       if (response && response.questions) {
         setQuestions(response.questions);
+        setGenerationWarnings(response.warnings || []);
         setStep("ai-review");
         toast.success(`Successfully generated ${response.questions.length} exam questions!`);
       }
@@ -757,14 +795,19 @@ export function TOSGeneratorScreen({
               label: targetQ.competency_label || "Topic",
               type_counts: { [targetQ.question_type]: 1 },
               bloom_targets: { [targetQ.cognitive_level || "REMEMBER"]: 1 },
+              passage: targetQ.passage || null,
             },
           ],
+          existing_stems: questions.map((q) => q.question_text),
         }),
       });
 
-      if (!res.ok) throw new Error("AI single question generation failed");
+      if (!res.ok) {
+        throw new Error(tosGenerationErrorMessage(await res.json().catch(() => null)));
+      }
 
-      const resData = (await res.json()) as { questions: TOSExportQuestion[] };
+      const resData = (await res.json()) as { questions: TOSExportQuestion[]; warnings?: string[] };
+      setGenerationWarnings((previous) => [...previous, ...(resData.warnings || [])]);
       if (resData && resData.questions && resData.questions[0]) {
         const updated = [...questions];
         updated[index] = {
@@ -777,6 +820,39 @@ export function TOSGeneratorScreen({
       alert("Failed to regenerate single question: " + (e.message || "AI Error"));
     } finally {
       setRegeneratingIdx(null);
+    }
+  };
+
+  const handleGenerateMissingItems = async () => {
+    if (isGenerating || isSaving) return;
+    setIsGenerating(true);
+    setGenerationError("");
+    try {
+      buildTOSGenerationRows(rows); // Validate before saving or sending paid repair.
+      // Save the current snapshot without finalizing a short exam. This also
+      // preserves explicit blueprint overrides for the server-side repair.
+      const savedResponse = await apiFetch(examId ? `/api/v1/tos/${examId}` : `/api/v1/tos/subject/${currentSubjectId}`, {
+        method: examId ? "PUT" : "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildExamPayload("DRAFT")),
+      });
+      if (!savedResponse.ok) throw new Error(tosGenerationErrorMessage(await savedResponse.json().catch(() => null)));
+      const saved = (await savedResponse.json()) as { tos_exam_id: number };
+      setExamId(saved.tos_exam_id);
+      const response = await apiFetch(`/api/v1/ai/tos-exams/${saved.tos_exam_id}/generate-missing`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language }),
+      });
+      if (!response.ok) throw new Error(tosGenerationErrorMessage(await response.json().catch(() => null)));
+      const result = (await response.json()) as { questions: TOSExportQuestion[]; warnings: string[]; added_count: number };
+      setQuestions(result.questions);
+      setGenerationWarnings(result.warnings || []);
+      toast.success(`Added ${result.added_count} missing question(s). Existing questions were kept.`);
+      void loadSavedExams();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Could not generate missing items.";
+      setGenerationError(message);
+      toast.error(message);
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -835,9 +911,10 @@ export function TOSGeneratorScreen({
   const groupedQuestions = useMemo(() => {
     const map = new Map<string, { label: string; questions: Array<{ q: TOSExportQuestion; globalIdx: number }> }>();
     questions.forEach((q, idx) => {
-      const key = q.competency_label || "General Assessment";
+      const label = q.competency_label || "General Assessment";
+      const key = `${label}\u0000${q.passage_id || ""}`;
       if (!map.has(key)) {
-        map.set(key, { label: key, questions: [] });
+        map.set(key, { label, questions: [] });
       }
       map.get(key)!.questions.push({ q, globalIdx: idx });
     });
@@ -913,7 +990,7 @@ export function TOSGeneratorScreen({
                 size="header"
                 variant="outline"
                 disabled={isSaving}
-                onClick={handleSaveDraft}
+                onClick={() => questions.length > 0 ? guardShortExam(handleSaveDraft) : void handleSaveDraft()}
                 className="min-w-0 whitespace-nowrap"
               >
                 <Save className="size-4" />
@@ -1002,7 +1079,7 @@ export function TOSGeneratorScreen({
               <span className="text-muted-foreground">→</span>
               <button
                 disabled={questions.length === 0}
-                onClick={() => setStep("export")}
+                onClick={proceedToExport}
                 className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${step === "export" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"} disabled:opacity-40`}
               >
                 <span className="flex h-4 w-4 items-center justify-center rounded bg-secondary text-[10px] text-secondary-foreground">6</span>
@@ -1018,6 +1095,27 @@ export function TOSGeneratorScreen({
 
         {/* Screen Content Body */}
         <div className="min-w-0 p-3 sm:p-6">
+          {(step === "ai-review" || step === "export") &&
+            (generationWarnings.length > 0 || shortfall.missing > 0) && (
+              <section aria-label="Generator warnings" role="status" className="mb-6 rounded border-2 border-amber-600 bg-amber-50 p-4 text-black">
+                <h3 className="font-bold">{shortfall.missing > 0 ? "Exam does not meet the blueprint target" : "Generator warnings"}</h3>
+                <p>Requested: {shortfall.requested} | Produced: {shortfall.produced} | Missing: {shortfall.missing}</p>
+                <table className="mt-2 w-full text-left text-sm" aria-label="Requested and produced question counts">
+                  <thead><tr><th>Type</th><th>Requested</th><th>Produced</th><th>Missing</th></tr></thead>
+                  <tbody>{shortfall.perType.map((item) => (
+                    <tr key={item.type}><th>{item.type.replaceAll("_", " ")}</th><td>{item.requested}</td><td>{item.produced}</td><td>{item.missing}</td></tr>
+                  ))}</tbody>
+                </table>
+                {generationWarnings.length > 0 && <ul className="mt-2 list-disc pl-5">{generationWarnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}
+                {shortfall.missing > 0 && <>
+                  <p className="mt-2">Regenerate or revise the blueprint, or explicitly confirm before exporting or finalizing this short exam.</p>
+                  <Button className="mt-2" disabled={isGenerating || isSaving} onClick={handleGenerateMissingItems}>
+                    {isGenerating ? "Generating missing items..." : "Generate missing items only"}
+                  </Button>
+                  <p className="mt-1 text-sm">Saves the current draft and keeps existing questions. Filling a short exam is free up to the configured per-exam limit (default: 3 successful fills). After that, a fill may cost one AI credit under the configured coverage rule (default: 60%). Failed, cancelled, and zero-addition fills are free.</p>
+                </>}
+              </section>
+            )}
           {/* ══════════════════════════════════════════════════════════════════
               LANDING PAGE: MY TOS EXAMS ARCHIVE
              ══════════════════════════════════════════════════════════════════ */}
@@ -2017,7 +2115,7 @@ export function TOSGeneratorScreen({
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => setStep("export")}
+                    onClick={proceedToExport}
                     className="rounded border-2 border-border bg-primary text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary-hover"
                   >
                     Proceed to Export <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
@@ -2090,6 +2188,13 @@ export function TOSGeneratorScreen({
                             {grp.questions.length} Item(s)
                           </Badge>
                         </div>
+
+                        {grpQuestions[0]?.passage && questions.findIndex((q) => q.passage_id === grpQuestions[0].passage_id) === grp.questions[0].globalIdx && (
+                          <section aria-label="Reading passage" className="mt-4 rounded border-2 border-border bg-muted/20 p-4">
+                            <h5 className="font-bold">{grpQuestions[0].passage.title}</h5>
+                            <p className="mt-2 whitespace-pre-wrap text-sm">{grpQuestions[0].passage.text}</p>
+                          </section>
+                        )}
 
                         {/* Standard RetroUI Question Cards */}
                         <div className="mt-4 space-y-4">
@@ -2306,6 +2411,7 @@ export function TOSGeneratorScreen({
                                           onClick={() => {
                                             setQuestions(questions.filter((_, i) => i !== globalIdx));
                                           }}
+                                          aria-label={`Delete question ${globalIdx + 1}`}
                                           className="rounded h-7 border-2 border-border bg-destructive/10 px-2 text-xs font-bold text-destructive hover:bg-destructive/10 shadow-sm"
                                         >
                                           <Trash2 className="h-3.5 w-3.5" />
@@ -2361,7 +2467,7 @@ export function TOSGeneratorScreen({
                 </Button>
                 <Button
                   disabled={questions.length === 0}
-                  onClick={() => setStep("export")}
+                  onClick={proceedToExport}
                   className="rounded border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover"
                 >
                   Proceed to Final Export <ArrowRight className="ml-1.5 h-4 w-4" />
@@ -2441,7 +2547,7 @@ export function TOSGeneratorScreen({
                   <div className="mt-4 flex flex-col gap-2">
                     <Button
                       disabled={isExporting !== null || questions.length === 0}
-                      onClick={async () => {
+                      onClick={() => guardShortExam(async () => {
                         setIsExporting("exam-pdf");
                         await exportTosExamPdf(questions, {
                           title,
@@ -2450,14 +2556,14 @@ export function TOSGeneratorScreen({
                           includeAnswerKey,
                         });
                         setIsExporting(null);
-                      }}
+                      })}
                       className="rounded border-2 border-border bg-primary font-bold text-primary-foreground hover:bg-primary-hover shadow-sm"
                     >
                       <FileDown className="mr-2 h-4 w-4" /> Export Exam Paper PDF (Portrait Legal)
                     </Button>
                     <Button
                       disabled={isExporting !== null || questions.length === 0}
-                      onClick={async () => {
+                      onClick={() => guardShortExam(async () => {
                         setIsExporting("exam-docx");
                         await exportTosExamDocx(questions, {
                           title,
@@ -2466,7 +2572,7 @@ export function TOSGeneratorScreen({
                           includeAnswerKey,
                         });
                         setIsExporting(null);
-                      }}
+                      })}
                       className="rounded border-2 border-border bg-card font-bold text-foreground hover:bg-muted/20 shadow-sm"
                     >
                       <FileText className="mr-2 h-4 w-4" /> Export Exam Paper Word (.docx)
@@ -2484,10 +2590,10 @@ export function TOSGeneratorScreen({
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Review
                 </Button>
                 <Button
-                  onClick={() => {
+                  onClick={() => guardShortExam(() => {
                     handleSaveDraft();
                     setStep("saved-list");
-                  }}
+                  })}
                   className="rounded border-2 border-border bg-success/20 font-bold text-foreground shadow"
                 >
                   <CheckCircle2 className="mr-1.5 h-4 w-4" /> Save & Return to TOS Archive
@@ -2497,6 +2603,23 @@ export function TOSGeneratorScreen({
           )}
         </div>
       </Card>
+      <Dialog open={pendingAction !== null} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
+        <Dialog.Content size="sm">
+          <Dialog.Header><Dialog.Title>Continue with a short exam?</Dialog.Title></Dialog.Header>
+          <Dialog.Description className="px-5 pt-4">
+            The blueprint requests {shortfall.requested} questions, but this exam has {shortfall.produced}.
+            {" "}{shortfall.missing} requested question(s) are missing by type. Confirm to continue with the current questions.
+          </Dialog.Description>
+          <Dialog.Footer>
+            <Button variant="outline" onClick={() => setPendingAction(null)}>Cancel</Button>
+            <Button onClick={() => {
+              const action = pendingAction;
+              setPendingAction(null);
+              if (action) void action.run();
+            }}>Confirm short exam</Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
       </div>
     </div>
   );
