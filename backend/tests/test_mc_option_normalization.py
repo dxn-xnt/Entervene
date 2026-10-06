@@ -107,3 +107,25 @@ def test_case_only_options_keep_exactly_one_correct_answer_after_shuffle(monkeyp
     assert sum(o["is_correct"] for o in options) == 1
     assert next(o["option_text"] for o in options if o["is_correct"]) == raw_options[correct_index]
     assert "correct_index" not in questions[0]
+
+
+def test_mc_prompt_matches_validator_and_accepts_case_only_distractors():
+    prompt = " ".join(generation.SYSTEM_PROMPT.split())
+    assert (
+        "MC options must remain distinct after trimming, collapsing whitespace, and Unicode NFC normalization. "
+        "Preserve meaningful capitalization and punctuation differences."
+    ) in prompt
+    assert "lowercas" not in prompt.lower()
+    assert "casefold" not in prompt.lower()
+    assert "removing trailing punctuation" not in prompt.lower()
+    assert "stripping punctuation" not in prompt.lower()
+
+    options = ["Tom went home.", "tom went home.", "TOM went home.", "tom Went home."]
+    discards = Counter()
+    question = generation.validate_item(
+        candidate(options, correct_index=0), "MULTIPLE_CHOICE", None, discards=discards,
+    )
+    assert question is not None and discards == Counter()
+    assert {option["option_text"] for option in question["options"]} == set(options)
+    assert sum(option["is_correct"] for option in question["options"]) == 1
+    assert next(option["option_text"] for option in question["options"] if option["is_correct"]) == options[0]

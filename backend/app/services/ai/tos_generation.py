@@ -43,8 +43,9 @@ unless a valid passage_id is attached, or the supporting text is included inline
 in question_text. A passage cannot supply a missing image, graph or table.
 Use exactly the requested question type and Bloom/difficulty cells; never relabel.
 Multiple choice: four distinct nonempty strings, exactly one correct_index 0-3;
-vary the correct position. Options must remain distinct after trimming, lowercasing,
-collapsing whitespace and removing trailing punctuation. Never use placeholders.
+vary the correct position. MC options must remain distinct after trimming, collapsing whitespace,
+and Unicode NFC normalization. Preserve meaningful capitalization and punctuation differences.
+Never use placeholders.
 True/False: a declarative statement, options ["True", "False"], correct_index 0 or 1;
 include both correct answers for parts of three or more. No blanks or instructions.
 Identification: one objectively correct concise term (normally 1-5 words), not an
