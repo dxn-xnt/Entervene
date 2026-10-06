@@ -12,6 +12,17 @@ vi.mock("@/lib/tos-export", () => ({
 }));
 vi.mock("@/components/ui/sidebar", () => ({ SidebarTrigger: () => null }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+// Decorative SVGs multiply jsdom's accessibility-query work under parallel
+// workers. Keep the real controls, dialogs, and their accessible names.
+vi.mock("lucide-react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("lucide-react")>();
+  const decorative = () => null;
+  return { ...actual, TableProperties: decorative, Sparkles: decorative, FileDown: decorative,
+    Plus: decorative, Trash2: decorative, RefreshCw: decorative, Edit3: decorative,
+    CheckCircle2: decorative, AlertCircle: decorative, ArrowRight: decorative,
+    ArrowLeft: decorative, Save: decorative, FileText: decorative, Check: decorative,
+    Search: decorative, Clock: decorative };
+});
 
 const subjects = [{ subject_id: 1, subject_name: "Science" }];
 const competencies = [{ competency_id: 1, statement: "Plants", competency_code: "SCI1", target_hours: 8 }];
@@ -32,7 +43,12 @@ async function openReview(questions = [question(1)]) {
 async function confirm() {
   const dialog = await screen.findByRole("dialog");
   fireEvent.click(within(dialog).getByRole("button", { name: "Confirm short exam" }));
-  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  await dialogClosed(dialog);
+}
+async function dialogClosed(dialog: HTMLElement) {
+  // Poll the known element rather than repeatedly walking the entire wizard.
+  await waitFor(() => expect(dialog.isConnected).toBe(false));
+  expect(screen.queryByRole("dialog")).toBeNull();
 }
 async function goToExport() {
   fireEvent.click(screen.getByRole("button", { name: "Proceed to Export" }));
@@ -65,6 +81,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("TOS shortfall visibility and confirmation", () => {
+  it("displays structured backend validation errors instead of [object Object]", async () => {
+    await openReview();
+    mocks.api.mockImplementationOnce(() => Promise.resolve({ ok: false, json: async () => ({ detail: [{
+      loc: ["body", "rows", 0], msg: "Value error, Each row must request 1 to 20 questions of supported types", ctx: { error: {} },
+    }] }) }));
+    fireEvent.click(screen.getByRole("button", { name: /Regenerate All/ }));
+    expect(await screen.findByText("body.rows.0: Value error, Each row must request 1 to 20 questions of supported types")).toBeTruthy();
+    expect(screen.queryByText(/\[object Object\]/)).toBeNull();
+  });
   it("keeps generator warnings visible on review and export with total and per-type counts", async () => {
     await openReview();
     fireEvent.click(screen.getByRole("button", { name: /Regenerate All/ }));
@@ -94,7 +119,7 @@ describe("TOS shortfall visibility and confirmation", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/blueprint requests 2 questions/)).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await dialogClosed(dialog);
     expect(screen.queryByText(/Export Assessment Questionnaire/)).toBeNull();
     expect(mocks.pdf).not.toHaveBeenCalled();
     expect(mocks.docx).not.toHaveBeenCalled();
@@ -109,7 +134,7 @@ describe("TOS shortfall visibility and confirmation", () => {
     const dialog = await screen.findByRole("dialog");
     expect(mocks[exporter]).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await dialogClosed(dialog);
     expect(mocks[exporter]).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: label }));
     await confirm();
@@ -123,7 +148,7 @@ describe("TOS shortfall visibility and confirmation", () => {
     const dialog = await screen.findByRole("dialog");
     expect(saveCalls()).toHaveLength(0);
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await dialogClosed(dialog);
     expect(saveCalls()).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: label }));
     await confirm();
@@ -141,5 +166,114 @@ describe("TOS shortfall visibility and confirmation", () => {
     expect(screen.queryByRole("status", { name: "Generator warnings" })).toBeNull();
     await goToExport();
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+describe("TOS passage rendering and persistence", () => {
+  const passage = { id: "plants-reading", title: "A Garden After Rain", text: "The rain watered the garden. The roots absorbed water." };
+
+  it("renders a shared passage once above its questions and includes it in the save payload", async () => {
+    await openReview([1, 2].map((number) => ({ ...question(number), passage, passage_id: passage.id })));
+    expect(screen.getAllByRole("region", { name: "Reading passage" })).toHaveLength(1);
+    expect(screen.getByText(passage.text)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save Draft" }));
+    await waitFor(() => expect(saveCalls()).toHaveLength(1));
+    const saved = JSON.parse(saveCalls()[0][1].body);
+    expect(saved.questions.map((q: TOSExportQuestion) => q.passage)).toEqual([passage, passage]);
+    expect(saved.questions.map((q: TOSExportQuestion) => q.passage_id)).toEqual([passage.id, passage.id]);
+  });
+
+  it("single regeneration reuses the passage and supplies existing stems to avoid repeats", async () => {
+    await openReview([1, 2].map((number) => ({ ...question(number), passage, passage_id: passage.id })));
+    generated = { questions: [{ ...question(3), passage, passage_id: passage.id }], warnings: [] };
+    const card = screen.getByText("Plant question 1").closest('[data-slot="card"]') as HTMLElement;
+    // The existing icon-only regeneration button has no accessible name.
+    fireEvent.click(within(card).getByRole("button", { name: "" }));
+    await screen.findByText("Plant question 3");
+    const call = mocks.api.mock.calls.find(([path]) => path.includes("generate-tos-questions"));
+    const payload = JSON.parse(call![1].body);
+    expect(payload.rows[0].passage).toEqual(passage);
+    expect(payload.existing_stems).toEqual(["Plant question 1", "Plant question 2"]);
+    expect(screen.getAllByRole("region", { name: "Reading passage" })).toHaveLength(1);
+  });
+});
+
+describe("TOS missing-only repair", () => {
+  it("discloses the free short-exam fill limit and paid fallback", async () => {
+    await openReview();
+    expect(screen.getByText(/Filling a short exam is free/).textContent).toContain("default: 3 successful fills");
+    expect(screen.getByText(/Filling a short exam is free/).textContent).toContain("one AI credit");
+    expect(screen.getByText(/Filling a short exam is free/).textContent).toContain("Failed, cancelled, and zero-addition fills are free");
+  });
+  it("reuses saved Bloom overrides rather than recomputing a different blueprint", async () => {
+    const original = mocks.api.getMockImplementation()!;
+    mocks.api.mockImplementation((path, options) => {
+      if (path === "/api/v1/tos/7" && !options?.method) return response({
+        tos_exam_id: 7, subject_id: 1, title: "Plants exam", quarter: "Term 1",
+        test_parts: [{ type: "MULTIPLE_CHOICE", count: 2 }],
+        competencies: [{ competency_id: 1, label: "Plants", days: 2 }],
+        difficulty_ratio: { easy: 0.6, average: 0.3, difficult: 0.1, blueprint_rows: [{
+          competency_id: 1, label: "Plants", type_counts: { MULTIPLE_CHOICE: 2 },
+          bloom_targets: { REMEMBER: 0, UNDERSTAND: 2, APPLY: 0, ANALYZE: 0, EVALUATE: 0, CREATE: 0 },
+        }] }, questions: [question(1)],
+      });
+      if (path.includes("generate-missing")) return response({ questions: [question(1), question(2)], warnings: [], added_count: 1 });
+      return original(path, options);
+    });
+    await openReview();
+    fireEvent.click(screen.getByRole("button", { name: "Generate missing items only" }));
+    await screen.findByText("Plant question 2");
+    const saved = JSON.parse(saveCalls()[0][1].body);
+    expect(saved.difficulty_ratio.blueprint_rows[0].bloom_targets.UNDERSTAND).toBe(2);
+    expect(saved.difficulty_ratio.blueprint_rows[0].bloom_targets.REMEMBER).toBe(0);
+  });
+
+  it("saves a draft, fills only missing items and keeps the existing question and passage", async () => {
+    const passage = { id: "keep-reading", title: "Plants", text: "Rain fell. Roots absorbed water." };
+    const existing = { ...question(1), passage, passage_id: passage.id };
+    await openReview([existing]);
+    const original = mocks.api.getMockImplementation()!;
+    mocks.api.mockImplementation((path, options) => path.includes("generate-missing")
+      ? response({ questions: [existing, { ...question(2), passage, passage_id: passage.id }], warnings: [], added_count: 1, credits_charged: 1 })
+      : original(path, options));
+    fireEvent.click(screen.getByRole("button", { name: "Generate missing items only" }));
+    await screen.findByText("Plant question 2");
+    expect(screen.getByText("Plant question 1")).toBeTruthy();
+    expect(screen.getAllByRole("region", { name: "Reading passage" })).toHaveLength(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("status", { name: "Generator warnings" })).toBeNull();
+    const saved = JSON.parse(saveCalls()[0][1].body);
+    expect(saved.status).toBe("DRAFT");
+    expect(saved.questions[0].passage).toEqual(passage);
+    expect(saved.difficulty_ratio.blueprint_rows[0].type_counts.MULTIPLE_CHOICE).toBe(2);
+    const repair = mocks.api.mock.calls.find(([path]) => path.includes("generate-missing"));
+    expect(repair?.[0]).toBe("/api/v1/ai/tos-exams/7/generate-missing");
+    expect(JSON.parse(repair![1].body)).toEqual({ language: "English" });
+    expect(mocks.api.mock.calls.some(([path]) => path.includes("generate-tos-questions"))).toBe(false);
+  });
+
+  it("keeps existing items when repair fails and displays the error", async () => {
+    await openReview();
+    const original = mocks.api.getMockImplementation()!;
+    mocks.api.mockImplementation((path, options) => path.includes("generate-missing")
+      ? Promise.resolve({ ok: false, json: async () => ({ detail: "AI is busy, try again in 3 seconds." }) })
+      : original(path, options));
+    fireEvent.click(screen.getByRole("button", { name: "Generate missing items only" }));
+    await screen.findByText("AI is busy, try again in 3 seconds.");
+    expect(screen.getByText("Plant question 1")).toBeTruthy();
+    expect(screen.getByRole("status", { name: "Generator warnings" }).textContent).toContain("Missing: 1");
+  });
+
+  it("replaces old warnings with only the final repair shortfall", async () => {
+    await openReview();
+    fireEvent.click(screen.getByRole("button", { name: /Regenerate All/ }));
+    await screen.findByText(generated.warnings[0]);
+    const original = mocks.api.getMockImplementation()!;
+    mocks.api.mockImplementation((path, options) => path.includes("generate-missing")
+      ? response({ questions: [question(1)], warnings: ["Still missing MULTIPLE_CHOICE/EASY/REMEMBER=1"], added_count: 0 })
+      : original(path, options));
+    fireEvent.click(screen.getByRole("button", { name: "Generate missing items only" }));
+    await screen.findByText("Still missing MULTIPLE_CHOICE/EASY/REMEMBER=1");
+    expect(screen.queryByText(generated.warnings[0])).toBeNull();
   });
 });
