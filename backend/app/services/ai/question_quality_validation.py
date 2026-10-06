@@ -43,12 +43,30 @@ _EXTERNAL_REFERENCE_RE = re.compile(
 )
 
 
-def option_text_issue(options: list[dict[str, Any]]) -> str | None:
+def normalize_option_text(text: str) -> str:
+    """Ignore presentation-only differences, including trailing punctuation."""
+    import unicodedata
+
+    text = " ".join(text.strip().casefold().split())
+    while text and unicodedata.category(text[-1]).startswith("P"):
+        text = text[:-1].rstrip()
+    return text
+
+
+def normalize_mc_option_text(text: str) -> str:
+    """Compare MC options without erasing case or punctuation being assessed."""
+    import unicodedata
+
+    return unicodedata.normalize("NFC", " ".join(text.strip().split()))
+
+
+def option_text_issue(options: list[dict[str, Any]], question_type: str = "MULTIPLE_CHOICE") -> str | None:
     """Return a discard reason for placeholder or duplicate option text."""
     texts = [str(option.get("option_text", "")).strip() for option in options]
     if any(_PLACEHOLDER_OPTION_RE.fullmatch(text) for text in texts):
         return "placeholder option"
-    normalized = [text.casefold() for text in texts]
+    normalize = normalize_mc_option_text if question_type == "MULTIPLE_CHOICE" else normalize_option_text
+    normalized = [normalize(text) for text in texts]
     if len(normalized) != len(set(normalized)):
         return "duplicate options"
     return None
@@ -67,7 +85,7 @@ def validate_true_false(
     if len(options) != 2:
         return None, "True/False requires exactly True and False options"
 
-    issue = option_text_issue(options)
+    issue = option_text_issue(options, "TRUE_FALSE")
     if issue:
         return None, issue
 

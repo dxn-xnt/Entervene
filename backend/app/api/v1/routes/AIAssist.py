@@ -1,11 +1,13 @@
 from typing import Optional
+from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.Dependencies import get_staff_id, require_role
-from app.services.ai.UsageGuard import actor, staff_usage_snapshot, usage_snapshot
+from app.core.Config import settings
+from app.services.ai.UsageGuard import actor, staff_usage_snapshot, usage_snapshot, fill_missing_usage
 from starlette.concurrency import run_in_threadpool
 from app.db.Session import get_db
 from app.models.academic.Lesson import Lesson
@@ -18,13 +20,19 @@ from app.schemas.AITOS import (
     AITOSAssistResponse,
     AITOSGenerateRequest,
     AITOSGenerateResponse,
+    AITOSRepairRequest,
+    AITOSRepairResponse,
+    TOSRowRequest,
     TOSQuestionIn,
 )
 from app.schemas.Quiz import QuizQuestionIn
 from app.services.academic.LessonPlanAIService import AISuggestField, generate_lesson_plan_suggestion
 from app.services.ai.AIQuizGeneratorService import generate_quiz_questions
 from app.services.ai.AITOSAssistService import handle_tos_assist
-from app.services.ai.AITOSGeneratorService import generate_tos_row_questions
+from app.services.ai.tos_generation import generate_tos_row_questions, blueprint_cells, missing_cells
+from app.services.ai.tos_generation_session import exam_generation
+from app.models.tos.TOSExam import TOSExam
+from app.services.tos.TOSService import get_tos_exam_detail, append_tos_questions
 
 async def ai_identity(staff_id: str = Depends(get_staff_id)):
     token = actor.set(str(staff_id))
@@ -252,7 +260,7 @@ async def generate_tos_questions(
 ) -> AITOSGenerateResponse:
     """
     Generate structured TOS exam questions using AI, partitioned per competency row.
-    Type counts are hard constraints; bloom targets provide soft guidance.
+    Type counts and reconciled Bloom cells are repaired independently per row.
     """
     subject = db.query(Subject).filter(Subject.subject_id == body.subject_id).first()
     if not subject:
@@ -262,33 +270,113 @@ async def generate_tos_questions(
     warnings: list[str] = []
     running_display_order = 1
 
+    requested = Counter()
     for row in body.rows:
-        try:
-            row_raw_questions = await generate_tos_row_questions(
-                competency_label=row.label,
-                code=row.code,
-                subject=subject.subject_name,
-                type_counts=row.type_counts,
-                bloom_targets=row.bloom_targets,
-                language=body.language,
-                warnings=warnings,
-            )
-            for q_data in row_raw_questions:
-                q_data["competency_id"] = row.competency_id
-                q_data["competency_label"] = row.label
-                q_data["display_order"] = running_display_order
-                running_display_order += 1
-                all_questions.append(TOSQuestionIn(**q_data))
-        except HTTPException:
-            # Never continue sending paid requests after a quota/provider failure.
-            raise
-        except (ValueError, TypeError, KeyError):
-            raise HTTPException(502, "AI returned invalid questions. Generation stopped.") from None
-
-    if not all_questions and warnings:
-        raise HTTPException(status_code=502, detail="Failed to generate any questions for the requested competencies.")
+        requested.update({kind: count for kind, count in row.type_counts.items() if count})
+    async with exam_generation(staff_id, requested) as operation:
+        for row in body.rows:
+            try:
+                row_raw_questions = await generate_tos_row_questions(
+                    competency_label=row.label,
+                    code=row.code,
+                    subject=subject.subject_name,
+                    type_counts=row.type_counts,
+                    bloom_targets=row.bloom_targets,
+                    language=body.language,
+                    warnings=warnings,
+                    passage=row.passage,
+                    grade_level=getattr(getattr(subject, "academic_level", None), "grade_level", None),
+                    existing_stems=[*body.existing_stems, *(q.question_text for q in all_questions)],
+                )
+                for q_data in row_raw_questions:
+                    q_data["competency_id"] = row.competency_id
+                    q_data["competency_label"] = row.label
+                    q_data["display_order"] = running_display_order
+                    running_display_order += 1
+                    all_questions.append(TOSQuestionIn(**q_data))
+            except HTTPException:
+                # Provider retries are exhausted or a local guard rejected admission.
+                raise
+            except (ValueError, TypeError, KeyError):
+                raise HTTPException(502, "AI returned invalid questions. Generation stopped.") from None
+        operation.final = Counter(q.question_type for q in all_questions)
+        operation.completed = True
 
     return AITOSGenerateResponse(questions=all_questions, warnings=warnings)
+
+
+@router.post("/tos-exams/{tos_exam_id}/generate-missing", response_model=AITOSRepairResponse,
+             dependencies=[Depends(ai_identity)])
+async def generate_missing_tos_questions(
+    tos_exam_id: int, body: AITOSRepairRequest,
+    staff_id: str = Depends(get_staff_id),
+    user: dict = Depends(require_role("teacher", "admin")),
+    db: Session = Depends(get_db),
+) -> AITOSRepairResponse:
+    exam = db.query(TOSExam).filter(TOSExam.tos_exam_id == tos_exam_id).first()
+    if exam is None:
+        raise HTTPException(404, "TOS Exam not found")
+    if user.get("role") != "admin" and exam.created_by_staff_id != staff_id:
+        raise HTTPException(403, "You do not own this TOS exam")
+    saved = get_tos_exam_detail(tos_exam_id, db)
+    raw_rows = saved.difficulty_ratio.get("blueprint_rows")
+    if not raw_rows:
+        raise HTTPException(422, "Save the blueprint in the editor before generating missing items.")
+    try:
+        request = AITOSGenerateRequest(subject_id=saved.subject_id, subject_name="",
+            language=body.language, rows=[TOSRowRequest.model_validate(row) for row in raw_rows])
+    except ValueError:
+        raise HTTPException(422, "The saved blueprint is invalid. Recalculate and save it first.") from None
+    subject = db.query(Subject).filter(Subject.subject_id == saved.subject_id).first()
+    if subject is None:
+        raise HTTPException(404, "Subject not found")
+    requested = Counter()
+    for row in request.rows:
+        requested.update({kind: count for kind, count in row.type_counts.items() if count})
+    existing = [question.model_dump() for question in saved.questions]
+    additions, warnings = [], []
+    next_order = max((q.display_order for q in saved.questions), default=0) + 1
+    free_fills_before = await run_in_threadpool(fill_missing_usage, tos_exam_id)
+    async with exam_generation(staff_id, requested) as operation:
+        operation.existing = Counter(q["question_type"] for q in existing)
+        has_missing = any(missing_cells(blueprint_cells(row.type_counts, row.bloom_targets), [q for q in existing if
+            (q["competency_id"] == row.competency_id if row.competency_id is not None else q["competency_label"] == row.label)])
+            for row in request.rows)
+        if has_missing:
+            await operation.reserve_fill(tos_exam_id, len(existing) < sum(requested.values()))
+        for row in request.rows:
+            row_questions = [q for q in existing if
+                (q["competency_id"] == row.competency_id if row.competency_id is not None
+                 else q["competency_label"] == row.label)]
+            targets = blueprint_cells(row.type_counts, row.bloom_targets)
+            if not missing_cells(targets, row_questions):
+                continue
+            passage = next((q.passage for q in saved.questions if q.passage is not None and
+                (q.competency_id == row.competency_id if row.competency_id is not None else q.competency_label == row.label)), None)
+            new_questions = await generate_tos_row_questions(
+                row.label, row.code, subject.subject_name, row.type_counts, row.bloom_targets,
+                language=body.language, warnings=warnings, passage=passage or row.passage,
+                grade_level=getattr(getattr(subject, "academic_level", None), "grade_level", None),
+                existing_stems=[q["question_text"] for q in [*existing, *(q.model_dump() for q in additions)]],
+                existing_questions=row_questions, target_cells=targets, missing_only=True,
+            )
+            for data in new_questions:
+                data.update(competency_id=row.competency_id, competency_label=row.label, display_order=next_order)
+                additions.append(TOSQuestionIn(**data))
+                next_order += 1
+        if additions:
+            result = append_tos_questions(tos_exam_id, additions, saved.updated_at, db)
+            final_questions = result.questions
+        else:
+            final_questions = saved.questions
+        operation.final = Counter(q.question_type for q in final_questions)
+        operation.billable_new_items = bool(additions)
+        operation.completed = True
+    return AITOSRepairResponse(questions=final_questions, warnings=warnings,
+        added_count=len(additions), credits_charged=int(operation.credit_charged),
+        free_fills_used=(operation.hold.free_fills_used + int(operation.hold.free and bool(additions))
+                         if operation.hold is not None else free_fills_before),
+        free_fill_limit=settings.tos_fill_missing_free_limit)
 
 
 @router.post("/tos-assist", response_model=AITOSAssistResponse, dependencies=[Depends(ai_identity)])

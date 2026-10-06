@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.academic.Subject import Subject
 from app.models.tos.TOSExam import TOSExam
 from app.models.tos.TOSQuestion import TOSQuestion
+from app.services.tos.passage_metadata import encode_question_metadata, decode_question_metadata
 from app.schemas.AITOS import (
     TOSExamDetailResponse,
     TOSExamSummary,
@@ -51,7 +52,7 @@ def _question_to_out(q: TOSQuestion) -> TOSQuestionOut:
         cognitive_level=q.cognitive_level,
         display_order=q.display_order,
         points=float(q.points) if q.points is not None else 1.0,
-        explanation=q.explanation,
+        **decode_question_metadata(q.explanation),
         options=options,
     )
 
@@ -92,7 +93,7 @@ def _sync_questions(db: Session, exam: TOSExam, questions: List[TOSQuestionIn]):
             cognitive_level=q_in.cognitive_level,
             display_order=q_in.display_order or idx,
             points=Decimal(str(q_in.points or 1.0)),
-            explanation=q_in.explanation,
+            explanation=encode_question_metadata(q_in),
             options_json=json.dumps(options_data),
         )
         db.add(db_q)
@@ -232,10 +233,34 @@ def update_single_tos_question(tos_question_id: int, body: TOSQuestionIn, db: Se
     q.cognitive_level = body.cognitive_level
     q.display_order = body.display_order
     q.points = Decimal(str(body.points or 1.0))
-    q.explanation = body.explanation
+    q.explanation = encode_question_metadata(body)
     options_data = [opt.model_dump() for opt in body.options] if body.options else []
     q.options_json = json.dumps(options_data)
 
     db.commit()
     db.refresh(q)
     return _question_to_out(q)
+
+
+def append_tos_questions(tos_exam_id: int, questions: List[TOSQuestionIn], expected_updated_at, db: Session):
+    """Append only: preserve saved question IDs/content/passages and reject races."""
+    exam = db.query(TOSExam).filter(TOSExam.tos_exam_id == tos_exam_id).populate_existing().with_for_update().first()
+    if not exam:
+        raise HTTPException(404, "TOS Exam not found")
+    if exam.updated_at != expected_updated_at:
+        raise HTTPException(409, "This exam changed during generation. Reload before generating missing items.")
+    for question in questions:
+        db.add(TOSQuestion(
+            tos_exam_id=tos_exam_id, competency_id=question.competency_id,
+            competency_label=question.competency_label, question_text=question.question_text,
+            question_type=question.question_type, difficulty_band=question.difficulty_band,
+            cognitive_level=question.cognitive_level, display_order=question.display_order,
+            points=Decimal(str(question.points)), explanation=encode_question_metadata(question),
+            options_json=json.dumps([option.model_dump() for option in question.options]),
+        ))
+    # A question-only append must also advance the exam's optimistic revision.
+    from datetime import datetime, timezone
+    exam.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.expire_all()
+    return get_tos_exam_detail(tos_exam_id, db)

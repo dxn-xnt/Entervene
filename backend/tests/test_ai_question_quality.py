@@ -132,7 +132,7 @@ def test_multiple_correct_placeholder_and_duplicate_options_are_discarded():
     placeholder = _mc()
     placeholder["options"][2]["option_text"] = "Option C"
     duplicate = _mc()
-    duplicate["options"][2]["option_text"] = " mercury "
+    duplicate["options"][2]["option_text"] = " Mercury "
     warnings = []
     questions = _extract_and_validate_json(
         _raw(_mc(correct_indexes=(0, 1)), placeholder, duplicate),

@@ -226,7 +226,7 @@ def _extract_and_validate_json(
                             "option_order": int(opt.get("option_order", o_idx)),
                         })
 
-        option_issue = option_text_issue(validated_options)
+        option_issue = option_text_issue(validated_options, requested_type)
         if option_issue:
             discard_reasons[option_issue] += 1
             logger.warning("Quiz question %r discarded: %s", question_text, option_issue)
