@@ -877,11 +877,6 @@ def test_real_tos_exporters_round_trip():
     - Imported DOCX questions match types, keys, and teacher-only rubrics
     - All imported question texts have no 'Scoring Criteria' and no underscore runs
     """
-    import shutil
-    import subprocess
-    import sys
-    import tempfile
-    import pytest
     from app.services.quiz.QuizImportService import _extract_text
 
     identity = {"sub": uuid.uuid4(), "role": "teacher"}
@@ -891,141 +886,101 @@ def test_real_tos_exporters_round_trip():
     app.dependency_overrides[get_db] = lambda: None
     app.dependency_overrides[get_staff_id] = lambda: "T-IMPORT"
 
-    repo_root = Path(__file__).resolve().parents[2]
-    gen_script = repo_root / "scripts" / "generate_tos_roundtrip_fixtures.ts"
+    fixture_dir = Path(__file__).resolve().parent / "fixtures" / "tos_roundtrip"
+    student_pdf_bytes = (fixture_dir / "real_student_exam.pdf").read_bytes()
+    teacher_pdf_bytes = (fixture_dir / "real_teacher_exam_with_key.pdf").read_bytes()
+    teacher_docx_bytes = (fixture_dir / "real_teacher_exam_with_key.docx").read_bytes()
 
-    if not gen_script.exists():
-        pytest.skip(f"generate_tos_roundtrip_fixtures.ts not found at {gen_script} (deferred to frontend commit)")
+    # 1. Assert student-copy extracted text has no "Scoring Criteria" and no rubric
+    student_text = _extract_text(student_pdf_bytes, ".pdf")
+    assert "Scoring Criteria" not in student_text
+    assert "scoring criteria" not in student_text.lower()
+    assert "Rubric:" not in student_text
+    assert "rubric:" not in student_text.lower()
 
-    npx_bin = shutil.which("npx") or shutil.which("npx.cmd")
-    if not npx_bin:
-        pytest.skip("npx not available in environment")
+    # 2. Test import via API on teacher PDF
+    with TestClient(app, raise_server_exceptions=False) as client:
+        pdf_res = client.post(
+            "/api/v1/quizzes/import-preview",
+            files={"file": ("real_teacher_exam_with_key.pdf", teacher_pdf_bytes, "application/pdf")},
+        )
+    assert pdf_res.status_code == 200
+    pdf_body = pdf_res.json()
+    assert len(pdf_body["questions"]) == 12
 
-    # Generate fixtures in a dedicated temp directory outside the repo and ensure automatic cleanup
-    with tempfile.TemporaryDirectory() as temp_dir_str:
-        tmp_dir = Path(temp_dir_str)
-        try:
-            res = subprocess.run(
-                [npx_bin, "--no-install", "tsx", str(gen_script), str(tmp_dir)],
-                shell=(sys.platform == "win32"),
-                capture_output=True,
-                text=True,
-                timeout=35,
-                cwd=str(repo_root),
-            )
-            if res.returncode != 0:
-                pytest.skip(
-                    f"generate_tos_roundtrip_fixtures.ts failed (exit code {res.returncode}): "
-                    f"stdout={res.stdout.strip()!r} stderr={res.stderr.strip()!r}"
+    def _verify_12_items(questions):
+        # Q1-Q3: MC
+        for i in range(3):
+            q = questions[i]
+            assert q["question_type"] == "MULTIPLE_CHOICE"
+            assert len(q["options"]) == 4
+            assert any(o["is_correct"] for o in q["options"])
+            assert "Scoring Criteria" not in q["question_text"]
+            assert "_____" not in q["question_text"]
+
+        assert questions[0]["options"][0]["option_text"] == "Simile" and questions[0]["options"][0]["is_correct"]
+        assert questions[1]["options"][1]["option_text"] == "Beowulf" and questions[1]["options"][1]["is_correct"]
+        assert questions[2]["options"][1]["option_text"] == "Climax" and questions[2]["options"][1]["is_correct"]
+
+        # Q4-Q6: TF (two-option MCQ)
+        for i in range(3, 6):
+            q = questions[i]
+            assert q["question_type"] == "MULTIPLE_CHOICE"
+            assert len(q["options"]) == 2
+            assert any(o["is_correct"] for o in q["options"])
+            assert "Scoring Criteria" not in q["question_text"]
+            assert "_____" not in q["question_text"]
+
+        assert questions[3]["options"][0]["option_text"] == "True" and questions[3]["options"][0]["is_correct"]
+        assert questions[4]["options"][1]["option_text"] == "False" and questions[4]["options"][1]["is_correct"]
+        assert questions[5]["options"][0]["option_text"] == "True" and questions[5]["options"][0]["is_correct"]
+
+        # Q7-Q9: IDENTIFICATION
+        for i in range(6, 9):
+            q = questions[i]
+            assert q["question_type"] == "IDENTIFICATION"
+            assert len(q["options"]) == 1
+            assert q["options"][0]["is_correct"] is True
+            assert "Scoring Criteria" not in q["question_text"]
+            assert "_____" not in q["question_text"]
+
+        assert questions[6]["options"][0]["option_text"] == "Plot"
+        assert questions[7]["options"][0]["option_text"] == "Alliteration"
+        assert questions[8]["options"][0]["option_text"] == "Point of View"
+
+        # Q10-Q12: SHORT_ANSWER (essays)
+        for i in range(9, 12):
+            q = questions[i]
+            assert q["question_type"] == "SHORT_ANSWER"
+            assert len(q["options"]) == 0
+            assert q["explanation"] is not None
+            assert len(q["explanation"]) > 10
+            assert "Scoring Criteria" not in q["question_text"]
+            assert "Rubric" not in q["question_text"]
+            assert "_____" not in q["question_text"]
+
+        assert "Defines dramatic irony" in questions[9]["explanation"]
+        assert "Identifies sensory details" in questions[10]["explanation"]
+        assert "Explains competing ethical values" in questions[11]["explanation"]
+
+    _verify_12_items(pdf_body["questions"])
+
+    # 3. Test import via API on teacher DOCX
+    with TestClient(app, raise_server_exceptions=False) as client:
+        docx_res = client.post(
+            "/api/v1/quizzes/import-preview",
+            files={
+                "file": (
+                    "real_teacher_exam_with_key.docx",
+                    teacher_docx_bytes,
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 )
-        except subprocess.TimeoutExpired:
-            pytest.skip("Timed out waiting for generate_tos_roundtrip_fixtures.ts execution")
-        except FileNotFoundError as fnf_err:
-            pytest.skip(f"Required runner executable not found: {fnf_err}")
-        except Exception as exc:
-            pytest.skip(f"Could not execute fixture generation script: {exc}")
-
-        student_pdf = tmp_dir / "real_student_exam.pdf"
-        teacher_pdf = tmp_dir / "real_teacher_exam_with_key.pdf"
-        teacher_docx = tmp_dir / "real_teacher_exam_with_key.docx"
-
-        if not (student_pdf.exists() and teacher_pdf.exists() and teacher_docx.exists()):
-            pytest.skip("One or more generated fixture files missing after script execution")
-
-        student_pdf_bytes = student_pdf.read_bytes()
-        teacher_pdf_bytes = teacher_pdf.read_bytes()
-        teacher_docx_bytes = teacher_docx.read_bytes()
-
-        # 1. Assert student-copy extracted text has no "Scoring Criteria" and no rubric
-        student_text = _extract_text(student_pdf_bytes, ".pdf")
-        assert "Scoring Criteria" not in student_text
-        assert "scoring criteria" not in student_text.lower()
-        assert "Rubric:" not in student_text
-        assert "rubric:" not in student_text.lower()
-
-        # 2. Test import via API on teacher PDF
-        with TestClient(app, raise_server_exceptions=False) as client:
-            pdf_res = client.post(
-                "/api/v1/quizzes/import-preview",
-                files={"file": ("real_teacher_exam_with_key.pdf", teacher_pdf_bytes, "application/pdf")},
-            )
-        assert pdf_res.status_code == 200
-        pdf_body = pdf_res.json()
-        assert len(pdf_body["questions"]) == 12
-
-        def _verify_12_items(questions):
-            # Q1-Q3: MC
-            for i in range(3):
-                q = questions[i]
-                assert q["question_type"] == "MULTIPLE_CHOICE"
-                assert len(q["options"]) == 4
-                assert any(o["is_correct"] for o in q["options"])
-                assert "Scoring Criteria" not in q["question_text"]
-                assert "_____" not in q["question_text"]
-
-            assert questions[0]["options"][0]["option_text"] == "Simile" and questions[0]["options"][0]["is_correct"]
-            assert questions[1]["options"][1]["option_text"] == "Beowulf" and questions[1]["options"][1]["is_correct"]
-            assert questions[2]["options"][1]["option_text"] == "Climax" and questions[2]["options"][1]["is_correct"]
-
-            # Q4-Q6: TF (two-option MCQ)
-            for i in range(3, 6):
-                q = questions[i]
-                assert q["question_type"] == "MULTIPLE_CHOICE"
-                assert len(q["options"]) == 2
-                assert any(o["is_correct"] for o in q["options"])
-                assert "Scoring Criteria" not in q["question_text"]
-                assert "_____" not in q["question_text"]
-
-            assert questions[3]["options"][0]["option_text"] == "True" and questions[3]["options"][0]["is_correct"]
-            assert questions[4]["options"][1]["option_text"] == "False" and questions[4]["options"][1]["is_correct"]
-            assert questions[5]["options"][0]["option_text"] == "True" and questions[5]["options"][0]["is_correct"]
-
-            # Q7-Q9: IDENTIFICATION
-            for i in range(6, 9):
-                q = questions[i]
-                assert q["question_type"] == "IDENTIFICATION"
-                assert len(q["options"]) == 1
-                assert q["options"][0]["is_correct"] is True
-                assert "Scoring Criteria" not in q["question_text"]
-                assert "_____" not in q["question_text"]
-
-            assert questions[6]["options"][0]["option_text"] == "Plot"
-            assert questions[7]["options"][0]["option_text"] == "Alliteration"
-            assert questions[8]["options"][0]["option_text"] == "Point of View"
-
-            # Q10-Q12: SHORT_ANSWER (essays)
-            for i in range(9, 12):
-                q = questions[i]
-                assert q["question_type"] == "SHORT_ANSWER"
-                assert len(q["options"]) == 0
-                assert q["explanation"] is not None
-                assert len(q["explanation"]) > 10
-                assert "Scoring Criteria" not in q["question_text"]
-                assert "Rubric" not in q["question_text"]
-                assert "_____" not in q["question_text"]
-
-            assert "Defines dramatic irony" in questions[9]["explanation"]
-            assert "Identifies sensory details" in questions[10]["explanation"]
-            assert "Explains competing ethical values" in questions[11]["explanation"]
-
-        _verify_12_items(pdf_body["questions"])
-
-        # 3. Test import via API on teacher DOCX
-        with TestClient(app, raise_server_exceptions=False) as client:
-            docx_res = client.post(
-                "/api/v1/quizzes/import-preview",
-                files={
-                    "file": (
-                        "real_teacher_exam_with_key.docx",
-                        teacher_docx_bytes,
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    )
-                },
-            )
-        assert docx_res.status_code == 200
-        docx_body = docx_res.json()
-        assert len(docx_body["questions"]) == 12
-        _verify_12_items(docx_body["questions"])
+            },
+        )
+    assert docx_res.status_code == 200
+    docx_body = docx_res.json()
+    assert len(docx_body["questions"]) == 12
+    _verify_12_items(docx_body["questions"])
 
 
 

@@ -4,6 +4,12 @@ from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, Field, model_validator
 
 
+class TOSPassage(BaseModel):
+    id: str = Field(min_length=1, max_length=100)
+    title: str = Field(min_length=1, max_length=200)
+    text: str = Field(min_length=1, max_length=6000)
+
+
 class TOSOption(BaseModel):
     option_id: Optional[int] = None
     option_text: str
@@ -22,6 +28,15 @@ class TOSQuestionIn(BaseModel):
     points: float = 1.0
     explanation: Optional[str] = None
     options: List[TOSOption] = Field(default_factory=list)
+    passage_id: Optional[str] = None
+    passage: Optional[TOSPassage] = None
+
+    @model_validator(mode="after")
+    def linked_passage(self):
+        if self.passage_id is not None or self.passage is not None:
+            if self.passage is None or self.passage_id != self.passage.id:
+                raise ValueError("A passage_id must link to the included passage")
+        return self
 
 
 class TOSQuestionOut(TOSQuestionIn):
@@ -80,6 +95,7 @@ class TOSRowRequest(BaseModel):
     code: Optional[str] = Field(default=None, max_length=100)
     type_counts: dict[str, int] = Field(default_factory=dict)
     bloom_targets: dict[str, int] = Field(default_factory=dict)
+    passage: Optional[TOSPassage] = None
 
     @model_validator(mode="after")
     def bound_counts(self):
@@ -98,6 +114,7 @@ class AITOSGenerateRequest(BaseModel):
     subject_name: str = Field(max_length=200)
     language: str = Field(default="English", max_length=40)
     rows: List[TOSRowRequest] = Field(min_length=1, max_length=12)
+    existing_stems: List[str] = Field(default_factory=list, max_length=50)
 
     @model_validator(mode="after")
     def bound_total(self):
@@ -109,6 +126,17 @@ class AITOSGenerateRequest(BaseModel):
 class AITOSGenerateResponse(BaseModel):
     questions: List[TOSQuestionIn] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
+
+
+class AITOSRepairRequest(BaseModel):
+    language: str = Field(default="English", max_length=40)
+
+
+class AITOSRepairResponse(AITOSGenerateResponse):
+    added_count: int = 0
+    credits_charged: int = 0
+    free_fills_used: int = 0
+    free_fill_limit: int = 3
 
 
 # AI field assistance schemas

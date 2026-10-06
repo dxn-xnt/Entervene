@@ -41,7 +41,19 @@ from app.api.v1.routes.TOS import router as tos_router
 from app.api.v1.routes.TeacherSubstitutions import router as teacher_substitutions_router
 from app.api.v1.routes.Analytics import router as analytics_router
 from app.api.v1.routes.LessonGoals import router as lesson_goals_router
+from contextlib import asynccontextmanager
+from starlette.concurrency import run_in_threadpool
+from app.services.ai.UsageGuard import reconcile_expired_holds
+from app.services.ai.tos_generation_session import check_telemetry_logging, validate_heartbeat_settings
 
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    validate_heartbeat_settings()
+    check_telemetry_logging()
+    await run_in_threadpool(reconcile_expired_holds)
+    yield
 
 
 app = FastAPI(
@@ -49,6 +61,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
+    lifespan=lifespan,
 )
 
 app.add_middleware(CSRFMiddleware)
