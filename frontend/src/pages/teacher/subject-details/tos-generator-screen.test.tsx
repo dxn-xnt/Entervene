@@ -25,7 +25,8 @@ vi.mock("lucide-react", async (importOriginal) => {
 });
 
 const subjects = [{ subject_id: 1, subject_name: "Science" }];
-const competencies = [{ competency_id: 1, statement: "Plants", competency_code: "SCI1", target_hours: 8 }];
+const competencies = [{ competency_id: 1, statement: "Plants", competency_code: "SCI1", target_hours: 8,
+  order_index: 1, subject_id: 1, is_archived: false }];
 const question = (number: number, type = "MULTIPLE_CHOICE"): TOSExportQuestion => ({
   question_text: `Plant question ${number}`, question_type: type, competency_label: "Plants",
   options: [{ option_text: "Roots", is_correct: true }, { option_text: "Leaves" }],
