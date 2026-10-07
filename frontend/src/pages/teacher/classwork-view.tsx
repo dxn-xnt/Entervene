@@ -726,7 +726,7 @@ export default function ClassworkView({
               <RubricsScoreBoard
                 totalPoints={selected.total_points}
                 rubricLevels={
-                  selected.classwork_type === "ACTIVITY"
+                  selected.classwork_type === "ACTIVITY" || selected.classwork_type === "ASSIGNMENT"
                     ? selected.rubric_levels
                     : undefined
                 }

@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
@@ -146,7 +146,7 @@ def get_assigned_subjects(db: Session, template: GradingTemplate) -> list[dict]:
     query_conditions.append(func.lower(Subject.default_grading_template) == template.template_name.casefold())
     query_conditions.append(Subject.default_grading_template == str(template.grading_template_id))
 
-    subjects = db.query(Subject).filter(or_(*query_conditions)).all()
+    subjects = db.query(Subject).options(joinedload(Subject.academic_level)).filter(or_(*query_conditions)).all()
     assigned = []
     seen = set()
     for sub in subjects:
@@ -156,6 +156,8 @@ def get_assigned_subjects(db: Session, template: GradingTemplate) -> list[dict]:
                 "subject_id": sub.subject_id,
                 "subject_name": sub.subject_name,
                 "subject_codename": sub.subject_codename,
+                "academic_level_id": sub.academic_level_id,
+                "grade_level": sub.academic_level.grade_level if sub.academic_level else None,
             })
     return assigned
 

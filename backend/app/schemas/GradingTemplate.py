@@ -8,6 +8,8 @@ class GradingTemplateSubject(BaseModel):
     subject_id: int
     subject_name: str
     subject_codename: str | None
+    academic_level_id: int | None = None
+    grade_level: int | None = None
 
 
 class GradingTemplateSubjectOption(GradingTemplateSubject):

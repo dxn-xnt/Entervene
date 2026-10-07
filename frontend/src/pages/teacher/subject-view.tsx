@@ -1205,14 +1205,9 @@ export default function SubjectDetails() {
                 >
                   <Dialog.Header asChild>
                     <>
-                      <div>
-                        <p className="text-xs font-bold uppercase">
-                          Teacher classwork detail
-                        </p>
-                        <p className="text-xl font-bold">
-                          {selectedClasswork?.title || "Classwork"}
-                        </p>
-                      </div>
+                      <p className="text-xl font-bold">
+                        {selectedClasswork?.title || "Classwork"}
+                      </p>
                       <div className="flex items-center gap-2">
                         <Tooltip>
                           <TooltipTrigger render={<button
