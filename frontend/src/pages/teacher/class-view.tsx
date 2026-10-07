@@ -8,12 +8,9 @@ import {
   CheckSquare,
   ChevronDown,
   ClipboardList,
-  Eye,
   FileText,
   Lightbulb,
-  Paperclip,
   Pencil,
-  Plus,
   Search,
   Users,
   X,
@@ -46,7 +43,7 @@ import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 
 import CompetencyModal from "./forms/competency-modal";
 import CreateLessonModal from "@/pages/teacher/forms/create-lesson";
-import ClassworkCard from "./classworks/classwork-card";
+import ClassworkItemLine from "@/components/item-line/classwork";
 import ClassworkView from "./classwork-view";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
@@ -62,6 +59,10 @@ import type {
 import ClassworkFormModal from "./subject-details/classwork-form-modal";
 import TeacherLessonDetailScreen from "./subject-details/teacher-lesson-detail-screen";
 import { StudentRecordDetail } from "./subject-details/student-records-panel";
+import LessonItemLine, {
+  type LessonItem,
+  type LinkedClassworkItem,
+} from "@/components/item-line/lesson";
 import {
   getTeacherRecordPeriods,
   getTeacherStudentRecordDetail,
@@ -101,61 +102,7 @@ import type {
 import type { SuggestionResponse } from "@/types/suggestion";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 
-interface LessonAttachment {
-  lesson_attachment_id: number;
-  file_name: string;
-  file_type?: string;
-  file_size: number;
-  uploaded_at?: string;
-}
 
-interface LessonItem {
-  lesson_id: number;
-  title: string;
-  description?: string | null;
-  content?: string | null;
-  competency_id?: number | null;
-  competency_code?: string | null;
-  competency_statement?: string | null;
-  order_index: number;
-  created_at?: string;
-  updated_at?: string;
-  is_published: boolean;
-  show_scores: boolean;
-  is_draft: boolean;
-  is_archived: boolean;
-  attachments: LessonAttachment[];
-}
-
-interface LinkedClassworkItem {
-  classwork_assignment_id: number;
-  classwork_id: number;
-  title: string;
-  classwork_type?: string | null;
-  classwork_category?: string | null;
-  due_date?: string | null;
-  total_points?: number | null;
-  attachment_count?: number;
-  is_published?: boolean;
-  is_locked?: boolean;
-}
-
-function ClassworkIcon({
-  type,
-  size = 16,
-}: {
-  type?: string | null;
-  size?: number;
-}) {
-  switch (type?.toLowerCase()) {
-    case "quiz":
-      return <ClipboardList size={size} />;
-    case "assignment":
-      return <BookOpen size={size} />;
-    default:
-      return <FileText size={size} />;
-  }
-}
 
 type DetailTab = "lessons" | "students" | "classwork";
 
@@ -413,7 +360,7 @@ export default function TeacherClassDetail() {
                         <Tooltip>
                           <TooltipTrigger render={<span className="inline-flex"><Button
                             variant="secondary"
-                            className="shadow-none w-7 p-1"
+                            className="shadow-none p-1"
                             size="sm"
                             aria-label={`View ${currentSubject?.subject_name || detail.section_name}`}
                             onClick={() => {
@@ -853,8 +800,8 @@ function LessonsTab({
       description: lesson.description || "",
       content: lesson.content || "",
       order_index: String(lesson.order_index || 1),
-      is_published: lesson.is_published,
-      show_scores: lesson.show_scores,
+      is_published: lesson.is_published ?? true,
+      show_scores: lesson.show_scores ?? true,
       competency_id: lesson.competency_id,
     });
   };
@@ -968,147 +915,17 @@ function LessonsTab({
     const isLoadingCw = loadingClassworkId === lesson.lesson_id;
 
     return (
-      <Accordion
+      <LessonItemLine
         key={lesson.lesson_id}
-        value={isExpanded ? [String(lesson.lesson_id)] : []}
-        onValueChange={() => toggleLesson(lesson.lesson_id)}
-        className="w-full"
-      >
-        <Accordion.Item
-          value={String(lesson.lesson_id)}
-          className="border-2 border-black bg-primary shadow-md!"
-        >
-          <Accordion.Header className="p-4 items-center shadow-none">
-            <div className="flex flex-col w-full items-start gap-1 min-w-0 text-left">
-              <div className="flex flex-wrap items-center w-full justify-between gap-2 min-w-0 pr-3">
-                <h4
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void openLessonDetail(lesson);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      void openLessonDetail(lesson);
-                    }
-                  }}
-                  className="text-xl sm:text-2xl font-semibold text-black break-words line-clamp-2 hover:underline cursor-pointer"
-                >
-                  {lesson.title}
-                </h4>
-                <div className="flex flex-row items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void openLessonDetail(lesson);
-                    }}
-                    className="h-7 border-2 border-black bg-white px-2.5 text-xs font-bold text-black shadow-none hover:bg-yellow-100 transition-colors"
-                  >
-                    <Eye size={12} className="mr-1.5" />
-                    View Lesson
-                  </Button>
-                  <Badge
-                    variant={lesson.is_published ? "solid" : "default"}
-                    size="sm"
-                    className="shrink-0 text-xs font-bold"
-                  >
-                    {lesson.is_published ? "Published" : "Draft"}
-                  </Badge>
-                  {lesson.attachments && lesson.attachments.length > 0 && (
-                    <Badge
-                      size="sm"
-                      variant="solid"
-                    >
-                      <Paperclip size={10} />
-                      {lesson.attachments.length} material
-                      {lesson.attachments.length === 1 ? "" : "s"}
-                    </Badge>
-                  )}
-                  <Badge
-                    variant="outline"
-                    size="sm"
-                    className=""
-                  >
-                    {classworks.length} classwork{classworks.length === 1 ? "" : "s"}
-                  </Badge>
-                </div>
-              </div>
-            </div>
-          </Accordion.Header>
-
-          <Accordion.Content className="p-3 border-t-2 border-black bg-white space-y-2">
-            {isLoadingCw ? (
-              <LoadingPanel label="Loading classworks..." />
-            ) : classworks.length === 0 ? (
-              <div className="flex items-center justify-between rounded border-2 border-dashed border-black/40 bg-white p-3 text-xs text-gray-500 font-medium">
-                <span>No classworks assigned to this lesson yet.</span>
-              </div>
-            ) : (
-              classworks.map((cw) => (
-                <Card
-                  key={cw.classwork_assignment_id}
-                  onClick={() => openClassworkDetail(cw)}
-                  className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3 hover:bg-retro shadow-none hover:translate-x-0.5 transition-all cursor-pointer min-w-0 group"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="shrink-0 text-black">
-                      <ClassworkIcon type={cw.classwork_type} size={18} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold truncate text-black">
-                        {cw.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {cw.due_date
-                          ? `Due ${new Date(cw.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                          : "No due date"}
-                        {/* {cw.total_points !== null && cw.total_points !== undefined
-                          ? ` • ${cw.total_points} pts`
-                          : ""} */}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {cw.classwork_category && (
-                      <Badge variant="surface" size="sm" className="capitalize">
-                        {cw.classwork_category.toLowerCase().replace(/_/g, " ")}
-                      </Badge>
-                    )}
-                  </div>
-                </Card>
-              ))
-            )}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-black/10">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void openLessonDetail(lesson)}
-                className="h-8 border-2 border-black bg-white px-3 text-xs font-bold text-black shadow-none hover:bg-retro"
-              >
-                <Eye size={14} className="mr-1.5" />
-                View Lesson
-              </Button>
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                onClick={() => openClassworkForm(lesson as any)}
-                className="h-8 border-2 border-black bg-primary px-3 text-xs font-bold text-black shadow-none hover:opacity-90"
-              >
-                <Plus size={14} className="mr-1.5" />
-                Add Classwork
-              </Button>
-            </div>
-          </Accordion.Content>
-        </Accordion.Item>
-      </Accordion>
+        lesson={lesson}
+        isExpanded={isExpanded}
+        onToggle={() => toggleLesson(lesson.lesson_id)}
+        classworks={classworks}
+        isLoadingClassworks={isLoadingCw}
+        onOpenLessonDetail={openLessonDetail}
+        onOpenClassworkDetail={openClassworkDetail}
+        onOpenClassworkForm={openClassworkForm}
+      />
     );
   };
 
@@ -2052,7 +1869,7 @@ function ClassworkTab({
         ) : filteredItems.length > 0 ? (
           <section className="space-y-3">
             {filteredItems.map((item) => (
-              <ClassworkCard
+              <ClassworkItemLine
                 key={item.classwork_id}
                 item={item}
                 onOpen={(cw) => setSelected(cw)}

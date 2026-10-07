@@ -1,15 +1,11 @@
 import {
     Award,
     BookOpen,
-    Calendar,
     ClipboardList,
     Clock,
-    Eye,
     FileText,
-    HelpCircle,
     Paperclip,
     Pencil,
-    PenTool,
     Plus,
 } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
@@ -24,9 +20,9 @@ import {
     EmptyMedia,
     EmptyTitle,
 } from "@/components/ui/empty";
-import { IconContainer } from "@/components/icon-container";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { formatDate, formatFileSize, toTitleCase } from "@/lib/formatters";
+import { formatDate, formatFileSize } from "@/lib/formatters";
+import ClassworkItemLine from "@/components/item-line/classwork";
 import type { Lesson, LinkedClasswork } from "./subject-details/types";
 
 export interface TeacherLessonViewProps {
@@ -40,20 +36,6 @@ export interface TeacherLessonViewProps {
     openClassworkDetail: (classwork: LinkedClasswork) => void;
     linkedClassworks: LinkedClasswork[];
     isLoadingClasswork?: boolean;
-}
-
-function getClassworkIcon(type?: string | null) {
-    switch (type?.toUpperCase()) {
-        case "READING":
-            return <BookOpen size={20} className="shrink-0 text-black" />;
-        case "QUIZ":
-            return <HelpCircle size={20} className="shrink-0 text-black" />;
-        case "ACTIVITY":
-            return <PenTool size={20} className="shrink-0 text-black" />;
-        case "ASSIGNMENT":
-        default:
-            return <FileText size={20} className="shrink-0 text-black" />;
-    }
 }
 
 export function TeacherLessonView({
@@ -277,84 +259,11 @@ export function TeacherLessonView({
                         /* Classworks List */
                         <div className="flex flex-col gap-3">
                             {linkedClassworks.map((classwork) => (
-                                <Card
+                                <ClassworkItemLine
                                     key={classwork.classwork_assignment_id}
-                                    tabIndex={0}
-                                    role="button"
-                                    onClick={() => openClassworkDetail(classwork)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === "Enter" || e.key === " ") {
-                                            e.preventDefault();
-                                            openClassworkDetail(classwork);
-                                        }
-                                    }}
-                                    className="group flex w-full cursor-pointer items-center justify-between gap-4 border-2 border-black bg-white p-3.5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 hover:bg-yellow-50/50 transition-all"
-                                >
-                                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                                        <IconContainer
-                                            variant="primary"
-                                            className="border-2 border-black bg-primary p-2 shrink-0 shadow-none group-hover:scale-105 transition-transform"
-                                        >
-                                            {getClassworkIcon(classwork.classwork_type)}
-                                        </IconContainer>
-
-                                        <div className="flex flex-col min-w-0 flex-1">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <p className="text-sm sm:text-base font-bold text-black break-words line-clamp-2 group-hover:underline">
-                                                    {classwork.title}
-                                                </p>
-                                                {classwork.classwork_type && (
-                                                    <Badge size="sm" variant="surface" className="font-semibold text-[11px]">
-                                                        {toTitleCase(classwork.classwork_type)}
-                                                    </Badge>
-                                                )}
-                                            </div>
-
-                                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs font-medium text-gray-600">
-                                                {classwork.due_date ? (
-                                                    <span className="inline-flex items-center gap-1 text-gray-700">
-                                                        <Calendar size={12} className="text-gray-500" />
-                                                        Due {formatDate(classwork.due_date)}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-muted-foreground">No due date</span>
-                                                )}
-
-                                                {classwork.created_at && (
-                                                    <span>
-                                                        Created {formatDate(classwork.created_at)}
-                                                    </span>
-                                                )}
-
-                                                {classwork.attachment_count ? (
-                                                    <Badge
-                                                        size="sm"
-                                                        className="bg-[#7ABA78] border border-black text-black font-semibold text-[11px] py-0"
-                                                    >
-                                                        <Paperclip size={10} className="mr-0.5 inline" />
-                                                        {classwork.attachment_count} file{classwork.attachment_count === 1 ? "" : "s"}
-                                                    </Badge>
-                                                ) : null}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-2 shrink-0">
-                                        <Button
-                                            type="button"
-                                            variant="default"
-                                            size="sm"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                openClassworkDetail(classwork);
-                                            }}
-                                            className="gap-1.5 border-2 border-black bg-white text-black font-bold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100"
-                                        >
-                                            <Eye size={14} />
-                                            <span>View</span>
-                                        </Button>
-                                    </div>
-                                </Card>
+                                    item={classwork}
+                                    onOpen={openClassworkDetail}
+                                />
                             ))}
                         </div>
                     ) : (

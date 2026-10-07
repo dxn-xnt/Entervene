@@ -4,9 +4,7 @@ import {
   ArchiveIcon,
   Award,
   BookOpen,
-  ClipboardList,
   Eye,
-  FileText,
   GraduationCap,
   MoreVertical,
   Pencil,
@@ -20,7 +18,7 @@ import { formatDate, toTitleCase } from "@/lib/formatters";
 import { Text } from "@/components/retroui/Text";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
-import { Accordion } from "@/components/retroui/Accordion";
+import LessonItemLine from "@/components/item-line/lesson";
 import { Select } from "@/components/retroui/Select";
 import { Badge } from "@/components/retroui/Badge";
 import { ContextMenu } from "@/components/retroui/ContextMenu";
@@ -30,15 +28,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { OverviewCard } from "@/components/overview-cards";
-import { IconContainer } from "@/components/icon-container";
+
 import type { CompetencyItem, Lesson, LinkedClasswork } from "./types";
 
 type SubjectLessonListProps = {
@@ -160,248 +151,28 @@ export default function SubjectLessonList({
   // Reusable renderer for a Lesson card + linked classwork items
   const renderLessonItem = (lesson: Lesson) => {
     const isExpanded = expandedLessonId === lesson.lesson_id;
-    const classworks = linkedClassworks[lesson.lesson_id] || [];
+    const rawClassworks = linkedClassworks[lesson.lesson_id] || [];
+    const classworks = rawClassworks.filter(
+      (cw) =>
+        cw.classwork_category !== "QUARTERLY_ASSESSMENT" &&
+        !quarterlyIds.has(cw.classwork_assignment_id),
+    );
+    const isLoadingCw = loadingClassworkId === lesson.lesson_id;
 
     return (
-      <ContextMenu key={lesson.lesson_id}>
-        <ContextMenu.Trigger className="block w-full">
-          <Accordion
-            value={isExpanded ? [String(lesson.lesson_id)] : []}
-            onValueChange={() => toggleLesson(lesson.lesson_id)}
-            className="w-full shadow-none"
-          >
-            <Accordion.Item
-              value={String(lesson.lesson_id)}
-              className="rounded border-2 border-black bg-primary shadow-none! overflow-hidden"
-            >
-              <Accordion.Header className="items-center p-3 shadow-none">
-                <div className="flex flex-1 items-center justify-between gap-2 min-w-0 text-left mr-2 shadow-none">
-                  <div className="flex flex-1 flex-col items-start min-w-0">
-                    <div className="flex flex-wrap items-center gap-3 min-w-0">
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (openLessonDetail) openLessonDetail(lesson);
-                          else openLessonManager(lesson);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (openLessonDetail) openLessonDetail(lesson);
-                            else openLessonManager(lesson);
-                          }
-                        }}
-                        className="text-base sm:text-lg md:text-xl font-bold text-gray-950 break-words line-clamp-2 hover:underline cursor-pointer"
-                      >
-                        {lesson.title}
-                      </span>
-
-                      {lesson.attachments && lesson.attachments.length > 0 && (
-                        <Badge
-                          size="sm"
-                          className="border border-black bg-[#7ABA78] font-bold text-black shrink-0"
-                        >
-                          {lesson.attachments.length} material
-                          {lesson.attachments.length === 1 ? "" : "s"}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  <Badge
-                    variant={lesson.is_published ? "solid" : "default"}
-                    size="sm"
-                    className="py-1 rounded!"
-                  >
-                    {lesson.is_published ? "Published" : "Draft"}
-                  </Badge>
-
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="secondary"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }
-                        }}
-                        className="p-1"
-                      >
-                        <MoreVertical size={14} />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      onClick={(e) => e.stopPropagation()}
-                      className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] min-w-[150px] p-1 rounded font-semibold text-xs z-50"
-                    >
-                      {openLessonDetail && (
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openLessonDetail(lesson);
-                          }}
-                          className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-yellow-100"
-                        >
-                          <Eye size={14} />
-                          <span>View Lesson</span>
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openLessonManager(lesson);
-                        }}
-                        className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-yellow-100"
-                      >
-                        <Pencil size={14} />
-                        <span>Manage</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setLessonToArchive(lesson);
-                        }}
-                        className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2"
-                      >
-                        <Archive size={14} />
-                        <span>Archive</span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </Accordion.Header>
-
-              <Accordion.Content className="p-3 border-t-2 border-black bg-white space-y-3">
-                <p className="text-xs font-normal text-foreground break-words line-clamp-2">
-                  {lesson.description ||
-                    (lesson.created_at
-                      ? `Created ${formatDate(lesson.created_at)}`
-                      : "Lesson folder")}
-                </p>
-
-                {(() => {
-                  const lessonClassworks = classworks.filter(
-                    (cw) =>
-                      cw.classwork_category !== "QUARTERLY_ASSESSMENT" &&
-                      !quarterlyIds.has(cw.classwork_assignment_id),
-                  );
-                  if (loadingClassworkId === lesson.lesson_id) {
-                    return (
-                      <div className="rounded border border-black bg-white px-4 py-3 text-sm font-medium shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                        Loading classworks...
-                      </div>
-                    );
-                  }
-
-                  if (lessonClassworks.length > 0) {
-                    return lessonClassworks.map((classwork) => (
-                      <Card
-                        key={classwork.classwork_assignment_id}
-                        onClick={() => openClassworkDetail(classwork)}
-                        className="flex w-full cursor-pointer items-center justify-between gap-4 shadow-none hover:bg-retro hover:translate-x-1 transition-all p-3"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ")
-                            openClassworkDetail(classwork);
-                        }}
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                          <IconContainer variant="primary" className="shadow-none p-2">
-                            <FileText size={20} className="shrink-0" />
-                          </IconContainer>
-                          <div className="min-w-0 w-full">
-                            <div className="flex flex-row items-center justify-between w-full">
-                              <div className="flex flex-col">
-                                <p className="text-sm md:text-base font-bold text-black line-clamp-2 break-words [overflow-wrap:anywhere]">
-                                  {classwork.title}
-                                </p>
-                                <p className="text-xs font-medium text-gray-700">
-                                  {classwork.created_at
-                                    ? `Created ${formatDate(classwork.created_at)}`
-                                    : ""}
-                                  {classwork.due_date
-                                    ? `${classwork.created_at ? " | " : ""}Due ${formatDate(classwork.due_date)}`
-                                    : ""}
-                                </p>
-                              </div>
-                              <Badge size="sm" variant="surface" className="mr-1">
-                                {toTitleCase(classwork.classwork_type)}
-                              </Badge>
-                            </div>
-                          </div>
-                        </div>
-                      </Card>
-                    ));
-                  }
-                  return (
-                    <Empty className="p-4 shadow-none bg-retro">
-                      <EmptyHeader>
-                        <EmptyMedia>
-                          <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
-                            <ClipboardList className="size-5 text-black" />
-                          </div>
-                        </EmptyMedia>
-                        <EmptyTitle>No classworks yet</EmptyTitle>
-                        <EmptyDescription className="whitespace-nowrap">
-                          Readings, activities, assignments, and quizzes linked to this lesson will appear here.
-                        </EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
-                  );
-                })()}
-                <div className="flex justify-end">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => openClassworkForm(lesson)}
-                    className="w-full shadow-none"
-                  >
-                    <Plus size={16} className="mr-2" />
-                    Add Classwork
-                  </Button>
-                </div>
-              </Accordion.Content>
-            </Accordion.Item>
-          </Accordion>
-        </ContextMenu.Trigger>
-
-        <ContextMenu.Content className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] min-w-[160px] p-1 rounded font-semibold text-xs z-50">
-          {openLessonDetail && (
-            <ContextMenu.Item
-              onClick={() => openLessonDetail(lesson)}
-              className="flex items-center gap-2 cursor-pointer px-2.5 py-2 hover:bg-yellow-100 rounded focus:bg-yellow-100 text-xs font-bold"
-            >
-              <Eye size={14} />
-              <span>View Lesson</span>
-            </ContextMenu.Item>
-          )}
-          <ContextMenu.Item
-            onClick={() => openLessonManager(lesson)}
-            className="flex items-center gap-2 cursor-pointer px-2.5 py-2 hover:bg-yellow-100 rounded focus:bg-yellow-100 text-xs font-bold"
-          >
-            <Pencil size={14} />
-            <span>Manage Lesson</span>
-          </ContextMenu.Item>
-          <ContextMenu.Separator className="my-1 border-b border-black" />
-          <ContextMenu.Item
-            variant="destructive"
-            onClick={() => setLessonToArchive(lesson)}
-            className="flex items-center gap-2 cursor-pointer px-2.5 py-2 text-red-600 hover:bg-red-50 hover:text-red-700 rounded focus:bg-red-50 focus:text-red-700 text-xs font-bold"
-          >
-            <Archive size={14} />
-            <span>Archive Lesson</span>
-          </ContextMenu.Item>
-        </ContextMenu.Content>
-      </ContextMenu>
+      <LessonItemLine
+        key={lesson.lesson_id}
+        lesson={lesson}
+        isExpanded={isExpanded}
+        onToggle={() => toggleLesson(lesson.lesson_id)}
+        classworks={classworks}
+        isLoadingClassworks={isLoadingCw}
+        onOpenLessonDetail={openLessonDetail}
+        onOpenClassworkDetail={openClassworkDetail}
+        onOpenClassworkForm={openClassworkForm}
+        onOpenLessonManager={openLessonManager}
+        onArchiveLesson={() => setLessonToArchive(lesson)}
+      />
     );
   };
 
