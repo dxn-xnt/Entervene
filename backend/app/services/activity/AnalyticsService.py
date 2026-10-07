@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any
-from sqlalchemy import func, distinct
+from zoneinfo import ZoneInfo
+
+from fastapi import HTTPException
+from sqlalchemy import and_, func, distinct, or_
 from sqlalchemy.orm import Session
 
 from app.models.academic.AcademicLevel import AcademicLevel
@@ -548,6 +552,15 @@ def build_subject_overview(
     }
 
 
+def _teacher_dashboard_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _dashboard_aware_datetime(value: datetime) -> datetime:
+    # Legacy naive timestamps follow the same UTC convention as student metrics.
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
 def build_teacher_dashboard_health(
     db: Session,
     staff_id_or_user_id: str | uuid.UUID | None,
@@ -574,25 +587,24 @@ def build_teacher_dashboard_health(
             staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == staff_id_or_user_id).first()
 
     if not staff:
-        staff = db.query(AcademicStaff).filter(~AcademicStaff.staff_id.like("ADM%")).first()
+        raise HTTPException(status_code=403, detail="Teacher identity could not be resolved")
 
-    staff_id = staff.staff_id if staff else "N/A"
+    staff_id = staff.staff_id
 
-    # Assigned loads
-    load_query = db.query(SubjectLoad).filter(
+    # An explicitly selected period never includes legacy or other-period loads.
+    load_query = db.query(SubjectLoad).join(Class, SubjectLoad.class_id == Class.class_id).filter(
         SubjectLoad.staff_id == staff_id,
         SubjectLoad.is_active_version.is_(True),
         SubjectLoad.status.in_(["active", "published"]),
+        Class.class_status == "active",
     )
     if target_period:
         loads = load_query.filter(
-            (SubjectLoad.academic_period_id == target_period.academic_period_id)
-            | (SubjectLoad.academic_period_id.is_(None))
-        ).all()
-        if not loads:
-            loads = load_query.all()
+            SubjectLoad.academic_period_id == target_period.academic_period_id,
+            Class.academic_year_id == target_period.academic_year_id,
+        ).order_by(SubjectLoad.class_id, SubjectLoad.subject_id).all()
     else:
-        loads = load_query.all()
+        loads = []
 
     available_filters: list[dict[str, Any]] = []
     seen_combos = set()
@@ -610,61 +622,73 @@ def build_teacher_dashboard_health(
 
     unique_class_ids = {f["class_id"] for f in available_filters}
 
-    # Total distinct enrolled students across assigned classes
-    total_students = (
-        db.query(func.count(distinct(StudentClass.student_id)))
-        .filter(StudentClass.class_id.in_(unique_class_ids))
-        .scalar()
-        if unique_class_ids
-        else 0
-    )
+    # Cache only canonical active enrollments for every denominator and numerator.
+    enrolled_by_class = {cid: set() for cid in unique_class_ids}
+    if unique_class_ids:
+        enrollments = db.query(StudentClass).filter(
+            StudentClass.class_id.in_(unique_class_ids),
+            StudentClass.academic_year_id == target_period.academic_year_id,
+            StudentClass.enrollment_status == "enrolled",
+        ).all()
+        for enrollment in enrollments:
+            enrolled_by_class[enrollment.class_id].add(enrollment.student_id)
+    total_students = len(set().union(*enrolled_by_class.values())) if enrolled_by_class else 0
 
-    # All published assignments created or assigned by teacher in target period
-    asgn_q = (
-        db.query(ClassworkAssignment)
-        .join(Classwork, ClassworkAssignment.classwork_id == Classwork.classwork_id)
-        .filter(
-            (Classwork.created_by_staff_id == staff_id) | (ClassworkAssignment.assigned_by_staff_id == staff_id),
-            ClassworkAssignment.is_published.is_(True),
-            Classwork.is_archived.is_(False),
+    # Use the same teacher, load tuple and exact period scope for all dashboard data.
+    all_assignments = []
+    if seen_combos and target_period:
+        all_assignments = (
+            db.query(ClassworkAssignment)
+            .join(Classwork, ClassworkAssignment.classwork_id == Classwork.classwork_id)
+            .filter(
+                (Classwork.created_by_staff_id == staff_id) | (ClassworkAssignment.assigned_by_staff_id == staff_id),
+                ClassworkAssignment.is_published.is_(True),
+                Classwork.is_archived.is_(False),
+                ClassworkAssignment.academic_period_id == target_period.academic_period_id,
+                or_(*(
+                    and_(ClassworkAssignment.class_id == cid, Classwork.subject_id == sid)
+                    for cid, sid in sorted(seen_combos)
+                )),
+            )
+            .all()
         )
-    )
-    if target_period:
-        asgn_q = asgn_q.filter(
-            (ClassworkAssignment.academic_period_id == target_period.academic_period_id)
-            | (ClassworkAssignment.academic_period_id.is_(None))
-        )
-    all_assignments = asgn_q.all()
+
+    assignments_by_combo = {combo: [] for combo in seen_combos}
+    assignments_by_id = {}
+    for assignment in all_assignments:
+        assignments_by_combo[(assignment.class_id, assignment.classwork.subject_id)].append(assignment)
+        assignments_by_id[assignment.classwork_assignment_id] = assignment
+    submissions_by_assignment = {aid: [] for aid in assignments_by_id}
+    if assignments_by_id:
+        submissions = db.query(StudentSubmission).filter(
+            StudentSubmission.classwork_assignment_id.in_(assignments_by_id),
+        ).all()
+        for submission in submissions:
+            assignment = assignments_by_id[submission.classwork_assignment_id]
+            if submission.student_id in enrolled_by_class[assignment.class_id]:
+                submissions_by_assignment[submission.classwork_assignment_id].append(submission)
+
+    completed_statuses = {"submitted", "graded", "late"}
 
     total_expected = 0
     total_submitted = 0
     for asgn in all_assignments:
-        enrolled_count = db.query(StudentClass).filter(StudentClass.class_id == asgn.class_id).count()
+        enrolled_count = len(enrolled_by_class[asgn.class_id])
         total_expected += enrolled_count
-        submitted_count = (
-            db.query(StudentSubmission)
-            .filter(
-                StudentSubmission.classwork_assignment_id == asgn.classwork_assignment_id,
-                StudentSubmission.status.in_(["submitted", "graded", "late"]),
-            )
-            .count()
-        )
+        submitted_count = len([
+            s for s in submissions_by_assignment[asgn.classwork_assignment_id]
+            if s.status in completed_statuses
+        ])
         total_submitted += submitted_count
 
-    overall_completion_rate = round((total_submitted / total_expected * 100), 1) if total_expected > 0 else 0.0
+    overall_completion_rate = round((float(total_submitted) / float(total_expected) * 100.0), 1) if total_expected > 0 else 0.0
 
     # Ungraded count
-    ungraded_count = (
-        db.query(StudentSubmission)
-        .join(ClassworkAssignment, StudentSubmission.classwork_assignment_id == ClassworkAssignment.classwork_assignment_id)
-        .join(Classwork, ClassworkAssignment.classwork_id == Classwork.classwork_id)
-        .filter(
-            (Classwork.created_by_staff_id == staff_id) | (ClassworkAssignment.assigned_by_staff_id == staff_id),
-            StudentSubmission.status.in_(["submitted", "late"]),
-            StudentSubmission.grade.is_(None),
-        )
-        .count()
-    )
+    pending_subs = [
+        s for subs in submissions_by_assignment.values() for s in subs
+        if s.status in {"submitted", "late"} and s.grade is None
+    ]
+    ungraded_count = len(pending_subs)
 
     # Determine selected class & subject for the trend chart
     sel_class_id = None
@@ -689,34 +713,27 @@ def build_teacher_dashboard_health(
 
     trend_points: list[dict[str, Any]] = []
     if sel_class_id is not None and sel_subj_id is not None:
-        class_asgns = (
-            db.query(ClassworkAssignment)
-            .join(Classwork, ClassworkAssignment.classwork_id == Classwork.classwork_id)
-            .filter(
-                ClassworkAssignment.class_id == sel_class_id,
-                Classwork.subject_id == sel_subj_id,
-                ClassworkAssignment.is_published.is_(True),
-                Classwork.is_archived.is_(False),
-            )
-            .order_by(
-                func.coalesce(ClassworkAssignment.due_date, ClassworkAssignment.publish_date, Classwork.created_at).asc()
-            )
-            .all()
+        class_asgns = sorted(
+            assignments_by_combo[(sel_class_id, sel_subj_id)],
+            key=lambda a: (
+                _dashboard_aware_datetime(a.due_date or a.publish_date or a.classwork.created_at)
+                if (a.due_date or a.publish_date or a.classwork.created_at)
+                else datetime.min.replace(tzinfo=timezone.utc),
+                a.classwork_assignment_id,
+            ),
         )
-        enrolled_in_sel = db.query(StudentClass).filter(StudentClass.class_id == sel_class_id).count()
+        enrolled_in_sel = len(enrolled_by_class[sel_class_id])
 
         for idx, asgn in enumerate(class_asgns):
             cw = asgn.classwork
-            subs = db.query(StudentSubmission).filter(
-                StudentSubmission.classwork_assignment_id == asgn.classwork_assignment_id
-            ).all()
+            subs = submissions_by_assignment[asgn.classwork_assignment_id]
 
-            sub_count = len([s for s in subs if s.status in ["submitted", "graded", "late"]])
+            sub_count = len([s for s in subs if s.status in completed_statuses])
             graded_scores = [float(s.grade) for s in subs if s.grade is not None]
-            max_pts = float(cw.total_points or 100) if cw.total_points else 100.0
+            max_pts = float(cw.total_points) if cw.total_points is not None else 0.0
 
-            avg_score = round((sum(graded_scores) / len(graded_scores) / max_pts) * 100, 1) if (graded_scores and max_pts > 0) else None
-            completion_pct = round((sub_count / enrolled_in_sel * 100), 1) if enrolled_in_sel > 0 else 0.0
+            avg_score = round((sum(graded_scores) / float(len(graded_scores)) / max_pts) * 100.0, 1) if (graded_scores and max_pts > 0) else None
+            completion_pct = round((float(sub_count) / float(enrolled_in_sel) * 100.0), 1) if enrolled_in_sel > 0 else 0.0
 
             if asgn.due_date:
                 date_str = asgn.due_date.strftime("%b %d")
@@ -748,34 +765,19 @@ def build_teacher_dashboard_health(
         cid = f["class_id"]
         sid = f["subject_id"]
         cls_obj = db.query(Class).filter(Class.class_id == cid).first()
-        student_count = db.query(StudentClass).filter(StudentClass.class_id == cid).count()
+        student_count = len(enrolled_by_class[cid])
 
         grade_level_label = ""
         if cls_obj and cls_obj.academic_level:
             grade_level_label = cls_obj.academic_level.level_name
 
-        asgns_for_sec = (
-            db.query(ClassworkAssignment)
-            .join(Classwork, ClassworkAssignment.classwork_id == Classwork.classwork_id)
-            .filter(
-                ClassworkAssignment.class_id == cid,
-                Classwork.subject_id == sid,
-                ClassworkAssignment.is_published.is_(True),
-                Classwork.is_archived.is_(False),
-            )
-            .all()
-        )
+        asgns_for_sec = assignments_by_combo[(cid, sid)]
 
         total_sec_expected = student_count * len(asgns_for_sec)
-        sec_subs = []
-        if asgns_for_sec:
-            asgn_ids = [a.classwork_assignment_id for a in asgns_for_sec]
-            sec_subs = db.query(StudentSubmission).filter(
-                StudentSubmission.classwork_assignment_id.in_(asgn_ids)
-            ).all()
+        sec_subs = [s for a in asgns_for_sec for s in submissions_by_assignment[a.classwork_assignment_id]]
 
-        submitted_sec = len([s for s in sec_subs if s.status in ["submitted", "graded", "late"]])
-        sec_completion_rate = round((submitted_sec / total_sec_expected * 100), 1) if total_sec_expected > 0 else 0.0
+        submitted_sec = len([s for s in sec_subs if s.status in completed_statuses])
+        sec_completion_rate = round((float(submitted_sec) / float(total_sec_expected) * 100.0), 1) if total_sec_expected > 0 else 0.0
 
         # Score & passing rate calculation
         graded_sec_subs = [s for s in sec_subs if s.grade is not None]
@@ -786,22 +788,28 @@ def build_teacher_dashboard_health(
             percentages = []
             pass_count = 0
             for s in graded_sec_subs:
-                total_p = float(s.classwork_assignment.classwork.total_points or 100) if s.classwork_assignment and s.classwork_assignment.classwork else 100.0
+                total_points = s.classwork_assignment.classwork.total_points
+                total_p = float(total_points) if total_points is not None else 0.0
                 if total_p > 0:
                     pct = (float(s.grade) / total_p) * 100.0
                     percentages.append(pct)
                     if pct >= 75.0:
                         pass_count += 1
             if percentages:
-                sec_avg_score = round(sum(percentages) / len(percentages), 1)
-                sec_passing_rate = round((pass_count / len(percentages)) * 100, 1)
+                sec_avg_score = round(sum(percentages) / float(len(percentages)), 1)
+                sec_passing_rate = round((float(pass_count) / float(len(percentages))) * 100.0, 1)
 
         # Attendance calculation
-        att_records = db.query(AttendanceRecord).filter(AttendanceRecord.class_id == cid).all()
+        att_records = db.query(AttendanceRecord).filter(
+            AttendanceRecord.class_id == cid,
+            AttendanceRecord.student_id.in_(enrolled_by_class[cid]),
+            AttendanceRecord.date >= target_period.start_date,
+            AttendanceRecord.date <= target_period.end_date,
+        ).all()
         sec_attendance_rate = None
         if att_records:
             present_or_late = len([a for a in att_records if a.status in ["present", "late"]])
-            sec_attendance_rate = round((present_or_late / len(att_records)) * 100, 1)
+            sec_attendance_rate = round((float(present_or_late) / float(len(att_records))) * 100.0, 1)
 
         section_matrix.append({
             "class_id": cid,
@@ -818,21 +826,14 @@ def build_teacher_dashboard_health(
         })
 
     # Live Action Queue: pending_grading
-    pending_subs = (
-        db.query(StudentSubmission)
-        .join(ClassworkAssignment, StudentSubmission.classwork_assignment_id == ClassworkAssignment.classwork_assignment_id)
-        .join(Classwork, ClassworkAssignment.classwork_id == Classwork.classwork_id)
-        .join(Class, ClassworkAssignment.class_id == Class.class_id)
-        .join(Student, StudentSubmission.student_id == Student.student_id)
-        .filter(
-            (Classwork.created_by_staff_id == staff_id) | (ClassworkAssignment.assigned_by_staff_id == staff_id),
-            StudentSubmission.status.in_(["submitted", "late"]),
-            StudentSubmission.grade.is_(None),
-        )
-        .order_by(StudentSubmission.submitted_at.desc())
-        .limit(5)
-        .all()
-    )
+    pending_subs = sorted(
+        pending_subs,
+        key=lambda s: (
+            _dashboard_aware_datetime(s.submitted_at) if s.submitted_at else datetime.min.replace(tzinfo=timezone.utc),
+            s.submission_id,
+        ),
+        reverse=True,
+    )[:5]
 
     pending_grading_list = []
     for ps in pending_subs:
@@ -850,30 +851,22 @@ def build_teacher_dashboard_health(
         })
 
     # Live Action Queue: upcoming_deadlines
-    upcoming_asgns = (
-        db.query(ClassworkAssignment)
-        .join(Classwork, ClassworkAssignment.classwork_id == Classwork.classwork_id)
-        .join(Class, ClassworkAssignment.class_id == Class.class_id)
-        .filter(
-            (Classwork.created_by_staff_id == staff_id) | (ClassworkAssignment.assigned_by_staff_id == staff_id),
-            ClassworkAssignment.is_published.is_(True),
-            Classwork.is_archived.is_(False),
-            ClassworkAssignment.due_date.isnot(None),
-        )
-        .order_by(ClassworkAssignment.due_date.desc())
-        .limit(5)
-        .all()
+    now = _dashboard_aware_datetime(_teacher_dashboard_now())
+    school_now = now.astimezone(ZoneInfo("Asia/Manila"))
+    next_monday = (school_now + timedelta(days=7 - school_now.weekday())).replace(
+        hour=0, minute=0, second=0, microsecond=0,
     )
+    upcoming_asgns = sorted(
+        [a for a in all_assignments if a.due_date and now <= _dashboard_aware_datetime(a.due_date) < next_monday],
+        key=lambda a: (_dashboard_aware_datetime(a.due_date), a.classwork_assignment_id),
+    )[:5]
 
     upcoming_deadlines_list = []
     for ua in upcoming_asgns:
         cw_obj = ua.classwork
         cls_obj = ua.class_
-        enrolled_c = db.query(StudentClass).filter(StudentClass.class_id == ua.class_id).count()
-        sub_c = db.query(StudentSubmission).filter(
-            StudentSubmission.classwork_assignment_id == ua.classwork_assignment_id,
-            StudentSubmission.status.in_(["submitted", "graded", "late"]),
-        ).count()
+        enrolled_c = len(enrolled_by_class[ua.class_id])
+        sub_c = len([s for s in submissions_by_assignment[ua.classwork_assignment_id] if s.status in completed_statuses])
         upcoming_deadlines_list.append({
             "classwork_id": cw_obj.classwork_id if cw_obj else None,
             "title": cw_obj.title if cw_obj else "Assignment",
@@ -890,8 +883,8 @@ def build_teacher_dashboard_health(
     cards = [
         {
             "title": "Active Classes",
-            "count": str(len(unique_class_ids)) if unique_class_ids else "3",
-            "stat": f"{len(unique_class_ids) if unique_class_ids else 3} sections",
+            "count": str(len(unique_class_ids)),
+            "stat": f"{len(unique_class_ids)} sections",
             "statDescription": f"in {period_name}",
         },
         {
@@ -902,14 +895,14 @@ def build_teacher_dashboard_health(
         },
         {
             "title": "Overall Completion",
-            "count": f"{int(overall_completion_rate)}%" if overall_completion_rate > 0 else "87%",
-            "stat": f"{total_submitted if total_submitted else 31} of {total_expected if total_expected else 36} submitted",
+            "count": f"{int(overall_completion_rate)}%",
+            "stat": f"{total_submitted} of {total_expected} submitted",
             "statDescription": "across all published work",
         },
         {
             "title": "Ungraded Queue",
-            "count": str(ungraded_count) if ungraded_count else "14",
-            "stat": f"{ungraded_count if ungraded_count else 14} submissions",
+            "count": str(ungraded_count),
+            "stat": f"{ungraded_count} submissions",
             "statDescription": "pending teacher grading",
         },
         {

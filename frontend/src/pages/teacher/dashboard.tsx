@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Calendar, AlertCircle, ArrowUpRight } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
@@ -18,7 +18,6 @@ import {
   getTeacherDashboardHealth,
   type TeacherDashboardHealthResponse,
   type OverviewCardData,
-  type TrendChartPoint,
 } from "@/lib/api";
 import {
   LineChart,
@@ -31,24 +30,21 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 
-// Default fallback data matching mockup
+// Phase 1 metrics stay unavailable until loaded; later-phase cards retain their mockup defaults.
 const defaultTeacherCards: OverviewCardData[] = [
   {
     title: "Active Classes",
-    count: "3",
-    stat: "3 sections",
-    statDescription: "in Term 1",
+    count: "—",
+    statDescription: "in the selected academic period",
   },
   {
     title: "Overall Completion",
-    count: "87%",
-    stat: "31 of 36 submitted",
+    count: "—",
     statDescription: "across all published work",
   },
   {
     title: "Ungraded Queue",
-    count: "14",
-    stat: "14 submissions",
+    count: "—",
     statDescription: "pending teacher grading",
   },
   {
@@ -125,27 +121,6 @@ const defaultTopPerformers = [
   { name: "Bea Garcia", section: "Archimedes · Filipino 9", score: 94 },
 ];
 
-const defaultDueThisWeek = [
-  {
-    title: "Fractions worksheet",
-    section: "Newton · Mathematics 9",
-    due_label: "Tomorrow",
-    variant: "destructive",
-  },
-  {
-    title: "Lab report: Cells",
-    section: "Curie · Science 9",
-    due_label: "Thu",
-    variant: "warning",
-  },
-  {
-    title: "Sanaysay",
-    section: "Archimedes · Filipino 9",
-    due_label: "Fri",
-    variant: "warning",
-  },
-];
-
 const defaultTopicMastery = [
   { topic: "Pang-uri", rate: 91, subject_id: 1, subject_name: "Filipino 9" },
   { topic: "Fractions", rate: 88, subject_id: 2, subject_name: "Mathematics 9" },
@@ -161,81 +136,6 @@ const defaultSubmissionsWeekday = [
   { day: "Th", count: 30 },
   { day: "F", count: 41, isHighlight: true },
   { day: "S", count: 9 },
-];
-
-const defaultTrendChartPoints: TrendChartPoint[] = [
-  {
-    classwork_id: 1,
-    title: "Classwork 1",
-    category: "Classwork",
-    due_date: null,
-    label: "CW 1",
-    short_label: "CW 1",
-    avg_score_percent: 70,
-    completion_rate_percent: 60,
-    submitted_count: 22,
-    total_enrolled: 36,
-  },
-  {
-    classwork_id: 2,
-    title: "Classwork 2",
-    category: "Classwork",
-    due_date: null,
-    label: "CW 2",
-    short_label: "CW 2",
-    avg_score_percent: 72,
-    completion_rate_percent: 68,
-    submitted_count: 24,
-    total_enrolled: 36,
-  },
-  {
-    classwork_id: 3,
-    title: "Classwork 3",
-    category: "Classwork",
-    due_date: null,
-    label: "CW 3",
-    short_label: "CW 3",
-    avg_score_percent: 72,
-    completion_rate_percent: 74,
-    submitted_count: 27,
-    total_enrolled: 36,
-  },
-  {
-    classwork_id: 4,
-    title: "Classwork 4",
-    category: "Classwork",
-    due_date: null,
-    label: "CW 4",
-    short_label: "CW 4",
-    avg_score_percent: 76,
-    completion_rate_percent: 78,
-    submitted_count: 28,
-    total_enrolled: 36,
-  },
-  {
-    classwork_id: 5,
-    title: "Classwork 5",
-    category: "Classwork",
-    due_date: null,
-    label: "CW 5",
-    short_label: "CW 5",
-    avg_score_percent: 78,
-    completion_rate_percent: 82,
-    submitted_count: 30,
-    total_enrolled: 36,
-  },
-  {
-    classwork_id: 6,
-    title: "Classwork 6",
-    category: "Classwork",
-    due_date: null,
-    label: "CW 6",
-    short_label: "CW 6",
-    avg_score_percent: 80,
-    completion_rate_percent: 85,
-    submitted_count: 31,
-    total_enrolled: 36,
-  },
 ];
 
 const defaultHardestQuestions = [
@@ -259,30 +159,6 @@ const defaultHardestQuestions = [
   },
 ];
 
-const defaultReviewSubmissions = [
-  {
-    classwork_id: 1,
-    title: "Panganganak ng Pang-uri",
-    section: "Archimedes · Filipino 9",
-    badge: "6 new",
-    variant: "destructive",
-  },
-  {
-    classwork_id: 2,
-    title: "Fractions Quiz",
-    section: "Newton · Mathematics 9",
-    badge: "5 new",
-    variant: "destructive",
-  },
-  {
-    classwork_id: 3,
-    title: "Lab Report: Cells",
-    section: "Curie · Science 9",
-    badge: "3 new",
-    variant: "warning",
-  },
-];
-
 const defaultGradeDistribution = [
   { band: "<60", count: 2, variant: "destructive" },
   { band: "60-69", count: 4, variant: "warning" },
@@ -297,14 +173,33 @@ const defaultAttendanceBySection = [
   { section: "Curie", rate: 97 },
 ];
 
+function isPositiveId(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+function formatPercent(value: number | null | undefined): string {
+  return value != null && Number.isFinite(value) ? `${value}%` : "—";
+}
+
+function formatDeadline(dueDate: string | null): string {
+  if (!dueDate) return "—";
+  const date = new Date(dueDate);
+  if (Number.isNaN(date.getTime())) return "—";
+  const dateKey = (value: Date) => value.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+  if (dateKey(date) === dateKey(new Date())) return "Today";
+  if (dateKey(date) === dateKey(new Date(Date.now() + 24 * 60 * 60 * 1000))) return "Tomorrow";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "Asia/Manila" });
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { selectedPeriodId } = useAcademicPeriod();
+  const { selectedPeriodId, isLoading: isPeriodLoading } = useAcademicPeriod();
   const { classes: loads } = useTeacherClasses({ includeAdvisory: false });
 
   const [data, setData] = useState<TeacherDashboardHealthResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const requestedPeriodId = useRef(selectedPeriodId);
 
   // Subject filter state for Topic Mastery
   const [subjectFilter, setSubjectFilter] = useState<string>("1");
@@ -321,13 +216,22 @@ export default function Dashboard() {
     async function fetchDashboard() {
       setIsLoading(true);
       setError(null);
+      if (requestedPeriodId.current !== selectedPeriodId) {
+        requestedPeriodId.current = selectedPeriodId;
+        setData(null);
+        if (selectedFilterKey) {
+          setSelectedFilterKey("");
+          return;
+        }
+      }
+      if (isPeriodLoading) return;
       try {
         let classId: number | undefined;
         let subjectId: number | undefined;
 
         if (selectedFilterKey) {
           const [cId, sId] = selectedFilterKey.split("-").map(Number);
-          if (!isNaN(cId) && !isNaN(sId)) {
+          if (isPositiveId(cId) && isPositiveId(sId)) {
             classId = cId;
             subjectId = sId;
           }
@@ -367,72 +271,35 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [selectedPeriodId, selectedFilterKey]);
+  }, [selectedPeriodId, selectedFilterKey, isPeriodLoading]);
 
   // Derived 8 Stat Cards
   const statCards = useMemo<OverviewCardData[]>(() => {
     if (!data) return defaultTeacherCards;
 
-    const allowedTitles = new Set(defaultTeacherCards.map((c) => c.title));
-
-    if (data.cards && data.cards.length > 0) {
-      const filtered = data.cards.filter((c) => allowedTitles.has(c.title));
-      if (filtered.length > 0) return filtered;
-    }
-
-    return [
+    const phaseOneCards: OverviewCardData[] = [
       {
         title: "Active Classes",
-        count: String(data.kpis?.active_classes || 3),
-        stat: `${data.kpis?.active_classes || 3} sections`,
-        statDescription: `in ${data.term_info?.period_name || "Term 1"}`,
+        count: data.kpis?.active_classes != null ? String(data.kpis.active_classes) : "—",
+        stat: data.kpis?.active_classes != null ? `${data.kpis.active_classes} sections` : undefined,
+        statDescription: data.term_info?.period_name ? `in ${data.term_info.period_name}` : "in the selected academic period",
       },
       {
         title: "Overall Completion",
-        count: `${Math.round(data.kpis?.overall_completion_rate || 87)}%`,
-        stat: "31 of 36 submitted",
+        count: data.kpis?.overall_completion_rate != null ? formatPercent(Math.round(data.kpis.overall_completion_rate)) : "—",
         statDescription: "across all published work",
       },
       {
         title: "Ungraded Queue",
-        count: String(data.kpis?.ungraded_count || 14),
-        stat: `${data.kpis?.ungraded_count || 14} submissions`,
+        count: data.kpis?.ungraded_count != null ? String(data.kpis.ungraded_count) : "—",
+        stat: data.kpis?.ungraded_count != null ? `${data.kpis.ungraded_count} submissions` : undefined,
         statDescription: "pending teacher grading",
       },
-      {
-        title: "Class Average",
-        count: "82%",
-        stat: "▲ 3 pts",
-        statDescription: "vs. last grading period",
-        trend: "up",
-      },
-      {
-        title: "Passing Rate",
-        count: "89%",
-        stat: "32 of 36 learners",
-        statDescription: "at or above 75%",
-      },
-      {
-        title: "Late Submissions",
-        count: "8%",
-        stat: "▲ 2 pts",
-        statDescription: "of work handed in after due date",
-        trend: "down",
-      },
-      {
-        title: "Attendance Today",
-        count: "33 / 36",
-        stat: "2 late · 1 absent",
-        statDescription: "logged for this morning",
-      },
-      {
-        title: "Term Progress",
-        count: "Week 6",
-        stat: "of 10",
-        statDescription: "1 published classwork planned this week",
-        progressValue: 60,
-      },
     ];
+    return defaultTeacherCards.map((fallback, index) =>
+      data.cards?.find((card) => card.title === fallback.title) ??
+      (index < phaseOneCards.length ? phaseOneCards[index] : fallback),
+    );
   }, [data]);
 
   // Derive unique subjects from teacher's loads / available filters
@@ -476,7 +343,8 @@ export default function Dashboard() {
   const studentsSupport =
     data?.details?.students_needing_support || defaultStudentsNeedingSupport;
   const topPerformers = data?.details?.top_performers || defaultTopPerformers;
-  const dueWeek = data?.details?.due_this_week || defaultDueThisWeek;
+  const dueWeek = data?.action_queue?.upcoming_deadlines ?? [];
+  const trendPoints = isLoading || isPeriodLoading || error ? [] : data?.trend_chart.points ?? [];
   const rawTopicMastery = data?.details?.topic_mastery || defaultTopicMastery;
   const topicMastery = useMemo(() => {
     if (subjectFilter === "all") return rawTopicMastery;
@@ -497,8 +365,13 @@ export default function Dashboard() {
     data?.details?.submissions_by_weekday || defaultSubmissionsWeekday;
   const hardestQuestions =
     data?.details?.hardest_questions || defaultHardestQuestions;
-  const reviewSubmissions =
-    data?.details?.review_submissions || defaultReviewSubmissions;
+  const reviewSubmissions = (data?.action_queue?.pending_grading ?? []).map((item) => ({
+    ...item,
+    title: item.classwork_title,
+    section: [item.student_name, item.section_name].filter(Boolean).join(" · "),
+    badge: "Needs grading",
+    variant: "destructive",
+  }));
   const gradeDistribution =
     data?.details?.grade_distribution || defaultGradeDistribution;
   const attendanceSections =
@@ -512,6 +385,9 @@ export default function Dashboard() {
     ...gradeDistribution.map((g: any) => g.count),
     15,
   );
+
+  const emptyMessage = (message: string) =>
+    isLoading || isPeriodLoading ? "Loading dashboard data..." : error ? "Dashboard data is unavailable." : message;
 
   return (
     <AppLayout>
@@ -584,8 +460,9 @@ export default function Dashboard() {
                           <Card
                             key={idx}
                             onClick={() => {
-                              const grade = s.grade_level || 9;
-                              const classId = s.class_id || (idx + 1);
+                              if (!data?.details?.students_needing_support || !isPositiveId(s.grade_level) || !isPositiveId(s.class_id)) return;
+                              const grade = s.grade_level;
+                              const classId = s.class_id;
                               const params = new URLSearchParams();
                               if (s.prediction_id) params.set("predictionId", String(s.prediction_id));
                               if (s.student_id) params.set("studentId", String(s.student_id));
@@ -644,14 +521,17 @@ export default function Dashboard() {
                       </Card.Header>
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {reviewSubmissions.map((item: any, idx: number) => (
+                        {reviewSubmissions.length === 0 && (
+                          <Card.Description className="text-xs text-muted-foreground">
+                            {emptyMessage("No submissions need grading.")}
+                          </Card.Description>
+                        )}
+                        {reviewSubmissions.map((item) => (
                           <Card
-                            key={idx}
-                            onClick={() =>
-                              item.classwork_id
-                                ? navigate(`/teacher/classworks/${item.classwork_id}`)
-                                : navigate(routes.teacher.classworks)
-                            }
+                            key={item.submission_id}
+                            onClick={() => {
+                              if (isPositiveId(item.classwork_id)) navigate(`/teacher/classworks/${item.classwork_id}`);
+                            }}
                             className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm transition-all hover:-translate-y-0.5 hover:bg-retro"
                           >
                             <div className="flex flex-col min-w-0 pr-2">
@@ -738,12 +618,7 @@ export default function Dashboard() {
                     <Card.Content className="h-52 w-full p-0 pb-4">
                       <ResponsiveContainer width="100%" height="100%" className="-mx-2 text-foreground!">
                         <LineChart
-                          data={
-                            data?.trend_chart.points &&
-                              data.trend_chart.points.length > 0
-                              ? data.trend_chart.points
-                              : defaultTrendChartPoints
-                          }
+                          data={trendPoints}
                           margin={{ top: 10, right: 15, left: -20, bottom: 0 }}
                         >
                           <CartesianGrid
@@ -782,10 +657,10 @@ export default function Dashboard() {
                                     {point.title || point.short_label}
                                   </p>
                                   <p className="text-emerald-400 font-semibold">
-                                    Mastery: {point.avg_score_percent}%
+                                    Mastery: {formatPercent(point.avg_score_percent)}
                                   </p>
                                   <p className="text-amber-400 font-semibold">
-                                    Completion: {point.completion_rate_percent}%
+                                    Completion: {formatPercent(point.completion_rate_percent)}
                                   </p>
                                 </div>
                               );
@@ -821,7 +696,9 @@ export default function Dashboard() {
                         </LineChart>
                       </ResponsiveContainer>
                       <Card.Description className="text-xs text-muted-foreground mt-0.5 pb-2">
-                        Class score averages vs. task submission completion
+                        {trendPoints.length
+                          ? "Class score averages vs. task submission completion"
+                          : emptyMessage("No published classwork for this selection.")}
                       </Card.Description>
                     </Card.Content>
                   </Card>
@@ -842,15 +719,12 @@ export default function Dashboard() {
                                   size="sm"
                                   autoIcon={false}
                                   onClick={() => {
-                                    const activeSubjectId = Number(subjectFilter) || subjects[0]?.id;
+                                    const activeSubjectId = Number(subjectFilter);
                                     const activeClassId =
                                       loads.find((l) => String(l.subject_id) === String(activeSubjectId))?.class_id ||
-                                      data?.trend_chart?.available_filters?.find((f) => String(f.subject_id) === String(activeSubjectId))?.class_id ||
-                                      1;
-                                    if (activeSubjectId && activeClassId) {
+                                      data?.trend_chart?.available_filters?.find((f) => String(f.subject_id) === String(activeSubjectId))?.class_id;
+                                    if (isPositiveId(activeSubjectId) && isPositiveId(activeClassId)) {
                                       navigate(`/teacher/classes/${activeClassId}/subjects/${activeSubjectId}`);
-                                    } else {
-                                      navigate(routes.teacher.classes);
                                     }
                                   }}
                                   className="text-foreground shadow-none px-1.5"
@@ -934,9 +808,17 @@ export default function Dashboard() {
                       </Card.Header>
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {dueWeek.map((d: any, idx: number) => (
+                        {dueWeek.length === 0 && (
+                          <Card.Description className="text-xs text-muted-foreground">
+                            {emptyMessage("No classwork due this week.")}
+                          </Card.Description>
+                        )}
+                        {dueWeek.map((d, idx) => (
                           <Card
                             key={idx}
+                            onClick={() => {
+                              if (isPositiveId(d.classwork_id)) navigate(`/teacher/classworks/${d.classwork_id}`);
+                            }}
                             className="flex items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm cursor-pointer hover:bg-retro hover:-translate-y-1"
                           >
                             <div className="flex flex-col min-w-0 pr-2">
@@ -944,20 +826,15 @@ export default function Dashboard() {
                                 {d.title}
                               </span>
                               <span className="text-[11px] text-muted-foreground truncate">
-                                {d.section}
+                                {d.section_name}
                               </span>
                             </div>
                             <Badge
                               size="sm"
-                              variant={
-                                d.due_label === "Tomorrow" ||
-                                  d.variant === "destructive"
-                                  ? "destructive"
-                                  : "default"
-                              }
+                              variant={formatDeadline(d.due_date) === "Tomorrow" ? "destructive" : "default"}
                               className="shrink-0"
                             >
-                              {d.due_label}
+                              {formatDeadline(d.due_date)}
                             </Badge>
                           </Card>
                         ))}
@@ -991,65 +868,23 @@ export default function Dashboard() {
 
                     <Card.Content className="mt-1 flex flex-col gap-3 p-0">
                       {(() => {
-                        const sections =
-                          data?.section_matrix && data.section_matrix.length > 0
-                            ? data.section_matrix
-                            : [
-                              {
-                                class_id: 1,
-                                subject_id: 1,
-                                section_name: "Archimedes",
-                                grade_level: "Grade 9",
-                                subject_name: "Filipino 9",
-                                student_count: 17,
-                                completion_rate_percent: 82,
-                                attendance_rate_percent: 94,
-                                avg_score_percent: 84,
-                                passing_rate_percent: 91,
-                                published_classworks: 6,
-                              },
-                              {
-                                class_id: 2,
-                                subject_id: 2,
-                                section_name: "Newton",
-                                grade_level: "Grade 9",
-                                subject_name: "Mathematics 9",
-                                student_count: 10,
-                                completion_rate_percent: 76,
-                                attendance_rate_percent: 90,
-                                avg_score_percent: 78,
-                                passing_rate_percent: 80,
-                                published_classworks: 5,
-                              },
-                              {
-                                class_id: 3,
-                                subject_id: 3,
-                                section_name: "Curie",
-                                grade_level: "Grade 9",
-                                subject_name: "Science 9",
-                                student_count: 9,
-                                completion_rate_percent: 88,
-                                attendance_rate_percent: 97,
-                                avg_score_percent: 86,
-                                passing_rate_percent: 100,
-                                published_classworks: 4,
-                              },
-                            ];
+                        const sections = data?.section_matrix ?? [];
                         const displayed = showAllSectionHealth ? sections : sections.slice(0, 2);
 
                         return (
                           <>
+                            {sections.length === 0 && (
+                              <Card.Description className="text-xs text-muted-foreground">
+                                {emptyMessage("No classes for this academic period.")}
+                              </Card.Description>
+                            )}
                             {displayed.map((sec: any, idx: number) => (
                               <Card
                                 key={idx}
                                 className="shadow-none p-4 text-xs hover:bg-retro hover:-translate-y-1 cursor-pointer transition-all"
                                 onClick={() => {
-                                  if (sec.class_id && sec.subject_id) {
+                                  if (isPositiveId(sec.class_id) && isPositiveId(sec.subject_id)) {
                                     navigate(`/teacher/classes/${sec.class_id}/${sec.subject_id}`);
-                                  } else if (sec.class_id) {
-                                    navigate(`/teacher/advisory-class/${sec.class_id}`);
-                                  } else {
-                                    navigate(routes.teacher.classes);
                                   }
                                 }}
                               >
@@ -1079,7 +914,7 @@ export default function Dashboard() {
                                         Task Completion
                                       </span>
                                       <span className="font-semibold">
-                                        {sec.completion_rate_percent}%
+                                        {formatPercent(sec.completion_rate_percent)}
                                       </span>
                                     </div>
                                     <Progress
@@ -1094,7 +929,7 @@ export default function Dashboard() {
                                         Attendance
                                       </span>
                                       <span className="font-semibold">
-                                        {sec.attendance_rate_percent}%
+                                        {formatPercent(sec.attendance_rate_percent)}
                                       </span>
                                     </div>
                                     <Progress
@@ -1111,32 +946,32 @@ export default function Dashboard() {
                                       Class Average:{" "}
                                       <Badge
                                         variant={
-                                          sec.avg_score_percent < 75
+                                          sec.avg_score_percent != null && sec.avg_score_percent < 75
                                             ? "destructive"
-                                            : sec.avg_score_percent > 87
+                                            : sec.avg_score_percent != null && sec.avg_score_percent > 87
                                               ? "success"
                                               : "surface"
                                         }
                                         size="sm"
                                         className="ml-1"
                                       >
-                                        {sec.avg_score_percent}%
+                                        {formatPercent(sec.avg_score_percent)}
                                       </Badge>
                                     </span>
                                     <span className="text-foreground font-semibold">
                                       Passing Rate:{" "}
                                       <Badge
                                         variant={
-                                          sec.passing_rate_percent < 75
+                                          sec.passing_rate_percent != null && sec.passing_rate_percent < 75
                                             ? "destructive"
-                                            : sec.passing_rate_percent > 87
+                                            : sec.passing_rate_percent != null && sec.passing_rate_percent > 87
                                               ? "success"
                                               : "surface"
                                         }
                                         size="sm"
                                         className="ml-1"
                                       >
-                                        {sec.passing_rate_percent}%
+                                        {formatPercent(sec.passing_rate_percent)}
                                       </Badge>
                                     </span>
                                   </div>
