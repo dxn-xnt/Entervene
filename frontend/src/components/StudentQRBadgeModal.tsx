@@ -87,9 +87,6 @@ export default function StudentQRBadgeModal({
             <Dialog.Title className="text-lg font-bold">
               Student Attendance QR Card
             </Dialog.Title>
-            {/* <Dialog.Description className="mt-1 text-xs font-medium text-black/70">
-              Permanent, secure QR badge encoding the student identifier for class attendance.
-            </Dialog.Description> */}
           </div>
         </Dialog.Header>
 
