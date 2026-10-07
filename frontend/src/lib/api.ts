@@ -389,6 +389,8 @@ export type GradingTemplateSubject = {
   subject_id: number;
   subject_name: string;
   subject_codename: string | null;
+  academic_level_id?: number | null;
+  grade_level?: number | null;
 };
 export type GradingTemplateSubjectOption = GradingTemplateSubject & {
   academic_level_id: number;

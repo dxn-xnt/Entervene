@@ -29,6 +29,15 @@ export function GradingTemplateRow({
 }) {
   const assignedCount = template.assigned_subjects?.length ?? (template.subject ? 1 : 0);
   const assignedSubjects = template.assigned_subjects ?? (template.subject ? [template.subject] : []);
+  const subjectsByGrade = Array.from(
+    assignedSubjects.reduce((groups, subject) => {
+      const grade = subject.grade_level ?? null;
+      const group = groups.get(grade) ?? [];
+      group.push(subject);
+      groups.set(grade, group);
+      return groups;
+    }, new Map<number | null, typeof assignedSubjects>())
+  ).sort(([first], [second]) => first == null ? 1 : second == null ? -1 : first - second);
 
   return (
     <RetroCard className="p-3 bg-primary">
@@ -97,31 +106,29 @@ export function GradingTemplateRow({
 
         <div className="flex flex-col gap-2 p-2 bg-background border-border border-2 rounded">
           <span><strong>Academic scope:</strong> {template.academic_level?.level_name ?? "Any level"}</span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <strong>Assigned subjects </strong> <span className="text-sm">({assignedCount}):</span>{" "}
-            {assignedSubjects.length > 0 ? (
-              <>
-                {assignedSubjects.slice(0, 10).map((s) => (
-                  <Badge key={s.subject_id} size="sm" variant="surface">
-                    {s.subject_name}
+          <div className="space-y-2">
+            <p><strong>Assigned subjects</strong> <span className="text-sm">({assignedCount})</span></p>
+            {subjectsByGrade.length > 0 ? subjectsByGrade.map(([grade, gradeSubjects]) => (
+              <div key={grade ?? "unspecified"} className="flex flex-wrap items-center gap-1.5">
+                <Badge size="sm" variant="outline" className="shrink-0 border border-border">
+                  {grade == null ? "Unspecified grade" : `Grade ${grade}`}
+                </Badge>
+                {gradeSubjects.slice(0, 10).map((subject) => (
+                  <Badge key={subject.subject_id} size="sm" variant="surface">
+                    {subject.subject_name}
                   </Badge>
                 ))}
-                {assignedSubjects.length > 10 ? (
+                {gradeSubjects.length > 10 && (
                   <Badge
                     size="sm"
                     variant="surface"
-                    title={assignedSubjects
-                      .slice(10)
-                      .map((s) => s.subject_name)
-                      .join(", ")}
+                    title={gradeSubjects.slice(10).map((subject) => subject.subject_name).join(", ")}
                   >
-                    +{assignedSubjects.length - 10} more...
+                    +{gradeSubjects.length - 10} more...
                   </Badge>
-                ) : null}
-              </>
-            ) : (
-              <span>General / Default template</span>
-            )}
+                )}
+              </div>
+            )) : <span>General / Default template</span>}
           </div>
         </div>
         <p className="sr-only">{scopeLabel(template)}</p>
