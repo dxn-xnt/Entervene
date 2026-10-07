@@ -1258,12 +1258,9 @@ export default function SubjectClassworkTab({
             <Dialog.Content size="3xl" className="max-h-[90vh] p-0">
               {/* Modal header */}
               <Dialog.Header position="fixed" className="bg-primary text-primary-foreground">
-                <div>
-                  <p className="text-xs">Student classwork detail</p>
-                  <h2 className="text-xl font-bold">
-                    {selectedClasswork?.title || "Classwork"}
-                  </h2>
-                </div>
+                <h2 className="text-xl font-bold">
+                  {selectedClasswork?.title || "Classwork"}
+                </h2>
               </Dialog.Header>
 
               {/* Modal body */}

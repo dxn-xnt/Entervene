@@ -48,7 +48,9 @@ export default function EditClassworkModal({
   const [removingAttachmentId, setRemovingAttachmentId] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [rubricLevels, setRubricLevels] = useState<ActivityRubricLevel[]>(() =>
-    classwork.rubric_levels?.map((level) => ({ ...level })) ?? defaultActivityRubric.map((level) => ({ ...level })),
+    classwork.rubric_levels?.length
+      ? classwork.rubric_levels.map((level) => ({ ...level }))
+      : defaultActivityRubric.map((level) => ({ ...level })),
   );
 
   const setFormError = (msg: string) => {
@@ -63,8 +65,9 @@ export default function EditClassworkModal({
     setEditDraft(classworkToEditDraft(classwork));
     setEditMaterials([]);
     setRubricLevels(
-      classwork.rubric_levels?.map((level) => ({ ...level })) ??
-        defaultActivityRubric.map((level) => ({ ...level })),
+      classwork.rubric_levels?.length
+        ? classwork.rubric_levels.map((level) => ({ ...level }))
+        : defaultActivityRubric.map((level) => ({ ...level })),
     );
     setError("");
   }, [classwork, isOpen]);
@@ -147,8 +150,8 @@ export default function EditClassworkModal({
     if (!currentClasswork || !editDraft) return;
 
     const isReading = isReadingType(editDraft.classwork_type);
-    const isActivity = editDraft.classwork_type === "ACTIVITY";
-    const totalPoints = isActivity
+    const hasRubric = editDraft.classwork_type === "ACTIVITY" || editDraft.classwork_type === "ASSIGNMENT";
+    const totalPoints = hasRubric
       ? activityRubricMaximum(rubricLevels)
       : !isReading && editDraft.total_points
         ? Number(editDraft.total_points)
@@ -164,7 +167,7 @@ export default function EditClassworkModal({
       setFormError("Total points must be greater than zero.");
       return;
     }
-    if (isActivity) {
+    if (hasRubric) {
       const rubricError = validateActivityRubric(rubricLevels);
       if (rubricError) {
         setFormError(rubricError);
@@ -181,11 +184,11 @@ export default function EditClassworkModal({
     }
 
     const originalRubric = classwork.rubric_levels ?? [];
-    const rubricChanged = isActivity && JSON.stringify(rubricLevels) !== JSON.stringify(originalRubric);
+    const rubricChanged = hasRubric && JSON.stringify(rubricLevels) !== JSON.stringify(originalRubric);
     if (rubricChanged && (currentClasswork.has_submissions || currentClasswork.has_graded_submissions)) {
       const message = currentClasswork.has_graded_submissions
-        ? "This activity already has graded submissions. Updating the rubric will not change previously recorded grades. Continue?"
-        : "This activity already has student submissions. Rubric changes will apply when these submissions are graded. Continue?";
+        ? "This classwork already has graded submissions. Updating the rubric will not change previously recorded grades. Continue?"
+        : "This classwork already has student submissions. Rubric changes will apply when these submissions are graded. Continue?";
       if (!window.confirm(message)) return;
     }
 
@@ -205,7 +208,7 @@ export default function EditClassworkModal({
             classwork_category: editDraft.classwork_category || null,
             exam_subtype: editDraft.exam_subtype || null,
             total_points: totalPoints,
-            rubric_levels: isActivity && rubricChanged ? rubricLevels : undefined,
+            rubric_levels: hasRubric && rubricChanged ? rubricLevels : undefined,
             confirm_rubric_change: rubricChanged && Boolean(currentClasswork.has_submissions),
             is_published: editDraft.is_published,
             show_scores: editDraft.show_scores,
@@ -469,7 +472,7 @@ export default function EditClassworkModal({
                   </Select>
                 </label>
               )}
-              {!isReadingType(editDraft.classwork_type) && editDraft.classwork_type !== "ACTIVITY" && (
+              {!isReadingType(editDraft.classwork_type) && editDraft.classwork_type !== "ACTIVITY" && editDraft.classwork_type !== "ASSIGNMENT" && (
                 <label className="block text-xs font-bold">
                   Total points
                   <Input
@@ -527,7 +530,7 @@ export default function EditClassworkModal({
               </label>
             </div>
 
-            {editDraft.classwork_type === "ACTIVITY" && (
+            {(editDraft.classwork_type === "ACTIVITY" || editDraft.classwork_type === "ASSIGNMENT") && (
               <ActivityRubricEditor
                 levels={rubricLevels}
                 onChange={setRubricLevels}

@@ -118,7 +118,7 @@ export function TeacherLessonView({
                             size="header"
                             variant="default"
                             onClick={() => openClassworkForm(lesson)}
-                            className="w-full whitespace-nowrap md:w-auto border-black bg-primary font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:opacity-90"
+                            className="w-full whitespace-nowrap md:w-auto"
                         >
                             <Plus size={16} />
                             Add Classwork
@@ -134,10 +134,9 @@ export function TeacherLessonView({
                     <div className="flex flex-col gap-3">
                         {/* Badges Ribbon */}
                         <div className="flex flex-wrap items-center gap-2">
-                            <span className="inline-flex items-center gap-1.5 rounded border-2 border-black bg-white px-2.5 py-1 text-xs font-bold text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
-                                <BookOpen size={13} className="text-black shrink-0" />
+                            <Badge variant="outline" size="sm" className="border-1 border-black bg-white text-black">
                                 Lesson
-                            </span>
+                            </Badge>
 
                             <Badge
                                 variant={lesson.is_published ? "solid" : "default"}
@@ -148,25 +147,23 @@ export function TeacherLessonView({
                             </Badge>
 
                             {(lesson.competency_code || lesson.competency_statement) && (
-                                <span className="inline-flex items-center gap-1.5 rounded border-2 border-black bg-white px-2.5 py-1 text-xs font-bold text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
-                                    <Award size={13} className="text-black shrink-0" />
+                                <Badge variant="outline" size="sm" className="border-1 border-black bg-white text-black">
                                     {lesson.competency_code || lesson.competency_statement}
-                                </span>
+                                </Badge>
                             )}
 
                             <Badge
                                 variant="surface"
                                 size="sm"
-                                className="bg-white border-2 border-black text-xs font-bold text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                                className="border-1 border-black bg-white text-black"
                             >
-                                <ClipboardList size={13} className="mr-1 inline text-black" />
                                 {linkedClassworks.length} {linkedClassworks.length === 1 ? "classwork" : "classworks"}
                             </Badge>
 
                             {lesson.attachments && lesson.attachments.length > 0 && (
                                 <Badge
                                     size="sm"
-                                    className="border-2 border-black bg-[#7ABA78] text-black font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                                    className="border-1 border-black bg-[#7ABA78] text-black font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
                                 >
                                     <Paperclip size={12} className="mr-1 inline" />
                                     {lesson.attachments.length} {lesson.attachments.length === 1 ? "material" : "materials"}

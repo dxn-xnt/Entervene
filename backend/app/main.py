@@ -16,6 +16,7 @@ from app.api.v1.routes.StudentPersistentInterventions import router as student_p
 from app.api.v1.routes.Auth import router as auth_router
 from app.api.v1.routes.Students import router as students_router
 from app.api.v1.routes.Classworks import router as classworks_router
+from app.api.v1.routes.RubricTemplates import router as rubric_templates_router
 from app.api.v1.routes.Lessons import router as lessons_router
 from app.api.v1.routes.Submissions import router as submissions_router
 from app.api.v1.routes.Quizzes import router as quizzes_router
@@ -106,6 +107,7 @@ app.include_router(
     prefix="/api/v1/classwork-assignments",
     tags=["Classwork"],
 )
+app.include_router(rubric_templates_router, prefix="/api/v1/rubric-templates", tags=["Rubric Templates"])
 app.include_router(lessons_router,     prefix="/api/v1/lessons",               tags=["Lessons"])
 app.include_router(submissions_router, prefix="/api/v1/submissions",           tags=["Submissions"])
 app.include_router(quizzes_router,     prefix="/api/v1/quizzes",               tags=["Quizzes"])

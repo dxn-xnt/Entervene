@@ -259,14 +259,14 @@ export function SuggestionPanel({
               <h2 className="text-lg font-black">
                 Suggest Study Material
               </h2>
-              <p className="text-xs font-semibold text-primary-foreground/75">
-                For {student.full_name}
-              </p>
             </div>
           </div>
         </Dialog.Header>
 
         <div className="space-y-4 p-6">
+          <Dialog.Description className="text-sm text-muted-foreground">
+            For {student.full_name}
+          </Dialog.Description>
           {formError && (
             <Alert status="error" className="text-xs">
               {formError}

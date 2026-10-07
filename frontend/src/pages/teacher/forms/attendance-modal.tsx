@@ -62,15 +62,9 @@ export default function AttendanceModal({
   return (
     <Dialog.Content size="xl" className="max-w-4xl">
       <Dialog.Header position="fixed" asChild>
-        <div className="flex items-center gap-2">
-          <Text as="h4" className="font-sans text-2xl font-bold">
-            {sectionName}
-          </Text>
-          <span className="text-xl text-muted-foreground font-normal">&gt;</span>
-          <Text as="h4" className="font-sans text-2xl font-semibold text-gray-700">
-            Attendance
-          </Text>
-        </div>
+        <Text as="h4" className="font-sans text-2xl font-bold">
+          Attendance — {sectionName}
+        </Text>
       </Dialog.Header>
 
       <section className="flex flex-col gap-5 p-4 md:p-6">

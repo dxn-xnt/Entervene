@@ -20,7 +20,7 @@ def validate_activity_rubric(levels: Optional[list[ActivityRubricLevelInput]]):
     if levels is None:
         return levels
     if not levels:
-        raise ValueError("Activity rubric must contain at least one performance level")
+        raise ValueError("Scoring rubric must contain at least one performance level")
     names = [level.level_name.strip().casefold() for level in levels]
     points = [level.points for level in levels]
     if len(names) != len(set(names)):

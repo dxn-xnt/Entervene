@@ -265,13 +265,15 @@ export default function TeacherClassDetail() {
                       <>
                         <div className="flex flex-row gap-2">
                           <Button
+                            size="header"
                             className="w-full md:w-auto whitespace-nowrap"
                             onClick={() => setIsSetGoalModalOpen(true)}
                           >
-                            <Pencil className="mr-2 size-4" /> Set Lesson Goal
+                            <Pencil className="size-4" /> Set Lesson Goal
                           </Button>
                           {(detail.subject_loads[0]?.subject_id) && (
                             <Button
+                              size="header"
                               variant="default"
                               onClick={() => {
                                 const targetId =
@@ -282,7 +284,7 @@ export default function TeacherClassDetail() {
                                   );
                                 }
                               }}
-                              className="h-10 w-full gap-2 whitespace-nowrap"
+                              className="w-full whitespace-nowrap md:w-auto"
                             >
                               <BookOpen size={16} />
                               View Subject
@@ -1138,12 +1140,7 @@ function LessonsTab({
         >
           <Dialog.Content className="w-full max-w-4xl p-0">
             <Dialog.Header className="border-border">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide">
-                  Teacher lesson management
-                </p>
-                <h2 className="text-xl font-bold">{selectedLesson.title}</h2>
-              </div>
+              <h2 className="text-xl font-bold">{selectedLesson.title}</h2>
             </Dialog.Header>
 
             <div className="flex flex-col gap-5 p-5">
