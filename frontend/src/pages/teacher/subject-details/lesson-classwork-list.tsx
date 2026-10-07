@@ -825,7 +825,7 @@ export default function SubjectLessonList({
                           size="sm"
                           autoIcon={false}
                           onClick={() => setShowAllSectionHealth((prev) => !prev)}
-                          className="self-end text-xs font-semibold px-2.5 py-1 h-7 bg-black text-white hover:bg-black/80 shadow-none"
+                          className="self-end text-xs font-semibold px-2.5 py-1 h-7 shadow-none"
                         >
                           {showAllSectionHealth ? "Show less" : "Show all classes"}
                         </Button>
