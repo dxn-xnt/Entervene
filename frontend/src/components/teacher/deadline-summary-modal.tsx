@@ -69,16 +69,12 @@ export default function DeadlineSummaryModal({
                 Deadline Summary
               </Dialog.Title>
             </div>
-            <Dialog.Description className="text-sm font-semibold text-muted-foreground">
-              {classworkTitle}
-              {dueDate && (
-                <span className="ml-2 font-normal text-xs text-foreground/70">
-                  (Due {formatTimestamp(dueDate)})
-                </span>
-              )}
-            </Dialog.Description>
           </div>
         </Dialog.Header>
+
+        <Dialog.Description className="px-5 pt-4 text-sm text-muted-foreground">
+          {classworkTitle}{dueDate ? ` · Due ${formatTimestamp(dueDate)}` : ""}
+        </Dialog.Description>
 
         {/* Counter Summary Bar */}
         <div className="grid grid-cols-2 border-b-2 border-border bg-muted/40 text-center">

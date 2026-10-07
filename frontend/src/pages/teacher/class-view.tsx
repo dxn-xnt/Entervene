@@ -1321,12 +1321,7 @@ function LessonsTab({
         >
           <Dialog.Content className="w-full max-w-4xl p-0">
             <Dialog.Header className="border-border">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide">
-                  Teacher lesson management
-                </p>
-                <h2 className="text-xl font-bold">{selectedLesson.title}</h2>
-              </div>
+              <h2 className="text-xl font-bold">{selectedLesson.title}</h2>
             </Dialog.Header>
 
             <div className="flex flex-col gap-5 p-5">

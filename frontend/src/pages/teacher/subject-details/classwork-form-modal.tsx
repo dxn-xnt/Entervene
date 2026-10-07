@@ -64,11 +64,13 @@ export default function ClassworkFormModal({
         <Dialog.Header className="border-border">
           <div>
             <h2 className="text-lg font-bold">{classworkModalTitle}</h2>
-            <p className="text-xs font-medium">{modalSubtitle}</p>
           </div>
         </Dialog.Header>
 
         <div className="space-y-4 p-5">
+          <Dialog.Description className="text-sm text-muted-foreground">
+            {modalSubtitle}
+          </Dialog.Description>
           {error && (
             <div className="border-2 border-red-600 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               {error}

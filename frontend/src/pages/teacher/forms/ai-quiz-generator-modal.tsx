@@ -529,9 +529,6 @@ export default function AIQuizGeneratorModal({
                 <h2 className="text-lg font-bold text-black">
                   AI Quiz Generator
                 </h2>
-                <p className="text-xs text-black/70">
-                  Generate curriculum-aligned quiz questions automatically
-                </p>
               </div>
             </div>
             <Tooltip>
