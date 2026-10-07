@@ -181,12 +181,13 @@ export default function CreateClassworkModal({
     if (remediationDraft && (draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && !draft.exam_subtype) return "Choose an Examination sub-type explicitly.";
     if (remediationGradeTreatment === "EXAMINATION" && (!remediationOriginalExam || draft.exam_subtype !== remediationOriginalExam.subtype || Number(draft.total_points) !== remediationOriginalExam.total_points)) return "Remedial Examination must match the original subtype and maximum points.";
     if (!isReadingType(selectedType)) {
-      if (selectedType === "ACTIVITY") {
+      const hasRubric = selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT";
+      if (hasRubric) {
         const rubricError = validateActivityRubric(rubricLevels);
         if (rubricError) return rubricError;
       }
       const points = Number(draft.total_points);
-      if (draft.total_points && (!Number.isFinite(points) || points <= 0)) {
+      if (!hasRubric && draft.total_points && (!Number.isFinite(points) || points <= 0)) {
         return "Total points must be greater than zero.";
       }
     }
@@ -308,7 +309,7 @@ export default function CreateClassworkModal({
     setCreateError("");
     try {
       const isReading = isReadingType(selectedType);
-      const totalPoints = selectedType === "ACTIVITY"
+      const totalPoints = selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT"
         ? activityRubricMaximum(rubricLevels)
         : !isReading && draft.total_points ? Number(draft.total_points) : null;
       const formData = new FormData();
@@ -325,7 +326,7 @@ export default function CreateClassworkModal({
       if (totalPoints !== null) {
         formData.append("total_points", String(totalPoints));
       }
-      if (selectedType === "ACTIVITY") {
+      if (selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT") {
         formData.append("rubric_payload", JSON.stringify(rubricLevels));
       }
       formData.append("subject_id", String(draft.subject_id));
@@ -579,7 +580,7 @@ export default function CreateClassworkModal({
                     </Field>
                   )}
 
-                  {selectedType !== "ACTIVITY" && <Field label="Total points">
+                  {selectedType !== "ACTIVITY" && selectedType !== "ASSIGNMENT" && <Field label="Total points">
                     <Input
                       type="number"
                       min="1"
@@ -695,7 +696,7 @@ export default function CreateClassworkModal({
                 )}
               </Field>
 
-              {selectedType === "ACTIVITY" && (
+              {(selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT") && (
                 <ActivityRubricEditor
                   levels={rubricLevels}
                   onChange={setRubricLevels}

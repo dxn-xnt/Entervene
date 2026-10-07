@@ -186,7 +186,7 @@ def _stage_targeted_assignment_notification(db: Session, assignment: ClassworkAs
 
 def create_classwork_record(body: ClassworkCreate, staff_id: str, db: Session) -> ClassworkResponse:
     classwork_type = normalize_classwork_type(body.classwork_type)
-    rubric_levels = body.rubric_levels if classwork_type == "ACTIVITY" else None
+    rubric_levels = body.rubric_levels if classwork_type in {"ACTIVITY", "ASSIGNMENT"} else None
     total_points = (
         max(level.points for level in rubric_levels)
         if rubric_levels
@@ -493,7 +493,7 @@ def _parse_quiz_payload(raw_payload: Optional[str], normalized_type: str) -> Qui
 def _parse_rubric_payload(
     raw_payload: Optional[str], normalized_type: str
 ) -> list[ActivityRubricLevelInput] | None:
-    if normalized_type != "ACTIVITY":
+    if normalized_type not in {"ACTIVITY", "ASSIGNMENT"}:
         return None
     if not raw_payload:
         return None
@@ -510,7 +510,7 @@ def _replace_activity_rubric(
     classwork: Classwork,
     levels: list[ActivityRubricLevelInput] | None,
 ) -> None:
-    if classwork.classwork_type != "ACTIVITY" or levels is None:
+    if classwork.classwork_type not in {"ACTIVITY", "ASSIGNMENT"} or levels is None:
         return
     existing = {level.rubric_level_id: level for level in classwork.rubric_levels}
     retained_ids: set[int] = set()
@@ -705,8 +705,8 @@ def update_classwork_record(
         values["total_points"] = None
     target_type = values.get("classwork_type", classwork.classwork_type)
     if rubric_levels is not None:
-        if target_type != "ACTIVITY":
-            raise HTTPException(status_code=400, detail="Rubrics are only supported for Activity classwork")
+        if target_type not in {"ACTIVITY", "ASSIGNMENT"}:
+            raise HTTPException(status_code=400, detail="Rubrics are only supported for Activity and Assignment classwork")
         submissions = [
             submission
             for assignment in classwork.assignments
@@ -714,9 +714,9 @@ def update_classwork_record(
         ]
         if submissions and not confirm_rubric_change:
             detail = (
-                "This activity already has graded submissions. Updating the rubric will not change previously recorded grades."
+                "This classwork already has graded submissions. Updating the rubric will not change previously recorded grades."
                 if any(s.status == "graded" or s.grade is not None for s in submissions)
-                else "This activity already has student submissions. Rubric changes will apply when these submissions are graded."
+                else "This classwork already has student submissions. Rubric changes will apply when these submissions are graded."
             )
             raise HTTPException(status_code=409, detail=detail)
         parsed_levels = [ActivityRubricLevelInput.model_validate(level) for level in rubric_levels]
