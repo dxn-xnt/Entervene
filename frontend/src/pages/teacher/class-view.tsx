@@ -140,23 +140,6 @@ interface LinkedClassworkItem {
   is_locked?: boolean;
 }
 
-function ClassworkIcon({
-  type,
-  size = 16,
-}: {
-  type?: string | null;
-  size?: number;
-}) {
-  switch (type?.toLowerCase()) {
-    case "quiz":
-      return <ClipboardList size={size} />;
-    case "assignment":
-      return <BookOpen size={size} />;
-    default:
-      return <FileText size={size} />;
-  }
-}
-
 type DetailTab = "lessons" | "students" | "classwork";
 
 export default function TeacherClassDetail() {
@@ -318,13 +301,15 @@ export default function TeacherClassDetail() {
                       <>
                         <div className="flex flex-row gap-2">
                           <Button
+                            size="header"
                             className="w-full md:w-auto whitespace-nowrap"
                             onClick={() => setIsSetGoalModalOpen(true)}
                           >
-                            <Pencil className="mr-2 size-4" /> Set Lesson Goal
+                            <Pencil className="size-4" /> Set Lesson Goal
                           </Button>
                           {(detail.subject_loads[0]?.subject_id) && (
                             <Button
+                              size="header"
                               variant="default"
                               onClick={() => {
                                 const targetId =
@@ -335,7 +320,7 @@ export default function TeacherClassDetail() {
                                   );
                                 }
                               }}
-                              className="h-10 w-full gap-2 whitespace-nowrap"
+                              className="w-full whitespace-nowrap md:w-auto"
                             >
                               <BookOpen size={16} />
                               View Subject
@@ -1000,19 +985,6 @@ function LessonsTab({
                   {lesson.title}
                 </h4>
                 <div className="flex flex-row items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void openLessonDetail(lesson);
-                    }}
-                    className="h-7 border-2 border-black bg-white px-2.5 text-xs font-bold text-black shadow-none hover:bg-yellow-100 transition-colors"
-                  >
-                    <Eye size={12} className="mr-1.5" />
-                    View Lesson
-                  </Button>
                   <Badge
                     variant={lesson.is_published ? "solid" : "default"}
                     size="sm"
@@ -1057,9 +1029,6 @@ function LessonsTab({
                   className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3 hover:bg-retro shadow-none hover:translate-x-0.5 transition-all cursor-pointer min-w-0 group"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className="shrink-0 text-black">
-                      <ClassworkIcon type={cw.classwork_type} size={18} />
-                    </span>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold truncate text-black">
                         {cw.title}
@@ -1084,7 +1053,7 @@ function LessonsTab({
                 </Card>
               ))
             )}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-black/10">
+            <div className="-mx-3 flex items-center justify-end gap-2 border-t-2 border-black px-3 pt-3">
               <Button
                 type="button"
                 variant="outline"
