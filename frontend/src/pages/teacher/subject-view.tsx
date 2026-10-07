@@ -1130,6 +1130,8 @@ export default function SubjectDetails() {
                       overviewMastery={overviewMastery}
                       classworkCount={classworkCount}
                       overviewCompletion={overviewCompletion}
+                      classId={classId}
+                      subjectId={subjectId}
                     />
                   )}
                 </div>

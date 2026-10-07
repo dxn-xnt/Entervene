@@ -1,7 +1,9 @@
 import { useMemo, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Archive,
   ArchiveIcon,
+  ArrowUpRight,
   Award,
   BookOpen,
   Eye,
@@ -13,7 +15,12 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { apiFetch } from "@/lib/api";
+import {
+  apiFetch,
+  getTeacherDashboardHealth,
+  type TeacherDashboardHealthResponse,
+  type SectionHealthItem,
+} from "@/lib/api";
 import { formatDate, toTitleCase } from "@/lib/formatters";
 import { Text } from "@/components/retroui/Text";
 import { Button } from "@/components/retroui/Button";
@@ -21,6 +28,8 @@ import { Card } from "@/components/retroui/Card";
 import LessonItemLine from "@/components/item-line/lesson";
 import { Select } from "@/components/retroui/Select";
 import { Badge } from "@/components/retroui/Badge";
+import { Progress } from "@/components/retroui/Progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { ContextMenu } from "@/components/retroui/ContextMenu";
 import {
   DropdownMenu,
@@ -29,6 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { OverviewCard } from "@/components/overview-cards";
+import { routes } from "@/../routes";
 
 import type { CompetencyItem, Lesson, LinkedClasswork } from "./types";
 
@@ -61,6 +71,9 @@ type SubjectLessonListProps = {
   overviewMastery?: number;
   classworkCount?: number | null;
   overviewCompletion?: number;
+  // Subject & Class context
+  classId?: string | number;
+  subjectId?: string | number;
 };
 
 export default function SubjectLessonList({
@@ -88,8 +101,51 @@ export default function SubjectLessonList({
   overviewMastery = 0,
   classworkCount = 0,
   overviewCompletion = 0,
+  classId,
+  subjectId,
 }: SubjectLessonListProps) {
+  const navigate = useNavigate();
   const [internalCompetencyFilter, setInternalCompetencyFilter] = useState("all");
+  const [healthData, setHealthData] = useState<TeacherDashboardHealthResponse | null>(null);
+  const [isHealthLoading, setIsHealthLoading] = useState(false);
+  const [showAllSectionHealth, setShowAllSectionHealth] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadHealth = async () => {
+      setIsHealthLoading(true);
+      try {
+        const res = await getTeacherDashboardHealth({
+          subject_id: subjectId ? Number(subjectId) : undefined,
+          class_id: classId ? Number(classId) : undefined,
+        });
+        if (isMounted) {
+          setHealthData(res);
+        }
+      } catch (err) {
+        console.warn("Failed to load section health in lesson list:", err);
+      } finally {
+        if (isMounted) setIsHealthLoading(false);
+      }
+    };
+    void loadHealth();
+    return () => {
+      isMounted = false;
+    };
+  }, [classId, subjectId]);
+
+  const sections: SectionHealthItem[] = useMemo(() => {
+    if (healthData?.section_matrix && healthData.section_matrix.length > 0) {
+      if (subjectId) {
+        const forSubject = healthData.section_matrix.filter(
+          (sec) => Number(sec.subject_id) === Number(subjectId),
+        );
+        if (forSubject.length > 0) return forSubject;
+      }
+      return healthData.section_matrix;
+    }
+    return [];
+  }, [healthData, subjectId]);
   const activeCompetencyFilter =
     competencyFilter !== undefined
       ? competencyFilter
@@ -276,17 +332,8 @@ export default function SubjectLessonList({
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] items-start min-w-0">
         {/* ── Main Panel (Left to Center): Toolbar, Competencies, and Lessons ── */}
         <div className="flex flex-col gap-4 min-w-0">
-          {/* Header toolbar */}
-          <div className="flex min-w-0 items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Text as="h3" className="text-xl font-bold tracking-tight sm:text-2xl">
-                Lessons & Competencies
-              </Text>
-            </div>
-          </div>
-
           {/* ── Search, Sort, and Add Competency Toolbar ── */}
-          <div className="-mt-2 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-row items-center justify-between gap-3 w-full">
               {/* <label className="relative md:w-80">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
@@ -582,7 +629,7 @@ export default function SubjectLessonList({
           </div>
         </div>
 
-        {/* ── Right Side: Subject Overview ── */}
+        {/* ── Right Side: Subject Overview & Section Health ── */}
         <aside className="order-first flex flex-col gap-3 sm:grid sm:grid-cols-3 lg:flex lg:flex-col min-w-0 lg:order-none lg:sticky lg:top-4">
           <OverviewCard
             title="Lesson Mastery"
@@ -599,6 +646,196 @@ export default function SubjectLessonList({
             count={`${overviewCompletion}%`}
             statDescription="Average submitted classwork completion"
           />
+
+          {/* Section-by-Section Health */}
+          <Card className="flex flex-col justify-between p-4 sm:p-5 sm:col-span-3 lg:col-span-1 border-2 border-black bg-card shadow-[4px_4px_0_#000]">
+            <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
+              <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                Section-by-Section Health
+              </Card.Title>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      autoIcon={false}
+                      onClick={() => navigate(routes.teacher.classes)}
+                      className=" shadow-none flex items-center justify-center shrink-0"
+                    >
+                      <ArrowUpRight className="size-4" />
+                    </Button>
+                  }
+                />
+                <TooltipContent side="right">View all classes</TooltipContent>
+              </Tooltip>
+            </Card.Header>
+
+            <Card.Content className="mt-3 flex flex-col gap-3 p-0">
+              {(() => {
+                if (isHealthLoading) {
+                  return (
+                    <div className="flex flex-col gap-2 p-2">
+                      <div className="h-20 animate-pulse bg-black/5 rounded border border-black/20" />
+                    </div>
+                  );
+                }
+
+                if (sections.length === 0) {
+                  return (
+                    <p className="border-2 border-dashed border-black/30 p-4 text-center text-xs font-medium text-muted-foreground">
+                      No section health data available for this subject.
+                    </p>
+                  );
+                }
+
+                const displayed = showAllSectionHealth ? sections : sections.slice(0, 2);
+
+                return (
+                  <>
+                    {displayed.map((sec, idx) => (
+                      <Card
+                        key={sec.class_id ? `${sec.class_id}-${sec.subject_id}-${idx}` : idx}
+                        className="shadow-none p-3 text-xs hover:bg-retro hover:-translate-y-0.5 cursor-pointer transition-all border-2 border-black"
+                        onClick={() => {
+                          if (sec.class_id && sec.subject_id) {
+                            navigate(`/teacher/classes/${sec.class_id}/${sec.subject_id}`);
+                          } else if (sec.class_id) {
+                            navigate(`/teacher/advisory-class/${sec.class_id}`);
+                          } else {
+                            navigate(routes.teacher.classes);
+                          }
+                        }}
+                      >
+                        {/* Section name & badge & student count */}
+                        <div className="flex items-center justify-between gap-2 mb-2.5">
+                          <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                            <span className="font-bold text-base text-foreground truncate">
+                              {sec.section_name}
+                            </span>
+                            {sec.subject_name && (
+                              <Badge
+                                variant="secondary"
+                                size="sm"
+                                className="px-1.5 py-0.5 text-[10px] font-bold"
+                              >
+                                {sec.subject_name}
+                              </Badge>
+                            )}
+                          </div>
+                          <span className="font-semibold text-xs text-muted-foreground shrink-0">
+                            {sec.student_count} Students
+                          </span>
+                        </div>
+
+                        {/* Task completion & attendance progress in vertical form */}
+                        <div className="flex flex-col gap-2 mb-2.5">
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-foreground font-medium">
+                                Task Completion
+                              </span>
+                              <span className="font-semibold">
+                                {sec.completion_rate_percent ?? 0}%
+                              </span>
+                            </div>
+                            <Progress
+                              value={sec.completion_rate_percent ?? 0}
+                              className="h-2"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-foreground font-medium">
+                                Attendance
+                              </span>
+                              <span className="font-semibold">
+                                {sec.attendance_rate_percent != null
+                                  ? `${sec.attendance_rate_percent}%`
+                                  : "%"}
+                              </span>
+                            </div>
+                            <Progress
+                              value={sec.attendance_rate_percent ?? 0}
+                              className="h-2"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Bottom Info Bar */}
+                        <div className="flex flex-col gap-1.5 pt-2 border-t border-black/10 text-xs text-muted-foreground">
+                          <div className="flex items-center justify-between gap-1 flex-wrap">
+                            <div className="flex items-center gap-1">
+                              <span className="text-foreground font-semibold text-[11px]">
+                                Class Average:
+                              </span>
+                              <Badge
+                                variant={
+                                  sec.avg_score_percent == null || sec.avg_score_percent < 75
+                                    ? "destructive"
+                                    : sec.avg_score_percent > 87
+                                      ? "success"
+                                      : "surface"
+                                }
+                                size="sm"
+                                className="px-1.5 py-0.2 text-[10px] font-bold"
+                              >
+                                {sec.avg_score_percent != null ? `${sec.avg_score_percent}%` : "%"}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-foreground font-semibold text-[11px]">
+                                Passing Rate:
+                              </span>
+                              <Badge
+                                variant={
+                                  sec.passing_rate_percent == null || sec.passing_rate_percent < 75
+                                    ? "destructive"
+                                    : sec.passing_rate_percent > 87
+                                      ? "success"
+                                      : "surface"
+                                }
+                                size="sm"
+                                className="px-1.5 py-0.2 text-[10px] font-bold"
+                              >
+                                {sec.passing_rate_percent != null ? `${sec.passing_rate_percent}%` : "%"}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-end text-[11px] text-foreground">
+                            <span>
+                              <strong className="font-bold mr-1">
+                                {sec.published_classworks ?? 0}
+                              </strong>
+                              published tasks
+                            </span>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+
+                    <div className="flex flex-col gap-2 pt-1">
+                      <Card.Description className="text-xs text-muted-foreground">
+                        Performance, completion, and attendance across your classes
+                      </Card.Description>
+                      {sections.length > 2 && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          autoIcon={false}
+                          onClick={() => setShowAllSectionHealth((prev) => !prev)}
+                          className="self-end text-xs font-semibold px-2.5 py-1 h-7 bg-black text-white hover:bg-black/80 shadow-none"
+                        >
+                          {showAllSectionHealth ? "Show less" : "Show all classes"}
+                        </Button>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+            </Card.Content>
+          </Card>
         </aside>
       </div>
 
