@@ -57,6 +57,7 @@ class RowMetrics:
     first_pass: Counter = field(default_factory=Counter)
     final: Counter = field(default_factory=Counter)
     discards: Counter = field(default_factory=Counter)
+    mc_option_discards: list[dict] = field(default_factory=list)  # Counts/indexes only.
     repair_rounds: int = 0
     passage_repairs: int = 0
     truncation_retries: int = 0
@@ -126,6 +127,7 @@ class ExamGeneration:
             "requested_per_type": dict(self.requested),
             "first_pass_per_type": {kind: first[kind] for kind in self.requested},
             **discard_summary(discards),
+            "mc_option_discards": [detail for row in self.rows for detail in row.mc_option_discards],
             "truncation_retries": sum(row.truncation_retries for row in self.rows),
             "recovered_from_400": sum(row.recovered_from_400 for row in self.rows),
             "context_fields_filled": sum(row.context_fields_filled for row in self.rows),
