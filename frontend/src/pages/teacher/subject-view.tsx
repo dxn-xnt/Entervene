@@ -966,6 +966,7 @@ export default function SubjectDetails() {
                   openLessonManager={openLessonManager}
                   openClassworkForm={openClassworkForm}
                   openClassworkDetail={openClassworkDetail}
+                  onArchiveLesson={handleArchiveLessonDirect}
                   linkedClassworks={
                     linkedClassworks[activeLessonDetail.lesson_id] || []
                   }

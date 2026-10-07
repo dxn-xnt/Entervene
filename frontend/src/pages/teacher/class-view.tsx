@@ -16,7 +16,6 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { LoadingPanel } from "@/components/loading-panel";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Accordion } from "@/components/retroui/Accordion";
@@ -440,8 +439,8 @@ function LessonsTab({
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(
     initialSubjectId || detail.subject_loads[0]?.subject_id || null,
   );
-  const [competencies, setCompetencies] = useState<CompetencyItem[]>([]);
   const [lessons, setLessons] = useState<LessonItem[]>([]);
+  const [competencies, setCompetencies] = useState<CompetencyItem[]>([]);
   const [isLoadingLessons, setIsLoadingLessons] = useState(false);
   const [lessonsError, setLessonsError] = useState("");
   const [expandedLessonId, setExpandedLessonId] = useState<number | null>(null);
@@ -641,10 +640,6 @@ function LessonsTab({
   };
 
 
-  const openCompetencyForm = (comp?: CompetencyItem | null) => {
-    setEditingCompetency(comp || null);
-    setIsCompetencyModalOpen(true);
-  };
 
   const handleCompetencySaved = (savedComp?: CompetencyItem) => {
     if (savedComp) {
@@ -661,32 +656,6 @@ function LessonsTab({
       });
     }
     void loadLessonsAndCompetencies();
-  };
-
-  const handleArchiveCompetency = async (competencyId: number) => {
-    if (
-      !window.confirm(
-        "Are you sure you want to archive this learning competency? Any attached lessons will become standalone.",
-      )
-    )
-      return;
-    try {
-      const res = await apiFetch(`/api/v1/competencies/${competencyId}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        setCompetencies((prev) =>
-          prev.filter((c) => c.competency_id !== competencyId),
-        );
-      }
-    } catch {
-      alert("Failed to archive competency.");
-    }
-  };
-
-  const openAddLessonForCompetency = (compId?: number) => {
-    setSelectedCompetencyIdForNewLesson(compId);
-    setIsCreatingLesson(true);
   };
 
   // Classwork Detail Dialog opener (reused from Image 2)
@@ -964,7 +933,7 @@ function LessonsTab({
         </div>
       ) : (
         /* ── Default All-Lessons Overview Layout ── */
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:grid-rows-[auto_1fr] items-stretch min-w-0">
+        <div className="mt-2 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:grid-rows-[auto_1fr] items-stretch min-w-0">
           {/* Main Content Area */}
           <section className="flex flex-col gap-4 min-w-0">
             <div className="flex flex-col gap-4 min-w-0">
@@ -979,7 +948,7 @@ function LessonsTab({
                 </div>
 
                 {/* Filter & Sort Controls */}
-                <div className="mt-6.5 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="-mt-3 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="w-full min-w-0 flex-1 lg:max-w-md">
                     <Select
                       value={lessonFilter}
@@ -1026,9 +995,7 @@ function LessonsTab({
               </div>
 
               {/* Lessons List */}
-              {isLoadingLessons ? (
-                <LoadingPanel label="Loading lessons..." />
-              ) : lessonsError ? (
+              {lessonsError ? (
                 <div className="rounded border-2 border-red-300 bg-red-50 p-4 text-sm text-red-700 font-medium">
                   {lessonsError}
                 </div>
@@ -1090,11 +1057,6 @@ function LessonsTab({
               isTeacher
               onSetGoal={() => setGoalModalOpen(true)}
               className="w-full flex-1 min-w-0"
-            />
-            <OverviewCard
-              title="Total Students"
-              count={String(detail.student_count ?? 0)}
-              statDescription="Assigned to section"
             />
             <OverviewCard
               title="Total Lessons"

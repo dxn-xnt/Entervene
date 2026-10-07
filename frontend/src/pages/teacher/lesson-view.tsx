@@ -1,13 +1,14 @@
+import { useState } from "react";
 import {
-    Award,
-    BookOpen,
+    Archive,
     ClipboardList,
     Clock,
     FileText,
-    Paperclip,
     Pencil,
     Plus,
+    X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
@@ -34,6 +35,7 @@ export interface TeacherLessonViewProps {
     openLessonManager: (lesson: Lesson) => void;
     openClassworkForm: (lesson: Lesson) => void;
     openClassworkDetail: (classwork: LinkedClasswork) => void;
+    onArchiveLesson?: (lesson: Lesson) => Promise<void> | void;
     linkedClassworks: LinkedClasswork[];
     isLoadingClasswork?: boolean;
 }
@@ -47,9 +49,13 @@ export function TeacherLessonView({
     openLessonManager,
     openClassworkForm,
     openClassworkDetail,
+    onArchiveLesson,
     linkedClassworks = [],
     isLoadingClasswork = false,
 }: TeacherLessonViewProps) {
+    const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+    const [isArchivingLesson, setIsArchivingLesson] = useState(false);
+
     return (
         <div className="flex flex-col flex-1 min-w-0 w-full animate-in fade-in-50 duration-200">
             {/* ── Universal Header ── */}
@@ -113,6 +119,19 @@ export function TeacherLessonView({
                             <Pencil size={16} />
                             Edit Lesson
                         </Button>
+                        {onArchiveLesson && (
+                            <Button
+                                type="button"
+                                size="header"
+                                variant="outline"
+                                onClick={() => setShowArchiveConfirm(true)}
+                                disabled={isArchivingLesson}
+                                className="w-full whitespace-nowrap md:w-auto"
+                            >
+                                <Archive size={16} />
+                                Archive Lesson
+                            </Button>
+                        )}
                         <Button
                             type="button"
                             size="header"
@@ -130,51 +149,41 @@ export function TeacherLessonView({
             <div className="-mt-[3px] flex min-w-0 flex-col gap-5 border-t-2! border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
 
                 {/* ── Hero Lesson Information Card ── */}
-                <Card className="block w-full border-2 border-black bg-primary p-5 sm:p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <Card className="block w-full border-2 border-black bg-primary p-4 sm:p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                     <div className="flex flex-col gap-3">
-                        {/* Badges Ribbon */}
-                        <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="outline" size="sm" className="border-1 border-black bg-white text-black">
-                                Lesson
-                            </Badge>
+
+                        <div className="flex flex-wrap items-center gap-2 justify-between">
+                            <div className="flex flex-row gap-3 items-center">
+                                {/* Lesson Title */}
+                                <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-black leading-tight break-words">
+                                    {lesson.title}
+                                </h1>
+                                <Badge variant="outline" size="sm" className="h-fit">
+                                    Lesson
+                                </Badge>
+                            </div>
 
                             <Badge
                                 variant={lesson.is_published ? "solid" : "default"}
                                 size="sm"
-                                className="py-1 rounded font-bold"
+                                className="py-1"
                             >
                                 {lesson.is_published ? "Published" : "Draft"}
                             </Badge>
 
+                        </div>
+
+                        <div className="-mt-2 flex flex-row gap-2 items-center">
+                            <p className="text-xs sm:text-sm text-foreground">
+                                Competency:
+                            </p>
                             {(lesson.competency_code || lesson.competency_statement) && (
-                                <Badge variant="outline" size="sm" className="border-1 border-black bg-white text-black">
+                                <p className="text-sm sm:text-base font-semibold text-foreground">
                                     {lesson.competency_code || lesson.competency_statement}
-                                </Badge>
-                            )}
-
-                            <Badge
-                                variant="surface"
-                                size="sm"
-                                className="border-1 border-black bg-white text-black"
-                            >
-                                {linkedClassworks.length} {linkedClassworks.length === 1 ? "classwork" : "classworks"}
-                            </Badge>
-
-                            {lesson.attachments && lesson.attachments.length > 0 && (
-                                <Badge
-                                    size="sm"
-                                    className="border-1 border-black bg-[#7ABA78] text-black font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
-                                >
-                                    <Paperclip size={12} className="mr-1 inline" />
-                                    {lesson.attachments.length} {lesson.attachments.length === 1 ? "material" : "materials"}
-                                </Badge>
+                                </p>
                             )}
                         </div>
 
-                        {/* Lesson Title */}
-                        <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-black leading-tight break-words">
-                            {lesson.title}
-                        </h1>
 
                         {/* Description */}
                         {lesson.description && (
@@ -293,6 +302,82 @@ export function TeacherLessonView({
                     )}
                 </section>
             </div>
+
+            {/* ── Archive Confirmation Modal ── */}
+            {showArchiveConfirm && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    onClick={(e) => e.stopPropagation()}
+                    className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4"
+                >
+                    <Card className="block w-full max-w-md border-2 border-black bg-background text-foreground shadow-[4px_4px_0_#000]">
+                        <div className="flex items-center justify-between border-b-2 border-black bg-red-100 px-5 py-3">
+                            <div className="flex items-center gap-2 text-red-800">
+                                <Archive size={18} />
+                                <Card.Title className="mb-0 text-base font-bold text-red-800">
+                                    Archive Lesson?
+                                </Card.Title>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowArchiveConfirm(false)}
+                                disabled={isArchivingLesson}
+                                className="rounded p-1 hover:bg-white/60 disabled:opacity-50 cursor-pointer"
+                                aria-label="Close archive confirmation"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <Card.Content className="space-y-3 p-5">
+                            <p className="text-sm font-medium">
+                                Are you sure you want to archive{" "}
+                                <span className="font-bold">"{lesson.title}"</span>?
+                            </p>
+                            <p className="text-xs text-gray-600">
+                                This hides the lesson from the teacher lesson list and student
+                                lesson views. You can restore it later from the backend archive
+                                flow.
+                            </p>
+                        </Card.Content>
+                        <div className="flex justify-end gap-3 border-t-2 border-black px-5 py-4 bg-gray-50">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setShowArchiveConfirm(false)}
+                                disabled={isArchivingLesson}
+                                className="border-black font-bold"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="button"
+                                onClick={async () => {
+                                    if (!onArchiveLesson) return;
+                                    setIsArchivingLesson(true);
+                                    try {
+                                        await onArchiveLesson(lesson);
+                                        setShowArchiveConfirm(false);
+                                        closeLessonDetail();
+                                    } catch (err) {
+                                        toast.error(
+                                            err instanceof Error
+                                                ? err.message
+                                                : "Unable to archive lesson."
+                                        );
+                                    } finally {
+                                        setIsArchivingLesson(false);
+                                    }
+                                }}
+                                disabled={isArchivingLesson}
+                                className="border-2 border-black bg-red-600 text-white font-bold hover:bg-red-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                            >
+                                {isArchivingLesson ? "Archiving..." : "Archive Lesson"}
+                            </Button>
+                        </div>
+                    </Card>
+                </div>
+            )}
         </div>
     );
 }

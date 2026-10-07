@@ -172,6 +172,7 @@ export default function SubjectLessonList({
         onOpenClassworkForm={openClassworkForm}
         onOpenLessonManager={openLessonManager}
         onArchiveLesson={() => setLessonToArchive(lesson)}
+        withShadow={false}
       />
     );
   };

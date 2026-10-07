@@ -23,6 +23,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LoadingPanel } from "@/components/loading-panel";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
 
 export interface LessonAttachment {
@@ -77,6 +84,8 @@ export interface LessonItemLineProps<TLesson extends LessonItem = LessonItem> {
   onOpenLessonManager?: (lesson: TLesson) => void;
   onArchiveLesson?: (lesson: TLesson) => void;
   className?: string;
+  /** Show the retro drop shadow on the lesson card. Defaults to true. */
+  withShadow?: boolean;
 }
 
 function ClassworkIcon({
@@ -110,6 +119,7 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
   onOpenLessonManager,
   onArchiveLesson,
   className,
+  withShadow = true,
 }: LessonItemLineProps<TLesson>) => {
   const hasActions = Boolean(onOpenLessonManager || onArchiveLesson);
 
@@ -121,7 +131,10 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
     >
       <Accordion.Item
         value={String(lesson.lesson_id)}
-        className="border-2 border-black bg-primary shadow-md! hover:translate-x-1 transition-all"
+        className={cn(
+          "border-2 border-black bg-primary hover:translate-x-1 transition-all",
+          withShadow ? "shadow-md!" : "shadow-none!",
+        )}
       >
         <div
           role="button"
@@ -275,9 +288,19 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
           {isLoadingClassworks ? (
             <LoadingPanel label="Loading classworks..." />
           ) : classworks.length === 0 ? (
-            <div className="flex items-center justify-between rounded border-2 border-dashed border-black/40 bg-white p-3 text-xs text-gray-500 font-medium">
-              <span>No classworks assigned to this lesson yet.</span>
-            </div>
+            <Empty className="border-2 bg-white p-6 shadow-none bg-retro">
+              <EmptyHeader>
+                <EmptyMedia>
+                  <div className="flex size-9 items-center justify-center border-2 border-black bg-primary">
+                    <ClipboardList className="size-4.5 text-black" />
+                  </div>
+                </EmptyMedia>
+                <EmptyTitle className="text-sm font-bold">No classworks yet</EmptyTitle>
+                <EmptyDescription className="text-xs">
+                  No classworks assigned to this lesson yet.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             classworks.map((cw) => (
               <Card
@@ -310,7 +333,7 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
               </Card>
             ))
           )}
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-black/10">
+          <div className="flex items-center justify-end gap-2 pt-1">
             <Button
               type="button"
               variant="default"
