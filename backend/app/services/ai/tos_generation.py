@@ -24,6 +24,7 @@ from app.services.ai.tos_generation_session import RowMetrics, current_generatio
 from app.services.ai.provider_diagnostics import (
     provider_call_phase, ProviderTruncationError, is_truncated_json, record_provider_failure,
     schema_batch_scope, recovery_validation_scope,
+    mc_option_discard_detail,
 )
 from app.services.ai.option_shuffle import shuffle_options
 from app.services.ai.question_quality_validation import (
@@ -251,11 +252,13 @@ def completion_budget(kind: str, batch_count: int) -> int:
 
 class ValidatedBatch(str):
     """Ephemeral content cache: validation/shuffling happens exactly once."""
-    def __new__(cls, raw, *, candidates=(), discards=None, from_400=False, usable_items=None):
+    def __new__(cls, raw, *, candidates=(), discards=None, from_400=False, usable_items=None,
+                mc_option_discards=()):
         result = super().__new__(cls, raw)
         result.candidates = candidates
         result.discards = discards if discards is not None else Counter()
         result.from_400 = from_400
+        result.mc_option_discards = list(mc_option_discards)
         result.usable_items = (sum(q is not None for _, q, _ in candidates)
                                if usable_items is None else usable_items)
         return result
@@ -276,13 +279,18 @@ def normalize_batch_item(data, kind, passage, discards):
 def _validate_batch(raw, kind, passage, *, from_400=False):
     if isinstance(raw, ValidatedBatch):
         return raw
-    discards, candidates = Counter(), []
-    for data in _read_questions(raw, discards):
+    discards, candidates, option_discards = Counter(), [], []
+    for index, data in enumerate(_read_questions(raw, discards), 1):
+        before = discards.copy()
         normalized, filled = normalize_batch_item(data, kind, passage, discards)
         q = (validate_item(normalized, kind, passage, discards=discards)
              if normalized is not None or not isinstance(data, dict) else None)
         candidates.append((data, q, filled))
-    return ValidatedBatch(raw, candidates=candidates, discards=discards, from_400=from_400)
+        if kind == "MULTIPLE_CHOICE" and q is None:
+            reason = next(iter(discards - before), "unknown_validation")
+            option_discards.append(mc_option_discard_detail(data, reason, item_index=index))
+    return ValidatedBatch(raw, candidates=candidates, discards=discards, from_400=from_400,
+                          mc_option_discards=option_discards)
 
 
 def legacy_completion_budget(batch_count: int) -> int:
@@ -438,9 +446,12 @@ async def generate_tos_row_questions(
                 raw = await _generate_question_batch(prompt, kind, batch_count, passage, round_number, offset, metrics)
                 batch = _validate_batch(raw, kind, passage)
                 metrics.discards.update(batch.discards)
+                metrics.mc_option_discards.extend(
+                    {**detail, "repair_round": round_number, "batch_offset": offset}
+                    for detail in batch.mc_option_discards)
                 kept_before_batch = existing_keys | {normalize_option_text(q["question_text"]) for q in questions}
                 batch_seen = set()
-                for data, q, filled in batch.candidates:
+                for item_index, (data, q, filled) in enumerate(batch.candidates, 1):
                     if not q:
                         if isinstance(data, dict) and isinstance(data.get("question_text"), str):
                             avoided.append(data["question_text"])
@@ -452,6 +463,10 @@ async def generate_tos_row_questions(
                                   "duplicate_stem_same_batch" if stem_key in batch_seen else
                                   "duplicate_stem_previous_candidate")
                         metrics.discards[reason] += 1
+                        if kind == "MULTIPLE_CHOICE":
+                            metrics.mc_option_discards.append({
+                                **mc_option_discard_detail(data, reason, item_index=item_index),
+                                "repair_round": round_number, "batch_offset": offset})
                         batch_seen.add(stem_key)
                         continue
                     batch_seen.add(stem_key)
@@ -477,6 +492,10 @@ async def generate_tos_row_questions(
                                   not any(n for pending_cell, n in remaining.items() if pending_cell[0] == kind)
                                   else "surplus_cell")
                         metrics.discards[reason] += 1
+                        if kind == "MULTIPLE_CHOICE":
+                            metrics.mc_option_discards.append({
+                                **mc_option_discard_detail(data, reason, item_index=item_index),
+                                "repair_round": round_number, "batch_offset": offset})
                         continue
                     if opposite and kind == "TRUE_FALSE" and not any(o["is_correct"] and o["option_text"] == opposite for o in q["options"]):
                         metrics.discards["identical_true_false_answers"] += 1
