@@ -1,7 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
-  ArrowLeft,
   ArrowUpRight,
   BookOpen,
   CheckCircle2,
@@ -57,7 +56,7 @@ import type {
 } from "@/types/classwork";
 import ClassworkFormModal from "./subject-details/classwork-form-modal";
 import TeacherLessonDetailScreen from "./subject-details/teacher-lesson-detail-screen";
-import { StudentRecordDetail } from "./subject-details/student-records-panel";
+import TeacherStudentView from "./student-view";
 import LessonItemLine, {
   type LessonItem,
   type LinkedClassworkItem,
@@ -81,7 +80,6 @@ import type {
 } from "./subject-details/types";
 
 import { SuggestionPanel } from "@/components/teacher/suggestions/suggestion-panel-modal";
-import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
 import {
   apiFetch,
   getLessonGoals,
@@ -201,26 +199,9 @@ export default function TeacherClassDetail() {
       <div className="flex min-w-0 max-w-full flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex min-w-0 max-w-full flex-1 flex-col">
           <div className="flex min-w-0 max-w-full flex-1 flex-col">
-            {!lessonInterfaceLesson && (
-              <div
-                data-page-tabs-sticky-region={
-                  studentInterfaceStudent ? undefined : ""
-                }
-                data-student-detail-sticky-region={
-                  studentInterfaceStudent ? "" : undefined
-                }
-                className={
-                  studentInterfaceStudent
-                    ? "sticky top-0 z-40 shrink-0 bg-background"
-                    : undefined
-                }
-              >
-                <header
-                  data-student-detail-header={
-                    studentInterfaceStudent ? "" : undefined
-                  }
-                  className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6"
-                >
+            {!lessonInterfaceLesson && !studentInterfaceStudent && (
+              <div data-page-tabs-sticky-region>
+                <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6">
                   <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                     <SidebarTrigger className="shrink-0 md:hidden" />
                     <Breadcrumb className="min-w-0">
@@ -245,7 +226,7 @@ export default function TeacherClassDetail() {
                         <Breadcrumb.Separator />
                         <Breadcrumb.Item className="min-w-0">
                           <Breadcrumb.Page className="block truncate">
-                            {studentInterfaceStudent?.full_name || detail.section_name}
+                            {detail.section_name}
                           </Breadcrumb.Page>
                         </Breadcrumb.Item>
                       </Breadcrumb.List>
@@ -253,85 +234,72 @@ export default function TeacherClassDetail() {
                   </div>
 
                   <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
-                    {studentInterfaceStudent ? (
-                      <ManualSuggestionPanel
-                        classId={detail.class_id}
-                        student={studentInterfaceStudent}
-                        subjectLoads={detail.subject_loads}
-                        displayMode="header"
-                      />
-                    ) : tab === "lessons" ? (
-                      <>
-                        <div className="flex flex-row gap-2">
+                    {tab === "lessons" ? (
+                      <div className="flex flex-row gap-2">
+                        <Button
+                          size="header"
+                          className="w-full md:w-auto whitespace-nowrap"
+                          onClick={() => setIsSetGoalModalOpen(true)}
+                        >
+                          <Pencil className="size-4" /> Set Lesson Goal
+                        </Button>
+                        {(detail.subject_loads[0]?.subject_id) && (
                           <Button
                             size="header"
-                            className="w-full md:w-auto whitespace-nowrap"
-                            onClick={() => setIsSetGoalModalOpen(true)}
+                            variant="default"
+                            onClick={() => {
+                              const targetId =
+                                detail.subject_loads[0]?.subject_id;
+                              if (targetId) {
+                                navigate(
+                                  `/teacher/classes/${detail.class_id}/subjects/${targetId}`,
+                                );
+                              }
+                            }}
+                            className="w-full whitespace-nowrap md:w-auto"
                           >
-                            <Pencil className="size-4" /> Set Lesson Goal
+                            <BookOpen size={16} />
+                            View Subject
                           </Button>
-                          {(detail.subject_loads[0]?.subject_id) && (
-                            <Button
-                              size="header"
-                              variant="default"
-                              onClick={() => {
-                                const targetId =
-                                  detail.subject_loads[0]?.subject_id;
-                                if (targetId) {
-                                  navigate(
-                                    `/teacher/classes/${detail.class_id}/subjects/${targetId}`,
-                                  );
-                                }
-                              }}
-                              className="w-full whitespace-nowrap md:w-auto"
-                            >
-                              <BookOpen size={16} />
-                              View Subject
-                            </Button>
-                          )}
-                        </div>
-                      </>
+                        )}
+                      </div>
                     ) : null}
                   </div>
                 </header>
-                {!studentInterfaceStudent && (
-                  <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-                    <Tabs<DetailTab>
-                      tabs={[
-                        {
-                          id: "lessons",
-                          label: "Lessons",
-                          icon: BookOpen,
-                        },
-                        {
-                          id: "students",
-                          label: "Students",
-                          icon: Users,
-                        },
-                        {
-                          id: "classwork",
-                          label: "Classwork",
-                          icon: ClipboardList,
-                        },
-                      ]}
-                      activeTab={tab}
-                      onTabChange={(nextTab) => {
-                        setStudentInterfaceStudent(null);
-                        setLessonInterfaceLesson(null);
-                        setTab(nextTab);
-                      }}
-                    />
-                  </div>
-                )}
+                <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                  <Tabs<DetailTab>
+                    tabs={[
+                      {
+                        id: "lessons",
+                        label: "Lessons",
+                        icon: BookOpen,
+                      },
+                      {
+                        id: "students",
+                        label: "Students",
+                        icon: Users,
+                      },
+                      {
+                        id: "classwork",
+                        label: "Classwork",
+                        icon: ClipboardList,
+                      },
+                    ]}
+                    activeTab={tab}
+                    onTabChange={(nextTab) => {
+                      setStudentInterfaceStudent(null);
+                      setLessonInterfaceLesson(null);
+                      setTab(nextTab);
+                    }}
+                  />
+                </div>
               </div>
             )}
 
             <div
-              className={`flex min-w-0 flex-col ${lessonInterfaceLesson
+              className={`flex min-w-0 flex-col ${lessonInterfaceLesson || studentInterfaceStudent
                 ? ""
-                : studentInterfaceStudent
-                  ? "gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6"
-                  : "-mt-[1px] border-t-1 border-border gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6"
+                : "-mt-[1px] border-t-1 border-border gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6"
                 }`}
             >
 
@@ -933,7 +901,7 @@ function LessonsTab({
         </div>
       ) : (
         /* ── Default All-Lessons Overview Layout ── */
-        <div className="mt-2 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:grid-rows-[auto_1fr] items-stretch min-w-0">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:grid-rows-[auto_1fr] items-stretch min-w-0">
           {/* Main Content Area */}
           <section className="flex flex-col gap-4 min-w-0">
             <div className="flex flex-col gap-4 min-w-0">
@@ -1459,65 +1427,23 @@ function StudentsTab({
 
   if (selectedStudent) {
     return (
-      <div className="flex flex-col gap-4 min-w-0">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <Button
-            type="button"
-            variant="outline"
-            size="header"
-            onClick={() => {
-              setSelectedStudent(null);
-              setStudentDetail(null);
-              onDetailViewChange?.(null);
-            }}
-          >
-            <ArrowLeft />
-            Back to students
-          </Button>
-
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {periods.length > 1 && (
-              <Select
-                value={selectedPeriodId}
-                onValueChange={handlePeriodChange}
-              >
-                <Select.Trigger className="h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold min-w-[200px]">
-                  <Select.Value placeholder="Select period" />
-                </Select.Trigger>
-                <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                  {periods.map((p) => (
-                    <Select.Item
-                      key={p.academic_period_id}
-                      value={String(p.academic_period_id)}
-                    >
-                      {p.period_name} ({p.year_label})
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select>
-            )}
-          </div>
-        </div>
-
-        {detailError && (
-          <div className="border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 font-medium">
-            {detailError}
-          </div>
-        )}
-
-        {isDetailLoading || !studentDetail ? (
-          <p className="py-12 text-center text-sm font-semibold text-gray-500">
-            Loading student analytics...
-          </p>
-        ) : (
-          <StudentRecordDetail
-            detail={studentDetail}
-            classId={detail.class_id}
-            subjectLoads={detail.subject_loads as any}
-            showSuggestionPanel={false}
-          />
-        )}
-      </div>
+      <TeacherStudentView
+        student={selectedStudent}
+        studentDetail={studentDetail}
+        classId={detail.class_id}
+        subjectLoads={detail.subject_loads as any}
+        periods={periods}
+        selectedPeriodId={selectedPeriodId}
+        onPeriodChange={handlePeriodChange}
+        isDetailLoading={isDetailLoading}
+        detailError={detailError}
+        sectionName={detail.section_name}
+        subjectName={
+          detail.subject_loads.find((l) => l.subject_id === activeSubjectId)
+            ?.subject_name
+        }
+        subjectId={activeSubjectId}
+      />
     );
   }
 
@@ -1525,7 +1451,6 @@ function StudentsTab({
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] items-start min-w-0">
       <section className="flex flex-col min-w-0">
         <div className="mb-4 flex flex-col gap-2 sm:items-start sm:justify-between">
-          <h3 className="text-xl sm:text-2xl font-bold sm:-mb-">Students</h3>
           <label className="relative flex-1 sm:min-w-sm">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50 z-10" />
             <Input
@@ -1832,6 +1757,7 @@ function ClassworkTab({
                 key={item.classwork_id}
                 item={item}
                 onOpen={(cw) => setSelected(cw)}
+                className="shadow-none"
               />
             ))}
           </section>

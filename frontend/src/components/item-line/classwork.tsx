@@ -4,10 +4,10 @@ import {
   CheckSquare,
   ClipboardList,
   FileText,
-  Paperclip,
 } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
+import { IconContainer } from "@/components/icon-container";
 import { Progress } from "@/components/retroui/Progress";
 import { formatDate } from "@/lib/classwork-utils";
 import { cn } from "@/lib/utils";
@@ -33,6 +33,7 @@ export interface ClassworkItemLineProps<T extends BaseClassworkItem = TeacherCla
   onOpen?: (item: T) => void;
   onClick?: () => void;
   className?: string;
+  showPublicationStatus?: boolean;
 }
 
 function ClassworkTypeIcon({
@@ -62,6 +63,7 @@ export const ClassworkItemLine = <T extends BaseClassworkItem = TeacherClasswork
   onOpen,
   onClick,
   className,
+  showPublicationStatus = true,
 }: ClassworkItemLineProps<T>) => {
   const dueLabel = useMemo(() => {
     if (item.assignments && item.assignments.length > 0) {
@@ -91,12 +93,9 @@ export const ClassworkItemLine = <T extends BaseClassworkItem = TeacherClasswork
     onClick?.();
   };
 
-  const formattedCategory = item.classwork_category
-    ? item.classwork_category.toLowerCase().replace(/_/g, " ")
+  const formattedType = item.classwork_type
+    ? item.classwork_type.toLowerCase().replace(/_/g, " ")
     : null;
-
-  const attachmentCount =
-    item.attachment_count ?? (item.attachments ? item.attachments.length : 0);
 
   return (
     <Card
@@ -117,9 +116,9 @@ export const ClassworkItemLine = <T extends BaseClassworkItem = TeacherClasswork
     >
       {/* Left side: Icon + Title & Subtitle metadata */}
       <div className="flex items-center gap-3.5 min-w-0 flex-1">
-        <div className="flex size-10 shrink-0 items-center justify-center border-2 border-black bg-primary text-black">
+        <IconContainer variant="primary">
           <ClassworkTypeIcon type={item.classwork_type} size={20} />
-        </div>
+        </IconContainer>
 
         <div className="flex flex-col gap-1 min-w-0 flex-1">
           <div className="flex items-center gap-2 min-w-0 flex-wrap">
@@ -139,16 +138,6 @@ export const ClassworkItemLine = <T extends BaseClassworkItem = TeacherClasswork
               <>
                 <span className="text-black/30">•</span>
                 <span>{item.total_points} pts</span>
-              </>
-            )}
-
-            {attachmentCount > 0 && (
-              <>
-                <span className="text-muted-foreground">•</span>
-                <span className="inline-flex items-center gap-1">
-                  <Paperclip size={12} />
-                  {attachmentCount}
-                </span>
               </>
             )}
           </div>
@@ -173,19 +162,21 @@ export const ClassworkItemLine = <T extends BaseClassworkItem = TeacherClasswork
         )}
 
         <div className="flex items-center gap-1.5 flex-wrap">
-          {formattedCategory && (
+          {formattedType && (
             <Badge variant="surface" size="sm" className="capitalize">
-              {formattedCategory}
+              {formattedType}
             </Badge>
           )}
 
-          <Badge
-            variant={item.is_published ? "solid" : "default"}
-            size="sm"
-            className="whitespace-nowrap"
-          >
-            {item.is_published ? "Published" : "Draft"}
-          </Badge>
+          {showPublicationStatus && (
+            <Badge
+              variant={item.is_published ? "solid" : "default"}
+              size="sm"
+              className="whitespace-nowrap"
+            >
+              {item.is_published ? "Published" : "Draft"}
+            </Badge>
+          )}
         </div>
       </div>
     </Card>

@@ -1,27 +1,16 @@
 import {
   Archive,
-  BookOpen,
-  CheckSquare,
   ChevronRight,
   ClipboardList,
   Eye,
-  FileText,
-  MoreVertical,
-  Paperclip,
   Pencil,
   Plus,
 } from "lucide-react";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
-import { Card } from "@/components/retroui/Card";
 import { ContextMenu } from "@/components/retroui/ContextMenu";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import ClassworkItemLine from "@/components/item-line/classwork";
 import { LoadingPanel } from "@/components/loading-panel";
 import {
   Empty,
@@ -88,24 +77,6 @@ export interface LessonItemLineProps<TLesson extends LessonItem = LessonItem> {
   withShadow?: boolean;
 }
 
-function ClassworkIcon({
-  type,
-  size = 16,
-}: {
-  type?: string | null;
-  size?: number;
-}) {
-  switch (type?.toLowerCase()) {
-    case "quiz":
-      return <ClipboardList size={size} />;
-    case "assignment":
-      return <BookOpen size={size} />;
-    case "activity":
-      return <CheckSquare size={size} />;
-    default:
-      return <FileText size={size} />;
-  }
-}
 
 export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
   lesson,
@@ -151,12 +122,12 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
           className="group flex flex-1 cursor-pointer items-center justify-between gap-3 p-4 font-sans text-base select-none transition-all"
           aria-label={`View lesson: ${lesson.title}`}
         >
-          <div className="flex flex-col w-full items-start gap-1 min-w-0 text-left">
+          <div className="flex flex-col w-full items-start min-w-0 text-left">
             <div className="flex flex-wrap items-center w-full justify-between gap-2 min-w-0 pr-2">
               <h4 className="text-xl sm:text-2xl font-semibold text-black break-words line-clamp-2 hover:underline">
                 {lesson.title}
               </h4>
-              <div className="flex flex-row items-center gap-2">
+              <div className="flex flex-row items-center gap-2 -mr-1">
                 <Badge
                   variant={lesson.is_published ? "solid" : "default"}
                   size="sm"
@@ -164,95 +135,11 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
                 >
                   {lesson.is_published ? "Published" : "Draft"}
                 </Badge>
-                {lesson.attachments && lesson.attachments.length > 0 && (
-                  <Badge
-                    size="sm"
-                    variant="solid"
-                  >
-                    <Paperclip size={10} />
-                    {lesson.attachments.length} material
-                    {lesson.attachments.length === 1 ? "" : "s"}
-                  </Badge>
-                )}
-                <Badge
-                  variant="outline"
-                  size="sm"
-                  className=""
-                >
-                  {classworks.length} classwork{classworks.length === 1 ? "" : "s"}
-                </Badge>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
-            {hasActions && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }
-                    }}
-                    className="h-8 w-8 p-0 rounded hover:bg-black/10 shrink-0 text-black cursor-pointer shadow-none"
-                    aria-label="Lesson actions"
-                  >
-                    <MoreVertical size={16} />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  onClick={(e) => e.stopPropagation()}
-                  className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] min-w-[150px] p-1 rounded font-semibold text-xs z-50"
-                >
-                  {onOpenLessonDetail && (
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenLessonDetail(lesson);
-                      }}
-                      className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-yellow-100"
-                    >
-                      <Eye size={14} />
-                      <span>View Lesson</span>
-                    </DropdownMenuItem>
-                  )}
-                  {onOpenLessonManager && (
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenLessonManager(lesson);
-                      }}
-                      className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-yellow-100"
-                    >
-                      <Pencil size={14} />
-                      <span>Manage</span>
-                    </DropdownMenuItem>
-                  )}
-                  {onArchiveLesson && (
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onArchiveLesson(lesson);
-                      }}
-                      className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 text-red-600 hover:bg-red-50 hover:text-red-700"
-                    >
-                      <Archive size={14} />
-                      <span>Archive</span>
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-
             <button
               type="button"
               aria-label={isExpanded ? "Collapse classworks" : "Expand classworks"}
@@ -303,34 +190,13 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
             </Empty>
           ) : (
             classworks.map((cw) => (
-              <Card
+              <ClassworkItemLine
                 key={cw.classwork_assignment_id}
-                onClick={() => onOpenClassworkDetail?.(cw)}
-                className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3 hover:bg-retro shadow-none hover:translate-x-0.5 transition-all cursor-pointer min-w-0 group"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="shrink-0 text-black">
-                    <ClassworkIcon type={cw.classwork_type} size={18} />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate text-black">
-                      {cw.title}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {cw.due_date
-                        ? `Due ${new Date(cw.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                        : "No due date"}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {cw.classwork_category && (
-                    <Badge variant="surface" size="sm" className="capitalize">
-                      {cw.classwork_category.toLowerCase().replace(/_/g, " ")}
-                    </Badge>
-                  )}
-                </div>
-              </Card>
+                item={cw}
+                onOpen={onOpenClassworkDetail}
+                className="shadow-none!"
+                showPublicationStatus={false}
+              />
             ))
           )}
           <div className="flex items-center justify-end gap-2 pt-1">
@@ -339,7 +205,7 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
               variant="default"
               size="sm"
               onClick={() => onOpenClassworkForm?.(lesson)}
-              className="h-8 border-2 border-black bg-primary px-3 text-xs font-bold text-black shadow-none hover:opacity-90"
+              className="h-8"
             >
               <Plus size={14} className="mr-1.5" />
               Add Classwork

@@ -2,8 +2,6 @@ import { useState } from "react";
 import {
     Archive,
     ClipboardList,
-    Clock,
-    FileText,
     Pencil,
     Plus,
     X,
@@ -22,7 +20,7 @@ import {
     EmptyTitle,
 } from "@/components/ui/empty";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { formatDate, formatFileSize } from "@/lib/formatters";
+import { formatDate } from "@/lib/formatters";
 import ClassworkItemLine from "@/components/item-line/classwork";
 import type { Lesson, LinkedClasswork } from "./subject-details/types";
 
@@ -146,12 +144,10 @@ export function TeacherLessonView({
                 </header>
             </div>
 
-            <div className="-mt-[3px] flex min-w-0 flex-col gap-5 border-t-2! border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-
+            <div className="-mt-[3px] flex min-w-0 flex-col gap-3 border-t-2! border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
                 {/* ── Hero Lesson Information Card ── */}
                 <Card className="block w-full border-2 border-black bg-primary p-4 sm:p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                    <div className="flex flex-col gap-3">
-
+                    <div className="flex flex-col gap-2">
                         <div className="flex flex-wrap items-center gap-2 justify-between">
                             <div className="flex flex-row gap-3 items-center">
                                 {/* Lesson Title */}
@@ -173,7 +169,7 @@ export function TeacherLessonView({
 
                         </div>
 
-                        <div className="-mt-2 flex flex-row gap-2 items-center">
+                        <div className="flex flex-row gap-2 items-center">
                             <p className="text-xs sm:text-sm text-foreground">
                                 Competency:
                             </p>
@@ -184,56 +180,10 @@ export function TeacherLessonView({
                             )}
                         </div>
 
-
-                        {/* Description */}
-                        {lesson.description && (
-                            <p className="text-sm sm:text-base font-medium leading-relaxed text-gray-900 break-words">
-                                {lesson.description}
-                            </p>
-                        )}
-
-                        {/* Lesson Content / Notes */}
-                        {lesson.content && (
-                            <div className="mt-2 rounded border-2 border-black bg-white/70 p-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                                <p className="text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
-                                    Lesson Content
-                                </p>
-                                <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-900 font-medium">
-                                    {lesson.content}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Lesson Attachments / Files */}
-                        {lesson.attachments && lesson.attachments.length > 0 && (
-                            <div className="mt-2 flex flex-col gap-2">
-                                <p className="text-xs font-bold uppercase tracking-wider text-gray-700">
-                                    Attached Materials ({lesson.attachments.length})
-                                </p>
-                                <div className="flex flex-wrap gap-2">
-                                    {lesson.attachments.map((file) => (
-                                        <div
-                                            key={file.lesson_attachment_id}
-                                            className="inline-flex items-center gap-2 rounded border-2 border-black bg-white px-3 py-1.5 text-xs font-bold text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                                        >
-                                            <FileText size={14} className="shrink-0 text-black" />
-                                            <span className="max-w-[180px] sm:max-w-[260px] truncate" title={file.file_name}>
-                                                {file.file_name}
-                                            </span>
-                                            <span className="text-[11px] font-normal text-muted-foreground">
-                                                ({formatFileSize(file.file_size)})
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
                         {/* Timestamps */}
                         {(lesson.updated_at || lesson.created_at) && (
-                            <div className="mt-1 flex items-center text-xs font-semibold text-gray-700">
+                            <div className="flex items-center text-xs sm:text-sm text-foreground">
                                 <span className="inline-flex items-center gap-1">
-                                    <Clock size={12} />
                                     {lesson.updated_at && (!lesson.created_at || lesson.updated_at !== lesson.created_at)
                                         ? `Updated ${formatDate(lesson.updated_at)}`
                                         : `Created ${formatDate(lesson.created_at)}`}
@@ -243,16 +193,28 @@ export function TeacherLessonView({
                     </div>
                 </Card>
 
-                {/* ── Classwork Section ── */}
-                <section className="flex flex-col gap-3 pt-2">
-                    <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                            <h2 className="text-xl sm:text-2xl font-bold text-black">
-                                Classwork
-                            </h2>
-                        </div>
-                    </div>
+                <section className="flex flex-col gap-3 px-1">
+                    {/* Lesson Content / Notes */}
+                    {lesson.content && (
+                        <Card className="shadow-none">
+                            <p className="mb-1 text-sm text-muted-foreground">
+                                Lesson Content
+                            </p>
+                            <div className="whitespace-pre-wrap text-sm text-foreground font-medium">
+                                {lesson.content}
+                            </div>
+                        </Card>
+                    )}
+                    {/* Description
+                    {lesson.description && (
+                        <p className="text-sm text-muted-foreground">
+                            {lesson.description}
+                        </p>
+                    )} */}
+                </section>
 
+                {/* ── Classwork Section ── */}
+                <section className="mt-2 flex flex-col gap-3 px-1">
                     {/* Loading State */}
                     {isLoadingClasswork ? (
                         <Card className="block border-2 border-black bg-white p-8 text-center text-sm font-semibold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
@@ -274,28 +236,27 @@ export function TeacherLessonView({
                         </div>
                     ) : (
                         /* Empty State when Lesson has no Classworks */
-                        <Empty className="border-2 border-dashed border-black/40 bg-white p-8 shadow-none">
+                        <Empty className="border-2 bg-white p-8 shadow-none">
                             <EmptyHeader>
                                 <EmptyMedia>
-                                    <div className="flex size-12 items-center justify-center border-2 border-black bg-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                    <div className="flex size-12 items-center justify-center border-2 border-black bg-primary">
                                         <ClipboardList className="size-6 text-black" />
                                     </div>
                                 </EmptyMedia>
                                 <EmptyTitle className="text-lg">No classworks yet</EmptyTitle>
-                                <EmptyDescription className="max-w-md">
-                                    Click "+ Add Classwork" to assign readings, quizzes, activities, or homework to this lesson.
+                                <EmptyDescription className="whitespace-nowrap">
+                                    Assign readings, quizzes, activities, or homework to this lesson.
                                 </EmptyDescription>
                             </EmptyHeader>
                             <EmptyContent className="mt-2">
                                 <Button
-                                    type="button"
                                     variant="default"
                                     size="sm"
                                     onClick={() => openClassworkForm(lesson)}
-                                    className="gap-2 border-2 border-black bg-[#7ABA78] text-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#68a966]"
+                                    className="gap-2"
                                 >
                                     <Plus size={16} />
-                                    Add First Classwork
+                                    Add Classwork
                                 </Button>
                             </EmptyContent>
                         </Empty>

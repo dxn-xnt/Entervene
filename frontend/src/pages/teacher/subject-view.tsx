@@ -979,7 +979,7 @@ export default function SubjectDetails() {
               <main>
                 <TOSGeneratorScreen
                   subjectId={Number(subjectId)}
-                  subjectName={subjectName || "Subject"}
+                  subjectName={subjectName}
                   competencies={competencies}
                   onBack={() => setIsTOSOpen(false)}
                 />
