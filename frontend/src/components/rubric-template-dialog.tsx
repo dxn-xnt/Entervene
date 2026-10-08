@@ -137,8 +137,9 @@ export function RubricTemplateDialog({ mode, currentLevels, onApply, onClose }: 
         size="2xl"
         data-rubric-template-dialog
         className="max-h-[90dvh] p-0"
+        portalContainer={typeof document === "undefined" ? undefined : document.body}
         style={{ zIndex: 1001 }}
-        overlay={{ style: { zIndex: 1000, backgroundColor: "rgb(0 0 0 / 0.6)" } }}
+        overlay={{ forceRender: true, style: { zIndex: 1000, backgroundColor: "rgb(0 0 0 / 0.6)", pointerEvents: "auto" } }}
       >
         <Dialog.Header asChild>
           <div className="flex w-full items-center justify-between">
@@ -193,19 +194,35 @@ export function RubricTemplateDialog({ mode, currentLevels, onApply, onClose }: 
             <label className="block text-sm font-semibold">Short description<textarea className="mt-1 min-h-16 w-full border-2 border-border bg-background px-3 py-2 text-sm" maxLength={300} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
             <RubricLevelFields levels={levels} onChange={setLevels} disabled={busy} />
             {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-            <div className="flex flex-wrap justify-end gap-2"><Button type="button" size="sm" variant="outline" onClick={() => { setError(""); setView("list"); }}>Back</Button><Button type="button" size="sm" variant="outline" onClick={() => { setPreviewFromForm(true); setView("preview"); }}>Preview</Button><Button type="button" size="sm" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save Template"}</Button></div>
           </div>}
 
           {view === "preview" && <div className="space-y-4">
             <div><h3 className="text-lg font-bold">{previewFromForm ? name || "New template" : selected?.name}</h3><p className="text-sm text-muted-foreground">{previewFromForm ? description : selected?.description}</p></div>
             <p className="text-sm font-semibold">Maximum score: {activityRubricMaximum(previewFromForm ? levels : selected?.levels ?? [])} points</p>
             <div className="grid gap-2 sm:grid-cols-2">{(previewFromForm ? levels : selected?.levels ?? []).map((level) => <Card key={level.level_name} className="block p-3 shadow-none hover:shadow-none"><div className="flex justify-between gap-2 font-bold"><span>{level.level_name}</span><span>{level.points} pts</span></div><p className="mt-2 text-sm text-muted-foreground">{level.description}</p></Card>)}</div>
-            <div className="flex flex-wrap justify-end gap-2"><Button type="button" size="sm" variant="outline" onClick={() => setView(previewFromForm ? "form" : "list")}>Back</Button>{selected && !previewFromForm && <Button type="button" size="sm" onClick={() => apply(selected)}>Use Template</Button>}</div>
           </div>}
-
-          {view === "replace" && selected && <div className="flex flex-wrap justify-end gap-2"><Button type="button" size="sm" variant="outline" onClick={() => setView("list")}>Keep Current Rubric</Button><Button type="button" size="sm" onClick={() => { onApply(copyRubricLevels(selected.levels)); onClose(); }}>Replace Rubric</Button></div>}
-          {view === "delete" && selected && <div className="flex flex-wrap justify-end gap-2"><Button type="button" size="sm" variant="outline" onClick={() => setView("list")}>Cancel</Button><Button type="button" size="sm" variant="destructive" disabled={busy} onClick={() => void remove()}>{busy ? "Deleting…" : "Delete Template"}</Button></div>}
         </div>
+        {view !== "list" && (
+          <Dialog.Footer className="mt-0">
+            {view === "form" && <>
+              <Button type="button" size="sm" variant="outline" onClick={() => { setError(""); setView("list"); }}>Back</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => { setPreviewFromForm(true); setView("preview"); }}>Preview</Button>
+              <Button type="button" size="sm" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save Template"}</Button>
+            </>}
+            {view === "preview" && <>
+              <Button type="button" size="sm" variant="outline" onClick={() => setView(previewFromForm ? "form" : "list")}>Back</Button>
+              {selected && !previewFromForm && <Button type="button" size="sm" onClick={() => apply(selected)}>Use Template</Button>}
+            </>}
+            {view === "replace" && selected && <>
+              <Button type="button" size="sm" variant="outline" onClick={() => setView("list")}>Keep Current Rubric</Button>
+              <Button type="button" size="sm" onClick={() => { onApply(copyRubricLevels(selected.levels)); onClose(); }}>Replace Rubric</Button>
+            </>}
+            {view === "delete" && selected && <>
+              <Button type="button" size="sm" variant="outline" onClick={() => setView("list")}>Cancel</Button>
+              <Button type="button" size="sm" variant="destructive" disabled={busy} onClick={() => void remove()}>{busy ? "Deleting…" : "Delete Template"}</Button>
+            </>}
+          </Dialog.Footer>
+        )}
       </Dialog.Content>
     </Dialog>
   );

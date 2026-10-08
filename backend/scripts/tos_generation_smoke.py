@@ -93,6 +93,14 @@ def print_results(summaries, failures, calls=()):
               f"count_mismatch(final_missing)={sum(summary['final_shortfall_per_type'].values())}")
         print("  Other validation reasons: " + (", ".join(
             f"{code}={count}" for code, count in sorted(summary["other_validation_reasons"].items())) or "(none)"))
+        print("  MC option discards (item is one-based; empty indexes are zero-based):")
+        option_discards = summary.get("mc_option_discards", [])
+        if not option_discards:
+            print("    (none)")
+        for detail in option_discards:
+            print(f"    round={detail['repair_round']} batch={detail['batch_offset']} item={detail['item']} "
+                  f"reason={detail['reason']} options={detail['option_count']} "
+                  f"empty={detail['empty_option_count']} empty_indexes={detail['empty_option_indexes']}")
         print(f"  Truncation retries: {summary['truncation_retries']}")
         print(f"  Schema retries: {summary['schema_retries']}")
         print(f"  Recovery: recovered_from_400={summary.get('recovered_from_400', 0)}, "
@@ -122,7 +130,7 @@ def print_results(summaries, failures, calls=()):
               " | ".join(str(row.get(key)) if row.get(key) is not None else "-"
                          for key in ("budget_requested", "prompt_tokens", "completion_tokens", "total_tokens")))
     print("\n400 detail (structure only; estimated tokens = ceil(characters / 4), NOT measured usage)")
-    print("Exam | Call | Phase | Budget requested | Characters | Est tokens | JSON parses / state | Top-level keys (counts) | Items / inspected | Finish reason | Root problems (counts) | Per-item problems (counts)")
+    print("Exam | Call | Phase | Budget requested | Characters | Est tokens | JSON parses / state | Top-level keys (counts) | Items / inspected | Finish reason | Root problems (counts) | Per-item problems (counts) | Per-item MC options (count / empty count / empty indexes, zero-based)")
     detail_rows = [(name, row) for name, row in failures if row["http_status"] == 400]
     if not detail_rows:
         print("(none)")
@@ -130,12 +138,15 @@ def print_results(summaries, failures, calls=()):
         detail = row.get("schema_detail", {})
         counts_text = lambda counts: "; ".join(f"{key}={value}" for key, value in sorted(counts.items())) or "-"
         items = "; ".join(f"{item['item']}[{counts_text(item['problems'])}]" for item in detail.get("item_problems", [])) or "-"
+        option_counts = "; ".join(
+            f"{item['item']}[{item['option_count']} / {item['empty_option_count']} / {item['empty_option_indexes']}]"
+            for item in detail.get("item_problems", []) if "option_count" in item) or "-"
         print(f"{name} | {row['call']} | {row['phase']} | {row.get('budget_requested')} | "
               f"{detail.get('characters', '-')} | {detail.get('estimated_tokens', '-')} | "
               f"{detail.get('json_parses', '-')} / {detail.get('parse_state', 'unavailable')} | "
               f"{counts_text(detail.get('top_level_key_counts', {}))} | "
               f"{detail.get('item_count', '-')} / {detail.get('inspected_items', '-')} | "
-              f"{detail.get('finish_reason', '-')} | {counts_text(detail.get('root_problems', {}))} | {items}")
+              f"{detail.get('finish_reason', '-')} | {counts_text(detail.get('root_problems', {}))} | {items} | {option_counts}")
     print("\nAll provider calls (one row per physical attempt)")
     print("Exam | Call | Provider | Phase | Type / Batch offset | Budget requested | Completion tokens | Prompt tokens | Total tokens")
     if not calls:

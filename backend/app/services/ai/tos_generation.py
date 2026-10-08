@@ -24,6 +24,7 @@ from app.services.ai.tos_generation_session import RowMetrics, current_generatio
 from app.services.ai.provider_diagnostics import (
     provider_call_phase, ProviderTruncationError, is_truncated_json, record_provider_failure,
     schema_batch_scope, recovery_validation_scope,
+    mc_option_discard_detail,
 )
 from app.services.ai.option_shuffle import shuffle_options
 from app.services.ai.question_quality_validation import (
@@ -69,6 +70,31 @@ MATERIAL_RE = re.compile(
     r"table|image|graph|poem)|(?:passage|story|text|sentence|table|image|graph|poem)\s+(?:above|below))\b", re.I,
 )
 VISUAL_RE = re.compile(r"\b(?:the|following|given|this)\s+(?:table|image|graph|chart|diagram|picture)\b", re.I)
+SENTENCE_SELECTION_RE = re.compile(
+    r"^\s*(?:(?:choose|select|identify)\s+the\s+sentence\s+(?:that|with)\b|which\s+sentence\b)", re.I,
+)
+LOCATED_MATERIAL_RE = re.compile(
+    r"\b(?:(?:following|given)\s+(?:[\w'-]+\s+){0,3}(?:sentence|story|narrative|passage|poem|selection|excerpt|"
+    r"article|text|paragraph|essay|speech|letter|dialogue|graph|chart|table|diagram|figure|"
+    r"picture|image|illustration|map|drawing)s?|(?:sentence|story|narrative|passage|poem|"
+    r"selection|excerpt|article|text|paragraph|essay|speech|letter|dialogue|graph|chart|"
+    r"table|diagram|figure|picture|image|illustration|map|drawing)s?(?:\s+[\w'-]+){0,3}\s+(?:above|below))\b", re.I,
+)
+
+
+def _sentence_options_supply_material(stem: str, options: list[str] | None) -> bool:
+    """A narrow structural gate, not a guarantee of grammatical correctness."""
+    if not SENTENCE_SELECTION_RE.match(stem) or VISUAL_RE.search(stem) or LOCATED_MATERIAL_RE.search(stem):
+        return False
+    if any(" ".join(reference.group().casefold().split()) != "the sentence"
+           for reference in MATERIAL_RE.finditer(stem)):
+        return False
+    if not isinstance(options, list) or len(options) != 4:
+        return False
+    if any(not isinstance(option, str) or len(re.findall(r"\b[^\W\d_]+\b", option)) < 3
+           for option in options):
+        return False
+    return option_text_issue([{"option_text": option} for option in options], "MULTIPLE_CHOICE") is None
 
 
 class GeneratedItem(BaseModel):
@@ -121,16 +147,25 @@ def question_schema(kind: str, count: int, passage: TOSPassage | None) -> dict:
     }}, "required": ["questions"], "additionalProperties": False}
 
 
-def supporting_material_issue(stem: str, passage: TOSPassage | None = None) -> str | None:
+def supporting_material_issue(stem: str, passage: TOSPassage | None = None, *,
+                              question_type: str | None = None, options: list[str] | None = None) -> str | None:
     """Retain the existing safety net; a validated link supplies textual context."""
     reason = self_containment_issue(stem)
     reference = MATERIAL_RE.search(stem)
+    visual = VISUAL_RE.search(stem)
+    if question_type == "MULTIPLE_CHOICE" and SENTENCE_SELECTION_RE.match(stem):
+        located = list(LOCATED_MATERIAL_RE.finditer(stem))
+        visual = visual or next((reference for reference in located
+            if re.search(r"\b(?:table|image|graph|chart|diagram|picture)\b", reference.group(), re.I)), None)
+        reference = reference or visual or next(iter(located), None)
     if not reason and not reference:
         return None
-    if passage and not VISUAL_RE.search(stem):
+    if passage and not visual:
         return None
     if reason:
         return reason
+    if question_type == "MULTIPLE_CHOICE" and _sentence_options_supply_material(stem, options):
+        return None
     if reference:
         inline = stem[reference.end():]
         # A single quoted sentence is enough for sentence-level grammar tasks.
@@ -168,7 +203,7 @@ def validate_item(data: dict, kind: str, passage: TOSPassage | None, *, discards
     if item.passage_id is not None and (passage is None or item.passage_id != passage.id):
         return reject("invalid_passage_link")
     linked = passage if item.passage_id is not None else None
-    if supporting_material_issue(item.question_text, linked):
+    if supporting_material_issue(item.question_text, linked, question_type=kind, options=item.options):
         return reject("missing_external_material")
     options = [{"option_text": text.strip(), "is_correct": idx == item.correct_index, "option_order": idx + 1}
                for idx, text in enumerate(item.options)]
@@ -251,11 +286,13 @@ def completion_budget(kind: str, batch_count: int) -> int:
 
 class ValidatedBatch(str):
     """Ephemeral content cache: validation/shuffling happens exactly once."""
-    def __new__(cls, raw, *, candidates=(), discards=None, from_400=False, usable_items=None):
+    def __new__(cls, raw, *, candidates=(), discards=None, from_400=False, usable_items=None,
+                mc_option_discards=()):
         result = super().__new__(cls, raw)
         result.candidates = candidates
         result.discards = discards if discards is not None else Counter()
         result.from_400 = from_400
+        result.mc_option_discards = list(mc_option_discards)
         result.usable_items = (sum(q is not None for _, q, _ in candidates)
                                if usable_items is None else usable_items)
         return result
@@ -276,13 +313,18 @@ def normalize_batch_item(data, kind, passage, discards):
 def _validate_batch(raw, kind, passage, *, from_400=False):
     if isinstance(raw, ValidatedBatch):
         return raw
-    discards, candidates = Counter(), []
-    for data in _read_questions(raw, discards):
+    discards, candidates, option_discards = Counter(), [], []
+    for index, data in enumerate(_read_questions(raw, discards), 1):
+        before = discards.copy()
         normalized, filled = normalize_batch_item(data, kind, passage, discards)
         q = (validate_item(normalized, kind, passage, discards=discards)
              if normalized is not None or not isinstance(data, dict) else None)
         candidates.append((data, q, filled))
-    return ValidatedBatch(raw, candidates=candidates, discards=discards, from_400=from_400)
+        if kind == "MULTIPLE_CHOICE" and q is None:
+            reason = next(iter(discards - before), "unknown_validation")
+            option_discards.append(mc_option_discard_detail(data, reason, item_index=index))
+    return ValidatedBatch(raw, candidates=candidates, discards=discards, from_400=from_400,
+                          mc_option_discards=option_discards)
 
 
 def legacy_completion_budget(batch_count: int) -> int:
@@ -438,9 +480,12 @@ async def generate_tos_row_questions(
                 raw = await _generate_question_batch(prompt, kind, batch_count, passage, round_number, offset, metrics)
                 batch = _validate_batch(raw, kind, passage)
                 metrics.discards.update(batch.discards)
+                metrics.mc_option_discards.extend(
+                    {**detail, "repair_round": round_number, "batch_offset": offset}
+                    for detail in batch.mc_option_discards)
                 kept_before_batch = existing_keys | {normalize_option_text(q["question_text"]) for q in questions}
                 batch_seen = set()
-                for data, q, filled in batch.candidates:
+                for item_index, (data, q, filled) in enumerate(batch.candidates, 1):
                     if not q:
                         if isinstance(data, dict) and isinstance(data.get("question_text"), str):
                             avoided.append(data["question_text"])
@@ -452,6 +497,10 @@ async def generate_tos_row_questions(
                                   "duplicate_stem_same_batch" if stem_key in batch_seen else
                                   "duplicate_stem_previous_candidate")
                         metrics.discards[reason] += 1
+                        if kind == "MULTIPLE_CHOICE":
+                            metrics.mc_option_discards.append({
+                                **mc_option_discard_detail(data, reason, item_index=item_index),
+                                "repair_round": round_number, "batch_offset": offset})
                         batch_seen.add(stem_key)
                         continue
                     batch_seen.add(stem_key)
@@ -477,6 +526,10 @@ async def generate_tos_row_questions(
                                   not any(n for pending_cell, n in remaining.items() if pending_cell[0] == kind)
                                   else "surplus_cell")
                         metrics.discards[reason] += 1
+                        if kind == "MULTIPLE_CHOICE":
+                            metrics.mc_option_discards.append({
+                                **mc_option_discard_detail(data, reason, item_index=item_index),
+                                "repair_round": round_number, "batch_offset": offset})
                         continue
                     if opposite and kind == "TRUE_FALSE" and not any(o["is_correct"] and o["option_text"] == opposite for o in q["options"]):
                         metrics.discards["identical_true_false_answers"] += 1
