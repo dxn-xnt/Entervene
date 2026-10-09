@@ -20,6 +20,14 @@ import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 import ClassworkCard from "./classworks/classwork-card";
 import ClassworkListItem from "./classworks/classwork-list-item";
 import { isQuizType } from "@/lib/classwork-utils";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import type {
   ClassworkKind,
   SortMode,
@@ -29,7 +37,6 @@ import type {
   ClassworkTracking,
 } from "@/types/classwork";
 import { Button } from "@/components/retroui/Button";
-import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Input } from "@/components/retroui/Input";
 import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
@@ -208,7 +215,7 @@ export default function Classworks() {
   const [loadingItems, setLoadingItems] = useState(true);
   const [itemsError, setItemsError] = useState("");
   const [trackingByClasswork, setTrackingByClasswork] = useState<
-    Record<number, ClassworkTracking>
+    Record<string, ClassworkTracking>
   >({});
 
   useEffect(() => {
@@ -334,32 +341,46 @@ export default function Classworks() {
   ]);
 
   useEffect(() => {
-    const trackableItems = filteredItems.filter(
-      (item) =>
-        (item.assignments?.length ?? 0) > 0 &&
-        !trackingByClasswork[item.classwork_id],
-    );
+    const trackableItems = filteredItems.filter((item) => {
+      if (!item.assignments || item.assignments.length === 0) return false;
+      const cacheKey = `${item.classwork_id}:${classFilter}`;
+      return !trackingByClasswork[cacheKey];
+    });
     if (!trackableItems.length) return;
 
     let cancelled = false;
     void Promise.all(
       trackableItems.map(async (item) => {
-        const response = await apiFetch(
-          `/api/v1/submissions/classwork/${item.classwork_id}/tracking`,
-        );
-        if (!response.ok)
+        const cacheKey = `${item.classwork_id}:${classFilter}`;
+        let url: string;
+        if (classFilter === "all") {
+          url = `/api/v1/submissions/classwork/${item.classwork_id}/tracking`;
+        } else {
+          const assignment = item.assignments?.find(
+            (a) => a.class_id === Number(classFilter),
+          );
+          if (assignment) {
+            url = `/api/v1/submissions/assignment/${assignment.classwork_assignment_id}/tracking`;
+          } else {
+            url = `/api/v1/submissions/classwork/${item.classwork_id}/tracking`;
+          }
+        }
+        const response = await apiFetch(url);
+        if (!response.ok) {
           throw new Error(
             `Unable to load submission summary for ${item.classwork_id}.`,
           );
-        return (await response.json()) as ClassworkTracking;
+        }
+        const summary = (await response.json()) as ClassworkTracking;
+        return { key: cacheKey, summary };
       }),
     )
-      .then((summaries) => {
+      .then((results) => {
         if (cancelled) return;
         setTrackingByClasswork((current) => ({
           ...current,
           ...Object.fromEntries(
-            summaries.map((summary) => [summary.classwork_id, summary]),
+            results.map(({ key, summary }) => [key, summary]),
           ),
         }));
       })
@@ -370,7 +391,7 @@ export default function Classworks() {
     return () => {
       cancelled = true;
     };
-  }, [filteredItems, trackingByClasswork]);
+  }, [filteredItems, classFilter, trackingByClasswork]);
 
   const openCreateWizard = () => {
     const preferredType = tabType[activeTab] as ClassworkKind | undefined;
@@ -567,8 +588,17 @@ export default function Classworks() {
                         <ClassworkCard
                           key={item.classwork_id}
                           item={item}
-                          tracking={trackingByClasswork[item.classwork_id]}
+                          tracking={
+                            trackingByClasswork[
+                            `${item.classwork_id}:${classFilter}`
+                            ]
+                          }
+                          showSubject={true}
+                          showClassworkType={true}
                           onOpen={openClassworkDetail}
+                          onReload={() => {
+                            void loadClassworks();
+                          }}
                         />
                       ))}
                     </section>
@@ -578,20 +608,46 @@ export default function Classworks() {
                         <ClassworkListItem
                           key={item.classwork_id}
                           item={item}
-                          tracking={trackingByClasswork[item.classwork_id]}
+                          tracking={
+                            trackingByClasswork[
+                            `${item.classwork_id}:${classFilter}`
+                            ]
+                          }
                           onOpen={openClassworkDetail}
                         />
                       ))}
                     </section>
                   )
                 ) : (
-                  <Card className="flex flex-col justify-center items-center">
-                    <ClipboardList className="mx-auto mb-2 " size={24} />
-                    <p className="font-bold">No classworks found</p>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Try another tab, search term, or filter.
-                    </p>
-                  </Card>
+                  <Empty className="shadow-md hover:shadow-none transition-shadow">
+                    <EmptyHeader>
+                      <EmptyMedia>
+                        <div className="flex items-center gap-2">
+                          <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
+                            <BookOpen className="size-5 text-black" />
+                          </div>
+                          <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
+                            <CheckSquare className="size-5 text-black" />
+                          </div>
+                          <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
+                            <FileText className="size-5 text-black" />
+                          </div>
+                          <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
+                            <ClipboardList className="size-5 text-black" />
+                          </div>
+                        </div>
+                      </EmptyMedia>
+                      <EmptyTitle>No Classworks Found</EmptyTitle>
+                      <EmptyDescription className="text-center whitespace-nowrap">
+                        Try another tab, search term, or filter.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                    <EmptyContent>
+                      <Button size="sm" variant="default" onClick={openCreateWizard} className="gap-1.5">
+                        Create Classwork
+                      </Button>
+                    </EmptyContent>
+                  </Empty>
                 )}
               </main>
 

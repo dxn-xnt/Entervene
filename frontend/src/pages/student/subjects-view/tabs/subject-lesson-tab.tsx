@@ -1,31 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import {
   Award,
-  ChevronRight,
-  ChevronLeft,
-  ClipboardList,
   BookOpen,
-  CheckCircle,
+  ClipboardList,
   FileText,
-  Info,
-  CalendarDays,
-  Paperclip,
   GraduationCap,
-  X,
+  Info,
 } from "lucide-react";
-import AttachmentDisplay from "@/components/attachment-display";
-import SubmissionForm from "@/components/submission-form";
-import SubmissionViewer from "@/components/submission-viewer";
 import { StudentLessonDetailScreen } from "@/pages/student/lesson-view";
-import { QuizTextAnswerInput, QuizTextAnswerSummary } from "@/components/quiz/student-quiz-answer";
-import {
-  API_URL,
-  apiFetch,
-  getLessonGoals,
-  type LessonGoalItemResponse,
-} from "@/lib/api";
+import { apiFetch, getLessonGoals, type LessonGoalItemResponse } from "@/lib/api";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { Card } from "@/components/retroui/Card";
@@ -33,158 +17,22 @@ import { Accordion } from "@/components/retroui/Accordion";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
-import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import type { StudentLesson as Lesson } from "@/types/student-subject";
+import StudentClassworkDetailModal from "@/pages/student/forms/student-classwork-detail-modal";
+import type {
+  ClassworkDetail,
+  LessonClasswork,
+  QuizAttempt,
+  Submission,
+  SubjectLessonTabProps,
+} from "../types";
 
 const LOCKED_CLASSWORK_MESSAGE =
   "This classwork is not available yet. Please check back later or contact your teacher for more information.";
-
-// ─── Interfaces ────────────────────────────────────────────────────────────
-
-interface ClassworkAttachment {
-  classwork_attachment_id: number;
-  file_name: string;
-  file_type?: string;
-  file_size: number;
-  uploaded_at?: string;
-}
-
-interface LinkedLessonAttachment {
-  lesson_attachment_id: number;
-  file_name: string;
-  file_type?: string;
-  file_size: number;
-  uploaded_at?: string;
-}
-
-interface LinkedReading {
-  classwork_id: number;
-  title: string;
-  description?: string | null;
-  instructions?: string | null;
-  activity_mode?: string;
-}
-
-interface LinkedLesson {
-  lesson_id: number;
-  title: string;
-  description?: string | null;
-  attachments?: LinkedLessonAttachment[];
-  readings?: LinkedReading[];
-}
-
-interface LessonClasswork {
-  classwork_assignment_id: number;
-  classwork_id: number;
-  title: string;
-  classwork_type?: string | null;
-  classwork_category?: string | null;
-  is_graded?: boolean;
-  total_points?: number | null;
-  due_date?: string | null;
-  allow_late_submissions?: boolean;
-  submission_status?: string | null;
-}
-
-interface ClassworkDetail {
-  classwork_assignment_id: number;
-  classwork_id: number;
-  title: string;
-  description?: string | null;
-  instructions?: string | null;
-  classwork_type?: string | null;
-  classwork_category?: string | null;
-  is_graded?: boolean;
-  total_points?: number | null;
-  due_date?: string | null;
-  allow_late_submissions?: boolean;
-  is_published: boolean;
-  show_scores?: boolean;
-  is_locked?: boolean;
-  max_attempts?: number;
-  teacher_name?: string | null;
-  submission_status?: string | null;
-  attachments: ClassworkAttachment[];
-  linked_lessons?: LinkedLesson[];
-}
-
-interface Submission {
-  submission_id: number;
-  classwork_assignment_id?: number;
-  status: string;
-  submitted_at?: string;
-  grade?: number;
-  feedback?: string;
-  attempt_count: number;
-  attachments: Array<{
-    submission_attachment_id: number;
-    file_name: string;
-    file_type?: string;
-    file_size: number;
-    uploaded_at?: string;
-  }>;
-}
-
-interface QuizAttemptOption {
-  option_id: number;
-  option_text: string;
-  option_order: number;
-  is_correct?: boolean | null;
-}
-
-interface QuizAttemptQuestion {
-  quiz_question_id: number;
-  question_text: string;
-  question_type: "MULTIPLE_CHOICE" | "SHORT_ANSWER" | string;
-  points: number;
-  display_order: number;
-  options: QuizAttemptOption[];
-  answer_text?: string | null;
-  selected_option_id?: number | null;
-  points_awarded?: number | null;
-  is_correct?: boolean | null;
-}
-
-interface QuizAttempt {
-  quiz_id: number;
-  classwork_assignment_id: number;
-  classwork_id: number;
-  title: string;
-  instructions?: string | null;
-  total_points?: number | null;
-  duration_minutes?: number | null;
-  max_attempts: number;
-  attempt_count: number;
-  status: string;
-  started_at?: string | null;
-  server_time?: string | null;
-  submitted_at?: string | null;
-  grade?: number | null;
-  can_submit: boolean;
-  summary_available: boolean;
-  summary_release_mode:
-    | "IMMEDIATE"
-    | "SCHEDULED"
-    | "AFTER_DUE_DATE"
-    | "NEVER"
-    | string;
-  summary_release_at?: string | null;
-  summary_message?: string | null;
-  questions: QuizAttemptQuestion[];
-}
-
-type SubjectLessonTabProps = {
-  classId?: number;
-  subjectId?: number;
-  subject?: string;
-  subjectName?: string;
-  teacherName?: string;
-  onLessonSelect?: (lessonId: number) => void;
-};
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -244,23 +92,6 @@ function fmtDate(dateStr?: string | null) {
     day: "numeric",
     year: "numeric",
   });
-}
-
-function statusLabel(s?: string | null) {
-  if (!s) return "Not submitted";
-  return s.replace(/_/g, " ");
-}
-
-function formatExamTimer(seconds: number | null) {
-  if (seconds === null) return "No timer";
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
-
-function formatDateTime(dateStr?: string | null) {
-  if (!dateStr) return "";
-  return new Date(dateStr).toLocaleString();
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────
@@ -881,11 +712,6 @@ export default function SubjectLessonTab({
     }
   };
 
-  const hasQuizAnswer = (question: QuizAttemptQuestion) => {
-    const answer = quizAnswers[question.quiz_question_id];
-    return Boolean(answer?.selected_option_id || answer?.answer_text?.trim());
-  };
-
   const toggleQuizFlag = (questionId: number) => {
     setFlaggedQuizQuestionIds((current) => {
       const next = new Set(current);
@@ -893,320 +719,6 @@ export default function SubjectLessonTab({
       else next.add(questionId);
       return next;
     });
-  };
-
-  const renderFullscreenQuiz = () => {
-    if (!selectedQuizAttempt || !selectedClasswork) return null;
-    const questions = selectedQuizAttempt.questions;
-    const currentQuestion = questions[quizCurrentIndex] ?? questions[0];
-    const answeredCount = questions.filter(hasQuizAnswer).length;
-    const isSummaryMode =
-      selectedQuizAttempt.status !== "pending" &&
-      selectedQuizAttempt.summary_available;
-    const totalPoints =
-      selectedQuizAttempt.total_points ?? selectedClasswork.total_points ?? 0;
-
-    return (
-      <div className="fixed inset-0 z-[99999] flex flex-col bg-white">
-        <header className="border-b-2 border-black bg-white px-4 py-3">
-          <div className="grid grid-cols-[auto_1fr_auto] items-start gap-3">
-            {isSummaryMode ? <span className="size-10" aria-hidden="true" /> : (
-              <Tooltip>
-                <TooltipTrigger render={<span className="inline-flex"><Button type="button" onClick={() => { setIsQuizFullscreen(false); setQuizReviewMode(false); }} variant="outline" size="icon" className="rounded border-black bg-white shadow-md hover:bg-white hover:shadow-none" aria-label="Exit fullscreen quiz"><ChevronLeft size={22} /></Button></span>} />
-                <TooltipContent>Exit quiz</TooltipContent>
-              </Tooltip>
-            )}
-            <div className="text-center">
-              <p className="text-xl font-black leading-none">
-                {isSummaryMode
-                  ? selectedClasswork.show_scores
-                    ? `${selectedQuizAttempt.grade ?? 0}/${totalPoints}`
-                    : "Hidden"
-                  : formatExamTimer(quizRemainingSeconds)}
-              </p>
-              <p className="text-xs font-semibold text-gray-700">
-                {isSummaryMode ? "score" : "time left"}
-              </p>
-            </div>
-            {isSummaryMode ? (
-              <Tooltip>
-                <TooltipTrigger render={<span className="inline-flex"><Button type="button" onClick={() => { setIsQuizFullscreen(false); setQuizReviewMode(false); }} variant="outline" size="icon" className="rounded border-black bg-white shadow-md hover:bg-white hover:shadow-none" aria-label="Close quiz summary"><X size={22} /></Button></span>} />
-                <TooltipContent>Close summary</TooltipContent>
-              </Tooltip>
-            ) : (
-              <Button
-                type="button"
-                onClick={() => setQuizReviewMode(true)}
-                size="sm"
-                className="rounded border-black bg-primary text-sm font-bold text-black"
-              >
-                Finish Quiz
-              </Button>
-            )}
-          </div>
-        </header>
-
-        <main className="flex-1 overflow-y-auto px-4 py-4">
-          <div className="mx-auto max-w-6xl space-y-4">
-            <Card className="block w-full border-black bg-white p-4 text-center shadow-md hover:shadow-none">
-              <h1 className="text-2xl font-bold">
-                {selectedQuizAttempt.title}
-              </h1>
-              <p className="mt-1 text-sm font-semibold italic text-gray-700">
-                {selectedClasswork.description
-                  ? `Lessons: ${selectedClasswork.description}`
-                  : "Review each question carefully before submitting."}
-              </p>
-              {isSummaryMode ? (
-                <div className="mt-4">
-                  <p className="text-sm font-semibold">Quiz Summary</p>
-                  <p className="text-xs text-gray-600">
-                    Review your recorded answers and item scores.
-                  </p>
-                </div>
-              ) : !quizReviewMode ? (
-                <div className="mt-4 flex flex-wrap justify-center gap-2">
-                  {questions.map((question, index) => (
-                    <Button
-                      key={question.quiz_question_id}
-                      type="button"
-                      onClick={() => {
-                        setQuizCurrentIndex(index);
-                        setQuizReviewMode(false);
-                      }}
-                      className={`relative h-8 min-w-8 rounded border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${
-                        index === quizCurrentIndex
-                          ? "bg-white"
-                          : hasQuizAnswer(question)
-                            ? "bg-[#F6E9B2]"
-                            : "bg-white"
-                      }`}
-                    >
-                      {flaggedQuizQuestionIds.has(question.quiz_question_id) ? (
-                        <span className="absolute -top-2 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-red-500" />
-                      ) : null}
-                      {index + 1}
-                    </Button>
-                  ))}
-                </div>
-              ) : null}
-            </Card>
-
-            {quizError ? (
-              <p className="border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-                {quizError}
-              </p>
-            ) : null}
-
-            {isSummaryMode ? (
-              <section className="mx-auto max-w-4xl space-y-3">
-                {questions.map((question, index) => {
-                  const selectedOption = question.options.find(
-                    (option) =>
-                      option.option_id === question.selected_option_id,
-                  );
-                  return (
-                    <Card
-                      key={question.quiz_question_id}
-                      className="block w-full border-black bg-white p-4 shadow-md hover:shadow-none"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <h2 className="min-w-0 flex-1 break-words text-base font-bold">
-                          {index + 1}. {question.question_text}
-                        </h2>
-                        <Badge
-                          variant={selectedClasswork.show_scores && question.points_awarded != null
-                            ? question.points_awarded >= question.points ? "success" : question.points_awarded <= 0 ? "destructive" : "outline"
-                            : "outline"}
-                          size="sm"
-                          className="shrink-0 text-xs font-bold"
-                        >
-                          {selectedClasswork.show_scores
-                            ? `${question.points_awarded ?? 0}/${question.points} pts`
-                            : `${question.points} pts`}
-                        </Badge>
-                      </div>
-                      {question.question_type === "MULTIPLE_CHOICE" || question.question_type === "TRUE_FALSE" ? (
-                        <div className="mt-3 grid gap-2">
-                          {question.options.map((option) => {
-                            const isSelected =
-                              option.option_id === question.selected_option_id;
-                            const isCorrect = option.is_correct === true;
-                            return (
-                              <div
-                                key={option.option_id}
-                                className={`border border-foreground px-3 py-2 text-sm ${
-                                   isSelected
-                                     ? "bg-primary text-primary-foreground"
-                                     : isCorrect
-                                       ? "bg-success/10"
-                                       : "bg-background"
-                                 }`}
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <span className="min-w-0 break-words">
-                                    {option.option_text}
-                                  </span>
-                                  <span className="text-xs font-bold">
-                                    {isCorrect && isSelected
-                                      ? "Your answer / Correct answer"
-                                      : isCorrect
-                                        ? "Correct answer"
-                                        : isSelected
-                                          ? "Your answer"
-                                          : ""}
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                          {!selectedOption && (
-                            <p className="text-xs font-semibold text-red-700">
-                              No answer recorded.
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <QuizTextAnswerSummary question={question} />
-                      )}
-                    </Card>
-                  );
-                })}
-              </section>
-            ) : quizReviewMode ? (
-              <section className="mx-auto max-w-3xl">
-                <div className="mb-2 flex items-center justify-between">
-                  <h2 className="text-lg font-bold">Review answers</h2>
-                  <p className="text-sm font-semibold text-gray-600">
-                    {answeredCount}/{questions.length} answered
-                  </p>
-                </div>
-                <Card className="block w-full overflow-hidden border-black bg-white p-0 shadow-md hover:shadow-none">
-                  {questions.map((question, index) => (
-                    <Button
-                      key={question.quiz_question_id}
-                      type="button"
-                      onClick={() => {
-                        setQuizCurrentIndex(index);
-                        setQuizReviewMode(false);
-                      }}
-                      variant="ghost"
-                      className="flex w-full rounded items-center justify-between border-b border-gray-300 px-4 py-2 text-left shadow-none last:border-b-0 hover:bg-primary hover:shadow-none"
-                    >
-                      <span className="font-semibold">
-                        Question {index + 1}
-                      </span>
-                      <Badge
-                        variant="outline"
-                        size="sm"
-                        className="rounded border border-gray-300 text-[11px] font-semibold"
-                      >
-                        {hasQuizAnswer(question)
-                          ? "Answer Recorded"
-                          : "No Answer"}
-                      </Badge>
-                    </Button>
-                  ))}
-                </Card>
-                <Button
-                  type="button"
-                  onClick={() => submitQuizAttempt(false)}
-                  disabled={!selectedQuizAttempt.can_submit || isQuizSubmitting}
-                  className="mt-4 float-right rounded border-black bg-success text-sm font-bold text-black shadow-none hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isQuizSubmitting ? "Submitting..." : "Submit"}
-                </Button>
-              </section>
-            ) : currentQuestion ? (
-              <section className="mx-auto max-w-3xl space-y-4">
-                <div className="flex items-center justify-between">
-                  <Tooltip>
-                    <TooltipTrigger render={<span className="inline-flex"><Button type="button" onClick={() => setQuizCurrentIndex((index) => Math.max(0, index - 1))} disabled={quizCurrentIndex === 0} variant="outline" size="icon" className="rounded border-black bg-white shadow-md hover:shadow-none disabled:opacity-40" aria-label="Previous question"><ChevronLeft size={18} /></Button></span>} />
-                    <TooltipContent>Previous</TooltipContent>
-                  </Tooltip>
-                  <Button
-                    type="button"
-                    onClick={() =>
-                      toggleQuizFlag(currentQuestion.quiz_question_id)
-                    }
-                    className={`rounded border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${
-                      flaggedQuizQuestionIds.has(
-                        currentQuestion.quiz_question_id,
-                      )
-                        ? "bg-[#F6E9B2]"
-                        : "bg-white"
-                    }`}
-                  >
-                    Flag Question
-                  </Button>
-                  <Tooltip>
-                    <TooltipTrigger render={<span className="inline-flex"><Button type="button" onClick={() => setQuizCurrentIndex((index) => Math.min(questions.length - 1, index + 1))} disabled={quizCurrentIndex === questions.length - 1} variant="outline" size="icon" className="rounded border-black bg-white shadow-md hover:shadow-none disabled:opacity-40" aria-label="Next question"><ChevronRight size={18} /></Button></span>} />
-                    <TooltipContent>Next</TooltipContent>
-                  </Tooltip>
-                </div>
-
-                <Card className="block w-full border-black bg-white px-6 py-8 text-center shadow-md hover:shadow-none">
-                  <p className="text-lg font-bold whitespace-normal break-words [overflow-wrap:anywhere]">
-                    {currentQuestion.question_text}
-                  </p>
-                </Card>
-
-                {currentQuestion.question_type === "MULTIPLE_CHOICE" || currentQuestion.question_type === "TRUE_FALSE" ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {currentQuestion.options.map((option) => (
-                      <Button
-                        key={option.option_id}
-                        type="button"
-                        autoIcon={false}
-                        onClick={() =>
-                          setQuizAnswers((current) => ({
-                            ...current,
-                            [currentQuestion.quiz_question_id]: {
-                              ...current[currentQuestion.quiz_question_id],
-                              selected_option_id: option.option_id,
-                            },
-                          }))
-                        }
-                        disabled={isQuizSubmitting}
-                        style={{ borderWidth: 1 }}
-                        className={`w-full min-w-0 h-full min-h-24 rounded border-black p-4 text-base sm:text-lg font-bold shadow-md hover:shadow-none whitespace-normal break-words [overflow-wrap:anywhere] ${
-                          quizAnswers[currentQuestion.quiz_question_id]
-                            ?.selected_option_id === option.option_id
-                            ? "bg-success hover:bg-success"
-                            : "bg-white hover:bg-white"
-                        }`}
-                      >
-                        <span className="w-full max-w-full min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] text-center leading-snug">
-                          {option.option_text}
-                        </span>
-                      </Button>
-                    ))}
-                  </div>
-                ) : (
-                  <QuizTextAnswerInput
-                    question={currentQuestion}
-                    value={
-                      quizAnswers[currentQuestion.quiz_question_id]
-                        ?.answer_text ?? ""
-                    }
-                    onChange={(text) =>
-                      setQuizAnswers((current) => ({
-                        ...current,
-                        [currentQuestion.quiz_question_id]: {
-                          ...current[currentQuestion.quiz_question_id],
-                          answer_text: text,
-                        },
-                      }))
-                    }
-                    disabled={isQuizSubmitting}
-                  />
-                )}
-              </section>
-            ) : null}
-          </div>
-        </main>
-      </div>
-    );
   };
 
   // Derived values
@@ -1266,6 +778,41 @@ export default function SubjectLessonTab({
       unassignedLessons: unassigned,
     };
   }, [sortedLessons]);
+
+  const classworkLessonCounts = allClassworks.reduce((counts, classwork) => {
+    counts.set(
+      classwork.classwork_assignment_id,
+      (counts.get(classwork.classwork_assignment_id) ?? 0) + 1,
+    );
+    return counts;
+  }, new Map<number, number>());
+
+  const quarterlyAssessments = Array.from(
+    new Map<number, ClassworkDetail | LessonClasswork>([
+      ...subjectAssignments
+        .filter((cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT")
+        .map((cw) => [cw.classwork_assignment_id, cw] as const),
+      ...allClassworks
+        .filter(
+          (cw) =>
+            cw.classwork_category === "QUARTERLY_ASSESSMENT" ||
+            (isQuizType(cw.classwork_type) &&
+              (classworkLessonCounts.get(cw.classwork_assignment_id) ?? 0) > 1),
+        )
+        .map((cw) => [cw.classwork_assignment_id, cw] as const),
+    ]).values(),
+  );
+
+  const quarterlyAssignmentIds = new Set(
+    quarterlyAssessments.map((qa) => qa.classwork_assignment_id),
+  );
+
+  const toggleStudentCompCollapse = (key: string) => {
+    setCollapsedCompetencies((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
 
   const renderStudentLessonItem = (lesson: Lesson) => {
     const isExpanded = expandedId === lesson.lesson_id;
@@ -1391,41 +938,6 @@ export default function SubjectLessonTab({
     );
   };
 
-  const classworkLessonCounts = allClassworks.reduce((counts, classwork) => {
-    counts.set(
-      classwork.classwork_assignment_id,
-      (counts.get(classwork.classwork_assignment_id) ?? 0) + 1,
-    );
-    return counts;
-  }, new Map<number, number>());
-
-  const quarterlyAssessments = Array.from(
-    new Map<number, ClassworkDetail | LessonClasswork>([
-      ...subjectAssignments
-        .filter((cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT")
-        .map((cw) => [cw.classwork_assignment_id, cw] as const),
-      ...allClassworks
-        .filter(
-          (cw) =>
-            cw.classwork_category === "QUARTERLY_ASSESSMENT" ||
-            (isQuizType(cw.classwork_type) &&
-              (classworkLessonCounts.get(cw.classwork_assignment_id) ?? 0) > 1),
-        )
-        .map((cw) => [cw.classwork_assignment_id, cw] as const),
-    ]).values(),
-  );
-
-  const quarterlyAssignmentIds = new Set(
-    quarterlyAssessments.map((qa) => qa.classwork_assignment_id),
-  );
-
-  const toggleStudentCompCollapse = (key: string) => {
-    setCollapsedCompetencies((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  };
-
   const renderLessonClassworkCards = (lesson: Lesson) => {
     const classworks = (classworksByLesson[lesson.lesson_id] ?? []).filter(
       (cw) =>
@@ -1515,9 +1027,6 @@ export default function SubjectLessonTab({
   // ─── Main render ───────────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-4">
-      {isQuizFullscreen && selectedClasswork && selectedQuizAttempt
-        ? createPortal(renderFullscreenQuiz(), document.body)
-        : null}
       {/* ── Subject info card ── */}
       {selectedLessonDetail ? (
         <StudentLessonDetailScreen
@@ -1541,7 +1050,21 @@ export default function SubjectLessonTab({
               <p className="text-sm">{displayTeacherName}</p>
             </div>
             <Tooltip>
-              <TooltipTrigger render={<span className="inline-flex"><Button type="button" variant="ghost" size="icon" className="rounded shadow-none hover:bg-transparent hover:shadow-none" aria-label="Subject information"><Info size={18} /></Button></span>} />
+              <TooltipTrigger
+                render={
+                  <span className="inline-flex">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="rounded shadow-none hover:bg-transparent hover:shadow-none"
+                      aria-label="Subject information"
+                    >
+                      <Info size={18} />
+                    </Button>
+                  </span>
+                }
+              />
               <TooltipContent>Subject information</TooltipContent>
             </Tooltip>
           </Card>
@@ -1786,478 +1309,42 @@ export default function SubjectLessonTab({
               />
             </div>
           )}
-
-          {/* ════════════════ Classwork Detail Modal ════════════════ */}
         </>
       )}
 
-      {!isQuizFullscreen &&
-        (selectedClasswork || detailLoadingId !== null || detailError) && (
-          <Dialog
-            open
-            onOpenChange={(open) => {
-              if (!open) closeClassworkDetail();
-            }}
-          >
-            <Dialog.Content size="3xl" className="max-h-[90vh] p-0">
-              {/* Modal header */}
-              <Dialog.Header position="fixed" className="bg-primary text-primary-foreground">
-                <h2 className="text-xl font-bold">
-                  {selectedClasswork?.title || "Classwork"}
-                </h2>
-              </Dialog.Header>
-
-              {/* Modal body */}
-              {detailLoadingId !== null ? (
-                <Card className="m-5 block p-6 text-center text-sm font-semibold text-gray-600 shadow-none">
-                  Loading classwork details...
-                </Card>
-              ) : detailError ? (
-                <Card className="m-5 block border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-none">
-                  {detailError}
-                </Card>
-              ) : selectedClasswork ? (
-                <div className="flex min-w-0 flex-col gap-5 overflow-x-hidden p-5">
-                  {/* Left: details */}
-                  <div className="min-w-0 space-y-4">
-                    {/* Status + title card */}
-                    <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          variant="surface"
-                          size="sm"
-                          className="border border-black bg-[#7ABA78] text-black"
-                        >
-                          {selectedClasswork.classwork_type || "Classwork"}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          size="sm"
-                          className="border border-gray-300 capitalize"
-                        >
-                          {statusLabel(
-                            selectedQuizAttempt?.status ??
-                              selectedSubmission?.status ??
-                              selectedClasswork.submission_status,
-                          )}
-                        </Badge>
-                      </div>
-                      <h3 className="mt-4 break-words text-3xl font-bold">
-                        {selectedClasswork.title}
-                      </h3>
-                      <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
-                        <Card className="block w-full border-black bg-gray-50 p-3 shadow-none hover:shadow-none">
-                          <div className="mb-1 flex items-center gap-1 font-semibold text-gray-600">
-                            <CalendarDays size={14} />
-                            Due
-                          </div>
-                          <p className="font-bold">
-                            {selectedClasswork.due_date
-                              ? new Date(
-                                  selectedClasswork.due_date,
-                                ).toLocaleString()
-                              : "No due date"}
-                          </p>
-                        </Card>
-                        <Card className="block w-full border-black bg-gray-50 p-3 shadow-none hover:shadow-none">
-                          <p className="font-semibold text-gray-600">Points</p>
-                          <p className="font-bold">
-                            {selectedClasswork.total_points ?? "Not set"}
-                          </p>
-                        </Card>
-                        <Card className="block w-full border-black bg-gray-50 p-3 shadow-none hover:shadow-none">
-                          <p className="font-semibold text-gray-600">Teacher</p>
-                          <p className="font-bold">
-                            {selectedClasswork.teacher_name || "Teacher"}
-                          </p>
-                        </Card>
-                      </div>
-                    </Card>
-
-                    {/* Description + instructions */}
-                    {(selectedClasswork.description ||
-                      selectedClasswork.instructions) && (
-                      <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
-                        {selectedClasswork.description && (
-                          <div>
-                            <h4 className="font-bold">Description</h4>
-                            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
-                              {selectedClasswork.description}
-                            </p>
-                          </div>
-                        )}
-                        {selectedClasswork.instructions && (
-                          <div className="mt-4">
-                            <h4 className="font-bold">Instructions</h4>
-                            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
-                              {selectedClasswork.instructions}
-                            </p>
-                          </div>
-                        )}
-                      </Card>
-                    )}
-
-                    {/* Coverage Section (Linked Lessons, Topics & Reading Classworks) - Exclusive to Quizzes */}
-                    {isQuizType(selectedClasswork.classwork_type) &&
-                      selectedClasswork.linked_lessons &&
-                      selectedClasswork.linked_lessons.length > 0 && (
-                        <Card className="block w-full border-black bg-primary shadow-none hover:shadow-none">
-                          <div className="mb-2 flex items-center gap-2">
-                            <GraduationCap size={18} className="text-black" />
-                            <h4 className="font-bold text-black">Coverage</h4>
-                          </div>
-                          <div className="space-y-3">
-                            {selectedClasswork.linked_lessons.map((lesson) => (
-                              <Card
-                                key={lesson.lesson_id}
-                                className="block w-full border-black bg-white p-3.5 shadow-none hover:shadow-none"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-bold uppercase text-gray-500">
-                                    Lesson:
-                                  </span>
-                                  <p className="text-sm font-extrabold text-black">
-                                    {lesson.title}
-                                  </p>
-                                </div>
-                                {lesson.description && (
-                                  <div className="mt-1 flex items-start gap-2 text-xs">
-                                    <span className="shrink-0 font-bold uppercase text-gray-500">
-                                      Topic:
-                                    </span>
-                                    <p className="text-gray-700">
-                                      {lesson.description}
-                                    </p>
-                                  </div>
-                                )}
-
-                                {/* Specific Reading Classworks under this Lesson */}
-                                {lesson.readings &&
-                                  lesson.readings.length > 0 && (
-                                    <div className="mt-3 border-t border-black/10 pt-2.5">
-                                      <div className="mb-1.5 flex items-center gap-1 text-[11px] font-bold uppercase text-gray-600">
-                                        <BookOpen
-                                          size={13}
-                                          className="text-black"
-                                        />
-                                        <span>
-                                          Reading Materials (
-                                          {lesson.readings.length})
-                                        </span>
-                                      </div>
-                                      <div className="space-y-1.5">
-                                        {lesson.readings.map((reading) => (
-                                          <div
-                                            key={reading.classwork_id}
-                                            className="flex items-center gap-2 border border-black/15 bg-[#F6E9B2]/40 px-2.5 py-1.5 text-xs"
-                                          >
-                                            <BookOpen
-                                              size={13}
-                                              className="text-black shrink-0"
-                                            />
-                                            <span className="font-bold text-black">
-                                              {reading.title}
-                                            </span>
-                                            {reading.description && (
-                                              <span className="text-gray-600 truncate text-[11px]">
-                                                — {reading.description}
-                                              </span>
-                                            )}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                {/* Lesson Study File Attachments if any */}
-                                {lesson.attachments &&
-                                  lesson.attachments.length > 0 && (
-                                    <div className="mt-3 border-t border-black/10 pt-2.5">
-                                      <div className="mb-1.5 flex items-center gap-1 text-[11px] font-bold uppercase text-gray-600">
-                                        <Paperclip
-                                          size={13}
-                                          className="text-black"
-                                        />
-                                        <span>
-                                          Lesson Files (
-                                          {lesson.attachments.length})
-                                        </span>
-                                      </div>
-                                      <AttachmentDisplay
-                                        attachments={lesson.attachments}
-                                        type="lesson"
-                                        downloadUrl={(attachmentId) =>
-                                          `${API_URL}/api/v1/lessons/${lesson.lesson_id}/attachments/${attachmentId}/download`
-                                        }
-                                      />
-                                    </div>
-                                  )}
-                              </Card>
-                            ))}
-                          </div>
-                        </Card>
-                      )}
-
-                    {/* Classwork File Attachments (Only shown when files are directly attached) */}
-                    {selectedClasswork.attachments &&
-                      selectedClasswork.attachments.length > 0 && (
-                        <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
-                          <div className="mb-3 flex items-center gap-2">
-                            <Paperclip size={18} />
-                            <h4 className="font-bold">Attached Files</h4>
-                          </div>
-                          <AttachmentDisplay
-                            attachments={selectedClasswork.attachments}
-                            type="classwork"
-                            downloadUrl={(attachmentId) =>
-                              `${API_URL}/api/v1/classwork-assignments/classwork/${selectedClasswork.classwork_id}/attachments/${attachmentId}/download`
-                            }
-                          />
-                        </Card>
-                      )}
-                  </div>
-
-                  {/* Right: submission or quiz attempt */}
-                  <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
-                    <div className="mb-3 flex items-center gap-2">
-                      {isQuizType(selectedClasswork.classwork_type) ? (
-                        <ClipboardList size={18} />
-                      ) : selectedSubmission ? (
-                        <FileText size={18} />
-                      ) : (
-                        <BookOpen size={18} />
-                      )}
-                      <h3 className="font-bold">
-                        {isReadingType(selectedClasswork.classwork_type)
-                          ? "Reading Material"
-                          : isQuizType(selectedClasswork.classwork_type)
-                            ? "Take Quiz"
-                            : selectedSubmission
-                              ? "Your Submission"
-                              : "Submit Your Work"}
-                      </h3>
-                    </div>
-                    {isReadingType(selectedClasswork.classwork_type) ? (
-                      <div className="space-y-3">
-                        {selectedSubmission?.status === "submitted" ||
-                        selectedSubmission?.status === "graded" ||
-                        selectedClasswork.submission_status === "submitted" ||
-                        selectedClasswork.submission_status === "graded" ||
-                        selectedClasswork.submission_status === "completed" ? (
-                          <div className="rounded border border-green-300 bg-green-50 p-3 text-sm font-semibold text-green-800 flex items-center gap-2">
-                            <CheckCircle className="size-5 text-green-600 shrink-0" />
-                            <span>
-                              You have completed this reading material.
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            <p className="text-sm text-gray-600 font-medium">
-                              Review the content and reference files above. When
-                              finished, mark it as completed to update your
-                              progress.
-                            </p>
-                            <Button
-                              type="button"
-                              onClick={() =>
-                                handleCompleteReading(
-                                  selectedClasswork.classwork_assignment_id,
-                                )
-                              }
-                              disabled={isMarkingRead}
-                              className="w-full disabled:opacity-50"
-                            >
-                              {isMarkingRead
-                                ? "Marking as completed..."
-                                : "Mark as Completed"}
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    ) : isQuizType(selectedClasswork.classwork_type) ? (
-                      <div className="space-y-3">
-                        {isQuizLoading ? (
-                          <p className="rounded border border-dashed border-black bg-white px-4 py-6 text-center text-sm font-semibold">
-                            Loading quiz...
-                          </p>
-                        ) : quizError ? (
-                          <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-                            {quizError}
-                          </div>
-                        ) : selectedQuizAttempt ? (
-                          <>
-                            <Card className="block w-full border-black bg-white p-3 text-sm shadow-none hover:shadow-none">
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="font-bold capitalize">
-                                  {statusLabel(selectedQuizAttempt.status)}
-                                </span>
-                                <span className="font-semibold">
-                                  Attempts {selectedQuizAttempt.attempt_count}/
-                                  {selectedQuizAttempt.max_attempts}
-                                </span>
-                              </div>
-                              <Card className="mt-2 flex w-full flex-wrap gap-2 border-black bg-white p-2 text-xs font-semibold text-gray-600 shadow-none hover:shadow-none">
-                                <span>
-                                  {selectedQuizAttempt.questions.length}{" "}
-                                  questions
-                                </span>
-                                <span>
-                                  {selectedQuizAttempt.total_points ??
-                                    selectedClasswork.total_points ??
-                                    0}{" "}
-                                  pts
-                                </span>
-                                {selectedQuizAttempt.duration_minutes ? (
-                                  <span>
-                                    {selectedQuizAttempt.duration_minutes}{" "}
-                                    minutes
-                                  </span>
-                                ) : null}
-                              </Card>
-                              {selectedQuizAttempt.grade !== null &&
-                              selectedQuizAttempt.grade !== undefined ? (
-                                <p className="mt-2 text-sm font-bold">
-                                  {selectedClasswork.show_scores ? (
-                                    <>
-                                      Score: {selectedQuizAttempt.grade}/
-                                      {selectedQuizAttempt.total_points ??
-                                        selectedClasswork.total_points ??
-                                        0}
-                                    </>
-                                  ) : (
-                                    <span className="rounded-full bg-gray-200 px-2 py-1 text-xs text-gray-700">
-                                      Score hidden
-                                    </span>
-                                  )}
-                                </p>
-                              ) : null}
-                            </Card>
-
-                            {selectedQuizAttempt.status !== "pending" ? (
-                              <div className="space-y-2">
-                                {selectedQuizAttempt.summary_message ? (
-                                  <div className="rounded border border-black bg-white px-3 py-2 text-xs font-semibold text-gray-700">
-                                    {selectedQuizAttempt.summary_release_at
-                                      ? `Your quiz has been submitted successfully. Your quiz summary will be available on ${formatDateTime(selectedQuizAttempt.summary_release_at)}.`
-                                      : selectedQuizAttempt.summary_message}
-                                  </div>
-                                ) : null}
-                                {selectedQuizAttempt.status !==
-                                "not_started" ? (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setQuizReviewMode(true);
-                                      setQuizCurrentIndex(0);
-                                      setIsQuizFullscreen(true);
-                                    }}
-                                    disabled={
-                                      !selectedQuizAttempt.summary_available
-                                    }
-                                    className="w-full rounded border-black bg-white text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
-                                  >
-                                    {selectedQuizAttempt.summary_available
-                                      ? "View Summary"
-                                      : selectedQuizAttempt.summary_release_mode ===
-                                          "NEVER"
-                                        ? "Summary Not Available"
-                                        : "Summary Scheduled"}
-                                  </Button>
-                                ) : null}
-                                <Button
-                                  type="button"
-                                  onClick={startQuizAttempt}
-                                  disabled={
-                                    !selectedQuizAttempt.can_submit ||
-                                    isQuizSubmitting
-                                  }
-                                  className="w-full rounded border-black bg-success text-sm font-bold text-black hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  {selectedQuizAttempt.status === "not_started"
-                                    ? "Start Quiz"
-                                    : "Retake Quiz"}
-                                </Button>
-                              </div>
-                            ) : (
-                              <>
-                                <Card className="block w-full border-black bg-white p-3 text-sm font-semibold shadow-none hover:shadow-none">
-                                  <p>Your quiz attempt is in progress.</p>
-                                  <p className="mt-1 text-gray-600">
-                                    Time left:{" "}
-                                    {formatExamTimer(quizRemainingSeconds)}
-                                  </p>
-                                </Card>
-                                <Button
-                                  type="button"
-                                  onClick={() => setIsQuizFullscreen(true)}
-                                  disabled={
-                                    !selectedQuizAttempt.can_submit ||
-                                    isQuizSubmitting
-                                  }
-                                  className="w-full rounded border-black bg-success text-sm font-bold text-black shadow-none hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  Continue Exam
-                                </Button>
-                              </>
-                            )}
-                          </>
-                        ) : (
-                          <p className="rounded border border-dashed border-black bg-white px-4 py-6 text-center text-sm font-semibold">
-                            Quiz details unavailable.
-                          </p>
-                        )}
-                      </div>
-                    ) : selectedSubmission ? (
-                      <SubmissionViewer
-                        submission={selectedSubmission}
-                        dueDate={selectedClasswork.due_date ?? undefined}
-                        isLocked={selectedClasswork.is_locked}
-                        allowLateSubmissions={
-                          selectedClasswork.allow_late_submissions
-                        }
-                        maxAttempts={selectedClasswork.max_attempts}
-                        showScores={selectedClasswork.show_scores}
-                        onDeleteSubmission={() =>
-                          handleDeleteSubmission(
-                            selectedClasswork.classwork_assignment_id,
-                          )
-                        }
-                        onResubmit={async () => {
-                          const sub = await fetchSubmissionForAssignment(
-                            selectedClasswork.classwork_assignment_id,
-                          );
-                          setSelectedSubmission(sub);
-                        }}
-                        isDeleting={
-                          deletingId ===
-                          selectedClasswork.classwork_assignment_id
-                        }
-                      />
-                    ) : (
-                      <SubmissionForm
-                        assignmentId={selectedClasswork.classwork_assignment_id}
-                        maxAttempts={selectedClasswork.max_attempts}
-                        currentAttempt={0}
-                        isLoading={
-                          submittingId ===
-                          selectedClasswork.classwork_assignment_id
-                        }
-                        onSubmit={(files) =>
-                          handleSubmit(
-                            selectedClasswork.classwork_assignment_id,
-                            files,
-                          )
-                        }
-                      />
-                    )}
-                  </Card>
-                </div>
-              ) : null}
-            </Dialog.Content>
-          </Dialog>
-        )}
+      {/* ════════════════ Classwork Detail Modal & Fullscreen Quiz ════════════════ */}
+      <StudentClassworkDetailModal
+        selectedClasswork={selectedClasswork}
+        detailLoadingId={detailLoadingId}
+        detailError={detailError}
+        selectedSubmission={selectedSubmission}
+        selectedQuizAttempt={selectedQuizAttempt}
+        quizAnswers={quizAnswers}
+        setQuizAnswers={setQuizAnswers}
+        isQuizLoading={isQuizLoading}
+        isQuizSubmitting={isQuizSubmitting}
+        quizError={quizError}
+        isQuizFullscreen={isQuizFullscreen}
+        setIsQuizFullscreen={setIsQuizFullscreen}
+        quizCurrentIndex={quizCurrentIndex}
+        setQuizCurrentIndex={setQuizCurrentIndex}
+        quizReviewMode={quizReviewMode}
+        setQuizReviewMode={setQuizReviewMode}
+        flaggedQuizQuestionIds={flaggedQuizQuestionIds}
+        toggleQuizFlag={toggleQuizFlag}
+        quizRemainingSeconds={quizRemainingSeconds}
+        submittingId={submittingId}
+        deletingId={deletingId}
+        isMarkingRead={isMarkingRead}
+        onClose={closeClassworkDetail}
+        onStartQuiz={startQuizAttempt}
+        onSubmitQuiz={submitQuizAttempt}
+        onSubmitFiles={handleSubmit}
+        onCompleteReading={handleCompleteReading}
+        onDeleteSubmission={handleDeleteSubmission}
+        onFetchSubmission={fetchSubmissionForAssignment}
+        setSelectedSubmission={setSelectedSubmission}
+      />
     </div>
   );
 }

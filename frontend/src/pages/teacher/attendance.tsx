@@ -1780,7 +1780,8 @@ export default function TeacherAttendancePage() {
         open={showDiscardDialog}
         onOpenChange={(open) => !open && handleCancelDiscard()}
         title="Unsaved Attendance Marks"
-        description={`You have unsaved attendance marks for ${selectedTarget?.label || "the current class"}. Switching classes or terms will discard these changes. Are you sure you want to proceed?`}
+        confirmationTitle="Discard unsaved attendance marks?"
+        description={`You have unsaved attendance marks for ${selectedTarget?.label || "the current class"}. Switching classes or terms will discard these changes.`}
         confirmLabel="Discard & Switch"
         cancelLabel="Stay Here"
         confirmVariant="destructive"

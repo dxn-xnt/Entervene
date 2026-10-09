@@ -291,12 +291,9 @@ export default function AdminSubjectLevel() {
         onOpenChange={(open) => {
           if (!open) setPendingArchive(null);
         }}
-        title="Archive Subject?"
-        description={
-          <p>
-            <strong>{pendingArchive?.subject_name}</strong> will be moved out of active use.
-          </p>
-        }
+        title="Archive Subject"
+        confirmationTitle={`Are you sure you want to archive "${pendingArchive?.subject_name}"?`}
+        description="Archiving this subject will move it out of active use."
         options={{
           confirmLabel: "Archive",
           confirmVariant: "default",

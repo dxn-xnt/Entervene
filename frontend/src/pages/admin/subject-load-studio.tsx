@@ -2793,18 +2793,9 @@ export default function AdminSubjectLoadStudio() {
         onOpenChange={(open) => {
           if (!open) setDiscardTargetClass(null);
         }}
-        title="Discard Draft Changes?"
-        description={
-          <div className="flex flex-col gap-2">
-            <p className="text-sm">
-              Are you sure you want to discard all unpublished draft edits for{" "}
-              <strong>{discardTargetClass?.sectionName}</strong>?
-            </p>
-            <p className="text-xs text-muted-foreground">
-              All changes made since unlocking will be permanently discarded, and this section will be restored to its active published baseline schedule.
-            </p>
-          </div>
-        }
+        title="Discard Draft Changes"
+        confirmationTitle={`Are you sure you want to discard all unpublished draft edits for "${discardTargetClass?.sectionName}"?`}
+        description="All changes made since unlocking will be permanently discarded, and this section will be restored to its active published baseline schedule."
         options={{
           confirmLabel: "Discard Draft",
           confirmVariant: "default",
@@ -2825,19 +2816,12 @@ export default function AdminSubjectLoadStudio() {
         onOpenChange={(open) => {
           if (!open) setPublishTargetClass(null);
         }}
-        title={`Publish Schedule for ${publishTargetClass?.sectionName}?`}
+        title="Publish Schedule"
+        confirmationTitle={`Are you sure you want to publish the timetable for "${publishTargetClass?.sectionName}"?`}
         description={
-          <div className="flex flex-col gap-2">
-            <p className="text-sm">
-              Are you sure you want to publish the timetable for{" "}
-              <strong>{publishTargetClass?.sectionName}</strong>?
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {publishTargetClass?.isRevisionUpdate
-                ? "This will update the live schedule with your draft changes, increment the section revision, and make the updated timetable immediately active for enrolled students and assigned teachers."
-                : "This will publish the section's timetable to live status, making it immediately visible and active for students and teachers."}
-            </p>
-          </div>
+          publishTargetClass?.isRevisionUpdate
+            ? "This will update the live schedule with your draft changes, increment the section revision, and make the updated timetable immediately active for enrolled students and assigned teachers."
+            : "This will publish the section's timetable to live status, making it immediately visible and active for students and teachers."
         }
         options={{
           confirmLabel: "Publish Section",

@@ -5,7 +5,6 @@ import {
   CheckSquare,
   ClipboardList,
   FileText,
-  Search,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -16,6 +15,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { isQuizType } from "@/lib/classwork-utils";
 import type {
   ClassworkKind,
+  ClassworkTracking,
   SortMode,
   TeacherClassLoad,
   TeacherClasswork,
@@ -25,7 +25,6 @@ import { Select } from "@/components/retroui/Select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { Card } from "@/components/retroui/Card";
-import { Input } from "@/components/retroui/Input";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
 import CreateClassworkModal from "@/pages/teacher/forms/create-classwork";
@@ -68,6 +67,13 @@ const classworkCreateOptions: Array<{
   ];
 
 
+const typeFilterOptions: Array<{ value: string; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "READING", label: "Readings" },
+  { value: "ACTIVITY", label: "Activities" },
+  { value: "ASSIGNMENT", label: "Assignments" },
+  { value: "QUIZ", label: "Quizzes" },
+];
 
 interface SubjectClassworkTabProps {
   classId?: string | number;
@@ -89,10 +95,15 @@ export default function SubjectClassworkTab({
 
   const [items, setItems] = useState<TeacherClasswork[]>([]);
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
+  const [lessons, setLessons] = useState<Array<{ lesson_id: number; title: string }>>([]);
+  const [lessonFilter, setLessonFilter] = useState("all");
+  const [sectionFilter, setSectionFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortMode, setSortMode] = useState<SortMode>("newest");
+  const [trackingByClasswork, setTrackingByClasswork] = useState<
+    Record<string, ClassworkTracking>
+  >({});
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [selectedType, setSelectedType] = useState<ClassworkKind | null>(null);
   const [selectedClasswork, setSelectedClasswork] =
@@ -130,6 +141,36 @@ export default function SubjectClassworkTab({
     void loadClassworks();
   }, [loadClassworks]);
 
+  useEffect(() => {
+    let isMounted = true;
+    const loadLessons = async () => {
+      try {
+        const url =
+          classId && numericSubjectId
+            ? `/api/v1/lessons/my-class/${classId}/subject/${numericSubjectId}`
+            : `/api/v1/lessons/my-lessons`;
+        const res = await apiFetch(url);
+        if (res.ok && isMounted) {
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : [];
+          setLessons(
+            list.filter(
+              (l: any) =>
+                !l.is_archived &&
+                (!numericSubjectId || l.subject_id === numericSubjectId || !l.subject_id),
+            ),
+          );
+        }
+      } catch (err) {
+        console.error("Failed to load lessons", err);
+      }
+    };
+    void loadLessons();
+    return () => {
+      isMounted = false;
+    };
+  }, [classId, numericSubjectId]);
+
   const subjects = useMemo(
     () =>
       Array.from(
@@ -143,8 +184,42 @@ export default function SubjectClassworkTab({
     [loads],
   );
 
+  const classSections = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          loads
+            .filter(
+              (load) =>
+                !numericSubjectId || load.subject_id === numericSubjectId,
+            )
+            .map((load) => [
+              load.class_id,
+              { id: load.class_id, name: load.section_name },
+            ]),
+        ).values(),
+      ).sort((a, b) => a.name.localeCompare(b.name)),
+    [loads, numericSubjectId],
+  );
+
+  const availableLessons = useMemo(() => {
+    const map = new Map<number, string>();
+    lessons.forEach((l) => map.set(l.lesson_id, l.title));
+    items.forEach((item) => {
+      if (numericSubjectId && item.subject_id !== numericSubjectId) return;
+      item.linked_lessons?.forEach((ll) => {
+        if (!map.has(ll.lesson_id)) {
+          map.set(ll.lesson_id, ll.title);
+        }
+      });
+    });
+    return Array.from(map.entries()).map(([lesson_id, title]) => ({
+      lesson_id,
+      title,
+    }));
+  }, [lessons, items, numericSubjectId]);
+
   const filteredItems = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
     const result = items.filter((item) => {
       // Must match this specific subject
       if (numericSubjectId && item.subject_id !== numericSubjectId) return false;
@@ -152,14 +227,24 @@ export default function SubjectClassworkTab({
       const matchesType =
         typeFilter === "all" ||
         item.classwork_type.toUpperCase() === typeFilter.toUpperCase();
-      const matchesSearch =
-        !normalizedSearch ||
-        item.title.toLowerCase().includes(normalizedSearch) ||
-        item.subject_name?.toLowerCase().includes(normalizedSearch);
+      const matchesLesson =
+        lessonFilter === "all" ||
+        Boolean(
+          item.linked_lessons?.some(
+            (l) => String(l.lesson_id) === lessonFilter,
+          ),
+        );
+      const matchesSection =
+        sectionFilter === "all" ||
+        Boolean(
+          item.assignments?.some(
+            (a) => String(a.class_id) === sectionFilter,
+          ),
+        );
       const matchesStatus =
         statusFilter === "all" ||
         (statusFilter === "published" ? item.is_published : !item.is_published);
-      return matchesType && matchesSearch && matchesStatus;
+      return matchesType && matchesLesson && matchesSection && matchesStatus;
     });
 
     return result.sort((a, b) => {
@@ -168,7 +253,66 @@ export default function SubjectClassworkTab({
       const second = new Date(b.created_at ?? 0).getTime();
       return sortMode === "oldest" ? first - second : second - first;
     });
-  }, [typeFilter, items, search, sortMode, statusFilter, numericSubjectId]);
+  }, [typeFilter, items, lessonFilter, sectionFilter, sortMode, statusFilter, numericSubjectId]);
+
+  const effectiveClassId = sectionFilter;
+  const selectedSectionName =
+    sectionFilter !== "all"
+      ? classSections.find((s) => String(s.id) === sectionFilter)?.name ?? sectionName
+      : undefined;
+
+  useEffect(() => {
+    const trackableItems = filteredItems.filter((item) => {
+      if (!item.assignments || item.assignments.length === 0) return false;
+      const cacheKey = `${item.classwork_id}:${effectiveClassId}`;
+      return !trackingByClasswork[cacheKey];
+    });
+    if (!trackableItems.length) return;
+
+    let cancelled = false;
+    void Promise.all(
+      trackableItems.map(async (item) => {
+        const cacheKey = `${item.classwork_id}:${effectiveClassId}`;
+        let url: string;
+        if (!effectiveClassId || effectiveClassId === "all") {
+          url = `/api/v1/submissions/classwork/${item.classwork_id}/tracking`;
+        } else {
+          const assignment = item.assignments?.find(
+            (a) => String(a.class_id) === String(effectiveClassId),
+          );
+          if (assignment) {
+            url = `/api/v1/submissions/assignment/${assignment.classwork_assignment_id}/tracking`;
+          } else {
+            url = `/api/v1/submissions/classwork/${item.classwork_id}/tracking`;
+          }
+        }
+        const response = await apiFetch(url);
+        if (!response.ok) {
+          throw new Error(
+            `Unable to load submission summary for ${item.classwork_id}.`,
+          );
+        }
+        const summary = (await response.json()) as ClassworkTracking;
+        return { key: cacheKey, summary };
+      }),
+    )
+      .then((results) => {
+        if (cancelled) return;
+        setTrackingByClasswork((current) => ({
+          ...current,
+          ...Object.fromEntries(
+            results.map(({ key, summary }) => [key, summary]),
+          ),
+        }));
+      })
+      .catch(() => {
+        // The list remains useful even when an individual tracking summary is unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filteredItems, effectiveClassId, trackingByClasswork]);
 
   const openCreateWizard = () => {
     const preferredType =
@@ -203,13 +347,15 @@ export default function SubjectClassworkTab({
     setDetailLoadingId(cw.classwork_id);
     setDetailError("");
     try {
-      const classIdQuery = classId ? `?class_id=${classId}` : "";
+      const activeClassId =
+        effectiveClassId !== "all" ? effectiveClassId : undefined;
+      const classIdQuery = activeClassId ? `?class_id=${activeClassId}` : "";
       const res = await apiFetch(
         `/api/v1/classwork-assignments/classwork/${cw.classwork_id}${classIdQuery}`,
       );
       const targetAssignment =
-        (classId
-          ? cw.assignments?.find((a) => String(a.class_id) === String(classId))
+        (activeClassId
+          ? cw.assignments?.find((a) => String(a.class_id) === String(activeClassId))
           : undefined) ?? cw.assignments?.[0];
 
       if (res.ok) {
@@ -217,9 +363,9 @@ export default function SubjectClassworkTab({
           assignments?: TeacherClasswork["assignments"];
         };
         const fetchedAssignment =
-          (classId
+          (activeClassId
             ? fullDetail.assignments?.find(
-              (a) => String(a.class_id) === String(classId),
+              (a) => String(a.class_id) === String(activeClassId),
             )
             : undefined) ??
           fullDetail.assignments?.[0] ??
@@ -234,16 +380,16 @@ export default function SubjectClassworkTab({
           class_id:
             fullDetail.class_id ??
             fetchedAssignment?.class_id ??
-            (classId ? Number(classId) : 0),
-          section_name: fullDetail.section_name ?? sectionName ?? null,
+            (activeClassId ? Number(activeClassId) : 0),
+          section_name: fullDetail.section_name ?? selectedSectionName ?? null,
           due_date: fullDetail.due_date ?? fetchedAssignment?.due_date ?? null,
         });
       } else {
         setSelectedClasswork({
           classwork_assignment_id: targetAssignment?.classwork_assignment_id ?? 0,
           classwork_id: cw.classwork_id,
-          class_id: targetAssignment?.class_id ?? (classId ? Number(classId) : 0),
-          section_name: sectionName ?? null,
+          class_id: targetAssignment?.class_id ?? (activeClassId ? Number(activeClassId) : 0),
+          section_name: selectedSectionName ?? null,
           title: cw.title,
           description: cw.description,
           instructions: cw.instructions,
@@ -282,93 +428,117 @@ export default function SubjectClassworkTab({
           </div>
         )}
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <label className="relative min-w-0 flex-1">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search classwork..."
-              className="h-10 w-full border-black pl-9 pr-3"
-            />
-          </label>
-
-          <Select
-            value={typeFilter}
-            onValueChange={setTypeFilter}
-          >
-            <Select.Trigger className="w-full sm:w-44 border-black">
-              <Select.Value placeholder="All types" />
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Group>
-                <Select.Item value="all">All types</Select.Item>
-                <Select.Item value="READING">Readings</Select.Item>
-                <Select.Item value="ACTIVITY">Activities</Select.Item>
-                <Select.Item value="ASSIGNMENT">Assignments</Select.Item>
-                <Select.Item value="QUIZ">Quizzes</Select.Item>
-              </Select.Group>
-            </Select.Content>
-          </Select>
-
-          <Select
-            value={statusFilter}
-            onValueChange={setStatusFilter}
-          >
-            <Select.Trigger className="w-full sm:w-44 border-black">
-              <Select.Value placeholder="All statuses" />
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Group>
-                <Select.Item value="all">All statuses</Select.Item>
-                <Select.Item value="published">Published</Select.Item>
-                <Select.Item value="draft">Draft</Select.Item>
-              </Select.Group>
-            </Select.Content>
-          </Select>
-
-          <Tooltip>
-            <TooltipTrigger render={<span className="inline-flex"><Button
-              variant="outline"
-              size="md"
-              onClick={cycleSort}
-              className="gap-1.5"
+        <div className="flex w-full flex-row justify-between gap-3 sm:flex-row sm:items-center">
+          <div className="w-full min-w-0 flex-1 lg:max-w-md">
+            <Select
+              value={lessonFilter}
+              onValueChange={(val) => setLessonFilter(val)}
             >
-              {sortMode === "title" ? (
-                <ArrowDownAZ size={15} />
-              ) : (
-                <ArrowUpDown size={15} />
-              )}
-              Sort By
-            </Button></span>} />
-            <TooltipContent>Sorted by {sortMode}</TooltipContent>
-          </Tooltip>
+              <Select.Trigger className="h-10 w-full border-2 border-black bg-white text-sm">
+                <Select.Value placeholder="Filter by lesson" />
+              </Select.Trigger>
+              <Select.Content className="border-2 border-black bg-white max-h-72 overflow-y-auto">
+                <Select.Item value="all">All Lessons</Select.Item>
+                {availableLessons.map((lesson) => (
+                  <Select.Item
+                    key={lesson.lesson_id}
+                    value={String(lesson.lesson_id)}
+                  >
+                    {lesson.title}
+                  </Select.Item>
+                ))}
+              </Select.Content>
+            </Select>
+          </div>
+
+          <div className="flex flex-row gap-2">
+            <Select
+              value={sectionFilter}
+              onValueChange={setSectionFilter}
+            >
+              <Select.Trigger className="w-full sm:w-44 border-black">
+                <Select.Value placeholder="All sections" />
+              </Select.Trigger>
+              <Select.Content className="max-h-72 overflow-y-auto">
+                <Select.Group>
+                  <Select.Item value="all">All sections</Select.Item>
+                  {classSections.map((sec) => (
+                    <Select.Item key={sec.id} value={String(sec.id)}>
+                      {sec.name}
+                    </Select.Item>
+                  ))}
+                </Select.Group>
+              </Select.Content>
+            </Select>
+
+            <Select
+              value={statusFilter}
+              onValueChange={setStatusFilter}
+            >
+              <Select.Trigger className="w-full sm:w-44 border-black">
+                <Select.Value placeholder="All statuses" />
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Group>
+                  <Select.Item value="all">All statuses</Select.Item>
+                  <Select.Item value="published">Published</Select.Item>
+                  <Select.Item value="draft">Draft</Select.Item>
+                </Select.Group>
+              </Select.Content>
+            </Select>
+
+            <Tooltip>
+              <TooltipTrigger render={<span className="inline-flex"><Button
+                variant="outline"
+                size="md"
+                onClick={cycleSort}
+                className="gap-1.5"
+              >
+                {sortMode === "title" ? (
+                  <ArrowDownAZ size={15} />
+                ) : (
+                  <ArrowUpDown size={15} />
+                )}
+                Sort By
+              </Button></span>} />
+              <TooltipContent>Sorted by {sortMode}</TooltipContent>
+            </Tooltip>
+          </div>
+
+
         </div>
 
-        {(statusFilter !== "all" || typeFilter !== "all") && (
+        <div className="flex items-center gap-2 overflow-x-auto -mb-2 justify-between">
+          <div className="flex flex-row gap-2 pb-1 overflow-x-auto">
+            <span className="shrink-0 text-sm font-regular text-muted-foreground self-center">
+              Type:
+            </span>
+            {typeFilterOptions.map((opt) => (
+              <Button
+                key={opt.value}
+                autoIcon={false}
+                variant={typeFilter === opt.value ? "default" : "outline"}
+                size="sm"
+                onClick={() => setTypeFilter(opt.value)}
+                className="shrink-0 border-black shadow-none"
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {statusFilter !== "all" && (
           <div className="flex flex-wrap items-center gap-2">
-            {typeFilter !== "all" && (
-              <Badge
-                variant="secondary"
-                size="sm"
-                className="flex w-fit items-center gap-2 capitalize cursor-pointer"
-                onClick={() => setTypeFilter("all")}
-              >
-                Type: {typeFilter.toLowerCase()}
-                <X size={13} />
-              </Badge>
-            )}
-            {statusFilter !== "all" && (
-              <Badge
-                variant="secondary"
-                size="sm"
-                className="flex w-fit items-center gap-2 capitalize cursor-pointer"
-                onClick={() => setStatusFilter("all")}
-              >
-                Status: {statusFilter}
-                <X size={13} />
-              </Badge>
-            )}
+            <Badge
+              variant="secondary"
+              size="sm"
+              className="flex w-fit items-center gap-2 capitalize cursor-pointer"
+              onClick={() => setStatusFilter("all")}
+            >
+              Status: {statusFilter}
+              <X size={13} />
+            </Badge>
           </div>
         )}
 
@@ -378,7 +548,17 @@ export default function SubjectClassworkTab({
               <ClassworkCard
                 key={item.classwork_id}
                 item={item}
+                tracking={
+                  trackingByClasswork[
+                    `${item.classwork_id}:${effectiveClassId}`
+                  ]
+                }
+                showClassworkType={true}
+                showSubject={false}
                 onOpen={(cw) => void openClassworkDetail(cw)}
+                onReload={() => {
+                  void loadClassworks();
+                }}
               />
             ))}
           </section>
@@ -476,7 +656,7 @@ export default function SubjectClassworkTab({
         detailLoadingId={detailLoadingId}
         detailError={detailError}
         onClose={closeClassworkDetail}
-        sectionName={sectionName}
+        sectionName={selectedSectionName}
       />
     </div>
   );

@@ -15,6 +15,7 @@ export type ConfirmDialogSize =
   | "screen";
 
 export type ConfirmDialogOptions = {
+  confirmationTitle?: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   confirmVariant?: IButtonProps["variant"];
@@ -28,6 +29,7 @@ export type ConfirmDialogProps = {
   open: boolean;
   onOpenChange?: (open: boolean) => void;
   title: React.ReactNode;
+  confirmationTitle?: React.ReactNode;
   description?: React.ReactNode;
   children?: React.ReactNode;
   options?: ConfirmDialogOptions;
@@ -48,6 +50,7 @@ export function ConfirmDialog({
   open,
   onOpenChange,
   title,
+  confirmationTitle,
   description,
   children,
   options,
@@ -56,6 +59,8 @@ export function ConfirmDialog({
   portalContainer,
   ...flatProps
 }: ConfirmDialogProps) {
+  const effectiveConfirmationTitle =
+    options?.confirmationTitle ?? confirmationTitle;
   const confirmLabel = options?.confirmLabel ?? flatProps.confirmLabel ?? "Confirm";
   const cancelLabel = options?.cancelLabel ?? flatProps.cancelLabel ?? "Cancel";
   const confirmVariant = options?.confirmVariant ?? flatProps.confirmVariant ?? "default";
@@ -109,6 +114,13 @@ export function ConfirmDialog({
           )}
         </Dialog.Header>
         <section className="flex flex-col gap-2 p-4 text-sm">
+          {effectiveConfirmationTitle ? (
+            typeof effectiveConfirmationTitle === "string" ? (
+              <p className="text-base font-bold">{effectiveConfirmationTitle}</p>
+            ) : (
+              effectiveConfirmationTitle
+            )
+          ) : null}
           {description ? (
             typeof description === "string" ? (
               <p>{description}</p>

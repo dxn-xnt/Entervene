@@ -609,6 +609,7 @@ def teacher_classworks(staff_id: str, db: Session, academic_period_id: int | Non
             joinedload(Classwork.staff),
             selectinload(Classwork.attachments),
             selectinload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
+            selectinload(Classwork.lessons),
         )
         .filter(Classwork.created_by_staff_id == staff_id, Classwork.is_archived == False)
     )
@@ -637,6 +638,7 @@ def classwork_detail(
             joinedload(Classwork.staff),
             selectinload(Classwork.attachments),
             selectinload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
+            selectinload(Classwork.lessons),
         )
         .filter(Classwork.classwork_id == classwork_id)
         .first()
@@ -672,6 +674,7 @@ def update_classwork_record(
             joinedload(Classwork.staff),
             selectinload(Classwork.attachments),
             selectinload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
+            selectinload(Classwork.lessons),
         )
         .filter(Classwork.classwork_id == classwork_id, Classwork.created_by_staff_id == staff_id)
         .first()

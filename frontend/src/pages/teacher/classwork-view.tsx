@@ -4,12 +4,16 @@ import {
   Pencil,
   X,
   AlertTriangle,
+  ClipboardList,
+  BookOpen,
+  CheckSquare,
 } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AttachmentDisplay from "@/components/attachment-display";
 import { API_URL, apiFetch } from "@/lib/api";
 import { Badge } from "@/components/retroui/Badge";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import type { QuizAnalysis } from "./classworks/quiz-builder-types";
 import QuizGradingModal from "@/components/quiz-grading-modal";
 import {
@@ -41,20 +45,40 @@ import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
 import DeadlineSummaryModal from "@/components/teacher/deadline-summary-modal";
+import IconContainer from "@/components/icon-container";
+import { toTitleCase } from "@/lib/formatters";
 
 export type ClassworkViewProps = {
   classwork?: TeacherClasswork;
   onClose?: () => void;
   onUpdated?: (updated: TeacherClasswork) => void;
   onArchived?: (classworkId: number) => void;
+  subjectName?: string;
+  sectionName?: string;
+  onSubjectClick?: () => void;
+  onSectionClick?: () => void;
+  customBreadcrumbs?: React.ReactNode;
 };
 
-function toTitleCase(str?: string | null, fallback = "Classwork") {
-  if (!str) return fallback;
-  return str
-    .toLowerCase()
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+function ClassworkTypeIcon({
+  type,
+  size = 18,
+}: {
+  type?: string | null;
+  size?: number;
+}) {
+  switch (type?.toUpperCase()) {
+    case "QUIZ":
+      return <ClipboardList size={size} />;
+    case "ASSIGNMENT":
+      return <BookOpen size={size} />;
+    case "ACTIVITY":
+      return <CheckSquare size={size} />;
+    case "READING":
+      return <FileText size={size} />;
+    default:
+      return <FileText size={size} />;
+  }
 }
 
 export default function ClassworkView({
@@ -62,6 +86,11 @@ export default function ClassworkView({
   onClose,
   onUpdated,
   onArchived,
+  subjectName,
+  sectionName,
+  onSubjectClick,
+  onSectionClick,
+  customBreadcrumbs,
 }: ClassworkViewProps = {}) {
   const toast = useToast();
   const navigate = useNavigate();
@@ -385,6 +414,66 @@ export default function ClassworkView({
     }
   };
 
+  const navigateToSubject = async () => {
+    if (!selected) return;
+    let targetClassId =
+      (selectedAssignmentId !== "all"
+        ? selected.assignments?.find(
+          (a) => a.classwork_assignment_id === Number(selectedAssignmentId),
+        )?.class_id
+        : selected.assignments?.[0]?.class_id) ||
+      selected.assignments?.[0]?.class_id;
+
+    if (!targetClassId) {
+      try {
+        const res = await apiFetch("/api/v1/classwork-assignments/teacher/classes");
+        if (res.ok) {
+          const loads = (await res.json()) as Array<{ class_id: number; subject_id: number }>;
+          const match = loads.find((l) => l.subject_id === selected.subject_id);
+          if (match) targetClassId = match.class_id;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (targetClassId) {
+      navigate(`/teacher/classes/${targetClassId}/subjects/${selected.subject_id}`);
+    } else {
+      navigate("/teacher/classes");
+    }
+  };
+
+  const navigateToLesson = async (lessonId: number) => {
+    if (!selected) return;
+    let targetClassId =
+      (selectedAssignmentId !== "all"
+        ? selected.assignments?.find(
+          (a) => a.classwork_assignment_id === Number(selectedAssignmentId),
+        )?.class_id
+        : selected.assignments?.[0]?.class_id) ||
+      selected.assignments?.[0]?.class_id;
+
+    if (!targetClassId) {
+      try {
+        const res = await apiFetch("/api/v1/classwork-assignments/teacher/classes");
+        if (res.ok) {
+          const loads = (await res.json()) as Array<{ class_id: number; subject_id: number }>;
+          const match = loads.find((l) => l.subject_id === selected.subject_id);
+          if (match) targetClassId = match.class_id;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (targetClassId) {
+      navigate(`/teacher/classes/${targetClassId}/subjects/${selected.subject_id}?lessonId=${lessonId}`);
+    } else {
+      navigate("/teacher/classes");
+    }
+  };
+
   const trackingRows = useMemo(() => {
     const rows = [...(tracking?.submitted ?? []), ...(tracking?.missing ?? [])];
     return rows.sort((a, b) => {
@@ -557,30 +646,90 @@ export default function ClassworkView({
           <header className="flex min-w-0 flex-row items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
             <div className="flex items-center gap-3 min-w-0">
               <SidebarTrigger className="md:hidden" />
-              <Breadcrumb>
-                <Breadcrumb.List className="flex-nowrap">
-                  <Breadcrumb.Item className="shrink-0">
-                    <Breadcrumb.Link
-                      onClick={() =>
-                        onClose ? onClose() : navigate("/teacher/classworks")
-                      }
-                      className="cursor-pointer"
-                    >
-                      Classworks
-                    </Breadcrumb.Link>
-                  </Breadcrumb.Item>
-                  <Breadcrumb.Separator className="shrink-0" />
-                  <Breadcrumb.Item className="min-w-0">
-                    <Tooltip>
-                      <TooltipTrigger render={<Breadcrumb.Page
-                        className="block max-w-[200px] truncate sm:max-w-[350px] lg:max-w-[400px]"
-                        tabIndex={0}
-                      >
-                        {selected?.title ?? "Classwork Title"}
-                      </Breadcrumb.Page>} />
-                      <TooltipContent>{selected?.title ?? "Classwork Title"}</TooltipContent>
-                    </Tooltip>
-                  </Breadcrumb.Item>
+              <Breadcrumb className="min-w-0">
+                <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
+                  {customBreadcrumbs ? (
+                    customBreadcrumbs
+                  ) : subjectName || sectionName ? (
+                    <>
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Link
+                          onClick={() =>
+                            onClose ? onClose() : navigate("/teacher/classes")
+                          }
+                          className="cursor-pointer whitespace-nowrap text-muted-foreground hover:text-black"
+                        >
+                          Classes
+                        </Breadcrumb.Link>
+                      </Breadcrumb.Item>
+
+                      {subjectName && (
+                        <>
+                          <Breadcrumb.Separator />
+                          <Breadcrumb.Item className="min-w-0 shrink-0">
+                            <Breadcrumb.Link
+                              onClick={onSubjectClick || onClose}
+                              className="cursor-pointer block max-w-[150px] sm:max-w-[200px] truncate !text-lg text-muted-foreground hover:text-black"
+                            >
+                              {subjectName}
+                            </Breadcrumb.Link>
+                          </Breadcrumb.Item>
+                        </>
+                      )}
+
+                      {sectionName && (
+                        <>
+                          <Breadcrumb.Separator />
+                          <Breadcrumb.Item className="min-w-0 shrink-0">
+                            <Breadcrumb.Link
+                              onClick={onSectionClick || onClose}
+                              className="cursor-pointer block max-w-[150px] sm:max-w-[200px] truncate text-muted-foreground hover:text-black"
+                            >
+                              {sectionName}
+                            </Breadcrumb.Link>
+                          </Breadcrumb.Item>
+                        </>
+                      )}
+
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item className="min-w-0 flex-1">
+                        <Tooltip>
+                          <TooltipTrigger render={<Breadcrumb.Page
+                            className="block max-w-[200px] truncate sm:max-w-[350px] lg:max-w-[400px] font-bold text-black"
+                            tabIndex={0}
+                          >
+                            {selected?.title ?? "Classwork Title"}
+                          </Breadcrumb.Page>} />
+                          <TooltipContent>{selected?.title ?? "Classwork Title"}</TooltipContent>
+                        </Tooltip>
+                      </Breadcrumb.Item>
+                    </>
+                  ) : (
+                    <>
+                      <Breadcrumb.Item className="">
+                        <Breadcrumb.Link
+                          onClick={() =>
+                            onClose ? onClose() : navigate("/teacher/classworks")
+                          }
+                          className="cursor-pointer whitespace-nowrap text-muted-foreground hover:text-black"
+                        >
+                          Classworks
+                        </Breadcrumb.Link>
+                      </Breadcrumb.Item>
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item className="min-w-0 flex-1">
+                        <Tooltip>
+                          <TooltipTrigger render={<Breadcrumb.Page
+                            className="block max-w-[200px] truncate sm:max-w-[350px] lg:max-w-[400px] font-bold text-black"
+                            tabIndex={0}
+                          >
+                            {selected?.title ?? "Classwork Title"}
+                          </Breadcrumb.Page>} />
+                          <TooltipContent>{selected?.title ?? "Classwork Title"}</TooltipContent>
+                        </Tooltip>
+                      </Breadcrumb.Item>
+                    </>
+                  )}
                 </Breadcrumb.List>
               </Breadcrumb>
             </div>
@@ -596,6 +745,7 @@ export default function ClassworkView({
                 <Pencil size={16} />
                 Edit Classwork
               </Button>
+
               <Button
                 type="button"
                 variant="outline"
@@ -610,12 +760,16 @@ export default function ClassworkView({
           </header>
 
           <div className="-mt-[1px] flex flex-col min-w-0 border-t-2 border-border px-3 py-3 gap-3 sm:px-4 sm:py-4 md:px-6">
-            <Card className="mx-auto w-full space-y-4 px-5 py-6">
-              <Card className="w-full border-0 p-0 shadow-none">
+            <Card className="mx-auto flex flex-col w-full gap-4 px-5 pt-6">
+              <Card className="w-full border-0! p-0 shadow-none">
                 <Card.Content className="flex flex-col gap-1">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <Card.Title className="flex flex-row items-center gap-3 mb-0 text-3xl font-abold">
-                      <FileText className="size-14 shrink-0" strokeWidth={1.70} />
+                    <Card.Title className="flex flex-row items-center gap-3 mb-0 text-3xl font-bold">
+
+                      <IconContainer variant="primary" size="xl">
+                        <ClassworkTypeIcon type={selected.classwork_type} size={48} />
+                      </IconContainer>
+
                       <div className="flex flex-col gap-1">
                         <div className="flex flex-row items-center gap-2">
                           <span>{selected.title}</span>
@@ -623,6 +777,7 @@ export default function ClassworkView({
                             {toTitleCase(selected.classwork_type)}
                           </Badge>
                         </div>
+
                         <div className="gap-3">
                           {(() => {
                             const activeAssignment =
@@ -635,13 +790,14 @@ export default function ClassworkView({
                             const due = activeAssignment?.due_date;
                             if (!due) return null;
                             return (
-                              <div className="rounded! border-2 border-black bg-background p-2 px-3 rounded">
-                                <p className="font-bold text-sm">
-                                  {new Date(due).toLocaleString()} |
+                              <div className="">
+                                <p className="font-normal text-sm">
+                                  Due on {new Date(due).toLocaleString()} |
                                 </p>
                               </div>
                             );
                           })()}
+
                           {selected.created_at && selected.is_published && (
                             <div className="">
                               <p className="font-normal text-sm">Created on
@@ -659,15 +815,17 @@ export default function ClassworkView({
                       </div>
 
                     </Card.Title>
-
                     <div className="flex flex-wrap items-center gap-2 px-2">
-                      <Badge
-                        variant="outline"
-                        size="md"
-                        className="w-fit"
-                      >
-                        {toTitleCase(selected.classwork_category)}
-                      </Badge>
+                      {!isReadingType(selected.classwork_type) && selected.classwork_category && (
+                        <Badge
+                          variant="outline"
+                          size="md"
+                          className="w-fit"
+                        >
+                          {toTitleCase(selected.classwork_category)}
+                        </Badge>
+                      )}
+
                       <Badge variant="solid" size="md">
                         {selected.is_published ? "Published" : "Draft"}
                       </Badge>
@@ -681,8 +839,8 @@ export default function ClassworkView({
                 </Card.Content>
               </Card>
 
-              <div className="flex flex-col gap-4 pt-1">
-                <Card className="w-full p-0 border-0 shadow-none px-2">
+              <div className="flex flex-col gap-4">
+                <Card className="w-full p-0 border-0! shadow-none px-2">
                   <Card.Content>
                     <Card.Title className="mb-1 text-lg">
                       Instructions
@@ -697,7 +855,7 @@ export default function ClassworkView({
                   </Card.Content>
                 </Card>
 
-                <Card className="w-full p-0 border-0 shadow-none px-2">
+                <Card className="w-full p-0 border-0! shadow-none px-2">
                   <Card.Content className="space-y-3">
                     <Card.Title className="mb-1 text-lg">
                       Attached Files
@@ -712,81 +870,89 @@ export default function ClassworkView({
                         }
                       />
                     ) : (
-                      <div className="py-8 text-center">
+                      <Card className="py-4 w-full text-center shadow-none!">
                         <p className="text-sm text-muted-foreground">
                           No files attached.
                         </p>
-                      </div>
+                      </Card>
                     )}
                   </Card.Content>
                 </Card>
-
               </div>
 
-              <RubricsScoreBoard
-                totalPoints={selected.total_points}
-                rubricLevels={
-                  selected.classwork_type === "ACTIVITY" || selected.classwork_type === "ASSIGNMENT"
-                    ? selected.rubric_levels
-                    : undefined
-                }
-              />
-              {showArchiveConfirm && (
-                <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4">
-                  <Card className="block w-full max-w-md border-border bg-background p-0 text-foreground shadow-[4px_4px_0_#000] transition-none hover:shadow-[4px_4px_0_#000]">
-                    <div className="flex items-center justify-between border-b-2 border-black bg-red-100 px-5 py-3">
-                      <div className="flex items-center gap-2 text-red-800">
-                        <Archive size={18} />
-                        <h2 className="font-bold">Archive Classwork?</h2>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setShowArchiveConfirm(false)}
-                        disabled={isArchiving}
-                        className="hover:bg-white/60 disabled:opacity-50"
-                        aria-label="Close archive confirmation"
-                      >
-                        <X size={16} />
-                      </Button>
-                    </div>
-                    <div className="space-y-3 p-5">
-                      <p className="text-sm font-medium">
-                        Are you sure you want to archive{" "}
-                        <span className="font-bold">"{selected.title}"</span>?
-                      </p>
-                      <p className="text-xs text-gray-600">
-                        This only works while no student work is turned in. If
-                        there are submissions, ask students to unsubmit first.
-                        Linked lessons stay intact.
-                      </p>
-                    </div>
-                    <div className="flex justify-end gap-3 border-t-2 border-black px-5 py-4">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowArchiveConfirm(false)}
-                        disabled={isArchiving}
-                        className="border-black font-semibold disabled:opacity-50"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="default"
-                        size="sm"
-                        onClick={archiveSelectedClasswork}
-                        disabled={isArchiving}
-                        className="border-black bg-red-600 font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 disabled:opacity-50"
-                      >
-                        {isArchiving ? "Archiving..." : "Archive Classwork"}
-                      </Button>
-                    </div>
-                  </Card>
-                </div>
+
+              {(Boolean(selected.linked_lessons?.length) || Boolean(selected.subject_name)) && (
+                <Card className="w-full p-0 border-0! shadow-none px-2 -mt-1">
+                  <Card.Content>
+                    <p className="text-sm text-muted-foreground">
+                      {selected.linked_lessons && selected.linked_lessons.length > 0 ? (
+                        <>
+                          Linked under {selected.linked_lessons.length === 1 ? "lesson" : "lessons"}{" "}
+                          {selected.linked_lessons.map((lesson, idx) => (
+                            <span key={lesson.lesson_id}>
+                              {idx > 0 && <span className="text-muted-foreground">, </span>}
+                              <button
+                                type="button"
+                                onClick={() => void navigateToLesson(lesson.lesson_id)}
+                                className="font-semibold text-foreground hover:underline cursor-pointer transition-colors"
+                              >
+                                {lesson.title}
+                              </button>
+                            </span>
+                          ))}
+                          {selected.subject_name ? (
+                            <>
+                              {" "}in{" "}
+                              <button
+                                type="button"
+                                onClick={() => void navigateToSubject()}
+                                className="font-semibold text-foreground hover:underline cursor-pointer transition-colors"
+                              >
+                                {selected.subject_name}
+                              </button>
+                            </>
+                          ) : null}
+                        </>
+                      ) : selected.subject_name ? (
+                        <>
+                          Subject:{" "}
+                          <button
+                            type="button"
+                            onClick={() => void navigateToSubject()}
+                            className="font-semibold text-foreground hover:underline cursor-pointer transition-colors"
+                          >
+                            {selected.subject_name}
+                          </button>
+                        </>
+                      ) : null}
+                    </p>
+                  </Card.Content>
+                </Card>
               )}
+
+              {(selected.classwork_type === "ACTIVITY" ||
+                selected.classwork_type === "ASSIGNMENT") && (
+                  <div className="w-full mb-2">
+                    <RubricsScoreBoard
+                      totalPoints={selected.total_points}
+                      rubricLevels={selected.rubric_levels}
+                    />
+                  </div>
+
+                )}
+              <ConfirmDialog
+                open={showArchiveConfirm}
+                onOpenChange={setShowArchiveConfirm}
+                title="Archive Classwork"
+                confirmationTitle={`Are you sure you want to archive "${selected.title}"?`}
+                description="This only works while no student work is turned in. If there are submissions, ask students to unsubmit first. Linked lessons stay intact."
+                confirmLabel={isArchiving ? "Archiving..." : "Archive Classwork"}
+                confirmVariant="default"
+                isLoading={isArchiving}
+                onCancel={() => setShowArchiveConfirm(false)}
+                onConfirm={archiveSelectedClasswork}
+              />
+
             </Card>
 
             {/* Submissions & Grading / Reading Engagement Progress Card */}
@@ -852,7 +1018,7 @@ export default function ClassworkView({
 
               {/* Submissions & Grading / Reading Engagement Progress Card */}
               {isReadingType(selected.classwork_type) ? (
-                <div className="space-y-6">
+                <div className="space-y-6 mt-2">
                   <Card className="w-full shadow-none bg-primary">
                     <Card.Content className="space-y-3">
 
@@ -913,7 +1079,7 @@ export default function ClassworkView({
                       ))}
                     </div>
 
-                    <Table wrapperClassName="border-black">
+                    <Table wrapperClassName="border-black -mt-2 shadow-none">
                       <Table.Header className="border-black">
                         <Table.Row>
                           <Table.Head>Student</Table.Head>
@@ -955,12 +1121,8 @@ export default function ClassworkView({
                                 </Table.Cell>
                                 <Table.Cell className="text-center">
                                   <Badge
-                                    variant={opened ? "solid" : "outline"}
+                                    variant={opened ? "surface" : "default"}
                                     size="sm"
-                                    className={`w-fit rounded font-medium ${opened
-                                      ? "bg-[#8BCB88] text-black border-black"
-                                      : "bg-muted/30 text-muted-foreground"
-                                      }`}
                                   >
                                     {opened ? "Opened" : "Not Opened"}
                                   </Badge>
