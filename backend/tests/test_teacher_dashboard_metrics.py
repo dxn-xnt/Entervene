@@ -1,0 +1,586 @@
+"""Dashboard-only policy units and mocked gradebook behavior; no live calls."""
+
+from contextlib import nullcontext
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import pytest
+from fastapi import HTTPException
+
+from app.schemas.TeacherDashboard import DashboardGrade
+from app.services.activity import TeacherDashboardMetrics as metrics
+
+
+def subject(threshold, *, subject_id=1, group_id=2):
+    return SimpleNamespace(
+        subject_id=subject_id,
+        subject_group_id=group_id,
+        subject_group_rel=SimpleNamespace(
+            subject_group_id=group_id, passing_threshold=threshold,
+        ),
+    )
+
+
+def grade(value, *, subject_id=1, student_id="learner", class_id=1):
+    return DashboardGrade(
+        student_id=student_id, class_id=class_id, subject_id=subject_id,
+        academic_period_id=1, current_grade=value,
+    )
+
+
+@pytest.mark.parametrize("threshold", [Decimal("75"), Decimal("83"), Decimal("85"), Decimal("83.25"), Decimal("0"), Decimal("100")])
+def test_threshold_is_read_from_group_without_a_constant_default(threshold):
+    """Unit: runtime group values, including policy and range boundaries."""
+    result = metrics.resolve_dashboard_passing_threshold(subject(threshold))
+    assert result.passing_threshold == float(threshold)
+    assert result.warning is None
+
+
+@pytest.mark.parametrize("value", [None, True, False, "83", Decimal("NaN"), Decimal("Infinity"), Decimal("-0.01"), Decimal("100.01")])
+def test_invalid_threshold_is_unavailable_with_configuration_warning(value):
+    """Unit: invalid values never silently fall back."""
+    result = metrics.resolve_dashboard_passing_threshold(subject(value))
+    assert result.passing_threshold is None
+    assert result.warning.code == "invalid_passing_threshold"
+    assert result.warning.message == metrics.PASSING_CONFIGURATION_WARNING
+
+
+@pytest.mark.parametrize("kind", ["no_group", "no_foreign_key", "different_group", "boolean_id"])
+def test_missing_or_mismatched_group_is_unavailable(kind):
+    """Unit: relationship identity is required, not just a plausible number."""
+    item = subject(Decimal("83"))
+    if kind == "no_group":
+        item.subject_group_rel = None
+    elif kind == "no_foreign_key":
+        item.subject_group_id = None
+    elif kind == "different_group":
+        item.subject_group_rel.subject_group_id = 3
+    else:
+        item.subject_group_id = item.subject_group_rel.subject_group_id = True
+    result = metrics.resolve_dashboard_passing_threshold(item)
+    assert result.passing_threshold is None
+    assert result.warning is not None
+
+
+@pytest.mark.parametrize("threshold", [Decimal("75"), Decimal("83"), Decimal("85"), Decimal("83.25")])
+@pytest.mark.parametrize("offset,passed", [(Decimal("-0.01"), False), (Decimal("0"), True), (Decimal("0.01"), True)])
+def test_passing_boundaries_are_derived_from_parameterized_threshold(threshold, offset, passed):
+    """Unit: compare precise values before rounding display grades."""
+    result = metrics.summarize_dashboard_grades(
+        [grade(float(threshold + offset))],
+        {1: metrics.resolve_dashboard_passing_threshold(subject(threshold))},
+    )
+    assert result.passing_count == int(passed)
+    assert result.passing_rate_percent == (100.0 if passed else 0.0)
+    assert result.current_grade_meets_threshold is passed
+
+
+def test_threshold_changes_are_picked_up_on_the_next_resolution():
+    """Unit: no process-global threshold cache."""
+    item = subject(Decimal("85"))
+    before = metrics.resolve_dashboard_passing_threshold(item)
+    item.subject_group_rel.passing_threshold = Decimal("75")
+    after = metrics.resolve_dashboard_passing_threshold(item)
+    assert before.passing_threshold == 85.0
+    assert after.passing_threshold == 75.0
+
+
+def test_mixed_groups_compare_each_student_subject_individually_and_stay_neutral():
+    """Unit: same learner can pass one subject and not another."""
+    result = metrics.summarize_dashboard_grades(
+        [grade(84, subject_id=1), grade(84, subject_id=2)],
+        {1: metrics.resolve_dashboard_passing_threshold(subject(Decimal("85"))),
+         2: metrics.resolve_dashboard_passing_threshold(subject(Decimal("83"), subject_id=2))},
+    )
+    assert result.total_grade_count == result.available_grade_count == 2
+    assert result.current_grade == 84.0
+    assert result.passing_count == 1
+    assert result.passing_rate_percent == 50.0
+    assert result.passing_threshold is None
+    assert result.current_grade_meets_threshold is None
+
+
+def test_missing_threshold_makes_whole_passing_metric_unavailable_not_partial():
+    """Unit: a configuration failure never produces a complete-looking rate."""
+    result = metrics.summarize_dashboard_grades(
+        [grade(90, subject_id=1), grade(80, subject_id=2)],
+        {1: metrics.resolve_dashboard_passing_threshold(subject(Decimal("85")))},
+    )
+    assert result.current_grade == 85.0
+    assert result.available_grade_count == 2
+    assert result.passing_rate_percent is None
+    assert result.passing_count is None
+    assert [warning.subject_id for warning in result.warnings] == [2]
+
+
+def test_ungraded_students_are_coverage_not_zero_or_failed_grades():
+    """Unit: preserve no-score null and disclose denominator coverage."""
+    result = metrics.summarize_dashboard_grades(
+        [grade(90), grade(None, student_id="ungraded")],
+        {1: metrics.resolve_dashboard_passing_threshold(subject(Decimal("85")))},
+    )
+    assert result.current_grade == 90.0
+    assert result.passing_rate_percent == 100.0
+    assert result.available_grade_count == 1
+    assert result.total_grade_count == 2
+
+
+def test_empty_grades_are_unavailable_not_demo_metrics():
+    """Unit: a real empty scope remains empty."""
+    result = metrics.summarize_dashboard_grades([], {})
+    assert result.current_grade is None
+    assert result.passing_rate_percent is None
+    assert result.total_grade_count == result.available_grade_count == 0
+    assert result.warnings == []
+
+
+def test_gradebook_is_called_once_per_unique_scope_not_per_student(monkeypatch):
+    """Mocked-behavior: query-count bound is one gradebook call per tuple."""
+    db = MagicMock()
+    db.no_autoflush = nullcontext()
+    provider = MagicMock(return_value=SimpleNamespace(studentGrades=[
+        SimpleNamespace(student_id="learner", transmuted_grade=84, total="99"),
+        SimpleNamespace(student_id="ungraded", transmuted_grade=None, total="70"),
+    ]))
+    monkeypatch.setattr(metrics, "teacher_student_gradebook", provider)
+    scopes = [metrics.DashboardScope(1, 1, 1), metrics.DashboardScope(1, 1, 1),
+              metrics.DashboardScope(2, 1, 1), metrics.DashboardScope(1, 2, 1)]
+    result = metrics.read_dashboard_current_grades(db, "teacher", scopes)
+    assert provider.call_count == 3
+    assert len(result) == 6
+    assert [row.current_grade for row in result] == [84, None, 84, None, 84, None]
+    provider.assert_any_call(db, "teacher", 1, 1, 1)
+    db.add.assert_not_called()
+    db.delete.assert_not_called()
+    db.flush.assert_not_called()
+    db.commit.assert_not_called()
+
+
+def test_gradebook_cache_is_request_local_and_active_roster_is_respected(monkeypatch):
+    """Mocked-behavior: inactive learners are excluded, not cached across calls."""
+    db = MagicMock()
+    db.no_autoflush = nullcontext()
+    provider = MagicMock(return_value=SimpleNamespace(studentGrades=[
+        SimpleNamespace(student_id="active", transmuted_grade=83),
+        SimpleNamespace(student_id="inactive", transmuted_grade=99),
+    ]))
+    monkeypatch.setattr(metrics, "teacher_student_gradebook", provider)
+    scope = metrics.DashboardScope(1, 1, 1, frozenset({"active", "roster-only"}))
+    first = metrics.read_dashboard_current_grades(db, "teacher", [scope])
+    second = metrics.read_dashboard_current_grades(db, "teacher", [scope])
+    assert provider.call_count == 2
+    assert [row.student_id for row in first] == ["active", "roster-only"]
+    assert [row.current_grade for row in first] == [83, None]
+    assert second == first
+
+
+def test_shared_subject_authorization_failure_is_unavailable_not_other_teacher_data(monkeypatch):
+    """Mocked-behavior: fail closed if existing gradebook authorization is ambiguous."""
+    db = MagicMock()
+    db.no_autoflush = nullcontext()
+    provider = MagicMock(side_effect=HTTPException(403, "private internal details"))
+    monkeypatch.setattr(metrics, "teacher_student_gradebook", provider)
+    scope = metrics.DashboardScope(1, 1, 1, frozenset({"active"}))
+    grades = metrics.read_dashboard_current_grades(db, "teacher", [scope, scope])
+    result = metrics.summarize_dashboard_grades(
+        grades, {1: metrics.resolve_dashboard_passing_threshold(subject(Decimal("85")))},
+    )
+    assert provider.call_count == 1
+    assert result.current_grade is None
+    assert result.passing_rate_percent is None
+    assert result.available_grade_count == 0
+    assert result.total_grade_count == 1
+    assert [warning.code for warning in result.warnings] == ["grade_scope_unavailable"]
+    assert "private" not in result.model_dump_json()
+
+
+def test_unexpected_gradebook_errors_are_not_swallowed(monkeypatch):
+    """Mocked-behavior: unexpected errors remain visible, not fake empty grades."""
+    db = MagicMock()
+    db.no_autoflush = nullcontext()
+    monkeypatch.setattr(metrics, "teacher_student_gradebook", MagicMock(side_effect=RuntimeError("test failure")))
+    with pytest.raises(RuntimeError, match="test failure"):
+        metrics.read_dashboard_current_grades(db, "teacher", [metrics.DashboardScope(1, 1, 1)])
+
+
+@pytest.fixture
+def dashboard_sample(monkeypatch):
+    """Mocked-behavior fixture: isolated in-memory SQLite, no external database."""
+    import app.models  # noqa: F401
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from app.db.Base import Base
+    from app.services.activity import AnalyticsService
+    from test_teacher_dashboard_health import NOW, seed_dashboard_data
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    monkeypatch.setattr(AnalyticsService, "_teacher_dashboard_now", lambda: NOW)
+    try:
+        yield db, seed_dashboard_data(db)
+    finally:
+        db.rollback()
+        db.close()
+        engine.dispose()
+
+
+def test_actual_gradebook_uses_term_grade_and_matches_class_record_calculation(dashboard_sample):
+    """Mocked-behavior: actual read-only calculation, not a replacement formula."""
+    db, data = dashboard_sample
+    scope = metrics.DashboardScope(data["class_"].class_id, data["subject"].subject_id, data["period"].academic_period_id)
+    authoritative = metrics.teacher_student_gradebook(db, data["teacher"].staff_id, scope.class_id, scope.subject_id, scope.academic_period_id)
+    dashboard_grades = metrics.read_dashboard_current_grades(db, data["teacher"].staff_id, [scope])
+    assert {row.student_id: row.current_grade for row in dashboard_grades} == {
+        row.student_id: row.transmuted_grade for row in authoritative.studentGrades
+    }
+
+
+def test_real_select_count_is_unchanged_for_duplicate_gradebook_scopes(dashboard_sample):
+    """Mocked-behavior: duplicate scopes do not repeat the gradebook's SELECTs."""
+    from sqlalchemy import event
+
+    db, data = dashboard_sample
+    staff_id = data["teacher"].staff_id
+    scope = metrics.DashboardScope(data["class_"].class_id, data["subject"].subject_id, data["period"].academic_period_id)
+    statements = []
+    def record_select(_connection, _cursor, statement, _parameters, _context, _many):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+    engine = db.get_bind()
+    event.listen(engine, "before_cursor_execute", record_select)
+    try:
+        db.expire_all()
+        metrics.read_dashboard_current_grades(db, staff_id, [scope])
+        unique_count = len(statements)
+        statements.clear()
+        db.expire_all()
+        metrics.read_dashboard_current_grades(db, staff_id, [scope] * 5)
+        duplicate_count = len(statements)
+    finally:
+        event.remove(engine, "before_cursor_execute", record_select)
+    assert unique_count > 0
+    assert duplicate_count == unique_count
+
+
+def test_whole_dashboard_is_read_only_even_with_a_dirty_session(dashboard_sample, monkeypatch):
+    """Mocked-behavior: reject DML, explicit mutation and implicit autoflush."""
+    from sqlalchemy import event
+    from app.services.activity import AnalyticsService
+
+    db, data = dashboard_sample
+    staff_id = data["teacher"].staff_id
+    period = data["period"]
+    # This pending update must not cause autoflush during any dashboard query.
+    data["assignments"]["main_graded"].classwork.title = "Unpersisted fixture title"
+    assert db.dirty
+    calls = []
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("Dashboard attempted a write, flush or commit")
+    def reject_dml(_connection, _cursor, statement, _parameters, _context, _many):
+        calls.append(statement)
+        assert statement.lstrip().upper().startswith("SELECT")
+    engine = db.get_bind()
+    event.listen(engine, "before_cursor_execute", reject_dml)
+    event.listen(db, "before_flush", forbidden)
+    try:
+        with monkeypatch.context() as guard:
+            for name in ("add", "add_all", "delete", "flush", "commit"):
+                guard.setattr(db, name, forbidden)
+            result = AnalyticsService.build_teacher_dashboard_health(db, staff_id, period)
+        assert result["section_matrix"]
+        assert calls
+        assert db.dirty
+    finally:
+        event.remove(engine, "before_cursor_execute", reject_dml)
+        event.remove(db, "before_flush", forbidden)
+
+
+@pytest.mark.parametrize("status,expected", [("present", 100.0), ("late", 100.0), ("excused", 0.0), ("absent", 0.0)])
+def test_attendance_rule_for_each_status(status, expected):
+    """Unit: present and late count; excused and absent do not."""
+    result = metrics.summarize_dashboard_attendance([SimpleNamespace(status=status)])
+    assert result.rate == expected
+    assert result.record_count == 1
+
+
+def test_attendance_denominator_is_records_not_days_or_students():
+    """Unit: advisory/subject records on the same day remain separate entries."""
+    records = [SimpleNamespace(status=status, student_id="learner", date=date(2026, 10, 1))
+               for status in ("present", "late", "excused", "absent")]
+    result = metrics.summarize_dashboard_attendance(records)
+    assert result.rate == 50.0
+    assert result.record_count == 4
+    assert result.present_count == result.late_count == result.excused_count == result.absent_count == 1
+
+
+def test_no_attendance_records_is_unavailable_not_inferred_absence():
+    """Unit: missing school days do not create denominator records."""
+    result = metrics.summarize_dashboard_attendance([])
+    assert result.rate is None
+    assert result.record_count == 0
+
+
+@pytest.mark.parametrize("now,month_start,today", [
+    (datetime(2026, 9, 30, 15, 59, 59, tzinfo=timezone.utc), date(2026, 9, 1), date(2026, 9, 30)),
+    (datetime(2026, 9, 30, 16, 0, tzinfo=timezone.utc), date(2026, 10, 1), date(2026, 10, 1)),
+    (datetime(2026, 12, 31, 16, 0, tzinfo=timezone.utc), date(2027, 1, 1), date(2027, 1, 1)),
+    (datetime(2028, 2, 28, 16, 0, tzinfo=timezone.utc), date(2028, 2, 1), date(2028, 2, 29)),
+    (datetime(2026, 9, 30, 16, 0), date(2026, 10, 1), date(2026, 10, 1)),
+])
+def test_month_boundaries_and_manila_midnight(now, month_start, today):
+    """Unit: dates use Manila, including naive legacy UTC and leap months."""
+    window = metrics.dashboard_month_window(now, date(2020, 1, 1), date(2030, 1, 1))
+    assert window.start_date == month_start
+    assert window.end_date == window.today == today
+    assert window.is_empty is False
+    assert window.label == "This month"
+
+
+@pytest.mark.parametrize("start,end,empty,expected_start,expected_end", [
+    (date(2026, 10, 4), date(2026, 12, 1), False, date(2026, 10, 4), date(2026, 10, 8)),
+    (date(2026, 8, 1), date(2026, 10, 5), False, date(2026, 10, 1), date(2026, 10, 5)),
+    (date(2026, 8, 1), date(2026, 9, 30), True, date(2026, 10, 1), date(2026, 9, 30)),
+    (date(2026, 11, 1), date(2026, 12, 1), True, date(2026, 11, 1), date(2026, 10, 8)),
+])
+def test_month_window_intersects_selected_period_inclusively(start, end, empty, expected_start, expected_end):
+    """Unit: historical/future selected periods never borrow current records."""
+    window = metrics.dashboard_month_window(datetime(2026, 10, 8, tzinfo=timezone.utc), start, end)
+    assert window.start_date == expected_start
+    assert window.end_date == expected_end
+    assert window.is_empty is empty
+
+
+def test_missing_threshold_warns_even_for_an_authorized_empty_roster():
+    """Unit: missing configuration is not hidden by a currently empty roster."""
+    result = metrics.summarize_dashboard_grades(
+        [], {1: metrics.resolve_dashboard_passing_threshold(subject(None))},
+    )
+    assert result.current_grade is None
+    assert result.passing_rate_percent is None
+    assert [warning.code for warning in result.warnings] == ["invalid_passing_threshold"]
+
+
+@pytest.mark.parametrize("offset,expected", [(-1, False), (0, False), (1, True)])
+@pytest.mark.parametrize("naive", [False, True])
+def test_submission_deadline_equality_and_legacy_naive_utc(offset, expected, naive):
+    """Unit: one instant, not local-clock lexicographic comparison."""
+    due = datetime(2026, 10, 8, 1, tzinfo=timezone.utc)
+    submitted = due + timedelta(seconds=offset)
+    if naive:
+        submitted = submitted.replace(tzinfo=None)
+    assert metrics.dashboard_submission_is_late(submitted, due) is expected
+
+
+@pytest.mark.parametrize("submitted,due", [(None, datetime(2026, 10, 8)), (datetime(2026, 10, 8), None), (None, None)])
+def test_missing_timestamps_are_not_silently_on_time(submitted, due):
+    """Unit: missing evidence is explicitly unknown."""
+    assert metrics.dashboard_submission_is_late(submitted, due) is None
+
+
+def excuse(*, learner="learner", class_id=1, subject_id=999, on=date(2026, 10, 8), status="excused"):
+    return SimpleNamespace(student_id=learner, class_id=class_id, subject_id=subject_id, date=on, status=status)
+
+
+@pytest.mark.parametrize("changes,expected", [
+    ({}, True), ({"learner": "other"}, False), ({"class_id": 2}, False),
+    ({"on": date(2026, 10, 7)}, False), ({"status": "present"}, False),
+    ({"status": "late"}, False), ({"status": "absent"}, False),
+    ({"subject_id": 1234}, True),
+])
+def test_excuse_matches_only_student_class_and_manila_deadline_date_by_default(changes, expected):
+    """Unit: subject matching remains OFF under the approved three-field rule."""
+    due = datetime(2026, 10, 7, 16, tzinfo=timezone.utc)  # Oct 8 Manila, Oct 7 UTC.
+    assert metrics.dashboard_excuse_covers_submission("learner", 1, 1, due, [excuse(**changes)]) is expected
+
+
+@pytest.mark.parametrize("record_subject,expected", [(1, True), (None, True), (2, False)])
+def test_optional_subject_matching_can_be_explicitly_enabled(record_subject, expected):
+    """Unit: optional parameter tested, but production dashboard leaves it False."""
+    due = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    assert metrics.dashboard_excuse_covers_submission(
+        "learner", 1, 1, due, [excuse(subject_id=record_subject)], require_subject_match=True,
+    ) is expected
+
+
+def assignment(identifier=1, *, due=None, class_id=1, subject_id=1):
+    return SimpleNamespace(classwork_assignment_id=identifier, class_id=class_id,
+                           classwork=SimpleNamespace(subject_id=subject_id), due_date=due)
+
+
+def submission(identifier=1, *, learner="learner", submitted=None, status="submitted"):
+    return SimpleNamespace(classwork_assignment_id=identifier, student_id=learner,
+                           submitted_at=submitted, status=status)
+
+
+def test_excused_submissions_are_excluded_from_both_late_counts_but_not_weekdays():
+    """Unit: exemptions are not lateness or denominator evidence, still completed."""
+    due = datetime(2026, 10, 7, 16, tzinfo=timezone.utc)
+    now = datetime(2026, 10, 8, 2, tzinfo=timezone.utc)
+    works = {1: assignment(due=due)}
+    rows = [submission(submitted=due + timedelta(hours=1)),
+            submission(learner="on-time", submitted=due),
+            submission(learner="late", submitted=due + timedelta(hours=1), status="graded")]
+    late, weekdays = metrics.summarize_dashboard_submissions(
+        works, rows, [excuse()], now, date(2026, 10, 1), date(2026, 12, 31),
+    )
+    assert late.completed_count == 3
+    assert late.excused_excluded_count == 1
+    assert late.eligible_count == 2
+    assert late.late_count == 1
+    assert late.late_rate_percent == 50.0
+    assert weekdays.days[3].count == weekdays.total_count == 3
+    assert late.warnings == weekdays.warnings == []
+
+
+def test_previous_month_deadline_excuse_still_covers_current_period_submission():
+    """Unit: excuse fetch/match must not be constrained to the chart's month."""
+    due = datetime(2026, 9, 29, 16, tzinfo=timezone.utc)
+    now = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    late, weekdays = metrics.summarize_dashboard_submissions(
+        {1: assignment(due=due)}, [submission(submitted=now)],
+        [excuse(on=date(2026, 9, 30))], now, date(2026, 10, 1), date(2026, 12, 31),
+    )
+    assert late.excused_excluded_count == late.completed_count == 1
+    assert late.eligible_count == late.late_count == 0
+    assert late.late_rate_percent is None
+    assert weekdays.total_count == 1
+
+
+def test_weekdays_keep_six_rows_and_count_sunday_without_a_seventh_bar():
+    """Unit: all actual submission dates use Manila and Sunday is separate."""
+    monday = datetime(2026, 10, 4, 16, tzinfo=timezone.utc)  # Oct 5, Monday Manila.
+    rows = [submission(learner=f"learner-{day}", submitted=monday + timedelta(days=day)) for day in range(7)]
+    late, result = metrics.summarize_dashboard_submissions(
+        {1: assignment(due=monday + timedelta(days=10))}, rows, [], monday + timedelta(days=7),
+        date(2026, 10, 1), date(2026, 12, 31),
+    )
+    assert [day.label for day in result.days] == ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    assert [day.count for day in result.days] == [1] * 6
+    assert result.sunday_count == 1
+    assert result.total_count == 7
+    assert late.late_rate_percent == 0.0
+
+
+@pytest.mark.parametrize("timestamp,expected", [
+    (datetime(2026, 9, 30, 15, 59, 59, tzinfo=timezone.utc), 0),
+    (datetime(2026, 9, 30, 16, tzinfo=timezone.utc), 1),
+    (datetime(2026, 10, 8, 1, tzinfo=timezone.utc), 1),
+    (datetime(2026, 10, 8, 1, 0, 1, tzinfo=timezone.utc), 0),
+])
+def test_submission_period_and_now_boundaries_use_manila(timestamp, expected):
+    """Unit: selected period starts inclusive and no future event is counted."""
+    now = datetime(2026, 10, 8, 1, tzinfo=timezone.utc)
+    late, weekdays = metrics.summarize_dashboard_submissions(
+        {1: assignment(due=now)}, [submission(submitted=timestamp)], [], now,
+        date(2026, 10, 1), date(2026, 12, 31),
+    )
+    assert late.completed_count == weekdays.total_count == expected
+
+
+@pytest.mark.parametrize("status", ["pending", "missed", "draft"])
+def test_incomplete_submission_statuses_are_not_actual_submissions(status):
+    """Unit: counts are completed evidence, not future/pending assignment rows."""
+    now = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    late, weekdays = metrics.summarize_dashboard_submissions(
+        {1: assignment(due=now)}, [submission(submitted=now, status=status)], [], now,
+        date(2026, 10, 1), date(2026, 12, 31),
+    )
+    assert late.completed_count == weekdays.total_count == 0
+
+
+def test_unique_latest_completed_attempt_is_authoritative():
+    """Unit: do not count historical attempts twice."""
+    old = submission(submitted=datetime(2026, 10, 7, tzinfo=timezone.utc))
+    newest = submission(submitted=datetime(2026, 10, 8, tzinfo=timezone.utc))
+    rows, warnings = metrics.select_dashboard_submissions([old, newest, newest])
+    assert rows == [newest]
+    assert warnings == []
+
+
+@pytest.mark.parametrize("missing_timestamp", [False, True])
+def test_ambiguous_duplicate_attempts_flag_instead_of_an_invented_authoritative_id(missing_timestamp):
+    """Unit: tied/missing attempt timestamps cannot yield a complete-looking rate."""
+    now = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    rows = [submission(submitted=now), submission(submitted=None if missing_timestamp else now)]
+    late, weekdays = metrics.summarize_dashboard_submissions(
+        {1: assignment(due=now)}, rows, [], now, date(2026, 10, 1), date(2026, 12, 31),
+    )
+    assert late.late_rate_percent is None
+    assert late.warnings[0].code == weekdays.warnings[0].code == "ambiguous_submission_attempts"
+
+
+@pytest.mark.parametrize("missing_field,code", [("submitted", "missing_submission_timestamp"), ("due", "missing_deadline_timestamp")])
+def test_missing_required_timestamp_makes_late_rate_unavailable(missing_field, code):
+    """Unit: due-less work remains submitted but cannot define lateness."""
+    now = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    late, weekdays = metrics.summarize_dashboard_submissions(
+        {1: assignment(due=None if missing_field == "due" else now)},
+        [submission(submitted=None if missing_field == "submitted" else now)], [], now,
+        date(2026, 10, 1), date(2026, 12, 31),
+    )
+    assert late.late_rate_percent is None
+    assert [warning.code for warning in late.warnings] == [code]
+    assert weekdays.total_count == (1 if missing_field == "due" else 0)
+
+
+@pytest.mark.parametrize("today,expected_days,expected_percent", [
+    (date(2026, 9, 30), 0, 0.0), (date(2026, 10, 1), 1, 10.0),
+    (date(2026, 10, 5), 5, 50.0), (date(2026, 10, 10), 10, 100.0),
+    (date(2026, 10, 11), 10, 100.0),
+])
+def test_term_progress_uses_inclusive_calendar_days_and_clamps(today, expected_days, expected_percent):
+    """Unit: calendar progress, not a scheduled-school-day estimate."""
+    result = metrics.dashboard_term_progress(date(2026, 10, 1), date(2026, 10, 10), today)
+    assert result.elapsed_days == expected_days
+    assert result.total_days == 10
+    assert result.progress_percent == expected_percent
+    assert result.total_weeks == 2
+
+
+def test_invalid_period_dates_make_calendar_progress_unavailable():
+    """Unit: malformed period boundaries do not become fabricated progress."""
+    result = metrics.dashboard_term_progress(date(2026, 10, 10), date(2026, 10, 1), date(2026, 10, 5))
+    assert result.progress_percent is None
+    assert result.warnings[0].code == "invalid_period_dates"
+
+
+@pytest.mark.parametrize("outside", [datetime(2026, 9, 30, tzinfo=timezone.utc), datetime(2026, 10, 9, tzinfo=timezone.utc)])
+def test_known_out_of_window_duplicates_do_not_flag_selected_period(outside):
+    """Unit: unrelated past/future attempts are filtered before ambiguity checks."""
+    now = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    late, weekdays = metrics.summarize_dashboard_submissions(
+        {1: assignment(due=now)}, [submission(submitted=outside), submission(submitted=outside)],
+        [], now, date(2026, 10, 1), date(2026, 12, 31),
+    )
+    assert late.completed_count == weekdays.total_count == 0
+    assert late.warnings == weekdays.warnings == []
+
+
+def test_latest_future_attempt_does_not_hide_a_known_submission_in_this_window():
+    """Unit: consolidate this window's evidence, not a future event."""
+    now = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    late, weekdays = metrics.summarize_dashboard_submissions(
+        {1: assignment(due=now)}, [submission(submitted=now), submission(submitted=now + timedelta(days=1))],
+        [], now, date(2026, 10, 1), date(2026, 12, 31),
+    )
+    assert late.completed_count == weekdays.total_count == 1
+    assert late.late_rate_percent == 0.0
+    assert late.warnings == weekdays.warnings == []
+
+
+def test_excused_unknown_timestamp_is_removed_before_lateness_availability_check():
+    """Unit: exempt work is outside both late counts but still has weekday warning."""
+    now = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    late, weekdays = metrics.summarize_dashboard_submissions(
+        {1: assignment(due=now)}, [submission(submitted=None), submission(learner="on-time", submitted=now)],
+        [excuse()], now, date(2026, 10, 1), date(2026, 12, 31),
+    )
+    assert late.excused_excluded_count == 1
+    assert late.eligible_count == 1
+    assert late.late_rate_percent == 0.0
+    assert late.warnings == []
+    assert [warning.code for warning in weekdays.warnings] == ["missing_submission_timestamp"]

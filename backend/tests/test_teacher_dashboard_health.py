@@ -26,6 +26,7 @@ from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
+from app.models.academic.SubjectGroup import SubjectGroup
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.attendance.Attendance import AttendanceRecord
@@ -123,8 +124,12 @@ def seed_dashboard_data(db):
         )
         for name in ["Newton", "Einstein", "Curie"]
     ]
+    group = SubjectGroup(name="Dashboard synthetic core", passing_threshold=Decimal("85"))
+    db.add(group)
+    db.flush()
     subjects = [
-        Subject(subject_name=name, academic_level_id=level.academic_level_id, status="active")
+        Subject(subject_name=name, academic_level_id=level.academic_level_id,
+                status="active", subject_group_id=group.subject_group_id)
         for name in ["Mathematics", "History", "English"]
     ]
     db.add_all(classes + subjects)
@@ -234,6 +239,8 @@ def data(db, monkeypatch):
 
 
 def dashboard(db, data, **kwargs):
+    # Persist test fixture edits before exercising the strictly read-only path.
+    db.flush()
     return AnalyticsService.build_teacher_dashboard_health(
         db, data["teacher"].staff_id, kwargs.pop("period", data["period"]), **kwargs,
     )
@@ -264,7 +271,10 @@ def test_exact_teacher_term_and_active_enrollment_scope(db, data):
     assert result["trend_chart"]["has_sufficient_data"] is False
     section = result["section_matrix"][0]
     assert (section["student_count"], section["published_classworks"]) == (2, 2)
-    assert (section["avg_score_percent"], section["passing_rate_percent"]) == (71.0, 50.0)
+    assert section["avg_score_percent"] == 71.0  # The trend's observed score is unchanged.
+    assert section["passing_threshold"] == float(data["subject"].subject_group_rel.passing_threshold)
+    assert section["available_grade_count"] == section["total_grade_count"] == 2
+    assert section["passing_rate_percent"] == 0.0
     assert (section["completion_rate_percent"], section["attendance_rate_percent"]) == (75.0, 50.0)
     queue = result["action_queue"]
     assert [s["submission_id"] for s in queue["pending_grading"]] == [data["submissions"]["pending_active"].submission_id]
@@ -301,7 +311,7 @@ def test_empty_scope_has_honest_phase_one_zeros_and_empty_data(db, data, empty_k
     assert (cards["Active Classes"]["count"], cards["Active Classes"]["stat"]) == ("0", "0 sections")
     assert (cards["Overall Completion"]["count"], cards["Overall Completion"]["stat"]) == ("0%", "0 of 0 submitted")
     assert (cards["Ungraded Queue"]["count"], cards["Ungraded Queue"]["stat"]) == ("0", "0 submissions")
-    assert cards["Class Average"]["count"] == "82%"  # Later-phase widgets retain their existing behavior.
+    assert cards["Current grade"]["count"] == "—"
     assert result["trend_chart"]["available_filters"] == result["trend_chart"]["points"] == []
     assert result["section_matrix"] == []
     assert result["action_queue"] == {"pending_grading": [], "upcoming_deadlines": []}
@@ -380,7 +390,9 @@ def test_missing_point_totals_and_genuine_zero_scores(db, data, total_points, ex
     result = dashboard(db, data)
     assert result["trend_chart"]["points"][0]["avg_score_percent"] == expected
     assert result["section_matrix"][0]["avg_score_percent"] == expected
-    assert result["section_matrix"][0]["passing_rate_percent"] == (None if expected is None else 0.0)
+    # Missing this work's denominator does not erase the class record's other work.
+    assert result["section_matrix"][0]["available_grade_count"] == 2
+    assert result["section_matrix"][0]["passing_rate_percent"] == 0.0
 
 
 def test_deadlines_use_now_to_next_monday_manila_with_ascending_real_ids(db, data):
@@ -530,3 +542,130 @@ def test_route_defaults_to_active_period_and_unknown_user_is_forbidden(db, data)
 def test_student_role_is_forbidden(db, data):
     client = create_client(db, {"sub": str(uuid.uuid4()), "role": "student"})
     assert client.get("/analytics/teacher/dashboard-health").status_code == 403
+
+
+def test_month_attendance_uses_all_recorded_rows_and_active_roster(db, data):
+    """Mocked behavior: all four statuses, no invented missing-day entries."""
+    for index, status in enumerate(["present", "late", "excused", "absent"]):
+        db.add(AttendanceRecord(
+            class_id=data["class_"].class_id, student_id=data["students"]["active_one"].student_id,
+            date=NOW.date() - timedelta(days=index), status=status,
+        ))
+    result = dashboard(db, data)
+    monthly = result["details"]["attendance_by_section"][0]
+    assert monthly["record_count"] == 6  # Two existing + four new, no withdrawn row.
+    assert monthly["present_count"] == 2 and monthly["late_count"] == 1
+    assert monthly["excused_count"] == 1 and monthly["absent_count"] == 2
+    assert monthly["rate"] == 50.0
+    assert result["phase_two"]["attendance_today"]["record_count"] == 1
+    previous = dashboard(db, data, period=data["previous_period"])
+    assert all(row["record_count"] == 0 and row["rate"] is None for row in previous["details"]["attendance_by_section"])
+
+
+def test_month_boundaries_and_today_use_the_same_manila_clock(db, data, monkeypatch):
+    """Mocked behavior: UTC September becomes Manila October, future rows excluded."""
+    monkeypatch.setattr(AnalyticsService, "_teacher_dashboard_now", lambda: datetime(2026, 9, 30, 16, tzinfo=timezone.utc))
+    for day in [date(2026, 9, 30), date(2026, 10, 1), date(2026, 10, 2)]:
+        db.add(AttendanceRecord(
+            class_id=data["class_"].class_id, student_id=data["students"]["active_two"].student_id,
+            date=day, status="late",
+        ))
+    result = dashboard(db, data)
+    assert result["details"]["attendance_by_section"][0]["record_count"] == 1
+    assert result["details"]["attendance_by_section"][0]["rate"] == 100.0
+    assert result["phase_two"]["attendance_today"]["late_count"] == 1
+    assert result["phase_two"]["month_window"]["start_date"] == "2026-10-01"
+
+
+def test_missing_threshold_keeps_grade_but_marks_passing_unavailable(db, data):
+    """Mocked behavior: configuration gaps never create a partial passing rate."""
+    data["subject"].subject_group_rel = None
+    result = dashboard(db, data)
+    summary = result["phase_two"]["grades"]
+    assert summary["current_grade"] is not None
+    assert summary["passing_rate_percent"] is None
+    assert summary["warnings"][0]["code"] == "invalid_passing_threshold"
+    assert result["section_matrix"][0]["passing_rate_percent"] is None
+    assert next(card for card in result["cards"] if card["title"] == "Passing Rate")["count"] == "—"
+
+
+def test_threshold_updates_are_used_by_the_next_dashboard_request(db, data):
+    """Mocked behavior: runtime policy updates, no dashboard threshold cache."""
+    before = dashboard(db, data)
+    assert before["phase_two"]["grades"]["passing_rate_percent"] == 0.0
+    data["subject"].subject_group_rel.passing_threshold = Decimal("40.25")
+    after = dashboard(db, data)
+    assert after["phase_two"]["grades"]["passing_rate_percent"] == 100.0
+    assert after["section_matrix"][0]["passing_threshold"] == 40.25
+
+
+def test_late_summary_excuses_use_deadline_manila_date_without_subject_match(db, data):
+    """Mocked behavior: excused removed from numerator AND denominator."""
+    deadline = datetime(2026, 9, 30, 17, tzinfo=timezone.utc)  # October 1 Manila.
+    data["assignments"]["main_graded"].due_date = deadline
+    db.add(AttendanceRecord(
+        class_id=data["class_"].class_id, student_id=data["students"]["active_one"].student_id,
+        subject_id=data["other_subject"].subject_id, date=date(2026, 10, 1), status="excused",
+    ))
+    result = dashboard(db, data)
+    summary = result["phase_two"]["late_submissions"]
+    assert summary["excused_excluded_count"] == 1
+    assert summary["late_count"] == 1 and summary["eligible_count"] == 2
+    assert summary["late_rate_percent"] == 50.0
+    assert result["phase_two"]["require_subject_match"] is False
+    assert result["phase_two"]["weekdays"]["total_count"] == 3  # Excuse does not remove a submission.
+    assert result["kpis"]["overall_completion_rate"] == 75.0
+
+
+def test_excuse_deadline_query_is_not_clipped_to_attendance_month(db, data):
+    """Mocked behavior: previous-month deadline may excuse a current submission."""
+    data["assignments"]["main_graded"].due_date = datetime(2026, 9, 29, 17, tzinfo=timezone.utc)
+    db.add(AttendanceRecord(
+        class_id=data["class_"].class_id, student_id=data["students"]["active_one"].student_id,
+        date=date(2026, 9, 30), status="excused",
+    ))
+    result = dashboard(db, data)
+    assert result["phase_two"]["late_submissions"]["excused_excluded_count"] == 1
+    assert result["details"]["attendance_by_section"][0]["excused_count"] == 0
+
+
+def test_weekday_counts_are_manila_six_rows_plus_sunday(db, data):
+    """Mocked behavior: selected period, future exclusion, Sunday in metadata."""
+    data["submissions"]["graded_one"].submitted_at = datetime(2026, 10, 3, 17, tzinfo=timezone.utc)
+    data["submissions"]["graded_two"].submitted_at = datetime(2026, 9, 30, 17, tzinfo=timezone.utc)
+    result = dashboard(db, data)
+    summary = result["phase_two"]["weekdays"]
+    assert len(summary["days"]) == len(result["details"]["submissions_by_weekday"]) == 6
+    assert summary["sunday_count"] == 1
+    assert summary["total_count"] == 3
+    assert [row["count"] for row in result["details"]["submissions_by_weekday"]] == [0, 0, 0, 2, 0, 0]
+    previous = dashboard(db, data, period=data["previous_period"])
+    assert previous["phase_two"]["weekdays"]["total_count"] == 0
+
+
+@pytest.mark.parametrize("explicit_period", [True, False])
+def test_route_period_lookup_does_not_autoflush_dirty_session(db, data, monkeypatch, explicit_period):
+    """Mocked behavior: the entire authenticated route is SELECT-only."""
+    from sqlalchemy import event
+
+    identity = {"sub": str(data["teacher"].user_id), "role": "teacher"}
+    period_id = data["period"].academic_period_id
+    data["teacher"].first_name = "Unpersisted test edit"
+    def forbidden(*args, **kwargs):
+        pytest.fail("Dashboard route attempted a write or flush")
+    def select_only(_connection, _cursor, statement, _parameters, _context, _many):
+        assert statement.lstrip().upper().startswith("SELECT")
+    event.listen(db.get_bind(), "before_cursor_execute", select_only)
+    try:
+        with monkeypatch.context() as guard:
+            for method in ["flush", "commit", "add", "add_all", "delete"]:
+                guard.setattr(db, method, forbidden)
+            with create_client(db, identity) as client:
+                response = client.get("/analytics/teacher/dashboard-health", params={
+                    "academic_period_id": period_id,
+                } if explicit_period else {})
+            assert response.status_code == 200
+            assert response.json()["phase_two"]["grades"]["available_grade_count"] == 2
+            assert db.dirty
+    finally:
+        event.remove(db.get_bind(), "before_cursor_execute", select_only)

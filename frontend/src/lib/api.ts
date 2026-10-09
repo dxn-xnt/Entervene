@@ -2722,7 +2722,68 @@ export interface TrendChartPoint {
   total_enrolled: number;
 }
 
-export interface SectionHealthItem {
+export interface TeacherDashboardWarning {
+  code: string;
+  message: string;
+  subject_id?: number | null;
+  class_id?: number | null;
+}
+
+export interface TeacherDashboardGradeSummary {
+  current_grade: number | null;
+  passing_rate_percent: number | null;
+  available_grade_count: number;
+  total_grade_count: number;
+  passing_count: number | null;
+  passing_threshold: number | null;
+  current_grade_meets_threshold: boolean | null;
+  warnings: TeacherDashboardWarning[];
+}
+
+export interface TeacherDashboardAttendanceSummary {
+  rate: number | null;
+  record_count: number;
+  present_count: number;
+  late_count: number;
+  excused_count: number;
+  absent_count: number;
+}
+
+export interface TeacherDashboardAttendanceSection extends TeacherDashboardAttendanceSummary {
+  class_id: number;
+  section: string;
+}
+
+export interface TeacherDashboardPhaseTwo {
+  grades: TeacherDashboardGradeSummary;
+  attendance_today: TeacherDashboardAttendanceSummary;
+  month_window: { start_date: string; end_date: string; today: string; label: string } | null;
+  late_submissions: {
+    late_rate_percent: number | null;
+    late_count: number;
+    eligible_count: number;
+    excused_excluded_count: number;
+    completed_count: number;
+    warnings: TeacherDashboardWarning[];
+  };
+  weekdays: {
+    days: Array<{ label: string; day_index: number; count: number }>;
+    sunday_count: number;
+    total_count: number;
+    warnings: TeacherDashboardWarning[];
+  };
+  term_progress: {
+    progress_percent: number | null;
+    elapsed_days: number;
+    total_days: number;
+    week_number: number;
+    total_weeks: number;
+    warnings: TeacherDashboardWarning[];
+  } | null;
+  require_subject_match: boolean;
+}
+
+export interface SectionHealthItem extends Partial<TeacherDashboardGradeSummary> {
   class_id: number;
   section_name: string;
   grade_level: string;
@@ -2779,11 +2840,14 @@ export interface TeacherDashboardHealthResponse {
     points: TrendChartPoint[];
   };
   section_matrix: SectionHealthItem[];
+  phase_two?: TeacherDashboardPhaseTwo;
   action_queue: {
     pending_grading: ActionQueuePendingItem[];
     upcoming_deadlines: ActionQueueDeadlineItem[];
   };
-  details?: Record<string, any>;
+  details?: Record<string, any> & {
+    attendance_by_section?: TeacherDashboardAttendanceSection[];
+  };
 }
 
 export async function getTeacherDashboardHealth(params: {
