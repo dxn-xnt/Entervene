@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Award, BookOpen, BookOpenCheck, ClipboardList, Info, Paperclip, Plus, Users, X } from "lucide-react";
+import { Award, BookOpen, BookOpenCheck, ClipboardList, Paperclip, Plus, Users, X } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import AppLayout from "@/layouts/app-layout";
@@ -14,6 +14,7 @@ import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
 import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { SubjectClassHeader } from "@/components/subject-class-header";
 import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Badge } from "@/components/retroui/Badge";
@@ -21,7 +22,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import ClassworkFormModal from "./subject-details/classwork-form-modal";
 import CompetencyModal from "./forms/competency-modal";
 import ManageLessonModal from "./forms/manage-lesson";
-import SubjectLessonList from "./subject-details/lesson-classwork-list";
+import SubjectLessonList from "./subject-details/subject-lesson-list";
 import SubjectClassworkTab from "./subject-details/subject-classwork-tab";
 import TeacherLessonDetailScreen from "./lesson-view";
 import TOSGeneratorScreen from "./subject-details/tos-generator-screen";
@@ -1080,21 +1081,17 @@ export default function SubjectDetails() {
                     </div>
                   )}
 
-                  <Card className="block bg-primary">
-                    <Card.Content className="flex items-start justify-between gap-4">
-                      <div>
-                        <Card.Title className="break-words text-2xl font-bold sm:text-3xl">
-                          {subjectName}
-                        </Card.Title>
-                        <p className="text-xs text-black">
-                          {sectionName
-                            ? `Section assigned: ${sectionName}`
-                            : "Section assigned for this subject"}
-                        </p>
-                      </div>
-                      <Info size={16} />
-                    </Card.Content>
-                  </Card>
+                  <SubjectClassHeader
+                    detail={{
+                      class_id: classId || "",
+                      academic_level: subjectLoad?.grade_level,
+                    }}
+                    currentSubject={{
+                      subject_id: Number(subjectId),
+                      subject_name: subjectName,
+                    }}
+                    showViewSubjectButton={false}
+                  />
 
                   {activeTab === "classwork" && subjectId ? (
                     <SubjectClassworkTab

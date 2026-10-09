@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import {
   Archive,
   ArchiveIcon,
-  ArrowUpRight,
   Award,
   BookOpen,
   Eye,
@@ -22,14 +21,12 @@ import {
   type SectionHealthItem,
 } from "@/lib/api";
 import { formatDate, toTitleCase } from "@/lib/formatters";
-import { Text } from "@/components/retroui/Text";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import LessonItemLine from "@/components/item-line/lesson";
 import { Select } from "@/components/retroui/Select";
 import { Badge } from "@/components/retroui/Badge";
 import { Progress } from "@/components/retroui/Progress";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { ContextMenu } from "@/components/retroui/ContextMenu";
 import {
   DropdownMenu,
@@ -631,47 +628,15 @@ export default function SubjectLessonList({
 
         {/* ── Right Side: Subject Overview & Section Health ── */}
         <aside className="order-first flex flex-col gap-3 sm:grid sm:grid-cols-3 lg:flex lg:flex-col min-w-0 lg:order-none lg:sticky lg:top-4">
-          <OverviewCard
-            title="Lesson Mastery"
-            count={`${overviewMastery}%`}
-            statDescription="Average graded classwork performance"
-          />
-          <OverviewCard
-            title="Classwork Assigned"
-            count={String(classworkCount ?? 0)}
-            statDescription="Active classworks in this subject"
-          />
-          <OverviewCard
-            title="Completion Percentage"
-            count={`${overviewCompletion}%`}
-            statDescription="Average submitted classwork completion"
-          />
-
           {/* Section-by-Section Health */}
           <Card className="flex flex-col justify-between p-4 sm:p-5 sm:col-span-3 lg:col-span-1 border-2 border-black bg-card shadow-[4px_4px_0_#000]">
             <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
               <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
                 Section-by-Section Health
               </Card.Title>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      autoIcon={false}
-                      onClick={() => navigate(routes.teacher.classes)}
-                      className=" shadow-none flex items-center justify-center shrink-0"
-                    >
-                      <ArrowUpRight className="size-4" />
-                    </Button>
-                  }
-                />
-                <TooltipContent side="right">View all classes</TooltipContent>
-              </Tooltip>
             </Card.Header>
 
-            <Card.Content className="mt-3 flex flex-col gap-3 p-0">
+            <Card.Content className="flex flex-col gap-3 p-0">
               {(() => {
                 if (isHealthLoading) {
                   return (
@@ -713,15 +678,6 @@ export default function SubjectLessonList({
                             <span className="font-bold text-base text-foreground truncate">
                               {sec.section_name}
                             </span>
-                            {sec.subject_name && (
-                              <Badge
-                                variant="secondary"
-                                size="sm"
-                                className="px-1.5 py-0.5 text-[10px] font-bold"
-                              >
-                                {sec.subject_name}
-                              </Badge>
-                            )}
                           </div>
                           <span className="font-semibold text-xs text-muted-foreground shrink-0">
                             {sec.student_count} Students
@@ -764,7 +720,7 @@ export default function SubjectLessonList({
                         </div>
 
                         {/* Bottom Info Bar */}
-                        <div className="flex flex-col gap-1.5 pt-2 border-t border-black/10 text-xs text-muted-foreground">
+                        <div className="flex flex-col gap-1.5 pt-1 text-xs text-muted-foreground">
                           <div className="flex items-center justify-between gap-1 flex-wrap">
                             <div className="flex items-center gap-1">
                               <span className="text-foreground font-semibold text-[11px]">
@@ -803,22 +759,10 @@ export default function SubjectLessonList({
                               </Badge>
                             </div>
                           </div>
-                          <div className="flex items-center justify-end text-[11px] text-foreground">
-                            <span>
-                              <strong className="font-bold mr-1">
-                                {sec.published_classworks ?? 0}
-                              </strong>
-                              published tasks
-                            </span>
-                          </div>
                         </div>
                       </Card>
                     ))}
-
-                    <div className="flex flex-col gap-2 pt-1">
-                      <Card.Description className="text-xs text-muted-foreground">
-                        Performance, completion, and attendance across your classes
-                      </Card.Description>
+                    <div className="flex flex-col gap-2">
                       {sections.length > 2 && (
                         <Button
                           variant="secondary"
@@ -836,6 +780,21 @@ export default function SubjectLessonList({
               })()}
             </Card.Content>
           </Card>
+          <OverviewCard
+            title="Lesson Mastery"
+            count={`${overviewMastery}%`}
+            statDescription="Average graded classwork performance"
+          />
+          <OverviewCard
+            title="Classwork Assigned"
+            count={String(classworkCount ?? 0)}
+            statDescription="Active classworks in this subject"
+          />
+          <OverviewCard
+            title="Completion Percentage"
+            count={`${overviewCompletion}%`}
+            statDescription="Average submitted classwork completion"
+          />
         </aside>
       </div>
 

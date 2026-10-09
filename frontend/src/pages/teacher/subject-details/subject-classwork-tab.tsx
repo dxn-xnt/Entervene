@@ -372,12 +372,8 @@ export default function SubjectClassworkTab({
           </div>
         )}
 
-        {isLoading ? (
-          <p className="py-12 text-center text-sm font-semibold text-gray-500">
-            Loading classworks...
-          </p>
-        ) : filteredItems.length > 0 ? (
-          <section className="space-y-3">
+        {filteredItems.length > 0 ? (
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-stretch">
             {filteredItems.map((item) => (
               <ClassworkCard
                 key={item.classwork_id}

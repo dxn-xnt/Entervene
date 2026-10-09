@@ -16,7 +16,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Skeleton } from "@/components/retroui/Skeleton"
 
 import { PanelLeftIcon } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../retroui/tooltip"

@@ -23,11 +23,13 @@ import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
+import { Skeleton } from "@/components/retroui/Skeleton";
 import { useToast } from "@/components/retroui/use-toast";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Text } from "@/components/retroui/Text";
 import { Select } from "@/components/retroui/Select";
 import { OverviewCard } from "@/components/overview-cards";
+import { SubjectClassHeader } from "@/components/subject-class-header";
 import { Table } from "@/components/retroui/Table";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
@@ -46,6 +48,7 @@ import ClassworkView from "./classwork-view";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
 import ClassworkDetailModal from "./forms/classwork-detail-modal";
+import ManageLessonModal from "./forms/manage-lesson";
 import { isQuizType } from "@/lib/classwork-utils";
 import type {
   ClassworkKind,
@@ -172,7 +175,57 @@ export default function TeacherClassDetail() {
   if (isLoading) {
     return (
       <AppLayout>
-        <StatePanel message="Loading class details..." />
+        <div className="flex min-w-0 max-w-full flex-1 flex-col overflow-x-clip">
+          <div className="@container/main flex min-w-0 max-w-full flex-1 flex-col">
+            <div className="flex min-w-0 max-w-full flex-1 flex-col">
+              <div data-page-tabs-sticky-region>
+                <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6">
+                  <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                    <SidebarTrigger className="shrink-0 md:hidden" />
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-5 w-16" />
+                      <span className="text-muted-foreground">/</span>
+                      <Skeleton className="h-5 w-24" />
+                      <span className="text-muted-foreground">/</span>
+                      <Skeleton className="h-5 w-20" />
+                    </div>
+                  </div>
+                </header>
+                <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                  <div className="flex border-b border-border py-2 gap-4">
+                    <Skeleton className="h-8 w-24" />
+                    <Skeleton className="h-8 w-24" />
+                    <Skeleton className="h-8 w-24" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex min-w-0 flex-col -mt-[1px] border-t-1 border-border gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+                <Card className="block w-full border-black bg-primary/20 transition-none pt-3 pb-4">
+                  <Card.Content>
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                      <Skeleton className="h-8 w-64" />
+                      <Skeleton className="h-6 w-16" />
+                    </div>
+                    <Skeleton className="mt-2 h-4 w-40" />
+                  </Card.Content>
+                </Card>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-24 w-full" />
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </AppLayout>
     );
   }
@@ -304,54 +357,11 @@ export default function TeacherClassDetail() {
             >
 
               {!studentInterfaceStudent && !lessonInterfaceLesson && (
-                <Card className="block w-full border-black bg-primary transition-none hover:shadow-md pt-3 pb-4">
-                  <Card.Content>
-                    <div className="flex min-w-0 items-center justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <Tooltip>
-                          <TooltipTrigger render={<Card.Title
-                            className="mb-0 truncate text-2xl font-extrabold sm:text-3xl"
-                            tabIndex={0}
-                          >
-                            {currentSubject?.subject_name || detail.section_name}
-                          </Card.Title>} />
-                          <TooltipContent>{currentSubject?.subject_name || detail.section_name}</TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <div className="flex shrink-0 flex-row items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          size="sm"
-                          className="w-fit font-black"
-                        >
-                          {statusLabel}
-                        </Badge>
-                        <Tooltip>
-                          <TooltipTrigger render={<span className="inline-flex"><Button
-                            variant="secondary"
-                            className="shadow-none p-1"
-                            size="sm"
-                            aria-label={`View ${currentSubject?.subject_name || detail.section_name}`}
-                            onClick={() => {
-                              if (currentSubject) {
-                                navigate(
-                                  `/teacher/classes/${detail.class_id}/subjects/${currentSubject.subject_id}`,
-                                );
-                              }
-                            }}
-                          >
-                            <ArrowUpRight className="size-4" />
-                          </Button></span>} />
-                          <TooltipContent>View subject</TooltipContent>
-                        </Tooltip>
-                      </div>
-
-                    </div>
-                    <p className="text-sm mt-1">
-                      {detail.section_name} | {detail.academic_level}
-                    </p>
-                  </Card.Content>
-                </Card>
+                <SubjectClassHeader
+                  detail={detail}
+                  currentSubject={currentSubject}
+                  statusLabel={statusLabel}
+                />
               )}
 
               {tab === "lessons" && (
@@ -408,7 +418,7 @@ function LessonsTab({
     initialSubjectId || detail.subject_loads[0]?.subject_id || null,
   );
   const [lessons, setLessons] = useState<LessonItem[]>([]);
-  const [competencies, setCompetencies] = useState<CompetencyItem[]>([]);
+  const [, setCompetencies] = useState<CompetencyItem[]>([]);
   const [isLoadingLessons, setIsLoadingLessons] = useState(false);
   const [lessonsError, setLessonsError] = useState("");
   const [expandedLessonId, setExpandedLessonId] = useState<number | null>(null);
@@ -606,8 +616,6 @@ function LessonsTab({
       await loadLessonClassworks(lesson.lesson_id);
     }
   };
-
-
 
   const handleCompetencySaved = (savedComp?: CompetencyItem) => {
     if (savedComp) {
@@ -963,7 +971,13 @@ function LessonsTab({
               </div>
 
               {/* Lessons List */}
-              {lessonsError ? (
+              {isLoadingLessons ? (
+                <div className="space-y-3 min-w-0">
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                </div>
+              ) : lessonsError ? (
                 <div className="rounded border-2 border-red-300 bg-red-50 p-4 text-sm text-red-700 font-medium">
                   {lessonsError}
                 </div>
@@ -1062,209 +1076,20 @@ function LessonsTab({
 
       {/* ── Lesson Management Dialog ── */}
       {selectedLesson && lessonDraft && (
-        <Dialog
-          open
-          onOpenChange={(open) => {
-            if (!open) closeLessonManager();
-          }}
-        >
-          <Dialog.Content className="w-full max-w-4xl p-0">
-            <Dialog.Header className="border-border">
-              <h2 className="text-xl font-bold">{selectedLesson.title}</h2>
-            </Dialog.Header>
-
-            <div className="flex flex-col gap-5 p-5">
-              <div className="space-y-4">
-                <Card className="block w-full border-border shadow-none">
-                  <Card.Content className="space-y-4">
-                    <div className="grid gap-4 sm:grid-cols-[1fr_130px]">
-                      <div>
-                        <label
-                          htmlFor="manage-lesson-title"
-                          className="mb-1 block text-sm font-semibold"
-                        >
-                          Lesson title
-                        </label>
-                        <Input
-                          id="manage-lesson-title"
-                          value={lessonDraft.title}
-                          onChange={(event) =>
-                            setLessonDraft((current) =>
-                              current
-                                ? { ...current, title: event.target.value }
-                                : current,
-                            )
-                          }
-                          disabled={isSavingLesson}
-                          className="h-10 w-full rounded-none border-border bg-background text-foreground !shadow-none"
-                        />
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="manage-lesson-order"
-                          className="mb-1 block text-sm font-semibold"
-                        >
-                          Order
-                        </label>
-                        <Input
-                          id="manage-lesson-order"
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={lessonDraft.order_index}
-                          onChange={(event) =>
-                            setLessonDraft((current) =>
-                              current
-                                ? {
-                                  ...current,
-                                  order_index: event.target.value,
-                                }
-                                : current,
-                            )
-                          }
-                          disabled={isSavingLesson}
-                          className="h-10 w-full rounded-none border-border bg-background text-foreground !shadow-none"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label
-                        htmlFor="manage-lesson-description"
-                        className="mb-1 block text-sm font-semibold"
-                      >
-                        Description
-                      </label>
-                      <textarea
-                        id="manage-lesson-description"
-                        value={lessonDraft.description}
-                        onChange={(event) =>
-                          setLessonDraft((current) =>
-                            current
-                              ? {
-                                ...current,
-                                description: event.target.value,
-                              }
-                              : current,
-                          )
-                        }
-                        disabled={isSavingLesson}
-                        className="min-h-20 w-full rounded-none border-2 border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/35"
-                        placeholder="Short lesson summary"
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        htmlFor="manage-lesson-content"
-                        className="mb-1 block text-sm font-semibold"
-                      >
-                        Lesson content
-                      </label>
-                      <textarea
-                        id="manage-lesson-content"
-                        value={lessonDraft.content}
-                        onChange={(event) =>
-                          setLessonDraft((current) =>
-                            current
-                              ? { ...current, content: event.target.value }
-                              : current,
-                          )
-                        }
-                        disabled={isSavingLesson}
-                        className="min-h-40 w-full rounded-none border-2 border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/35"
-                        placeholder="Write the lesson notes or learning content."
-                      />
-                    </div>
-                  </Card.Content>
-                </Card>
-
-              </div>
-            </div>
-            <Dialog.Footer className="sm:justify-between">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowArchiveConfirm(true)}
-                className="border-2 border-red-600 bg-red-50 font-bold text-red-700 hover:bg-red-100"
-              >
-                <Archive size={14} className="mr-1" />
-                Archive Lesson
-              </Button>
-              <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={closeLessonManager}
-                  className="font-bold"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  onClick={saveLessonDetails}
-                  disabled={isSavingLesson}
-                  className="font-bold"
-                >
-                  Save Changes
-                </Button>
-              </div>
-            </Dialog.Footer>
-          </Dialog.Content>
-        </Dialog>
-      )}
-
-      {/* ── Archive Confirmation Modal ── */}
-      {showArchiveConfirm && selectedLesson && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <Card className="block w-full max-w-md border-2 border-border bg-background text-foreground shadow-[4px_4px_0_#000] hover:shadow-[4px_4px_0_#000]">
-            <div className="flex items-center justify-between border-b-2 border-black bg-red-100 px-5 py-3">
-              <div className="flex items-center gap-2 text-red-800">
-                <Archive size={18} />
-                <Card.Title className="mb-0 text-base font-bold text-red-800">
-                  Archive Lesson?
-                </Card.Title>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowArchiveConfirm(false)}
-                disabled={isArchivingLesson}
-                className="rounded p-1 hover:bg-white/60 disabled:opacity-50"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <Card.Content className="space-y-3 p-4">
-              <p className="text-sm font-medium">
-                Are you sure you want to archive{" "}
-                <span className="font-bold">"{selectedLesson.title}"</span>?
-              </p>
-              <p className="text-xs text-gray-600">
-                This hides the lesson from the student view.
-              </p>
-            </Card.Content>
-            <div className="flex justify-end gap-3 border-t-2 border-black px-5 py-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowArchiveConfirm(false)}
-                disabled={isArchivingLesson}
-                className="border-2 border-black font-semibold"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="default"
-                onClick={archiveLesson}
-                disabled={isArchivingLesson}
-                className="border-2 border-black bg-red-600 font-bold text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700"
-              >
-                Archive Lesson
-              </Button>
-            </div>
-          </Card>
-        </div>
+        <ManageLessonModal
+          selectedLesson={selectedLesson as any}
+          lessonDraft={lessonDraft}
+          setLessonDraft={setLessonDraft}
+          classId={detail.class_id}
+          isSavingLesson={isSavingLesson}
+          isArchivingLesson={isArchivingLesson}
+          error={lessonsError}
+          showArchiveConfirm={showArchiveConfirm}
+          setShowArchiveConfirm={setShowArchiveConfirm}
+          closeLessonManager={closeLessonManager}
+          saveLesson={saveLessonDetails}
+          archiveLesson={archiveLesson}
+        />
       )}
 
       {/* ── Competency Create / Edit Modal ── */}

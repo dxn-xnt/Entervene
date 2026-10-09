@@ -13,12 +13,12 @@ export interface ManageLessonModalProps {
   selectedLesson: Lesson;
   lessonDraft: LessonDraft;
   setLessonDraft: Dispatch<SetStateAction<LessonDraft | null>>;
-  classesForSubject: TeacherClassLoad[];
-  classId?: string;
-  lessonClassIds: number[];
+  classesForSubject?: TeacherClassLoad[];
+  classId?: string | number;
+  lessonClassIds?: number[];
   isSavingLesson: boolean;
   isArchivingLesson?: boolean;
-  removingLessonAttachmentId: number | null;
+  removingLessonAttachmentId?: number | null;
   error?: string;
   showArchiveConfirm?: boolean;
   setShowArchiveConfirm?: (show: boolean) => void;
@@ -38,12 +38,12 @@ export default function ManageLessonModal({
   selectedLesson,
   lessonDraft,
   setLessonDraft,
-  classesForSubject,
+  classesForSubject = [],
   classId,
-  lessonClassIds,
+  lessonClassIds = [],
   isSavingLesson,
   isArchivingLesson = false,
-  removingLessonAttachmentId,
+  removingLessonAttachmentId = null,
   error = "",
   showArchiveConfirm: propShowArchiveConfirm,
   setShowArchiveConfirm: propSetShowArchiveConfirm,
@@ -327,43 +327,45 @@ export default function ManageLessonModal({
                 </Card.Content>
               </Card>
 
-              <Card className="block w-full shadow-none">
-                <Card.Content>
-                  <Card.Title className="mb-0 text-base font-bold">
-                    Assigned Sections
-                  </Card.Title>
-                  <p className="mt-1 text-xs text-gray-600">
-                    Select sections to keep or add. Existing assignments cannot
-                    be removed by the current lesson API.
-                  </p>
-                  <div className="mt-3 space-y-2">
-                    {classesForSubject.map((item) => (
-                      <label
-                        key={item.subject_load_id}
-                        className="flex items-center gap-2 border border-border bg-background px-3 py-2 text-sm"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={lessonClassIds.includes(item.class_id)}
-                          onChange={() =>
-                            handleToggleLessonClass(item.class_id)
-                          }
-                          disabled={
-                            isSavingLesson ||
-                            item.class_id === Number(classId)
-                          }
-                        />
-                        <span className="flex-1">{item.section_name}</span>
-                        {item.class_id === Number(classId) && (
-                          <span className="text-[10px] font-bold uppercase text-gray-500">
-                            Current
-                          </span>
-                        )}
-                      </label>
-                    ))}
-                  </div>
-                </Card.Content>
-              </Card>
+              {classesForSubject.length > 0 && (
+                <Card className="block w-full shadow-none">
+                  <Card.Content>
+                    <Card.Title className="mb-0 text-base font-bold">
+                      Assigned Sections
+                    </Card.Title>
+                    <p className="mt-1 text-xs text-gray-600">
+                      Select sections to keep or add. Existing assignments cannot
+                      be removed by the current lesson API.
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      {classesForSubject.map((item) => (
+                        <label
+                          key={item.subject_load_id}
+                          className="flex items-center gap-2 border border-border bg-background px-3 py-2 text-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={lessonClassIds.includes(item.class_id)}
+                            onChange={() =>
+                              handleToggleLessonClass(item.class_id)
+                            }
+                            disabled={
+                              isSavingLesson ||
+                              item.class_id === Number(classId)
+                            }
+                          />
+                          <span className="flex-1">{item.section_name}</span>
+                          {item.class_id === Number(classId) && (
+                            <span className="text-[10px] font-bold uppercase text-gray-500">
+                              Current
+                            </span>
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                  </Card.Content>
+                </Card>
+              )}
 
               <Card className="block w-full shadow-none">
                 <Card.Content>
