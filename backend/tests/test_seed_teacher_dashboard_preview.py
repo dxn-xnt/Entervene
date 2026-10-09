@@ -350,11 +350,15 @@ def test_counts_match_the_real_phase_two_three_dashboard_and_gradebook(preview, 
         grades = dashboard["phase_two"]["grades"]
         assert grades["available_grade_count"] == plan.counts["available_grades"] == 36
         assert grades["total_grade_count"] == plan.counts["student_subject_entries"] == 38
-        assert grades["current_grade"] == 81.9
-        assert grades["passing_count"] == plan.counts["passing_grades"] == 16
-        assert grades["passing_rate_percent"] == 44.4
+        assert grades["current_grade"] == round(sum(plan.grades.values()) / len(plan.grades), 1)
+        expected_passing = sum(value >= (85 if sid == data.subjects[0] else 83)
+                               for (_, sid, _), value in plan.grades.items())
+        assert grades["passing_count"] == plan.counts["passing_grades"] == expected_passing
+        assert grades["passing_rate_percent"] == round(100.0 * expected_passing / len(plan.grades), 1)
         bands = dashboard["details"]["grade_distribution"]
-        assert [b["count"] for b in bands] == [6, 8, 9, 8, 5]
+        expected_bands = [sum(low <= value < high for value in plan.grades.values())
+                          for low, high in ((90,101), (85,90), (80,85), (75,80), (0,75))]
+        assert [b["count"] for b in bands] == expected_bands
         assert [p["current_grade"] for p in dashboard["details"]["top_performers"]] == [97, 96, 95]
         assert dashboard["details"]["grade_details"]["cutoff_tie_omitted_count"] == 1
         assert dashboard["details"]["attendance_by_section"][0]["rate"] == 80.0
@@ -373,18 +377,21 @@ def test_counts_match_the_real_phase_two_three_dashboard_and_gradebook(preview, 
             assert sum(answer.points_awarded for answer in submission.quiz_answers) == submission.grade
 
 
-def test_output_is_allowlisted_counts_only(preview, capsys):
-    """Unit formatting with SQLite plan; no identities, names, or question text."""
+def test_output_is_allowlisted_counts_and_chosen_ids_only(preview, capsys):
+    """Unit formatting: chosen IDs allowed, no names or individual grades/text."""
     engine, data = preview
     with engine.connect() as conn:
         result = seed.seed_connection(conn, STAFF, data.period, NOW, apply=False)
     seed.print_counts(*result, apply=False)
     output = capsys.readouterr().out
-    assert all(value not in output for value in (STAFF, "Synthetic", "student_lrn", result[0].prefix, result[0].fingerprint, "postgresql", "There are 12"))
-    for line in output.splitlines():
-        if line.startswith(("Category ", "Metric ")):
-            continue
-        assert all(part.isdigit() for part in line.split()[1:])
+    assert all(value not in output for value in ("Synthetic", "student_lrn", result[0].prefix, result[0].fingerprint, "postgresql", "There are 12"))
+    assert output.count(STAFF) == 1
+    assert f'teacher_staff_id "{STAFF}"' in output
+    assert f"academic_period_id {data.period}" in output
+    numeric_section = output.split("Metric Count\n", 1)[1].split("Included scenarios\n", 1)[0]
+    assert all(part.isdigit() for line in numeric_section.splitlines() for part in line.split()[1:])
+    assert "Expected results (aggregates only)" in output
+    assert f"grade_coverage {len(result[0].grades)}/38" in output
 
 
 def test_existing_template_is_reused_without_modification(preview):
@@ -481,7 +488,7 @@ def test_cli_wrong_connected_database_never_calls_seed(monkeypatch, capsys):
     monkeypatch.setattr(seed, "seed_connection", core)
     assert seed.main(["--teacher-staff-id", STAFF, "--academic-period-id", "1", "--apply"], environ={}) == 2
     core.assert_not_called()
-    assert capsys.readouterr().out == "ERROR connected_database_guard_failed\n"
+    assert capsys.readouterr().out == "ERROR connected_database_guard_failed: The connected database must be exactly entervene_preview.\n"
 
 
 def test_cli_connection_errors_never_print_url_sql_or_identity(monkeypatch, capsys):
@@ -490,7 +497,7 @@ def test_cli_connection_errors_never_print_url_sql_or_identity(monkeypatch, caps
         raise RuntimeError(synthetic_url() + " Synthetic Teacher private question text")
     monkeypatch.setattr(seed, "guarded_engine", fail)
     assert seed.main(["--teacher-staff-id", STAFF, "--academic-period-id", "1", "--dry-run"], environ={}) == 2
-    assert capsys.readouterr().out == "ERROR preview_seed_failed\n"
+    assert capsys.readouterr().out == "ERROR preview_seed_failed: The operation failed; connection and database details were suppressed.\n"
 
 
 def test_script_has_no_settings_session_dotenv_or_app_importers():
@@ -505,3 +512,323 @@ def test_script_has_no_settings_session_dotenv_or_app_importers():
         if path.name.startswith(".env"):
             continue
         assert "seed_teacher_dashboard_preview" not in path.read_text(encoding="utf-8")
+
+
+def configure_small_roster(engine, data, *, count=3, subject_count=1, threshold=83):
+    """Fixture-only SQLite mutations; the seed itself remains INSERT-only."""
+    with Session(engine) as db:
+        for enrollment in db.query(seed.StudentClass):
+            enrollment.enrollment_status = "enrolled" if enrollment.student_id in {learner_id(i) for i in range(1, count+1)} else "transferred"
+        for index, load in enumerate(db.query(seed.SubjectLoad).order_by(seed.SubjectLoad.subject_id)):
+            load.status = "published" if index < subject_count else "draft"
+        db.get(seed.SubjectGroup, data.groups[0]).passing_threshold = Decimal(threshold)
+        db.commit()
+
+
+def add_candidate_pair(engine, data, *, staff_id="T-OTHER", learners=25, sequence=None,
+                       start=date(2026,10,1), end=date(2026,12,31), period_id=None):
+    """Synthetic SQLite structure for discovery, no names selected by the seed."""
+    with Session(engine) as db:
+        if db.get(seed.AcademicStaff, staff_id) is None:
+            db.add(seed.AcademicStaff(staff_id=staff_id, first_name="Synthetic", last_name="Other"))
+        if sequence is not None:
+            period = seed.AcademicPeriod(academic_year_id=data.year_id, period_name=f"Synthetic term {sequence}",
+                period_type="TERM", period_sequence=sequence, total_periods_in_year=3,
+                start_date=start, end_date=end)
+            db.add(period)
+            db.flush()
+            period_id = period.academic_period_id
+        period_id = data.period if period_id is None else period_id
+        class_ = seed.Class(section_name="Synthetic Other", academic_year_id=data.year_id,
+                            academic_level_id=data.level_id, class_status="active")
+        db.add(class_)
+        db.flush()
+        db.add(seed.SubjectLoad(staff_id=staff_id, class_id=class_.class_id, subject_id=data.subjects[0],
+                               academic_period_id=period_id, status="published"))
+        first = 1000 + class_.class_id * 100
+        for index in range(first, first+learners):
+            db.add(Student(student_id=learner_id(index), student_lrn=f"{index:012}",
+                first_name="Synthetic", last_name="Other", academic_level_id=data.level_id))
+            db.flush()
+            db.add(seed.StudentClass(student_id=learner_id(index), class_id=class_.class_id,
+                academic_year_id=data.year_id, enrollment_status="enrolled"))
+        db.commit()
+        return staff_id, period_id, class_.class_id
+
+
+def test_auto_discovery_ranks_learners_not_multiplied_subject_entries(preview):
+    """Mocked-behavior: 25 learners/one subject beats 19 learners/two subjects."""
+    engine, data = preview
+    staff, period, _ = add_candidate_pair(engine, data)
+    with engine.connect() as conn:
+        assert seed.discover_scope(conn, None, None, NOW) == (staff, period)
+        assert seed.discover_scope(conn, STAFF, None, NOW) == (STAFF, data.period)
+        assert seed.discover_scope(conn, STAFF, data.period, NOW) == (STAFF, data.period)
+
+
+def test_auto_discovery_honors_period_override_and_missing_id_filters(preview):
+    """Mocked-behavior: a single explicit ID constrains, never gets replaced."""
+    engine, data = preview
+    staff, period, _ = add_candidate_pair(engine, data, sequence=3)
+    with engine.connect() as conn:
+        assert seed.discover_scope(conn, None, period, NOW) == (staff, period)
+        assert seed.discover_scope(conn, STAFF, period, NOW) == (STAFF, period)
+        with pytest.raises(seed.SeedError, match="no_assigned_active_loads"):
+            seed.seed_connection(conn, STAFF, period, NOW, apply=False)
+
+
+@pytest.mark.parametrize("kind", ["historical_period", "starts_after_first", "ends_before_today", "inactive_class", "draft_load", "inactive_version", "other_year", "inactive_enrollments"])
+def test_auto_discovery_ignores_ineligible_or_unenrolled_larger_candidates(preview, kind):
+    """Mocked-behavior: real ORM rows queried on SQLite, no production DB."""
+    engine, data = preview
+    kwargs = {}
+    if kind == "historical_period":
+        kwargs = dict(sequence=1, start=date(2026,7,1), end=date(2026,9,30))
+    elif kind == "starts_after_first":
+        kwargs = dict(sequence=3, start=date(2026,10,2))
+    elif kind == "ends_before_today":
+        kwargs = dict(sequence=3, end=date(2026,10,9))
+    staff, _, class_id = add_candidate_pair(engine, data, **kwargs)
+    with Session(engine) as db:
+        class_ = db.get(seed.Class, class_id)
+        load = db.query(seed.SubjectLoad).filter_by(class_id=class_id).one()
+        if kind == "inactive_class":
+            class_.class_status = "archived"
+        elif kind == "draft_load":
+            load.status = "draft"
+        elif kind == "inactive_version":
+            load.is_active_version = False
+        elif kind == "other_year":
+            year = AcademicYear(year_label="2025-2026", start_date=date(2025,8,1), end_date=date(2026,5,31))
+            db.add(year)
+            db.flush()
+            old_class = seed.Class(section_name="Synthetic old-year class", academic_year_id=year.academic_year_id,
+                                   academic_level_id=data.level_id, class_status="active")
+            db.add(old_class)
+            db.flush()
+            load.class_id = old_class.class_id
+        elif kind == "inactive_enrollments":
+            for enrollment in db.query(seed.StudentClass).filter_by(class_id=class_id):
+                enrollment.enrollment_status = "transferred"
+        db.commit()
+    with engine.connect() as conn:
+        assert seed.discover_scope(conn, None, None, NOW) == (STAFF, data.period)
+
+
+def test_discovery_ties_and_clock_use_manila_dates(preview):
+    """Mocked-behavior: stable IDs break ties, Manila month not UTC month."""
+    engine, data = preview
+    add_candidate_pair(engine, data, learners=19, staff_id="T-Z")
+    with engine.connect() as conn:
+        assert seed.discover_scope(conn, None, None, NOW) == (STAFF, data.period)
+        # UTC September 30 is already October 1 in Manila.
+        assert seed.discover_scope(conn, STAFF, None, datetime(2026,9,30,16,tzinfo=timezone.utc)) == (STAFF, data.period)
+
+
+def test_auto_selected_unsafe_pair_fails_closed_without_teacher_fallback(preview):
+    """Mocked-behavior: discovery cannot silently bypass ambiguous ownership."""
+    engine, data = preview
+    _, _, class_id = add_candidate_pair(engine, data)
+    with Session(engine) as db:
+        db.add(seed.SubjectLoad(staff_id=STAFF, class_id=class_id, subject_id=data.subjects[0],
+                               academic_period_id=data.period, status="active", logical_load_id="Synthetic-ambiguous"))
+        db.commit()
+    with engine.connect() as conn:
+        with pytest.raises(seed.SeedError, match="ambiguous_shared_load_authorization"):
+            seed.seed_connection(conn, None, None, NOW, apply=False)
+
+
+@pytest.mark.parametrize("threshold", [75, 83, 85, 83.25])
+def test_three_learner_single_subject_floor_succeeds_without_other_groups(preview, threshold):
+    """Mocked-behavior: two scored learners and one ungraded, optional gaps."""
+    engine, data = preview
+    configure_small_roster(engine, data, threshold=threshold)
+    with engine.begin() as conn:
+        guard = seed.install_statement_guard(conn, dry_run=False)
+        try:
+            first, _, inserted = seed.seed_connection(conn, None, None, NOW, apply=True)
+            second, existing, additions = seed.seed_connection(conn, None, None, NOW, apply=True)
+        finally:
+            event.remove(conn, "before_cursor_execute", guard)
+    assert first == second and not additions and existing == inserted
+    assert first.counts["enrolled_learners"] == 3
+    assert first.counts["student_subject_entries"] == 3
+    assert first.counts["available_grades"] == 2
+    assert first.counts["unavailable_grades"] == first.counts["ungraded_learners"] == 1
+    assert first.counts["top_performer_entries"] == 2
+    assert first.counts["top_cutoff_ties_omitted"] == 0
+    assert first.counts["completed_submissions"] == 12
+    assert first.counts["expected_submissions"] == 18
+    assert first.counts["excused_excluded_submissions"] == first.counts["counted_late_submissions"] == 1
+    assert "all_attendance_statuses" in first.scenarios
+    assert "excused_late_submission" in first.scenarios
+    skipped = {s.code: s.reason for s in first.skipped}
+    assert skipped["top_3_cutoff_tie"] == "insufficient_matching_grade_entries"
+    assert skipped["multi_subject_learner"] == "no_multi_subject_learner"
+    if threshold != 85:
+        assert skipped["threshold_85_boundary_pair"] == "no_subject_at_threshold_85"
+    if threshold != 83:
+        assert skipped["threshold_83_boundary_pair"] == "no_subject_at_threshold_83"
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_roster_floor_has_its_own_sanitized_refusal(preview, count, capsys):
+    """Mocked-behavior: exact floor diagnostics, never a bundled reason."""
+    engine, data = preview
+    configure_small_roster(engine, data, count=count)
+    with engine.connect() as conn:
+        with pytest.raises(seed.SeedError, match="insufficient_enrolled_learners") as caught:
+            seed.seed_connection(conn, None, None, NOW, apply=False)
+    seed.print_refusal(caught.value)
+    output = capsys.readouterr().out
+    assert "At least three enrolled learners" in output
+    assert f"enrolled_learners {count}" in output
+    assert "required_learners 3" in output
+    assert output.count(STAFF) == 1  # Verified chosen ID is explicitly allowed.
+
+
+def test_shared_graded_scope_is_checked_before_planning():
+    """Validator-unit: three isolated learners cannot satisfy the shared floor."""
+    entries = [(i, 1, learner_id(i)) for i in range(1,4)]
+    with pytest.raises(seed.SeedError, match="no_shared_graded_scope"):
+        seed.choose_ungraded(entries, {1: Decimal(83)})
+
+
+def test_ungraded_selection_preserves_a_two_learner_scope_when_possible():
+    """Validator-unit: remove the lone learner, not one of the shared pair."""
+    entries = [(1,1,learner_id(1)), (2,1,learner_id(2)), (2,1,learner_id(3))]
+    missing, scope, grades, _, _ = seed.choose_ungraded(entries, {1: Decimal(83)})
+    assert missing == learner_id(1)
+    assert scope == (2,1)
+    assert len(grades) == 2
+
+
+def test_priority_uses_four_available_entries_for_top_cutoff_tie_first(preview):
+    """Mocked-behavior: no hardcoded 15-entry floor or guaranteed tie count."""
+    engine, data = preview
+    configure_small_roster(engine, data, count=3, subject_count=2, threshold=85)
+    plan, _, _ = apply_fixture(engine, data)
+    assert sorted(plan.grades.values(), reverse=True) == [97,96,95,95]
+    assert "top_3_cutoff_tie" in plan.scenarios
+    assert plan.counts["top_cutoff_ties_omitted"] == 1
+    assert plan.counts["unavailable_grades"] == 2
+    assert "multi_subject_learner" in plan.scenarios
+    assert any(s.code == "threshold_85_boundary_pair" for s in plan.skipped)
+
+
+def test_large_roster_fits_all_scenarios_and_reuses_boundary_pairs(preview):
+    """Mocked-behavior: all requested examples fit, same data serves band 85."""
+    engine, data = preview
+    with engine.connect() as conn:
+        plan = seed.build_plan(conn, STAFF, data.period, NOW)
+    assert set(plan.scenarios) == set(seed.SCENARIOS)
+    assert not plan.skipped
+    core = {value for (_,sid,_), value in plan.grades.items() if sid == data.subjects[0]}
+    other = {value for (_,sid,_), value in plan.grades.items() if sid == data.subjects[1]}
+    assert {84,85,86} <= core
+    assert {82,83,84} <= other
+    assert {74,75,79,80,84,85,89,90} <= set(plan.grades.values())
+
+
+def test_absent_graded_entries_are_not_mislabeled_as_absent_subject():
+    """Validator-unit: subject exists but the reserved learner owned its entries."""
+    _, _, skipped = seed.plan_scenarios([(1,1,learner_id(1)), (1,1,learner_id(2))], {1:Decimal(85), 2:Decimal(83)})
+    assert next(s for s in skipped if s.code == "threshold_83_boundary_pair").reason == "insufficient_matching_grade_entries"
+
+
+def test_small_expected_output_is_derived_from_real_dashboard(preview, monkeypatch, capsys):
+    """Mocked-behavior: count-only example and authoritative class-record parity."""
+    from app.services.activity import AnalyticsService
+    engine, data = preview
+    configure_small_roster(engine, data)
+    result = apply_fixture(engine, data)
+    plan = result[0]
+    monkeypatch.setattr(AnalyticsService, "_teacher_dashboard_now", lambda: NOW)
+    with Session(engine) as db:
+        dashboard = AnalyticsService.build_teacher_dashboard_health(db, STAFF, db.get(seed.AcademicPeriod, data.period))
+    assert dashboard["phase_two"]["grades"]["current_grade"] == 82.5
+    assert dashboard["phase_two"]["grades"]["passing_rate_percent"] == 50.0
+    assert dashboard["kpis"]["overall_completion_rate"] == 66.7
+    assert dashboard["details"]["grade_details"]["unavailable_grade_count"] == 1
+    assert len(dashboard["details"]["top_performers"]) == 2
+    assert dashboard["phase_two"]["late_submissions"]["late_rate_percent"] == 9.1
+    seed.print_counts(*result, apply=True)
+    output = capsys.readouterr().out
+    assert "grade_coverage 2/3" in output
+    assert "current_grade_average 82.5" in output
+    assert "passing 1/2 50.0%" in output
+    assert "completion 12/18 66.7%" in output
+    assert "this_month_attendance 8/10 80.0%" in output
+    assert "late_submissions 1/11 9.1%" in output
+    assert "No subject at threshold 85" in output
+    assert "Skipped scenarios" in output
+    assert "Synthetic" not in output
+    assert all(str(learner_id(i)) not in output for i in range(1,20))
+
+
+@pytest.mark.parametrize("arguments,staff,period", [
+    ([], None, None), (["--teacher-staff-id",STAFF], STAFF, None),
+    (["--academic-period-id","1"], None, 1),
+])
+def test_cli_defaults_to_discovery_and_preserves_partial_overrides(monkeypatch, arguments, staff, period):
+    """Mocked-behavior: parse only, engine and seeding fully mocked."""
+    engine, conn = MagicMock(), MagicMock()
+    engine.connect.return_value.__enter__.return_value = conn
+    conn.execute.return_value.scalar_one.return_value = "entervene_preview"
+    monkeypatch.setattr(seed, "guarded_engine", lambda _env: engine)
+    monkeypatch.setattr(seed, "install_statement_guard", lambda *_a, **_k: "guard")
+    monkeypatch.setattr(seed.event, "remove", MagicMock())
+    core = MagicMock(return_value=("plan", Counter(), Counter()))
+    monkeypatch.setattr(seed, "seed_connection", core)
+    monkeypatch.setattr(seed, "print_counts", MagicMock())
+    assert seed.main(["--dry-run", *arguments], environ={}) == 0
+    assert core.call_args.args[1:3] == (staff,period)
+
+
+def test_unknown_refusal_code_and_sensitive_details_are_never_printed(capsys):
+    """Unit: neither arbitrary error codes nor non-integer count fields leak."""
+    seed.print_refusal(seed.SeedError("PRIVATE_EXCEPTION_TEXT", enrolled_learners="PRIVATE_NAME", sql="PRIVATE_SQL"))
+    assert capsys.readouterr().out == "ERROR preview_seed_failed: The operation failed; connection and database details were suppressed.\n"
+
+
+def test_multi_subject_scenario_requires_distinct_subjects_not_extra_classes():
+    """Validator-unit: repeat classes in one subject are not two subjects."""
+    entries = [(class_id, 1, learner_id(index))
+               for class_id in (1, 2) for index in (1, 2)]
+    _, included, skipped = seed.plan_scenarios(entries, {1: Decimal(83)})
+    assert "multi_subject_learner" not in included
+    assert next(s for s in skipped if s.code == "multi_subject_learner").reason == "no_multi_subject_learner"
+
+
+def test_no_discovery_candidate_has_separate_reason_and_count(preview, capsys):
+    """Mocked-behavior: no eligible dates emits neither input IDs nor names."""
+    engine, data = preview
+    with engine.connect() as conn:
+        with pytest.raises(seed.SeedError, match="no_teacher_period_candidate") as caught:
+            seed.seed_connection(conn, None, None, NOW.replace(year=2028), apply=False)
+    seed.print_refusal(caught.value)
+    assert capsys.readouterr().out == (
+        "ERROR no_teacher_period_candidate: No assigned teacher/period pair covers this Manila month through today.\n"
+        "candidate_pairs 0\n"
+    )
+
+
+def test_auto_discovery_dry_run_is_select_only_and_selects_no_names(preview):
+    """Mocked-behavior: real SQLite dry-run with statement guard and SQL capture."""
+    engine, data = preview
+    statements = []
+    def capture(_conn, _cursor, statement, *_args):
+        statements.append(statement)
+    with engine.connect() as conn:
+        guard = seed.install_statement_guard(conn, dry_run=True)
+        event.listen(conn, "before_cursor_execute", capture)
+        try:
+            plan, _, _ = seed.seed_connection(conn, None, None, NOW, apply=False)
+        finally:
+            event.remove(conn, "before_cursor_execute", capture)
+            event.remove(conn, "before_cursor_execute", guard)
+    assert (plan.staff_id, plan.period_id) == (STAFF, data.period)
+    assert all(statement.lstrip().upper().startswith("SELECT ") for statement in statements)
+    discovery_selects = [sql.split("FROM", 1)[0] for sql in statements[:2]]
+    assert all(field not in sql for sql in discovery_selects
+               for field in ("first_name", "last_name", "student_lrn", "email", "password"))

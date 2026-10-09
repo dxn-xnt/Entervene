@@ -3,7 +3,7 @@
 Never import this module from the application. The CLI reads ONLY
 DASHBOARD_PREVIEW_SEED_URL, never dotenv/settings/application sessions. Dry-run
 performs SELECTs in a read-only transaction; it never inserts and rolls back.
-All console output is allowlisted count-level data or static error codes.
+Console output is allowlisted IDs, aggregate metrics, and static reason codes.
 """
 from __future__ import annotations
 
@@ -59,15 +59,70 @@ TABLES = {model.__table__.name: model.__table__ for model in (
     GradingTemplate, GradingTemplateComponent, Classwork, ClassworkAssignment,
     Quiz, Question, QuizQuestion, StudentSubmission, QuizAnswer, AttendanceRecord,
 )}
-# 36 available entries in the illustrative 19-learner/two-subject roster.
+# Background grades only; scenario allocation, not this list, determines size.
 PROFILE = (97, 96, 95, 95, 92, 90, 85, 85, 86, 86, 87, 88, 89, 89,
            80, 80, 81, 81, 82, 82, 83, 84, 84, 75, 75, 76, 76, 77, 78,
            79, 79, 60, 65, 69, 70, 73)
-ESSENTIAL = Counter((97, 96, 95, 95, 90, 89, 85, 86, 84, 84, 83, 82, 80, 79, 60))
+SCENARIOS = (
+    "top_3_cutoff_tie", "threshold_85_boundary_pair", "threshold_83_boundary_pair",
+    "threshold_85_above", "threshold_83_above", "band_90_boundary_pair",
+    "band_85_boundary_pair", "band_80_boundary_pair", "band_75_boundary_pair",
+    "multi_subject_learner", "all_attendance_statuses", "excused_late_submission",
+)
+REASONS = {
+    "preview_url_unset": "Set the dedicated preview URL in the process environment.",
+    "libpq_environment_override_forbidden": "Remove libpq process overrides before seeding.",
+    "invalid_preview_url": "The dedicated preview URL is malformed.",
+    "preview_target_guard_failed": "Only a loopback PostgreSQL preview target with an explicit port and no query parameters is allowed.",
+    "connected_database_guard_failed": "The connected database must be exactly entervene_preview.",
+    "non_insert_write_forbidden": "A statement outside the approved read/insert policy was refused.",
+    "invalid_seed_scope": "Provide valid IDs and a timezone-aware clock.",
+    "teacher_or_period_missing": "The selected teacher or academic period does not exist.",
+    "no_teacher_period_candidate": "No assigned teacher/period pair covers this Manila month through today.",
+    "no_assigned_active_loads": "The selected teacher has no eligible assigned loads in this period.",
+    "ambiguous_shared_load_authorization": "An active class-subject load has ambiguous teacher ownership.",
+    "empty_active_roster": "An assigned class has no enrolled learners in the selected academic year.",
+    "insufficient_enrolled_learners": "At least three enrolled learners are needed, including one ungraded learner.",
+    "no_shared_graded_scope": "After reserving one ungraded learner, two graded learners must share a class-subject scope.",
+    "no_subject_at_threshold_85": "No subject at threshold 85 is among this teacher's loads.",
+    "no_subject_at_threshold_83": "No subject at threshold 83 is among this teacher's loads.",
+    "insufficient_matching_grade_entries": "Too few unused or reusable grade entries fit this scenario.",
+    "no_multi_subject_learner": "No remaining graded learner has two subjects.",
+    "invalid_subject_group_configuration": "A referenced subject group or its threshold is missing or invalid.",
+    "ambiguous_grading_template": "More than one active grading template matches the same priority.",
+    "invalid_existing_grading_weights": "Existing grading weights are invalid.",
+    "existing_template_has_no_usable_components": "The existing template has no usable grading components.",
+    "weights_cannot_reproduce_fixture_grades": "Existing weights cannot reproduce the planned current grades.",
+    "attendance_requires_at_least_5_elapsed_dates": "At least five calendar dates must have elapsed in this Manila month.",
+    "selected_period_does_not_cover_attendance_slots": "The selected period does not cover all required attendance dates.",
+    "invalid_attendance_slot_count": "Attendance requires five to ten date slots.",
+    "seven_elapsed_submission_weekdays_required": "The period must cover seven elapsed dates for weekday examples.",
+    "selected_period_cannot_fit_distinct_deadlines": "The selected period cannot fit the planned deadlines.",
+    "fixture_submission_would_be_future": "A planned submission would occur in the future.",
+    "invalid_fixture_grade": "A planned grade cannot be represented by the current transmutation table.",
+    "preexisting_scope_activity_conflict": "Existing activity in the target scope is not owned by this seed.",
+    "seed_inputs_changed_start_with_fresh_preview": "Existing seed activity was made with a different plan; it will not be overwritten.",
+    "preexisting_saved_grades_conflict": "Existing saved period grades will not be overwritten.",
+    "preexisting_attendance_conflict": "Existing attendance conflicts with the planned preview records.",
+    "duplicate_seed_natural_key": "More than one existing row matches a planned seed identity.",
+    "existing_row_conflicts_with_seed_plan": "An existing row differs from the planned seed values.",
+    "unexpected_existing_seed_children": "Unexpected rows are attached to existing seed activity.",
+    "unexpected_existing_seed_attendance": "Unexpected attendance is attached to the existing seed plan.",
+    "invalid_seed_dependency": "A planned row has an unresolved dependency.",
+    "invalid_arguments": "Use dry-run or apply with optional teacher and period IDs.",
+    "cancelled": "The operation was cancelled.",
+    "preview_seed_failed": "The operation failed; connection and database details were suppressed.",
+}
 
 
 class SeedError(Exception):
     """Only static, non-sensitive codes may reach the CLI."""
+
+    def __init__(self, code, **counts):
+        super().__init__(code)
+        self.code = code
+        self.counts = counts
+        self.chosen_ids = None
 
 
 def validate_url(raw: str | None, environ: Mapping[str, str]) -> URL:
@@ -134,6 +189,18 @@ class Plan:
     grades: dict[tuple[int, int, object], int]
     prefix: str
     fingerprint: str
+    staff_id: str
+    period_id: int
+    scenarios: tuple[str, ...]
+    skipped: tuple["SkippedScenario", ...]
+
+
+@dataclass(frozen=True)
+class SkippedScenario:
+    code: str
+    reason: str
+    available: int
+    required: int
 
 
 def at(day: date, hour: int, minute: int = 0) -> datetime:
@@ -183,19 +250,130 @@ def raw_score(term_grade: int) -> Decimal:
     raise SeedError("invalid_fixture_grade")
 
 
-def grade_profile(size: int) -> list[int]:
-    if size < sum(ESSENTIAL.values()):
-        raise SeedError("insufficient_entries_for_grade_scenarios")
-    result = list(PROFILE)
-    while len(result) > size:
-        counts = Counter(result)
-        index = next(i for i in range(len(result) - 1, -1, -1)
-                     if counts[result[i]] > ESSENTIAL[result[i]])
-        result.pop(index)
-    extras = (74, 73, 75, 80, 82, 86)
-    while len(result) < size:
-        result.append(extras[(len(result) - len(PROFILE)) % len(extras)])
-    return result
+def discover_scope(conn: Connection, staff_id: str | None, period_id: int | None,
+                   now: datetime) -> tuple[str, int]:
+    """SELECT IDs only; rank distinct enrolled learners in Python, not load rows.
+
+    Supplying either ID constrains discovery of the other. Supplying both uses
+    exactly that pair and leaves all existing preflight validation in place.
+    A chosen pair's failed safety checks never cause silent teacher fallback.
+    """
+    if staff_id is not None and period_id is not None:
+        return staff_id, period_id
+    today = now.astimezone(MANILA).date()
+    query = select(SubjectLoad.staff_id, SubjectLoad.academic_period_id,
+                   SubjectLoad.class_id, AcademicPeriod.academic_year_id).join(
+        AcademicPeriod, AcademicPeriod.academic_period_id == SubjectLoad.academic_period_id
+    ).join(Class, Class.class_id == SubjectLoad.class_id).join(
+        AcademicStaff, AcademicStaff.staff_id == SubjectLoad.staff_id
+    ).where(
+        SubjectLoad.is_active_version.is_(True), SubjectLoad.status.in_(("active", "published")),
+        Class.class_status == "active", Class.academic_year_id == AcademicPeriod.academic_year_id,
+        AcademicPeriod.start_date <= today.replace(day=1), AcademicPeriod.end_date >= today,
+    )
+    if staff_id is not None:
+        query = query.where(SubjectLoad.staff_id == staff_id)
+    if period_id is not None:
+        query = query.where(SubjectLoad.academic_period_id == period_id)
+    choices = {}
+    for row in conn.execute(query):
+        choices.setdefault((row.staff_id, row.academic_period_id), set()).add(
+            (row.class_id, row.academic_year_id))
+    if not choices:
+        raise SeedError("no_teacher_period_candidate", candidate_pairs=0)
+    class_ids = {cid for scopes in choices.values() for cid, _ in scopes}
+    rosters = {}
+    for row in conn.execute(select(StudentClass.class_id, StudentClass.academic_year_id,
+                                   StudentClass.student_id).where(
+            StudentClass.class_id.in_(class_ids), StudentClass.enrollment_status == "enrolled")):
+        rosters.setdefault((row.class_id, row.academic_year_id), set()).add(row.student_id)
+    ranked = []
+    for pair, scopes in choices.items():
+        learners = set().union(*(rosters.get(scope, set()) for scope in scopes))
+        ranked.append((-len(learners), str(pair[0]), pair[1], pair))
+    # Staff ID then period ID break equal-roster ties deterministically.
+    return min(ranked)[3]
+
+
+def plan_scenarios(entries, thresholds):
+    """Allocate compatible grade examples by priority; never fabricate a roster.
+
+    A boundary pair is below/equal. Above-threshold examples are optional next
+    priorities. Later band pairs reuse earlier compatible entries where possible.
+    """
+    grades, included, skipped = {}, [], []
+    positions = {entry: index for index, entry in enumerate(entries)}
+    specifications = (
+        ("top_3_cutoff_tie", (97, 96, 95, 95), None),
+        ("threshold_85_boundary_pair", (84, 85), Decimal(85)),
+        ("threshold_83_boundary_pair", (82, 83), Decimal(83)),
+        ("threshold_85_above", (86,), Decimal(85)),
+        ("threshold_83_above", (84,), Decimal(83)),
+        ("band_90_boundary_pair", (89, 90), None),
+        ("band_85_boundary_pair", (84, 85), None),
+        ("band_80_boundary_pair", (79, 80), None),
+        ("band_75_boundary_pair", (74, 75), None),
+    )
+    for code, targets, threshold in specifications:
+        eligible = [entry for entry in entries if threshold is None or thresholds[entry[1]] == threshold]
+        if not eligible and threshold is not None:
+            reason = (f"no_subject_at_threshold_{int(threshold)}" if threshold not in thresholds.values()
+                      else "insufficient_matching_grade_entries")
+            skipped.append(SkippedScenario(code, reason, 0, len(targets)))
+            continue
+        proposed, used, matched = dict(grades), set(), 0
+        for target in targets:
+            reusable = next((entry for entry in eligible if entry not in used and proposed.get(entry) == target), None)
+            free = [entry for entry in eligible if entry not in proposed]
+            if reusable is None and not free:
+                break
+            if reusable is None:
+                counts = Counter(thresholds[entry[1]] for entry in free)
+                # Preserve scarce 85/83 slots when assigning unconstrained grades.
+                reusable = max(free, key=lambda entry: (
+                    thresholds[entry[1]] not in (Decimal(85), Decimal(83)),
+                    counts[thresholds[entry[1]]], -positions[entry]))
+                proposed[reusable] = target
+            used.add(reusable)
+            matched += 1
+        if matched != len(targets):
+            skipped.append(SkippedScenario(code, "insufficient_matching_grade_entries", matched, len(targets)))
+        else:
+            grades = proposed
+            included.append(code)
+    distinct_subjects = {(entry[2], entry[1]) for entry in entries}
+    multi = sum(count >= 2 for count in Counter(student for student, _ in distinct_subjects).values())
+    if multi:
+        included.append("multi_subject_learner")
+    else:
+        skipped.append(SkippedScenario("multi_subject_learner", "no_multi_subject_learner", 0, 1))
+    # These are guaranteed by the existing date guard and the shared-scope floor.
+    included.extend(("all_attendance_statuses", "excused_late_submission"))
+    background = [grade for grade in PROFILE if grade < 95]
+    for index, entry in enumerate(entry for entry in entries if entry not in grades):
+        grades[entry] = background[index % len(background)]
+    return grades, tuple(included), tuple(skipped)
+
+
+def choose_ungraded(entries, thresholds):
+    learners = sorted({entry[2] for entry in entries}, key=str, reverse=True)
+    if len(learners) < 3:
+        raise SeedError("insufficient_enrolled_learners", enrolled_learners=len(learners), required_learners=3)
+    best = None
+    for candidate in learners:
+        available = [entry for entry in entries if entry[2] != candidate]
+        scope_counts = Counter(entry[:2] for entry in available)
+        shared = sorted(scope for scope, count in scope_counts.items() if count >= 2)
+        if not shared:
+            continue
+        grades, included, skipped = plan_scenarios(available, thresholds)
+        priority = tuple(int(code in included) for code in SCENARIOS) + (len(available),)
+        if best is None or priority > best[0]:
+            best = (priority, candidate, shared[0], grades, included, skipped)
+    if best is None:
+        raise SeedError("no_shared_graded_scope", enrolled_learners=len(learners), required_shared_learners=2)
+    _, missing, extra_scope, grades, included, skipped = best
+    return missing, extra_scope, grades, included, skipped
 
 
 def _resolve_template(conn: Connection, subject: Mapping, level_id: int):
@@ -290,31 +468,12 @@ def build_plan(conn: Connection, staff_id: str, period_id: int, now: datetime) -
         templates[(cid, sid)] = template
         weights[(cid, sid)] = resolved
     entries = [(cid, sid, student) for cid, sid in scopes for student in rosters[cid]]
-    missing = None
-    for candidate in sorted({row[2] for row in entries}, key=str, reverse=True):
-        remaining = [row for row in entries if row[2] != candidate]
-        counts = Counter(thresholds[row[1]] for row in remaining)
-        multi = Counter(row[2] for row in remaining)
-        if len(remaining) >= 15 and counts[Decimal(85)] >= 3 and counts[Decimal(83)] >= 3 and max(multi.values()) >= 2:
-            missing = candidate
-            break
-    if missing is None:
-        raise SeedError("insufficient_roster_or_85_83_multi_subject_scenarios")
+    missing, extra_scope, grades, scenarios, skipped = choose_ungraded(entries, thresholds)
     available = [row for row in entries if row[2] != missing]
-    pool = grade_profile(len(available))
-    grades = {}
-    for threshold, targets in ((Decimal(85), (84, 85, 86)), (Decimal(83), (83, 84, 82))):
-        selected = [row for row in available if thresholds[row[1]] == threshold][:3]
-        for entry, grade in zip(selected, targets):
-            grades[entry] = grade
-            pool.remove(grade)
-    for entry, grade in zip((row for row in available if row not in grades), pool):
-        grades[entry] = grade
     for (cid, sid, _), grade in grades.items():
         initial = round(sum(float(raw_score(grade)) * float(weight) for weight in weights[(cid, sid)]), 2)
         if transmute_current_three_term_grade(initial) != grade:
             raise SeedError("weights_cannot_reproduce_fixture_grades")
-    extra_scope = next(scope for scope in scopes if sum(row[:2] == scope for row in available) >= 2)
     extra_students = [row[2] for row in available if row[:2] == extra_scope]
     excused_student, late_student = extra_students[:2]
     prefix = PREFIX + sha256(f"{staff_id}|{period_id}".encode()).hexdigest()[:16]
@@ -448,21 +607,42 @@ def build_plan(conn: Connection, staff_id: str, period_id: int, now: datetime) -
                 created_at=created, updated_at=created)
     band_counts = [sum((grade >= low and (upper is None or grade < upper)) for grade in grades.values())
                    for low, upper in ((90, None), (85, 90), (80, 85), (75, 80), (0, 75))]
+    assignments = {row.key: row for row in rows if row.table == "classwork_assignment"}
+    submissions = [row for row in rows if row.table == "student_submission"]
+    attendance = [row for row in rows if row.table == "attendance_record"]
+    excuses = {(row.values["student_id"], row.values["class_id"], row.values["date"])
+               for row in attendance if row.values["status"] == "excused"}
+    excluded, counted_late = 0, 0
+    for row in submissions:
+        assignment = assignments[row.values["classwork_assignment_id"].key].values
+        covered = (row.values["student_id"], assignment["class_id"],
+                   assignment["due_date"].astimezone(MANILA).date()) in excuses
+        excluded += int(covered)
+        counted_late += int(not covered and row.values["submitted_at"] > assignment["due_date"])
+    ranked = sorted(grades.values(), reverse=True)
+    omitted_ties = sum(grade == ranked[2] for grade in ranked[3:]) if len(ranked) > 3 else 0
     counts = {
+        "enrolled_learners": len({entry[2] for entry in entries}), "ungraded_learners": 1,
         "student_subject_entries": len(entries), "available_grades": len(grades),
         "unavailable_grades": len(entries) - len(grades), "passing_grades": sum(
             Decimal(grade) >= thresholds[sid] for (_, sid, _), grade in grades.items()),
-        "grade_sum": sum(grades.values()), "top_cutoff_ties_omitted": 1,
-        "completed_submissions": completed, "expected_submissions": 5 * len(entries) + len(rosters[extra_scope[0]]),
-        "counted_late_submissions": 1, "excused_excluded_submissions": 1,
-        "late_eligible_submissions": completed - 1, "pending_grading": 0,
-        "attendance_slots_per_class": len(slots), "attendance_rows": len(slots) * len(class_ids),
-        "attendance_present_per_class": statuses.count("present"), "attendance_late_per_class": 1,
-        "attendance_excused_per_class": 1, "attendance_absent_per_class": 1,
+        "grade_sum": sum(grades.values()), "top_cutoff_ties_omitted": omitted_ties,
+        "top_performer_entries": min(3, len(grades)),
+        "learners_with_multiple_graded_subjects": sum(count >= 2 for count in Counter(
+            student for student, _ in {(entry[2], entry[1]) for entry in grades}).values()),
+        "completed_submissions": len(submissions),
+        "expected_submissions": sum(len(rosters[row.values["class_id"]]) for row in assignments.values()),
+        "counted_late_submissions": counted_late, "excused_excluded_submissions": excluded,
+        "late_eligible_submissions": len(submissions) - excluded,
+        "pending_grading": sum(row.values["grade"] is None for row in submissions),
+        "attendance_slots_per_class": len(slots), "attendance_rows": len(attendance),
+        "attendance_attended_rows": sum(row.values["status"] in ("present", "late") for row in attendance),
+        "attendance_present_per_class": statuses.count("present"), "attendance_late_per_class": statuses.count("late"),
+        "attendance_excused_per_class": statuses.count("excused"), "attendance_absent_per_class": statuses.count("absent"),
     }
     counts.update(zip(("band_90_100", "band_85_89", "band_80_84", "band_75_79", "band_below_75"), band_counts))
     counts.update(zip(("weekday_mon", "weekday_tue", "weekday_wed", "weekday_thu", "weekday_fri", "weekday_sat", "weekday_sun"), bins))
-    return Plan(rows, counts, grades, prefix, fingerprint)
+    return Plan(rows, counts, grades, prefix, fingerprint, staff_id, period_id, scenarios, skipped)
 
 
 def _resolved(values: Mapping, ids: Mapping[str, object]) -> dict | None:
@@ -525,10 +705,20 @@ def inspect_plan(conn: Connection, plan: Plan) -> tuple[dict[str, object], Count
     return ids, existing, missing
 
 
-def seed_connection(conn: Connection, staff_id: str, period_id: int, now: datetime, *, apply: bool):
+def seed_connection(conn: Connection, staff_id: str | None, period_id: int | None, now: datetime, *, apply: bool):
     """Shared SQLite-testable core; CLI connection/target guards cannot be bypassed."""
-    plan = build_plan(conn, staff_id, period_id, now)
-    ids, existing, missing = inspect_plan(conn, plan)  # ALL checks before first INSERT.
+    if now.tzinfo is None or (period_id is not None and period_id <= 0) or staff_id == "":
+        raise SeedError("invalid_seed_scope")
+    staff_id, period_id = discover_scope(conn, staff_id, period_id, now)
+    try:
+        plan = build_plan(conn, staff_id, period_id, now)
+        ids, existing, missing = inspect_plan(conn, plan)  # ALL checks before first INSERT.
+    except SeedError as error:
+        # Never echo unverified explicit arguments; these other refusals happen
+        # only after build_plan verified both existing teacher and period IDs.
+        if error.code not in {"invalid_seed_scope", "teacher_or_period_missing"}:
+            error.chosen_ids = (staff_id, period_id)
+        raise
     if apply:
         for row in plan.rows:
             if row.key in ids:
@@ -542,13 +732,52 @@ def seed_connection(conn: Connection, staff_id: str, period_id: int, now: dateti
     return plan, existing, missing
 
 
+def print_chosen_ids(staff_id: str, period_id: int) -> None:
+    # JSON-escape the staff ID: an ID may not inject lines into count-only output.
+    print("Chosen IDs")
+    print("teacher_staff_id " + json.dumps(staff_id, ensure_ascii=True))
+    print(f"academic_period_id {period_id}")
+
+
 def print_counts(plan: Plan, existing: Counter, additions: Counter, *, apply: bool) -> None:
+    print_chosen_ids(plan.staff_id, plan.period_id)
     print("Category Existing " + ("Inserted" if apply else "Would_insert") + " Conflicts")
     for name in sorted(TABLES):
         print(f"{name} {existing[name]} {additions[name]} 0")
     print("Metric Count")
     for name, count in plan.counts.items():
         print(f"{name} {count}")
+    print("Included scenarios")
+    for code in plan.scenarios:
+        print(f"{code} 1")
+    print("Skipped scenarios")
+    for scenario in plan.skipped:
+        print(f"{scenario.code} {scenario.reason} available={scenario.available} required={scenario.required}: {REASONS[scenario.reason]}")
+    print("Expected results (aggregates only)")
+    counts = plan.counts
+    print(f"grade_coverage {counts['available_grades']}/{counts['student_subject_entries']}")
+    print(f"current_grade_average {counts['grade_sum'] / counts['available_grades']:.1f}")
+    for label, numerator, denominator in (
+        ("passing", "passing_grades", "available_grades"),
+        ("completion", "completed_submissions", "expected_submissions"),
+        ("this_month_attendance", "attendance_attended_rows", "attendance_rows"),
+        ("late_submissions", "counted_late_submissions", "late_eligible_submissions"),
+    ):
+        total = counts[denominator]
+        value = f"{100.0 * counts[numerator] / total:.1f}%" if total else "unavailable"
+        print(f"{label} {counts[numerator]}/{total} {value}")
+
+
+def print_refusal(error: SeedError) -> None:
+    code = error.code if error.code in REASONS else "preview_seed_failed"
+    if code == error.code and error.chosen_ids is not None:
+        print_chosen_ids(*error.chosen_ids)
+    print(f"ERROR {code}: {REASONS[code]}")
+    # Only these locally generated count fields are allowed; never driver details.
+    for key in ("candidate_pairs", "enrolled_learners", "required_learners", "required_shared_learners"):
+        value = error.counts.get(key)
+        if type(value) is int and value >= 0:
+            print(f"{key} {value}")
 
 
 class SafeParser(argparse.ArgumentParser):
@@ -560,8 +789,8 @@ def main(argv=None, *, environ=None) -> int:
     engine = None
     try:
         parser = SafeParser(description="Count-only, INSERT-only local preview dashboard fixture")
-        parser.add_argument("--teacher-staff-id", required=True)
-        parser.add_argument("--academic-period-id", required=True, type=int)
+        parser.add_argument("--teacher-staff-id")
+        parser.add_argument("--academic-period-id", type=int)
         mode = parser.add_mutually_exclusive_group(required=True)
         mode.add_argument("--dry-run", action="store_true")
         mode.add_argument("--apply", action="store_true")
@@ -583,14 +812,14 @@ def main(argv=None, *, environ=None) -> int:
         print_counts(*result, apply=args.apply)
         return 0
     except SeedError as error:
-        print("ERROR " + str(error))
+        print_refusal(error)
         return 2
     except KeyboardInterrupt:
-        print("ERROR cancelled")
+        print_refusal(SeedError("cancelled"))
         return 2
     except Exception:
         # Deliberately do not expose exception text, SQL, URL, or traceback.
-        print("ERROR preview_seed_failed")
+        print_refusal(SeedError("preview_seed_failed"))
         return 2
     finally:
         if engine is not None:
