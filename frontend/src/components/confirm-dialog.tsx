@@ -39,6 +39,9 @@ export type ConfirmDialogProps = {
   onCancel?: () => void;
   isLoading?: boolean;
   size?: ConfirmDialogSize;
+  style?: React.CSSProperties;
+  overlay?: Record<string, unknown>;
+  portalContainer?: HTMLElement | null;
 };
 
 export function ConfirmDialog({
@@ -48,6 +51,9 @@ export function ConfirmDialog({
   description,
   children,
   options,
+  style,
+  overlay,
+  portalContainer,
   ...flatProps
 }: ConfirmDialogProps) {
   const confirmLabel = options?.confirmLabel ?? flatProps.confirmLabel ?? "Confirm";
@@ -79,7 +85,20 @@ export function ConfirmDialog({
         }
       }}
     >
-      <Dialog.Content size={size}>
+      <Dialog.Content
+        size={size}
+        portalContainer={portalContainer ?? (typeof document === "undefined" ? undefined : document.body)}
+        style={{ zIndex: 1101, ...style }}
+        overlay={{
+          forceRender: true,
+          style: {
+            zIndex: 1100,
+            backgroundColor: "rgb(0 0 0 / 0.6)",
+            pointerEvents: "auto",
+          },
+          ...overlay,
+        }}
+      >
         <Dialog.Header position="static">
           {typeof title === "string" ? (
             <Text as="h5" className="font-sans text-xl font-bold">
@@ -101,7 +120,6 @@ export function ConfirmDialog({
         </section>
         <Dialog.Footer position="static">
           <Button
-            autoIcon={false}
             variant="outline"
             onClick={handleCancel}
             disabled={isLoading}
@@ -109,7 +127,6 @@ export function ConfirmDialog({
             {cancelLabel}
           </Button>
           <Button
-            autoIcon={false}
             variant={confirmVariant}
             onClick={() => void handleConfirm()}
             disabled={isLoading}

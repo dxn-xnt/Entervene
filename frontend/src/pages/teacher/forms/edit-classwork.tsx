@@ -624,21 +624,6 @@ export default function EditClassworkModal({
             </Card>
 
             <label className="block text-xs font-bold">
-              Description
-              <Input
-                value={editDraft.description}
-                onChange={(event) =>
-                  setEditDraft((current) => ({
-                    ...current,
-                    description: event.target.value,
-                  }))
-                }
-                disabled={isSavingEdit}
-                className="mt-1 w-full rounded border-black text-sm shadow-none"
-              />
-            </label>
-
-            <label className="block text-xs font-bold">
               Instructions
               <textarea
                 value={editDraft.instructions}

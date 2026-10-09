@@ -658,6 +658,7 @@ export type TeacherClassItem = {
   section_name: string;
   subject_name: string;
   grade_level?: string;
+  student_count?: number;
   academic_period_id?: number;
 };
 

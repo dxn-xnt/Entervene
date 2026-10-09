@@ -15,7 +15,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       offset={{ right: 16, bottom: 16 }}
       mobileOffset={{ right: 12, left: 12, bottom: 12 }}
       containerAriaLabel="Notifications"
-      style={{ zIndex: 997 }}
+      style={{ zIndex: 999999 }}
       icons={{
         success: <span className="flex size-5 shrink-0 items-center justify-center"><CircleCheck aria-hidden="true" className="size-5" /></span>,
         error: <span className="flex size-5 shrink-0 items-center justify-center"><CircleAlert aria-hidden="true" className="size-5" /></span>,

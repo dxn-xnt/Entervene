@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { BookOpen, Save } from "lucide-react";
+import { BookOpen } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
-import { RubricLevelFields } from "@/components/rubric-level-fields";
 import { RubricTemplateDialog } from "@/components/rubric-template-dialog";
+import RubricsScoreBoard from "@/components/rubrics-score-board";
+import { activityRubricMaximum } from "@/lib/classwork-utils";
 import type { ActivityRubricLevel } from "@/types/classwork";
 
 type Props = {
@@ -12,24 +13,35 @@ type Props = {
 };
 
 export function ActivityRubricEditor({ levels, onChange, disabled }: Props) {
-  const [dialogMode, setDialogMode] = useState<"choose" | "save" | null>(null);
+  const [dialogMode, setDialogMode] = useState<"choose" | null>(null);
+  const [chosenTitle, setChosenTitle] = useState<string>("Scoring Rubric");
+
   return (
     <>
-      <div data-rubric-template-actions className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => setDialogMode("choose")}>
+      <div data-rubric-template-actions className="flex items-end justify-between w-full">
+        <p className="text-sm text-foreground font-medium -mb-1">
+          Choose Rubrics
+        </p>
+        <Button type="button" size="sm" disabled={disabled} onClick={() => setDialogMode("choose")}>
           <BookOpen /> Choose Template
         </Button>
-        <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => setDialogMode("save")}>
-          <Save /> Save as Template
-        </Button>
       </div>
-      <RubricLevelFields levels={levels} onChange={onChange} disabled={disabled} />
+      <RubricsScoreBoard
+        title={chosenTitle}
+        totalPoints={activityRubricMaximum(levels)}
+        rubricLevels={levels}
+      />
       {dialogMode && (
         <RubricTemplateDialog
           key={dialogMode}
           mode={dialogMode}
           currentLevels={levels}
-          onApply={onChange}
+          onApply={(newLevels, templateName) => {
+            onChange(newLevels);
+            if (templateName) {
+              setChosenTitle(templateName);
+            }
+          }}
           onClose={() => setDialogMode(null)}
         />
       )}

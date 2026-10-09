@@ -99,7 +99,7 @@ export default function SubjectClassworkTab({
     useState<ClassworkDetail | null>(null);
   const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
   const [detailError, setDetailError] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
+  const [, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   const loadClassworks = useCallback(async () => {
@@ -219,8 +219,8 @@ export default function SubjectClassworkTab({
         const fetchedAssignment =
           (classId
             ? fullDetail.assignments?.find(
-                (a) => String(a.class_id) === String(classId),
-              )
+              (a) => String(a.class_id) === String(classId),
+            )
             : undefined) ??
           fullDetail.assignments?.[0] ??
           targetAssignment;
