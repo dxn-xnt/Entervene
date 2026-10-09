@@ -12,6 +12,7 @@ import {
   GraduationCap,
   Paperclip,
   Search,
+  X,
 } from "lucide-react";
 import SubmissionForm from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
@@ -812,10 +813,12 @@ export default function SubjectClassworkTab({
       <div className="fixed inset-0 z-[99999] flex flex-col bg-white">
         <header className="border-b-2 border-black bg-white px-4 py-3">
           <div className="grid grid-cols-[auto_1fr_auto] items-start gap-3">
-            <Tooltip>
-              <TooltipTrigger render={<span className="inline-flex"><Button type="button" onClick={() => { setIsQuizFullscreen(false); setQuizReviewMode(false); }} variant="outline" size="icon" className="rounded border-black bg-white shadow-md hover:bg-white hover:shadow-none" aria-label="Exit fullscreen quiz"><ChevronLeft size={22} /></Button></span>} />
-              <TooltipContent>Exit quiz</TooltipContent>
-            </Tooltip>
+            {isSummaryMode ? <span className="size-10" aria-hidden="true" /> : (
+              <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex"><Button type="button" onClick={() => { setIsQuizFullscreen(false); setQuizReviewMode(false); }} variant="outline" size="icon" className="rounded border-black bg-white shadow-md hover:bg-white hover:shadow-none" aria-label="Exit fullscreen quiz"><ChevronLeft size={22} /></Button></span>} />
+                <TooltipContent>Exit quiz</TooltipContent>
+              </Tooltip>
+            )}
             <div className="text-center">
               <p className="text-xl font-black leading-none">
                 {isSummaryMode
@@ -829,15 +832,10 @@ export default function SubjectClassworkTab({
               </p>
             </div>
             {isSummaryMode ? (
-              <Button
-                type="button"
-                onClick={() => setIsQuizFullscreen(false)}
-                variant="outline"
-                size="sm"
-                className="rounded border-black bg-white text-sm font-bold shadow-md hover:shadow-none"
-              >
-                Close Summary
-              </Button>
+              <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex"><Button type="button" onClick={() => { setIsQuizFullscreen(false); setQuizReviewMode(false); }} variant="outline" size="icon" className="rounded border-black bg-white shadow-md hover:bg-white hover:shadow-none" aria-label="Close quiz summary"><X size={22} /></Button></span>} />
+                <TooltipContent>Close summary</TooltipContent>
+              </Tooltip>
             ) : (
               <Button
                 type="button"
@@ -910,11 +908,6 @@ export default function SubjectClassworkTab({
                     (option) =>
                       option.option_id === question.selected_option_id,
                   );
-                  const revealsCorrectKey = question.options.some(
-                    (option) =>
-                      option.is_correct !== null &&
-                      option.is_correct !== undefined,
-                  );
                   return (
                     <Card
                       key={question.quiz_question_id}
@@ -924,32 +917,34 @@ export default function SubjectClassworkTab({
                         <h2 className="min-w-0 flex-1 break-words text-base font-bold">
                           {index + 1}. {question.question_text}
                         </h2>
-                        <Badge variant="outline" size="sm" className="shrink-0 rounded border border-gray-300 text-xs font-bold">
+                        <Badge
+                          variant={selectedClasswork.show_scores && question.points_awarded != null
+                            ? question.points_awarded >= question.points ? "success" : question.points_awarded <= 0 ? "destructive" : "outline"
+                            : "outline"}
+                          size="sm"
+                          className="shrink-0 text-xs font-bold"
+                        >
                           {selectedClasswork.show_scores
                             ? `${question.points_awarded ?? 0}/${question.points} pts`
                             : `${question.points} pts`}
                         </Badge>
                       </div>
-                      {question.question_type === "MULTIPLE_CHOICE" ? (
+                      {question.question_type === "MULTIPLE_CHOICE" || question.question_type === "TRUE_FALSE" ? (
                         <div className="mt-3 grid gap-2">
                           {question.options.map((option) => {
                             const isSelected =
                               option.option_id === question.selected_option_id;
                             const isCorrect = option.is_correct === true;
-                            const isKnownWrongSelection =
-                              revealsCorrectKey && isSelected && !isCorrect;
                             return (
                               <div
                                 key={option.option_id}
-                                className={`border px-3 py-2 text-sm ${
-                                  isCorrect
-                                    ? "border-green-500 bg-green-50"
-                                    : isKnownWrongSelection
-                                      ? "border-red-400 bg-red-50"
-                                      : isSelected
-                                        ? "border-[#E0C15A] bg-[#FFFBEE]"
-                                        : "border-gray-200 bg-white"
-                                }`}
+                                className={`border border-foreground px-3 py-2 text-sm ${
+                                   isSelected
+                                     ? "bg-primary text-primary-foreground"
+                                     : isCorrect
+                                       ? "bg-success/10"
+                                       : "bg-background"
+                                 }`}
                               >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <span className="min-w-0 break-words">
@@ -1055,7 +1050,7 @@ export default function SubjectClassworkTab({
                   </p>
                 </Card>
 
-                {currentQuestion.question_type === "MULTIPLE_CHOICE" ? (
+                {currentQuestion.question_type === "MULTIPLE_CHOICE" || currentQuestion.question_type === "TRUE_FALSE" ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     {currentQuestion.options.map((option) => (
                       <Button
@@ -1072,6 +1067,7 @@ export default function SubjectClassworkTab({
                           }))
                         }
                         disabled={isQuizSubmitting}
+                        style={{ borderWidth: 1 }}
                         className={`w-full min-w-0 h-full min-h-24 rounded border-black p-4 text-base sm:text-lg font-bold shadow-md hover:shadow-none whitespace-normal break-words [overflow-wrap:anywhere] ${
                           quizAnswers[currentQuestion.quiz_question_id]
                             ?.selected_option_id === option.option_id
