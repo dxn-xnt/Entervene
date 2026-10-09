@@ -233,28 +233,6 @@ export default function ClassworkFormModal({
 
           <div>
             <label
-              htmlFor="classwork-description"
-              className="mb-1 block text-sm font-semibold"
-            >
-              Description
-            </label>
-            <textarea
-              id="classwork-description"
-              value={classworkDraft.description}
-              onChange={(event) =>
-                setClassworkDraft((current) => ({
-                  ...current,
-                  description: event.target.value,
-                }))
-              }
-              disabled={isCreatingClasswork}
-              className="min-h-20 w-full rounded border-2 border-black px-3 py-2 text-sm"
-              placeholder="Optional summary"
-            />
-          </div>
-
-          <div>
-            <label
               htmlFor="classwork-instructions"
               className="mb-1 block text-sm font-semibold"
             >

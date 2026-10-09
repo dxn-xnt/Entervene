@@ -66,6 +66,7 @@ export type TeacherClassLoad = {
   class_id: number;
   section_name: string;
   grade_level?: string;
+  student_count?: number;
   academic_period_id?: number;
 };
 
@@ -76,6 +77,8 @@ export type TeacherLesson = {
   is_published: boolean;
   show_scores: boolean;
   is_draft: boolean;
+  is_archived?: boolean;
+  is_locked?: boolean;
   subject_id: number;
 };
 

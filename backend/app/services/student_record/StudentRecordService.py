@@ -260,6 +260,8 @@ def teacher_student_record_detail(
             email=student.email,
             academic_level=_academic_level_label(scope.class_.academic_level),
             section_name=scope.class_.section_name,
+            gender=student.gender,
+            status=student.user_account.account_status if student.user_account else None,
         ),
         scope=_scope_out(scope),
         summary=StudentRecordSummary(**metrics.__dict__),

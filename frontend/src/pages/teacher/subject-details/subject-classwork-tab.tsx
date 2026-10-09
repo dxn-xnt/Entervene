@@ -99,7 +99,7 @@ export default function SubjectClassworkTab({
     useState<ClassworkDetail | null>(null);
   const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
   const [detailError, setDetailError] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
+  const [, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   const loadClassworks = useCallback(async () => {
@@ -219,8 +219,8 @@ export default function SubjectClassworkTab({
         const fetchedAssignment =
           (classId
             ? fullDetail.assignments?.find(
-                (a) => String(a.class_id) === String(classId),
-              )
+              (a) => String(a.class_id) === String(classId),
+            )
             : undefined) ??
           fullDetail.assignments?.[0] ??
           targetAssignment;
@@ -372,12 +372,8 @@ export default function SubjectClassworkTab({
           </div>
         )}
 
-        {isLoading ? (
-          <p className="py-12 text-center text-sm font-semibold text-gray-500">
-            Loading classworks...
-          </p>
-        ) : filteredItems.length > 0 ? (
-          <section className="space-y-3">
+        {filteredItems.length > 0 ? (
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-stretch">
             {filteredItems.map((item) => (
               <ClassworkCard
                 key={item.classwork_id}

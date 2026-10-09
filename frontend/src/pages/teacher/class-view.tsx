@@ -1,25 +1,20 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
-  ArrowLeft,
   ArrowUpRight,
   BookOpen,
   CheckCircle2,
   CheckSquare,
   ChevronDown,
   ClipboardList,
-  Eye,
   FileText,
   Lightbulb,
-  Paperclip,
   Pencil,
-  Plus,
   Search,
   Users,
   X,
   type LucideIcon,
 } from "lucide-react";
-import { LoadingPanel } from "@/components/loading-panel";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Accordion } from "@/components/retroui/Accordion";
@@ -28,11 +23,13 @@ import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
+import { Skeleton } from "@/components/retroui/Skeleton";
 import { useToast } from "@/components/retroui/use-toast";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Text } from "@/components/retroui/Text";
 import { Select } from "@/components/retroui/Select";
 import { OverviewCard } from "@/components/overview-cards";
+import { SubjectClassHeader } from "@/components/subject-class-header";
 import { Table } from "@/components/retroui/Table";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
@@ -46,11 +43,12 @@ import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 
 import CompetencyModal from "./forms/competency-modal";
 import CreateLessonModal from "@/pages/teacher/forms/create-lesson";
-import ClassworkCard from "./classworks/classwork-card";
+import ClassworkItemLine from "@/components/item-line/classwork";
 import ClassworkView from "./classwork-view";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
 import ClassworkDetailModal from "./forms/classwork-detail-modal";
+import ManageLessonModal from "./forms/manage-lesson";
 import { isQuizType } from "@/lib/classwork-utils";
 import type {
   ClassworkKind,
@@ -61,7 +59,11 @@ import type {
 } from "@/types/classwork";
 import ClassworkFormModal from "./subject-details/classwork-form-modal";
 import TeacherLessonDetailScreen from "./subject-details/teacher-lesson-detail-screen";
-import { StudentRecordDetail } from "./subject-details/student-records-panel";
+import TeacherStudentView from "./student-view";
+import LessonItemLine, {
+  type LessonItem,
+  type LinkedClassworkItem,
+} from "@/components/item-line/lesson";
 import {
   getTeacherRecordPeriods,
   getTeacherStudentRecordDetail,
@@ -81,7 +83,6 @@ import type {
 } from "./subject-details/types";
 
 import { SuggestionPanel } from "@/components/teacher/suggestions/suggestion-panel-modal";
-import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
 import {
   apiFetch,
   getLessonGoals,
@@ -101,44 +102,7 @@ import type {
 import type { SuggestionResponse } from "@/types/suggestion";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 
-interface LessonAttachment {
-  lesson_attachment_id: number;
-  file_name: string;
-  file_type?: string;
-  file_size: number;
-  uploaded_at?: string;
-}
 
-interface LessonItem {
-  lesson_id: number;
-  title: string;
-  description?: string | null;
-  content?: string | null;
-  competency_id?: number | null;
-  competency_code?: string | null;
-  competency_statement?: string | null;
-  order_index: number;
-  created_at?: string;
-  updated_at?: string;
-  is_published: boolean;
-  show_scores: boolean;
-  is_draft: boolean;
-  is_archived: boolean;
-  attachments: LessonAttachment[];
-}
-
-interface LinkedClassworkItem {
-  classwork_assignment_id: number;
-  classwork_id: number;
-  title: string;
-  classwork_type?: string | null;
-  classwork_category?: string | null;
-  due_date?: string | null;
-  total_points?: number | null;
-  attachment_count?: number;
-  is_published?: boolean;
-  is_locked?: boolean;
-}
 
 type DetailTab = "lessons" | "students" | "classwork";
 
@@ -211,7 +175,57 @@ export default function TeacherClassDetail() {
   if (isLoading) {
     return (
       <AppLayout>
-        <StatePanel message="Loading class details..." />
+        <div className="flex min-w-0 max-w-full flex-1 flex-col overflow-x-clip">
+          <div className="@container/main flex min-w-0 max-w-full flex-1 flex-col">
+            <div className="flex min-w-0 max-w-full flex-1 flex-col">
+              <div data-page-tabs-sticky-region>
+                <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6">
+                  <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                    <SidebarTrigger className="shrink-0 md:hidden" />
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-5 w-16" />
+                      <span className="text-muted-foreground">/</span>
+                      <Skeleton className="h-5 w-24" />
+                      <span className="text-muted-foreground">/</span>
+                      <Skeleton className="h-5 w-20" />
+                    </div>
+                  </div>
+                </header>
+                <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                  <div className="flex border-b border-border py-2 gap-4">
+                    <Skeleton className="h-8 w-24" />
+                    <Skeleton className="h-8 w-24" />
+                    <Skeleton className="h-8 w-24" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex min-w-0 flex-col -mt-[1px] border-t-1 border-border gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+                <Card className="block w-full border-black bg-primary/20 transition-none pt-3 pb-4">
+                  <Card.Content>
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                      <Skeleton className="h-8 w-64" />
+                      <Skeleton className="h-6 w-16" />
+                    </div>
+                    <Skeleton className="mt-2 h-4 w-40" />
+                  </Card.Content>
+                </Card>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-24 w-full" />
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </AppLayout>
     );
   }
@@ -238,26 +252,9 @@ export default function TeacherClassDetail() {
       <div className="flex min-w-0 max-w-full flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex min-w-0 max-w-full flex-1 flex-col">
           <div className="flex min-w-0 max-w-full flex-1 flex-col">
-            {!lessonInterfaceLesson && (
-              <div
-                data-page-tabs-sticky-region={
-                  studentInterfaceStudent ? undefined : ""
-                }
-                data-student-detail-sticky-region={
-                  studentInterfaceStudent ? "" : undefined
-                }
-                className={
-                  studentInterfaceStudent
-                    ? "sticky top-0 z-40 shrink-0 bg-background"
-                    : undefined
-                }
-              >
-                <header
-                  data-student-detail-header={
-                    studentInterfaceStudent ? "" : undefined
-                  }
-                  className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6"
-                >
+            {!lessonInterfaceLesson && !studentInterfaceStudent && (
+              <div data-page-tabs-sticky-region>
+                <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6">
                   <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                     <SidebarTrigger className="shrink-0 md:hidden" />
                     <Breadcrumb className="min-w-0">
@@ -282,7 +279,7 @@ export default function TeacherClassDetail() {
                         <Breadcrumb.Separator />
                         <Breadcrumb.Item className="min-w-0">
                           <Breadcrumb.Page className="block truncate">
-                            {studentInterfaceStudent?.full_name || detail.section_name}
+                            {detail.section_name}
                           </Breadcrumb.Page>
                         </Breadcrumb.Item>
                       </Breadcrumb.List>
@@ -290,137 +287,81 @@ export default function TeacherClassDetail() {
                   </div>
 
                   <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
-                    {studentInterfaceStudent ? (
-                      <ManualSuggestionPanel
-                        classId={detail.class_id}
-                        student={studentInterfaceStudent}
-                        subjectLoads={detail.subject_loads}
-                        displayMode="header"
-                      />
-                    ) : tab === "lessons" ? (
-                      <>
-                        <div className="flex flex-row gap-2">
+                    {tab === "lessons" ? (
+                      <div className="flex flex-row gap-2">
+                        <Button
+                          size="header"
+                          className="w-full md:w-auto whitespace-nowrap"
+                          onClick={() => setIsSetGoalModalOpen(true)}
+                        >
+                          <Pencil className="size-4" /> Set Lesson Goal
+                        </Button>
+                        {(detail.subject_loads[0]?.subject_id) && (
                           <Button
                             size="header"
-                            className="w-full md:w-auto whitespace-nowrap"
-                            onClick={() => setIsSetGoalModalOpen(true)}
+                            variant="default"
+                            onClick={() => {
+                              const targetId =
+                                detail.subject_loads[0]?.subject_id;
+                              if (targetId) {
+                                navigate(
+                                  `/teacher/classes/${detail.class_id}/subjects/${targetId}`,
+                                );
+                              }
+                            }}
+                            className="w-full whitespace-nowrap md:w-auto"
                           >
-                            <Pencil className="size-4" /> Set Lesson Goal
+                            <BookOpen size={16} />
+                            View Subject
                           </Button>
-                          {(detail.subject_loads[0]?.subject_id) && (
-                            <Button
-                              size="header"
-                              variant="default"
-                              onClick={() => {
-                                const targetId =
-                                  detail.subject_loads[0]?.subject_id;
-                                if (targetId) {
-                                  navigate(
-                                    `/teacher/classes/${detail.class_id}/subjects/${targetId}`,
-                                  );
-                                }
-                              }}
-                              className="w-full whitespace-nowrap md:w-auto"
-                            >
-                              <BookOpen size={16} />
-                              View Subject
-                            </Button>
-                          )}
-                        </div>
-                      </>
+                        )}
+                      </div>
                     ) : null}
                   </div>
                 </header>
-                {!studentInterfaceStudent && (
-                  <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-                    <Tabs<DetailTab>
-                      tabs={[
-                        {
-                          id: "lessons",
-                          label: "Lessons",
-                          icon: BookOpen,
-                        },
-                        {
-                          id: "students",
-                          label: "Students",
-                          icon: Users,
-                        },
-                        {
-                          id: "classwork",
-                          label: "Classwork",
-                          icon: ClipboardList,
-                        },
-                      ]}
-                      activeTab={tab}
-                      onTabChange={(nextTab) => {
-                        setStudentInterfaceStudent(null);
-                        setLessonInterfaceLesson(null);
-                        setTab(nextTab);
-                      }}
-                    />
-                  </div>
-                )}
+                <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                  <Tabs<DetailTab>
+                    tabs={[
+                      {
+                        id: "lessons",
+                        label: "Lessons",
+                        icon: BookOpen,
+                      },
+                      {
+                        id: "students",
+                        label: "Students",
+                        icon: Users,
+                      },
+                      {
+                        id: "classwork",
+                        label: "Classwork",
+                        icon: ClipboardList,
+                      },
+                    ]}
+                    activeTab={tab}
+                    onTabChange={(nextTab) => {
+                      setStudentInterfaceStudent(null);
+                      setLessonInterfaceLesson(null);
+                      setTab(nextTab);
+                    }}
+                  />
+                </div>
               </div>
             )}
 
             <div
-              className={`flex min-w-0 flex-col ${lessonInterfaceLesson
+              className={`flex min-w-0 flex-col ${lessonInterfaceLesson || studentInterfaceStudent
                 ? ""
-                : studentInterfaceStudent
-                  ? "gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6"
-                  : "-mt-[1px] border-t-1 border-border gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6"
+                : "-mt-[1px] border-t-1 border-border gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6"
                 }`}
             >
 
               {!studentInterfaceStudent && !lessonInterfaceLesson && (
-                <Card className="block w-full border-black bg-primary transition-none hover:shadow-md pt-3 pb-4">
-                  <Card.Content>
-                    <div className="flex min-w-0 items-center justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <Tooltip>
-                          <TooltipTrigger render={<Card.Title
-                            className="mb-0 truncate text-2xl font-extrabold sm:text-3xl"
-                            tabIndex={0}
-                          >
-                            {currentSubject?.subject_name || detail.section_name}
-                          </Card.Title>} />
-                          <TooltipContent>{currentSubject?.subject_name || detail.section_name}</TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <div className="flex shrink-0 flex-row items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          size="sm"
-                          className="w-fit font-black"
-                        >
-                          {statusLabel}
-                        </Badge>
-                        <Tooltip>
-                          <TooltipTrigger render={<span className="inline-flex"><Button
-                            variant="secondary"
-                            className="shadow-none w-7 p-1"
-                            size="sm"
-                            aria-label={`View ${currentSubject?.subject_name || detail.section_name}`}
-                            onClick={() => {
-                              if (currentSubject) {
-                                navigate(
-                                  `/teacher/classes/${detail.class_id}/subjects/${currentSubject.subject_id}`,
-                                );
-                              }
-                            }}
-                          >
-                            <ArrowUpRight className="size-4" />
-                          </Button></span>} />
-                          <TooltipContent>View subject</TooltipContent>
-                        </Tooltip>
-                      </div>
-
-                    </div>
-                    <p className="text-sm mt-1">
-                      {detail.section_name} | {detail.academic_level}
-                    </p>
-                  </Card.Content>
-                </Card>
+                <SubjectClassHeader
+                  detail={detail}
+                  currentSubject={currentSubject}
+                  statusLabel={statusLabel}
+                />
               )}
 
               {tab === "lessons" && (
@@ -476,8 +417,8 @@ function LessonsTab({
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(
     initialSubjectId || detail.subject_loads[0]?.subject_id || null,
   );
-  const [competencies, setCompetencies] = useState<CompetencyItem[]>([]);
   const [lessons, setLessons] = useState<LessonItem[]>([]);
+  const [, setCompetencies] = useState<CompetencyItem[]>([]);
   const [isLoadingLessons, setIsLoadingLessons] = useState(false);
   const [lessonsError, setLessonsError] = useState("");
   const [expandedLessonId, setExpandedLessonId] = useState<number | null>(null);
@@ -676,12 +617,6 @@ function LessonsTab({
     }
   };
 
-
-  const openCompetencyForm = (comp?: CompetencyItem | null) => {
-    setEditingCompetency(comp || null);
-    setIsCompetencyModalOpen(true);
-  };
-
   const handleCompetencySaved = (savedComp?: CompetencyItem) => {
     if (savedComp) {
       setCompetencies((prev) => {
@@ -697,32 +632,6 @@ function LessonsTab({
       });
     }
     void loadLessonsAndCompetencies();
-  };
-
-  const handleArchiveCompetency = async (competencyId: number) => {
-    if (
-      !window.confirm(
-        "Are you sure you want to archive this learning competency? Any attached lessons will become standalone.",
-      )
-    )
-      return;
-    try {
-      const res = await apiFetch(`/api/v1/competencies/${competencyId}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        setCompetencies((prev) =>
-          prev.filter((c) => c.competency_id !== competencyId),
-        );
-      }
-    } catch {
-      alert("Failed to archive competency.");
-    }
-  };
-
-  const openAddLessonForCompetency = (compId?: number) => {
-    setSelectedCompetencyIdForNewLesson(compId);
-    setIsCreatingLesson(true);
   };
 
   // Classwork Detail Dialog opener (reused from Image 2)
@@ -838,8 +747,8 @@ function LessonsTab({
       description: lesson.description || "",
       content: lesson.content || "",
       order_index: String(lesson.order_index || 1),
-      is_published: lesson.is_published,
-      show_scores: lesson.show_scores,
+      is_published: lesson.is_published ?? true,
+      show_scores: lesson.show_scores ?? true,
       competency_id: lesson.competency_id,
     });
   };
@@ -953,131 +862,17 @@ function LessonsTab({
     const isLoadingCw = loadingClassworkId === lesson.lesson_id;
 
     return (
-      <Accordion
+      <LessonItemLine
         key={lesson.lesson_id}
-        value={isExpanded ? [String(lesson.lesson_id)] : []}
-        onValueChange={() => toggleLesson(lesson.lesson_id)}
-        className="w-full"
-      >
-        <Accordion.Item
-          value={String(lesson.lesson_id)}
-          className="border-2 border-black bg-primary shadow-md!"
-        >
-          <Accordion.Header className="p-4 items-center shadow-none">
-            <div className="flex flex-col w-full items-start gap-1 min-w-0 text-left">
-              <div className="flex flex-wrap items-center w-full justify-between gap-2 min-w-0 pr-3">
-                <h4
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void openLessonDetail(lesson);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      void openLessonDetail(lesson);
-                    }
-                  }}
-                  className="text-xl sm:text-2xl font-semibold text-black break-words line-clamp-2 hover:underline cursor-pointer"
-                >
-                  {lesson.title}
-                </h4>
-                <div className="flex flex-row items-center gap-2">
-                  <Badge
-                    variant={lesson.is_published ? "solid" : "default"}
-                    size="sm"
-                    className="shrink-0 text-xs font-bold"
-                  >
-                    {lesson.is_published ? "Published" : "Draft"}
-                  </Badge>
-                  {lesson.attachments && lesson.attachments.length > 0 && (
-                    <Badge
-                      size="sm"
-                      variant="solid"
-                    >
-                      <Paperclip size={10} />
-                      {lesson.attachments.length} material
-                      {lesson.attachments.length === 1 ? "" : "s"}
-                    </Badge>
-                  )}
-                  <Badge
-                    variant="outline"
-                    size="sm"
-                    className=""
-                  >
-                    {classworks.length} classwork{classworks.length === 1 ? "" : "s"}
-                  </Badge>
-                </div>
-              </div>
-            </div>
-          </Accordion.Header>
-
-          <Accordion.Content className="p-3 border-t-2 border-black bg-white space-y-2">
-            {isLoadingCw ? (
-              <LoadingPanel label="Loading classworks..." />
-            ) : classworks.length === 0 ? (
-              <div className="flex items-center justify-between rounded border-2 border-dashed border-black/40 bg-white p-3 text-xs text-gray-500 font-medium">
-                <span>No classworks assigned to this lesson yet.</span>
-              </div>
-            ) : (
-              classworks.map((cw) => (
-                <Card
-                  key={cw.classwork_assignment_id}
-                  onClick={() => openClassworkDetail(cw)}
-                  className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3 hover:bg-retro shadow-none hover:translate-x-0.5 transition-all cursor-pointer min-w-0 group"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold truncate text-black">
-                        {cw.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {cw.due_date
-                          ? `Due ${new Date(cw.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                          : "No due date"}
-                        {/* {cw.total_points !== null && cw.total_points !== undefined
-                          ? ` • ${cw.total_points} pts`
-                          : ""} */}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {cw.classwork_category && (
-                      <Badge variant="surface" size="sm" className="capitalize">
-                        {cw.classwork_category.toLowerCase().replace(/_/g, " ")}
-                      </Badge>
-                    )}
-                  </div>
-                </Card>
-              ))
-            )}
-            <div className="-mx-3 flex items-center justify-end gap-2 border-t-2 border-black px-3 pt-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void openLessonDetail(lesson)}
-                className="h-8 border-2 border-black bg-white px-3 text-xs font-bold text-black shadow-none hover:bg-retro"
-              >
-                <Eye size={14} className="mr-1.5" />
-                View Lesson
-              </Button>
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                onClick={() => openClassworkForm(lesson as any)}
-                className="h-8 border-2 border-black bg-primary px-3 text-xs font-bold text-black shadow-none hover:opacity-90"
-              >
-                <Plus size={14} className="mr-1.5" />
-                Add Classwork
-              </Button>
-            </div>
-          </Accordion.Content>
-        </Accordion.Item>
-      </Accordion>
+        lesson={lesson}
+        isExpanded={isExpanded}
+        onToggle={() => toggleLesson(lesson.lesson_id)}
+        classworks={classworks}
+        isLoadingClassworks={isLoadingCw}
+        onOpenLessonDetail={openLessonDetail}
+        onOpenClassworkDetail={openClassworkDetail}
+        onOpenClassworkForm={openClassworkForm}
+      />
     );
   };
 
@@ -1129,7 +924,7 @@ function LessonsTab({
                 </div>
 
                 {/* Filter & Sort Controls */}
-                <div className="mt-6.5 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="-mt-3 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="w-full min-w-0 flex-1 lg:max-w-md">
                     <Select
                       value={lessonFilter}
@@ -1177,7 +972,11 @@ function LessonsTab({
 
               {/* Lessons List */}
               {isLoadingLessons ? (
-                <LoadingPanel label="Loading lessons..." />
+                <div className="space-y-3 min-w-0">
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                </div>
               ) : lessonsError ? (
                 <div className="rounded border-2 border-red-300 bg-red-50 p-4 text-sm text-red-700 font-medium">
                   {lessonsError}
@@ -1242,11 +1041,6 @@ function LessonsTab({
               className="w-full flex-1 min-w-0"
             />
             <OverviewCard
-              title="Total Students"
-              count={String(detail.student_count ?? 0)}
-              statDescription="Assigned to section"
-            />
-            <OverviewCard
               title="Total Lessons"
               count={String(lessons.length)}
               statDescription="In this subject"
@@ -1282,209 +1076,20 @@ function LessonsTab({
 
       {/* ── Lesson Management Dialog ── */}
       {selectedLesson && lessonDraft && (
-        <Dialog
-          open
-          onOpenChange={(open) => {
-            if (!open) closeLessonManager();
-          }}
-        >
-          <Dialog.Content className="w-full max-w-4xl p-0">
-            <Dialog.Header className="border-border">
-              <h2 className="text-xl font-bold">{selectedLesson.title}</h2>
-            </Dialog.Header>
-
-            <div className="flex flex-col gap-5 p-5">
-              <div className="space-y-4">
-                <Card className="block w-full border-border shadow-none">
-                  <Card.Content className="space-y-4">
-                    <div className="grid gap-4 sm:grid-cols-[1fr_130px]">
-                      <div>
-                        <label
-                          htmlFor="manage-lesson-title"
-                          className="mb-1 block text-sm font-semibold"
-                        >
-                          Lesson title
-                        </label>
-                        <Input
-                          id="manage-lesson-title"
-                          value={lessonDraft.title}
-                          onChange={(event) =>
-                            setLessonDraft((current) =>
-                              current
-                                ? { ...current, title: event.target.value }
-                                : current,
-                            )
-                          }
-                          disabled={isSavingLesson}
-                          className="h-10 w-full rounded-none border-border bg-background text-foreground !shadow-none"
-                        />
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="manage-lesson-order"
-                          className="mb-1 block text-sm font-semibold"
-                        >
-                          Order
-                        </label>
-                        <Input
-                          id="manage-lesson-order"
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={lessonDraft.order_index}
-                          onChange={(event) =>
-                            setLessonDraft((current) =>
-                              current
-                                ? {
-                                  ...current,
-                                  order_index: event.target.value,
-                                }
-                                : current,
-                            )
-                          }
-                          disabled={isSavingLesson}
-                          className="h-10 w-full rounded-none border-border bg-background text-foreground !shadow-none"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label
-                        htmlFor="manage-lesson-description"
-                        className="mb-1 block text-sm font-semibold"
-                      >
-                        Description
-                      </label>
-                      <textarea
-                        id="manage-lesson-description"
-                        value={lessonDraft.description}
-                        onChange={(event) =>
-                          setLessonDraft((current) =>
-                            current
-                              ? {
-                                ...current,
-                                description: event.target.value,
-                              }
-                              : current,
-                          )
-                        }
-                        disabled={isSavingLesson}
-                        className="min-h-20 w-full rounded-none border-2 border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/35"
-                        placeholder="Short lesson summary"
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        htmlFor="manage-lesson-content"
-                        className="mb-1 block text-sm font-semibold"
-                      >
-                        Lesson content
-                      </label>
-                      <textarea
-                        id="manage-lesson-content"
-                        value={lessonDraft.content}
-                        onChange={(event) =>
-                          setLessonDraft((current) =>
-                            current
-                              ? { ...current, content: event.target.value }
-                              : current,
-                          )
-                        }
-                        disabled={isSavingLesson}
-                        className="min-h-40 w-full rounded-none border-2 border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/35"
-                        placeholder="Write the lesson notes or learning content."
-                      />
-                    </div>
-                  </Card.Content>
-                </Card>
-
-              </div>
-            </div>
-            <Dialog.Footer className="sm:justify-between">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowArchiveConfirm(true)}
-                className="border-2 border-red-600 bg-red-50 font-bold text-red-700 hover:bg-red-100"
-              >
-                <Archive size={14} className="mr-1" />
-                Archive Lesson
-              </Button>
-              <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={closeLessonManager}
-                  className="font-bold"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  onClick={saveLessonDetails}
-                  disabled={isSavingLesson}
-                  className="font-bold"
-                >
-                  Save Changes
-                </Button>
-              </div>
-            </Dialog.Footer>
-          </Dialog.Content>
-        </Dialog>
-      )}
-
-      {/* ── Archive Confirmation Modal ── */}
-      {showArchiveConfirm && selectedLesson && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <Card className="block w-full max-w-md border-2 border-border bg-background text-foreground shadow-[4px_4px_0_#000] hover:shadow-[4px_4px_0_#000]">
-            <div className="flex items-center justify-between border-b-2 border-black bg-red-100 px-5 py-3">
-              <div className="flex items-center gap-2 text-red-800">
-                <Archive size={18} />
-                <Card.Title className="mb-0 text-base font-bold text-red-800">
-                  Archive Lesson?
-                </Card.Title>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowArchiveConfirm(false)}
-                disabled={isArchivingLesson}
-                className="rounded p-1 hover:bg-white/60 disabled:opacity-50"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <Card.Content className="space-y-3 p-4">
-              <p className="text-sm font-medium">
-                Are you sure you want to archive{" "}
-                <span className="font-bold">"{selectedLesson.title}"</span>?
-              </p>
-              <p className="text-xs text-gray-600">
-                This hides the lesson from the student view.
-              </p>
-            </Card.Content>
-            <div className="flex justify-end gap-3 border-t-2 border-black px-5 py-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowArchiveConfirm(false)}
-                disabled={isArchivingLesson}
-                className="border-2 border-black font-semibold"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="default"
-                onClick={archiveLesson}
-                disabled={isArchivingLesson}
-                className="border-2 border-black bg-red-600 font-bold text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700"
-              >
-                Archive Lesson
-              </Button>
-            </div>
-          </Card>
-        </div>
+        <ManageLessonModal
+          selectedLesson={selectedLesson as any}
+          lessonDraft={lessonDraft}
+          setLessonDraft={setLessonDraft}
+          classId={detail.class_id}
+          isSavingLesson={isSavingLesson}
+          isArchivingLesson={isArchivingLesson}
+          error={lessonsError}
+          showArchiveConfirm={showArchiveConfirm}
+          setShowArchiveConfirm={setShowArchiveConfirm}
+          closeLessonManager={closeLessonManager}
+          saveLesson={saveLessonDetails}
+          archiveLesson={archiveLesson}
+        />
       )}
 
       {/* ── Competency Create / Edit Modal ── */}
@@ -1647,65 +1252,23 @@ function StudentsTab({
 
   if (selectedStudent) {
     return (
-      <div className="flex flex-col gap-4 min-w-0">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <Button
-            type="button"
-            variant="outline"
-            size="header"
-            onClick={() => {
-              setSelectedStudent(null);
-              setStudentDetail(null);
-              onDetailViewChange?.(null);
-            }}
-          >
-            <ArrowLeft />
-            Back to students
-          </Button>
-
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {periods.length > 1 && (
-              <Select
-                value={selectedPeriodId}
-                onValueChange={handlePeriodChange}
-              >
-                <Select.Trigger className="h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold min-w-[200px]">
-                  <Select.Value placeholder="Select period" />
-                </Select.Trigger>
-                <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                  {periods.map((p) => (
-                    <Select.Item
-                      key={p.academic_period_id}
-                      value={String(p.academic_period_id)}
-                    >
-                      {p.period_name} ({p.year_label})
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select>
-            )}
-          </div>
-        </div>
-
-        {detailError && (
-          <div className="border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 font-medium">
-            {detailError}
-          </div>
-        )}
-
-        {isDetailLoading || !studentDetail ? (
-          <p className="py-12 text-center text-sm font-semibold text-gray-500">
-            Loading student analytics...
-          </p>
-        ) : (
-          <StudentRecordDetail
-            detail={studentDetail}
-            classId={detail.class_id}
-            subjectLoads={detail.subject_loads as any}
-            showSuggestionPanel={false}
-          />
-        )}
-      </div>
+      <TeacherStudentView
+        student={selectedStudent}
+        studentDetail={studentDetail}
+        classId={detail.class_id}
+        subjectLoads={detail.subject_loads as any}
+        periods={periods}
+        selectedPeriodId={selectedPeriodId}
+        onPeriodChange={handlePeriodChange}
+        isDetailLoading={isDetailLoading}
+        detailError={detailError}
+        sectionName={detail.section_name}
+        subjectName={
+          detail.subject_loads.find((l) => l.subject_id === activeSubjectId)
+            ?.subject_name
+        }
+        subjectId={activeSubjectId}
+      />
     );
   }
 
@@ -1713,7 +1276,6 @@ function StudentsTab({
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] items-start min-w-0">
       <section className="flex flex-col min-w-0">
         <div className="mb-4 flex flex-col gap-2 sm:items-start sm:justify-between">
-          <h3 className="text-xl sm:text-2xl font-bold sm:-mb-">Students</h3>
           <label className="relative flex-1 sm:min-w-sm">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50 z-10" />
             <Input
@@ -2016,10 +1578,11 @@ function ClassworkTab({
         ) : filteredItems.length > 0 ? (
           <section className="space-y-3">
             {filteredItems.map((item) => (
-              <ClassworkCard
+              <ClassworkItemLine
                 key={item.classwork_id}
                 item={item}
                 onOpen={(cw) => setSelected(cw)}
+                className="shadow-none"
               />
             ))}
           </section>

@@ -1,5 +1,20 @@
 import type { ReactNode } from "react";
 
-export default function Field({ label, children }: { label: string; children: ReactNode }) {
-  return <label className="grid gap-1 text-sm font-medium">{label}{children}</label>;
+interface FieldProps {
+  label: string;
+  children: ReactNode;
+  isRequired?: boolean;
 }
+
+export default function Field({ label, children, isRequired }: FieldProps) {
+  return (
+    <label className="grid gap-1 text-sm font-medium">
+      <span>
+        {label}
+        {isRequired && <span className="ml-1 text-red-500">*</span>}
+      </span>
+      {children}
+    </label>
+  );
+}
+

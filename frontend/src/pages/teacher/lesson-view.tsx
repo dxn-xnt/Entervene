@@ -1,13 +1,12 @@
+import { useState } from "react";
 import {
-    Calendar,
+    Archive,
     ClipboardList,
-    Clock,
-    Eye,
-    FileText,
-    Paperclip,
     Pencil,
     Plus,
+    X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
@@ -21,7 +20,8 @@ import {
     EmptyTitle,
 } from "@/components/ui/empty";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { formatDate, formatFileSize, toTitleCase } from "@/lib/formatters";
+import { formatDate } from "@/lib/formatters";
+import ClassworkItemLine from "@/components/item-line/classwork";
 import type { Lesson, LinkedClasswork } from "./subject-details/types";
 
 export interface TeacherLessonViewProps {
@@ -33,6 +33,7 @@ export interface TeacherLessonViewProps {
     openLessonManager: (lesson: Lesson) => void;
     openClassworkForm: (lesson: Lesson) => void;
     openClassworkDetail: (classwork: LinkedClasswork) => void;
+    onArchiveLesson?: (lesson: Lesson) => Promise<void> | void;
     linkedClassworks: LinkedClasswork[];
     isLoadingClasswork?: boolean;
 }
@@ -46,9 +47,13 @@ export function TeacherLessonView({
     openLessonManager,
     openClassworkForm,
     openClassworkDetail,
+    onArchiveLesson,
     linkedClassworks = [],
     isLoadingClasswork = false,
 }: TeacherLessonViewProps) {
+    const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+    const [isArchivingLesson, setIsArchivingLesson] = useState(false);
+
     return (
         <div className="flex flex-col flex-1 min-w-0 w-full animate-in fade-in-50 duration-200">
             {/* ── Universal Header ── */}
@@ -112,6 +117,19 @@ export function TeacherLessonView({
                             <Pencil size={16} />
                             Edit Lesson
                         </Button>
+                        {onArchiveLesson && (
+                            <Button
+                                type="button"
+                                size="header"
+                                variant="outline"
+                                onClick={() => setShowArchiveConfirm(true)}
+                                disabled={isArchivingLesson}
+                                className="w-full whitespace-nowrap md:w-auto"
+                            >
+                                <Archive size={16} />
+                                Archive Lesson
+                            </Button>
+                        )}
                         <Button
                             type="button"
                             size="header"
@@ -126,104 +144,46 @@ export function TeacherLessonView({
                 </header>
             </div>
 
-            <div className="-mt-[3px] flex min-w-0 flex-col gap-5 border-t-2! border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-
+            <div className="-mt-[3px] flex min-w-0 flex-col gap-3 border-t-2! border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
                 {/* ── Hero Lesson Information Card ── */}
-                <Card className="block w-full border-2 border-black bg-primary p-5 sm:p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                    <div className="flex flex-col gap-3">
-                        {/* Badges Ribbon */}
-                        <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="outline" size="sm" className="border-1 border-black bg-white text-black">
-                                Lesson
-                            </Badge>
+                <Card className="block w-full border-2 border-black bg-primary p-4 sm:p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                    <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap items-center gap-2 justify-between">
+                            <div className="flex flex-row gap-3 items-center">
+                                {/* Lesson Title */}
+                                <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-black leading-tight break-words">
+                                    {lesson.title}
+                                </h1>
+                                <Badge variant="outline" size="sm" className="h-fit">
+                                    Lesson
+                                </Badge>
+                            </div>
 
                             <Badge
                                 variant={lesson.is_published ? "solid" : "default"}
                                 size="sm"
-                                className="py-1 rounded font-bold"
+                                className="py-1"
                             >
                                 {lesson.is_published ? "Published" : "Draft"}
                             </Badge>
 
+                        </div>
+
+                        <div className="flex flex-row gap-2 items-center">
+                            <p className="text-xs sm:text-sm text-foreground">
+                                Competency:
+                            </p>
                             {(lesson.competency_code || lesson.competency_statement) && (
-                                <Badge variant="outline" size="sm" className="border-1 border-black bg-white text-black">
+                                <p className="text-sm sm:text-base font-semibold text-foreground">
                                     {lesson.competency_code || lesson.competency_statement}
-                                </Badge>
-                            )}
-
-                            <Badge
-                                variant="surface"
-                                size="sm"
-                                className="border-1 border-black bg-white text-black"
-                            >
-                                {linkedClassworks.length} {linkedClassworks.length === 1 ? "classwork" : "classworks"}
-                            </Badge>
-
-                            {lesson.attachments && lesson.attachments.length > 0 && (
-                                <Badge
-                                    size="sm"
-                                    className="border-1 border-black bg-[#7ABA78] text-black font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
-                                >
-                                    <Paperclip size={12} className="mr-1 inline" />
-                                    {lesson.attachments.length} {lesson.attachments.length === 1 ? "material" : "materials"}
-                                </Badge>
+                                </p>
                             )}
                         </div>
 
-                        {/* Lesson Title */}
-                        <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-black leading-tight break-words">
-                            {lesson.title}
-                        </h1>
-
-                        {/* Description */}
-                        {lesson.description && (
-                            <p className="text-sm sm:text-base font-medium leading-relaxed text-gray-900 break-words">
-                                {lesson.description}
-                            </p>
-                        )}
-
-                        {/* Lesson Content / Notes */}
-                        {lesson.content && (
-                            <div className="mt-2 rounded border-2 border-black bg-white/70 p-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                                <p className="text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
-                                    Lesson Content
-                                </p>
-                                <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-900 font-medium">
-                                    {lesson.content}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Lesson Attachments / Files */}
-                        {lesson.attachments && lesson.attachments.length > 0 && (
-                            <div className="mt-2 flex flex-col gap-2">
-                                <p className="text-xs font-bold uppercase tracking-wider text-gray-700">
-                                    Attached Materials ({lesson.attachments.length})
-                                </p>
-                                <div className="flex flex-wrap gap-2">
-                                    {lesson.attachments.map((file) => (
-                                        <div
-                                            key={file.lesson_attachment_id}
-                                            className="inline-flex items-center gap-2 rounded border-2 border-black bg-white px-3 py-1.5 text-xs font-bold text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                                        >
-                                            <FileText size={14} className="shrink-0 text-black" />
-                                            <span className="max-w-[180px] sm:max-w-[260px] truncate" title={file.file_name}>
-                                                {file.file_name}
-                                            </span>
-                                            <span className="text-[11px] font-normal text-muted-foreground">
-                                                ({formatFileSize(file.file_size)})
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
                         {/* Timestamps */}
                         {(lesson.updated_at || lesson.created_at) && (
-                            <div className="mt-1 flex items-center text-xs font-semibold text-gray-700">
+                            <div className="flex items-center text-xs sm:text-sm text-foreground">
                                 <span className="inline-flex items-center gap-1">
-                                    <Clock size={12} />
                                     {lesson.updated_at && (!lesson.created_at || lesson.updated_at !== lesson.created_at)
                                         ? `Updated ${formatDate(lesson.updated_at)}`
                                         : `Created ${formatDate(lesson.created_at)}`}
@@ -233,16 +193,28 @@ export function TeacherLessonView({
                     </div>
                 </Card>
 
-                {/* ── Classwork Section ── */}
-                <section className="flex flex-col gap-3 pt-2">
-                    <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                            <h2 className="text-xl sm:text-2xl font-bold text-black">
-                                Classwork
-                            </h2>
-                        </div>
-                    </div>
+                <section className="flex flex-col gap-3 px-1">
+                    {/* Lesson Content / Notes */}
+                    {lesson.content && (
+                        <Card className="shadow-none">
+                            <p className="mb-1 text-sm text-muted-foreground">
+                                Lesson Content
+                            </p>
+                            <div className="whitespace-pre-wrap text-sm text-foreground font-medium">
+                                {lesson.content}
+                            </div>
+                        </Card>
+                    )}
+                    {/* Description
+                    {lesson.description && (
+                        <p className="text-sm text-muted-foreground">
+                            {lesson.description}
+                        </p>
+                    )} */}
+                </section>
 
+                {/* ── Classwork Section ── */}
+                <section className="mt-2 flex flex-col gap-3 px-1">
                     {/* Loading State */}
                     {isLoadingClasswork ? (
                         <Card className="block border-2 border-black bg-white p-8 text-center text-sm font-semibold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
@@ -255,109 +227,118 @@ export function TeacherLessonView({
                         /* Classworks List */
                         <div className="flex flex-col gap-3">
                             {linkedClassworks.map((classwork) => (
-                                <Card
+                                <ClassworkItemLine
                                     key={classwork.classwork_assignment_id}
-                                    tabIndex={0}
-                                    role="button"
-                                    onClick={() => openClassworkDetail(classwork)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === "Enter" || e.key === " ") {
-                                            e.preventDefault();
-                                            openClassworkDetail(classwork);
-                                        }
-                                    }}
-                                    className="group flex w-full cursor-pointer items-center justify-between gap-4 border-2 border-black bg-white p-3.5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 hover:bg-yellow-50/50 transition-all"
-                                >
-                                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                                        <div className="flex flex-col min-w-0 flex-1">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <p className="text-sm sm:text-base font-bold text-black break-words line-clamp-2 group-hover:underline">
-                                                    {classwork.title}
-                                                </p>
-                                                {classwork.classwork_type && (
-                                                    <Badge size="sm" variant="surface" className="font-semibold text-[11px]">
-                                                        {toTitleCase(classwork.classwork_type)}
-                                                    </Badge>
-                                                )}
-                                            </div>
-
-                                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs font-medium text-gray-600">
-                                                {classwork.due_date ? (
-                                                    <span className="inline-flex items-center gap-1 text-gray-700">
-                                                        <Calendar size={12} className="text-gray-500" />
-                                                        Due {formatDate(classwork.due_date)}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-muted-foreground">No due date</span>
-                                                )}
-
-                                                {classwork.created_at && (
-                                                    <span>
-                                                        Created {formatDate(classwork.created_at)}
-                                                    </span>
-                                                )}
-
-                                                {classwork.attachment_count ? (
-                                                    <Badge
-                                                        size="sm"
-                                                        className="bg-[#7ABA78] border border-black text-black font-semibold text-[11px] py-0"
-                                                    >
-                                                        <Paperclip size={10} className="mr-0.5 inline" />
-                                                        {classwork.attachment_count} file{classwork.attachment_count === 1 ? "" : "s"}
-                                                    </Badge>
-                                                ) : null}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-2 shrink-0">
-                                        <Button
-                                            type="button"
-                                            variant="default"
-                                            size="sm"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                openClassworkDetail(classwork);
-                                            }}
-                                            className="gap-1.5 border-2 border-black bg-white text-black font-bold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100"
-                                        >
-                                            <Eye size={14} />
-                                            <span>View</span>
-                                        </Button>
-                                    </div>
-                                </Card>
+                                    item={classwork}
+                                    onOpen={openClassworkDetail}
+                                />
                             ))}
                         </div>
                     ) : (
                         /* Empty State when Lesson has no Classworks */
-                        <Empty className="border-2 border-dashed border-black/40 bg-white p-8 shadow-none">
+                        <Empty className="border-2 bg-white p-8 shadow-none">
                             <EmptyHeader>
                                 <EmptyMedia>
-                                    <div className="flex size-12 items-center justify-center border-2 border-black bg-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                    <div className="flex size-12 items-center justify-center border-2 border-black bg-primary">
                                         <ClipboardList className="size-6 text-black" />
                                     </div>
                                 </EmptyMedia>
                                 <EmptyTitle className="text-lg">No classworks yet</EmptyTitle>
-                                <EmptyDescription className="max-w-md">
-                                    Click "+ Add Classwork" to assign readings, quizzes, activities, or homework to this lesson.
+                                <EmptyDescription className="whitespace-nowrap">
+                                    Assign readings, quizzes, activities, or homework to this lesson.
                                 </EmptyDescription>
                             </EmptyHeader>
                             <EmptyContent className="mt-2">
                                 <Button
-                                    type="button"
                                     variant="default"
                                     size="sm"
                                     onClick={() => openClassworkForm(lesson)}
-                                    className="gap-2 border-2 border-black bg-[#7ABA78] text-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#68a966]"
+                                    className="gap-2"
                                 >
                                     <Plus size={16} />
-                                    Add First Classwork
+                                    Add Classwork
                                 </Button>
                             </EmptyContent>
                         </Empty>
                     )}
                 </section>
             </div>
+
+            {/* ── Archive Confirmation Modal ── */}
+            {showArchiveConfirm && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    onClick={(e) => e.stopPropagation()}
+                    className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4"
+                >
+                    <Card className="block w-full max-w-md border-2 border-black bg-background text-foreground shadow-[4px_4px_0_#000]">
+                        <div className="flex items-center justify-between border-b-2 border-black bg-red-100 px-5 py-3">
+                            <div className="flex items-center gap-2 text-red-800">
+                                <Archive size={18} />
+                                <Card.Title className="mb-0 text-base font-bold text-red-800">
+                                    Archive Lesson?
+                                </Card.Title>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowArchiveConfirm(false)}
+                                disabled={isArchivingLesson}
+                                className="rounded p-1 hover:bg-white/60 disabled:opacity-50 cursor-pointer"
+                                aria-label="Close archive confirmation"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <Card.Content className="space-y-3 p-5">
+                            <p className="text-sm font-medium">
+                                Are you sure you want to archive{" "}
+                                <span className="font-bold">"{lesson.title}"</span>?
+                            </p>
+                            <p className="text-xs text-gray-600">
+                                This hides the lesson from the teacher lesson list and student
+                                lesson views. You can restore it later from the backend archive
+                                flow.
+                            </p>
+                        </Card.Content>
+                        <div className="flex justify-end gap-3 border-t-2 border-black px-5 py-4 bg-gray-50">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setShowArchiveConfirm(false)}
+                                disabled={isArchivingLesson}
+                                className="border-black font-bold"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="button"
+                                onClick={async () => {
+                                    if (!onArchiveLesson) return;
+                                    setIsArchivingLesson(true);
+                                    try {
+                                        await onArchiveLesson(lesson);
+                                        setShowArchiveConfirm(false);
+                                        closeLessonDetail();
+                                    } catch (err) {
+                                        toast.error(
+                                            err instanceof Error
+                                                ? err.message
+                                                : "Unable to archive lesson."
+                                        );
+                                    } finally {
+                                        setIsArchivingLesson(false);
+                                    }
+                                }}
+                                disabled={isArchivingLesson}
+                                className="border-2 border-black bg-red-600 text-white font-bold hover:bg-red-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                            >
+                                {isArchivingLesson ? "Archiving..." : "Archive Lesson"}
+                            </Button>
+                        </div>
+                    </Card>
+                </div>
+            )}
         </div>
     );
 }

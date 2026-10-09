@@ -59,9 +59,6 @@ export default function ClassworkCard({
             </Card.Title>
           </div>
           <div className="flex items-center gap-1.5">
-            {/* <Badge variant="secondary" size="sm">
-              {displayType(item.classwork_type)}
-            </Badge> */}
             <Badge variant={item.is_published ? "solid" : "default"} size="sm">
               {item.is_published ? "Published" : "Draft"}
             </Badge>

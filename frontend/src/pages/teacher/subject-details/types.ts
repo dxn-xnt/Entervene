@@ -1,14 +1,6 @@
-import type { ClassworkAttachment } from "@/types/classwork";
+import type { ClassworkAttachment, TeacherClassLoad } from "@/types/classwork";
 
-export type TeacherClassLoad = {
-  subject_load_id: number;
-  subject_id: number;
-  subject_name: string;
-  subject_codename?: string | null;
-  class_id: number;
-  section_name: string;
-  academic_period_id?: number;
-};
+export type { TeacherClassLoad };
 
 export type CompetencyItem = {
   competency_id: number;

@@ -58,6 +58,8 @@ export type StudentRecordDetailResponse = {
     email?: string | null;
     academic_level?: string | null;
     section_name: string;
+    gender?: string | null;
+    status?: string | null;
   };
   scope: StudentRecordScope;
   summary: {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ClipboardList, Search, UserRound } from "lucide-react";
+import { ArrowLeft, Search, UserRound } from "lucide-react";
 import {
   getTeacherRecordPeriods,
   getTeacherStudentRecordDetail,
@@ -12,11 +12,10 @@ import {
 import { Input } from "@/components/retroui/Input";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
-import { Badge } from "@/components/retroui/Badge";
 import { Select } from "@/components/retroui/Select";
+import { StudentRecordDetail } from "../student-view";
 
 import type { TeacherAdvisorySubjectLoadItem } from "@/types/adminClasses";
-import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
 
 type StudentRecordsPanelProps = {
   classId: string;
@@ -32,17 +31,6 @@ function formatMetric(value?: number | null, suffix = "%", emptyValue = "0") {
 function formatOfficialGrade(value?: number | null) {
   if (value === null || value === undefined) return "Not encoded";
   return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) return "No due date";
-  return new Date(value).toLocaleString();
-}
-
-function statusLabel(status: string) {
-  return status
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export default function StudentRecordsPanel({
@@ -417,154 +405,7 @@ export default function StudentRecordsPanel({
   );
 }
 
-export function StudentRecordDetail({
-  detail,
-  classId,
-  subjectLoads,
-  showSuggestionPanel = true,
-}: {
-  detail: StudentRecordDetailResponse;
-  classId: number;
-  subjectLoads: TeacherAdvisorySubjectLoadItem[];
-  showSuggestionPanel?: boolean;
-}) {
-  return (
-    <div className="space-y-4">
-      <Card className="block w-full bg-primary text-primary-foreground">
-        <Card.Content className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-primary-foreground/70">
-              Student record
-            </p>
-            <Card.Title className="text-3xl font-bold">
-              {detail.student.full_name}
-            </Card.Title>
-            <p className="text-sm text-primary-foreground/80">
-              {detail.student.academic_level || "Student"} |{" "}
-              {detail.student.section_name} | LRN {detail.student.lrn}
-            </p>
-          </div>
-          <UserRound size={24} className="shrink-0" />
-        </Card.Content>
-      </Card>
-
-      {showSuggestionPanel && (
-        <ManualSuggestionPanel
-          classId={classId}
-          student={{
-            student_id: detail.student.student_id,
-            full_name: detail.student.full_name,
-          } as any}
-          subjectLoads={subjectLoads}
-        />
-      )}
-
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card className="block w-full">
-          <Card.Content className="space-y-1">
-            <Card.Description className="text-sm">Official Grade</Card.Description>
-            <Card.Title className="text-3xl">
-              {formatOfficialGrade(detail.summary.official_period_grade)}
-            </Card.Title>
-            <p className="text-xs font-medium text-muted-foreground">
-              Encoded period grade
-            </p>
-          </Card.Content>
-        </Card>
-
-        <Card className="block w-full">
-          <Card.Content className="space-y-1">
-            <Card.Description className="text-sm">Running Average</Card.Description>
-            <Card.Title className="text-3xl">
-              {formatMetric(detail.summary.running_classwork_percentage)}
-            </Card.Title>
-            <p className="text-xs font-medium text-muted-foreground">
-              Classwork only
-            </p>
-          </Card.Content>
-        </Card>
-
-        <Card className="block w-full">
-          <Card.Content className="space-y-1">
-            <Card.Description className="text-sm">Completion</Card.Description>
-            <Card.Title className="text-3xl">
-              {formatMetric(detail.summary.completion_rate)}
-            </Card.Title>
-            <p className="text-xs font-medium text-muted-foreground">
-              {detail.summary.submitted_count}/{detail.summary.assigned_count}{" "}
-              done
-            </p>
-          </Card.Content>
-        </Card>
-
-        <Card className="block w-full">
-          <Card.Content className="space-y-1">
-            <Card.Description className="text-sm">Needs Attention</Card.Description>
-            <Card.Title className="text-3xl">
-              {detail.summary.missing_count + detail.summary.ungraded_count}
-            </Card.Title>
-            <p className="text-xs font-medium text-muted-foreground">
-              Missing or ungraded
-            </p>
-          </Card.Content>
-        </Card>
-      </div>
-
-      <Card className="block w-full">
-        <Card.Content>
-          <div className="mb-3 flex items-center gap-2">
-            <ClipboardList size={18} />
-            <Card.Title className="mb-0 text-xl font-bold">
-              Classwork History
-            </Card.Title>
-            <Badge
-              variant="secondary"
-              size="sm"
-              className="ml-auto bg-accent text-accent-foreground"
-            >
-              {detail.classwork_results.length}
-            </Badge>
-          </div>
-          <div className="space-y-3">
-            {detail.classwork_results.length ? (
-              detail.classwork_results.map((item) => (
-                <div
-                  key={item.assignment_id}
-                  className="border border-border bg-background px-4 py-3"
-                >
-                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="font-bold">{item.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {item.type}{" "}
-                        {item.category
-                          ? `| ${item.category.replace(/_/g, " ")}`
-                          : ""}{" "}
-                        | {formatDateTime(item.due_date)}
-                      </p>
-                    </div>
-                    <div className="text-left md:text-right">
-                      <p className="font-bold">
-                        {item.score ?? 0}/{item.total_points ?? 0}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {statusLabel(item.status)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="border border-dashed border-border px-4 py-6 text-center text-muted-foreground">
-                No classwork records for this period yet.
-              </p>
-            )}
-          </div>
-        </Card.Content>
-      </Card>
-    </div>
-  );
-}
+export { StudentRecordDetail } from "../student-view";
 
 function SmallMetric({ label, value }: { label: string; value: string }) {
   return (

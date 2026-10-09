@@ -627,6 +627,7 @@ export default function Classworks() {
                           {createOptions.map((option) => {
                             return (
                               <DialogueSelect
+                                className="shadow-none hover:shadow-none"
                                 key={option.type}
                                 title={option.title}
                                 description={option.description}
@@ -639,8 +640,9 @@ export default function Classworks() {
                       </section>
                       <Dialog.Footer position="fixed">
                         <Button
-                          type="button"
                           variant="outline"
+                          size="sm"
+                          autoIcon={false}
                           onClick={closeCreateWizard}
                         >
                           Cancel
