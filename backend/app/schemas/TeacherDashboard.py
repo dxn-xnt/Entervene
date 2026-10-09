@@ -40,6 +40,50 @@ class GradeSummary(BaseModel):
     warnings: list[DashboardWarning] = Field(default_factory=list)
 
 
+class DashboardScopeLabel(BaseModel):
+    section_name: str | None = None
+    subject_name: str | None = None
+
+
+class DashboardPerformerItem(BaseModel):
+    student_id: str
+    class_id: int
+    subject_id: int
+    academic_period_id: int
+    name: str
+    section_name: str | None = None
+    subject_name: str | None = None
+    current_grade: float
+
+
+class DashboardPerformerSummary(BaseModel):
+    items: list[DashboardPerformerItem] = Field(default_factory=list)
+    limit: int = Field(default=3, ge=1)
+    cutoff_tie_omitted_count: int = Field(default=0, ge=0)
+    warnings: list[DashboardWarning] = Field(default_factory=list)
+
+
+class DashboardGradeBand(BaseModel):
+    band: str
+    count: int = Field(default=0, ge=0)
+
+
+class DashboardGradeDistribution(BaseModel):
+    bands: list[DashboardGradeBand] = Field(default_factory=list)
+    total_grade_count: int = Field(default=0, ge=0)
+    available_grade_count: int = Field(default=0, ge=0)
+    unavailable_grade_count: int = Field(default=0, ge=0)
+
+
+class DashboardGradeDetails(BaseModel):
+    total_grade_count: int = Field(ge=0)
+    available_grade_count: int = Field(ge=0)
+    unavailable_grade_count: int = Field(ge=0)
+    top_performer_limit: int = Field(default=3, ge=1)
+    cutoff_tie_omitted_count: int = Field(default=0, ge=0)
+    warnings: list[DashboardWarning] = Field(default_factory=list)
+
+
 class DashboardWindow(BaseModel):
     start_date: date
     end_date: date
