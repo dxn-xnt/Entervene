@@ -8,14 +8,14 @@ run without PostgreSQL, network requests, or an external AI provider.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import importlib.util
 import os
 import re
 import sys
 import uuid
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import httpx
 import pytest
@@ -30,6 +30,8 @@ from sqlalchemy.schema import CreateSchema, CreateTable, DropSchema
 
 import app.models  # noqa: F401 -- create all registered models, not a subset
 from app.db.Base import Base
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
+from app.models.attendance.Attendance import AttendanceRecord
 from app.models.people.Student import Student
 from app.services.activity import AnalyticsService
 
@@ -388,17 +390,37 @@ def _seed_and_dashboard(db):
 
     try:
         data = seed_dashboard_data(db)
-        result = AnalyticsService.build_teacher_dashboard_health(
-            db, data["teacher"].staff_id, data["period"],
-        )
+        result = _read_only_dashboard(db, data["teacher"].staff_id, data["period"])
         return data, result
     except Exception as error:
         pytest.fail(_safe_failure("synthetic data or dashboard query", error), pytrace=False)
 
 
+def _read_only_dashboard(db, identity, period):
+    """Reject DML and explicit session mutations after synthetic fixture writes."""
+    def reject_write(*args, **kwargs):
+        raise AssertionError("Dashboard production path attempted a database write")
+
+    def select_only(_connection, _cursor, statement, _parameters, _context, _many):
+        if not statement.lstrip().upper().startswith("SELECT"):
+            reject_write()
+
+    engine = db.get_bind()
+    event.listen(engine, "before_cursor_execute", select_only)
+    try:
+        with patch.object(db, "add", side_effect=reject_write), \
+                patch.object(db, "add_all", side_effect=reject_write), \
+                patch.object(db, "delete", side_effect=reject_write), \
+                patch.object(db, "flush", side_effect=reject_write), \
+                patch.object(db, "commit", side_effect=reject_write):
+            return AnalyticsService.build_teacher_dashboard_health(db, identity, period)
+    finally:
+        event.remove(engine, "before_cursor_execute", select_only)
+
+
 def _dashboard(db, identity, period):
     try:
-        return AnalyticsService.build_teacher_dashboard_health(db, identity, period)
+        return _read_only_dashboard(db, identity, period)
     except Exception as error:
         pytest.fail(_safe_failure("dashboard query", error), pytrace=False)
 
@@ -449,6 +471,8 @@ def _numeric_snapshot(result, data):
     class_keys = {data[key].class_id: key for key in ("class_", "other_class", "previous_class")}
     subject_keys = {data[key].subject_id: key for key in ("subject", "other_subject", "off_load_subject")}
     chart = result["trend_chart"]
+    phase_two = result["phase_two"]
+    grades = phase_two["grades"]
     return {
         "kpis": result["kpis"],
         "selected_combo": (
@@ -465,6 +489,30 @@ def _numeric_snapshot(result, data):
             row["student_count"], row["published_classworks"], row["avg_score_percent"],
             row["passing_rate_percent"], row["completion_rate_percent"], row["attendance_rate_percent"],
         ) for row in result["section_matrix"]),
+        "section_grades": sorted((
+            class_keys[row["class_id"]], subject_keys[row["subject_id"]],
+            row["current_grade"], row["passing_threshold"],
+            row["available_grade_count"], row["total_grade_count"],
+            row["current_grade_meets_threshold"],
+            tuple(warning["code"] for warning in row["warnings"]),
+        ) for row in result["section_matrix"]),
+        "grade_summary": {key: value for key, value in grades.items() if key != "warnings"},
+        "grade_warnings": [warning["code"] for warning in grades["warnings"]],
+        "month_window": phase_two["month_window"],
+        "attendance_today": phase_two["attendance_today"],
+        "monthly_attendance": sorted((
+            class_keys[row["class_id"]], row["rate"], row["record_count"],
+            row["present_count"], row["late_count"], row["excused_count"], row["absent_count"],
+        ) for row in result["details"]["attendance_by_section"]),
+        "late_submissions": {
+            key: value for key, value in phase_two["late_submissions"].items() if key != "warnings"
+        },
+        "late_warnings": [warning["code"] for warning in phase_two["late_submissions"]["warnings"]],
+        "weekdays": {
+            key: value for key, value in phase_two["weekdays"].items() if key != "warnings"
+        },
+        "weekday_warnings": [warning["code"] for warning in phase_two["weekdays"]["warnings"]],
+        "require_subject_match": phase_two["require_subject_match"],
         "pending": [(
             submission_keys[row["submission_id"]], _utc_timestamp(row["submitted_at"]),
         ) for row in result["action_queue"]["pending_grading"]],
@@ -489,7 +537,7 @@ def _collect_numeric_scenarios(db, data, current_result):
             ("main_graded", 71.0, 100.0, 2, 2), ("main_pending", None, 50.0, 1, 2),
         ], "current-period mastery and completion values")
         _expect_equal(current["matrix"], [
-            ("class_", "subject", 2, 2, 71.0, 50.0, 75.0, 50.0),
+            ("class_", "subject", 2, 2, 71.0, 0.0, 75.0, 50.0),
         ], "current-period matrix values")
 
         previous = _dashboard(db, data["teacher"].staff_id, data["previous_period"])
@@ -515,7 +563,7 @@ def _collect_numeric_scenarios(db, data, current_result):
             db.flush()
             samples[key] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
             _expect_equal(samples[key]["trend"][0][1], expected, f"{key} mastery")
-            _expect_equal(samples[key]["matrix"][0][4:6], (expected, expected), f"{key} matrix score and passing")
+            _expect_equal(samples[key]["matrix"][0][4:6], (expected, 0.0), f"{key} raw score and official passing")
 
         work.total_points = Decimal("50.00")
         data["submissions"]["graded_one"].grade = Decimal("25.50")
@@ -565,6 +613,117 @@ def _assert_matches_sqlite(actual, expected):
             _expect_equal(actual[scenario][component], expected[scenario][component], f"{scenario} {component} PostgreSQL/SQLite parity")
 
 
+def _collect_phase_two_scenarios(db, data):
+    """Actual ORM queries; only synthetic fixture setup writes to either engine."""
+    from test_teacher_dashboard_health import NOW, add_assignment, add_submission
+
+    try:
+        samples = {}
+        group = data["subject"].subject_group_rel
+        period_grades = []
+        for key in ("active_one", "active_two"):
+            row = StudentPeriodGrade(
+                student_id=data["students"][key].student_id,
+                class_id=data["class_"].class_id,
+                subject_id=data["subject"].subject_id,
+                academic_period_id=data["period"].academic_period_id,
+                # A separate saved final grade must NOT replace the Term Grade.
+                final_period_grade=Decimal("99"), is_finalized=True,
+            )
+            db.add(row)
+            period_grades.append(row)
+        for threshold in (Decimal("85"), Decimal("83"), Decimal("75"), Decimal("83.25")):
+            group.passing_threshold = threshold
+            period_grades[0].transmuted_grade = threshold - Decimal("0.01")
+            period_grades[1].transmuted_grade = threshold
+            db.commit()
+            key = f"runtime_threshold_{threshold}"
+            samples[key] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
+            summary = samples[key]["grade_summary"]
+            _expect_equal(summary["passing_threshold"], float(threshold), "runtime threshold")
+            _expect_equal(summary["passing_count"], 1, "precise threshold equality passing count")
+            _expect_equal(summary["passing_rate_percent"], 50.0, "precise threshold passing rate")
+            _expect_equal(summary["available_grade_count"], 2, "official grade coverage")
+            _expect_equal(summary["current_grade"], round(float(threshold - Decimal("0.005")), 1), "Term Grade not separate saved final")
+            _expect_equal(summary["current_grade_meets_threshold"], False, "threshold comparison before rounding")
+
+        data["subject"].subject_group_rel = None
+        db.commit()
+        samples["missing_group"] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
+        _expect_equal(samples["missing_group"]["grade_summary"]["passing_rate_percent"], None, "missing-group passing availability")
+        _expect_equal(samples["missing_group"]["grade_summary"]["available_grade_count"], 2, "missing-group current-grade coverage")
+        _expect_equal(samples["missing_group"]["grade_warnings"], ["invalid_passing_threshold"], "missing-group configuration warning")
+        data["subject"].subject_group_rel = group
+
+        # Every recorded row counts, including another subject in the same class.
+        rows = [
+            ("active_one", "subject", date(2026, 10, 1), "present"),
+            ("active_two", "subject", date(2026, 10, 1), "late"),
+            ("active_one", "other_subject", date(2026, 10, 1), "excused"),
+            ("active_two", "other_subject", date(2026, 10, 1), "absent"),
+            ("active_one", "subject", date(2026, 10, 9), "present"),
+            ("active_two", "subject", date(2026, 9, 30), "late"),
+            ("active_one", "other_subject", date(2026, 9, 30), "excused"),
+        ]
+        db.add_all([
+            AttendanceRecord(
+                student_id=data["students"][student].student_id,
+                class_id=data["class_"].class_id, subject_id=data[subject].subject_id,
+                date=record_date, status=status,
+            ) for student, subject, record_date, status in rows
+        ])
+        db.commit()
+        samples["four_status_month"] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
+        _expect_equal(samples["four_status_month"]["monthly_attendance"], [
+            ("class_", 50.0, 6, 2, 1, 1, 2),
+        ], "inclusive month/current-day record denominator")
+        _expect_equal(samples["four_status_month"]["attendance_today"]["record_count"], 0, "missing-today records are not inferred")
+
+        with patch.object(AnalyticsService, "_teacher_dashboard_now", return_value=datetime(2026, 9, 30, 16, 0, tzinfo=timezone.utc)):
+            samples["manila_midnight"] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
+        _expect_equal(samples["manila_midnight"]["month_window"], {
+            "start_date": "2026-10-01", "end_date": "2026-10-01", "today": "2026-10-01", "label": "This month",
+        }, "UTC previous-day Manila month boundary")
+        _expect_equal(samples["manila_midnight"]["monthly_attendance"], [
+            ("class_", 50.0, 4, 1, 1, 1, 1),
+        ], "first-day four status records")
+
+        # UTC Sept 30 16:00 is Oct 1 in Manila. Its excuse is deliberately for a
+        # different subject: the approved three-field policy must still match.
+        midnight_due = datetime(2026, 9, 30, 16, 0, tzinfo=timezone.utc)
+        for key, student, due, submitted in (
+            ("excused_midnight", "active_one", midnight_due, midnight_due + timedelta(hours=1)),
+            ("equal_midnight", "active_two", midnight_due, midnight_due),
+            ("unexcused_late", "active_two", midnight_due, midnight_due + timedelta(hours=1)),
+            ("sunday_late", "active_two", datetime(2026, 10, 3, 16, 0, tzinfo=timezone.utc), datetime(2026, 10, 4, 1, 0, tzinfo=timezone.utc)),
+            ("prior_month_excuse", "active_one", datetime(2026, 9, 30, 8, 0, tzinfo=timezone.utc), datetime(2026, 10, 1, 1, 0, tzinfo=timezone.utc)),
+        ):
+            assignment = add_assignment(db, data, key, due_date=due)
+            submission = add_submission(db, data, key, assignment, data["students"][student], status="graded", grade=Decimal("25"))
+            submission.submitted_at = submitted
+        db.commit()
+        with patch.object(AnalyticsService, "_teacher_dashboard_now", return_value=NOW):
+            samples["three_field_excuses_and_weekdays"] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
+        submitted = samples["three_field_excuses_and_weekdays"]
+        _expect_equal(submitted["require_subject_match"], False, "subject matching stays disabled")
+        _expect_equal(submitted["late_submissions"], {
+            "late_rate_percent": 33.3, "late_count": 2, "eligible_count": 6,
+            "excused_excluded_count": 2, "completed_count": 8,
+        }, "excuse exclusion from numerator and denominator")
+        _expect_equal(submitted["late_warnings"], [], "complete timestamp availability")
+        _expect_equal(submitted["weekdays"]["sunday_count"], 1, "Sunday disclosed separately")
+        _expect_equal(submitted["weekdays"]["total_count"], 8, "excused completion still counted")
+        _expect_equal([row["count"] for row in submitted["weekdays"]["days"]], [0, 0, 0, 7, 0, 0], "six Monday-Saturday Manila buckets")
+
+        previous = _dashboard(db, data["teacher"].staff_id, data["previous_period"])
+        samples["historical_period_phase_two"] = _numeric_snapshot(previous, data)
+        _expect_equal([row[2] for row in samples["historical_period_phase_two"]["monthly_attendance"]], [0, 0], "historical selected-period empty month")
+        _expect_equal(samples["historical_period_phase_two"]["weekdays"]["total_count"], 0, "historical selected-period submission dates")
+        return samples
+    except Exception as error:
+        pytest.fail(_safe_failure("Phase 2 numeric scenario query", error), pytrace=False)
+
+
 def test_teacher_dashboard_queries_compile_for_postgres_without_connecting(dashboard_clock):
     """Compilation checks cover actual service SELECTs, not hand-written SQL."""
     statements = []
@@ -582,6 +741,7 @@ def test_teacher_dashboard_queries_compile_for_postgres_without_connecting(dashb
         assert _route_dashboard(db, data).status_code == 200
         assert _route_dashboard(db, data, period_id=999999).status_code == 404
         _collect_numeric_scenarios(db, data, result)
+        _collect_phase_two_scenarios(db, data)
         event.remove(db, "do_orm_execute", capture_select)
 
     engine.dispose()
@@ -590,7 +750,8 @@ def test_teacher_dashboard_queries_compile_for_postgres_without_connecting(dashb
     compiled = [str(statement.compile(dialect=postgresql.dialect())) for statement in statements]
     for table in (
         "academic_period", "academic_staff", "subject_load", "student_class", "classwork_assignment",
-        "student_submission", "attendance_record",
+        "student_submission", "attendance_record", "subject_groups", "student_period_grade",
+        "grading_template",
     ):
         assert any(table in sql for sql in compiled), f"Missing actual dashboard SELECT for {table}"
     assert all("strftime" not in sql.lower() and "julianday" not in sql.lower() for sql in compiled)
@@ -629,6 +790,36 @@ def test_teacher_dashboard_populated_queries_execute_on_guarded_postgres(postgre
         pytest.fail(_safe_failure("isolated SQLite comparison", error), pytrace=False)
     finally:
         sqlite_engine.dispose()
+    _assert_matches_sqlite(postgres_samples, sqlite_samples)
+
+
+def test_teacher_dashboard_phase_two_scenarios_execute_on_isolated_sqlite(dashboard_clock):
+    """Mocked-behavior: run parity expectations even when PG is not configured."""
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(bind=engine) as db:
+            data, _ = _seed_and_dashboard(db)
+            samples = _collect_phase_two_scenarios(db, data)
+    finally:
+        engine.dispose()
+    assert len(samples) == 9
+
+
+def test_teacher_dashboard_phase_two_queries_execute_on_guarded_postgres(postgres_dashboard_session, dashboard_clock):
+    """Opt-in: actual queries/Decimal/timestamps/read-only parity, no providers."""
+    data, _ = _seed_and_dashboard(postgres_dashboard_session)
+    postgres_samples = _collect_phase_two_scenarios(postgres_dashboard_session, data)
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(bind=engine) as db:
+            sqlite_data, _ = _seed_and_dashboard(db)
+            sqlite_samples = _collect_phase_two_scenarios(db, sqlite_data)
+    except Exception as error:
+        pytest.fail(_safe_failure("Phase 2 isolated SQLite comparison", error), pytrace=False)
+    finally:
+        engine.dispose()
     _assert_matches_sqlite(postgres_samples, sqlite_samples)
 
 

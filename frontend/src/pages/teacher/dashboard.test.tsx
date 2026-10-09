@@ -61,6 +61,32 @@ function response(overrides: Partial<TeacherDashboardHealthResponse> = {}): Teac
   };
 }
 
+function phaseTwoResponse(overrides: Partial<TeacherDashboardHealthResponse> = {}): TeacherDashboardHealthResponse {
+  return response({
+    phase_two: {
+      grades: { current_grade: 80.5, passing_rate_percent: 50, available_grade_count: 2, total_grade_count: 3,
+        passing_count: 1, passing_threshold: null, current_grade_meets_threshold: null, warnings: [] },
+      attendance_today: { rate: 50, record_count: 4, present_count: 1, late_count: 1, excused_count: 1, absent_count: 1 },
+      month_window: { start_date: "2026-10-01", end_date: "2026-10-09", today: "2026-10-09", label: "This month" },
+      late_submissions: { late_rate_percent: 25, late_count: 1, eligible_count: 4, excused_excluded_count: 2,
+        completed_count: 6, warnings: [] },
+      weekdays: { days: [2, 0, 3, 1, 4, 0].map((count, day_index) => ({
+        label: ["M", "T", "W", "Th", "F", "S"][day_index], day_index, count,
+      })), sunday_count: 2, total_count: 12, warnings: [] },
+      term_progress: { progress_percent: 40, elapsed_days: 14, total_days: 35, week_number: 2, total_weeks: 5, warnings: [] },
+      require_subject_match: false,
+    },
+    ...overrides,
+  });
+}
+
+function phaseTwoSection(): TeacherDashboardHealthResponse["section_matrix"][number] {
+  return { class_id: 17, subject_id: 25, section_name: "Actual Section", grade_level: "Grade 8", subject_name: "Actual Subject",
+    student_count: 3, published_classworks: 2, completion_rate_percent: 50, attendance_rate_percent: 50,
+    avg_score_percent: null, current_grade: 80.5, passing_rate_percent: 50, available_grade_count: 2, total_grade_count: 3,
+    passing_count: 1, passing_threshold: 80.5, current_grade_meets_threshold: true, warnings: [] };
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason: unknown) => void;
@@ -117,13 +143,13 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     expect(screen.getByText("Maria Santos")).toBeTruthy();
   });
 
-  it("shows unavailable Phase 1 values after errors and retains the five later card defaults", async () => {
+  it("shows unavailable overview values after errors while retaining later detail demos", async () => {
     mocks.load.mockRejectedValue(new Error("Dashboard request failed"));
     render(<Dashboard />);
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Dashboard request failed"));
     expect([countFor("Active Classes"), countFor("Overall Completion"), countFor("Ungraded Queue")]).toEqual(["—", "—", "—"]);
-    expect([countFor("Class Average"), countFor("Passing Rate"), countFor("Late Submissions"), countFor("Attendance Today"), countFor("Term Progress")])
-      .toEqual(["82%", "89%", "8%", "33 / 36", "Week 6"]);
+    expect([countFor("Current grade"), countFor("Passing Rate"), countFor("Late Submissions"), countFor("Attendance Today"), countFor("Term Progress")])
+      .toEqual(["—", "—", "—", "—", "—"]);
     expect(chartPoints()).toEqual([]);
     expect(within(cardFor("Submissions to Review")).getByText("Dashboard data is unavailable.")).toBeTruthy();
   });
@@ -151,8 +177,8 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     expect(within(cardFor("Submissions to Review")).queryByText("Panganganak ng Pang-uri")).toBeNull();
     expect(within(cardFor("Due this week")).queryByText("Fractions worksheet")).toBeNull();
     expect(within(cardFor("Section-by-Section Health")).queryByText("Archimedes", { exact: true })).toBeNull();
-    expect([countFor("Class Average"), countFor("Passing Rate"), countFor("Late Submissions"), countFor("Attendance Today"), countFor("Term Progress")])
-      .toEqual(["82%", "89%", "8%", "33 / 36", "Week 6"]);
+    expect([countFor("Current grade"), countFor("Passing Rate"), countFor("Late Submissions"), countFor("Attendance Today"), countFor("Term Progress")])
+      .toEqual(["—", "—", "—", "—", "—"]);
     expect(screen.getByText("Jose Reyes")).toBeTruthy();
     expect(screen.getByText("Maria Santos")).toBeTruthy();
   });
@@ -171,14 +197,14 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     expect(chartPoints()).toEqual([]);
     const cards = cardFor("Active Classes").parentElement!.querySelectorAll(':scope > [data-slot="card"]');
     expect(Array.from(cards, (card) => card.querySelector('[data-slot="card-description"]')!.textContent))
-      .toEqual(["Active Classes", "Overall Completion", "Ungraded Queue", "Class Average", "Passing Rate", "Late Submissions", "Attendance Today", "Term Progress"]);
+      .toEqual(["Active Classes", "Overall Completion", "Ungraded Queue", "Current grade", "Passing Rate", "Late Submissions", "Attendance Today", "Term Progress"]);
     expect(screen.getByTestId("trend-axis").getAttribute("data-domain")).toBe("[50,100]");
     expect(screen.getByTestId("trend-axis").getAttribute("data-ticks")).toBe("[50,75,100]");
     expect(container.querySelector(".grid.grid-cols-1.items-start")?.className).toBe("grid grid-cols-1 items-start gap-4 lg:grid-cols-12 md:gap-4");
     expect(cardFor("Due this week").className).toContain("flex flex-col justify-between p-4 sm:p-5");
   });
 
-  it("uses supplied cards in the existing order and fills missing later cards with their defaults", async () => {
+  it("uses supplied cards in the existing order and leaves missing Phase 2 metrics unavailable", async () => {
     mocks.load.mockResolvedValue(response({ cards: [
       { title: "Ungraded Queue", count: "0", stat: "0 submissions" },
       { title: "Active Classes", count: "2", stat: "2 sections" },
@@ -189,8 +215,8 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     await waitFor(() => expect(countFor("Active Classes")).toBe("2"));
     expect(countFor("Overall Completion")).toBe("40%");
     expect(countFor("Ungraded Queue")).toBe("0");
-    expect(countFor("Class Average")).toBe("82%");
-    expect(countFor("Term Progress")).toBe("Week 6");
+    expect(countFor("Current grade")).toBe("—");
+    expect(countFor("Term Progress")).toBe("—");
     expect(screen.queryByText("Unknown metric")).toBeNull();
   });
 
@@ -226,7 +252,7 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     expect(within(section).getByText("0 Students")).toBeTruthy();
     expect(within(section).getAllByText("—")).toHaveLength(3);
     expect(within(section).getAllByText("0%")).toHaveLength(1);
-    expect(section.textContent).toContain("Class Average: —");
+    expect(section.textContent).toContain("Current grade: —");
     expect(section.textContent).toContain("Passing Rate: —");
     fireEvent.click(screen.getByText("Real Section"));
     expect(mocks.navigate).toHaveBeenCalledWith("/teacher/classes/17/25");
@@ -387,5 +413,234 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     await act(async () => sectionARequest.resolve(initial));
     expect(chartPoints()).toEqual(sectionB.trend_chart.points);
     expect((screen.getByRole("combobox", { name: "Trend section" }) as HTMLSelectElement).value).toBe("18-26");
+  });
+});
+
+// All Phase 2 cases are mocked component behavior tests. Aggregation and policy
+// arithmetic live in the dashboard-only backend helpers, not this page.
+describe("teacher dashboard Phase 2 mocked component behavior", () => {
+  it("renders current grade points, coverage, real overview metrics and no invented trend deltas", async () => {
+    mocks.load.mockResolvedValue(phaseTwoResponse());
+    render(<Dashboard />);
+    await waitFor(() => expect(countFor("Current grade")).toBe("80.5"));
+    expect(within(cardFor("Current grade")).getByText(/2 of 3 student-subject grades available/)).toBeTruthy();
+    expect(within(cardFor("Current grade")).getByText(/Weighted and transmuted, as in the class record/)).toBeTruthy();
+    expect(countFor("Passing Rate")).toBe("50%");
+    expect(within(cardFor("Passing Rate")).getByText(/Against each subject group's passing grade/)).toBeTruthy();
+    expect(within(cardFor("Passing Rate")).getByText(/Passing grade is set per subject group/)).toBeTruthy();
+    expect(countFor("Late Submissions")).toBe("25%");
+    expect(within(cardFor("Late Submissions")).getByText(/1 of 4 assessed submissions · 2 excused excluded/)).toBeTruthy();
+    expect(within(cardFor("Late Submissions")).getByText(/Late submissions, excluding excused submissions/)).toBeTruthy();
+    expect(countFor("Attendance Today")).toBe("2 / 4");
+    expect(within(cardFor("Attendance Today")).getByText(/1 late · 1 absent · 1 excused/)).toBeTruthy();
+    expect(countFor("Term Progress")).toBe("Week 2");
+    expect(within(cardFor("Term Progress")).getByText(/Calendar progress in Term 2/)).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: "Term Progress: 40%" })).toBeTruthy();
+    expect(screen.queryByText("Class Average")).toBeNull();
+    expect(screen.queryByText(/▲ 3 pts|▲ 2 pts|at or above 75%/)).toBeNull();
+    // Deferred detail widgets retain their existing behavior, not Phase 2 cards.
+    expect(screen.getByText("Maria Santos")).toBeTruthy();
+    expect(screen.getByText("Pang-uri")).toBeTruthy();
+  });
+
+  it("uses the real backend cards without losing excluded counts or threshold warnings", async () => {
+    const result = phaseTwoResponse({ cards: [
+      { title: "Current grade", count: "80.5", stat: "2 of 3 student-subject grades available",
+        statDescription: "Weighted and transmuted, as in the class record." },
+      { title: "Late Submissions", count: "25%", stat: "1 of 4 assessed submissions · 2 excused excluded",
+        statDescription: "Late submissions, excluding excused submissions." },
+      { title: "Passing Rate", count: "—", stat: "2 of 3 student-subject grades available",
+        statDescription: "Passing rate unavailable: subject-group passing grade is missing or invalid." },
+      { title: "Term Progress", count: "Ended", stat: "of 5", statDescription: "Calendar progress in Term 2.", progressValue: 100 },
+    ] });
+    mocks.load.mockResolvedValue(result);
+    render(<Dashboard />);
+    await waitFor(() => expect(countFor("Current grade")).toBe("80.5"));
+    expect(countFor("Passing Rate")).toBe("—");
+    expect(within(cardFor("Passing Rate")).getByText(/Passing rate unavailable/)).toBeTruthy();
+    expect(within(cardFor("Late Submissions")).getByText(/2 excused excluded/)).toBeTruthy();
+    expect(countFor("Term Progress")).toBe("Ended");
+  });
+
+  it.each([75, 83, 85, 82.25].flatMap((threshold) => [-0.25, 0, 0.25].map((delta) => ({ threshold, delta }))))(
+    "renders runtime threshold $threshold at its derived boundary delta $delta, with a neutral cohort passing badge", async ({ threshold, delta }) => {
+      const grade = threshold + delta;
+      const section = { ...phaseTwoSection(), current_grade: grade, passing_threshold: threshold,
+        current_grade_meets_threshold: delta >= 0 };
+      mocks.load.mockResolvedValue(phaseTwoResponse({ section_matrix: [section] }));
+      render(<Dashboard />);
+      await waitFor(() => expect(screen.getByText("Actual Section")).toBeTruthy());
+      const row = cardFor("Actual Section");
+      const gradeBadge = within(row).getByText(String(grade), { exact: true });
+      expect(gradeBadge.getAttribute("title")).toBe(`Passing grade is set per subject group: ${threshold}. Compared before display rounding.`);
+      expect(gradeBadge.className).toContain(delta >= 0 ? "bg-success" : "bg-destructive");
+      const passingBadge = within(row).getAllByText("50%").find((element) => element.parentElement?.textContent?.includes("Passing Rate:"));
+      expect(passingBadge?.className).toContain("bg-primary");
+      expect(passingBadge?.className).not.toMatch(/bg-destructive|bg-success/);
+      expect(row.textContent).toContain("Current grade:");
+      expect(row.textContent).toContain("2 of 3 student-subject grades available.");
+      expect(row.textContent).not.toContain("Class Average:");
+    },
+  );
+
+  it("shows missing-threshold configuration warnings without discarding valid grade points or inventing a passing rate", async () => {
+    const warning = { code: "invalid_passing_threshold", message: "Passing rate unavailable: subject-group passing grade is missing or invalid.", subject_id: 25 };
+    const result = phaseTwoResponse({ section_matrix: [{ ...phaseTwoSection(), passing_rate_percent: null,
+      passing_count: null, passing_threshold: null, current_grade_meets_threshold: null, warnings: [warning] }] });
+    result.phase_two!.grades = { ...result.phase_two!.grades, passing_rate_percent: null, passing_count: null, warnings: [warning] };
+    mocks.load.mockResolvedValue(result);
+    render(<Dashboard />);
+    await waitFor(() => expect(countFor("Current grade")).toBe("80.5"));
+    expect(countFor("Passing Rate")).toBe("—");
+    expect(within(cardFor("Passing Rate")).getByText(/subject-group passing grade is missing or invalid/)).toBeTruthy();
+    expect(within(cardFor("Passing Rate")).queryByText(/0 of 2 available grades/)).toBeNull();
+    const row = cardFor("Actual Section");
+    expect(within(row).getByText(/subject-group passing grade is missing or invalid/)).toBeTruthy();
+    expect(row.textContent).toContain("Passing Rate: —");
+    expect(within(row).getByText("80.5", { exact: true }).className).not.toMatch(/bg-destructive|bg-success/);
+  });
+
+  it("uses the backend's pre-rounding threshold classification rather than comparing rounded display grades", async () => {
+    mocks.load.mockResolvedValue(phaseTwoResponse({ section_matrix: [{ ...phaseTwoSection(), current_grade: 85,
+      passing_threshold: 85, current_grade_meets_threshold: false }] }));
+    render(<Dashboard />);
+    await waitFor(() => expect(screen.getByText("Actual Section")).toBeTruthy());
+    const badge = within(cardFor("Actual Section")).getByText("85", { exact: true });
+    expect(badge.className).toContain("bg-destructive");
+    expect(badge.getAttribute("title")).toContain("Compared before display rounding.");
+  });
+
+  it("keeps mixed-group aggregate grades neutral and renders each subject's own threshold result", async () => {
+    const core = { ...phaseTwoSection(), section_name: "Shared Section", subject_name: "Core Subject", current_grade: 84,
+      passing_threshold: 85, current_grade_meets_threshold: false, passing_rate_percent: 0 };
+    const other = { ...phaseTwoSection(), subject_id: 26, section_name: "Shared Section", subject_name: "Other Subject", current_grade: 84,
+      passing_threshold: 83, current_grade_meets_threshold: true, passing_rate_percent: 100 };
+    const mixed = { ...phaseTwoSection(), class_id: 18, section_name: "Mixed Section", current_grade: 84,
+      passing_threshold: null, current_grade_meets_threshold: null };
+    mocks.load.mockResolvedValue(phaseTwoResponse({ section_matrix: [core, other, mixed] }));
+    render(<Dashboard />);
+    await waitFor(() => expect(screen.getAllByText("Shared Section")).toHaveLength(2));
+    const sharedRows = screen.getAllByText("Shared Section").map((element) => element.closest<HTMLElement>('[data-slot="card"]')!);
+    expect(within(sharedRows[0]).getByText("84", { exact: true }).className).toContain("bg-destructive");
+    expect(within(sharedRows[1]).getByText("84", { exact: true }).className).toContain("bg-success");
+    fireEvent.click(screen.getByRole("button", { name: "Show all classes" }));
+    expect(within(cardFor("Mixed Section")).getByText("84", { exact: true }).className).not.toMatch(/bg-destructive|bg-success/);
+    expect(countFor("Current grade")).not.toContain("%");
+  });
+
+  it("shows genuine zero metrics, no-grade coverage and monthly no-record dashes rather than demo values", async () => {
+    const result = phaseTwoResponse({ details: { attendance_by_section: [{ class_id: 17, section: "Actual Section", rate: null,
+      record_count: 0, present_count: 0, late_count: 0, excused_count: 0, absent_count: 0 }] } });
+    result.phase_two!.grades = { ...result.phase_two!.grades, current_grade: null, passing_rate_percent: null,
+      available_grade_count: 0, total_grade_count: 3, passing_count: null };
+    result.phase_two!.attendance_today = { rate: null, record_count: 0, present_count: 0, late_count: 0, excused_count: 0, absent_count: 0 };
+    result.phase_two!.late_submissions = { ...result.phase_two!.late_submissions, late_rate_percent: 0, late_count: 0,
+      eligible_count: 4, excused_excluded_count: 0, completed_count: 4 };
+    result.phase_two!.weekdays = { ...result.phase_two!.weekdays, days: result.phase_two!.weekdays.days.map((day) => ({ ...day, count: 0 })),
+      sunday_count: 0, total_count: 0 };
+    mocks.load.mockResolvedValue(result);
+    render(<Dashboard />);
+    await waitFor(() => expect(countFor("Late Submissions")).toBe("0%"));
+    expect(countFor("Current grade")).toBe("—");
+    expect(countFor("Attendance Today")).toBe("—");
+    expect(within(cardFor("Current grade")).getByText(/No current grades available/)).toBeTruthy();
+    expect(within(cardFor("Current grade")).getByText(/0 of 3 student-subject grades available/)).toBeTruthy();
+    const attendance = cardFor("Attendance by section");
+    expect(within(attendance).getByText("No attendance records this month for the selected period.")).toBeTruthy();
+    expect(within(attendance).getByText("—", { exact: true })).toBeTruthy();
+    expect(within(attendance).queryByText("0%", { exact: true })).toBeNull();
+    expect(within(cardFor("Submissions by weekday")).getAllByText("0", { exact: true })).toHaveLength(6);
+    expect(within(cardFor("Submissions by weekday")).getByText("Selected period · Manila time · Sunday: 0.")).toBeTruthy();
+    expect(screen.queryByText(/Last 20 school days/)).toBeNull();
+  });
+
+  it("keeps six Monday-Saturday rows, shows Sunday's real count, and exposes sparse monthly record counts", async () => {
+    mocks.load.mockResolvedValue(phaseTwoResponse({ details: { attendance_by_section: [{ class_id: 17, section: "Actual Section", rate: 100,
+      record_count: 1, present_count: 0, late_count: 1, excused_count: 0, absent_count: 0 }] } }));
+    render(<Dashboard />);
+    await waitFor(() => expect(countFor("Current grade")).toBe("80.5"));
+    const weekdays = cardFor("Submissions by weekday");
+    expect(within(weekdays).getAllByRole("progressbar")).toHaveLength(6);
+    expect(weekdays.textContent).toContain("Selected period · Manila time · Sunday: 2.");
+    const rows = weekdays.querySelectorAll('[data-slot="card-content"] > div');
+    expect(Array.from(rows, (row) => row.textContent)).toEqual(["M2", "T0", "W3", "Th1", "F4", "S0"]);
+    expect(weekdays.querySelectorAll('[data-slot="card-content"] > div')).toHaveLength(6);
+    const attendance = cardFor("Attendance by section");
+    expect(within(attendance).getByText("100%")).toBeTruthy();
+    expect(within(attendance).getByTitle("1 recorded entry.")).toBeTruthy();
+    expect(within(attendance).getByText("This month · Present + late / recorded entries. Excused and absent do not count as present.")).toBeTruthy();
+    expect(within(attendance).queryByText(/No attendance records/)).toBeNull();
+  });
+
+  it("renders late-data warnings as unavailable instead of displaying a complete-looking rate", async () => {
+    const result = phaseTwoResponse();
+    result.phase_two!.late_submissions = { ...result.phase_two!.late_submissions, late_rate_percent: null,
+      warnings: [{ code: "missing_submission_timestamp", message: "Late submission rate unavailable: submission timestamps are missing." }] };
+    mocks.load.mockResolvedValue(result);
+    render(<Dashboard />);
+    await waitFor(() => expect(countFor("Late Submissions")).toBe("—"));
+    expect(within(cardFor("Late Submissions")).getByText(/submission timestamps are missing/)).toBeTruthy();
+    expect(within(cardFor("Late Submissions")).getByText(/2 excused excluded/)).toBeTruthy();
+  });
+
+  it("clears old monthly and overview metrics on a period change and ignores a stale Phase 2 response", async () => {
+    const initial = phaseTwoResponse({ details: { attendance_by_section: [{ class_id: 17, section: "Old Monthly Section", rate: 100,
+      record_count: 1, present_count: 1, late_count: 0, excused_count: 0, absent_count: 0 }] } });
+    const older = deferred<TeacherDashboardHealthResponse>();
+    const newer = deferred<TeacherDashboardHealthResponse>();
+    mocks.load.mockResolvedValueOnce(initial).mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise);
+    const page = render(<Dashboard />);
+    await waitFor(() => expect(screen.getByText("Old Monthly Section")).toBeTruthy());
+    mocks.period.selectedPeriodId = 4;
+    page.rerender(<Dashboard />);
+    expect(screen.queryByText("Old Monthly Section")).toBeNull();
+    expect(within(cardFor("Attendance by section")).getByText("Loading dashboard data...")).toBeTruthy();
+    mocks.period.selectedPeriodId = 5;
+    page.rerender(<Dashboard />);
+    const latest = phaseTwoResponse();
+    latest.phase_two!.grades.current_grade = 90;
+    latest.phase_two!.weekdays.sunday_count = 0;
+    await act(async () => newer.resolve(latest));
+    expect(countFor("Current grade")).toBe("90");
+    expect(within(cardFor("Submissions by weekday")).getByText("Selected period · Manila time · Sunday: 0.")).toBeTruthy();
+    const stale = phaseTwoResponse();
+    stale.phase_two!.grades.current_grade = 1;
+    stale.phase_two!.weekdays.sunday_count = 99;
+    await act(async () => older.resolve(stale));
+    expect(countFor("Current grade")).toBe("90");
+    expect(within(cardFor("Submissions by weekday")).queryByText(/Sunday: 99/)).toBeNull();
+    expect(mocks.load.mock.calls.map(([params]) => params.academic_period_id)).toEqual([3, 4, 5]);
+  });
+
+  it("keeps Phase 2 chart areas unavailable while loading and after a request failure", async () => {
+    const request = deferred<TeacherDashboardHealthResponse>();
+    mocks.load.mockReturnValueOnce(request.promise);
+    render(<Dashboard />);
+    const weekdayCard = cardFor("Submissions by weekday");
+    expect(within(weekdayCard).getAllByText("—", { exact: true })).toHaveLength(6);
+    expect(weekdayCard.textContent).toContain("Sunday: —");
+    expect(within(cardFor("Attendance by section")).getByText("Loading dashboard data...")).toBeTruthy();
+    await act(async () => request.reject(new Error("Phase 2 request failed")));
+    expect(screen.getByRole("alert").textContent).toContain("Phase 2 request failed");
+    expect(within(cardFor("Attendance by section")).getByText("Dashboard data is unavailable.")).toBeTruthy();
+    expect(within(weekdayCard).getAllByText("—", { exact: true })).toHaveLength(6);
+    expect(countFor("Current grade")).toBe("—");
+  });
+
+  it("renders Not started and invalid-calendar warnings without inventing Week 0 or progress", async () => {
+    const initial = phaseTwoResponse();
+    initial.phase_two!.term_progress = { ...initial.phase_two!.term_progress!, progress_percent: 0, elapsed_days: 0, week_number: 0 };
+    const invalid = phaseTwoResponse();
+    invalid.phase_two!.term_progress = { ...invalid.phase_two!.term_progress!, progress_percent: null,
+      warnings: [{ code: "invalid_period_dates", message: "Calendar progress unavailable: invalid period dates." }] };
+    mocks.load.mockResolvedValueOnce(initial).mockResolvedValueOnce(invalid);
+    const page = render(<Dashboard />);
+    await waitFor(() => expect(countFor("Term Progress")).toBe("Not started"));
+    expect(screen.queryByText("Week 0")).toBeNull();
+    mocks.period.selectedPeriodId = 4;
+    page.rerender(<Dashboard />);
+    await waitFor(() => expect(countFor("Term Progress")).toBe("—"));
+    expect(within(cardFor("Term Progress")).getByText(/Calendar progress unavailable: invalid period dates/)).toBeTruthy();
+    expect(within(cardFor("Term Progress")).queryByRole("progressbar")).toBeNull();
   });
 });
