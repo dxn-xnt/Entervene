@@ -843,3 +843,98 @@ def test_teacher_dashboard_empty_queries_execute_on_guarded_postgres(postgres_da
         _expect_equal(result["trend_chart"]["points"], [], "empty-scope trend points")
         _expect_equal(result["section_matrix"], [], "empty-scope matrix")
         _expect_equal(result["action_queue"], {"pending_grading": [], "upcoming_deadlines": []}, "empty-scope queues")
+
+
+def _collect_phase_three_scenarios(db, data):
+    """Synthetic setup writes only; every dashboard evaluation is SELECT-only."""
+    records = [StudentPeriodGrade(
+        student_id=data["students"][key].student_id,
+        class_id=data["class_"].class_id, subject_id=data["subject"].subject_id,
+        academic_period_id=data["period"].academic_period_id,
+        transmuted_grade=Decimal("95"), is_finalized=True,
+    ) for key in ("active_one", "active_two")]
+    db.add_all(records)
+    aliases = {str(student.student_id): key for key, student in data["students"].items()}
+    samples = {}
+    def snapshot(result):
+        details = result["details"]
+        return {
+            "performers": [(aliases[row["student_id"]], row["name"], row["section_name"],
+                row["subject_name"], row["current_grade"]) for row in details["top_performers"]],
+            "bands": [(band["band"], band["count"]) for band in details["grade_distribution"]],
+            "coverage": {key: value for key, value in details["grade_details"].items() if key != "warnings"},
+            "warnings": [warning["code"] for warning in details["grade_details"]["warnings"]],
+        }
+    for value in ("74.99", "75", "79.99", "80", "84.5", "84.99", "85", "89.99", "90", "100"):
+        records[0].transmuted_grade = Decimal(value)
+        db.commit()
+        result = _dashboard(db, data["teacher"].staff_id, data["period"])
+        samples[value] = snapshot(result)
+        _expect_equal(result["details"]["grade_details"]["available_grade_count"], 2, "Phase 3 grade coverage")
+        _expect_equal(sum(band["count"] for band in result["details"]["grade_distribution"]), 2, "Phase 3 band total")
+    data["subject"].subject_group_rel = None
+    db.commit()
+    samples["missing_threshold"] = snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]))
+    _expect_equal(samples["missing_threshold"]["warnings"], ["invalid_passing_threshold"], "Phase 3 threshold warnings retained")
+    learner = data["students"]["active_one"]
+    learner.first_name = learner.last_name = ""
+    db.commit()
+    samples["missing_name"] = snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]))
+    _expect_equal(samples["missing_name"]["performers"][0][1], "Name unavailable", "Phase 3 missing name retained")
+    assert "student_name_unavailable" in samples["missing_name"]["warnings"]
+    samples["empty"] = snapshot(_dashboard(db, data["teacher"].staff_id, data["empty_period"]))
+    _expect_equal(samples["empty"]["performers"], [], "Phase 3 empty scope")
+    return samples
+
+
+def test_teacher_dashboard_phase_three_scenarios_execute_on_isolated_sqlite(dashboard_clock):
+    """Mocked-behavior: exercise parity fixtures without a PostgreSQL connection."""
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(bind=engine) as db:
+            data, _ = _seed_and_dashboard(db)
+            samples = _collect_phase_three_scenarios(db, data)
+    finally:
+        engine.dispose()
+    assert len(samples) == 13
+
+
+def test_phase_three_name_projection_compiles_for_postgres_without_connecting():
+    """Unit: name-only UUID SELECT compiles without any engine or connection."""
+    with Session() as db:
+        statement = db.query(
+            Student.student_id, Student.first_name, Student.middle_name,
+            Student.last_name, Student.suffix,
+        ).filter(Student.student_id.in_([uuid.UUID(int=1)])).statement
+    sql = str(statement.compile(dialect=postgresql.dialect())).lower()
+    assert len(statement.selected_columns) == 5
+    assert "student.first_name" in sql and "student.suffix" in sql
+    assert not any(column in sql for column in ("student_lrn", "email", "contact_number", "password"))
+
+
+def test_phase_three_postgres_fixture_skips_before_connecting_when_unset(monkeypatch):
+    """Unit: prove the opt-in fixture skips without constructing an engine."""
+    monkeypatch.delenv("DASHBOARD_TEST_PG_URL", raising=False)
+    create = Mock(side_effect=AssertionError("A database connection is forbidden in this unit test"))
+    monkeypatch.setattr(sys.modules[__name__], "_guarded_postgres_engine", create)
+    with pytest.raises(pytest.skip.Exception, match="DASHBOARD_TEST_PG_URL is unset"):
+        next(postgres_dashboard_session.__wrapped__())
+    create.assert_not_called()
+
+
+def test_teacher_dashboard_phase_three_queries_execute_on_guarded_postgres(postgres_dashboard_session, dashboard_clock):
+    """Opt-in: real guarded-schema SELECTs and Decimal/name/band SQLite parity."""
+    data, _ = _seed_and_dashboard(postgres_dashboard_session)
+    postgres_samples = _collect_phase_three_scenarios(postgres_dashboard_session, data)
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(bind=engine) as db:
+            sqlite_data, _ = _seed_and_dashboard(db)
+            sqlite_samples = _collect_phase_three_scenarios(db, sqlite_data)
+    except Exception as error:
+        pytest.fail(_safe_failure("Phase 3 isolated SQLite comparison", error), pytrace=False)
+    finally:
+        engine.dispose()
+    _assert_matches_sqlite(postgres_samples, sqlite_samples)

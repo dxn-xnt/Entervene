@@ -587,6 +587,9 @@ def test_missing_threshold_keeps_grade_but_marks_passing_unavailable(db, data):
     assert summary["warnings"][0]["code"] == "invalid_passing_threshold"
     assert result["section_matrix"][0]["passing_rate_percent"] is None
     assert next(card for card in result["cards"] if card["title"] == "Passing Rate")["count"] == "—"
+    assert len(result["details"]["top_performers"]) == summary["available_grade_count"]
+    assert sum(item["count"] for item in result["details"]["grade_distribution"]) == summary["available_grade_count"]
+    assert result["details"]["grade_details"]["warnings"] == summary["warnings"]
 
 
 def test_threshold_updates_are_used_by_the_next_dashboard_request(db, data):
@@ -669,3 +672,102 @@ def test_route_period_lookup_does_not_autoflush_dirty_session(db, data, monkeypa
             assert db.dirty
     finally:
         event.remove(db.get_bind(), "before_cursor_execute", select_only)
+
+
+def test_phase_three_uses_real_scoped_current_grades_names_and_neutral_bands(db, data):
+    """Mocked-behavior: these detail arrays no longer contain demo payloads."""
+    result = dashboard(db, data)
+    details = result["details"]
+    coverage = details["grade_details"]
+    rows = details["top_performers"]
+    assert len(rows) == coverage["available_grade_count"] == 2
+    assert coverage["total_grade_count"] == 2
+    assert coverage["unavailable_grade_count"] == 0
+    assert coverage["top_performer_limit"] == 3
+    assert coverage["warnings"] == result["phase_two"]["grades"]["warnings"]
+    assert {item["name"] for item in rows} == {"Student, active_one", "Student, active_two"}
+    assert all(item["subject_name"] == data["subject"].subject_name for item in rows)
+    assert all(item["section_name"] == data["class_"].section_name for item in rows)
+    assert [item["current_grade"] for item in rows] == sorted([item["current_grade"] for item in rows], reverse=True)
+    assert sum(item["count"] for item in details["grade_distribution"]) == 2
+    assert all("variant" not in item for item in details["grade_distribution"])
+    assert all("score" not in item for item in rows)
+
+
+@pytest.mark.parametrize("scope", ["empty_period", "previous_period", "empty_teacher", "other_teacher"])
+def test_phase_three_keeps_teacher_and_period_isolation(db, data, scope):
+    """Mocked-behavior: no cross-teacher or current-period fallback."""
+    period = data.get(scope, data["period"]) if scope.endswith("period") else data["period"]
+    staff = data[scope] if scope.endswith("teacher") else data["teacher"]
+    db.flush()
+    result = AnalyticsService.build_teacher_dashboard_health(db, staff.staff_id, period)
+    rows = result["details"]["top_performers"]
+    assert all(row["academic_period_id"] == period.academic_period_id for row in rows)
+    combos = {(item["class_id"], item["subject_id"]) for item in result["trend_chart"]["available_filters"]}
+    assert all((row["class_id"], row["subject_id"]) in combos for row in rows)
+    if scope in {"empty_period", "empty_teacher"}:
+        assert rows == []
+        assert result["details"]["grade_details"]["total_grade_count"] == 0
+    if scope == "other_teacher":
+        assert any(warning["code"] == "grade_scope_unavailable" for warning in result["details"]["grade_details"]["warnings"])
+    assert sum(band["count"] for band in result["details"]["grade_distribution"]) == result["details"]["grade_details"]["available_grade_count"]
+
+
+def test_phase_three_preserves_same_student_subject_in_two_active_classes(db, data, monkeypatch):
+    """Mocked-behavior: two grade scopes, without violating enrollment uniqueness."""
+    from types import SimpleNamespace
+    from app.services.activity import TeacherDashboardMetrics
+
+    second_class = data["previous_class"]
+    learner_id = str(data["students"]["active_one"].student_id)
+    calls = []
+    def gradebook(_db, staff, class_id, subject_id, period_id):
+        calls.append((class_id, subject_id, period_id))
+        return SimpleNamespace(studentGrades=[SimpleNamespace(student_id=learner_id, transmuted_grade=84.5)])
+    monkeypatch.setattr(TeacherDashboardMetrics, "teacher_student_gradebook", gradebook)
+    grades = TeacherDashboardMetrics.read_dashboard_current_grades(db, data["teacher"].staff_id, [
+        TeacherDashboardMetrics.DashboardScope(class_id, data["subject"].subject_id,
+            data["period"].academic_period_id, frozenset({learner_id}))
+        for class_id in (data["class_"].class_id, second_class.class_id)
+    ])
+    result = TeacherDashboardMetrics.rank_dashboard_performers(grades,
+        TeacherDashboardMetrics.read_dashboard_student_names(db, [learner_id]), {})
+    assert len(calls) == 2
+    rows = [row for row in result.items if row.student_id == learner_id]
+    assert len(rows) == 2
+    assert {row.class_id for row in rows} == {data["class_"].class_id, second_class.class_id}
+    assert [row.current_grade for row in rows] == [84.5, 84.5]
+    assert TeacherDashboardMetrics.summarize_dashboard_grade_distribution(grades).available_grade_count == 2
+
+
+def test_phase_three_is_not_scoped_to_the_trend_selector(db, data):
+    """Mocked-behavior: an invalid trend tuple cannot filter grade details."""
+    baseline = dashboard(db, data)
+    selected = dashboard(db, data, class_id=data["other_class"].class_id, subject_id=data["other_subject"].subject_id)
+    for key in ("top_performers", "grade_distribution", "grade_details"):
+        assert selected["details"][key] == baseline["details"][key]
+
+
+def test_phase_three_missing_names_keep_available_grades_and_warn(db, data, monkeypatch):
+    """Mocked-behavior: metadata absence is not grade unavailability."""
+    monkeypatch.setattr(AnalyticsService, "read_dashboard_student_names", lambda _db, _ids: {})
+    result = dashboard(db, data)
+    assert [row["name"] for row in result["details"]["top_performers"]] == ["Name unavailable"] * 2
+    assert result["details"]["grade_details"]["available_grade_count"] == 2
+    assert result["details"]["grade_details"]["unavailable_grade_count"] == 0
+    assert any(warning["code"] == "student_name_unavailable" for warning in result["details"]["grade_details"]["warnings"])
+
+
+def test_phase_three_authorization_unavailable_keeps_coverage_and_warning(db, data, monkeypatch):
+    """Mocked-behavior: missing authorized scope is neither zero nor demo data."""
+    from app.services.activity import TeacherDashboardMetrics
+    def denied(*_args):
+        raise HTTPException(403, "Do not expose internal authorization details")
+    monkeypatch.setattr(TeacherDashboardMetrics, "teacher_student_gradebook", denied)
+    result = dashboard(db, data)
+    details = result["details"]
+    assert details["top_performers"] == []
+    assert details["grade_details"]["unavailable_grade_count"] == details["grade_details"]["total_grade_count"] == 2
+    assert [band["count"] for band in details["grade_distribution"]] == [0] * 5
+    assert details["grade_details"]["warnings"][0]["code"] == "grade_scope_unavailable"
+    assert "internal authorization" not in str(details["grade_details"])

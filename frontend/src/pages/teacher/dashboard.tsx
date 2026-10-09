@@ -107,12 +107,6 @@ const defaultStudentsNeedingSupport = [
   },
 ];
 
-const defaultTopPerformers = [
-  { name: "Maria Santos", section: "Curie · Science 9", score: 97 },
-  { name: "Liam Tan", section: "Newton · Mathematics 9", score: 95 },
-  { name: "Bea Garcia", section: "Archimedes · Filipino 9", score: 94 },
-];
-
 const defaultTopicMastery = [
   { topic: "Pang-uri", rate: 91, subject_id: 1, subject_name: "Filipino 9" },
   { topic: "Fractions", rate: 88, subject_id: 2, subject_name: "Mathematics 9" },
@@ -143,14 +137,6 @@ const defaultHardestQuestions = [
     rate: "57% correct",
     variant: "warning",
   },
-];
-
-const defaultGradeDistribution = [
-  { band: "<60", count: 2, variant: "destructive" },
-  { band: "60-69", count: 4, variant: "warning" },
-  { band: "70-79", count: 9, variant: "warning" },
-  { band: "80-89", count: 13, variant: "success" },
-  { band: "90-100", count: 8, variant: "success" },
 ];
 
 function isPositiveId(value: unknown): value is number {
@@ -389,7 +375,9 @@ export default function Dashboard() {
 
   const studentsSupport =
     data?.details?.students_needing_support || defaultStudentsNeedingSupport;
-  const topPerformers = data?.details?.top_performers || defaultTopPerformers;
+  const visibleGradeData = isLoading || isPeriodLoading || error ? undefined : data?.details;
+  const gradeDetails = visibleGradeData?.grade_details;
+  const topPerformers = gradeDetails ? visibleGradeData?.top_performers ?? [] : [];
   const dueWeek = data?.action_queue?.upcoming_deadlines ?? [];
   const trendPoints = isLoading || isPeriodLoading || error ? [] : data?.trend_chart.points ?? [];
   const rawTopicMastery = data?.details?.topic_mastery || defaultTopicMastery;
@@ -423,8 +411,7 @@ export default function Dashboard() {
     badge: "Needs grading",
     variant: "destructive",
   }));
-  const gradeDistribution =
-    data?.details?.grade_distribution || defaultGradeDistribution;
+  const gradeDistribution = gradeDetails ? visibleGradeData?.grade_distribution ?? [] : [];
   const attendanceSections = isLoading || isPeriodLoading || error ? [] : data?.details?.attendance_by_section ?? [];
 
   const maxWeekdayCount = Math.max(
@@ -432,12 +419,28 @@ export default function Dashboard() {
     45,
   );
   const maxGradeDistCount = Math.max(
-    ...gradeDistribution.map((g: any) => g.count),
+    ...gradeDistribution.map((g) => g.count),
     15,
   );
 
   const emptyMessage = (message: string) =>
     isLoading || isPeriodLoading ? "Loading dashboard data..." : error ? "Dashboard data is unavailable." : message;
+
+  const gradeEmptyMessage = (hasDetails: boolean) => emptyMessage(
+    !gradeDetails || !hasDetails ? "Current-grade details are unavailable." :
+      gradeDetails.total_grade_count === 0 ? "No student-subject grades for this academic period." :
+        gradeDetails.available_grade_count === 0 ? "No Current grades available." :
+          "Current-grade details are unavailable.",
+  );
+  const gradeCoverage = () => gradeDetails && (
+    <Card.Description className="mt-3 text-[11px] text-muted-foreground">
+      {gradeDetails.available_grade_count} of {gradeDetails.total_grade_count} student-subject grades available.
+      {" "}Unavailable: {gradeDetails.unavailable_grade_count}.
+      {gradeDetails.warnings.map((warning) => (
+        <span key={`${warning.code}-${warning.subject_id}-${warning.class_id}`}> {warning.message}</span>
+      ))}
+    </Card.Description>
+  );
 
   return (
     <AppLayout>
@@ -1108,12 +1111,20 @@ export default function Dashboard() {
                         <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
                           Top Performers
                         </Card.Title>
+                        <Card.Description className="mt-0.5 text-xs text-muted-foreground">
+                          Highest available student-subject Current grades, selected period.
+                        </Card.Description>
                       </Card.Header>
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {topPerformers.map((p: any, idx: number) => (
+                        {topPerformers.length === 0 && (
+                          <Card.Description className="text-xs text-muted-foreground">
+                            {gradeEmptyMessage(Array.isArray(visibleGradeData?.top_performers))}
+                          </Card.Description>
+                        )}
+                        {topPerformers.map((p) => (
                           <Card
-                            key={idx}
+                            key={`${p.student_id}-${p.subject_id}-${p.class_id}-${p.academic_period_id}`}
                             className="flex items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm"
                           >
                             <div className="flex flex-col min-w-0 pr-2">
@@ -1121,15 +1132,21 @@ export default function Dashboard() {
                                 {p.name}
                               </span>
                               <span className="text-[11px] text-muted-foreground truncate">
-                                {p.section}
+                                {[p.section_name, p.subject_name].filter(Boolean).join(" · ") || "Subject unavailable"}
                               </span>
                             </div>
-                            <Badge size="sm" variant="success" className="shrink-0">
-                              {p.score}%
+                            <Badge size="sm" variant="surface" className="shrink-0" title="Current grade">
+                              {formatGrade(p.current_grade)}
                             </Badge>
                           </Card>
                         ))}
                       </Card.Content>
+                      {gradeCoverage()}
+                      {gradeDetails && gradeDetails.cutoff_tie_omitted_count > 0 && (
+                        <Card.Description className="mt-0.5 text-xs text-muted-foreground">
+                          {gradeDetails.cutoff_tie_omitted_count} additional {gradeDetails.cutoff_tie_omitted_count === 1 ? "entry shares" : "entries share"} the cutoff grade; ties are ordered by name, then student ID.
+                        </Card.Description>
+                      )}
                     </Card>
 
                     {/* Grade Distribution */}
@@ -1139,17 +1156,19 @@ export default function Dashboard() {
                           Grade distribution
                         </Card.Title>
                         <Card.Description className="mt-0.5 text-xs text-muted-foreground">
-                          Learners per score band, all sections
+                          Student-subject Current grades per band, selected period.
                         </Card.Description>
                       </Card.Header>
 
                       <Card.Content className="mt-4 flex flex-col justify-between gap-2.5 p-0">
-                        {gradeDistribution.map((item: any, idx: number) => {
-                          const isRed = item.variant === "destructive";
-                          const isGreen = item.variant === "success";
-                          return (
+                        {(!gradeDetails || gradeDetails.available_grade_count === 0 || gradeDistribution.length === 0) && (
+                          <Card.Description className="text-xs text-muted-foreground">
+                            {gradeEmptyMessage(Array.isArray(visibleGradeData?.grade_distribution))}
+                          </Card.Description>
+                        )}
+                        {gradeDetails && gradeDetails.available_grade_count > 0 && gradeDistribution.map((item) => (
                             <div
-                              key={idx}
+                              key={item.band}
                               className="flex items-center justify-between gap-3 text-xs sm:text-sm"
                             >
                               <span className="font-medium text-foreground/90 shrink-0 w-14 truncate">
@@ -1159,19 +1178,19 @@ export default function Dashboard() {
                                 value={Math.round(
                                   (item.count / maxGradeDistCount) * 100,
                                 )}
-                                className={cn(
-                                  "h-3 flex-1",
-                                  isRed && "[&>div]:bg-destructive",
-                                  isGreen && "[&>div]:bg-success",
-                                )}
+                                className="h-3 flex-1"
+                                indicatorClassName="bg-muted-foreground"
                               />
                               <span className="font-semibold text-foreground text-right w-8 shrink-0">
                                 {item.count}
                               </span>
                             </div>
-                          );
-                        })}
+                        ))}
                       </Card.Content>
+                      {gradeCoverage()}
+                      <Card.Description className="mt-0.5 text-xs text-muted-foreground">
+                        Bands use unrounded grades and do not indicate passing.
+                      </Card.Description>
                     </Card>
 
                     {/* Attendance by Section */}

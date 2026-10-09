@@ -25,15 +25,19 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.schemas.TeacherDashboard import DashboardGradeDetails, DashboardScopeLabel
 from app.services.activity.TeacherDashboardMetrics import (
     DashboardScope,
     dashboard_month_window,
     dashboard_term_progress,
     read_dashboard_current_grades,
+    read_dashboard_student_names,
+    rank_dashboard_performers,
     resolve_dashboard_passing_threshold,
     summarize_dashboard_attendance,
     summarize_dashboard_submissions,
     summarize_dashboard_grades,
+    summarize_dashboard_grade_distribution,
 )
 
 
@@ -711,6 +715,24 @@ def build_teacher_dashboard_health(
         for f in available_filters
     ])
     grade_summary = summarize_dashboard_grades(current_grades, thresholds)
+    student_names = read_dashboard_student_names(db, {
+        grade.student_id for grade in current_grades if grade.current_grade is not None
+    })
+    performers = rank_dashboard_performers(current_grades, student_names, {
+        (item["class_id"], item["subject_id"]): DashboardScopeLabel(
+            section_name=item["section_name"], subject_name=item["subject_name"],
+        )
+        for item in available_filters
+    })
+    distribution = summarize_dashboard_grade_distribution(current_grades)
+    grade_details = DashboardGradeDetails(
+        total_grade_count=distribution.total_grade_count,
+        available_grade_count=distribution.available_grade_count,
+        unavailable_grade_count=distribution.unavailable_grade_count,
+        top_performer_limit=performers.limit,
+        cutoff_tie_omitted_count=performers.cutoff_tie_omitted_count,
+        warnings=[*grade_summary.warnings, *performers.warnings],
+    )
     attendance_by_class = {cid: [] for cid in unique_class_ids}
     if unique_class_ids:
         for record in db.query(AttendanceRecord).filter(
@@ -1108,11 +1130,8 @@ def build_teacher_dashboard_health(
                 {"name": "Ana Lim", "section": "Newton · falling 12 pts", "score": 61, "variant": "destructive"},
                 {"name": "Paolo Cruz", "section": "Curie · low attendance", "score": 68, "variant": "warning"},
             ],
-            "top_performers": [
-                {"name": "Maria Santos", "section": "Curie · Science 9", "score": 97},
-                {"name": "Liam Tan", "section": "Newton · Mathematics 9", "score": 95},
-                {"name": "Bea Garcia", "section": "Archimedes · Filipino 9", "score": 94},
-            ],
+            "top_performers": [item.model_dump(mode="json") for item in performers.items],
+            "grade_details": grade_details.model_dump(mode="json"),
             "due_this_week": [
                 {"title": "Fractions worksheet", "section": "Newton · Mathematics 9", "due_label": "Tomorrow", "variant": "destructive"},
                 {"title": "Lab report: Cells", "section": "Curie · Science 9", "due_label": "Thu", "variant": "warning"},
@@ -1134,13 +1153,7 @@ def build_teacher_dashboard_health(
                 {"code": "Q3 · Parts of the cell", "quiz": "Lab Quiz", "rate": "48% correct", "variant": "destructive"},
                 {"code": "Q5 · Uri ng pang-uri", "quiz": "Pagsusulit 1", "rate": "57% correct", "variant": "warning"},
             ],
-            "grade_distribution": [
-                {"band": "<60", "count": 2, "variant": "destructive"},
-                {"band": "60-69", "count": 4, "variant": "warning"},
-                {"band": "70-79", "count": 9, "variant": "warning"},
-                {"band": "80-89", "count": 13, "variant": "success"},
-                {"band": "90-100", "count": 8, "variant": "success"},
-            ],
+            "grade_distribution": [item.model_dump(mode="json") for item in distribution.bands],
             "attendance_by_section": month_attendance,
         },
     }

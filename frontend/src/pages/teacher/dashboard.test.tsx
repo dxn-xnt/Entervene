@@ -140,7 +140,8 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     expect(screen.queryByText("Fractions worksheet")).toBeNull();
     expect(screen.queryByText("17 Students")).toBeNull();
     expect(screen.getByText("Jose Reyes")).toBeTruthy();
-    expect(screen.getByText("Maria Santos")).toBeTruthy();
+    expect(screen.queryByText("Maria Santos")).toBeNull();
+    expect(within(cardFor("Top Performers")).getByText("Loading dashboard data...")).toBeTruthy();
   });
 
   it("shows unavailable overview values after errors while retaining later detail demos", async () => {
@@ -180,7 +181,8 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     expect([countFor("Current grade"), countFor("Passing Rate"), countFor("Late Submissions"), countFor("Attendance Today"), countFor("Term Progress")])
       .toEqual(["—", "—", "—", "—", "—"]);
     expect(screen.getByText("Jose Reyes")).toBeTruthy();
-    expect(screen.getByText("Maria Santos")).toBeTruthy();
+    expect(screen.queryByText("Maria Santos")).toBeNull();
+    expect(within(cardFor("Top Performers")).getByText("Dashboard data is unavailable.")).toBeTruthy();
   });
 
   it("preserves real zero KPIs, empty responses, card order, layout classes, and the 50–100 chart axis", async () => {
@@ -439,7 +441,8 @@ describe("teacher dashboard Phase 2 mocked component behavior", () => {
     expect(screen.queryByText("Class Average")).toBeNull();
     expect(screen.queryByText(/▲ 3 pts|▲ 2 pts|at or above 75%/)).toBeNull();
     // Deferred detail widgets retain their existing behavior, not Phase 2 cards.
-    expect(screen.getByText("Maria Santos")).toBeTruthy();
+    expect(screen.queryByText("Maria Santos")).toBeNull();
+    expect(within(cardFor("Top Performers")).getByText("Current-grade details are unavailable.")).toBeTruthy();
     expect(screen.getByText("Pang-uri")).toBeTruthy();
   });
 
@@ -642,5 +645,157 @@ describe("teacher dashboard Phase 2 mocked component behavior", () => {
     await waitFor(() => expect(countFor("Term Progress")).toBe("—"));
     expect(within(cardFor("Term Progress")).getByText(/Calendar progress unavailable: invalid period dates/)).toBeTruthy();
     expect(within(cardFor("Term Progress")).queryByRole("progressbar")).toBeNull();
+  });
+});
+
+
+function phaseThreeResponse(): TeacherDashboardHealthResponse {
+  return phaseTwoResponse({ details: {
+    top_performers: [
+      { student_id: "learner-a", class_id: 17, subject_id: 25, academic_period_id: 3,
+        name: "Learner, Alex", section_name: "Actual Section", subject_name: "Mathematics", current_grade: 95 },
+      { student_id: "learner-a", class_id: 19, subject_id: 27, academic_period_id: 3,
+        name: "Learner, Alex", section_name: "Other Actual Section", subject_name: "History", current_grade: 84.99 },
+      { student_id: "learner-b", class_id: 17, subject_id: 25, academic_period_id: 3,
+        name: "Learner, Blake", section_name: "Actual Section", subject_name: "Mathematics", current_grade: 75 },
+    ],
+    grade_distribution: [
+      { band: "90-100", count: 1 }, { band: "85-89", count: 0 }, { band: "80-84", count: 1 },
+      { band: "75-79", count: 1 }, { band: "Below 75", count: 0 },
+    ],
+    grade_details: { total_grade_count: 4, available_grade_count: 3, unavailable_grade_count: 1,
+      top_performer_limit: 3, cutoff_tie_omitted_count: 0, warnings: [] },
+  } });
+}
+
+describe("teacher dashboard Phase 3 mocked component behavior", () => {
+  it("renders real student-subject grade points, neutral bands and explicit coverage without demo data", async () => {
+    mocks.load.mockResolvedValue(phaseThreeResponse());
+    render(<Dashboard />);
+    const top = cardFor("Top Performers");
+    const bands = cardFor("Grade distribution");
+    await waitFor(() => expect(within(top).getAllByText("Learner, Alex")).toHaveLength(2));
+    expect(within(top).getByText("Other Actual Section · History")).toBeTruthy();
+    expect(within(top).getByText("84.99", { exact: true })).toBeTruthy();
+    expect(within(top).queryByText("84.99%")).toBeNull();
+    expect(within(top).getAllByTitle("Current grade").every((badge) => !badge.className.includes("bg-success"))).toBe(true);
+    expect(Array.from(bands.querySelectorAll('[data-slot="card-content"] > div'), (row) => row.textContent))
+      .toEqual(["90-1001", "85-890", "80-841", "75-791", "Below 750"]);
+    expect(within(bands).getAllByRole("progressbar")).toHaveLength(5);
+    for (const bar of within(bands).getAllByRole("progressbar")) {
+      expect(bar.firstElementChild?.className).toContain("bg-muted-foreground");
+      expect(bar.firstElementChild?.className).not.toMatch(/bg-success|bg-destructive/);
+    }
+    for (const card of [top, bands]) {
+      expect(card.textContent).toContain("3 of 4 student-subject grades available.");
+      expect(card.textContent).toContain("Unavailable: 1.");
+    }
+    expect(screen.queryByText("Maria Santos")).toBeNull();
+    expect(within(bands).queryByText("80-89")).toBeNull();
+    expect(within(bands).getByText("Bands use unrounded grades and do not indicate passing.")).toBeTruthy();
+    expect(screen.getByText("Jose Reyes")).toBeTruthy(); // Untouched later-phase demo.
+  });
+
+  it.each([0, 2])("shows cutoff tie text only for actually omitted entries (%s)", async (omitted) => {
+    const result = phaseThreeResponse();
+    result.details!.grade_details!.cutoff_tie_omitted_count = omitted;
+    mocks.load.mockResolvedValue(result);
+    render(<Dashboard />);
+    await waitFor(() => expect(within(cardFor("Top Performers")).getAllByTitle("Current grade")).toHaveLength(3));
+    const message = within(cardFor("Top Performers")).queryByText(/additional .*cutoff grade/);
+    expect(Boolean(message)).toBe(omitted > 0);
+    if (omitted) expect(message?.textContent).toContain("2 additional entries share the cutoff grade");
+  });
+
+  it.each([
+    { total: 0, message: "No student-subject grades for this academic period." },
+    { total: 4, message: "No Current grades available." },
+  ])("distinguishes empty scope from all missing grades ($total)", async ({ total, message }) => {
+    const result = phaseThreeResponse();
+    result.details!.top_performers = [];
+    result.details!.grade_distribution!.forEach((band) => { band.count = 0; });
+    Object.assign(result.details!.grade_details!, { total_grade_count: total, available_grade_count: 0, unavailable_grade_count: total });
+    mocks.load.mockResolvedValue(result);
+    render(<Dashboard />);
+    for (const title of ["Top Performers", "Grade distribution"]) {
+      await waitFor(() => expect(within(cardFor(title)).getByText(message)).toBeTruthy());
+      expect(cardFor(title).textContent).toContain(`Unavailable: ${total}.`);
+      expect(within(cardFor(title)).queryByRole("progressbar")).toBeNull();
+      expect(within(cardFor(title)).queryByTitle("Current grade")).toBeNull();
+    }
+  });
+
+  it("preserves configuration warnings, authorization coverage and missing-name grade entries", async () => {
+    const result = phaseThreeResponse();
+    result.details!.top_performers![0].name = "Name unavailable";
+    result.details!.grade_details!.warnings = [
+      { code: "invalid_passing_threshold", message: "Passing rate unavailable: subject-group passing grade is missing or invalid." },
+      { code: "grade_scope_unavailable", message: "Current grade unavailable for this teacher scope." },
+      { code: "student_name_unavailable", message: "Student name unavailable for one or more Current-grade entries." },
+    ];
+    mocks.load.mockResolvedValue(result);
+    render(<Dashboard />);
+    await waitFor(() => expect(within(cardFor("Top Performers")).getByText("Name unavailable")).toBeTruthy());
+    expect(within(cardFor("Top Performers")).getByText("95", { exact: true })).toBeTruthy();
+    for (const title of ["Top Performers", "Grade distribution"]) {
+      for (const warning of result.details!.grade_details!.warnings) {
+        expect(cardFor(title).textContent).toContain(warning.message);
+      }
+    }
+    expect(within(cardFor("Grade distribution")).getAllByRole("progressbar")).toHaveLength(5);
+  });
+
+  it("keeps a same-student same-subject entry in each class without averaging", async () => {
+    const result = phaseThreeResponse();
+    Object.assign(result.details!.top_performers![1], { subject_id: 25, subject_name: "Mathematics" });
+    mocks.load.mockResolvedValue(result);
+    render(<Dashboard />);
+    const top = cardFor("Top Performers");
+    await waitFor(() => expect(within(top).getAllByText("Learner, Alex")).toHaveLength(2));
+    expect(within(top).getByText("95", { exact: true })).toBeTruthy();
+    expect(within(top).getByText("84.99", { exact: true })).toBeTruthy();
+    expect(within(top).getByText("Other Actual Section · Mathematics")).toBeTruthy();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it("keeps both cards unavailable while loading, after failure and when contract fields are missing", async () => {
+    const request = deferred<TeacherDashboardHealthResponse>();
+    mocks.load.mockReturnValueOnce(request.promise);
+    const page = render(<Dashboard />);
+    for (const title of ["Top Performers", "Grade distribution"]) {
+      expect(within(cardFor(title)).getByText("Loading dashboard data...")).toBeTruthy();
+    }
+    await act(async () => request.reject(new Error("Phase 3 request failed")));
+    expect(screen.getByRole("alert").textContent).toContain("Phase 3 request failed");
+    for (const title of ["Top Performers", "Grade distribution"]) {
+      expect(within(cardFor(title)).getByText("Dashboard data is unavailable.")).toBeTruthy();
+    }
+    mocks.load.mockResolvedValueOnce(phaseTwoResponse());
+    mocks.period.selectedPeriodId = 4;
+    page.rerender(<Dashboard />);
+    for (const title of ["Top Performers", "Grade distribution"]) {
+      await waitFor(() => expect(within(cardFor(title)).getByText("Current-grade details are unavailable.")).toBeTruthy());
+    }
+    expect(screen.queryByText("Maria Santos")).toBeNull();
+  });
+
+  it("clears old grade rows on period changes and ignores stale responses", async () => {
+    const old = deferred<TeacherDashboardHealthResponse>();
+    const newer = deferred<TeacherDashboardHealthResponse>();
+    mocks.load.mockResolvedValueOnce(phaseThreeResponse()).mockReturnValueOnce(old.promise).mockReturnValueOnce(newer.promise);
+    const page = render(<Dashboard />);
+    await waitFor(() => expect(within(cardFor("Top Performers")).getAllByText("Learner, Alex")).toHaveLength(2));
+    mocks.period.selectedPeriodId = 4;
+    page.rerender(<Dashboard />);
+    expect(screen.queryByText("Learner, Alex")).toBeNull();
+    mocks.period.selectedPeriodId = 5;
+    page.rerender(<Dashboard />);
+    const result = phaseThreeResponse();
+    result.details!.top_performers!.forEach((row) => { row.name = "New period learner"; row.academic_period_id = 5; });
+    await act(async () => newer.resolve(result));
+    await waitFor(() => expect(within(cardFor("Top Performers")).getAllByText("New period learner")).toHaveLength(3));
+    await act(async () => old.resolve(phaseThreeResponse()));
+    expect(screen.queryByText("Learner, Alex")).toBeNull();
+    expect(within(cardFor("Top Performers")).getAllByText("New period learner")).toHaveLength(3);
   });
 });

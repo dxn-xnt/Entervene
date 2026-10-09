@@ -584,3 +584,143 @@ def test_excused_unknown_timestamp_is_removed_before_lateness_availability_check
     assert late.late_rate_percent == 0.0
     assert late.warnings == []
     assert [warning.code for warning in weekdays.warnings] == ["missing_submission_timestamp"]
+
+
+def test_performer_order_uses_grade_normalized_name_id_subject_and_class():
+    """Unit: casefold/NFC ordering and all deterministic tie-breakers."""
+    grades = [
+        grade(90, student_id="b", class_id=2),
+        grade(90, student_id="a", subject_id=2),
+        grade(90, student_id="a", class_id=2),
+        grade(90, student_id="a"),
+        grade(90, student_id="z"),
+        grade(99, student_id="top"),
+    ]
+    names = {"a": "Álpha, A.", "b": "A\u0301LPHA, A.", "z": "Ωmega, Z.", "top": "Zeta, Z."}
+    expected = [("top", 1, 1), ("a", 1, 1), ("a", 1, 2), ("a", 2, 1), ("b", 1, 2), ("z", 1, 1)]
+    for candidates in (grades, list(reversed(grades))):
+        result = metrics.rank_dashboard_performers(candidates, names, {}, limit=6)
+        assert [(row.student_id, row.subject_id, row.class_id) for row in result.items] == expected
+        assert result.items[0].current_grade == 99
+        assert result.items[-2].name == names["b"]
+
+
+@pytest.mark.parametrize("values,omitted", [
+    ([99, 98, 90, 90, 90, 80], 2), ([99, 98, 90], 0), ([99, 99, 98, 97], 0),
+])
+def test_performer_cutoff_ties_count_only_actually_omitted_entries(values, omitted):
+    """Unit: top three are never expanded or padded because of ties."""
+    rows = [grade(value, student_id=str(index)) for index, value in enumerate(values)]
+    result = metrics.rank_dashboard_performers(rows, {row.student_id: "Same, Name" for row in rows}, {})
+    assert len(result.items) == min(3, len(values))
+    assert result.limit == 3
+    assert result.cutoff_tie_omitted_count == omitted
+
+
+@pytest.mark.parametrize("other_subject,other_class", [(2, 1), (1, 2)])
+def test_performers_keep_each_subject_and_active_class_entry(other_subject, other_class):
+    """Unit: same learner is retained in each subject or same-subject class."""
+    rows = [grade(84.5), grade(92, subject_id=other_subject, class_id=other_class)]
+    labels = {(1, 1): metrics.DashboardScopeLabel(section_name="Section A", subject_name="Subject A")}
+    result = metrics.rank_dashboard_performers(rows, {"learner": "Student, Synthetic"}, labels)
+    assert len(result.items) == 2
+    assert result.items[0].current_grade == 92
+    assert result.items[1].section_name == "Section A"
+    assert result.items[1].subject_name == "Subject A"
+    distribution = metrics.summarize_dashboard_grade_distribution(rows)
+    assert distribution.available_grade_count == 2
+    assert sum(item.count for item in distribution.bands) == 2
+
+
+@pytest.mark.parametrize("name", [None, "", "   "])
+def test_missing_name_keeps_valid_grade_and_adds_configuration_free_warning(name):
+    """Unit: missing metadata never fabricates a person or removes a grade."""
+    names = {} if name is None else {"learner": name}
+    result = metrics.rank_dashboard_performers([grade(0)], names, {})
+    assert len(result.items) == 1
+    assert result.items[0].name == "Name unavailable"
+    assert result.items[0].current_grade == 0
+    assert [warning.code for warning in result.warnings] == ["student_name_unavailable"]
+
+
+@pytest.mark.parametrize("values", [[], [None, None]])
+def test_performers_and_bands_preserve_empty_and_all_unavailable_grades(values):
+    """Unit: unknown grades are not zero or members of the lowest band."""
+    rows = [grade(value, student_id=str(index)) for index, value in enumerate(values)]
+    ranking = metrics.rank_dashboard_performers(rows, {}, {})
+    distribution = metrics.summarize_dashboard_grade_distribution(rows)
+    assert ranking.items == []
+    assert ranking.cutoff_tie_omitted_count == 0
+    assert ranking.warnings == []
+    assert distribution.total_grade_count == distribution.unavailable_grade_count == len(values)
+    assert distribution.available_grade_count == 0
+    assert [item.count for item in distribution.bands] == [0] * 5
+
+
+@pytest.mark.parametrize("value,band", [
+    (Decimal("74.99"), "Below 75"), (Decimal("75"), "75-79"),
+    (Decimal("79.99"), "75-79"), (Decimal("80"), "80-84"),
+    (Decimal("84.5"), "80-84"), (Decimal("84.99"), "80-84"),
+    (Decimal("85"), "85-89"), (Decimal("89.99"), "85-89"),
+    (Decimal("90"), "90-100"), (Decimal("100"), "90-100"), (Decimal("0"), "Below 75"),
+])
+def test_grade_distribution_fractional_boundaries_before_display_rounding(value, band):
+    """Unit: neutral intervals use underlying transmuted values."""
+    distribution = metrics.summarize_dashboard_grade_distribution([grade(value), grade(None, student_id="missing")])
+    assert [item.band for item in distribution.bands] == ["90-100", "85-89", "80-84", "75-79", "Below 75"]
+    assert [item.band for item in distribution.bands if item.count] == [band]
+    assert sum(item.count for item in distribution.bands) == distribution.available_grade_count == 1
+    assert distribution.unavailable_grade_count == 1
+    assert distribution.total_grade_count == 2
+    assert all("variant" not in item.model_dump() for item in distribution.bands)
+
+
+@pytest.mark.parametrize("size", [1, 2, 100])
+def test_bulk_student_names_are_one_name_only_select_and_never_autoflush(dashboard_sample, monkeypatch, size):
+    """Mocked-behavior: one query independent of list size, even when dirty."""
+    from uuid import uuid4
+    from sqlalchemy import event
+
+    db, data = dashboard_sample
+    learner = data["students"]["active_one"]
+    learner_id = str(learner.student_id)
+    learner.first_name = "Unpersisted name"
+    assert db.dirty
+    ids = [learner_id] + [str(uuid4()) for _ in range(size - 1)]
+    statements = []
+    def reject_writes(_connection, _cursor, statement, _parameters, _context, _many):
+        assert statement.lstrip().upper().startswith("SELECT")
+        statements.append(statement.lower())
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("Name lookup attempted a write or autoflush")
+    engine = db.get_bind()
+    event.listen(engine, "before_cursor_execute", reject_writes)
+    try:
+        with monkeypatch.context() as guard:
+            for method in ("add", "add_all", "delete", "flush", "commit"):
+                guard.setattr(db, method, forbidden)
+            result = metrics.read_dashboard_student_names(db, ids)
+        assert result[learner_id] == "Student, active_one"
+        assert len(statements) == 1
+        projection = statements[0].split("from")[0]
+        for column in ("student_id", "first_name", "middle_name", "last_name", "suffix"):
+            assert "student." + column in projection
+        for column in ("student_lrn", "email", "contact_number", "password", "user_id", "dob", "address"):
+            assert column not in projection
+        assert db.dirty
+        statements.clear()
+        assert metrics.read_dashboard_student_names(db, []) == {}
+        assert statements == []
+    finally:
+        event.remove(engine, "before_cursor_execute", reject_writes)
+
+
+def test_bulk_name_read_uses_class_record_display_format(dashboard_sample):
+    """Mocked-behavior: family, suffix, first and middle initial match records."""
+    db, data = dashboard_sample
+    learner = data["students"]["active_one"]
+    learner.first_name, learner.middle_name, learner.last_name, learner.suffix = "Alex", "Taylor", "Sample", "Jr."
+    db.flush()
+    assert metrics.read_dashboard_student_names(db, [str(learner.student_id)]) == {
+        str(learner.student_id): "Sample Jr., Alex T.",
+    }

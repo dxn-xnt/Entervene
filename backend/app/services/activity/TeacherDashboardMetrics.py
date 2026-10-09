@@ -9,7 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import TYPE_CHECKING, Mapping, Sequence
+from typing import TYPE_CHECKING, Collection, Mapping, Sequence
+from unicodedata import normalize
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
@@ -17,6 +19,11 @@ from fastapi import HTTPException
 from app.schemas.TeacherDashboard import (
     AttendanceSummary,
     DashboardGrade,
+    DashboardGradeBand,
+    DashboardGradeDistribution,
+    DashboardPerformerItem,
+    DashboardPerformerSummary,
+    DashboardScopeLabel,
     DashboardWindow,
     DashboardWarning,
     GradeSummary,
@@ -27,6 +34,8 @@ from app.schemas.TeacherDashboard import (
     WeekdaySummary,
 )
 from app.services.student_record.StudentRecordService import teacher_student_gradebook
+from app.services.classes.ClassQueryService import _student_full_name
+from app.models.people.Student import Student
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -211,6 +220,88 @@ def summarize_dashboard_grades(
             mean >= single_threshold if mean is not None and single_threshold is not None else None
         ),
         warnings=warnings,
+    )
+
+
+def read_dashboard_student_names(
+    db: Session, student_ids: Collection[str]
+) -> dict[str, str]:
+    """One name-only SELECT for the authorized grade population, never autoflush."""
+    ids = {UUID(student_id) for student_id in student_ids}
+    if not ids:
+        return {}
+    with db.no_autoflush:
+        rows = db.query(
+            Student.student_id, Student.first_name, Student.middle_name,
+            Student.last_name, Student.suffix,
+        ).filter(Student.student_id.in_(ids)).all()
+    return {str(row.student_id): _student_full_name(row) for row in rows}
+
+
+def rank_dashboard_performers(
+    grades: Sequence[DashboardGrade],
+    student_names: Mapping[str, str],
+    scope_labels: Mapping[tuple[int, int], DashboardScopeLabel],
+    *,
+    limit: int = 3,
+) -> DashboardPerformerSummary:
+    """Rank available class/student/subject entries, without a passing cutoff."""
+    if limit < 1:
+        raise ValueError("The dashboard performer limit must be positive")
+    items = []
+    warnings = {}
+    for grade in grades:
+        if grade.current_grade is None:
+            continue
+        name = student_names.get(grade.student_id)
+        if not name or not name.strip():
+            name = "Name unavailable"
+            warnings[(grade.class_id, grade.subject_id)] = DashboardWarning(
+                code="student_name_unavailable",
+                message="Student name unavailable for one or more Current-grade entries.",
+                class_id=grade.class_id, subject_id=grade.subject_id,
+            )
+        label = scope_labels.get((grade.class_id, grade.subject_id), DashboardScopeLabel())
+        items.append(DashboardPerformerItem(
+            student_id=grade.student_id, class_id=grade.class_id,
+            subject_id=grade.subject_id, academic_period_id=grade.academic_period_id,
+            name=name, section_name=label.section_name, subject_name=label.subject_name,
+            current_grade=grade.current_grade,
+        ))
+    items.sort(key=lambda item: (
+        -Decimal(str(item.current_grade)), normalize("NFC", item.name).casefold(),
+        item.student_id, item.subject_id, item.class_id,
+    ))
+    kept = items[:limit]
+    cutoff_ties = (
+        sum(item.current_grade == kept[-1].current_grade for item in items[limit:])
+        if len(items) > limit else 0
+    )
+    return DashboardPerformerSummary(
+        items=kept, limit=limit, cutoff_tie_omitted_count=cutoff_ties,
+        warnings=[warnings[key] for key in sorted(warnings)],
+    )
+
+
+def summarize_dashboard_grade_distribution(
+    grades: Sequence[DashboardGrade],
+) -> DashboardGradeDistribution:
+    """Descriptive, neutral intervals on underlying grades, not passing bands."""
+    labels = ("90-100", "85-89", "80-84", "75-79", "Below 75")
+    lower_bounds = (Decimal("90"), Decimal("85"), Decimal("80"), Decimal("75"))
+    counts = [0] * len(labels)
+    available = 0
+    for grade in grades:
+        if grade.current_grade is None:
+            continue
+        value = Decimal(str(grade.current_grade))
+        index = next((i for i, lower in enumerate(lower_bounds) if value >= lower), 4)
+        counts[index] += 1
+        available += 1
+    return DashboardGradeDistribution(
+        bands=[DashboardGradeBand(band=label, count=count) for label, count in zip(labels, counts)],
+        total_grade_count=len(grades), available_grade_count=available,
+        unavailable_grade_count=len(grades) - available,
     )
 
 

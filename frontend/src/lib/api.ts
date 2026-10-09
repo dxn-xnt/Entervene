@@ -2816,6 +2816,31 @@ export interface ActionQueueDeadlineItem {
   total_students: number;
 }
 
+export interface TeacherDashboardPerformer {
+  student_id: string;
+  class_id: number;
+  subject_id: number;
+  academic_period_id: number;
+  name: string;
+  section_name: string | null;
+  subject_name: string | null;
+  current_grade: number;
+}
+
+export interface TeacherDashboardGradeBand {
+  band: "90-100" | "85-89" | "80-84" | "75-79" | "Below 75";
+  count: number;
+}
+
+export interface TeacherDashboardGradeDetails {
+  total_grade_count: number;
+  available_grade_count: number;
+  unavailable_grade_count: number;
+  top_performer_limit: number;
+  cutoff_tie_omitted_count: number;
+  warnings: TeacherDashboardWarning[];
+}
+
 export interface TeacherDashboardHealthResponse {
   term_info: {
     period_id: number | null;
@@ -2847,6 +2872,9 @@ export interface TeacherDashboardHealthResponse {
   };
   details?: Record<string, any> & {
     attendance_by_section?: TeacherDashboardAttendanceSection[];
+    top_performers?: TeacherDashboardPerformer[];
+    grade_distribution?: TeacherDashboardGradeBand[];
+    grade_details?: TeacherDashboardGradeDetails;
   };
 }
 
