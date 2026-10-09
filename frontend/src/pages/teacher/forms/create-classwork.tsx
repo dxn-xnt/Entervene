@@ -107,16 +107,21 @@ export default function CreateClassworkModal({
     toast.error({ title: msg });
   };
 
-  const selectedSubjectLoads = useMemo(
-    () =>
-      loads
-        .filter(
-          (load) =>
-            draft.subject_id && load.subject_id === Number(draft.subject_id),
-        )
-        .sort((a, b) => a.section_name.localeCompare(b.section_name)),
-    [draft.subject_id, loads],
-  );
+  const selectedSubjectLoads = useMemo(() => {
+    const filtered = loads.filter(
+      (load) =>
+        draft.subject_id && load.subject_id === Number(draft.subject_id),
+    );
+    const seen = new Set<number>();
+    const unique: TeacherClassLoad[] = [];
+    for (const load of filtered) {
+      if (!seen.has(load.class_id)) {
+        seen.add(load.class_id);
+        unique.push(load);
+      }
+    }
+    return unique.sort((a, b) => a.section_name.localeCompare(b.section_name));
+  }, [draft.subject_id, loads]);
 
   const addMaterials = (files: FileList | null) => {
     if (!files) return;
@@ -454,7 +459,7 @@ export default function CreateClassworkModal({
                 </Select>
               </Field>
 
-              <Field label="Link under lesson">
+              <Field label="Link Lesson">
                 <Select
                   value={selectedLessonIds[0] ? String(selectedLessonIds[0]) : ""}
                   onValueChange={(val) => {

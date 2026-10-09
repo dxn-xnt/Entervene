@@ -250,4 +250,4 @@ const ContextMenuComponent = Object.assign(ContextMenu, {
   RadioGroup: ContextMenuRadioGroup,
 });
 
-export { ContextMenuComponent as ContextMenu };
+export { ContextMenuComponent as ContextMenu, ContextMenuSeparator, ContextMenuTrigger, ContextMenuContent, ContextMenuItem };

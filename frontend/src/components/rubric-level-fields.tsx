@@ -101,15 +101,16 @@ export function RubricLevelFields({ levels, onChange, disabled }: RubricLevelFie
           if (!open) setDeleteIndex(null);
         }}
         title="Remove Performance Level"
-        description=
-        {<span>
-          Are you sure you want to remove{" "}
-          <span className="font-bold">
-            {deleteIndex !== null ? levels[deleteIndex]?.level_name : "this performance level"}
-          </span>{" "}
-          level from the rubric template?
-        </span>}
-
+        confirmationTitle={
+          <span>
+            Are you sure you want to remove{" "}
+            <span className="font-bold">
+              {deleteIndex !== null ? levels[deleteIndex]?.level_name : "this performance level"}
+            </span>{" "}
+            from the rubric?
+          </span>
+        }
+        description="Removing this level will adjust the rubric points and level order."
         confirmLabel="Remove Level"
         confirmVariant="destructive"
         onConfirm={() => {

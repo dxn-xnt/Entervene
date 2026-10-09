@@ -230,6 +230,7 @@ export const AcademicPeriodProvider = ({ children }: { children: ReactNode }) =>
         open={showConfirmDialog}
         onOpenChange={(open) => !open && handleCancelSwitch()}
         title="Unsaved Changes in Academic Term"
+        confirmationTitle="Switch academic term and discard changes?"
         description={
           pendingGuardMessage ||
           "You have unsaved changes that will be lost if you switch academic terms. Are you sure you want to proceed?"

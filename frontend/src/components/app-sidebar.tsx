@@ -49,7 +49,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           value={selectedPeriodId ? String(selectedPeriodId) : undefined}
           onValueChange={(val) => setSelectedPeriodId(Number(val))}
         >
-          <Select.Trigger className="w-full rounded-none border-x-background m-0 shadow-none mb-1">
+          <Select.Trigger className="w-full rounded-none! border-x-background m-0 shadow-none mb-1">
             <Select.Value placeholder="Active Period" />
           </Select.Trigger>
           <Select.Content>
