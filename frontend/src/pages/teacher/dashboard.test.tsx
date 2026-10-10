@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TeacherDashboardHealthResponse } from "@/lib/api";
+import type { TeacherDashboardHealthResponse, TrendChartPoint } from "@/lib/api";
 import Dashboard from "./dashboard";
 
 const mocks = vi.hoisted(() => ({
@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   period: { selectedPeriodId: 3 as number | null, isLoading: false },
   classes: [] as Array<{ class_id: number; subject_id: number; subject_name: string }>,
+  tooltipPoint: null as TrendChartPoint | null,
 }));
 
 vi.mock("@/lib/api", () => ({ getTeacherDashboardHealth: mocks.load }));
@@ -43,7 +44,8 @@ vi.mock("recharts", () => ({
     <div data-testid="trend-axis" data-domain={JSON.stringify(domain)} data-ticks={JSON.stringify(ticks)} />,
   XAxis: () => null,
   CartesianGrid: () => null,
-  Tooltip: () => null,
+  Tooltip: ({ content }: { content: (props: { active: boolean; payload: Array<{ payload: TrendChartPoint }> }) => ReactNode }) =>
+    mocks.tooltipPoint ? <>{content({ active: true, payload: [{ payload: mocks.tooltipPoint }] })}</> : null,
   Line: () => null,
 }));
 
@@ -114,6 +116,7 @@ beforeEach(() => {
   mocks.period.selectedPeriodId = 3;
   mocks.period.isLoading = false;
   mocks.classes = [];
+  mocks.tooltipPoint = null;
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.stubGlobal("fetch", vi.fn(() => { throw new Error("Unexpected live request in a mocked dashboard test"); }));
 });
@@ -389,7 +392,7 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     await act(async () => sectionBRequest.reject(new Error("Section B failed")));
     expect(screen.getByRole("alert").textContent).toContain("Section B failed");
     expect(chartPoints()).toEqual([]);
-    expect(within(cardFor("Classwork Mastery & Completion Trend")).getByText("Dashboard data is unavailable.")).toBeTruthy();
+    expect(within(cardFor("Classwork Performance & Completion Trend")).getByText("Dashboard data is unavailable.")).toBeTruthy();
     expect(screen.getAllByRole("option")).toHaveLength(2);
   });
 
@@ -829,5 +832,138 @@ describe("teacher dashboard Phase 3 mocked component behavior", () => {
     await act(async () => old.resolve(phaseThreeResponse()));
     expect(screen.queryByText("Learner, Alex")).toBeNull();
     expect(within(cardFor("Top Performers")).getAllByText("New period learner")).toHaveLength(3);
+  });
+});
+
+
+function phaseFourResponse(): TeacherDashboardHealthResponse {
+  const result = phaseThreeResponse();
+  result.engagement = {
+    expected_count: 318, completed_count: 313, pending_grading_count: 0,
+    resolved_completed_count: 313, resolved_pending_grading_count: 0,
+    completion_rate_percent: 98.4, avg_score_percent: 82.9,
+    scored_count: 313, graded_task_count: 26, warnings: [],
+  };
+  result.kpis = { active_classes: 4, enrolled_students: 46, overall_completion_rate: 98.4, ungraded_count: 0 };
+  result.trend_chart = { ...result.trend_chart, has_sufficient_data: true, graded_task_count: 6,
+    date_group_count: 2, warnings: [], points: [
+      { classwork_id: 71, date_key: "2026-10-04", assignment_ids: [1], task_count: 1, title: "1 task",
+        category: "Grouped tasks", due_date: null, label: "Oct 04", short_label: "Oct 04", avg_score_percent: 95.5,
+        completion_rate_percent: 100, submitted_count: 3, total_enrolled: 3, eligible_count: 3, scored_count: 3, graded_task_count: 1, warnings: [] },
+      { classwork_id: null, date_key: "2026-10-08", assignment_ids: [2, 3, 4, 5, 6], task_count: 5, title: "5 tasks",
+        category: "Grouped tasks", due_date: null, label: "Oct 08", short_label: "Oct 08", avg_score_percent: 95.4,
+        completion_rate_percent: 100, submitted_count: 15, total_enrolled: 15, eligible_count: 15, scored_count: 15, graded_task_count: 5, warnings: [] },
+    ] };
+  result.phase_two!.late_submissions = { late_rate_percent: 0.3, late_count: 1, eligible_count: 312,
+    excused_excluded_count: 1, completed_count: 313, warnings: [] };
+  result.phase_two!.weekdays = { days: [45, 44, 44, 45, 44, 44].map((count, day_index) => ({
+    label: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day_index], day_index, count,
+  })), sunday_count: 47, total_count: 313, warnings: [] };
+  return result;
+}
+
+
+// Phase 4 tests are mocked component-behavior tests, with no live requests.
+describe("teacher dashboard Phase 4 engagement rendering", () => {
+  it("uses eligible completion counts and keeps seeded weekdays, lateness and an empty review queue", async () => {
+    mocks.load.mockResolvedValue(phaseFourResponse());
+    render(<Dashboard />);
+    await waitFor(() => expect(countFor("Overall Completion")).toBe("98%"));
+    expect(cardFor("Overall Completion").textContent).toContain("313 of 318 submitted.");
+    expect(cardFor("Overall Completion").textContent).toContain("eligible student-task requirements");
+    expect(countFor("Ungraded Queue")).toBe("0");
+    expect(within(cardFor("Submissions to Review")).getByText("No submissions need grading.")).toBeTruthy();
+    expect(countFor("Late Submissions")).toBe("0.3%");
+    expect(cardFor("Late Submissions").textContent).toContain("1 of 312 assessed submissions are late. 1 excused submission excluded.");
+    const weekday = cardFor("Submissions by weekday");
+    expect(Array.from(weekday.querySelectorAll('[data-slot="card-content"] > div'), (row) => row.textContent))
+      .toEqual(["M45", "T44", "W44", "Th45", "F44", "S44"]);
+    expect(weekday.textContent).toContain("Sunday: 47.");
+  });
+
+  it("renders one/two grouped date points without hiding them or inventing task IDs, retaining the chart axis", async () => {
+    const result = phaseFourResponse();
+    result.trend_chart.has_sufficient_data = false;
+    mocks.load.mockResolvedValue(result);
+    mocks.tooltipPoint = result.trend_chart.points[1];
+    render(<Dashboard />);
+    await waitFor(() => expect(chartPoints()).toEqual(result.trend_chart.points));
+    expect(screen.getByText("Classwork Performance & Completion Trend")).toBeTruthy();
+    expect(screen.queryByText("Classwork Mastery & Completion Trend")).toBeNull();
+    expect(screen.getByText("Average task score (%)")).toBeTruthy();
+    expect(screen.getByText("Submission completion (%)")).toBeTruthy();
+    expect(chartPoints().map((point: TrendChartPoint) => point.short_label)).toEqual(["Oct 04", "Oct 08"]);
+    expect(chartPoints()[1].classwork_id).toBeNull();
+    expect(screen.getByText("Oct 08 · 5 tasks")).toBeTruthy();
+    expect(screen.getByText("Average task score: 95.4%")).toBeTruthy();
+    expect(screen.getByText("15 scored of 15 eligible student-task requirements.")).toBeTruthy();
+    expect(screen.getByText("Grouped by Manila deadline date; publish or creation date used when no deadline exists. Raw task scores, not Current grades.")).toBeTruthy();
+    expect(screen.getByTestId("trend-axis").getAttribute("data-domain")).toBe("[50,100]");
+    expect(screen.getByTestId("trend-axis").getAttribute("data-ticks")).toBe("[50,75,100]");
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it("keeps ambiguous totals unavailable and resolved review entries visible with an incomplete warning", async () => {
+    const result = phaseFourResponse();
+    const warning = { code: "ambiguous_submission_attempts", message: "Submission metrics unavailable: ambiguous duplicate submissions.", assignment_id: 1 };
+    Object.assign(result.engagement!, { completed_count: null, pending_grading_count: null, completion_rate_percent: null,
+      resolved_completed_count: 1, resolved_pending_grading_count: 1, warnings: [warning] });
+    result.action_queue.pending_grading = [{ submission_id: 44, student_id: "synthetic", student_name: "Synthetic Learner",
+      classwork_id: 555, classwork_title: "Resolved review", section_name: "Actual Section", submitted_at: null }];
+    result.trend_chart.warnings = [warning];
+    result.trend_chart.points[0].completion_rate_percent = null;
+    result.trend_chart.points[0].avg_score_percent = null;
+    mocks.tooltipPoint = result.trend_chart.points[0];
+    mocks.load.mockResolvedValue(result);
+    render(<Dashboard />);
+    await waitFor(() => expect(countFor("Overall Completion")).toBe("—"));
+    expect(countFor("Ungraded Queue")).toBe("—");
+    expect(cardFor("Overall Completion").textContent).toContain("1 resolved of 318 expected.");
+    for (const title of ["Overall Completion", "Ungraded Queue", "Submissions to Review", "Classwork Performance & Completion Trend"]) {
+      expect(cardFor(title).textContent).toContain(warning.message);
+    }
+    expect(within(cardFor("Submissions to Review")).getByText("Resolved review")).toBeTruthy();
+    expect(screen.getByText("Average task score: —")).toBeTruthy();
+    expect(screen.getByText("Completion: —")).toBeTruthy();
+    fireEvent.click(screen.getByText("Resolved review"));
+    expect(mocks.navigate).toHaveBeenCalledWith("/teacher/classworks/555");
+  });
+
+  it("does not claim an empty review queue is complete when attempts are ambiguous", async () => {
+    const result = phaseFourResponse();
+    result.engagement!.warnings = [{ code: "ambiguous_submission_attempts", message: "Ambiguous completed attempts." }];
+    mocks.load.mockResolvedValue(result);
+    render(<Dashboard />);
+    await waitFor(() => expect(within(cardFor("Submissions to Review")).getByText("Review queue incomplete.")).toBeTruthy());
+    expect(screen.queryByText("No submissions need grading.")).toBeNull();
+  });
+
+  it("keeps an outside-roster targeted deadline visible with its configuration warning and a real link", async () => {
+    const result = phaseFourResponse();
+    result.action_queue.upcoming_deadlines = [{ classwork_id: 81, assignment_id: 11, title: "Targeted work",
+      section_name: "Actual Section", due_date: "2026-10-10T00:00:00Z", submitted_count: 0, total_students: 0, eligible_count: 0,
+      warnings: [{ code: "targeted_recipient_outside_active_roster", message: "Assignment configuration: targeted recipient is outside the active roster." }] }];
+    mocks.load.mockResolvedValue(result);
+    render(<Dashboard />);
+    await waitFor(() => expect(screen.getByText("Targeted work")).toBeTruthy());
+    expect(cardFor("Due this week").textContent).toContain("Assignment configuration: targeted recipient is outside the active roster.");
+    fireEvent.click(screen.getByText("Targeted work"));
+    expect(mocks.navigate).toHaveBeenCalledWith("/teacher/classworks/81");
+  });
+
+  it("shows section completion gaps without replacing Current-grade warnings or class-record values", async () => {
+    const result = phaseFourResponse();
+    result.section_matrix = [{ ...phaseTwoSection(), completion_rate_percent: null,
+      engagement: { ...result.engagement!, completed_count: null, completion_rate_percent: null,
+        warnings: [{ code: "ambiguous_submission_attempts", message: "Section completion is unavailable." }] },
+      warnings: [{ code: "invalid_passing_threshold", message: "Passing configuration is unavailable." }] }];
+    mocks.load.mockResolvedValue(result);
+    render(<Dashboard />);
+    await waitFor(() => expect(screen.getByText("Actual Section")).toBeTruthy());
+    const section = cardFor("Actual Section");
+    expect(section.textContent).toContain("Section completion is unavailable.");
+    expect(section.textContent).toContain("Passing configuration is unavailable.");
+    expect(within(section).getByText("80.5", { exact: true })).toBeTruthy();
+    expect(section.textContent).toContain("Task Completion—");
   });
 });
