@@ -46,6 +46,17 @@ _ROUTING_ENVIRONMENT = (
     "PGHOST", "PGHOSTADDR", "PGPORT", "PGDATABASE", "PGSERVICE",
     "PGSERVICEFILE", "PGSYSCONFDIR", "PGOPTIONS",
 )
+_GUARD_FAILURE_CHECKS = {
+    "Malformed PostgreSQL test URL": "url_parse",
+    "The PostgreSQL test driver must be exactly postgresql": "driver",
+    "PostgreSQL test URL query parameters are forbidden": "query_parameters",
+    "PostgreSQL test host must be a literal local host": "host",
+    "PostgreSQL test port must be 55432": "port",
+    "PostgreSQL test database must be activity_test": "database",
+    "The selected PostgreSQL test driver is not installed": "driver_available",
+    "libpq routing and options environment overrides are forbidden": "routing_environment",
+    "Unable to construct the validated PostgreSQL test engine": "engine_construction",
+}
 _SYNTHETIC_URL = "postgresql://x@127.0.0.1:55432/activity_test"
 
 
@@ -149,6 +160,15 @@ def _postgres_model_constraints():
 def _safe_failure(stage: str, error: Exception, *, list_models: bool = False) -> str:
     # Exception text, repr, connection details and query parameters are omitted.
     message = f"PostgreSQL dashboard {stage} failed ({type(error).__name__})"
+    if isinstance(error, DashboardPostgresSafetyError):
+        guard_message = error.args[0] if len(error.args) == 1 else None
+        # Only literal, exact messages can select an allowlisted code. Never
+        # render unknown arguments or invoke a string subclass's hash/equality.
+        check = (
+            _GUARD_FAILURE_CHECKS.get(guard_message, "unknown")
+            if type(guard_message) is str else "unknown"
+        )
+        message += f"; check={check}"
     sqlstate = getattr(getattr(error, "orig", None), "pgcode", None)
     if isinstance(sqlstate, str) and re.fullmatch(r"[A-Z0-9]{5}", sqlstate):
         message += f"; SQLSTATE {sqlstate}"
@@ -1082,3 +1102,159 @@ def test_teacher_dashboard_phase_four_queries_execute_on_guarded_postgres(postgr
         _assert_matches_sqlite(actual, expected)
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("guard_message,check", [
+    ("Malformed PostgreSQL test URL", "url_parse"),
+    ("The PostgreSQL test driver must be exactly postgresql", "driver"),
+    ("PostgreSQL test URL query parameters are forbidden", "query_parameters"),
+    ("PostgreSQL test host must be a literal local host", "host"),
+    ("PostgreSQL test port must be 55432", "port"),
+    ("PostgreSQL test database must be activity_test", "database"),
+    ("The selected PostgreSQL test driver is not installed", "driver_available"),
+    ("libpq routing and options environment overrides are forbidden", "routing_environment"),
+    ("Unable to construct the validated PostgreSQL test engine", "engine_construction"),
+], ids=[
+    "url_parse", "driver", "query_parameters", "host", "port", "database",
+    "driver_available", "routing_environment", "engine_construction",
+])
+def test_safe_failure_names_only_exact_allowlisted_guard_checks(guard_message, check):
+    """Unit: every fixed guard message has an independently specified code."""
+    visible = _safe_failure("target guard", DashboardPostgresSafetyError(guard_message))
+    _expect_equal(
+        visible,
+        f"PostgreSQL dashboard target guard failed (DashboardPostgresSafetyError); check={check}",
+        "allowlisted guard check",
+    )
+
+
+@pytest.mark.parametrize("payload_kind", [
+    "url", "username", "password", "exception_text", "known_prefix", "known_suffix",
+])
+def test_safe_failure_unknown_guard_details_never_leak(payload_kind, capsys, caplog):
+    """Unit: synthetic confidential details never enter output or captured logs."""
+    user_marker = "synthetic-guard-user"
+    password_marker = "synthetic-guard-private"
+    exception_marker = "synthetic-confidential-exception-detail"
+    diagnostic_url = URL.create(
+        "postgresql", username=user_marker, password=password_marker,
+        host="127.0.0.1", port=_TEST_PORT, database=_TEST_DATABASE,
+    ).render_as_string(hide_password=False)
+    details = {
+        "url": diagnostic_url,
+        "username": user_marker,
+        "password": password_marker,
+        "exception_text": exception_marker,
+        "known_prefix": "PostgreSQL test port must be 55432 " + diagnostic_url,
+        "known_suffix": diagnostic_url + " PostgreSQL test port must be 55432",
+    }
+    error = DashboardPostgresSafetyError(details[payload_kind])
+    visible = _safe_failure("target guard", error)
+    _expect_equal(
+        visible,
+        "PostgreSQL dashboard target guard failed (DashboardPostgresSafetyError); check=unknown",
+        "unknown guard check sanitation",
+    )
+    captured = capsys.readouterr()
+    output = visible + captured.out + captured.err + caplog.text
+    if any(marker in output for marker in (
+        "://", diagnostic_url, user_marker, password_marker, exception_marker,
+        details[payload_kind],
+    )):
+        pytest.fail("Mocked guard diagnostic leaked confidential details", pytrace=False)
+
+
+@pytest.mark.parametrize("argument_kind", ["empty", "multiple", "list", "dict", "string_subclass"])
+def test_safe_failure_unknown_guard_arguments_are_not_formatted(argument_kind):
+    """Unit: unexpected argument shapes cannot leak or select a known check."""
+    class UntrustedString(str):
+        def __hash__(self):
+            raise AssertionError("Untrusted string hash must not run")
+
+        def __eq__(self, other):
+            raise AssertionError("Untrusted string comparison must not run")
+
+        def __str__(self):
+            raise AssertionError("Untrusted string rendering must not run")
+
+    arguments = {
+        "empty": (),
+        "multiple": ("PostgreSQL test port must be 55432", "synthetic-private-detail"),
+        "list": (["synthetic-private-detail"],),
+        "dict": ({"synthetic-private-detail": "synthetic-private-value"},),
+        "string_subclass": (UntrustedString("PostgreSQL test port must be 55432"),),
+    }
+    visible = _safe_failure("target guard", DashboardPostgresSafetyError(*arguments[argument_kind]))
+    _expect_equal(
+        visible,
+        "PostgreSQL dashboard target guard failed (DashboardPostgresSafetyError); check=unknown",
+        "unknown guard argument sanitation",
+    )
+
+
+@pytest.mark.parametrize("guard_error", [True, False], ids=["guard", "other_exception"])
+def test_safe_failure_never_stringifies_or_reprs_exceptions(guard_error):
+    """Unit: formatting never invokes an exception's confidential renderers."""
+    class NonRenderingGuardError(DashboardPostgresSafetyError):
+        def __str__(self):
+            raise AssertionError("Exception text must not be rendered")
+
+        def __repr__(self):
+            raise AssertionError("Exception repr must not be rendered")
+
+    class NonRenderingError(RuntimeError):
+        def __str__(self):
+            raise AssertionError("Exception text must not be rendered")
+
+        def __repr__(self):
+            raise AssertionError("Exception repr must not be rendered")
+
+    error_type = NonRenderingGuardError if guard_error else NonRenderingError
+    error = error_type("synthetic-private-exception-detail")
+    visible = _safe_failure("target guard", error)
+    expected = f"PostgreSQL dashboard target guard failed ({error_type.__name__})"
+    if guard_error:
+        expected += "; check=unknown"
+    _expect_equal(visible, expected, "exception rendering is forbidden")
+
+
+def test_safe_failure_does_not_label_other_exception_types_as_guard_checks():
+    """Unit: a guard-like message in another exception retains prior output."""
+    visible = _safe_failure("target guard", RuntimeError("PostgreSQL test port must be 55432"))
+    _expect_equal(
+        visible, "PostgreSQL dashboard target guard failed (RuntimeError)",
+        "non-guard failure behavior is unchanged",
+    )
+
+
+@pytest.mark.parametrize("state_kind", ["valid", "private", "missing"])
+def test_safe_failure_guard_codes_preserve_sqlstate_sanitization(state_kind):
+    """Unit: guard labels preserve validated SQLSTATE handling, never its payload."""
+    error = DashboardPostgresSafetyError("PostgreSQL test port must be 55432")
+    error.orig = Mock(pgcode={
+        "valid": "23514", "private": "synthetic-private-sqlstate-detail", "missing": None,
+    }[state_kind])
+    expected = "PostgreSQL dashboard target guard failed (DashboardPostgresSafetyError); check=port"
+    if state_kind == "valid":
+        expected += "; SQLSTATE 23514"
+    _expect_equal(_safe_failure("target guard", error), expected, "SQLSTATE sanitation is unchanged")
+
+
+def test_postgres_fixture_displays_guard_check_without_private_details(monkeypatch, capsys, caplog):
+    """Mocked-behavior: the real fixture exposes a check code before any engine."""
+    monkeypatch.setenv("DASHBOARD_TEST_PG_URL", _SYNTHETIC_URL)
+    error = DashboardPostgresSafetyError("PostgreSQL test port must be 55432")
+    engine_factory = Mock(side_effect=error)
+    monkeypatch.setattr(sys.modules[__name__], "_guarded_postgres_engine", engine_factory)
+    fixture = postgres_dashboard_session.__wrapped__()
+    with pytest.raises(pytest.fail.Exception) as caught:
+        next(fixture)
+    _expect_equal(
+        str(caught.value),
+        "PostgreSQL dashboard target guard failed (DashboardPostgresSafetyError); check=port",
+        "fixture exposes only the failed guard check",
+    )
+    captured = capsys.readouterr()
+    if "://" in str(caught.value) + captured.out + captured.err + caplog.text:
+        pytest.fail("Mocked fixture exposed a connection URL", pytrace=False)
+    engine_factory.assert_called_once_with()
