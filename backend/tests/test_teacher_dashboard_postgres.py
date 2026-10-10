@@ -33,6 +33,7 @@ from app.db.Base import Base
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.attendance.Attendance import AttendanceRecord
 from app.models.people.Student import Student
+from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.activity import AnalyticsService
 
 
@@ -1258,3 +1259,76 @@ def test_postgres_fixture_displays_guard_check_without_private_details(monkeypat
     if "://" in str(caught.value) + captured.out + captured.err + caplog.text:
         pytest.fail("Mocked fixture exposed a connection URL", pytrace=False)
     engine_factory.assert_called_once_with()
+
+
+def _phase_five_lesson_snapshot(db):
+    """Counts/scores only, identical synthetic data on either SQL dialect."""
+    from test_teacher_dashboard_health import NOW, seed_dashboard_data, seed_dashboard_lesson_data
+    try:
+        data = seed_dashboard_data(db)
+        fixture = seed_dashboard_lesson_data(db, data)
+        # Boundary: submitted just before the UTC day changes to Oct 8 Manila.
+        fixture["submissions"][0].submitted_at = datetime(2026, 10, 7, 16, 0, tzinfo=timezone.utc)
+        db.commit()
+        first = _read_only_dashboard(db, data["teacher"].staff_id, data["period"])["details"]["lesson_performance"]
+        fixture["submissions"][0].submitted_at = NOW + timedelta(seconds=1)
+        db.commit()
+        future = _read_only_dashboard(db, data["teacher"].staff_id, data["period"])["details"]["lesson_performance"]
+        fixture["submissions"][0].submitted_at = datetime(2026, 10, 7, 16, 0, tzinfo=timezone.utc)
+        db.commit()
+        from app.models.quiz.QuizAnswer import QuizAnswer
+        newer = StudentSubmission(student_id=fixture["learners"][0].student_id,
+            classwork_assignment_id=fixture["assignment"].classwork_assignment_id,
+            status="submitted", submitted_at=NOW - timedelta(seconds=1))
+        db.add(newer)
+        db.flush()
+        db.add(QuizAnswer(submission_id=newer.submission_id, quiz_question_id=fixture["links"][0].quiz_question_id,
+            points_awarded=None))
+        db.commit()
+        latest = _read_only_dashboard(db, data["teacher"].staff_id, data["period"])["details"]["lesson_performance"]
+        def numeric(payload):
+            subject = payload["subjects"][0]
+            return {"policy": payload["policy"], "coverage": subject["coverage"],
+                "items": [{k: v for k, v in row.items() if k not in ("lesson_id", "title")} for row in subject["items"]]}
+        return {"first": numeric(first), "latest": numeric(latest), "future": numeric(future)}
+    except Exception as error:
+        pytest.fail(_safe_failure("Phase 5 synthetic lesson data or query", error), pytrace=False)
+
+
+def test_teacher_dashboard_phase_five_queries_execute_on_guarded_postgres(postgres_dashboard_session, dashboard_clock):
+    """Gated parity: bulk joins, Decimal partial scores, cutoff and latest attempt."""
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(engine) as session:
+            sqlite = _phase_five_lesson_snapshot(session)
+        postgres = _phase_five_lesson_snapshot(postgres_dashboard_session)
+        _expect_equal(postgres, sqlite, "Phase 5 lesson evidence dialect parity")
+        _expect_equal(postgres["first"]["items"][0]["performance_percent"], 68.8, "Phase 5 Decimal pooled percent")
+        _expect_equal(postgres["latest"]["coverage"]["scored_mapped_response_count"], 6, "Phase 5 latest-only evidence")
+    finally:
+        engine.dispose()
+
+
+def test_phase_five_parity_fixture_runs_on_isolated_sqlite(dashboard_clock):
+    """Mocked-behavior: validate the parity fixture without any PG connection."""
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(engine) as session:
+            result = _phase_five_lesson_snapshot(session)
+        _expect_equal(result["first"]["items"][0]["performance_percent"], 68.8, "Phase 5 pooled percent")
+        _expect_equal(result["latest"]["items"], [], "Phase 5 evidence floor after ungraded retake")
+        _expect_equal(result["future"]["coverage"]["scored_mapped_response_count"], 6, "Phase 5 future cutoff")
+    finally:
+        engine.dispose()
+
+
+def test_phase_five_guarded_fixture_skips_without_url_and_never_constructs_engine(monkeypatch):
+    """Mocked-behavior: skip path tested WITHOUT running a guarded query test."""
+    monkeypatch.delenv("DASHBOARD_TEST_PG_URL", raising=False)
+    factory = Mock(side_effect=AssertionError("No PostgreSQL engine may be constructed"))
+    monkeypatch.setattr(sys.modules[__name__], "_guarded_postgres_engine", factory)
+    with pytest.raises(pytest.skip.Exception, match="DASHBOARD_TEST_PG_URL is unset"):
+        next(postgres_dashboard_session.__wrapped__())
+    factory.assert_not_called()

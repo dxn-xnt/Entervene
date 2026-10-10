@@ -168,3 +168,45 @@ class TermProgress(BaseModel):
     week_number: int = 0
     total_weeks: int = 0
     warnings: list[DashboardWarning] = Field(default_factory=list)
+
+
+class DashboardLessonPolicy(BaseModel):
+    model_config = {"frozen": True}
+    min_learners: int = Field(default=3, ge=1)
+    min_questions: int = Field(default=3, ge=1)
+    limit_per_subject: int = Field(default=5, ge=1)
+
+
+class DashboardLessonPerformanceItem(BaseModel):
+    lesson_id: int
+    title: str
+    performance_percent: float
+    awarded_points: float
+    possible_points: float
+    scored_response_count: int
+    learner_count: int
+    question_count: int
+
+
+class DashboardLessonCoverage(BaseModel):
+    scored_mapped_response_count: int = 0
+    unmapped_response_count: int = 0
+    ungraded_response_count: int = 0
+    invalid_response_count: int = 0
+    insufficient_lesson_count: int = 0
+    omitted_lesson_count: int = 0
+    excluded_manual_assignment_count: int = 0
+
+
+class DashboardLessonSubjectSummary(BaseModel):
+    subject_id: int
+    subject_name: str
+    class_ids: list[int] = Field(default_factory=list)
+    items: list[DashboardLessonPerformanceItem] = Field(default_factory=list)
+    coverage: DashboardLessonCoverage = Field(default_factory=DashboardLessonCoverage)
+    warnings: list[DashboardWarning] = Field(default_factory=list)
+
+
+class DashboardLessonPerformanceSummary(BaseModel):
+    policy: DashboardLessonPolicy = Field(default_factory=DashboardLessonPolicy)
+    subjects: list[DashboardLessonSubjectSummary] = Field(default_factory=list)

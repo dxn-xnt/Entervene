@@ -2869,6 +2869,35 @@ export interface TeacherDashboardGradeDetails {
   warnings: TeacherDashboardWarning[];
 }
 
+export interface TeacherDashboardLessonPerformance {
+  policy: { min_learners: number; min_questions: number; limit_per_subject: number };
+  subjects: Array<{
+    subject_id: number;
+    subject_name: string;
+    class_ids: number[];
+    items: Array<{
+      lesson_id: number;
+      title: string;
+      performance_percent: number;
+      awarded_points: number;
+      possible_points: number;
+      scored_response_count: number;
+      learner_count: number;
+      question_count: number;
+    }>;
+    coverage: {
+      scored_mapped_response_count: number;
+      unmapped_response_count: number;
+      ungraded_response_count: number;
+      invalid_response_count: number;
+      insufficient_lesson_count: number;
+      omitted_lesson_count: number;
+      excluded_manual_assignment_count: number;
+    };
+    warnings: TeacherDashboardWarning[];
+  }>;
+}
+
 export interface TeacherDashboardHealthResponse {
   term_info: {
     period_id: number | null;
@@ -2907,6 +2936,7 @@ export interface TeacherDashboardHealthResponse {
     top_performers?: TeacherDashboardPerformer[];
     grade_distribution?: TeacherDashboardGradeBand[];
     grade_details?: TeacherDashboardGradeDetails;
+    lesson_performance?: TeacherDashboardLessonPerformance;
   };
 }
 
