@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
-from sqlalchemy import create_engine, event, func, insert, select, text
+from sqlalchemy import CheckConstraint, MetaData, create_engine, event, func, insert, select, text
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -19,6 +19,7 @@ from app.db.Base import Base
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.people.Student import Student
+from app.services.grading.ComponentMapper import CanonicalGradingComponent, classify_classwork_component
 from scripts import seed_teacher_dashboard_preview as seed
 
 
@@ -109,7 +110,21 @@ def preview():
     @event.listens_for(engine, "connect")
     def enable_foreign_keys(dbapi_connection, _record):
         dbapi_connection.execute("PRAGMA foreign_keys=ON")
-    Base.metadata.create_all(engine)
+    # The ORM omits these migration-only checks. Reproduce the preview DB's
+    # confirmed rules on SQLite, using copied metadata so app models stay intact.
+    metadata = MetaData()
+    for table in Base.metadata.tables.values():
+        table.to_metadata(metadata)
+    metadata.tables["classwork"].append_constraint(CheckConstraint(
+        "classwork_category IS NULL OR classwork_category IN "
+        "('WRITTEN_WORK', 'PERFORMANCE_TASK', 'QUARTERLY_ASSESSMENT')",
+        name="ck_classwork_classwork_category",
+    ))
+    metadata.tables["classwork"].append_constraint(CheckConstraint(
+        "classwork_type IN ('QUIZ', 'ASSIGNMENT', 'ACTIVITY', 'READING')",
+        name="classwork_classwork_type_check",
+    ))
+    metadata.create_all(engine)
     with Session(engine) as db:
         year = AcademicYear(year_label="2026-2027", start_date=date(2026, 8, 1),
                             end_date=date(2027, 5, 31), is_active=True)
@@ -497,7 +512,10 @@ def test_cli_connection_errors_never_print_url_sql_or_identity(monkeypatch, caps
         raise RuntimeError(synthetic_url() + " Synthetic Teacher private question text")
     monkeypatch.setattr(seed, "guarded_engine", fail)
     assert seed.main(["--teacher-staff-id", STAFF, "--academic-period-id", "1", "--dry-run"], environ={}) == 2
-    assert capsys.readouterr().out == "ERROR preview_seed_failed: The operation failed; connection and database details were suppressed.\n"
+    assert capsys.readouterr().out == (
+        "DIAGNOSTIC stage=engine exception_type=RuntimeError sqlstate=unavailable constraint=unavailable\n"
+        "ERROR preview_seed_failed: The operation failed; connection and database details were suppressed.\n"
+    )
 
 
 def test_script_has_no_settings_session_dotenv_or_app_importers():
@@ -832,3 +850,553 @@ def test_auto_discovery_dry_run_is_select_only_and_selects_no_names(preview):
     discovery_selects = [sql.split("FROM", 1)[0] for sql in statements[:2]]
     assert all(field not in sql for sql in discovery_selects
                for field in ("first_name", "last_name", "student_lrn", "email", "password"))
+
+
+@pytest.mark.parametrize("overrides", ["none", "teacher", "period"])
+def test_class_filter_constrains_discovery_before_roster_ranking(preview, overrides):
+    """Mocked-behavior: larger rosters in another class cannot win discovery."""
+    engine, data = preview
+    other_staff, other_period, _ = add_candidate_pair(engine, data)
+    with engine.connect() as conn:
+        assert seed.discover_scope(conn, None, None, NOW) == (other_staff, other_period)
+        chosen = seed.discover_scope(
+            conn, STAFF if overrides == "teacher" else None,
+            data.period if overrides == "period" else None, NOW, class_id=data.class_id,
+        )
+    assert chosen == (STAFF, data.period)
+
+
+def test_class_filtered_apply_is_insert_only_isolated_and_idempotent(preview, capsys):
+    """Mocked-behavior: no activity in the teacher's other eligible class."""
+    engine, data = preview
+    _, _, other_class = add_candidate_pair(engine, data, staff_id=STAFF)
+    with engine.begin() as conn:
+        guard = seed.install_statement_guard(conn, dry_run=False)
+        try:
+            first, _, inserted = seed.seed_connection(
+                conn, STAFF, data.period, NOW, apply=True, class_id=data.class_id,
+            )
+            before = table_counts(conn)
+            second, existing, additions = seed.seed_connection(
+                conn, STAFF, data.period, NOW, apply=True, class_id=data.class_id,
+            )
+            assert table_counts(conn) == before
+            assert set(conn.execute(select(seed.ClassworkAssignment.class_id)).scalars()) == {data.class_id}
+            assert set(conn.execute(select(seed.AttendanceRecord.class_id)).scalars()) == {data.class_id}
+            assert conn.scalar(select(func.count()).select_from(seed.ClassworkAssignment).where(
+                seed.ClassworkAssignment.class_id == other_class)) == 0
+        finally:
+            event.remove(conn, "before_cursor_execute", guard)
+    assert first == second and existing == inserted and not additions
+    assert first.class_id == data.class_id
+    assert {cid for cid, _, _ in first.grades} == {data.class_id}
+    assert first.counts["enrolled_learners"] == 19
+    assert inserted["attendance_record"] == 10
+    assert inserted["student_submission"] == 198
+    seed.print_counts(first, Counter(), inserted, apply=True)
+    output = capsys.readouterr().out
+    assert f"class_id {data.class_id}\n" in output
+    assert "Synthetic" not in output
+    assert all(str(learner_id(i)) not in output for i in range(1, 20))
+
+
+def test_filtered_seed_does_not_change_dashboard_teacher_wide_scope(preview, monkeypatch):
+    """Mocked-behavior: an unseeded class remains in dashboard grade coverage."""
+    from app.services.activity import AnalyticsService
+    engine, data = preview
+    add_candidate_pair(engine, data, staff_id=STAFF, learners=25)
+    with engine.begin() as conn:
+        plan, _, _ = seed.seed_connection(conn, STAFF, data.period, NOW,
+                                         apply=True, class_id=data.class_id)
+    monkeypatch.setattr(AnalyticsService, "_teacher_dashboard_now", lambda: NOW)
+    with Session(engine) as db:
+        dashboard = AnalyticsService.build_teacher_dashboard_health(
+            db, STAFF, db.get(seed.AcademicPeriod, data.period),
+        )
+    grades = dashboard["phase_two"]["grades"]
+    assert plan.counts["student_subject_entries"] == 38
+    assert grades["total_grade_count"] == 63
+    assert grades["available_grade_count"] == plan.counts["available_grades"] == 36
+    assert dashboard["details"]["grade_details"]["unavailable_grade_count"] == 27
+
+
+def test_class_filtered_dry_run_ignores_foreign_activity_outside_target(preview):
+    """Mocked-behavior: SELECT-only preflight checks only the requested class."""
+    engine, data = preview
+    _, _, other_class = add_candidate_pair(engine, data, staff_id=STAFF)
+    with Session(engine) as db:
+        work = seed.Classwork(title="Synthetic unrelated work", classwork_type="ACTIVITY",
+                              subject_id=data.subjects[0], created_by_staff_id=STAFF)
+        db.add(work)
+        db.flush()
+        db.add(seed.ClassworkAssignment(classwork_id=work.classwork_id, class_id=other_class,
+                                       academic_period_id=data.period, assigned_by_staff_id=STAFF))
+        db.commit()
+    statements = []
+    def capture(_conn, _cursor, statement, *_args):
+        statements.append(statement)
+    with engine.connect() as conn:
+        before = table_counts(conn)
+        guard = seed.install_statement_guard(conn, dry_run=True)
+        event.listen(conn, "before_cursor_execute", capture)
+        try:
+            plan, _, additions = seed.seed_connection(
+                conn, STAFF, data.period, NOW, apply=False, class_id=data.class_id,
+            )
+            assert table_counts(conn) == before
+            with pytest.raises(seed.SeedError, match="preexisting_scope_activity_conflict"):
+                seed.seed_connection(conn, STAFF, data.period, NOW, apply=False)
+        finally:
+            event.remove(conn, "before_cursor_execute", capture)
+            event.remove(conn, "before_cursor_execute", guard)
+    assert plan.class_id == data.class_id and additions
+    assert all(sql.lstrip().upper().startswith("SELECT ") for sql in statements)
+
+
+@pytest.mark.parametrize("kind", ["missing", "inactive", "wrong_year"])
+def test_class_filter_refuses_missing_or_ineligible_class_without_inserting(preview, kind):
+    """Mocked-behavior: class must exist and be active in the period's year."""
+    engine, data = preview
+    requested = data.class_id
+    with Session(engine) as db:
+        if kind == "missing":
+            requested = 999999
+        elif kind == "inactive":
+            db.get(seed.Class, requested).class_status = "archived"
+        else:
+            year = AcademicYear(year_label="2025-2026", start_date=date(2025, 8, 1),
+                                end_date=date(2026, 5, 31))
+            db.add(year)
+            db.flush()
+            wrong_year_class = seed.Class(section_name="Synthetic previous year",
+                academic_year_id=year.academic_year_id, academic_level_id=data.level_id,
+                class_status="active")
+            db.add(wrong_year_class)
+            db.flush()
+            requested = wrong_year_class.class_id
+        db.commit()
+    with engine.begin() as conn:
+        before = table_counts(conn)
+        with pytest.raises(seed.SeedError, match="class_not_active_in_period"):
+            seed.seed_connection(conn, STAFF, data.period, NOW, apply=True, class_id=requested)
+        assert table_counts(conn) == before
+
+
+@pytest.mark.parametrize("kind", ["other_teacher", "other_period", "draft", "inactive_version"])
+def test_class_filter_requires_an_eligible_assigned_load_without_fallback(preview, kind):
+    """Mocked-behavior: never use another teacher, period, or class instead."""
+    engine, data = preview
+    other_staff, other_period, _ = add_candidate_pair(engine, data, sequence=3)
+    with Session(engine) as db:
+        for load in db.query(seed.SubjectLoad).filter_by(class_id=data.class_id):
+            if kind == "other_teacher":
+                load.staff_id = other_staff
+            elif kind == "other_period":
+                load.academic_period_id = other_period
+            elif kind == "draft":
+                load.status = "draft"
+            else:
+                load.is_active_version = False
+        db.commit()
+    with engine.begin() as conn:
+        before = table_counts(conn)
+        with pytest.raises(seed.SeedError, match="class_not_assigned_to_teacher_in_period"):
+            seed.seed_connection(conn, STAFF, data.period, NOW, apply=True, class_id=data.class_id)
+        assert table_counts(conn) == before
+
+
+def test_class_filtered_discovery_without_candidate_does_not_drop_filter(preview, capsys):
+    """Mocked-behavior: an unrelated eligible class must not become the target."""
+    engine, _ = preview
+    with engine.connect() as conn:
+        with pytest.raises(seed.SeedError, match="no_teacher_period_candidate_for_class") as caught:
+            seed.seed_connection(conn, None, None, NOW, apply=False, class_id=999999)
+    seed.print_refusal(caught.value)
+    assert capsys.readouterr().out == (
+        "ERROR no_teacher_period_candidate_for_class: No assigned teacher/period pair for the requested class covers this Manila month through today.\n"
+        "candidate_pairs 0\n"
+    )
+
+
+def test_class_filter_keeps_ambiguous_shared_load_refusal(preview):
+    """Mocked-behavior: filtering cannot hide a second teacher in the same scope."""
+    engine, data = preview
+    other_staff, _, _ = add_candidate_pair(engine, data)
+    with Session(engine) as db:
+        db.add(seed.SubjectLoad(staff_id=other_staff, subject_id=data.subjects[0],
+            class_id=data.class_id, academic_period_id=data.period, status="active",
+            logical_load_id="Synthetic-shared-filtered"))
+        db.commit()
+    with engine.begin() as conn:
+        before = table_counts(conn)
+        with pytest.raises(seed.SeedError, match="ambiguous_shared_load_authorization"):
+            seed.seed_connection(conn, STAFF, data.period, NOW, apply=True, class_id=data.class_id)
+        assert table_counts(conn) == before
+
+
+def test_class_filtered_seeds_for_separate_classes_do_not_collide(preview):
+    """Mocked-behavior: distinct markers, safe reuse of subject grading templates."""
+    engine, data = preview
+    _, _, other_class = add_candidate_pair(engine, data, staff_id=STAFF)
+    with engine.begin() as conn:
+        guard = seed.install_statement_guard(conn, dry_run=False)
+        try:
+            first, _, _ = seed.seed_connection(conn, STAFF, data.period, NOW,
+                                              apply=True, class_id=data.class_id)
+            other, _, _ = seed.seed_connection(conn, STAFF, data.period, NOW,
+                                              apply=True, class_id=other_class)
+            before = table_counts(conn)
+            again, _, additions = seed.seed_connection(conn, STAFF, data.period, NOW,
+                                                      apply=True, class_id=data.class_id)
+            assert table_counts(conn) == before
+        finally:
+            event.remove(conn, "before_cursor_execute", guard)
+    assert first.prefix != other.prefix
+    assert again == first and not additions
+
+
+@pytest.mark.parametrize("filtered_first", [True, False])
+def test_switching_between_overlapping_filtered_and_full_plans_refuses_without_writes(preview, filtered_first):
+    """Mocked-behavior: existing activity is never overwritten or duplicated."""
+    engine, data = preview
+    with engine.begin() as conn:
+        seed.seed_connection(conn, STAFF, data.period, NOW, apply=True,
+                             class_id=data.class_id if filtered_first else None)
+        before = table_counts(conn)
+        with pytest.raises(seed.SeedError, match="preexisting_scope_activity_conflict"):
+            seed.seed_connection(conn, STAFF, data.period, NOW, apply=True,
+                                 class_id=None if filtered_first else data.class_id)
+        assert table_counts(conn) == before
+
+
+def test_omitting_class_filter_preserves_existing_plan_and_output(preview, capsys):
+    """Mocked-behavior: default identity and unfiltered behavior stay unchanged."""
+    engine, data = preview
+    with engine.connect() as conn:
+        first = seed.seed_connection(conn, STAFF, data.period, NOW, apply=False)
+        second = seed.seed_connection(conn, STAFF, data.period, NOW, apply=False, class_id=None)
+    assert first == second and first[0].class_id is None
+    assert first[0].prefix == seed.PREFIX + seed.sha256(f"{STAFF}|{data.period}".encode()).hexdigest()[:16]
+    seed.print_counts(*first, apply=False)
+    assert "class_id " not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("value", [0, -1, True, "6"])
+def test_invalid_class_filter_refuses_before_any_query(value):
+    """Validator-unit: internal callers must not coerce invalid class IDs."""
+    conn = MagicMock()
+    with pytest.raises(seed.SeedError, match="invalid_seed_scope"):
+        seed.seed_connection(conn, STAFF, 1, NOW, apply=True, class_id=value)
+    conn.execute.assert_not_called()
+
+
+@pytest.mark.parametrize("apply", [False, True])
+def test_cli_passes_explicit_class_filter_to_preflight(monkeypatch, apply):
+    """Mocked-behavior: engine and seed fully mocked; no real preview call."""
+    engine, conn = MagicMock(), MagicMock()
+    engine.connect.return_value.__enter__.return_value = conn
+    conn.execute.return_value.scalar_one.return_value = "entervene_preview"
+    monkeypatch.setattr(seed, "guarded_engine", lambda _env: engine)
+    monkeypatch.setattr(seed, "install_statement_guard", lambda *_a, **_k: "guard")
+    monkeypatch.setattr(seed.event, "remove", MagicMock())
+    core = MagicMock(return_value=("plan", Counter(), Counter()))
+    monkeypatch.setattr(seed, "seed_connection", core)
+    monkeypatch.setattr(seed, "print_counts", MagicMock())
+    arguments = ["--teacher-staff-id", STAFF, "--academic-period-id", "1", "--class-id", "6",
+                 "--apply" if apply else "--dry-run"]
+    assert seed.main(arguments, environ={}) == 0
+    assert core.call_args.args[1:3] == (STAFF, 1)
+    assert core.call_args.kwargs == {"apply": apply, "class_id": 6}
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "not-an-id"])
+def test_cli_invalid_class_id_never_creates_engine(monkeypatch, value, capsys):
+    """Mocked-behavior: refuse invalid IDs before opening any connection."""
+    factory = MagicMock()
+    monkeypatch.setattr(seed, "guarded_engine", factory)
+    assert seed.main(["--dry-run", "--class-id", value], environ={}) == 2
+    factory.assert_not_called()
+    output = capsys.readouterr().out
+    assert output.startswith("ERROR invalid_")
+    assert "not-an-id" not in output
+
+
+def diagnostic_database_error(*, sqlstate="23514", constraint="ck_quiz_answer_points_non_negative"):
+    """Synthetic driver metadata; no connection or credential-shaped fixtures."""
+    original = RuntimeError("PRIVATE_EXCEPTION_PAYLOAD")
+    original.pgcode = sqlstate
+    original.diag = SimpleNamespace(constraint_name=constraint)
+    return seed.sa_exc.IntegrityError(
+        "PRIVATE_SQL_PAYLOAD", {"value": "PRIVATE_PARAMETER_PAYLOAD"}, original,
+    )
+
+
+def test_failure_diagnostics_print_only_approved_metadata(capsys):
+    """Unit: SQLAlchemy messages and parameters are never rendered."""
+    error = diagnostic_database_error()
+    with pytest.raises(seed.sa_exc.IntegrityError):
+        with seed.failure_stage("insert:quiz_answer"):
+            raise error
+    seed.print_failure_diagnostics(error)
+    output = capsys.readouterr().out
+    assert output == (
+        "DIAGNOSTIC stage=insert:quiz_answer exception_type=IntegrityError "
+        "sqlstate=23514 constraint=ck_quiz_answer_points_non_negative\n"
+    )
+    assert "PRIVATE" not in output
+
+
+@pytest.mark.parametrize("constraint,expected", [
+    ("ck_quiz_answer_points_non_negative", "ck_quiz_answer_points_non_negative"),
+    ("quiz_answer_pkey", "quiz_answer_pkey"),
+    ("quiz_answer_submission_id_fkey", "quiz_answer_submission_id_fkey"),
+    (None, "unavailable"),
+    ("PRIVATE_IDENTIFIER_PAYLOAD", "redacted"),
+    ("PRIVATE\nIDENTIFIER_PAYLOAD", "redacted"),
+    (123, "redacted"),
+])
+def test_constraint_names_require_exact_local_model_allowlist(capsys, constraint, expected):
+    """Unit: an identifier-shaped server string is not automatically safe."""
+    seed.print_failure_diagnostics(diagnostic_database_error(constraint=constraint))
+    output = capsys.readouterr().out
+    assert output.endswith(f"constraint={expected}\n")
+    assert "PRIVATE" not in output
+
+
+@pytest.mark.parametrize("sqlstate,expected", [
+    ("23503", "23503"), ("40001", "40001"), (None, "unavailable"),
+    ("PRIVATE_STATE_PAYLOAD", "unavailable"), ("23514\n", "unavailable"),
+    (" 23514", "unavailable"), (23514, "unavailable"),
+])
+def test_sqlstate_is_five_uppercase_alphanumeric_characters(capsys, sqlstate, expected):
+    """Unit: no arbitrary driver string can enter the SQLSTATE field."""
+    seed.print_failure_diagnostics(diagnostic_database_error(sqlstate=sqlstate))
+    output = capsys.readouterr().out
+    assert f"sqlstate={expected} " in output
+    assert "PRIVATE" not in output
+    assert output.count("\n") == 1
+
+
+def test_failure_diagnostics_support_sqlstate_without_pgcode(capsys):
+    """Unit: drivers exposing sqlstate rather than pgcode remain diagnostic."""
+    error = diagnostic_database_error(sqlstate=None)
+    error.orig.sqlstate = "23502"
+    seed.print_failure_diagnostics(error)
+    assert "sqlstate=23502 " in capsys.readouterr().out
+
+
+def test_unknown_exception_name_and_stage_are_redacted(capsys):
+    """Unit: type names and stage annotations are not unrestricted output."""
+    kind = type("PRIVATE_EXCEPTION_NAME", (Exception,), {})
+    error = kind("PRIVATE_MESSAGE")
+    error._preview_seed_stage = "PRIVATE_STAGE"
+    seed.print_failure_diagnostics(error)
+    assert capsys.readouterr().out == (
+        "DIAGNOSTIC stage=unavailable exception_type=unavailable "
+        "sqlstate=unavailable constraint=unavailable\n"
+    )
+
+
+def test_diagnostics_never_stringify_exception_or_untrusted_properties(capsys):
+    """Unit: hostile metadata cannot leak through an error while reporting."""
+    class UnsafeError(Exception):
+        def __str__(self):
+            raise AssertionError("PRIVATE_STRING_PAYLOAD")
+
+        def __getattr__(self, _name):
+            raise RuntimeError("PRIVATE_ATTRIBUTE_PAYLOAD")
+
+    seed.print_failure_diagnostics(UnsafeError())
+    assert capsys.readouterr().out == (
+        "DIAGNOSTIC stage=unavailable exception_type=unavailable "
+        "sqlstate=unavailable constraint=unavailable\n"
+    )
+
+
+def test_nested_failure_stages_preserve_deepest_stage_and_exception_identity():
+    """Unit: instrumentation does not wrap errors or change rollback semantics."""
+    error = RuntimeError("synthetic")
+    with pytest.raises(RuntimeError) as caught:
+        with seed.failure_stage("seed"), seed.failure_stage("build_plan"):
+            raise error
+    assert caught.value is error
+    assert error._preview_seed_stage == "build_plan"
+
+
+@pytest.mark.parametrize("stage", [
+    "engine", "connect", "statement_guard", "transaction", "read_only",
+    "database_check", "advisory_lock", "seed", "guard_cleanup", "output",
+    "transaction_finish",
+])
+def test_cli_unexpected_failures_report_stage_without_details(monkeypatch, capsys, stage):
+    """Mocked-behavior: every CLI boundary is tested without a real engine."""
+    engine, conn = MagicMock(), MagicMock()
+    engine.connect.return_value.__enter__.return_value = conn
+    conn.execute.return_value.scalar_one.return_value = seed.DATABASE
+    factory = MagicMock(return_value=engine)
+    guard = MagicMock(return_value="guard")
+    cleanup = MagicMock()
+    core = MagicMock(return_value=("plan", Counter(), Counter()))
+    printer = MagicMock()
+    monkeypatch.setattr(seed, "guarded_engine", factory)
+    monkeypatch.setattr(seed, "install_statement_guard", guard)
+    monkeypatch.setattr(seed.event, "remove", cleanup)
+    monkeypatch.setattr(seed, "seed_connection", core)
+    monkeypatch.setattr(seed, "print_counts", printer)
+    error = RuntimeError("PRIVATE_RUNTIME_PAYLOAD")
+    if stage == "engine":
+        factory.side_effect = error
+    elif stage == "connect":
+        engine.connect.return_value.__enter__.side_effect = error
+    elif stage == "statement_guard":
+        guard.side_effect = error
+    elif stage == "transaction":
+        conn.begin.return_value.__enter__.side_effect = error
+    elif stage == "transaction_finish":
+        conn.begin.return_value.__exit__.side_effect = error
+    elif stage in {"read_only", "database_check", "advisory_lock"}:
+        failed_statement = {
+            "read_only": "SET TRANSACTION READ ONLY",
+            "database_check": "SELECT current_database()",
+            "advisory_lock": "SELECT pg_advisory_xact_lock(:key)",
+        }[stage]
+        def execute(statement, *_args):
+            if str(statement) == failed_statement:
+                raise error
+            result = MagicMock()
+            result.scalar_one.return_value = seed.DATABASE
+            return result
+        conn.execute.side_effect = execute
+    elif stage == "seed":
+        core.side_effect = error
+    elif stage == "guard_cleanup":
+        cleanup.side_effect = error
+    elif stage == "output":
+        printer.side_effect = error
+    mode = "--dry-run" if stage == "read_only" else "--apply"
+    assert seed.main([mode], environ={}) == 2
+    expected_stage = "transaction" if stage == "transaction_finish" else stage
+    assert capsys.readouterr().out == (
+        f"DIAGNOSTIC stage={expected_stage} exception_type=RuntimeError "
+        "sqlstate=unavailable constraint=unavailable\n"
+        "ERROR preview_seed_failed: The operation failed; connection and database details were suppressed.\n"
+    )
+    if stage != "engine":
+        engine.dispose.assert_called_once()
+
+
+@pytest.mark.parametrize("stage", ["discover_scope", "build_plan", "inspect_plan", "insert:quiz_answer"])
+def test_seed_core_failures_annotate_stage_without_changing_exception(monkeypatch, stage):
+    """Mocked-behavior: rows, connection, and all preflight reads are mocked."""
+    plan = SimpleNamespace(rows=[seed.Row("synthetic", "quiz_answer", (), {})])
+    discover = MagicMock(return_value=(STAFF, 1))
+    build = MagicMock(return_value=plan)
+    inspect = MagicMock(return_value=({}, Counter(), Counter()))
+    conn = MagicMock()
+    monkeypatch.setattr(seed, "discover_scope", discover)
+    monkeypatch.setattr(seed, "build_plan", build)
+    monkeypatch.setattr(seed, "inspect_plan", inspect)
+    error = diagnostic_database_error()
+    failing_call = {"discover_scope": discover, "build_plan": build,
+                    "inspect_plan": inspect, "insert:quiz_answer": conn.execute}[stage]
+    failing_call.side_effect = error
+    with pytest.raises(seed.sa_exc.IntegrityError) as caught:
+        seed.seed_connection(conn, STAFF, 1, NOW, apply=True)
+    assert caught.value is error
+    assert error._preview_seed_stage == stage
+    if stage != "insert:quiz_answer":
+        conn.execute.assert_not_called()
+
+
+def test_insert_diagnostics_preserve_atomic_rollback(preview, capsys):
+    """SQLite mocked-behavior: preceding INSERTs roll back on driver failure."""
+    engine, data = preview
+    with engine.connect() as conn:
+        before = table_counts(conn)
+    error = diagnostic_database_error()
+    def fail(_conn, _cursor, statement, *_rest):
+        if statement.startswith("INSERT INTO quiz_answer"):
+            raise error
+    event.listen(engine, "before_cursor_execute", fail)
+    try:
+        with pytest.raises(seed.sa_exc.IntegrityError) as caught:
+            apply_fixture(engine, data)
+    finally:
+        event.remove(engine, "before_cursor_execute", fail)
+    with engine.connect() as conn:
+        assert table_counts(conn) == before
+    seed.print_failure_diagnostics(caught.value)
+    assert capsys.readouterr().out == (
+        "DIAGNOSTIC stage=insert:quiz_answer exception_type=IntegrityError "
+        "sqlstate=23514 constraint=ck_quiz_answer_points_non_negative\n"
+    )
+
+
+@pytest.mark.parametrize("classwork_type,category,constraint", [
+    ("QUIZ", None, None),
+    ("QUIZ", "WRITTEN_WORK", None),
+    ("ACTIVITY", "PERFORMANCE_TASK", None),
+    ("ASSIGNMENT", "QUARTERLY_ASSESSMENT", None),
+    ("READING", "WRITTEN_WORK", None),
+    ("ASSIGNMENT", "EXAMS", "ck_classwork_classwork_category"),
+    ("ASSIGNMENT", "PERIODICAL_EXAM", "ck_classwork_classwork_category"),
+    ("ASSIGNMENT", "quarterly_assessment", "ck_classwork_classwork_category"),
+    ("OTHER", "WRITTEN_WORK", "classwork_classwork_type_check"),
+    ("quiz", "WRITTEN_WORK", "classwork_classwork_type_check"),
+])
+def test_preview_fixture_enforces_confirmed_classwork_migration_rules(
+    preview, classwork_type, category, constraint,
+):
+    """SQLite mocked-behavior: test schema accepts/rejects the real DB enums."""
+    engine, data = preview
+    statement = insert(seed.Classwork.__table__).values(
+        title="Synthetic constraint probe", classwork_type=classwork_type,
+        classwork_category=category, subject_id=data.subjects[0],
+        created_by_staff_id=STAFF,
+    )
+    with engine.begin() as conn:
+        if constraint is None:
+            conn.execute(statement)
+        else:
+            with pytest.raises(seed.sa_exc.IntegrityError, match=constraint):
+                conn.execute(statement)
+
+
+@pytest.mark.parametrize("subtype", ["SUMMATIVE_1", "SUMMATIVE_2", "TERM_EXAM"])
+def test_planned_exam_tasks_use_allowed_category_and_keep_grading_component(preview, subtype):
+    """SQLite mocked-behavior: category compatibility never changes exam roles."""
+    engine, data = preview
+    with engine.connect() as conn:
+        plan = seed.build_plan(conn, STAFF, data.period, NOW)
+    exams = [row for row in plan.rows
+             if row.table == "classwork" and row.values["exam_subtype"] == subtype]
+    assert len(exams) == len(data.subjects)
+    for row in exams:
+        assert row.values["classwork_type"] == "ASSIGNMENT"
+        assert row.values["classwork_category"] == "QUARTERLY_ASSESSMENT"
+        assert classify_classwork_component(
+            row.values["classwork_type"], row.values["classwork_category"],
+            row.values["exam_subtype"],
+        ) == CanonicalGradingComponent.ASSESSMENT
+
+
+def test_seed_apply_and_rerun_pass_confirmed_migration_checks(preview):
+    """SQLite mocked-behavior: full seed is insert-only and idempotent with checks."""
+    engine, data = preview
+    with engine.begin() as conn:
+        guard = seed.install_statement_guard(conn, dry_run=False)
+        try:
+            plan, _, inserted = seed.seed_connection(conn, STAFF, data.period, NOW, apply=True)
+            before = table_counts(conn)
+            rerun, existing, additions = seed.seed_connection(conn, STAFF, data.period, NOW, apply=True)
+            assert table_counts(conn) == before
+            exams = conn.execute(select(
+                seed.Classwork.classwork_category, seed.Classwork.exam_subtype,
+            ).where(seed.Classwork.exam_subtype.is_not(None))).all()
+        finally:
+            event.remove(conn, "before_cursor_execute", guard)
+    assert rerun == plan
+    assert existing == inserted and not additions
+    assert len(exams) == 3 * len(data.subjects)
+    assert {category for category, _ in exams} == {"QUARTERLY_ASSESSMENT"}
+    assert {subtype for _, subtype in exams} == {"SUMMATIVE_1", "SUMMATIVE_2", "TERM_EXAM"}

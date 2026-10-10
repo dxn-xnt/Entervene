@@ -3,12 +3,14 @@
 Never import this module from the application. The CLI reads ONLY
 DASHBOARD_PREVIEW_SEED_URL, never dotenv/settings/application sessions. Dry-run
 performs SELECTs in a read-only transaction; it never inserts and rolls back.
-Console output is allowlisted IDs, aggregate metrics, and static reason codes.
+Console output is allowlisted IDs, aggregate metrics, static reason codes, and
+sanitized failure metadata. Exception messages, SQL, and parameters never print.
 """
 from __future__ import annotations
 
 import argparse
 from collections import Counter
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, ROUND_DOWN
@@ -17,12 +19,15 @@ import json
 import os
 from pathlib import Path
 import random
+import re
 import sys
 from typing import Mapping
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, create_engine, event, insert, or_, select, text
+from sqlalchemy import exc as sa_exc
 from sqlalchemy.engine import Connection, Engine, URL, make_url
+from sqlalchemy.schema import ForeignKeyConstraint, PrimaryKeyConstraint, UniqueConstraint
 
 # Running a script by path puts scripts/, not backend/, on sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -59,6 +64,84 @@ TABLES = {model.__table__.name: model.__table__ for model in (
     GradingTemplate, GradingTemplateComponent, Classwork, ClassworkAssignment,
     Quiz, Question, QuizQuestion, StudentSubmission, QuizAnswer, AttendanceRecord,
 )}
+FAILURE_STAGES = frozenset({
+    "arguments", "engine", "connect", "statement_guard", "transaction",
+    "read_only", "database_check", "advisory_lock", "seed", "discover_scope",
+    "build_plan", "inspect_plan", "guard_cleanup", "output",
+} | {f"insert:{name}" for name in TABLES})
+# Match classes, not arbitrary exception class names supplied by a driver.
+FAILURE_TYPES = {kind: kind.__name__ for kind in (
+    RuntimeError, ValueError, TypeError, KeyError, AttributeError, OSError,
+    sa_exc.ArgumentError, sa_exc.InvalidRequestError, sa_exc.NoReferencedTableError,
+    sa_exc.NoReferencedColumnError, sa_exc.IntegrityError, sa_exc.OperationalError,
+    sa_exc.ProgrammingError, sa_exc.DataError, sa_exc.InterfaceError,
+    sa_exc.InternalError, sa_exc.DatabaseError, sa_exc.DBAPIError,
+    sa_exc.StatementError, sa_exc.TimeoutError,
+)}
+
+
+def approved_constraint_names() -> frozenset[str]:
+    """Only local model identifiers, never arbitrary server metadata, may print."""
+    names = set()
+    for table in TABLES.values():
+        for constraint in table.constraints:
+            if isinstance(constraint.name, str):
+                names.add(constraint.name)
+            elif isinstance(constraint, PrimaryKeyConstraint):
+                names.add(f"{table.name}_pkey")
+            elif isinstance(constraint, ForeignKeyConstraint):
+                # column_keys does not resolve/import the referenced model.
+                names.add(f"{table.name}_{'_'.join(constraint.column_keys)}_fkey")
+            elif isinstance(constraint, UniqueConstraint):
+                names.add(f"{table.name}_{'_'.join(constraint.columns.keys())}_key")
+    return frozenset(names)
+
+
+APPROVED_CONSTRAINT_NAMES = approved_constraint_names()
+
+
+def _safe_attribute(value, name):
+    try:
+        return getattr(value, name, None)
+    except Exception:
+        return None
+
+
+@contextmanager
+def failure_stage(stage: str):
+    """Annotate without changing exception types, propagation, or rollback."""
+    try:
+        yield
+    except Exception as error:
+        if _safe_attribute(error, "_preview_seed_stage") is None:
+            try:
+                error._preview_seed_stage = stage
+            except Exception:
+                pass
+        raise
+
+
+def print_failure_diagnostics(error: Exception) -> None:
+    """Never stringify exceptions or print SQL, parameters, URLs, or messages."""
+    stage = _safe_attribute(error, "_preview_seed_stage")
+    stage = stage if type(stage) is str and stage in FAILURE_STAGES else "unavailable"
+    kind = FAILURE_TYPES.get(type(error), "unavailable")
+    original = _safe_attribute(error, "orig")
+    if original is None:
+        original = error
+    sqlstate = "unavailable"
+    for field in ("pgcode", "sqlstate"):
+        value = _safe_attribute(original, field)
+        if type(value) is str and re.fullmatch(r"[0-9A-Z]{5}", value):
+            sqlstate = value
+            break
+    raw_constraint = _safe_attribute(_safe_attribute(original, "diag"), "constraint_name")
+    constraint = "unavailable" if raw_constraint is None else "redacted"
+    if type(raw_constraint) is str and raw_constraint in APPROVED_CONSTRAINT_NAMES:
+        constraint = raw_constraint
+    print(f"DIAGNOSTIC stage={stage} exception_type={kind} sqlstate={sqlstate} constraint={constraint}")
+
+
 # Background grades only; scenario allocation, not this list, determines size.
 PROFILE = (97, 96, 95, 95, 92, 90, 85, 85, 86, 86, 87, 88, 89, 89,
            80, 80, 81, 81, 82, 82, 83, 84, 84, 75, 75, 76, 76, 77, 78,
@@ -79,7 +162,10 @@ REASONS = {
     "invalid_seed_scope": "Provide valid IDs and a timezone-aware clock.",
     "teacher_or_period_missing": "The selected teacher or academic period does not exist.",
     "no_teacher_period_candidate": "No assigned teacher/period pair covers this Manila month through today.",
+    "no_teacher_period_candidate_for_class": "No assigned teacher/period pair for the requested class covers this Manila month through today.",
     "no_assigned_active_loads": "The selected teacher has no eligible assigned loads in this period.",
+    "class_not_active_in_period": "The requested class must exist, be active, and belong to the selected period's academic year.",
+    "class_not_assigned_to_teacher_in_period": "The requested class has no eligible load assigned to this teacher in the selected period.",
     "ambiguous_shared_load_authorization": "An active class-subject load has ambiguous teacher ownership.",
     "empty_active_roster": "An assigned class has no enrolled learners in the selected academic year.",
     "insufficient_enrolled_learners": "At least three enrolled learners are needed, including one ungraded learner.",
@@ -109,7 +195,7 @@ REASONS = {
     "unexpected_existing_seed_children": "Unexpected rows are attached to existing seed activity.",
     "unexpected_existing_seed_attendance": "Unexpected attendance is attached to the existing seed plan.",
     "invalid_seed_dependency": "A planned row has an unresolved dependency.",
-    "invalid_arguments": "Use dry-run or apply with optional teacher and period IDs.",
+    "invalid_arguments": "Use dry-run or apply with optional teacher, period, and class IDs.",
     "cancelled": "The operation was cancelled.",
     "preview_seed_failed": "The operation failed; connection and database details were suppressed.",
 }
@@ -193,6 +279,7 @@ class Plan:
     period_id: int
     scenarios: tuple[str, ...]
     skipped: tuple["SkippedScenario", ...]
+    class_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -250,14 +337,21 @@ def raw_score(term_grade: int) -> Decimal:
     raise SeedError("invalid_fixture_grade")
 
 
+def validate_class_filter(class_id: int | None) -> None:
+    if class_id is not None and (type(class_id) is not int or class_id <= 0):
+        raise SeedError("invalid_seed_scope")
+
+
 def discover_scope(conn: Connection, staff_id: str | None, period_id: int | None,
-                   now: datetime) -> tuple[str, int]:
+                   now: datetime, *, class_id: int | None = None) -> tuple[str, int]:
     """SELECT IDs only; rank distinct enrolled learners in Python, not load rows.
 
     Supplying either ID constrains discovery of the other. Supplying both uses
     exactly that pair and leaves all existing preflight validation in place.
     A chosen pair's failed safety checks never cause silent teacher fallback.
+    A class filter constrains eligible loads and the enrolled-learner ranking.
     """
+    validate_class_filter(class_id)
     if staff_id is not None and period_id is not None:
         return staff_id, period_id
     today = now.astimezone(MANILA).date()
@@ -275,12 +369,15 @@ def discover_scope(conn: Connection, staff_id: str | None, period_id: int | None
         query = query.where(SubjectLoad.staff_id == staff_id)
     if period_id is not None:
         query = query.where(SubjectLoad.academic_period_id == period_id)
+    if class_id is not None:
+        query = query.where(SubjectLoad.class_id == class_id)
     choices = {}
     for row in conn.execute(query):
         choices.setdefault((row.staff_id, row.academic_period_id), set()).add(
             (row.class_id, row.academic_year_id))
     if not choices:
-        raise SeedError("no_teacher_period_candidate", candidate_pairs=0)
+        code = "no_teacher_period_candidate_for_class" if class_id is not None else "no_teacher_period_candidate"
+        raise SeedError(code, candidate_pairs=0)
     class_ids = {cid for scopes in choices.values() for cid, _ in scopes}
     rosters = {}
     for row in conn.execute(select(StudentClass.class_id, StudentClass.academic_year_id,
@@ -412,8 +509,10 @@ def _resolve_template(conn: Connection, subject: Mapping, level_id: int):
     return template[0]["grading_template_id"], weights
 
 
-def build_plan(conn: Connection, staff_id: str, period_id: int, now: datetime) -> Plan:
+def build_plan(conn: Connection, staff_id: str, period_id: int, now: datetime,
+               *, class_id: int | None = None) -> Plan:
     """Read existing structure and produce plain dictionaries, never ORM writes."""
+    validate_class_filter(class_id)
     if not staff_id or period_id <= 0 or now.tzinfo is None:
         raise SeedError("invalid_seed_scope")
     staff = conn.execute(select(AcademicStaff.staff_id).where(AcademicStaff.staff_id == staff_id)).first()
@@ -427,15 +526,24 @@ def build_plan(conn: Connection, staff_id: str, period_id: int, now: datetime) -
     normal_date = max(weeks[-1], late_date) + timedelta(days=1)
     if normal_date > period["end_date"]:
         raise SeedError("selected_period_cannot_fit_distinct_deadlines")
-    loads = list(conn.execute(select(SubjectLoad.__table__).where(
+    load_query = select(SubjectLoad.__table__).where(
         SubjectLoad.academic_period_id == period_id, SubjectLoad.is_active_version.is_(True),
-        SubjectLoad.status.in_(("active", "published")))).mappings())
-    classes = {row["class_id"]: row for row in conn.execute(select(Class.__table__).where(
-        Class.academic_year_id == period["academic_year_id"], Class.class_status == "active")).mappings()}
+        SubjectLoad.status.in_(("active", "published")))
+    class_query = select(Class.__table__).where(
+        Class.academic_year_id == period["academic_year_id"], Class.class_status == "active")
+    if class_id is not None:
+        # Keep other teachers' loads within this class for the ambiguity guard.
+        load_query = load_query.where(SubjectLoad.class_id == class_id)
+        class_query = class_query.where(Class.class_id == class_id)
+    loads = list(conn.execute(load_query).mappings())
+    classes = {row["class_id"]: row for row in conn.execute(class_query).mappings()}
+    if class_id is not None and class_id not in classes:
+        raise SeedError("class_not_active_in_period")
     scopes = sorted({(row["class_id"], row["subject_id"]) for row in loads
                      if row["staff_id"] == staff_id and row["class_id"] in classes})
     if not scopes:
-        raise SeedError("no_assigned_active_loads")
+        code = "class_not_assigned_to_teacher_in_period" if class_id is not None else "no_assigned_active_loads"
+        raise SeedError(code)
     for scope in scopes:
         matching = [row for row in loads if (row["class_id"], row["subject_id"]) == scope]
         if len(matching) != 1 or matching[0]["staff_id"] != staff_id:
@@ -476,7 +584,11 @@ def build_plan(conn: Connection, staff_id: str, period_id: int, now: datetime) -
             raise SeedError("weights_cannot_reproduce_fixture_grades")
     extra_students = [row[2] for row in available if row[:2] == extra_scope]
     excused_student, late_student = extra_students[:2]
-    prefix = PREFIX + sha256(f"{staff_id}|{period_id}".encode()).hexdigest()[:16]
+    identity = f"{staff_id}|{period_id}"
+    if class_id is not None:
+        # Separate filtered plans without altering the existing unfiltered IDs.
+        identity += f"|class:{class_id}"
+    prefix = PREFIX + sha256(identity.encode()).hexdigest()[:16]
     fingerprint = sha256(json.dumps({
         "slots": [day.isoformat() for day in slots], "week": [day.isoformat() for day in weeks],
         "grades": [(cid, sid, str(student), grade) for (cid, sid, student), grade in grades.items()],
@@ -530,9 +642,9 @@ def build_plan(conn: Connection, staff_id: str, period_id: int, now: datetime) -
     completed = 0
     kinds = (("written", "QUIZ", "WRITTEN_WORK", None),
              ("performance", "ACTIVITY", "PERFORMANCE_TASK", None),
-             ("exam1", "ASSIGNMENT", "EXAMS", "SUMMATIVE_1"),
-             ("exam2", "ASSIGNMENT", "EXAMS", "SUMMATIVE_2"),
-             ("term", "ASSIGNMENT", "EXAMS", "TERM_EXAM"))
+             ("exam1", "ASSIGNMENT", "QUARTERLY_ASSESSMENT", "SUMMATIVE_1"),
+             ("exam2", "ASSIGNMENT", "QUARTERLY_ASSESSMENT", "SUMMATIVE_2"),
+             ("term", "ASSIGNMENT", "QUARTERLY_ASSESSMENT", "TERM_EXAM"))
     question_texts = (
         "There are 12 red cards and 8 blue cards. How many cards are there altogether?",
         "The rain fell all day. Tom stayed indoors. State where Tom spent the day.",
@@ -642,7 +754,7 @@ def build_plan(conn: Connection, staff_id: str, period_id: int, now: datetime) -
     }
     counts.update(zip(("band_90_100", "band_85_89", "band_80_84", "band_75_79", "band_below_75"), band_counts))
     counts.update(zip(("weekday_mon", "weekday_tue", "weekday_wed", "weekday_thu", "weekday_fri", "weekday_sat", "weekday_sun"), bins))
-    return Plan(rows, counts, grades, prefix, fingerprint, staff_id, period_id, scenarios, skipped)
+    return Plan(rows, counts, grades, prefix, fingerprint, staff_id, period_id, scenarios, skipped, class_id)
 
 
 def _resolved(values: Mapping, ids: Mapping[str, object]) -> dict | None:
@@ -705,14 +817,19 @@ def inspect_plan(conn: Connection, plan: Plan) -> tuple[dict[str, object], Count
     return ids, existing, missing
 
 
-def seed_connection(conn: Connection, staff_id: str | None, period_id: int | None, now: datetime, *, apply: bool):
+def seed_connection(conn: Connection, staff_id: str | None, period_id: int | None, now: datetime,
+                    *, apply: bool, class_id: int | None = None):
     """Shared SQLite-testable core; CLI connection/target guards cannot be bypassed."""
+    validate_class_filter(class_id)
     if now.tzinfo is None or (period_id is not None and period_id <= 0) or staff_id == "":
         raise SeedError("invalid_seed_scope")
-    staff_id, period_id = discover_scope(conn, staff_id, period_id, now)
+    with failure_stage("discover_scope"):
+        staff_id, period_id = discover_scope(conn, staff_id, period_id, now, class_id=class_id)
     try:
-        plan = build_plan(conn, staff_id, period_id, now)
-        ids, existing, missing = inspect_plan(conn, plan)  # ALL checks before first INSERT.
+        with failure_stage("build_plan"):
+            plan = build_plan(conn, staff_id, period_id, now, class_id=class_id)
+        with failure_stage("inspect_plan"):
+            ids, existing, missing = inspect_plan(conn, plan)  # ALL checks before first INSERT.
     except SeedError as error:
         # Never echo unverified explicit arguments; these other refusals happen
         # only after build_plan verified both existing teacher and period IDs.
@@ -723,24 +840,27 @@ def seed_connection(conn: Connection, staff_id: str | None, period_id: int | Non
         for row in plan.rows:
             if row.key in ids:
                 continue
-            table = TABLES[row.table]
-            values = _resolved(row.values, ids)
-            if values is None:
-                raise SeedError("invalid_seed_dependency")
-            result = conn.execute(insert(table).values(**values))
-            ids[row.key] = result.inserted_primary_key[0]
+            with failure_stage(f"insert:{row.table}"):
+                table = TABLES[row.table]
+                values = _resolved(row.values, ids)
+                if values is None:
+                    raise SeedError("invalid_seed_dependency")
+                result = conn.execute(insert(table).values(**values))
+                ids[row.key] = result.inserted_primary_key[0]
     return plan, existing, missing
 
 
-def print_chosen_ids(staff_id: str, period_id: int) -> None:
+def print_chosen_ids(staff_id: str, period_id: int, class_id: int | None = None) -> None:
     # JSON-escape the staff ID: an ID may not inject lines into count-only output.
     print("Chosen IDs")
     print("teacher_staff_id " + json.dumps(staff_id, ensure_ascii=True))
     print(f"academic_period_id {period_id}")
+    if class_id is not None:
+        print(f"class_id {class_id}")
 
 
 def print_counts(plan: Plan, existing: Counter, additions: Counter, *, apply: bool) -> None:
-    print_chosen_ids(plan.staff_id, plan.period_id)
+    print_chosen_ids(plan.staff_id, plan.period_id, plan.class_id)
     print("Category Existing " + ("Inserted" if apply else "Would_insert") + " Conflicts")
     for name in sorted(TABLES):
         print(f"{name} {existing[name]} {additions[name]} 0")
@@ -791,25 +911,36 @@ def main(argv=None, *, environ=None) -> int:
         parser = SafeParser(description="Count-only, INSERT-only local preview dashboard fixture")
         parser.add_argument("--teacher-staff-id")
         parser.add_argument("--academic-period-id", type=int)
+        parser.add_argument("--class-id", type=int,
+                            help="Limit activity to this teacher's assigned subjects in one active class.")
         mode = parser.add_mutually_exclusive_group(required=True)
         mode.add_argument("--dry-run", action="store_true")
         mode.add_argument("--apply", action="store_true")
         args = parser.parse_args(argv)
-        engine = guarded_engine(os.environ if environ is None else environ)
-        with engine.connect() as conn:
-            guard = install_statement_guard(conn, dry_run=not args.apply)
+        validate_class_filter(args.class_id)
+        with failure_stage("engine"):
+            engine = guarded_engine(os.environ if environ is None else environ)
+        with failure_stage("connect"), engine.connect() as conn:
+            with failure_stage("statement_guard"):
+                guard = install_statement_guard(conn, dry_run=not args.apply)
             try:
-                with conn.begin():
+                with failure_stage("transaction"), conn.begin():
                     if not args.apply:
-                        conn.execute(text("SET TRANSACTION READ ONLY"))
-                    check_database(conn)
+                        with failure_stage("read_only"):
+                            conn.execute(text("SET TRANSACTION READ ONLY"))
+                    with failure_stage("database_check"):
+                        check_database(conn)
                     if args.apply:
-                        conn.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": LOCK_ID})
-                    result = seed_connection(conn, args.teacher_staff_id, args.academic_period_id,
-                                             datetime.now(timezone.utc), apply=args.apply)
+                        with failure_stage("advisory_lock"):
+                            conn.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": LOCK_ID})
+                    with failure_stage("seed"):
+                        result = seed_connection(conn, args.teacher_staff_id, args.academic_period_id,
+                                                 datetime.now(timezone.utc), apply=args.apply, class_id=args.class_id)
             finally:
-                event.remove(conn, "before_cursor_execute", guard)
-        print_counts(*result, apply=args.apply)
+                with failure_stage("guard_cleanup"):
+                    event.remove(conn, "before_cursor_execute", guard)
+        with failure_stage("output"):
+            print_counts(*result, apply=args.apply)
         return 0
     except SeedError as error:
         print_refusal(error)
@@ -817,8 +948,9 @@ def main(argv=None, *, environ=None) -> int:
     except KeyboardInterrupt:
         print_refusal(SeedError("cancelled"))
         return 2
-    except Exception:
+    except Exception as error:
         # Deliberately do not expose exception text, SQL, URL, or traceback.
+        print_failure_diagnostics(error)
         print_refusal(SeedError("preview_seed_failed"))
         return 2
     finally:
