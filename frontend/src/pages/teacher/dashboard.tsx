@@ -13,7 +13,6 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { routes } from "@/../routes";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
-import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 import {
   getTeacherDashboardHealth,
   type TeacherDashboardHealthResponse,
@@ -107,14 +106,6 @@ const defaultStudentsNeedingSupport = [
   },
 ];
 
-const defaultTopicMastery = [
-  { topic: "Pang-uri", rate: 91, subject_id: 1, subject_name: "Filipino 9" },
-  { topic: "Fractions", rate: 88, subject_id: 2, subject_name: "Mathematics 9" },
-  { topic: "Cells", rate: 80, subject_id: 3, subject_name: "Science 9" },
-  { topic: "Geometry", rate: 64, subject_id: 2, subject_name: "Mathematics 9" },
-  { topic: "Essay writing", rate: 59, subject_id: 1, subject_name: "Filipino 9" },
-];
-
 const weekdayLabels = ["M", "T", "W", "Th", "F", "S"];
 const trendAxisRange = [50, 100];
 
@@ -164,15 +155,14 @@ function formatDeadline(dueDate: string | null): string {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { selectedPeriodId, isLoading: isPeriodLoading } = useAcademicPeriod();
-  const { classes: loads } = useTeacherClasses({ includeAdvisory: false });
 
   const [data, setData] = useState<TeacherDashboardHealthResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const requestedPeriodId = useRef(selectedPeriodId);
 
-  // Subject filter state for Topic Mastery
-  const [subjectFilter, setSubjectFilter] = useState<string>("1");
+  // Only real selected-period subjects can become a lesson filter.
+  const [subjectFilter, setSubjectFilter] = useState<string>("");
 
   // Filter state for the trend chart
   const [selectedFilterKey, setSelectedFilterKey] = useState<string>("");
@@ -189,6 +179,7 @@ export default function Dashboard() {
       if (requestedPeriodId.current !== selectedPeriodId) {
         requestedPeriodId.current = selectedPeriodId;
         setData(null);
+        setSubjectFilter("");
         if (selectedFilterKey) {
           setSelectedFilterKey("");
           return;
@@ -361,43 +352,21 @@ export default function Dashboard() {
     });
   }, [data, isLoading, isPeriodLoading, error]);
 
-  // Derive unique subjects from teacher's loads / available filters
-  const subjects = useMemo(() => {
-    if (loads && loads.length > 0) {
-      return Array.from(
-        new Map(
-          loads.map((load) => [
-            load.subject_id,
-            { id: load.subject_id, name: load.subject_name },
-          ]),
-        ).values(),
-      ).sort((a, b) => a.name.localeCompare(b.name));
-    }
-    if (data?.trend_chart?.available_filters?.length) {
-      const map = new Map<number, { id: number; name: string }>();
-      data.trend_chart.available_filters.forEach((f) => {
-        if (f.subject_id && f.subject_name) {
-          map.set(f.subject_id, { id: f.subject_id, name: f.subject_name });
-        }
-      });
-      return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-    }
-    return [
-      { id: 1, name: "Filipino 9" },
-      { id: 2, name: "Mathematics 9" },
-      { id: 3, name: "Science 9" },
-    ];
-  }, [loads, data]);
+  const lessonPerformance = isLoading || isPeriodLoading || error ||
+    (selectedPeriodId != null && data?.term_info.period_id !== selectedPeriodId)
+    ? undefined : data?.details?.lesson_performance;
+  const subjects = useMemo(() => lessonPerformance?.subjects ?? [], [lessonPerformance]);
+  const lessonSubject = subjects.find((subject) => String(subject.subject_id) === subjectFilter) ?? subjects[0];
+  const lessonClassIds = [...new Set(lessonSubject?.class_ids.filter(isPositiveId) ?? [])];
+  const lessonClassId = lessonClassIds.length === 1 ? lessonClassIds[0] : undefined;
 
-  // Keep subjectFilter synced to first valid subject
   useEffect(() => {
-    if (
-      subjects.length > 0 &&
-      (!subjectFilter || !subjects.some((s) => String(s.id) === subjectFilter))
-    ) {
-      setSubjectFilter(String(subjects[0].id));
-    }
-  }, [subjects, subjectFilter]);
+    // A trend-only refetch hides the card but must not reset its independent
+    // subject choice. Period changes explicitly reset it in fetchDashboard.
+    if (!lessonPerformance) return;
+    if (!subjects.some((subject) => String(subject.subject_id) === subjectFilter))
+      setSubjectFilter(subjects.length ? String(subjects[0].subject_id) : "");
+  }, [subjects, subjectFilter, lessonPerformance]);
 
   const studentsSupport =
     data?.details?.students_needing_support || defaultStudentsNeedingSupport;
@@ -406,22 +375,6 @@ export default function Dashboard() {
   const topPerformers = gradeDetails ? visibleGradeData?.top_performers ?? [] : [];
   const dueWeek = data?.action_queue?.upcoming_deadlines ?? [];
   const trendPoints = isLoading || isPeriodLoading || error ? [] : data?.trend_chart.points ?? [];
-  const rawTopicMastery = data?.details?.topic_mastery || defaultTopicMastery;
-  const topicMastery = useMemo(() => {
-    if (subjectFilter === "all") return rawTopicMastery;
-    return rawTopicMastery.filter((item: any) => {
-      if (item.subject_id !== undefined) {
-        return String(item.subject_id) === subjectFilter;
-      }
-      if (item.subject_name) {
-        const activeSub = subjects.find((s) => String(s.id) === subjectFilter);
-        return activeSub
-          ? item.subject_name.toLowerCase().includes(activeSub.name.toLowerCase())
-          : true;
-      }
-      return true;
-    });
-  }, [rawTopicMastery, subjectFilter, subjects]);
   const visiblePhaseTwo = isLoading || isPeriodLoading || error ? undefined : data?.phase_two;
   const visibleEngagement = isLoading || isPeriodLoading || error ? undefined : data?.engagement;
   const reviewWarnings = visibleEngagement?.warnings.filter((warning) => warning.code === "ambiguous_submission_attempts") ?? [];
@@ -795,12 +748,12 @@ export default function Dashboard() {
                   </Card>
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    {/* Topic mastery */}
+                    {/* Scored quiz lesson performance */}
                     <Card className="flex flex-col p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0 flex flex-col gap-2">
                         <div className="flex flex-row items-center justify-between">
                           <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
-                            Lesson Mastery
+                            Lesson performance
                           </Card.Title>
                           <Tooltip>
                             <TooltipTrigger
@@ -809,13 +762,11 @@ export default function Dashboard() {
                                   variant="secondary"
                                   size="sm"
                                   autoIcon={false}
+                                  aria-label="View lesson subject"
+                                  disabled={!isPositiveId(lessonSubject?.subject_id) || !isPositiveId(lessonClassId)}
                                   onClick={() => {
-                                    const activeSubjectId = Number(subjectFilter);
-                                    const activeClassId =
-                                      loads.find((l) => String(l.subject_id) === String(activeSubjectId))?.class_id ||
-                                      data?.trend_chart?.available_filters?.find((f) => String(f.subject_id) === String(activeSubjectId))?.class_id;
-                                    if (isPositiveId(activeSubjectId) && isPositiveId(activeClassId)) {
-                                      navigate(`/teacher/classes/${activeClassId}/subjects/${activeSubjectId}`);
+                                    if (isPositiveId(lessonSubject?.subject_id) && isPositiveId(lessonClassId)) {
+                                      navigate(`/teacher/classes/${lessonClassId}/subjects/${lessonSubject.subject_id}`);
                                     }
                                   }}
                                   className="text-foreground shadow-none px-1.5"
@@ -824,50 +775,70 @@ export default function Dashboard() {
                                 </Button>
                               }
                             />
-                            <TooltipContent side="right">View subject</TooltipContent>
+                            <TooltipContent side="right">{isPositiveId(lessonClassId) ? "View subject" : "Choose a class to view this subject."}</TooltipContent>
                           </Tooltip>
                         </div>
 
                         <div className="flex flex-row flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
                           {subjects.map((subject) => (
                             <Button
-                              key={subject.id}
+                              key={subject.subject_id}
                               autoIcon={false}
                               variant={
-                                subjectFilter === String(subject.id)
+                                lessonSubject?.subject_id === subject.subject_id
                                   ? "default"
                                   : "outline"
                               }
                               size="sm"
-                              onClick={() => setSubjectFilter(String(subject.id))}
+                              onClick={() => setSubjectFilter(String(subject.subject_id))}
                               className="shrink-0 border-black shadow-none text-[11px] px-2 py-0.5"
                             >
-                              {subject.name}
+                              {subject.subject_name}
                             </Button>
                           ))}
                         </div>
+                        <Card.Description className="text-[11px] text-muted-foreground">
+                          Scored quiz answers · selected academic period.
+                        </Card.Description>
                       </Card.Header>
 
                       <Card.Content className="flex flex-col justify-between gap-2.5 p-0 justify-between h-full">
                         <div className="flex flex-col gap-2.5 ">
-                          {topicMastery.slice(0, 5).map((item: any) => (
+                          {!lessonSubject?.items.length && (
+                            <Card.Description className="text-[11px] text-muted-foreground">
+                              {emptyMessage(!lessonSubject
+                                ? "No subjects assigned for this academic period."
+                                : lessonSubject.coverage.scored_mapped_response_count === 0
+                                  ? "No scored quiz answers linked to lessons for this subject."
+                                  : `Not enough evidence yet. Each lesson needs scores from at least ${lessonPerformance?.policy.min_learners ?? 3} learners across ${lessonPerformance?.policy.min_questions ?? 3} questions.`)}
+                            </Card.Description>
+                          )}
+                          {lessonSubject?.items.slice(0, 5).map((item) => (
                             <div
-                              key={item.topic}
+                              key={item.lesson_id}
+                              title={`Points earned / points available. ${item.scored_response_count} scored responses · ${item.learner_count} learners · ${item.question_count} questions.`}
                               className="flex items-center justify-between gap-3 text-xs sm:text-sm"
                             >
                               <span className="font-medium text-foreground/90 shrink-0 w-24 truncate">
-                                {item.topic}
+                                {item.title}
                               </span>
-                              <Progress value={item.rate} className="h-2.5 flex-1" />
+                              <Progress value={item.performance_percent} className="h-2.5 flex-1" />
                               <span className="font-semibold text-foreground text-right w-10 shrink-0">
-                                {item.rate}%
+                                {item.performance_percent}%
                               </span>
                             </div>
                           ))}
                         </div>
+                        {lessonSubject && (
+                          <Card.Description className="text-[11px] text-muted-foreground">
+                            {lessonSubject.coverage.scored_mapped_response_count} scored lesson-linked responses. {lessonSubject.coverage.unmapped_response_count} unmapped; {lessonSubject.coverage.ungraded_response_count} awaiting scores.
+                            {lessonSubject.coverage.insufficient_lesson_count > 0 && <span> {lessonSubject.coverage.insufficient_lesson_count} lessons have insufficient evidence.</span>}
+                            {lessonSubject.warnings.map((warning, index) => <span key={`${warning.code}-${index}`}> {warning.message}</span>)}
+                          </Card.Description>
+                        )}
 
                         <Card.Description className="text-[11px] text-muted-foreground">
-                          Lowest topics may need reteaching
+                          Lowest observed lesson scores may help identify topics to review.
                         </Card.Description>
                       </Card.Content>
 

@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TeacherDashboardHealthResponse, TrendChartPoint } from "@/lib/api";
+import type { TeacherDashboardHealthResponse, TeacherDashboardLessonPerformance, TrendChartPoint } from "@/lib/api";
 import Dashboard from "./dashboard";
 
 const mocks = vi.hoisted(() => ({
@@ -87,6 +87,24 @@ function phaseTwoSection(): TeacherDashboardHealthResponse["section_matrix"][num
     student_count: 3, published_classworks: 2, completion_rate_percent: 50, attendance_rate_percent: 50,
     avg_score_percent: null, current_grade: 80.5, passing_rate_percent: 50, available_grade_count: 2, total_grade_count: 3,
     passing_count: 1, passing_threshold: 80.5, current_grade_meets_threshold: true, warnings: [] };
+}
+
+
+function lessonPayload(): TeacherDashboardLessonPerformance {
+  return {
+    policy: { min_learners: 3, min_questions: 3, limit_per_subject: 5 },
+    subjects: [{ subject_id: 25, subject_name: "Actual Subject", class_ids: [53],
+      items: [{ lesson_id: 81, title: "Actual quiz lesson", performance_percent: 68.8,
+        awarded_points: 41.25, possible_points: 60, scored_response_count: 9, learner_count: 3, question_count: 3 }],
+      coverage: { scored_mapped_response_count: 9, unmapped_response_count: 3, ungraded_response_count: 1,
+        invalid_response_count: 0, insufficient_lesson_count: 0, omitted_lesson_count: 0,
+        excluded_manual_assignment_count: 2 }, warnings: [] }],
+  };
+}
+
+
+function lessonResponse(payload = lessonPayload()): TeacherDashboardHealthResponse {
+  return response({ details: { lesson_performance: payload } });
 }
 
 function deferred<T>() {
@@ -298,23 +316,24 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     expect(mocks.navigate).toHaveBeenCalledWith("/teacher/classworks/812");
   });
 
-  it("does not turn retained support or lesson mock IDs into navigation targets", async () => {
+  it("does not turn retained support or removed lesson mock IDs into navigation targets", async () => {
     mocks.load.mockResolvedValue(response());
     render(<Dashboard />);
     await waitFor(() => expect(countFor("Active Classes")).toBe("0"));
     fireEvent.click(screen.getByText("Jose Reyes"));
-    fireEvent.click(within(cardFor("Lesson Mastery")).getAllByRole("button")[0]);
+    fireEvent.click(within(cardFor("Lesson performance")).getByRole("button", { name: "View lesson subject" }));
     expect(mocks.navigate).not.toHaveBeenCalled();
-    expect(screen.getByText("Pang-uri")).toBeTruthy();
+    expect(screen.queryByText("Pang-uri")).toBeNull();
+    expect(within(cardFor("Lesson performance")).getByText("No subjects assigned for this academic period.")).toBeTruthy();
   });
 
-  it("requires both a real grade and class for support navigation and uses an actual load for lessons", async () => {
+  it("requires both a real grade and class for support navigation and an authorized lesson destination", async () => {
     mocks.classes = [{ class_id: 53, subject_id: 25, subject_name: "Actual Subject" }];
     mocks.load.mockResolvedValue(response({ details: { students_needing_support: [
       { name: "Missing grade", class_id: 53, score: 50, section: "Actual Section" },
       { name: "Missing class", grade_level: 8, score: 50, section: "Actual Section" },
       { name: "Actual support", grade_level: 8, class_id: 53, student_id: "s-5", prediction_id: 45, score: 60, section: "Actual Section" },
-    ] } }));
+    ], lesson_performance: lessonPayload() } }));
     render(<Dashboard />);
     await waitFor(() => expect(screen.getByText("Actual support")).toBeTruthy());
     fireEvent.click(screen.getByText("Missing grade"));
@@ -322,7 +341,7 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     expect(mocks.navigate).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText("Actual support"));
     expect(mocks.navigate).toHaveBeenCalledWith("/teacher/predictions/8/53?predictionId=45&studentId=s-5&studentName=Actual+support");
-    fireEvent.click(within(cardFor("Lesson Mastery")).getAllByRole("button")[0]);
+    fireEvent.click(within(cardFor("Lesson performance")).getByRole("button", { name: "View lesson subject" }));
     expect(mocks.navigate).toHaveBeenCalledWith("/teacher/classes/53/subjects/25");
   });
 
@@ -446,7 +465,8 @@ describe("teacher dashboard Phase 2 mocked component behavior", () => {
     // Deferred detail widgets retain their existing behavior, not Phase 2 cards.
     expect(screen.queryByText("Maria Santos")).toBeNull();
     expect(within(cardFor("Top Performers")).getByText("Current-grade details are unavailable.")).toBeTruthy();
-    expect(screen.getByText("Pang-uri")).toBeTruthy();
+    expect(screen.queryByText("Pang-uri")).toBeNull();
+    expect(screen.getByText("No subjects assigned for this academic period.")).toBeTruthy();
   });
 
   it("uses the real backend cards without losing excluded counts or threshold warnings", async () => {
@@ -965,5 +985,121 @@ describe("teacher dashboard Phase 4 engagement rendering", () => {
     expect(section.textContent).toContain("Passing configuration is unavailable.");
     expect(within(section).getByText("80.5", { exact: true })).toBeTruthy();
     expect(section.textContent).toContain("Task Completion—");
+  });
+});
+
+
+describe("teacher dashboard Phase 5 mocked component behavior", () => {
+  it("shows exact labels, pooled percentage and coverage without demo topics", async () => {
+    mocks.load.mockResolvedValue(lessonResponse());
+    render(<Dashboard />);
+    await waitFor(() => expect(screen.getByText("Actual quiz lesson")).toBeTruthy());
+    const card = within(cardFor("Lesson performance"));
+    expect(card.getByText("Scored quiz answers · selected academic period.")).toBeTruthy();
+    expect(card.getByText("68.8%")).toBeTruthy();
+    expect(card.getByText("9 scored lesson-linked responses. 3 unmapped; 1 awaiting scores.")).toBeTruthy();
+    expect(card.getByText("Lowest observed lesson scores may help identify topics to review.")).toBeTruthy();
+    expect(card.getByTitle("Points earned / points available. 9 scored responses · 3 learners · 3 questions.")).toBeTruthy();
+    for (const demo of ["Pang-uri", "Fractions", "Cells", "Geometry", "Essay writing", "Filipino 9", "Mathematics 9", "Science 9"])
+      expect(card.queryByText(demo)).toBeNull();
+  });
+
+  it("has loading/error states and never invents subjects from stale load data", async () => {
+    const request = deferred<TeacherDashboardHealthResponse>();
+    mocks.classes = [{ class_id: 999, subject_id: 999, subject_name: "Unauthorized stale subject" }];
+    mocks.load.mockReturnValue(request.promise);
+    render(<Dashboard />);
+    expect(within(cardFor("Lesson performance")).getByText("Loading dashboard data...")).toBeTruthy();
+    expect(screen.queryByText("Unauthorized stale subject")).toBeNull();
+    await act(async () => request.reject(new Error("Cannot load lesson data")));
+    expect(within(cardFor("Lesson performance")).getByText("Dashboard data is unavailable.")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Cannot load lesson data");
+    expect(screen.getByRole("button", { name: "View lesson subject" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it.each(["empty", "unmapped", "insufficient"])("shows the exact %s state without zero-performance placeholders", async (state) => {
+    const payload = lessonPayload();
+    payload.subjects[0].items = [];
+    if (state === "empty") payload.subjects = [];
+    else if (state === "unmapped") payload.subjects[0].coverage.scored_mapped_response_count = 0;
+    else payload.subjects[0].coverage.insufficient_lesson_count = 1;
+    mocks.load.mockResolvedValue(lessonResponse(payload));
+    render(<Dashboard />);
+    const message = state === "empty" ? "No subjects assigned for this academic period." :
+      state === "unmapped" ? "No scored quiz answers linked to lessons for this subject." :
+      "Not enough evidence yet. Each lesson needs scores from at least 3 learners across 3 questions.";
+    await waitFor(() => expect(within(cardFor("Lesson performance")).getByText(message)).toBeTruthy());
+    expect(within(cardFor("Lesson performance")).queryByRole("progressbar")).toBeNull();
+  });
+
+  it("switches only by authorized IDs, not name matching, and keeps no-evidence subjects", async () => {
+    const payload = lessonPayload();
+    payload.subjects.push({ ...payload.subjects[0], subject_id: 26, subject_name: "Actual Subject extended",
+      class_ids: [54], items: [], coverage: { ...payload.subjects[0].coverage, scored_mapped_response_count: 0 } });
+    mocks.load.mockResolvedValue(lessonResponse(payload));
+    render(<Dashboard />);
+    await waitFor(() => expect(screen.getByText("Actual quiz lesson")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Actual Subject extended" }));
+    expect(screen.queryByText("Actual quiz lesson")).toBeNull();
+    expect(screen.getByText("No scored quiz answers linked to lessons for this subject.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "View lesson subject" }));
+    expect(mocks.navigate).toHaveBeenCalledWith("/teacher/classes/54/subjects/26");
+    expect(mocks.load).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([{ classIds: [] }, { classIds: [53, 54] }, { classIds: [0] }])("disables the arrow for non-unambiguous destination $classIds", async ({ classIds }) => {
+    const payload = lessonPayload();
+    payload.subjects[0].class_ids = classIds;
+    mocks.load.mockResolvedValue(lessonResponse(payload));
+    render(<Dashboard />);
+    await waitFor(() => expect(screen.getByText("Actual quiz lesson")).toBeTruthy());
+    const arrow = screen.getByRole("button", { name: "View lesson subject" });
+    expect(arrow.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(arrow);
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it("resets subjects on period change and ignores a stale lesson response", async () => {
+    const old = deferred<TeacherDashboardHealthResponse>();
+    const current = deferred<TeacherDashboardHealthResponse>();
+    mocks.load.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise);
+    const page = render(<Dashboard />);
+    mocks.period.selectedPeriodId = 4;
+    page.rerender(<Dashboard />);
+    const payload = lessonPayload();
+    payload.subjects[0].subject_id = 26;
+    payload.subjects[0].subject_name = "New period subject";
+    const result = lessonResponse(payload);
+    result.term_info.period_id = 4;
+    await act(async () => current.resolve(result));
+    expect(screen.getByRole("button", { name: "New period subject" })).toBeTruthy();
+    await act(async () => old.resolve(lessonResponse()));
+    expect(screen.queryByRole("button", { name: "Actual Subject" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "View lesson subject" }));
+    expect(mocks.navigate).toHaveBeenCalledWith("/teacher/classes/53/subjects/26");
+    expect(mocks.load.mock.calls.map(([args]) => args.academic_period_id)).toEqual([3, 4]);
+  });
+
+  it("preserves the independent lesson subject through a trend-only refetch", async () => {
+    const payload = lessonPayload();
+    payload.subjects.push({ ...payload.subjects[0], subject_id: 26, subject_name: "Second subject", class_ids: [54],
+      items: [{ ...payload.subjects[0].items[0], lesson_id: 82, title: "Second lesson" }] });
+    const result = lessonResponse(payload);
+    result.trend_chart.available_filters = [
+      { class_id: 53, subject_id: 25, section_name: "First class", subject_name: "Actual Subject" },
+      { class_id: 54, subject_id: 26, section_name: "Second class", subject_name: "Second subject" },
+    ];
+    const next = deferred<TeacherDashboardHealthResponse>();
+    mocks.load.mockResolvedValueOnce(result).mockResolvedValueOnce(result).mockReturnValueOnce(next.promise);
+    render(<Dashboard />);
+    await waitFor(() => expect(mocks.load).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByText("Actual quiz lesson")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Second subject" }));
+    expect(screen.getByText("Second lesson")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Trend section"), { target: { value: "54-26" } });
+    await waitFor(() => expect(mocks.load).toHaveBeenCalledTimes(3));
+    await act(async () => next.resolve(result));
+    expect(screen.getByText("Second lesson")).toBeTruthy();
+    expect(screen.queryByText("Actual quiz lesson")).toBeNull();
   });
 });

@@ -23,6 +23,11 @@ from app.schemas.TeacherDashboard import (
     DashboardEngagementSummary,
     DashboardGradeBand,
     DashboardGradeDistribution,
+    DashboardLessonCoverage,
+    DashboardLessonPerformanceItem,
+    DashboardLessonPerformanceSummary,
+    DashboardLessonPolicy,
+    DashboardLessonSubjectSummary,
     DashboardPerformerItem,
     DashboardPerformerSummary,
     DashboardScopeLabel,
@@ -39,6 +44,11 @@ from app.schemas.TeacherDashboard import (
 from app.services.student_record.StudentRecordService import teacher_student_gradebook
 from app.services.classes.ClassQueryService import _student_full_name
 from app.models.people.Student import Student
+from app.models.academic.Lesson import Lesson
+from app.models.quiz.Question import Question
+from app.models.quiz.Quiz import Quiz
+from app.models.quiz.QuizAnswer import QuizAnswer
+from app.models.quiz.QuizQuestion import QuizQuestion
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
 
 if TYPE_CHECKING:
@@ -686,3 +696,202 @@ def dashboard_term_progress(period_start: date, period_end: date, today: date) -
         week_number=min(total_weeks, (elapsed_days + 6) // 7),
         total_weeks=total_weeks,
     )
+
+
+@dataclass(frozen=True)
+class DashboardLessonQuestion:
+    quiz_question_id: int
+    question_id: int
+    classwork_id: int
+    subject_id: int
+    points: object
+    lesson_id: int | None
+    lesson_title: str | None
+    lesson_subject_id: int | None
+
+
+@dataclass(frozen=True)
+class DashboardLessonAttempt:
+    student_id: str
+    classwork_id: int
+    subject_id: int
+
+
+@dataclass(frozen=True)
+class DashboardLessonAnswer:
+    submission_id: int
+    quiz_question_id: int
+    points_awarded: object
+
+
+@dataclass(frozen=True)
+class DashboardLessonEvidence:
+    """Internal read inputs only; learner IDs and answers are never serialized."""
+    subjects: Mapping[int, tuple[str, tuple[int, ...]]]
+    questions: Sequence[DashboardLessonQuestion]
+    attempts: Mapping[int, DashboardLessonAttempt]
+    answers: Sequence[DashboardLessonAnswer]
+    warnings_by_subject: Mapping[int, Sequence[DashboardWarning]]
+    manual_assignment_counts: Mapping[int, int]
+
+
+def read_dashboard_lesson_evidence(
+    db: Session, snapshot: DashboardEngagementSnapshot, *,
+    subjects: Mapping[int, tuple[str, tuple[int, ...]]],
+) -> DashboardLessonEvidence:
+    """At most TWO narrow SELECTs, using already-authorized request inputs.
+
+    The snapshot chose latest completed attempts before scores are read. READY
+    and PUBLISHED are the quiz states the student attempt service accepts.
+    No answer/question text, options, student names or lazy relationships read.
+    """
+    work_subjects = {a.classwork_id: a.classwork.subject_id for a in snapshot.assignments.values()}
+    with db.no_autoflush:
+        rows = db.query(
+            Quiz.classwork_id, QuizQuestion.quiz_question_id, Question.question_id,
+            Question.points, Question.lesson_id, Lesson.title, Lesson.subject_id,
+        ).join(QuizQuestion, QuizQuestion.quiz_id == Quiz.quiz_id).join(
+            Question, Question.question_id == QuizQuestion.question_id,
+        ).outerjoin(Lesson, Lesson.lesson_id == Question.lesson_id).filter(
+            Quiz.classwork_id.in_(work_subjects), Quiz.status.in_(["READY", "PUBLISHED"]),
+        ).all() if work_subjects else []
+        questions = [DashboardLessonQuestion(row.quiz_question_id, row.question_id,
+            row.classwork_id, work_subjects[row.classwork_id], row.points,
+            row.lesson_id, row.title, row.subject_id) for row in rows]
+        quiz_works = {q.classwork_id for q in questions}
+        attempts = {
+            row.submission_id: DashboardLessonAttempt(str(row.student_id),
+                snapshot.assignments[aid].classwork_id, snapshot.assignments[aid].classwork.subject_id)
+            for aid, selected in snapshot.selected_by_assignment.items()
+            if snapshot.assignments[aid].classwork_id in quiz_works
+            for row in selected
+        }
+        answers = [DashboardLessonAnswer(row.submission_id, row.quiz_question_id, row.points_awarded)
+            for row in db.query(QuizAnswer.submission_id, QuizAnswer.quiz_question_id,
+                QuizAnswer.points_awarded).filter(QuizAnswer.submission_id.in_(attempts),
+                    QuizAnswer.quiz_question_id.in_({q.quiz_question_id for q in questions})).all()
+        ] if attempts else []
+    warnings = {sid: [] for sid in subjects}
+    manual_counts = {sid: 0 for sid in subjects}
+    for aid, assignment in snapshot.assignments.items():
+        sid = assignment.classwork.subject_id
+        if sid not in subjects:
+            continue
+        warnings[sid].extend(w for w in snapshot.warnings_by_assignment[aid]
+                            if w.code in {"ambiguous_submission_attempts", "targeted_recipient_outside_active_roster"})
+        if assignment.classwork_id not in quiz_works and assignment.classwork.classwork_type != "QUIZ":
+            manual_counts[sid] += 1
+    return DashboardLessonEvidence(subjects, questions, attempts, answers, warnings, manual_counts)
+
+
+def _lesson_number(value: object) -> Decimal | None:
+    if isinstance(value, bool) or not isinstance(value, (Decimal, int, float)):
+        return None
+    number = Decimal(str(value))
+    return number if number.is_finite() and number >= 0 else None
+
+
+def summarize_dashboard_lesson_performance(
+    evidence: DashboardLessonEvidence, *, min_learners: int = 3,
+    min_questions: int = 3, limit_per_subject: int = 5,
+) -> DashboardLessonPerformanceSummary:
+    """Points-pooled scored responses, sorted BEFORE display rounding.
+
+    Missing mappings take the unmapped bucket; missing scores on mapped items
+    take the ungraded bucket. Neither becomes zero. Only stored numeric zero is
+    zero evidence. No task-total override or coverage assertion is apportioned.
+    """
+    policy = DashboardLessonPolicy(min_learners=min_learners,
+        min_questions=min_questions, limit_per_subject=limit_per_subject)
+    summaries = {
+        sid: DashboardLessonSubjectSummary(subject_id=sid, subject_name=name,
+            class_ids=sorted(set(classes)),
+            coverage=DashboardLessonCoverage(
+                excluded_manual_assignment_count=evidence.manual_assignment_counts.get(sid, 0)),
+            warnings=list(evidence.warnings_by_subject.get(sid, ())))
+        for sid, (name, classes) in evidence.subjects.items()
+    }
+    by_work: dict[int, list[DashboardLessonQuestion]] = {}
+    for question in evidence.questions:
+        by_work.setdefault(question.classwork_id, []).append(question)
+    answers = {}
+    duplicate_answers = set()
+    question_lookup = {q.quiz_question_id: q for q in evidence.questions}
+    for answer in evidence.answers:
+        attempt = evidence.attempts.get(answer.submission_id)
+        question = question_lookup.get(answer.quiz_question_id)
+        if attempt is None:
+            continue
+        if question is None or question.classwork_id != attempt.classwork_id:
+            if attempt.subject_id in summaries:
+                summaries[attempt.subject_id].coverage.invalid_response_count += 1
+            continue
+        key = (answer.submission_id, answer.quiz_question_id)
+        if key in answers:
+            duplicate_answers.add(key)
+        answers[key] = answer.points_awarded
+    lessons = {}
+    for submission_id, attempt in evidence.attempts.items():
+        summary = summaries.get(attempt.subject_id)
+        if summary is None:
+            continue
+        for question in by_work.get(attempt.classwork_id, ()):
+            coverage = summary.coverage
+            key = (submission_id, question.quiz_question_id)
+            if question.subject_id != attempt.subject_id or key in duplicate_answers:
+                coverage.invalid_response_count += 1
+                continue
+            if question.lesson_id is None or question.lesson_subject_id is None:
+                coverage.unmapped_response_count += 1
+                continue
+            if question.lesson_subject_id != attempt.subject_id:
+                coverage.invalid_response_count += 1
+                continue
+            maximum = _lesson_number(question.points)
+            if maximum is None or maximum == 0:
+                coverage.invalid_response_count += 1
+                continue
+            lesson_key = (attempt.subject_id, question.lesson_id)
+            lesson = lessons.setdefault(lesson_key, {
+                "title": question.lesson_title or "Lesson title unavailable",
+                "earned": Decimal(0), "possible": Decimal(0), "responses": 0,
+                "learners": set(), "questions": set(),
+            })
+            raw_score = answers.get(key)
+            if raw_score is None:
+                coverage.ungraded_response_count += 1
+                continue
+            earned = _lesson_number(raw_score)
+            if earned is None or earned > maximum:
+                coverage.invalid_response_count += 1
+                continue
+            coverage.scored_mapped_response_count += 1
+            lesson["earned"] += earned
+            lesson["possible"] += maximum
+            lesson["responses"] += 1
+            lesson["learners"].add(attempt.student_id)
+            lesson["questions"].add(question.question_id)
+    ranked = {sid: [] for sid in summaries}
+    for (sid, lesson_id), lesson in lessons.items():
+        if len(lesson["learners"]) < min_learners or len(lesson["questions"]) < min_questions:
+            summaries[sid].coverage.insufficient_lesson_count += 1
+            continue
+        percent = lesson["earned"] / lesson["possible"] * Decimal(100)
+        item = DashboardLessonPerformanceItem(lesson_id=lesson_id, title=lesson["title"],
+            performance_percent=float(round(percent, 1)),
+            awarded_points=float(lesson["earned"]), possible_points=float(lesson["possible"]),
+            scored_response_count=lesson["responses"], learner_count=len(lesson["learners"]),
+            question_count=len(lesson["questions"]))
+        ranked[sid].append((percent, normalize("NFC", item.title).casefold(), lesson_id, item))
+    for sid, summary in summaries.items():
+        rows = sorted(ranked[sid], key=lambda row: row[:3])
+        summary.items = [row[3] for row in rows[:limit_per_subject]]
+        summary.coverage.omitted_lesson_count = max(0, len(rows) - limit_per_subject)
+        if summary.coverage.invalid_response_count:
+            summary.warnings.append(DashboardWarning(code="invalid_lesson_evidence",
+                message="Lesson performance excludes invalid or mismatched quiz evidence.", subject_id=sid))
+        if any(item.title == "Lesson title unavailable" for item in summary.items):
+            summary.warnings.append(DashboardWarning(code="missing_lesson_title",
+                message="A lesson title is unavailable.", subject_id=sid))
+    return DashboardLessonPerformanceSummary(policy=policy, subjects=sorted(summaries.values(),
+        key=lambda summary: (normalize("NFC", summary.subject_name).casefold(), summary.subject_id)))
