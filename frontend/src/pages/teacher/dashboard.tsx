@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Calendar, AlertCircle, ArrowUpRight } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
@@ -18,7 +18,6 @@ import {
   getTeacherDashboardHealth,
   type TeacherDashboardHealthResponse,
   type OverviewCardData,
-  type TrendChartPoint,
 } from "@/lib/api";
 import {
   LineChart,
@@ -31,58 +30,47 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 
-// Default fallback data matching mockup
+// Dashboard metrics stay unavailable until loaded; later-phase detail widgets retain their mockups.
 const defaultTeacherCards: OverviewCardData[] = [
   {
     title: "Active Classes",
-    count: "3",
-    stat: "3 sections",
-    statDescription: "in Term 1",
+    count: "—",
+    statDescription: "in the selected academic period",
   },
   {
     title: "Overall Completion",
-    count: "87%",
-    stat: "31 of 36 submitted",
+    count: "—",
     statDescription: "across all published work",
   },
   {
     title: "Ungraded Queue",
-    count: "14",
-    stat: "14 submissions",
+    count: "—",
     statDescription: "pending teacher grading",
   },
   {
-    title: "Class Average",
-    count: "82%",
-    stat: "▲ 3 pts",
-    statDescription: "vs. last grading period",
-    trend: "up",
+    title: "Current grade",
+    count: "—",
+    statDescription: "Weighted and transmuted, as in the class record.",
   },
   {
     title: "Passing Rate",
-    count: "89%",
-    stat: "32 of 36 learners",
-    statDescription: "at or above 75%",
+    count: "—",
+    statDescription: "Against each subject group's passing grade. Passing grade is set per subject group.",
   },
   {
     title: "Late Submissions",
-    count: "8%",
-    stat: "▲ 2 pts",
-    statDescription: "of work handed in after due date",
-    trend: "down",
+    count: "—",
+    statDescription: "Late submissions, excluding excused submissions.",
   },
   {
     title: "Attendance Today",
-    count: "33 / 36",
-    stat: "2 late · 1 absent",
-    statDescription: "logged for this morning",
+    count: "—",
+    statDescription: "Present + late / recorded entries today.",
   },
   {
     title: "Term Progress",
-    count: "Week 6",
-    stat: "of 10",
-    statDescription: "1 published classwork planned this week",
-    progressValue: 60,
+    count: "—",
+    statDescription: "Calendar progress in the selected academic period.",
   },
 ];
 
@@ -119,33 +107,6 @@ const defaultStudentsNeedingSupport = [
   },
 ];
 
-const defaultTopPerformers = [
-  { name: "Maria Santos", section: "Curie · Science 9", score: 97 },
-  { name: "Liam Tan", section: "Newton · Mathematics 9", score: 95 },
-  { name: "Bea Garcia", section: "Archimedes · Filipino 9", score: 94 },
-];
-
-const defaultDueThisWeek = [
-  {
-    title: "Fractions worksheet",
-    section: "Newton · Mathematics 9",
-    due_label: "Tomorrow",
-    variant: "destructive",
-  },
-  {
-    title: "Lab report: Cells",
-    section: "Curie · Science 9",
-    due_label: "Thu",
-    variant: "warning",
-  },
-  {
-    title: "Sanaysay",
-    section: "Archimedes · Filipino 9",
-    due_label: "Fri",
-    variant: "warning",
-  },
-];
-
 const defaultTopicMastery = [
   { topic: "Pang-uri", rate: 91, subject_id: 1, subject_name: "Filipino 9" },
   { topic: "Fractions", rate: 88, subject_id: 2, subject_name: "Mathematics 9" },
@@ -154,89 +115,8 @@ const defaultTopicMastery = [
   { topic: "Essay writing", rate: 59, subject_id: 1, subject_name: "Filipino 9" },
 ];
 
-const defaultSubmissionsWeekday = [
-  { day: "M", count: 18 },
-  { day: "T", count: 22 },
-  { day: "W", count: 14 },
-  { day: "Th", count: 30 },
-  { day: "F", count: 41, isHighlight: true },
-  { day: "S", count: 9 },
-];
-
-const defaultTrendChartPoints: TrendChartPoint[] = [
-  {
-    classwork_id: 1,
-    title: "Classwork 1",
-    category: "Classwork",
-    due_date: null,
-    label: "CW 1",
-    short_label: "CW 1",
-    avg_score_percent: 70,
-    completion_rate_percent: 60,
-    submitted_count: 22,
-    total_enrolled: 36,
-  },
-  {
-    classwork_id: 2,
-    title: "Classwork 2",
-    category: "Classwork",
-    due_date: null,
-    label: "CW 2",
-    short_label: "CW 2",
-    avg_score_percent: 72,
-    completion_rate_percent: 68,
-    submitted_count: 24,
-    total_enrolled: 36,
-  },
-  {
-    classwork_id: 3,
-    title: "Classwork 3",
-    category: "Classwork",
-    due_date: null,
-    label: "CW 3",
-    short_label: "CW 3",
-    avg_score_percent: 72,
-    completion_rate_percent: 74,
-    submitted_count: 27,
-    total_enrolled: 36,
-  },
-  {
-    classwork_id: 4,
-    title: "Classwork 4",
-    category: "Classwork",
-    due_date: null,
-    label: "CW 4",
-    short_label: "CW 4",
-    avg_score_percent: 76,
-    completion_rate_percent: 78,
-    submitted_count: 28,
-    total_enrolled: 36,
-  },
-  {
-    classwork_id: 5,
-    title: "Classwork 5",
-    category: "Classwork",
-    due_date: null,
-    label: "CW 5",
-    short_label: "CW 5",
-    avg_score_percent: 78,
-    completion_rate_percent: 82,
-    submitted_count: 30,
-    total_enrolled: 36,
-  },
-  {
-    classwork_id: 6,
-    title: "Classwork 6",
-    category: "Classwork",
-    due_date: null,
-    label: "CW 6",
-    short_label: "CW 6",
-    avg_score_percent: 80,
-    completion_rate_percent: 85,
-    submitted_count: 31,
-    total_enrolled: 36,
-  },
-];
+const weekdayLabels = ["M", "T", "W", "Th", "F", "S"];
+const trendAxisRange = [50, 100];
 
 const defaultHardestQuestions = [
   {
@@ -259,52 +139,37 @@ const defaultHardestQuestions = [
   },
 ];
 
-const defaultReviewSubmissions = [
-  {
-    classwork_id: 1,
-    title: "Panganganak ng Pang-uri",
-    section: "Archimedes · Filipino 9",
-    badge: "6 new",
-    variant: "destructive",
-  },
-  {
-    classwork_id: 2,
-    title: "Fractions Quiz",
-    section: "Newton · Mathematics 9",
-    badge: "5 new",
-    variant: "destructive",
-  },
-  {
-    classwork_id: 3,
-    title: "Lab Report: Cells",
-    section: "Curie · Science 9",
-    badge: "3 new",
-    variant: "warning",
-  },
-];
+function isPositiveId(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
 
-const defaultGradeDistribution = [
-  { band: "<60", count: 2, variant: "destructive" },
-  { band: "60-69", count: 4, variant: "warning" },
-  { band: "70-79", count: 9, variant: "warning" },
-  { band: "80-89", count: 13, variant: "success" },
-  { band: "90-100", count: 8, variant: "success" },
-];
+function formatPercent(value: number | null | undefined): string {
+  return value != null && Number.isFinite(value) ? `${value}%` : "—";
+}
 
-const defaultAttendanceBySection = [
-  { section: "Archimedes", rate: 94 },
-  { section: "Newton", rate: 90 },
-  { section: "Curie", rate: 97 },
-];
+function formatGrade(value: number | null | undefined): string {
+  return value != null && Number.isFinite(value) ? String(value) : "—";
+}
+
+function formatDeadline(dueDate: string | null): string {
+  if (!dueDate) return "—";
+  const date = new Date(dueDate);
+  if (Number.isNaN(date.getTime())) return "—";
+  const dateKey = (value: Date) => value.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+  if (dateKey(date) === dateKey(new Date())) return "Today";
+  if (dateKey(date) === dateKey(new Date(Date.now() + 24 * 60 * 60 * 1000))) return "Tomorrow";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "Asia/Manila" });
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { selectedPeriodId } = useAcademicPeriod();
+  const { selectedPeriodId, isLoading: isPeriodLoading } = useAcademicPeriod();
   const { classes: loads } = useTeacherClasses({ includeAdvisory: false });
 
   const [data, setData] = useState<TeacherDashboardHealthResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const requestedPeriodId = useRef(selectedPeriodId);
 
   // Subject filter state for Topic Mastery
   const [subjectFilter, setSubjectFilter] = useState<string>("1");
@@ -321,13 +186,22 @@ export default function Dashboard() {
     async function fetchDashboard() {
       setIsLoading(true);
       setError(null);
+      if (requestedPeriodId.current !== selectedPeriodId) {
+        requestedPeriodId.current = selectedPeriodId;
+        setData(null);
+        if (selectedFilterKey) {
+          setSelectedFilterKey("");
+          return;
+        }
+      }
+      if (isPeriodLoading) return;
       try {
         let classId: number | undefined;
         let subjectId: number | undefined;
 
         if (selectedFilterKey) {
           const [cId, sId] = selectedFilterKey.split("-").map(Number);
-          if (!isNaN(cId) && !isNaN(sId)) {
+          if (isPositiveId(cId) && isPositiveId(sId)) {
             classId = cId;
             subjectId = sId;
           }
@@ -367,73 +241,125 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [selectedPeriodId, selectedFilterKey]);
+  }, [selectedPeriodId, selectedFilterKey, isPeriodLoading]);
 
   // Derived 8 Stat Cards
   const statCards = useMemo<OverviewCardData[]>(() => {
-    if (!data) return defaultTeacherCards;
+    if (!data || isLoading || isPeriodLoading || error) return defaultTeacherCards;
 
-    const allowedTitles = new Set(defaultTeacherCards.map((c) => c.title));
-
-    if (data.cards && data.cards.length > 0) {
-      const filtered = data.cards.filter((c) => allowedTitles.has(c.title));
-      if (filtered.length > 0) return filtered;
-    }
-
-    return [
+    const phaseOneCards: OverviewCardData[] = [
       {
         title: "Active Classes",
-        count: String(data.kpis?.active_classes || 3),
-        stat: `${data.kpis?.active_classes || 3} sections`,
-        statDescription: `in ${data.term_info?.period_name || "Term 1"}`,
+        count: data.kpis?.active_classes != null ? String(data.kpis.active_classes) : "—",
+        stat: data.kpis?.active_classes != null ? `${data.kpis.active_classes} sections` : undefined,
+        statDescription: data.term_info?.period_name ? `in ${data.term_info.period_name}` : "in the selected academic period",
       },
       {
         title: "Overall Completion",
-        count: `${Math.round(data.kpis?.overall_completion_rate || 87)}%`,
-        stat: "31 of 36 submitted",
+        count: data.kpis?.overall_completion_rate != null ? formatPercent(Math.round(data.kpis.overall_completion_rate)) : "—",
         statDescription: "across all published work",
       },
       {
         title: "Ungraded Queue",
-        count: String(data.kpis?.ungraded_count || 14),
-        stat: `${data.kpis?.ungraded_count || 14} submissions`,
+        count: data.kpis?.ungraded_count != null ? String(data.kpis.ungraded_count) : "—",
+        stat: data.kpis?.ungraded_count != null ? `${data.kpis.ungraded_count} submissions` : undefined,
         statDescription: "pending teacher grading",
       },
+    ];
+    const phaseTwo = data.phase_two;
+    const grades = phaseTwo?.grades;
+    const late = phaseTwo?.late_submissions;
+    const attendance = phaseTwo?.attendance_today;
+    const progress = phaseTwo?.term_progress;
+    const gradeCoverage = grades
+      ? `${grades.available_grade_count} of ${grades.total_grade_count} student-subject grades available.`
+      : undefined;
+    const phaseTwoCards: OverviewCardData[] = [
       {
-        title: "Class Average",
-        count: "82%",
-        stat: "▲ 3 pts",
-        statDescription: "vs. last grading period",
-        trend: "up",
+        title: "Current grade",
+        count: formatGrade(grades?.current_grade),
+        stat: gradeCoverage,
+        statDescription: grades?.available_grade_count === 0
+          ? "No current grades available."
+          : "Weighted and transmuted, as in the class record.",
       },
       {
         title: "Passing Rate",
-        count: "89%",
-        stat: "32 of 36 learners",
-        statDescription: "at or above 75%",
+        count: formatPercent(grades?.passing_rate_percent),
+        stat: grades?.passing_count != null
+          ? `${grades.passing_count} of ${grades.available_grade_count} available grades pass.`
+          : gradeCoverage,
+        statDescription: grades?.warnings.length
+          ? grades.warnings.map((warning) => warning.message).join(" ")
+          : "Passing grade is set per subject group.",
       },
       {
         title: "Late Submissions",
-        count: "8%",
-        stat: "▲ 2 pts",
-        statDescription: "of work handed in after due date",
-        trend: "down",
+        count: formatPercent(late?.late_rate_percent),
+        stat: late
+          ? `${late.late_count} of ${late.eligible_count} assessed submissions are late.`
+          : undefined,
+        statDescription: late
+          ? `${late.excused_excluded_count} excused ${late.excused_excluded_count === 1 ? "submission" : "submissions"} excluded. ${late.warnings.map((warning) => warning.message).join(" ")}`.trim()
+          : undefined,
       },
       {
         title: "Attendance Today",
-        count: "33 / 36",
-        stat: "2 late · 1 absent",
-        statDescription: "logged for this morning",
+        count: attendance?.record_count
+          ? `${attendance.present_count + attendance.late_count} / ${attendance.record_count}`
+          : "—",
+        stat: attendance
+          ? `${attendance.late_count} late · ${attendance.absent_count} absent · ${attendance.excused_count} excused`
+          : undefined,
+        statDescription: "Present + late / recorded entries today.",
       },
       {
         title: "Term Progress",
-        count: "Week 6",
-        stat: "of 10",
-        statDescription: "1 published classwork planned this week",
-        progressValue: 60,
+        count: !progress || progress.warnings.length ? "—" : progress.week_number === 0 ? "Not started" : `Week ${progress.week_number}`,
+        stat: progress ? `of ${progress.total_weeks}` : undefined,
+        statDescription: progress?.warnings.length
+          ? progress.warnings.map((warning) => warning.message).join(" ")
+          : `Calendar progress in ${data.term_info.period_name}.`,
+        progressValue: progress?.warnings.length ? undefined : progress?.progress_percent ?? undefined,
       },
     ];
-  }, [data]);
+    return defaultTeacherCards.map((fallback, index) => {
+      const card = data.cards?.find((item) => item.title === fallback.title) ??
+        (index < phaseOneCards.length ? phaseOneCards[index] : phaseTwoCards[index - phaseOneCards.length]);
+      if (data.engagement && ["Overall Completion", "Ungraded Queue"].includes(card.title)) {
+        const summary = data.engagement;
+        const isCompletion = card.title === "Overall Completion";
+        return {
+          ...card,
+          count: isCompletion ? formatPercent(summary.completion_rate_percent == null ? null : Math.round(summary.completion_rate_percent))
+            : summary.pending_grading_count == null ? "—" : String(summary.pending_grading_count),
+          stat: isCompletion
+            ? summary.completed_count == null ? `${summary.resolved_completed_count} resolved of ${summary.expected_count} expected.`
+              : `${summary.completed_count} of ${summary.expected_count} submitted.`
+            : summary.pending_grading_count == null ? `${summary.resolved_pending_grading_count} resolved submissions.`
+              : `${summary.pending_grading_count} submissions.`,
+          statDescription: `${isCompletion
+            ? "Selected-period eligible student-task requirements; unique latest completed attempts."
+            : "Latest completed attempts pending teacher grading."} ${summary.warnings.map((warning) => warning.message).join(" ")}`.trim(),
+        };
+      }
+      if (["Current grade", "Passing Rate", "Late Submissions"].includes(card.title)) {
+        const metric = phaseTwoCards[index - phaseOneCards.length];
+        // Normalize presentation locally, retaining configuration warnings from
+        // older API card payloads as well as the typed metric warnings.
+        const backendWarning = card.title === "Passing Rate" && !grades?.warnings.length && card.count === "—" && card.statDescription &&
+          card.statDescription !== metric.statDescription ? card.statDescription : undefined;
+        return {
+          ...card,
+          stat: card.title === "Passing Rate" && card.count === "—" ? gradeCoverage : metric.stat,
+          statDescription: backendWarning ?? (card.title === "Current grade" && grades?.warnings.length
+            ? `${metric.statDescription} ${grades.warnings.map((warning) => warning.message).join(" ")}`
+            : metric.statDescription),
+        };
+      }
+      return card;
+    });
+  }, [data, isLoading, isPeriodLoading, error]);
 
   // Derive unique subjects from teacher's loads / available filters
   const subjects = useMemo(() => {
@@ -475,8 +401,11 @@ export default function Dashboard() {
 
   const studentsSupport =
     data?.details?.students_needing_support || defaultStudentsNeedingSupport;
-  const topPerformers = data?.details?.top_performers || defaultTopPerformers;
-  const dueWeek = data?.details?.due_this_week || defaultDueThisWeek;
+  const visibleGradeData = isLoading || isPeriodLoading || error ? undefined : data?.details;
+  const gradeDetails = visibleGradeData?.grade_details;
+  const topPerformers = gradeDetails ? visibleGradeData?.top_performers ?? [] : [];
+  const dueWeek = data?.action_queue?.upcoming_deadlines ?? [];
+  const trendPoints = isLoading || isPeriodLoading || error ? [] : data?.trend_chart.points ?? [];
   const rawTopicMastery = data?.details?.topic_mastery || defaultTopicMastery;
   const topicMastery = useMemo(() => {
     if (subjectFilter === "all") return rawTopicMastery;
@@ -493,24 +422,51 @@ export default function Dashboard() {
       return true;
     });
   }, [rawTopicMastery, subjectFilter, subjects]);
-  const submissionsWeekday =
-    data?.details?.submissions_by_weekday || defaultSubmissionsWeekday;
+  const visiblePhaseTwo = isLoading || isPeriodLoading || error ? undefined : data?.phase_two;
+  const visibleEngagement = isLoading || isPeriodLoading || error ? undefined : data?.engagement;
+  const reviewWarnings = visibleEngagement?.warnings.filter((warning) => warning.code === "ambiguous_submission_attempts") ?? [];
+  const submissionsWeekday = weekdayLabels.map((day, dayIndex) => ({
+    day,
+    count: visiblePhaseTwo?.weekdays.days.find((item) => item.day_index === dayIndex)?.count ?? null,
+  }));
   const hardestQuestions =
     data?.details?.hardest_questions || defaultHardestQuestions;
-  const reviewSubmissions =
-    data?.details?.review_submissions || defaultReviewSubmissions;
-  const gradeDistribution =
-    data?.details?.grade_distribution || defaultGradeDistribution;
-  const attendanceSections =
-    data?.details?.attendance_by_section || defaultAttendanceBySection;
+  const reviewSubmissions = (data?.action_queue?.pending_grading ?? []).map((item) => ({
+    ...item,
+    title: item.classwork_title,
+    section: [item.student_name, item.section_name].filter(Boolean).join(" · "),
+    badge: "Needs grading",
+    variant: "destructive",
+  }));
+  const gradeDistribution = gradeDetails ? visibleGradeData?.grade_distribution ?? [] : [];
+  const attendanceSections = isLoading || isPeriodLoading || error ? [] : data?.details?.attendance_by_section ?? [];
 
   const maxWeekdayCount = Math.max(
-    ...submissionsWeekday.map((s: any) => s.count),
+    ...submissionsWeekday.map((item) => item.count ?? 0),
     45,
   );
   const maxGradeDistCount = Math.max(
-    ...gradeDistribution.map((g: any) => g.count),
+    ...gradeDistribution.map((g) => g.count),
     15,
+  );
+
+  const emptyMessage = (message: string) =>
+    isLoading || isPeriodLoading ? "Loading dashboard data..." : error ? "Dashboard data is unavailable." : message;
+
+  const gradeEmptyMessage = (hasDetails: boolean) => emptyMessage(
+    !gradeDetails || !hasDetails ? "Current-grade details are unavailable." :
+      gradeDetails.total_grade_count === 0 ? "No student-subject grades for this academic period." :
+        gradeDetails.available_grade_count === 0 ? "No Current grades available." :
+          "Current-grade details are unavailable.",
+  );
+  const gradeCoverage = () => gradeDetails && (
+    <Card.Description className="mt-3 text-[11px] text-muted-foreground">
+      {gradeDetails.available_grade_count} of {gradeDetails.total_grade_count} student-subject grades available.
+      {" "}Unavailable: {gradeDetails.unavailable_grade_count}.
+      {gradeDetails.warnings.map((warning) => (
+        <span key={`${warning.code}-${warning.subject_id}-${warning.class_id}`}> {warning.message}</span>
+      ))}
+    </Card.Description>
   );
 
   return (
@@ -584,8 +540,9 @@ export default function Dashboard() {
                           <Card
                             key={idx}
                             onClick={() => {
-                              const grade = s.grade_level || 9;
-                              const classId = s.class_id || (idx + 1);
+                              if (!data?.details?.students_needing_support || !isPositiveId(s.grade_level) || !isPositiveId(s.class_id)) return;
+                              const grade = s.grade_level;
+                              const classId = s.class_id;
                               const params = new URLSearchParams();
                               if (s.prediction_id) params.set("predictionId", String(s.prediction_id));
                               if (s.student_id) params.set("studentId", String(s.student_id));
@@ -644,14 +601,17 @@ export default function Dashboard() {
                       </Card.Header>
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {reviewSubmissions.map((item: any, idx: number) => (
+                        {reviewSubmissions.length === 0 && (
+                          <Card.Description className="text-xs text-muted-foreground">
+                            {emptyMessage(reviewWarnings.length ? "Review queue incomplete." : "No submissions need grading.")}
+                          </Card.Description>
+                        )}
+                        {reviewSubmissions.map((item) => (
                           <Card
-                            key={idx}
-                            onClick={() =>
-                              item.classwork_id
-                                ? navigate(`/teacher/classworks/${item.classwork_id}`)
-                                : navigate(routes.teacher.classworks)
-                            }
+                            key={item.submission_id}
+                            onClick={() => {
+                              if (isPositiveId(item.classwork_id)) navigate(`/teacher/classworks/${item.classwork_id}`);
+                            }}
                             className="flex cursor-pointer items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm transition-all hover:-translate-y-0.5 hover:bg-retro"
                           >
                             <div className="flex flex-col min-w-0 pr-2">
@@ -675,17 +635,22 @@ export default function Dashboard() {
                             </Badge>
                           </Card>
                         ))}
+                        {reviewWarnings.map((warning, index) => (
+                          <Card.Description key={`${warning.code}-${warning.assignment_id}-${index}`} className="text-xs text-muted-foreground">
+                            {warning.message}
+                          </Card.Description>
+                        ))}
                       </Card.Content>
                     </Card>
                   </div>
 
-                  {/* 2. Mastery & Completion Trend Chart */}
+                  {/* 2. Performance & Completion Trend Chart */}
                   <Card className="flex flex-col justify-between p-4 sm:p-5">
                     <Card.Header className="p-0">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
                         <div>
                           <Card.Title className="text-base font-bold sm:text-lg">
-                            Classwork Mastery & Completion Trend
+                            Classwork Performance & Completion Trend
                           </Card.Title>
                         </div>
 
@@ -722,13 +687,13 @@ export default function Dashboard() {
                         <div className="flex items-center gap-1.5">
                           <span className="size-2.5 rounded-full bg-primary inline-block" />
                           <span className="text-foreground">
-                            Class Mastery Average (%)
+                            Average task score (%)
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <span className="size-2.5 rounded-full bg-muted inline-block" />
                           <span className="text-foreground">
-                            Submission Completion (%)
+                            Submission completion (%)
                           </span>
                         </div>
                       </div>
@@ -738,12 +703,7 @@ export default function Dashboard() {
                     <Card.Content className="h-52 w-full p-0 pb-4">
                       <ResponsiveContainer width="100%" height="100%" className="-mx-2 text-foreground!">
                         <LineChart
-                          data={
-                            data?.trend_chart.points &&
-                              data.trend_chart.points.length > 0
-                              ? data.trend_chart.points
-                              : defaultTrendChartPoints
-                          }
+                          data={trendPoints}
                           margin={{ top: 10, right: 15, left: -20, bottom: 0 }}
                         >
                           <CartesianGrid
@@ -762,8 +722,8 @@ export default function Dashboard() {
                             tick={{ fontSize: 11, fontWeight: 500, fill: "var(--foreground)" }}
                           />
                           <YAxis
-                            domain={[50, 100]}
-                            ticks={[50, 75, 100]}
+                            domain={trendAxisRange}
+                            ticks={[trendAxisRange[0], (trendAxisRange[0] + trendAxisRange[1]) / 2, trendAxisRange[1]]}
                             tickLine={false}
                             axisLine={{
                               stroke: "var(--foreground)",
@@ -779,14 +739,17 @@ export default function Dashboard() {
                               return (
                                 <div className="space-y-1 rounded border border-border bg-background p-2.5 text-xs text-foreground shadow-md">
                                   <p className="font-bold">
-                                    {point.title || point.short_label}
+                                    {point.short_label} · {point.title}
                                   </p>
                                   <p className="text-emerald-400 font-semibold">
-                                    Mastery: {point.avg_score_percent}%
+                                    Average task score: {formatPercent(point.avg_score_percent)}
                                   </p>
                                   <p className="text-amber-400 font-semibold">
-                                    Completion: {point.completion_rate_percent}%
+                                    Completion: {formatPercent(point.completion_rate_percent)}
                                   </p>
+                                  {point.scored_count != null && point.eligible_count != null && (
+                                    <p>{point.scored_count} scored of {point.eligible_count} eligible student-task requirements.</p>
+                                  )}
                                 </div>
                               );
                             }}
@@ -794,7 +757,7 @@ export default function Dashboard() {
                           <Line
                             type="monotone"
                             dataKey="avg_score_percent"
-                            name="Mastery %"
+                            name="Average task score %"
                             stroke="var(--primary)"
                             strokeWidth={2.5}
                             dot={{
@@ -821,7 +784,12 @@ export default function Dashboard() {
                         </LineChart>
                       </ResponsiveContainer>
                       <Card.Description className="text-xs text-muted-foreground mt-0.5 pb-2">
-                        Class score averages vs. task submission completion
+                        {trendPoints.length
+                          ? "Grouped by Manila deadline date; publish or creation date used when no deadline exists. Raw task scores, not Current grades."
+                          : emptyMessage("No published classwork for this selection.")}
+                        {!isLoading && !isPeriodLoading && !error && data?.trend_chart.warnings?.map((warning, index) => (
+                          <span key={`${warning.code}-${warning.assignment_id}-${index}`}> {warning.message}</span>
+                        ))}
                       </Card.Description>
                     </Card.Content>
                   </Card>
@@ -842,15 +810,12 @@ export default function Dashboard() {
                                   size="sm"
                                   autoIcon={false}
                                   onClick={() => {
-                                    const activeSubjectId = Number(subjectFilter) || subjects[0]?.id;
+                                    const activeSubjectId = Number(subjectFilter);
                                     const activeClassId =
                                       loads.find((l) => String(l.subject_id) === String(activeSubjectId))?.class_id ||
-                                      data?.trend_chart?.available_filters?.find((f) => String(f.subject_id) === String(activeSubjectId))?.class_id ||
-                                      1;
-                                    if (activeSubjectId && activeClassId) {
+                                      data?.trend_chart?.available_filters?.find((f) => String(f.subject_id) === String(activeSubjectId))?.class_id;
+                                    if (isPositiveId(activeSubjectId) && isPositiveId(activeClassId)) {
                                       navigate(`/teacher/classes/${activeClassId}/subjects/${activeSubjectId}`);
-                                    } else {
-                                      navigate(routes.teacher.classes);
                                     }
                                   }}
                                   className="text-foreground shadow-none px-1.5"
@@ -934,9 +899,17 @@ export default function Dashboard() {
                       </Card.Header>
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {dueWeek.map((d: any, idx: number) => (
+                        {dueWeek.length === 0 && (
+                          <Card.Description className="text-xs text-muted-foreground">
+                            {emptyMessage("No classwork due this week.")}
+                          </Card.Description>
+                        )}
+                        {dueWeek.map((d, idx) => (
                           <Card
                             key={idx}
+                            onClick={() => {
+                              if (isPositiveId(d.classwork_id)) navigate(`/teacher/classworks/${d.classwork_id}`);
+                            }}
                             className="flex items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm cursor-pointer hover:bg-retro hover:-translate-y-1"
                           >
                             <div className="flex flex-col min-w-0 pr-2">
@@ -944,20 +917,20 @@ export default function Dashboard() {
                                 {d.title}
                               </span>
                               <span className="text-[11px] text-muted-foreground truncate">
-                                {d.section}
+                                {d.section_name}
                               </span>
+                              {d.warnings?.map((warning, index) => (
+                                <span key={`${warning.code}-${index}`} className={cn("text-xs", "text-muted-foreground")}>
+                                  {warning.message}
+                                </span>
+                              ))}
                             </div>
                             <Badge
                               size="sm"
-                              variant={
-                                d.due_label === "Tomorrow" ||
-                                  d.variant === "destructive"
-                                  ? "destructive"
-                                  : "default"
-                              }
+                              variant={formatDeadline(d.due_date) === "Tomorrow" ? "destructive" : "default"}
                               className="shrink-0"
                             >
-                              {d.due_label}
+                              {formatDeadline(d.due_date)}
                             </Badge>
                           </Card>
                         ))}
@@ -991,65 +964,23 @@ export default function Dashboard() {
 
                     <Card.Content className="mt-1 flex flex-col gap-3 p-0">
                       {(() => {
-                        const sections =
-                          data?.section_matrix && data.section_matrix.length > 0
-                            ? data.section_matrix
-                            : [
-                              {
-                                class_id: 1,
-                                subject_id: 1,
-                                section_name: "Archimedes",
-                                grade_level: "Grade 9",
-                                subject_name: "Filipino 9",
-                                student_count: 17,
-                                completion_rate_percent: 82,
-                                attendance_rate_percent: 94,
-                                avg_score_percent: 84,
-                                passing_rate_percent: 91,
-                                published_classworks: 6,
-                              },
-                              {
-                                class_id: 2,
-                                subject_id: 2,
-                                section_name: "Newton",
-                                grade_level: "Grade 9",
-                                subject_name: "Mathematics 9",
-                                student_count: 10,
-                                completion_rate_percent: 76,
-                                attendance_rate_percent: 90,
-                                avg_score_percent: 78,
-                                passing_rate_percent: 80,
-                                published_classworks: 5,
-                              },
-                              {
-                                class_id: 3,
-                                subject_id: 3,
-                                section_name: "Curie",
-                                grade_level: "Grade 9",
-                                subject_name: "Science 9",
-                                student_count: 9,
-                                completion_rate_percent: 88,
-                                attendance_rate_percent: 97,
-                                avg_score_percent: 86,
-                                passing_rate_percent: 100,
-                                published_classworks: 4,
-                              },
-                            ];
+                        const sections = data?.section_matrix ?? [];
                         const displayed = showAllSectionHealth ? sections : sections.slice(0, 2);
 
                         return (
                           <>
+                            {sections.length === 0 && (
+                              <Card.Description className="text-xs text-muted-foreground">
+                                {emptyMessage("No classes for this academic period.")}
+                              </Card.Description>
+                            )}
                             {displayed.map((sec: any, idx: number) => (
                               <Card
                                 key={idx}
                                 className="shadow-none p-4 text-xs hover:bg-retro hover:-translate-y-1 cursor-pointer transition-all"
                                 onClick={() => {
-                                  if (sec.class_id && sec.subject_id) {
+                                  if (isPositiveId(sec.class_id) && isPositiveId(sec.subject_id)) {
                                     navigate(`/teacher/classes/${sec.class_id}/${sec.subject_id}`);
-                                  } else if (sec.class_id) {
-                                    navigate(`/teacher/advisory-class/${sec.class_id}`);
-                                  } else {
-                                    navigate(routes.teacher.classes);
                                   }
                                 }}
                               >
@@ -1079,7 +1010,7 @@ export default function Dashboard() {
                                         Task Completion
                                       </span>
                                       <span className="font-semibold">
-                                        {sec.completion_rate_percent}%
+                                        {formatPercent(sec.completion_rate_percent)}
                                       </span>
                                     </div>
                                     <Progress
@@ -1094,7 +1025,7 @@ export default function Dashboard() {
                                         Attendance
                                       </span>
                                       <span className="font-semibold">
-                                        {sec.attendance_rate_percent}%
+                                        {formatPercent(sec.attendance_rate_percent)}
                                       </span>
                                     </div>
                                     <Progress
@@ -1108,35 +1039,32 @@ export default function Dashboard() {
                                 <div className="flex items-center justify-between text-sm text-muted-foreground pt-2">
                                   <div className="flex items-center gap-4">
                                     <span className="text-foreground font-semibold">
-                                      Class Average:{" "}
+                                      Current grade:{" "}
                                       <Badge
                                         variant={
-                                          sec.avg_score_percent < 75
+                                          sec.current_grade_meets_threshold === false
                                             ? "destructive"
-                                            : sec.avg_score_percent > 87
+                                            : sec.current_grade_meets_threshold === true
                                               ? "success"
                                               : "surface"
                                         }
                                         size="sm"
                                         className="ml-1"
+                                        title={sec.passing_threshold != null
+                                          ? `Passing grade is set per subject group: ${sec.passing_threshold}. Compared before display rounding.`
+                                          : "Passing grade is set per subject group; unavailable for this section."}
                                       >
-                                        {sec.avg_score_percent}%
+                                        {formatGrade(sec.current_grade)}
                                       </Badge>
                                     </span>
                                     <span className="text-foreground font-semibold">
                                       Passing Rate:{" "}
                                       <Badge
-                                        variant={
-                                          sec.passing_rate_percent < 75
-                                            ? "destructive"
-                                            : sec.passing_rate_percent > 87
-                                              ? "success"
-                                              : "surface"
-                                        }
+                                        variant="surface"
                                         size="sm"
                                         className="ml-1"
                                       >
-                                        {sec.passing_rate_percent}%
+                                        {formatPercent(sec.passing_rate_percent)}
                                       </Badge>
                                     </span>
                                   </div>
@@ -1147,6 +1075,18 @@ export default function Dashboard() {
                                     published tasks
                                   </span>
                                 </div>
+                                <Card.Description className="text-xs text-muted-foreground">
+                                  {sec.available_grade_count != null && sec.total_grade_count != null
+                                    ? `${sec.available_grade_count} of ${sec.total_grade_count} student-subject grades available. `
+                                    : ""}
+                                  Weighted and transmuted, as in the class record. Passing grade is set per subject group.
+                                  {sec.warnings?.map((warning: { code: string; message: string }) => (
+                                    <span key={warning.code}> {warning.message}</span>
+                                  ))}
+                                  {sec.engagement?.warnings.map((warning: { code: string; message: string }, index: number) => (
+                                    <span key={`engagement-${warning.code}-${index}`}> {warning.message}</span>
+                                  ))}
+                                </Card.Description>
                               </Card>
                             ))}
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
@@ -1174,18 +1114,19 @@ export default function Dashboard() {
                   {/* 4. Submissions by weekday & Hardest questions */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {/* Submissions by weekday */}
-                    <Card className="flex flex-col justify-between p-4 sm:p-5">
+                    <Card className="flex flex-col justify-start p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0">
                         <Card.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
                           Submissions by weekday
                         </Card.Title>
                         <Card.Description className="mt-0.5 text-xs text-muted-foreground">
-                          When learners hand work in
+                          Selected period · Manila time · Sunday: {visiblePhaseTwo?.weekdays.sunday_count ?? "—"}.
+                          {visiblePhaseTwo?.weekdays.warnings.map((warning) => <span key={warning.code}> {warning.message}</span>)}
                         </Card.Description>
                       </Card.Header>
 
                       <Card.Content className="mt-4 flex flex-col justify-between gap-2.5 p-0">
-                        {submissionsWeekday.map((item: any, idx: number) => (
+                        {submissionsWeekday.map((item, idx: number) => (
                           <div
                             key={idx}
                             className="flex items-center justify-between gap-3 text-xs sm:text-sm"
@@ -1195,15 +1136,12 @@ export default function Dashboard() {
                             </span>
                             <Progress
                               value={Math.round(
-                                (item.count / maxWeekdayCount) * 100,
+                                ((item.count ?? 0) / maxWeekdayCount) * 100,
                               )}
-                              className={cn(
-                                "h-3 flex-1",
-                                item.isHighlight && "[&>div]:bg-success",
-                              )}
+                              className="h-3 flex-1"
                             />
                             <span className="font-semibold text-foreground text-right w-8 shrink-0">
-                              {item.count}
+                              {item.count ?? "—"}
                             </span>
                           </div>
                         ))}
@@ -1216,12 +1154,20 @@ export default function Dashboard() {
                         <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
                           Top Performers
                         </Card.Title>
+                        <Card.Description className="mt-0.5 text-xs text-muted-foreground">
+                          Highest available student-subject Current grades, selected period.
+                        </Card.Description>
                       </Card.Header>
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {topPerformers.map((p: any, idx: number) => (
+                        {topPerformers.length === 0 && (
+                          <Card.Description className="text-xs text-muted-foreground">
+                            {gradeEmptyMessage(Array.isArray(visibleGradeData?.top_performers))}
+                          </Card.Description>
+                        )}
+                        {topPerformers.map((p) => (
                           <Card
-                            key={idx}
+                            key={`${p.student_id}-${p.subject_id}-${p.class_id}-${p.academic_period_id}`}
                             className="flex items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm"
                           >
                             <div className="flex flex-col min-w-0 pr-2">
@@ -1229,15 +1175,21 @@ export default function Dashboard() {
                                 {p.name}
                               </span>
                               <span className="text-[11px] text-muted-foreground truncate">
-                                {p.section}
+                                {[p.section_name, p.subject_name].filter(Boolean).join(" · ") || "Subject unavailable"}
                               </span>
                             </div>
-                            <Badge size="sm" variant="success" className="shrink-0">
-                              {p.score}%
+                            <Badge size="sm" variant="surface" className="shrink-0" title="Current grade">
+                              {formatGrade(p.current_grade)}
                             </Badge>
                           </Card>
                         ))}
                       </Card.Content>
+                      {gradeCoverage()}
+                      {gradeDetails && gradeDetails.cutoff_tie_omitted_count > 0 && (
+                        <Card.Description className="mt-0.5 text-xs text-muted-foreground">
+                          {gradeDetails.cutoff_tie_omitted_count} additional {gradeDetails.cutoff_tie_omitted_count === 1 ? "entry shares" : "entries share"} the cutoff grade; ties are ordered by name, then student ID.
+                        </Card.Description>
+                      )}
                     </Card>
 
                     {/* Grade Distribution */}
@@ -1247,39 +1199,41 @@ export default function Dashboard() {
                           Grade distribution
                         </Card.Title>
                         <Card.Description className="mt-0.5 text-xs text-muted-foreground">
-                          Learners per score band, all sections
+                          Student-subject Current grades per band, selected period.
                         </Card.Description>
                       </Card.Header>
 
                       <Card.Content className="mt-4 flex flex-col justify-between gap-2.5 p-0">
-                        {gradeDistribution.map((item: any, idx: number) => {
-                          const isRed = item.variant === "destructive";
-                          const isGreen = item.variant === "success";
-                          return (
+                        {(!gradeDetails || gradeDetails.available_grade_count === 0 || gradeDistribution.length === 0) && (
+                          <Card.Description className="text-xs text-muted-foreground">
+                            {gradeEmptyMessage(Array.isArray(visibleGradeData?.grade_distribution))}
+                          </Card.Description>
+                        )}
+                        {gradeDetails && gradeDetails.available_grade_count > 0 && gradeDistribution.map((item) => (
                             <div
-                              key={idx}
+                              key={item.band}
                               className="flex items-center justify-between gap-3 text-xs sm:text-sm"
                             >
-                              <span className="font-medium text-foreground/90 shrink-0 w-14 truncate">
+                              <span className="font-medium text-foreground/90 shrink-0 w-20 whitespace-nowrap">
                                 {item.band}
                               </span>
                               <Progress
                                 value={Math.round(
                                   (item.count / maxGradeDistCount) * 100,
                                 )}
-                                className={cn(
-                                  "h-3 flex-1",
-                                  isRed && "[&>div]:bg-destructive",
-                                  isGreen && "[&>div]:bg-success",
-                                )}
+                                className="h-3 flex-1"
+                                indicatorClassName="bg-muted-foreground"
                               />
                               <span className="font-semibold text-foreground text-right w-8 shrink-0">
                                 {item.count}
                               </span>
                             </div>
-                          );
-                        })}
+                        ))}
                       </Card.Content>
+                      {gradeCoverage()}
+                      <Card.Description className="mt-0.5 text-xs text-muted-foreground">
+                        Bands use unrounded grades and do not indicate passing.
+                      </Card.Description>
                     </Card>
 
                     {/* Attendance by Section */}
@@ -1291,23 +1245,29 @@ export default function Dashboard() {
                       </Card.Header>
 
                       <Card.Content className="mt-3 flex flex-col justify-between gap-3 p-0">
-                        {attendanceSections.map((item: any) => (
+                        {attendanceSections.every((item) => item.record_count === 0) && (
+                          <Card.Description className="text-xs text-muted-foreground">
+                            {emptyMessage("No attendance records this month for the selected period.")}
+                          </Card.Description>
+                        )}
+                        {attendanceSections.map((item) => (
                           <div
-                            key={item.section}
+                            key={item.class_id}
                             className="flex items-center justify-between gap-2 text-xs sm:text-sm"
+                            title={`${item.record_count} recorded ${item.record_count === 1 ? "entry" : "entries"}.`}
                           >
                             <span className="font-medium text-foreground/90 shrink-0 w-20 truncate">
                               {item.section}
                             </span>
-                            <Progress value={item.rate} className="h-3 flex-1" />
+                            <Progress value={item.rate ?? 0} className="h-3 flex-1" />
                             <span className="font-semibold text-foreground text-right w-10 shrink-0">
-                              {item.rate}%
+                              {formatPercent(item.rate)}
                             </span>
                           </div>
                         ))}
                       </Card.Content>
                       <Card.Description className="mt-3 text-[11px] text-muted-foreground">
-                        Last 20 school days
+                        This month · Present + late / recorded entries. Excused and absent do not count as present.
                       </Card.Description>
                     </Card>
                   </div>

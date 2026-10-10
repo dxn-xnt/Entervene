@@ -1,0 +1,1260 @@
+"""Dashboard SQL coverage with an opt-in, strictly local PostgreSQL target.
+
+The URL is read only from DASHBOARD_TEST_PG_URL in this process. An unset
+variable skips live integration tests. Guard and SQL compilation tests always
+run without PostgreSQL, network requests, or an external AI provider.
+"""
+
+from __future__ import annotations
+
+from contextlib import contextmanager
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+import importlib.util
+import os
+import re
+import sys
+import uuid
+from unittest.mock import MagicMock, Mock, patch
+
+import httpx
+import pytest
+from fastapi import HTTPException
+from sqlalchemy import CheckConstraint, create_engine, event, text
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.engine import URL, make_url
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
+from sqlalchemy.schema import CreateSchema, CreateTable, DropSchema
+
+import app.models  # noqa: F401 -- create all registered models, not a subset
+from app.db.Base import Base
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
+from app.models.attendance.Attendance import AttendanceRecord
+from app.models.people.Student import Student
+from app.services.activity import AnalyticsService
+
+
+_TEST_DATABASE = "activity_test"
+_TEST_PORT = 55432
+_SCHEMA_PATTERN = re.compile(r"dashboard_test_[0-9a-f]{32}\Z")
+_DRIVERS = {
+    "postgresql": "psycopg2",
+}
+_ROUTING_ENVIRONMENT = (
+    "PGHOST", "PGHOSTADDR", "PGPORT", "PGDATABASE", "PGSERVICE",
+    "PGSERVICEFILE", "PGSYSCONFDIR", "PGOPTIONS",
+)
+_GUARD_FAILURE_CHECKS = {
+    "Malformed PostgreSQL test URL": "url_parse",
+    "The PostgreSQL test driver must be exactly postgresql": "driver",
+    "PostgreSQL test URL query parameters are forbidden": "query_parameters",
+    "PostgreSQL test host must be a literal local host": "host",
+    "PostgreSQL test port must be 55432": "port",
+    "PostgreSQL test database must be activity_test": "database",
+    "The selected PostgreSQL test driver is not installed": "driver_available",
+    "libpq routing and options environment overrides are forbidden": "routing_environment",
+    "Unable to construct the validated PostgreSQL test engine": "engine_construction",
+}
+_SYNTHETIC_URL = "postgresql://x@127.0.0.1:55432/activity_test"
+
+
+class DashboardPostgresSafetyError(RuntimeError):
+    """A sanitized guard failure; never includes a supplied URL or credentials."""
+
+
+@pytest.fixture(autouse=True)
+def prohibit_external_provider_http(monkeypatch):
+    def refuse_http(*args, **kwargs):
+        raise AssertionError("External HTTP calls are forbidden in dashboard database tests")
+
+    async def refuse_async_http(*args, **kwargs):
+        raise AssertionError("External HTTP calls are forbidden in dashboard database tests")
+
+    # TestClient's in-process transport remains available for authenticated
+    # route tests; every real HTTP provider transport is forbidden.
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", refuse_http)
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", refuse_async_http)
+
+
+def _validate_postgres_test_url(raw_url: str) -> URL:
+    # Do not interpolate raw_url or a parser/driver exception into an error.
+    try:
+        parsed = make_url(raw_url)
+        host, port, database = parsed.host, parsed.port, parsed.database
+    except Exception:
+        raise DashboardPostgresSafetyError("Malformed PostgreSQL test URL") from None
+
+    driver_module = _DRIVERS.get(parsed.drivername)
+    if driver_module is None:
+        raise DashboardPostgresSafetyError("The PostgreSQL test driver must be exactly postgresql")
+    if parsed.query:
+        raise DashboardPostgresSafetyError("PostgreSQL test URL query parameters are forbidden")
+    if host not in {"localhost", "127.0.0.1"}:
+        raise DashboardPostgresSafetyError("PostgreSQL test host must be a literal local host")
+    if port != _TEST_PORT:
+        raise DashboardPostgresSafetyError("PostgreSQL test port must be 55432")
+    if database != _TEST_DATABASE:
+        raise DashboardPostgresSafetyError("PostgreSQL test database must be activity_test")
+    try:
+        installed = importlib.util.find_spec(driver_module) is not None
+    except Exception:
+        installed = False
+    if not installed:
+        raise DashboardPostgresSafetyError("The selected PostgreSQL test driver is not installed")
+    return parsed
+
+
+def _guarded_postgres_engine():
+    """All target validation happens before an engine or connection is created."""
+    parsed = _validate_postgres_test_url(os.environ["DASHBOARD_TEST_PG_URL"])
+    if any(os.environ.get(name) for name in _ROUTING_ENVIRONMENT):
+        raise DashboardPostgresSafetyError("libpq routing and options environment overrides are forbidden")
+    try:
+        return create_engine(
+            parsed,
+            echo=False,
+            hide_parameters=True,
+            pool_pre_ping=True,
+            connect_args={
+                "hostaddr": "127.0.0.1",
+                "connect_timeout": 5,
+                "options": "-c statement_timeout=5000 -c lock_timeout=5000",
+            },
+        )
+    except Exception:
+        raise DashboardPostgresSafetyError("Unable to construct the validated PostgreSQL test engine") from None
+
+
+def _validate_schema_name(schema: str) -> None:
+    if not _SCHEMA_PATTERN.fullmatch(schema):
+        raise DashboardPostgresSafetyError("Refusing an invalid dashboard test schema name")
+
+
+def _validate_connected_database(connection) -> None:
+    if connection.dialect.name != "postgresql":
+        raise DashboardPostgresSafetyError("The connected test database is not PostgreSQL")
+    if connection.execute(text("SELECT current_database()")).scalar_one() != _TEST_DATABASE:
+        raise DashboardPostgresSafetyError("The connected database is not activity_test")
+
+
+@contextmanager
+def _postgres_model_constraints():
+    """Undo conftest's SQLite LRN workaround temporarily, using the model object."""
+    original = next(
+        constraint for constraint in Student.__table_args__
+        if isinstance(constraint, CheckConstraint) and constraint.name == "lrn_check"
+    )
+    removed_by_conftest = original not in Student.__table__.constraints
+    if removed_by_conftest:
+        Student.__table__.append_constraint(original)
+    try:
+        assert original in Student.__table__.constraints
+        yield
+    finally:
+        if removed_by_conftest:
+            Student.__table__.constraints.remove(original)
+
+
+def _safe_failure(stage: str, error: Exception, *, list_models: bool = False) -> str:
+    # Exception text, repr, connection details and query parameters are omitted.
+    message = f"PostgreSQL dashboard {stage} failed ({type(error).__name__})"
+    if isinstance(error, DashboardPostgresSafetyError):
+        guard_message = error.args[0] if len(error.args) == 1 else None
+        # Only literal, exact messages can select an allowlisted code. Never
+        # render unknown arguments or invoke a string subclass's hash/equality.
+        check = (
+            _GUARD_FAILURE_CHECKS.get(guard_message, "unknown")
+            if type(guard_message) is str else "unknown"
+        )
+        message += f"; check={check}"
+    sqlstate = getattr(getattr(error, "orig", None), "pgcode", None)
+    if isinstance(sqlstate, str) and re.fullmatch(r"[A-Z0-9]{5}", sqlstate):
+        message += f"; SQLSTATE {sqlstate}"
+    if list_models:
+        message += "; model tables: " + ", ".join(sorted(Base.metadata.tables))
+    return message
+
+
+@pytest.fixture
+def postgres_dashboard_session():
+    if "DASHBOARD_TEST_PG_URL" not in os.environ:
+        pytest.skip("DASHBOARD_TEST_PG_URL is unset; local PostgreSQL integration is opt-in")
+
+    engine = None
+    session = None
+    schema_created = False
+    schema = "dashboard_test_" + uuid.uuid4().hex
+    _validate_schema_name(schema)
+    failure = None
+    stage = "target guard"
+
+    with _postgres_model_constraints():
+        try:
+            engine = _guarded_postgres_engine()
+            stage = "connection and database validation"
+            with engine.begin() as connection:
+                _validate_connected_database(connection)
+                if any(table.schema is not None for table in Base.metadata.tables.values()):
+                    raise DashboardPostgresSafetyError("Model tables must have no explicit external schema")
+                stage = "schema creation"
+                connection.execute(CreateSchema(schema))
+                schema_created = True
+                connection.exec_driver_sql(f'SET search_path TO "{schema}"')
+                connection = connection.execution_options(schema_translate_map={None: schema})
+                stage = "model creation"
+                Base.metadata.create_all(bind=connection)
+
+            session = Session(bind=engine.execution_options(schema_translate_map={None: schema}))
+            session.execute(text(f'SET search_path TO "{schema}"'))
+        except Exception as error:
+            failure = _safe_failure(stage, error, list_models=stage == "model creation")
+
+        try:
+            if failure is not None:
+                pytest.fail(failure, pytrace=False)
+            yield session
+        finally:
+            if session is not None:
+                session.close()
+            cleanup_failure = None
+            if engine is not None and schema_created:
+                # Validate both the generated schema and the actual database on
+                # each cleanup connection, including after a failed create_all.
+                try:
+                    _validate_schema_name(schema)
+                    with engine.begin() as connection:
+                        _validate_connected_database(connection)
+                        connection.exec_driver_sql(f'SET search_path TO "{schema}"')
+                        connection = connection.execution_options(schema_translate_map={None: schema})
+                        Base.metadata.drop_all(bind=connection)
+                except Exception as error:
+                    cleanup_failure = _safe_failure("model cleanup", error, list_models=True)
+                try:
+                    _validate_schema_name(schema)
+                    with engine.begin() as connection:
+                        _validate_connected_database(connection)
+                        connection.execute(DropSchema(schema, cascade=True, if_exists=True))
+                except Exception as error:
+                    cleanup_failure = _safe_failure("isolated schema cleanup", error)
+            if engine is not None:
+                engine.dispose()
+            if cleanup_failure is not None:
+                pytest.fail(cleanup_failure, pytrace=False)
+
+
+@pytest.mark.parametrize("driver", tuple(_DRIVERS))
+@pytest.mark.parametrize("host", ["localhost", "127.0.0.1"])
+def test_postgres_guard_accepts_only_installed_local_test_target(monkeypatch, driver, host):
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+    parsed = _validate_postgres_test_url(
+        f"{driver}://x@{host}:55432/activity_test"
+    )
+    assert (parsed.drivername, parsed.host, parsed.port, parsed.database) == (
+        driver, host, _TEST_PORT, _TEST_DATABASE,
+    )
+
+
+@pytest.mark.parametrize("unsafe_url", [
+    "sqlite:///:memory:",
+    "postgresql+psycopg2://x@localhost:55432/activity_test",
+    "postgresql+psycopg://x@localhost:55432/activity_test",
+    "postgresql+pg8000://x@localhost:55432/activity_test",
+    "postgresql://x@external.example:55432/activity_test",
+    "postgresql://x@localhost.evil.com:55432/activity_test",
+    "postgresql://x@localhost:5432/activity_test",
+    "postgresql://x@localhost/activity_test",
+    "postgresql://x@localhost:55432/activity",
+    "postgresql://x@localhost:55432/activity_db",
+    "postgresql://x@localhost:55432/entervene_db",
+    "postgresql://x@localhost:55432/activity_test_extra",
+    "postgresql://x@/activity_test",
+    "postgresql://x@localhost,external.example:55432/activity_test",
+    "postgresql://x@[::1]:55432/activity_test",
+    "postgresql://x@localhost:invalid/activity_test",
+    "not a database URL",
+] + [_SYNTHETIC_URL + suffix for suffix in [
+    "?host=external.example", "?hostaddr=203.0.113.1", "?host=/tmp",
+    "?host=localhost&host=external.example", "?port=5432", "?service=production",
+    "?options=-csearch_path%3Dpublic", "?sslmode=disable",
+]])
+def test_postgres_guard_refuses_unsafe_target_before_engine_creation(monkeypatch, unsafe_url):
+    monkeypatch.setenv("DASHBOARD_TEST_PG_URL", unsafe_url)
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+    engine_factory = Mock()
+    monkeypatch.setattr(sys.modules[__name__], "create_engine", engine_factory)
+    with pytest.raises(DashboardPostgresSafetyError) as caught:
+        _guarded_postgres_engine()
+    assert "://" not in str(caught.value)
+    assert unsafe_url not in str(caught.value)
+    engine_factory.assert_not_called()
+
+
+def test_postgres_guard_refuses_missing_driver_before_engine_creation(monkeypatch):
+    monkeypatch.setenv("DASHBOARD_TEST_PG_URL", _SYNTHETIC_URL)
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+    engine_factory = Mock()
+    monkeypatch.setattr(sys.modules[__name__], "create_engine", engine_factory)
+    with pytest.raises(DashboardPostgresSafetyError, match="driver is not installed"):
+        _guarded_postgres_engine()
+    engine_factory.assert_not_called()
+
+
+@pytest.mark.parametrize("routing_variable", _ROUTING_ENVIRONMENT)
+def test_postgres_guard_refuses_libpq_environment_routing(monkeypatch, routing_variable):
+    monkeypatch.setenv("DASHBOARD_TEST_PG_URL", _SYNTHETIC_URL)
+    monkeypatch.setenv(routing_variable, "synthetic-unsafe-override")
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+    engine_factory = Mock()
+    monkeypatch.setattr(sys.modules[__name__], "create_engine", engine_factory)
+    with pytest.raises(DashboardPostgresSafetyError, match="environment overrides"):
+        _guarded_postgres_engine()
+    engine_factory.assert_not_called()
+
+
+@pytest.mark.parametrize("schema", ["public", "dashboard_test_", "dashboard_test_../x", 'dashboard_test_x"; DROP SCHEMA public'])
+def test_postgres_cleanup_guard_refuses_nonisolated_schema_names(schema):
+    with pytest.raises(DashboardPostgresSafetyError, match="schema name"):
+        _validate_schema_name(schema)
+
+
+def test_postgres_guard_checks_actual_database_before_schema_writes():
+    connection = Mock()
+    connection.dialect.name = "postgresql"
+    connection.execute.return_value.scalar_one.return_value = "synthetic_wrong_database"
+    with pytest.raises(DashboardPostgresSafetyError, match="connected database"):
+        _validate_connected_database(connection)
+    assert connection.execute.call_count == 1
+    assert str(connection.execute.call_args.args[0]) == "SELECT current_database()"
+
+
+def test_postgres_fixture_never_cleans_up_a_schema_it_did_not_create(monkeypatch):
+    monkeypatch.setenv("DASHBOARD_TEST_PG_URL", _SYNTHETIC_URL)
+    engine = MagicMock()
+    connection = engine.begin.return_value.__enter__.return_value
+    connection.dialect.name = "postgresql"
+    query_result = Mock()
+    query_result.scalar_one.return_value = _TEST_DATABASE
+
+    def execute(statement):
+        if isinstance(statement, CreateSchema):
+            raise RuntimeError("Synthetic schema creation refusal")
+        return query_result
+
+    connection.execute.side_effect = execute
+    monkeypatch.setattr(sys.modules[__name__], "_guarded_postgres_engine", lambda: engine)
+    fixture = postgres_dashboard_session.__wrapped__()
+    with pytest.raises(pytest.fail.Exception, match="schema creation failed"):
+        next(fixture)
+    assert engine.begin.call_count == 1
+    assert not any(isinstance(call.args[0], DropSchema) for call in connection.execute.call_args_list)
+    engine.dispose.assert_called_once()
+
+
+def test_postgres_fixture_sanitizes_connection_errors_before_schema_writes(monkeypatch, capsys, caplog):
+    monkeypatch.setenv("DASHBOARD_TEST_PG_URL", _SYNTHETIC_URL)
+    user_marker = "connection-user-marker"
+    password_marker = "connection-secret-marker"
+    diagnostic_url = URL.create(
+        "postgresql", username=user_marker, password=password_marker,
+        host="127.0.0.1", port=_TEST_PORT, database=_TEST_DATABASE,
+    )
+    error = OperationalError(
+        None, None, RuntimeError(diagnostic_url.render_as_string(hide_password=False)),
+        hide_parameters=True,
+    )
+    engine = MagicMock()
+    connection = engine.begin.return_value.__enter__.return_value
+    engine.begin.return_value.__enter__.side_effect = error
+    drop_all = Mock()
+    monkeypatch.setattr(Base.metadata, "drop_all", drop_all)
+    monkeypatch.setattr(sys.modules[__name__], "_guarded_postgres_engine", lambda: engine)
+    fixture = postgres_dashboard_session.__wrapped__()
+    with pytest.raises(pytest.fail.Exception) as caught:
+        next(fixture)
+    _expect_equal(str(caught.value), (
+        "PostgreSQL dashboard connection and database validation failed (OperationalError)"
+    ), "connection-error sanitation")
+    captured = capsys.readouterr()
+    visible = str(caught.value) + captured.out + captured.err + caplog.text
+    if any(marker in visible for marker in ("://", user_marker, password_marker)):
+        pytest.fail("Mocked PostgreSQL connection error leaked confidential details", pytrace=False)
+    connection.execute.assert_not_called()
+    drop_all.assert_not_called()
+    engine.dispose.assert_called_once()
+
+
+def test_postgres_model_constraints_restore_original_lrn_check():
+    original = next(
+        constraint for constraint in Student.__table_args__
+        if isinstance(constraint, CheckConstraint) and constraint.name == "lrn_check"
+    )
+    before = set(Student.__table__.constraints)
+    with _postgres_model_constraints():
+        assert original in Student.__table__.constraints
+        ddl = str(CreateTable(Student.__table__).compile(dialect=postgresql.dialect()))
+        assert "CONSTRAINT lrn_check CHECK (length(student_lrn) = 12)" in ddl
+    assert set(Student.__table__.constraints) == before
+
+
+@pytest.fixture
+def dashboard_clock(monkeypatch):
+    from test_teacher_dashboard_health import NOW
+
+    monkeypatch.setattr(AnalyticsService, "_teacher_dashboard_now", lambda: NOW)
+
+
+def _seed_and_dashboard(db):
+    from test_teacher_dashboard_health import seed_dashboard_data
+
+    try:
+        data = seed_dashboard_data(db)
+        result = _read_only_dashboard(db, data["teacher"].staff_id, data["period"])
+        return data, result
+    except Exception as error:
+        pytest.fail(_safe_failure("synthetic data or dashboard query", error), pytrace=False)
+
+
+def _read_only_dashboard(db, identity, period):
+    """Reject DML and explicit session mutations after synthetic fixture writes."""
+    def reject_write(*args, **kwargs):
+        raise AssertionError("Dashboard production path attempted a database write")
+
+    def select_only(_connection, _cursor, statement, _parameters, _context, _many):
+        if not statement.lstrip().upper().startswith("SELECT"):
+            reject_write()
+
+    engine = db.get_bind()
+    event.listen(engine, "before_cursor_execute", select_only)
+    try:
+        with patch.object(db, "add", side_effect=reject_write), \
+                patch.object(db, "add_all", side_effect=reject_write), \
+                patch.object(db, "delete", side_effect=reject_write), \
+                patch.object(db, "flush", side_effect=reject_write), \
+                patch.object(db, "commit", side_effect=reject_write):
+            return AnalyticsService.build_teacher_dashboard_health(db, identity, period)
+    finally:
+        event.remove(engine, "before_cursor_execute", select_only)
+
+
+def _dashboard(db, identity, period):
+    try:
+        return _read_only_dashboard(db, identity, period)
+    except Exception as error:
+        pytest.fail(_safe_failure("dashboard query", error), pytrace=False)
+
+
+def _route_dashboard(db, data, period_id=None):
+    from test_teacher_dashboard_health import create_client
+
+    try:
+        with create_client(db, {"sub": str(data["teacher"].user_id), "role": "teacher"}) as client:
+            return client.get("/analytics/teacher/dashboard-health", params={
+                "academic_period_id": data["period"].academic_period_id if period_id is None else period_id,
+                "class_id": data["class_"].class_id,
+                "subject_id": data["subject"].subject_id,
+            })
+    except Exception as error:
+        pytest.fail(_safe_failure("in-process route query", error), pytrace=False)
+
+
+def _assert_unknown_identity_is_forbidden(db, data, identity):
+    try:
+        AnalyticsService.build_teacher_dashboard_health(db, identity, data["period"])
+    except HTTPException as error:
+        _expect_equal(error.status_code, 403, "unknown identity status")
+    except Exception as error:
+        pytest.fail(_safe_failure("unknown identity query", error), pytrace=False)
+    else:
+        pytest.fail("Unknown dashboard identity was accepted", pytrace=False)
+
+
+def _expect_equal(actual, expected, description):
+    if actual != expected:
+        pytest.fail(f"Dashboard {description} mismatch", pytrace=False)
+
+
+def _utc_timestamp(value):
+    if value is None:
+        return None
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def _numeric_snapshot(result, data):
+    """Compare numeric behavior and absolute times without DB IDs or people."""
+    assignment_keys = {row.classwork_id: key for key, row in data["assignments"].items()}
+    assignment_id_keys = {row.classwork_assignment_id: key for key, row in data["assignments"].items()}
+    submission_keys = {row.submission_id: key for key, row in data["submissions"].items()}
+    class_keys = {data[key].class_id: key for key in ("class_", "other_class", "previous_class")}
+    subject_keys = {data[key].subject_id: key for key in ("subject", "other_subject", "off_load_subject")}
+    chart = result["trend_chart"]
+    phase_two = result["phase_two"]
+    grades = phase_two["grades"]
+    return {
+        "kpis": result["kpis"],
+        "selected_combo": (
+            class_keys.get(chart["selected_class_id"]), subject_keys.get(chart["selected_subject_id"]),
+        ),
+        "sufficient_mastery": chart["has_sufficient_data"],
+        "trend": [(
+            (assignment_keys[row["classwork_id"]] if row["classwork_id"] is not None else
+             tuple(assignment_id_keys[aid] for aid in row["assignment_ids"])), row["avg_score_percent"],
+            row["completion_rate_percent"], row["submitted_count"], row["total_enrolled"],
+            _utc_timestamp(row["due_date"]),
+        ) for row in chart["points"]],
+        "matrix": sorted((
+            class_keys[row["class_id"]], subject_keys[row["subject_id"]],
+            row["student_count"], row["published_classworks"], row["avg_score_percent"],
+            row["passing_rate_percent"], row["completion_rate_percent"], row["attendance_rate_percent"],
+        ) for row in result["section_matrix"]),
+        "section_grades": sorted((
+            class_keys[row["class_id"]], subject_keys[row["subject_id"]],
+            row["current_grade"], row["passing_threshold"],
+            row["available_grade_count"], row["total_grade_count"],
+            row["current_grade_meets_threshold"],
+            tuple(warning["code"] for warning in row["warnings"]),
+        ) for row in result["section_matrix"]),
+        "grade_summary": {key: value for key, value in grades.items() if key != "warnings"},
+        "grade_warnings": [warning["code"] for warning in grades["warnings"]],
+        "month_window": phase_two["month_window"],
+        "attendance_today": phase_two["attendance_today"],
+        "monthly_attendance": sorted((
+            class_keys[row["class_id"]], row["rate"], row["record_count"],
+            row["present_count"], row["late_count"], row["excused_count"], row["absent_count"],
+        ) for row in result["details"]["attendance_by_section"]),
+        "late_submissions": {
+            key: value for key, value in phase_two["late_submissions"].items() if key != "warnings"
+        },
+        "late_warnings": [warning["code"] for warning in phase_two["late_submissions"]["warnings"]],
+        "weekdays": {
+            key: value for key, value in phase_two["weekdays"].items() if key != "warnings"
+        },
+        "weekday_warnings": [warning["code"] for warning in phase_two["weekdays"]["warnings"]],
+        "require_subject_match": phase_two["require_subject_match"],
+        "pending": [(
+            submission_keys[row["submission_id"]], _utc_timestamp(row["submitted_at"]),
+        ) for row in result["action_queue"]["pending_grading"]],
+        "deadlines": [(
+            assignment_keys[row["classwork_id"]], _utc_timestamp(row["due_date"]),
+            row["submitted_count"], row["total_students"],
+        ) for row in result["action_queue"]["upcoming_deadlines"]],
+    }
+
+
+def _collect_numeric_scenarios(db, data, current_result):
+    from test_teacher_dashboard_health import NEXT_MONDAY, NOW, add_assignment
+
+    try:
+        samples = {"current_period": _numeric_snapshot(current_result, data)}
+        current = samples["current_period"]
+        _expect_equal(current["kpis"], {
+            "active_classes": 1, "enrolled_students": 2,
+            "overall_completion_rate": 75.0, "ungraded_count": 1,
+        }, "current-period KPI values")
+        _expect_equal([row[:5] for row in current["trend"]], [
+            ("main_graded", 71.0, 100.0, 2, 2), ("main_pending", None, 50.0, 1, 2),
+        ], "current-period mastery and completion values")
+        _expect_equal(current["matrix"], [
+            ("class_", "subject", 2, 2, 71.0, 0.0, 75.0, 50.0),
+        ], "current-period matrix values")
+
+        previous = _dashboard(db, data["teacher"].staff_id, data["previous_period"])
+        samples["previous_period"] = _numeric_snapshot(previous, data)
+        _expect_equal(samples["previous_period"]["kpis"], {
+            "active_classes": 2, "enrolled_students": 3,
+            "overall_completion_rate": 50.0, "ungraded_count": 1,
+        }, "selected previous-period KPI values")
+        _expect_equal(samples["previous_period"]["matrix"], [
+            ("class_", "subject", 2, 1, None, None, 50.0, 0.0),
+            ("previous_class", "subject", 1, 0, None, None, 0.0, None),
+        ], "selected previous-period matrix values")
+
+        work = data["assignments"]["main_graded"].classwork
+        for key, points, expected in (
+            ("null_point_total", None, None),
+            ("zero_point_total", Decimal("0.00"), None),
+            ("genuine_zero_score", Decimal("100.00"), 0.0),
+        ):
+            work.total_points = points
+            for submission_key in ("graded_one", "graded_two"):
+                data["submissions"][submission_key].grade = Decimal("0.00")
+            db.flush()
+            samples[key] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
+            _expect_equal(samples[key]["trend"][0][1], expected, f"{key} mastery")
+            _expect_equal(samples[key]["matrix"][0][4:6], (expected, 0.0), f"{key} raw score and official passing")
+
+        work.total_points = Decimal("50.00")
+        data["submissions"]["graded_one"].grade = Decimal("25.50")
+        data["submissions"]["graded_two"].grade = Decimal("45.50")
+        for key, due in (
+            ("past_week", NOW - timedelta(days=7)),
+            ("earlier_today", NOW - timedelta(seconds=1)),
+            ("exact_now", NOW),
+            ("late_sunday", NEXT_MONDAY - timedelta(seconds=1)),
+            ("monday_boundary", NEXT_MONDAY),
+            ("end_next_week", NEXT_MONDAY + timedelta(days=6)),
+        ):
+            add_assignment(db, data, key, due_date=due)
+        db.commit()
+        samples["deadline_boundaries"] = _numeric_snapshot(
+            _dashboard(db, data["teacher"].staff_id, data["period"]), data,
+        )
+        _expect_equal([row[0] for row in samples["deadline_boundaries"]["deadlines"]], [
+            "exact_now", "main_graded", "main_pending", "late_sunday",
+        ], "inclusive-now and exclusive-next-Monday deadline order")
+        _expect_equal([row[2:] for row in samples["deadline_boundaries"]["deadlines"]], [
+            (0, 2), (2, 2), (1, 2), (0, 2),
+        ], "deadline submission and enrollment counts")
+        _expect_equal(samples["deadline_boundaries"]["kpis"]["overall_completion_rate"], 18.8, "boundary-data completion percentage")
+
+        for index in range(7):
+            add_assignment(db, data, f"soon_{index}", due_date=NOW + timedelta(minutes=index + 1))
+        db.commit()
+        samples["five_earliest_deadlines"] = _numeric_snapshot(
+            _dashboard(db, data["teacher"].staff_id, data["period"]), data,
+        )
+        _expect_equal([row[0] for row in samples["five_earliest_deadlines"]["deadlines"]], [
+            "exact_now", "soon_0", "soon_1", "soon_2", "soon_3",
+        ], "five earliest deadline limit and order")
+        samples["previous_after_current_additions"] = _numeric_snapshot(
+            _dashboard(db, data["teacher"].staff_id, data["previous_period"]), data,
+        )
+        _expect_equal(samples["previous_after_current_additions"], samples["previous_period"], "previous-period isolation after current-period additions")
+        return samples
+    except Exception as error:
+        pytest.fail(_safe_failure("numeric scenario query", error), pytrace=False)
+
+
+def _assert_matches_sqlite(actual, expected):
+    for scenario in expected:
+        for component in expected[scenario]:
+            _expect_equal(actual[scenario][component], expected[scenario][component], f"{scenario} {component} PostgreSQL/SQLite parity")
+
+
+def _collect_phase_two_scenarios(db, data):
+    """Actual ORM queries; only synthetic fixture setup writes to either engine."""
+    from test_teacher_dashboard_health import NOW, add_assignment, add_submission
+
+    try:
+        samples = {}
+        group = data["subject"].subject_group_rel
+        period_grades = []
+        for key in ("active_one", "active_two"):
+            row = StudentPeriodGrade(
+                student_id=data["students"][key].student_id,
+                class_id=data["class_"].class_id,
+                subject_id=data["subject"].subject_id,
+                academic_period_id=data["period"].academic_period_id,
+                # A separate saved final grade must NOT replace the Term Grade.
+                final_period_grade=Decimal("99"), is_finalized=True,
+            )
+            db.add(row)
+            period_grades.append(row)
+        for threshold in (Decimal("85"), Decimal("83"), Decimal("75"), Decimal("83.25")):
+            group.passing_threshold = threshold
+            period_grades[0].transmuted_grade = threshold - Decimal("0.01")
+            period_grades[1].transmuted_grade = threshold
+            db.commit()
+            key = f"runtime_threshold_{threshold}"
+            samples[key] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
+            summary = samples[key]["grade_summary"]
+            _expect_equal(summary["passing_threshold"], float(threshold), "runtime threshold")
+            _expect_equal(summary["passing_count"], 1, "precise threshold equality passing count")
+            _expect_equal(summary["passing_rate_percent"], 50.0, "precise threshold passing rate")
+            _expect_equal(summary["available_grade_count"], 2, "official grade coverage")
+            _expect_equal(summary["current_grade"], round(float(threshold - Decimal("0.005")), 1), "Term Grade not separate saved final")
+            _expect_equal(summary["current_grade_meets_threshold"], False, "threshold comparison before rounding")
+
+        data["subject"].subject_group_rel = None
+        db.commit()
+        samples["missing_group"] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
+        _expect_equal(samples["missing_group"]["grade_summary"]["passing_rate_percent"], None, "missing-group passing availability")
+        _expect_equal(samples["missing_group"]["grade_summary"]["available_grade_count"], 2, "missing-group current-grade coverage")
+        _expect_equal(samples["missing_group"]["grade_warnings"], ["invalid_passing_threshold"], "missing-group configuration warning")
+        data["subject"].subject_group_rel = group
+
+        # Every recorded row counts, including another subject in the same class.
+        rows = [
+            ("active_one", "subject", date(2026, 10, 1), "present"),
+            ("active_two", "subject", date(2026, 10, 1), "late"),
+            ("active_one", "other_subject", date(2026, 10, 1), "excused"),
+            ("active_two", "other_subject", date(2026, 10, 1), "absent"),
+            ("active_one", "subject", date(2026, 10, 9), "present"),
+            ("active_two", "subject", date(2026, 9, 30), "late"),
+            ("active_one", "other_subject", date(2026, 9, 30), "excused"),
+        ]
+        db.add_all([
+            AttendanceRecord(
+                student_id=data["students"][student].student_id,
+                class_id=data["class_"].class_id, subject_id=data[subject].subject_id,
+                date=record_date, status=status,
+            ) for student, subject, record_date, status in rows
+        ])
+        db.commit()
+        samples["four_status_month"] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
+        _expect_equal(samples["four_status_month"]["monthly_attendance"], [
+            ("class_", 50.0, 6, 2, 1, 1, 2),
+        ], "inclusive month/current-day record denominator")
+        _expect_equal(samples["four_status_month"]["attendance_today"]["record_count"], 0, "missing-today records are not inferred")
+
+        with patch.object(AnalyticsService, "_teacher_dashboard_now", return_value=datetime(2026, 9, 30, 16, 0, tzinfo=timezone.utc)):
+            samples["manila_midnight"] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
+        _expect_equal(samples["manila_midnight"]["month_window"], {
+            "start_date": "2026-10-01", "end_date": "2026-10-01", "today": "2026-10-01", "label": "This month",
+        }, "UTC previous-day Manila month boundary")
+        _expect_equal(samples["manila_midnight"]["monthly_attendance"], [
+            ("class_", 50.0, 4, 1, 1, 1, 1),
+        ], "first-day four status records")
+
+        # UTC Sept 30 16:00 is Oct 1 in Manila. Its excuse is deliberately for a
+        # different subject: the approved three-field policy must still match.
+        midnight_due = datetime(2026, 9, 30, 16, 0, tzinfo=timezone.utc)
+        for key, student, due, submitted in (
+            ("excused_midnight", "active_one", midnight_due, midnight_due + timedelta(hours=1)),
+            ("equal_midnight", "active_two", midnight_due, midnight_due),
+            ("unexcused_late", "active_two", midnight_due, midnight_due + timedelta(hours=1)),
+            ("sunday_late", "active_two", datetime(2026, 10, 3, 16, 0, tzinfo=timezone.utc), datetime(2026, 10, 4, 1, 0, tzinfo=timezone.utc)),
+            ("prior_month_excuse", "active_one", datetime(2026, 9, 30, 8, 0, tzinfo=timezone.utc), datetime(2026, 10, 1, 1, 0, tzinfo=timezone.utc)),
+        ):
+            assignment = add_assignment(db, data, key, due_date=due)
+            submission = add_submission(db, data, key, assignment, data["students"][student], status="graded", grade=Decimal("25"))
+            submission.submitted_at = submitted
+        db.commit()
+        with patch.object(AnalyticsService, "_teacher_dashboard_now", return_value=NOW):
+            samples["three_field_excuses_and_weekdays"] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
+        submitted = samples["three_field_excuses_and_weekdays"]
+        _expect_equal(submitted["require_subject_match"], False, "subject matching stays disabled")
+        _expect_equal(submitted["late_submissions"], {
+            "late_rate_percent": 33.3, "late_count": 2, "eligible_count": 6,
+            "excused_excluded_count": 2, "completed_count": 8,
+        }, "excuse exclusion from numerator and denominator")
+        _expect_equal(submitted["late_warnings"], [], "complete timestamp availability")
+        _expect_equal(submitted["weekdays"]["sunday_count"], 1, "Sunday disclosed separately")
+        _expect_equal(submitted["weekdays"]["total_count"], 8, "excused completion still counted")
+        _expect_equal([row["count"] for row in submitted["weekdays"]["days"]], [0, 0, 0, 7, 0, 0], "six Monday-Saturday Manila buckets")
+
+        previous = _dashboard(db, data["teacher"].staff_id, data["previous_period"])
+        samples["historical_period_phase_two"] = _numeric_snapshot(previous, data)
+        _expect_equal([row[2] for row in samples["historical_period_phase_two"]["monthly_attendance"]], [0, 0], "historical selected-period empty month")
+        _expect_equal(samples["historical_period_phase_two"]["weekdays"]["total_count"], 0, "historical selected-period submission dates")
+        return samples
+    except Exception as error:
+        pytest.fail(_safe_failure("Phase 2 numeric scenario query", error), pytrace=False)
+
+
+def test_teacher_dashboard_queries_compile_for_postgres_without_connecting(dashboard_clock):
+    """Compilation checks cover actual service SELECTs, not hand-written SQL."""
+    statements = []
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(bind=engine)
+    with Session(bind=engine) as db:
+        def capture_select(state):
+            if state.is_select:
+                statements.append(state.statement)
+
+        event.listen(db, "do_orm_execute", capture_select)
+        data, result = _seed_and_dashboard(db)
+        _dashboard(db, data["teacher"].user_id, data["period"])
+        _assert_unknown_identity_is_forbidden(db, data, "unknown-synthetic-teacher")
+        assert _route_dashboard(db, data).status_code == 200
+        assert _route_dashboard(db, data, period_id=999999).status_code == 404
+        _collect_numeric_scenarios(db, data, result)
+        _collect_phase_two_scenarios(db, data)
+        event.remove(db, "do_orm_execute", capture_select)
+
+    engine.dispose()
+    assert result["kpis"]["active_classes"] > 0
+    assert statements
+    compiled = [str(statement.compile(dialect=postgresql.dialect())) for statement in statements]
+    for table in (
+        "academic_period", "academic_staff", "subject_load", "student_class", "classwork_assignment",
+        "student_submission", "attendance_record", "subject_groups", "student_period_grade",
+        "grading_template",
+    ):
+        assert any(table in sql for sql in compiled), f"Missing actual dashboard SELECT for {table}"
+    assert all("strftime" not in sql.lower() and "julianday" not in sql.lower() for sql in compiled)
+
+
+def test_teacher_dashboard_populated_queries_execute_on_guarded_postgres(postgres_dashboard_session, dashboard_clock):
+    data, result = _seed_and_dashboard(postgres_dashboard_session)
+    _expect_equal(result["kpis"], {
+        "active_classes": 1, "enrolled_students": 2,
+        "overall_completion_rate": 75.0, "ungraded_count": 1,
+    }, "populated-scope KPI values")
+    _expect_equal(_dashboard(
+        postgres_dashboard_session, data["teacher"].user_id, data["period"],
+    )["kpis"], result["kpis"], "UUID identity KPI values")
+    route_response = _route_dashboard(postgres_dashboard_session, data)
+    _expect_equal(route_response.status_code, 200, "explicit-period route status")
+    _expect_equal(route_response.json()["kpis"], result["kpis"], "explicit-period route KPI values")
+    _expect_equal(_route_dashboard(postgres_dashboard_session, data, period_id=999999).status_code, 404, "invalid-period route status")
+    _expect_equal([item["submission_id"] for item in result["action_queue"]["pending_grading"]], [
+        data["submissions"]["pending_active"].submission_id,
+    ], "pending submission identifiers")
+    deadlines = result["action_queue"]["upcoming_deadlines"]
+    _expect_equal([_utc_timestamp(item["due_date"]) for item in deadlines], sorted(_utc_timestamp(item["due_date"]) for item in deadlines), "base deadline timestamp order")
+    _expect_equal([item["classwork_id"] for item in deadlines], [
+        data["assignments"]["main_graded"].classwork_id,
+        data["assignments"]["main_pending"].classwork_id,
+    ], "base deadline identifiers")
+    postgres_samples = _collect_numeric_scenarios(postgres_dashboard_session, data, result)
+    sqlite_engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=sqlite_engine)
+        with Session(bind=sqlite_engine) as sqlite_db:
+            sqlite_data, sqlite_result = _seed_and_dashboard(sqlite_db)
+            sqlite_samples = _collect_numeric_scenarios(sqlite_db, sqlite_data, sqlite_result)
+    except Exception as error:
+        pytest.fail(_safe_failure("isolated SQLite comparison", error), pytrace=False)
+    finally:
+        sqlite_engine.dispose()
+    _assert_matches_sqlite(postgres_samples, sqlite_samples)
+
+
+def test_teacher_dashboard_phase_two_scenarios_execute_on_isolated_sqlite(dashboard_clock):
+    """Mocked-behavior: run parity expectations even when PG is not configured."""
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(bind=engine) as db:
+            data, _ = _seed_and_dashboard(db)
+            samples = _collect_phase_two_scenarios(db, data)
+    finally:
+        engine.dispose()
+    assert len(samples) == 9
+
+
+def test_teacher_dashboard_phase_two_queries_execute_on_guarded_postgres(postgres_dashboard_session, dashboard_clock):
+    """Opt-in: actual queries/Decimal/timestamps/read-only parity, no providers."""
+    data, _ = _seed_and_dashboard(postgres_dashboard_session)
+    postgres_samples = _collect_phase_two_scenarios(postgres_dashboard_session, data)
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(bind=engine) as db:
+            sqlite_data, _ = _seed_and_dashboard(db)
+            sqlite_samples = _collect_phase_two_scenarios(db, sqlite_data)
+    except Exception as error:
+        pytest.fail(_safe_failure("Phase 2 isolated SQLite comparison", error), pytrace=False)
+    finally:
+        engine.dispose()
+    _assert_matches_sqlite(postgres_samples, sqlite_samples)
+
+
+def test_teacher_dashboard_empty_queries_execute_on_guarded_postgres(postgres_dashboard_session, dashboard_clock):
+    data, _ = _seed_and_dashboard(postgres_dashboard_session)
+    for identity in (
+        "unknown-synthetic-teacher", uuid.UUID("00000000-0000-4000-8000-000000000099"),
+    ):
+        _assert_unknown_identity_is_forbidden(postgres_dashboard_session, data, identity)
+    for identity, period in (
+        (data["empty_teacher"].staff_id, data["period"]),
+        (data["teacher"].staff_id, data["empty_period"]),
+        (data["teacher"].staff_id, None),
+    ):
+        result = _dashboard(postgres_dashboard_session, identity, period)
+        _expect_equal(result["kpis"], {
+            "active_classes": 0, "enrolled_students": 0,
+            "overall_completion_rate": 0.0, "ungraded_count": 0,
+        }, "empty-scope KPI zeros")
+        _expect_equal(result["trend_chart"]["available_filters"], [], "empty-scope filters")
+        _expect_equal(result["trend_chart"]["points"], [], "empty-scope trend points")
+        _expect_equal(result["section_matrix"], [], "empty-scope matrix")
+        _expect_equal(result["action_queue"], {"pending_grading": [], "upcoming_deadlines": []}, "empty-scope queues")
+
+
+def _collect_phase_three_scenarios(db, data):
+    """Synthetic setup writes only; every dashboard evaluation is SELECT-only."""
+    records = [StudentPeriodGrade(
+        student_id=data["students"][key].student_id,
+        class_id=data["class_"].class_id, subject_id=data["subject"].subject_id,
+        academic_period_id=data["period"].academic_period_id,
+        transmuted_grade=Decimal("95"), is_finalized=True,
+    ) for key in ("active_one", "active_two")]
+    db.add_all(records)
+    aliases = {str(student.student_id): key for key, student in data["students"].items()}
+    samples = {}
+    def snapshot(result):
+        details = result["details"]
+        return {
+            "performers": [(aliases[row["student_id"]], row["name"], row["section_name"],
+                row["subject_name"], row["current_grade"]) for row in details["top_performers"]],
+            "bands": [(band["band"], band["count"]) for band in details["grade_distribution"]],
+            "coverage": {key: value for key, value in details["grade_details"].items() if key != "warnings"},
+            "warnings": [warning["code"] for warning in details["grade_details"]["warnings"]],
+        }
+    for value in ("74.99", "75", "79.99", "80", "84.5", "84.99", "85", "89.99", "90", "100"):
+        records[0].transmuted_grade = Decimal(value)
+        db.commit()
+        result = _dashboard(db, data["teacher"].staff_id, data["period"])
+        samples[value] = snapshot(result)
+        _expect_equal(result["details"]["grade_details"]["available_grade_count"], 2, "Phase 3 grade coverage")
+        _expect_equal(sum(band["count"] for band in result["details"]["grade_distribution"]), 2, "Phase 3 band total")
+    data["subject"].subject_group_rel = None
+    db.commit()
+    samples["missing_threshold"] = snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]))
+    _expect_equal(samples["missing_threshold"]["warnings"], ["invalid_passing_threshold"], "Phase 3 threshold warnings retained")
+    learner = data["students"]["active_one"]
+    learner.first_name = learner.last_name = ""
+    db.commit()
+    samples["missing_name"] = snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]))
+    _expect_equal(samples["missing_name"]["performers"][0][1], "Name unavailable", "Phase 3 missing name retained")
+    assert "student_name_unavailable" in samples["missing_name"]["warnings"]
+    samples["empty"] = snapshot(_dashboard(db, data["teacher"].staff_id, data["empty_period"]))
+    _expect_equal(samples["empty"]["performers"], [], "Phase 3 empty scope")
+    return samples
+
+
+def test_teacher_dashboard_phase_three_scenarios_execute_on_isolated_sqlite(dashboard_clock):
+    """Mocked-behavior: exercise parity fixtures without a PostgreSQL connection."""
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(bind=engine) as db:
+            data, _ = _seed_and_dashboard(db)
+            samples = _collect_phase_three_scenarios(db, data)
+    finally:
+        engine.dispose()
+    assert len(samples) == 13
+
+
+def test_phase_three_name_projection_compiles_for_postgres_without_connecting():
+    """Unit: name-only UUID SELECT compiles without any engine or connection."""
+    with Session() as db:
+        statement = db.query(
+            Student.student_id, Student.first_name, Student.middle_name,
+            Student.last_name, Student.suffix,
+        ).filter(Student.student_id.in_([uuid.UUID(int=1)])).statement
+    sql = str(statement.compile(dialect=postgresql.dialect())).lower()
+    assert len(statement.selected_columns) == 5
+    assert "student.first_name" in sql and "student.suffix" in sql
+    assert not any(column in sql for column in ("student_lrn", "email", "contact_number", "password"))
+
+
+def test_phase_three_postgres_fixture_skips_before_connecting_when_unset(monkeypatch):
+    """Unit: prove the opt-in fixture skips without constructing an engine."""
+    monkeypatch.delenv("DASHBOARD_TEST_PG_URL", raising=False)
+    create = Mock(side_effect=AssertionError("A database connection is forbidden in this unit test"))
+    monkeypatch.setattr(sys.modules[__name__], "_guarded_postgres_engine", create)
+    with pytest.raises(pytest.skip.Exception, match="DASHBOARD_TEST_PG_URL is unset"):
+        next(postgres_dashboard_session.__wrapped__())
+    create.assert_not_called()
+
+
+def test_teacher_dashboard_phase_three_queries_execute_on_guarded_postgres(postgres_dashboard_session, dashboard_clock):
+    """Opt-in: real guarded-schema SELECTs and Decimal/name/band SQLite parity."""
+    data, _ = _seed_and_dashboard(postgres_dashboard_session)
+    postgres_samples = _collect_phase_three_scenarios(postgres_dashboard_session, data)
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(bind=engine) as db:
+            sqlite_data, _ = _seed_and_dashboard(db)
+            sqlite_samples = _collect_phase_three_scenarios(db, sqlite_data)
+    except Exception as error:
+        pytest.fail(_safe_failure("Phase 3 isolated SQLite comparison", error), pytrace=False)
+    finally:
+        engine.dispose()
+    _assert_matches_sqlite(postgres_samples, sqlite_samples)
+
+
+def _phase_four_snapshot(result, data):
+    """Count/date-only parity; translate generated IDs into fixture keys."""
+    keys = {row.classwork_assignment_id: key for key, row in data["assignments"].items()}
+    return {
+        "engagement": {key: value for key, value in result["engagement"].items() if key != "warnings"},
+        "warnings": sorted((warning["code"], keys.get(warning["assignment_id"]))
+                           for warning in result["engagement"]["warnings"]),
+        "trend": [(point["date_key"], tuple(keys[aid] for aid in point["assignment_ids"]),
+                   point["task_count"], point["avg_score_percent"], point["completion_rate_percent"],
+                   point["eligible_count"], point["submitted_count"], point["scored_count"])
+                  for point in result["trend_chart"]["points"]],
+        "trend_evidence": (result["trend_chart"]["graded_task_count"], result["trend_chart"]["date_group_count"]),
+        "deadlines": [(keys[row["assignment_id"]], row["eligible_count"], row["submitted_count"],
+                       tuple(warning["code"] for warning in row["warnings"]))
+                      for row in result["action_queue"]["upcoming_deadlines"]],
+        "late": {key: value for key, value in result["phase_two"]["late_submissions"].items() if key != "warnings"},
+        "weekdays": {key: value for key, value in result["phase_two"]["weekdays"].items() if key != "warnings"},
+    }
+
+
+def _collect_phase_four_scenarios(db, data):
+    """Synthetic setup only; all production evaluations reject writes/flushes."""
+    from test_teacher_dashboard_health import NOW, add_submission, make_targeted_assignment
+    samples = {}
+    def capture(key):
+        db.flush()
+        result = _read_only_dashboard(db, data["teacher"].staff_id, data["period"])
+        samples[key] = _phase_four_snapshot(result, data)
+        return result
+    capture("base")
+    latest = add_submission(db, data, "phase_four_retake", data["assignments"]["main_graded"], data["students"]["active_one"])
+    latest.submitted_at = NOW - timedelta(seconds=1)
+    result = capture("latest_ungraded_retake")
+    assert result["engagement"]["completed_count"] == 3 and result["kpis"]["ungraded_count"] == 2
+    assert result["trend_chart"]["points"][0]["avg_score_percent"] == 91.0
+    # UTC October 7 is October 8 Manila: these tasks must be grouped together.
+    target = make_targeted_assignment(db, data, "phase_four_target", data["students"]["active_one"],
+                                     due_date=datetime(2026, 10, 7, 17, tzinfo=timezone.utc))
+    add_submission(db, data, "phase_four_target", target, data["students"]["active_one"], status="graded", grade=Decimal("40.25"))
+    add_submission(db, data, "phase_four_nonrecipient", target, data["students"]["active_two"], status="graded", grade=Decimal("50"))
+    result = capture("target_and_manila_group")
+    assert result["engagement"]["expected_count"] == 5 and result["engagement"]["completed_count"] == 4
+    point = result["trend_chart"]["points"][0]
+    assert point["date_key"] == "2026-10-08" and point["task_count"] == 2
+    assert point["scored_count"] == 2 and point["avg_score_percent"] == 85.8
+    outside = make_targeted_assignment(db, data, "phase_four_outside_target", data["students"]["withdrawn"], due_date=NOW)
+    result = capture("outside_target")
+    deadline = next(row for row in result["action_queue"]["upcoming_deadlines"] if row["assignment_id"] == outside.classwork_assignment_id)
+    assert deadline["eligible_count"] == 0 and deadline["warnings"][0]["code"] == "targeted_recipient_outside_active_roster"
+    future = add_submission(db, data, "phase_four_future", target, data["students"]["active_one"])
+    future.submitted_at = NOW + timedelta(seconds=1)
+    capture("future_attempt_excluded")
+    assert samples["future_attempt_excluded"] == samples["outside_target"]
+    # Excuse preserves target completion/performance but excludes lateness.
+    db.add(AttendanceRecord(student_id=data["students"]["active_one"].student_id,
+        class_id=data["class_"].class_id, subject_id=data["other_subject"].subject_id,
+        date=date(2026, 10, 8), status="excused"))
+    result = capture("excuse_keeps_completion")
+    assert result["engagement"]["completed_count"] == 4
+    assert result["phase_two"]["late_submissions"]["excused_excluded_count"] == 2
+    # After selected-period end, completion remains cohort-based; dates do not.
+    data["period"].end_date = date(2026, 10, 7)
+    result = capture("cohort_vs_calendar_window")
+    assert result["engagement"]["completed_count"] == 4
+    assert result["phase_two"]["weekdays"]["total_count"] == 0
+    data["period"].end_date = date(2026, 12, 31)
+    tied = add_submission(db, data, "phase_four_ambiguous", data["assignments"]["main_pending"], data["students"]["active_one"])
+    tied.submitted_at = data["submissions"]["pending_active"].submitted_at
+    result = capture("ambiguous_attempts")
+    assert result["engagement"]["completion_rate_percent"] is None and result["kpis"]["ungraded_count"] is None
+    samples["empty_period"] = _phase_four_snapshot(_read_only_dashboard(db, data["teacher"].staff_id, data["empty_period"]), data)
+    other = _read_only_dashboard(db, data["other_teacher"].staff_id, data["period"])
+    samples["teacher_isolation"] = _phase_four_snapshot(other, data)
+    assert all(not key.startswith("phase_four") for point in samples["teacher_isolation"]["trend"] for key in point[1])
+    return samples
+
+
+def test_teacher_dashboard_phase_four_scenarios_execute_on_isolated_sqlite(dashboard_clock):
+    """Mocked-behavior: exercise every new parity fixture with no PostgreSQL."""
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(bind=engine) as db:
+            data, _ = _seed_and_dashboard(db)
+            samples = _collect_phase_four_scenarios(db, data)
+        assert len(samples) == 10
+    finally:
+        engine.dispose()
+
+
+def test_phase_four_postgres_fixture_skips_before_connecting_when_unset(monkeypatch):
+    """Unit: even the new parity suite cannot connect unless explicitly enabled."""
+    monkeypatch.delenv("DASHBOARD_TEST_PG_URL", raising=False)
+    create = Mock(side_effect=AssertionError("No database connection is allowed"))
+    monkeypatch.setattr(sys.modules[__name__], "_guarded_postgres_engine", create)
+    with pytest.raises(pytest.skip.Exception, match="DASHBOARD_TEST_PG_URL is unset"):
+        next(postgres_dashboard_session.__wrapped__())
+    create.assert_not_called()
+
+
+def test_phase_four_queries_compile_for_postgres_without_connecting(dashboard_clock):
+    """Mocked-behavior: compile the actual bulk reads, no PostgreSQL execution."""
+    engine = create_engine("sqlite:///:memory:")
+    statements = []
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(bind=engine) as db:
+            data, _ = _seed_and_dashboard(db)
+            def capture(state):
+                if state.is_select:
+                    statements.append(state.statement)
+            event.listen(db, "do_orm_execute", capture)
+            try:
+                _collect_phase_four_scenarios(db, data)
+            finally:
+                event.remove(db, "do_orm_execute", capture)
+        compiled = [str(statement.compile(dialect=postgresql.dialect())).lower() for statement in statements]
+        assert any("left outer join classwork" in sql for sql in compiled)
+        assert any("left outer join academic_level" in sql for sql in compiled)
+        queue_names = [sql for sql in compiled if "student.first_name" in sql and "student.middle_name" not in sql and "student.student_lrn" not in sql]
+        assert queue_names
+        assert all("email" not in sql and "contact" not in sql for sql in queue_names)
+        assert all("strftime" not in sql and "julianday" not in sql for sql in compiled)
+    finally:
+        engine.dispose()
+
+
+def test_teacher_dashboard_phase_four_queries_execute_on_guarded_postgres(postgres_dashboard_session, dashboard_clock):
+    """Opt-in only: selected attempts, targeted eligibility, Decimal and Manila parity."""
+    data, _ = _seed_and_dashboard(postgres_dashboard_session)
+    actual = _collect_phase_four_scenarios(postgres_dashboard_session, data)
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(bind=engine) as db:
+            sqlite_data, _ = _seed_and_dashboard(db)
+            expected = _collect_phase_four_scenarios(db, sqlite_data)
+        _assert_matches_sqlite(actual, expected)
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("guard_message,check", [
+    ("Malformed PostgreSQL test URL", "url_parse"),
+    ("The PostgreSQL test driver must be exactly postgresql", "driver"),
+    ("PostgreSQL test URL query parameters are forbidden", "query_parameters"),
+    ("PostgreSQL test host must be a literal local host", "host"),
+    ("PostgreSQL test port must be 55432", "port"),
+    ("PostgreSQL test database must be activity_test", "database"),
+    ("The selected PostgreSQL test driver is not installed", "driver_available"),
+    ("libpq routing and options environment overrides are forbidden", "routing_environment"),
+    ("Unable to construct the validated PostgreSQL test engine", "engine_construction"),
+], ids=[
+    "url_parse", "driver", "query_parameters", "host", "port", "database",
+    "driver_available", "routing_environment", "engine_construction",
+])
+def test_safe_failure_names_only_exact_allowlisted_guard_checks(guard_message, check):
+    """Unit: every fixed guard message has an independently specified code."""
+    visible = _safe_failure("target guard", DashboardPostgresSafetyError(guard_message))
+    _expect_equal(
+        visible,
+        f"PostgreSQL dashboard target guard failed (DashboardPostgresSafetyError); check={check}",
+        "allowlisted guard check",
+    )
+
+
+@pytest.mark.parametrize("payload_kind", [
+    "url", "username", "password", "exception_text", "known_prefix", "known_suffix",
+])
+def test_safe_failure_unknown_guard_details_never_leak(payload_kind, capsys, caplog):
+    """Unit: synthetic confidential details never enter output or captured logs."""
+    user_marker = "synthetic-guard-user"
+    password_marker = "synthetic-guard-private"
+    exception_marker = "synthetic-confidential-exception-detail"
+    diagnostic_url = URL.create(
+        "postgresql", username=user_marker, password=password_marker,
+        host="127.0.0.1", port=_TEST_PORT, database=_TEST_DATABASE,
+    ).render_as_string(hide_password=False)
+    details = {
+        "url": diagnostic_url,
+        "username": user_marker,
+        "password": password_marker,
+        "exception_text": exception_marker,
+        "known_prefix": "PostgreSQL test port must be 55432 " + diagnostic_url,
+        "known_suffix": diagnostic_url + " PostgreSQL test port must be 55432",
+    }
+    error = DashboardPostgresSafetyError(details[payload_kind])
+    visible = _safe_failure("target guard", error)
+    _expect_equal(
+        visible,
+        "PostgreSQL dashboard target guard failed (DashboardPostgresSafetyError); check=unknown",
+        "unknown guard check sanitation",
+    )
+    captured = capsys.readouterr()
+    output = visible + captured.out + captured.err + caplog.text
+    if any(marker in output for marker in (
+        "://", diagnostic_url, user_marker, password_marker, exception_marker,
+        details[payload_kind],
+    )):
+        pytest.fail("Mocked guard diagnostic leaked confidential details", pytrace=False)
+
+
+@pytest.mark.parametrize("argument_kind", ["empty", "multiple", "list", "dict", "string_subclass"])
+def test_safe_failure_unknown_guard_arguments_are_not_formatted(argument_kind):
+    """Unit: unexpected argument shapes cannot leak or select a known check."""
+    class UntrustedString(str):
+        def __hash__(self):
+            raise AssertionError("Untrusted string hash must not run")
+
+        def __eq__(self, other):
+            raise AssertionError("Untrusted string comparison must not run")
+
+        def __str__(self):
+            raise AssertionError("Untrusted string rendering must not run")
+
+    arguments = {
+        "empty": (),
+        "multiple": ("PostgreSQL test port must be 55432", "synthetic-private-detail"),
+        "list": (["synthetic-private-detail"],),
+        "dict": ({"synthetic-private-detail": "synthetic-private-value"},),
+        "string_subclass": (UntrustedString("PostgreSQL test port must be 55432"),),
+    }
+    visible = _safe_failure("target guard", DashboardPostgresSafetyError(*arguments[argument_kind]))
+    _expect_equal(
+        visible,
+        "PostgreSQL dashboard target guard failed (DashboardPostgresSafetyError); check=unknown",
+        "unknown guard argument sanitation",
+    )
+
+
+@pytest.mark.parametrize("guard_error", [True, False], ids=["guard", "other_exception"])
+def test_safe_failure_never_stringifies_or_reprs_exceptions(guard_error):
+    """Unit: formatting never invokes an exception's confidential renderers."""
+    class NonRenderingGuardError(DashboardPostgresSafetyError):
+        def __str__(self):
+            raise AssertionError("Exception text must not be rendered")
+
+        def __repr__(self):
+            raise AssertionError("Exception repr must not be rendered")
+
+    class NonRenderingError(RuntimeError):
+        def __str__(self):
+            raise AssertionError("Exception text must not be rendered")
+
+        def __repr__(self):
+            raise AssertionError("Exception repr must not be rendered")
+
+    error_type = NonRenderingGuardError if guard_error else NonRenderingError
+    error = error_type("synthetic-private-exception-detail")
+    visible = _safe_failure("target guard", error)
+    expected = f"PostgreSQL dashboard target guard failed ({error_type.__name__})"
+    if guard_error:
+        expected += "; check=unknown"
+    _expect_equal(visible, expected, "exception rendering is forbidden")
+
+
+def test_safe_failure_does_not_label_other_exception_types_as_guard_checks():
+    """Unit: a guard-like message in another exception retains prior output."""
+    visible = _safe_failure("target guard", RuntimeError("PostgreSQL test port must be 55432"))
+    _expect_equal(
+        visible, "PostgreSQL dashboard target guard failed (RuntimeError)",
+        "non-guard failure behavior is unchanged",
+    )
+
+
+@pytest.mark.parametrize("state_kind", ["valid", "private", "missing"])
+def test_safe_failure_guard_codes_preserve_sqlstate_sanitization(state_kind):
+    """Unit: guard labels preserve validated SQLSTATE handling, never its payload."""
+    error = DashboardPostgresSafetyError("PostgreSQL test port must be 55432")
+    error.orig = Mock(pgcode={
+        "valid": "23514", "private": "synthetic-private-sqlstate-detail", "missing": None,
+    }[state_kind])
+    expected = "PostgreSQL dashboard target guard failed (DashboardPostgresSafetyError); check=port"
+    if state_kind == "valid":
+        expected += "; SQLSTATE 23514"
+    _expect_equal(_safe_failure("target guard", error), expected, "SQLSTATE sanitation is unchanged")
+
+
+def test_postgres_fixture_displays_guard_check_without_private_details(monkeypatch, capsys, caplog):
+    """Mocked-behavior: the real fixture exposes a check code before any engine."""
+    monkeypatch.setenv("DASHBOARD_TEST_PG_URL", _SYNTHETIC_URL)
+    error = DashboardPostgresSafetyError("PostgreSQL test port must be 55432")
+    engine_factory = Mock(side_effect=error)
+    monkeypatch.setattr(sys.modules[__name__], "_guarded_postgres_engine", engine_factory)
+    fixture = postgres_dashboard_session.__wrapped__()
+    with pytest.raises(pytest.fail.Exception) as caught:
+        next(fixture)
+    _expect_equal(
+        str(caught.value),
+        "PostgreSQL dashboard target guard failed (DashboardPostgresSafetyError); check=port",
+        "fixture exposes only the failed guard check",
+    )
+    captured = capsys.readouterr()
+    if "://" in str(caught.value) + captured.out + captured.err + caplog.text:
+        pytest.fail("Mocked fixture exposed a connection URL", pytrace=False)
+    engine_factory.assert_called_once_with()
