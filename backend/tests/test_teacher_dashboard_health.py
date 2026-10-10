@@ -431,7 +431,8 @@ def test_pending_queue_is_limited_after_scope_and_status_filters(db, data):
     for index in range(7):
         assignment = add_assignment(db, data, f"queue_{index}")
         submission = add_submission(db, data, f"queue_{index}", assignment, data["students"]["active_one"], status="late")
-        submission.submitted_at = NOW + timedelta(minutes=index)
+        # Keep all fixture events through now; preserve the newest-first test.
+        submission.submitted_at = NOW - timedelta(minutes=7 - index)
         own.append(submission.submission_id)
     result = dashboard(db, data)
     assert result["kpis"]["ungraded_count"] == 8
@@ -771,3 +772,174 @@ def test_phase_three_authorization_unavailable_keeps_coverage_and_warning(db, da
     assert [band["count"] for band in details["grade_distribution"]] == [0] * 5
     assert details["grade_details"]["warnings"][0]["code"] == "grade_scope_unavailable"
     assert "internal authorization" not in str(details["grade_details"])
+
+
+def make_targeted_assignment(db, data, key, recipient, *, due_date=None):
+    """Real synthetic FK/check-constrained rows, reusable by PostgreSQL parity."""
+    from app.models.ai.AIModelVersion import AIModelVersion
+    from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
+    from app.models.intervention.Intervention import Intervention
+
+    model = AIModelVersion(model_name=f"dashboard-fixture-{key}", model_type="REGRESSOR",
+        model_purpose="CURRENT_TERM_FINAL_GRADE_PROJECTION", algorithm="synthetic", is_active=False)
+    db.add(model)
+    db.flush()
+    prediction = DevelopmentCurrentTermPrediction(student_id=recipient.student_id,
+        class_id=data["class_"].class_id, subject_id=data["subject"].subject_id,
+        source_period_id=data["period"].academic_period_id, target_period_id=data["period"].academic_period_id,
+        model_version_id=model.model_version_id, revision=1, predicted_period_grade=Decimal("80"),
+        intervention_level="NEEDS_MONITORING", intervention_basis="synthetic fixture", evidence_snapshot={})
+    db.add(prediction)
+    db.flush()
+    intervention = Intervention(student_id=recipient.student_id, class_id=data["class_"].class_id,
+        subject_id=data["subject"].subject_id, academic_period_id=data["period"].academic_period_id,
+        source_prediction_id=prediction.prediction_id, diagnosis_snapshot={})
+    db.add(intervention)
+    db.flush()
+    item = add_assignment(db, data, key, due_date=due_date)
+    item.recipient_student_id = recipient.student_id
+    item.source_intervention_id = intervention.intervention_id
+    item.remediation_request_id = uuid.uuid4()
+    db.flush()
+    return item
+
+
+def test_phase_four_latest_retake_keeps_unique_completion_and_latest_review(db, data):
+    """Mocked-behavior: no duplicate row inflation or highest-score fallback."""
+    item = data["assignments"]["main_graded"]
+    latest = add_submission(db, data, "retake", item, data["students"]["active_one"], status="submitted")
+    latest.submitted_at = NOW - timedelta(seconds=1)
+    result = dashboard(db, data)
+    assert result["engagement"]["expected_count"] == 4 and result["engagement"]["completed_count"] == 3
+    assert result["kpis"]["overall_completion_rate"] == 75.0 and result["kpis"]["ungraded_count"] == 2
+    assert result["trend_chart"]["points"][0]["avg_score_percent"] == 91.0
+    assert result["trend_chart"]["points"][0]["scored_count"] == 1
+    assert {row["submission_id"] for row in result["action_queue"]["pending_grading"]} == {
+        latest.submission_id, data["submissions"]["pending_active"].submission_id,
+    }
+    assert result["action_queue"]["upcoming_deadlines"][0]["submitted_count"] == 2
+    assert result["phase_two"]["weekdays"]["total_count"] == 3
+
+
+def test_phase_four_targeted_assignment_uses_one_eligible_student_everywhere(db, data):
+    """Mocked-behavior: active but non-target rows excluded from every metric."""
+    item = make_targeted_assignment(db, data, "target", data["students"]["active_one"], due_date=NOW)
+    target = add_submission(db, data, "target", item, data["students"]["active_one"], status="graded", grade=Decimal("50"))
+    add_submission(db, data, "not_target", item, data["students"]["active_two"], status="submitted")
+    result = dashboard(db, data)
+    assert result["engagement"]["expected_count"] == 5 and result["engagement"]["completed_count"] == 4
+    assert result["kpis"]["overall_completion_rate"] == 80.0
+    assert result["kpis"]["ungraded_count"] == 1
+    deadline = next(row for row in result["action_queue"]["upcoming_deadlines"] if row["assignment_id"] == item.classwork_assignment_id)
+    assert deadline["eligible_count"] == deadline["total_students"] == deadline["submitted_count"] == 1
+    assert deadline["warnings"] == []
+    assert result["phase_two"]["weekdays"]["total_count"] == result["phase_two"]["late_submissions"]["completed_count"] == 4
+    point = result["trend_chart"]["points"][0]
+    assert point["assignment_ids"] == [data["assignments"]["main_graded"].classwork_assignment_id, item.classwork_assignment_id]
+    assert point["avg_score_percent"] == 80.7 and point["scored_count"] == 3
+    assert point["eligible_count"] == point["submitted_count"] == 3
+    assert target.submission_id not in {row["submission_id"] for row in result["action_queue"]["pending_grading"]}
+
+
+def test_phase_four_outside_target_keeps_deadline_and_configuration_warning(db, data):
+    """Mocked-behavior: no whole-class denominator for an invalid target."""
+    item = make_targeted_assignment(db, data, "outside_target", data["students"]["withdrawn"], due_date=NOW)
+    add_submission(db, data, "outside_target", item, data["students"]["withdrawn"])
+    result = dashboard(db, data)
+    assert result["engagement"]["expected_count"] == 4
+    assert result["engagement"]["completed_count"] == 3
+    deadline = next(row for row in result["action_queue"]["upcoming_deadlines"] if row["assignment_id"] == item.classwork_assignment_id)
+    assert deadline["eligible_count"] == deadline["submitted_count"] == 0
+    assert deadline["warnings"][0]["code"] == "targeted_recipient_outside_active_roster"
+    assert any(warning["assignment_id"] == item.classwork_assignment_id for warning in result["engagement"]["warnings"])
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_phase_four_ambiguous_attempts_flag_totals_and_keep_valid_review_rows(db, data, missing):
+    """Mocked-behavior: ties/missing timestamps are not ID-resolved silently."""
+    item = data["assignments"]["main_graded"]
+    row = add_submission(db, data, "ambiguous", item, data["students"]["active_one"])
+    row.submitted_at = None if missing else data["submissions"]["graded_one"].submitted_at
+    result = dashboard(db, data)
+    assert result["kpis"]["overall_completion_rate"] is result["kpis"]["ungraded_count"] is None
+    assert result["section_matrix"][0]["completion_rate_percent"] is None
+    assert result["trend_chart"]["points"][0]["avg_score_percent"] is None
+    assert result["action_queue"]["upcoming_deadlines"][0]["submitted_count"] is None
+    assert result["engagement"]["warnings"][0]["code"] == "ambiguous_submission_attempts"
+    assert [row["submission_id"] for row in result["action_queue"]["pending_grading"]] == [data["submissions"]["pending_active"].submission_id]
+    assert next(card for card in result["cards"] if card["title"] == "Overall Completion")["count"] == "—"
+
+
+def test_phase_four_future_attempts_are_not_dashboard_evidence(db, data):
+    """Mocked-behavior: future latest attempts cannot hide valid older work."""
+    future = add_submission(db, data, "future", data["assignments"]["main_graded"], data["students"]["active_one"])
+    future.submitted_at = NOW + timedelta(seconds=1)
+    result = dashboard(db, data)
+    assert result["engagement"]["completed_count"] == 3
+    assert result["kpis"]["ungraded_count"] == 1
+    assert result["trend_chart"]["points"][0]["avg_score_percent"] == 71.0
+    assert result["phase_two"]["weekdays"]["total_count"] == 3
+
+
+def test_phase_four_grouped_trend_preserves_three_scored_task_sufficiency(db, data):
+    """Mocked-behavior: multiple same-day tasks make one real date point."""
+    for index in range(2):
+        item = add_assignment(db, data, f"same_day_{index}", due_date=data["assignments"]["main_graded"].due_date)
+        add_submission(db, data, f"same_day_{index}", item, data["students"]["active_one"], status="graded", grade=Decimal("25"))
+    result = dashboard(db, data)
+    chart = result["trend_chart"]
+    assert chart["has_sufficient_data"] is True and chart["graded_task_count"] == 3
+    assert chart["date_group_count"] == len(chart["points"]) == 2
+    point = chart["points"][0]
+    assert point["date_key"] == "2026-10-08" and point["task_count"] == 3
+    assert point["classwork_id"] is None and len(point["assignment_ids"]) == 3
+    assert point["scored_count"] == 4 and point["eligible_count"] == 6
+    assert point["avg_score_percent"] == 60.5 and point["completion_rate_percent"] == 66.7
+
+
+def test_phase_four_engagement_query_count_does_not_grow_with_fixture_size(db, data, monkeypatch):
+    """Mocked-behavior: actual SELECT counts, isolating existing gradebook calls."""
+    from sqlalchemy import event
+    monkeypatch.setattr(AnalyticsService, "read_dashboard_current_grades", lambda *_args: [])
+    engine = db.get_bind()
+    staff_id, period_id = data["teacher"].staff_id, data["period"].academic_period_id
+    def measured():
+        db.flush()
+        db.expire_all()
+        period = db.get(AcademicPeriod, period_id)
+        statements = []
+        def capture(_connection, _cursor, statement, _parameters, _context, _many):
+            assert statement.lstrip().upper().startswith("SELECT")
+            statements.append(statement)
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            AnalyticsService.build_teacher_dashboard_health(db, staff_id, period)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
+        return statements
+    small = measured()
+    for index in range(8):
+        learner = Student(student_id=uuid.uuid4(), student_lrn=f"{100 + index:012d}",
+            first_name=f"Synthetic{index}", last_name="Learner", academic_level_id=data["class_"].academic_level_id)
+        db.add(learner)
+        db.flush()
+        db.add(StudentClass(student_id=learner.student_id, class_id=data["class_"].class_id,
+            academic_year_id=data["year"].academic_year_id, enrollment_status="enrolled"))
+        item = add_assignment(db, data, f"larger_{index}", due_date=NOW)
+        add_submission(db, data, f"larger_{index}", item, learner)
+    # More classes/load combinations must not add metadata reads either.
+    for index in range(2):
+        cls = Class(section_name=f"Extra {index}", academic_year_id=data["year"].academic_year_id,
+            academic_level_id=data["class_"].academic_level_id, class_status="active")
+        db.add(cls)
+        db.flush()
+        db.add(SubjectLoad(staff_id=staff_id, class_id=cls.class_id, subject_id=data["subject"].subject_id,
+            academic_period_id=period_id, status="published", is_active_version=True))
+        add_assignment(db, data, f"extra_class_{index}", class_=cls, due_date=NOW)
+    large = measured()
+    assert len(small) > 0 and len(large) == len(small)
+    print(f"Engagement SELECT count: small={len(small)}, large={len(large)} (gradebook calls isolated).")
+    for statements in (small, large):
+        name_reads = [sql for sql in statements if "student.first_name" in sql and "FROM student " in sql]
+        assert len(name_reads) == 1
+        assert all(column not in name_reads[0] for column in ("student_lrn", "email", "contact", "password"))

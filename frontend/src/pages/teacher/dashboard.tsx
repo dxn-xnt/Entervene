@@ -326,11 +326,28 @@ export default function Dashboard() {
     return defaultTeacherCards.map((fallback, index) => {
       const card = data.cards?.find((item) => item.title === fallback.title) ??
         (index < phaseOneCards.length ? phaseOneCards[index] : phaseTwoCards[index - phaseOneCards.length]);
+      if (data.engagement && ["Overall Completion", "Ungraded Queue"].includes(card.title)) {
+        const summary = data.engagement;
+        const isCompletion = card.title === "Overall Completion";
+        return {
+          ...card,
+          count: isCompletion ? formatPercent(summary.completion_rate_percent == null ? null : Math.round(summary.completion_rate_percent))
+            : summary.pending_grading_count == null ? "—" : String(summary.pending_grading_count),
+          stat: isCompletion
+            ? summary.completed_count == null ? `${summary.resolved_completed_count} resolved of ${summary.expected_count} expected.`
+              : `${summary.completed_count} of ${summary.expected_count} submitted.`
+            : summary.pending_grading_count == null ? `${summary.resolved_pending_grading_count} resolved submissions.`
+              : `${summary.pending_grading_count} submissions.`,
+          statDescription: `${isCompletion
+            ? "Selected-period eligible student-task requirements; unique latest completed attempts."
+            : "Latest completed attempts pending teacher grading."} ${summary.warnings.map((warning) => warning.message).join(" ")}`.trim(),
+        };
+      }
       if (["Current grade", "Passing Rate", "Late Submissions"].includes(card.title)) {
         const metric = phaseTwoCards[index - phaseOneCards.length];
         // Normalize presentation locally, retaining configuration warnings from
         // older API card payloads as well as the typed metric warnings.
-        const backendWarning = card.count === "—" && card.statDescription &&
+        const backendWarning = card.title === "Passing Rate" && !grades?.warnings.length && card.count === "—" && card.statDescription &&
           card.statDescription !== metric.statDescription ? card.statDescription : undefined;
         return {
           ...card,
@@ -406,6 +423,8 @@ export default function Dashboard() {
     });
   }, [rawTopicMastery, subjectFilter, subjects]);
   const visiblePhaseTwo = isLoading || isPeriodLoading || error ? undefined : data?.phase_two;
+  const visibleEngagement = isLoading || isPeriodLoading || error ? undefined : data?.engagement;
+  const reviewWarnings = visibleEngagement?.warnings.filter((warning) => warning.code === "ambiguous_submission_attempts") ?? [];
   const submissionsWeekday = weekdayLabels.map((day, dayIndex) => ({
     day,
     count: visiblePhaseTwo?.weekdays.days.find((item) => item.day_index === dayIndex)?.count ?? null,
@@ -584,7 +603,7 @@ export default function Dashboard() {
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
                         {reviewSubmissions.length === 0 && (
                           <Card.Description className="text-xs text-muted-foreground">
-                            {emptyMessage("No submissions need grading.")}
+                            {emptyMessage(reviewWarnings.length ? "Review queue incomplete." : "No submissions need grading.")}
                           </Card.Description>
                         )}
                         {reviewSubmissions.map((item) => (
@@ -616,17 +635,22 @@ export default function Dashboard() {
                             </Badge>
                           </Card>
                         ))}
+                        {reviewWarnings.map((warning, index) => (
+                          <Card.Description key={`${warning.code}-${warning.assignment_id}-${index}`} className="text-xs text-muted-foreground">
+                            {warning.message}
+                          </Card.Description>
+                        ))}
                       </Card.Content>
                     </Card>
                   </div>
 
-                  {/* 2. Mastery & Completion Trend Chart */}
+                  {/* 2. Performance & Completion Trend Chart */}
                   <Card className="flex flex-col justify-between p-4 sm:p-5">
                     <Card.Header className="p-0">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
                         <div>
                           <Card.Title className="text-base font-bold sm:text-lg">
-                            Classwork Mastery & Completion Trend
+                            Classwork Performance & Completion Trend
                           </Card.Title>
                         </div>
 
@@ -663,13 +687,13 @@ export default function Dashboard() {
                         <div className="flex items-center gap-1.5">
                           <span className="size-2.5 rounded-full bg-primary inline-block" />
                           <span className="text-foreground">
-                            Class Mastery Average (%)
+                            Average task score (%)
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <span className="size-2.5 rounded-full bg-muted inline-block" />
                           <span className="text-foreground">
-                            Submission Completion (%)
+                            Submission completion (%)
                           </span>
                         </div>
                       </div>
@@ -715,14 +739,17 @@ export default function Dashboard() {
                               return (
                                 <div className="space-y-1 rounded border border-border bg-background p-2.5 text-xs text-foreground shadow-md">
                                   <p className="font-bold">
-                                    {point.title || point.short_label}
+                                    {point.short_label} · {point.title}
                                   </p>
                                   <p className="text-emerald-400 font-semibold">
-                                    Mastery: {formatPercent(point.avg_score_percent)}
+                                    Average task score: {formatPercent(point.avg_score_percent)}
                                   </p>
                                   <p className="text-amber-400 font-semibold">
                                     Completion: {formatPercent(point.completion_rate_percent)}
                                   </p>
+                                  {point.scored_count != null && point.eligible_count != null && (
+                                    <p>{point.scored_count} scored of {point.eligible_count} eligible student-task requirements.</p>
+                                  )}
                                 </div>
                               );
                             }}
@@ -730,7 +757,7 @@ export default function Dashboard() {
                           <Line
                             type="monotone"
                             dataKey="avg_score_percent"
-                            name="Mastery %"
+                            name="Average task score %"
                             stroke="var(--primary)"
                             strokeWidth={2.5}
                             dot={{
@@ -758,8 +785,11 @@ export default function Dashboard() {
                       </ResponsiveContainer>
                       <Card.Description className="text-xs text-muted-foreground mt-0.5 pb-2">
                         {trendPoints.length
-                          ? "Class score averages vs. task submission completion"
+                          ? "Grouped by Manila deadline date; publish or creation date used when no deadline exists. Raw task scores, not Current grades."
                           : emptyMessage("No published classwork for this selection.")}
+                        {!isLoading && !isPeriodLoading && !error && data?.trend_chart.warnings?.map((warning, index) => (
+                          <span key={`${warning.code}-${warning.assignment_id}-${index}`}> {warning.message}</span>
+                        ))}
                       </Card.Description>
                     </Card.Content>
                   </Card>
@@ -889,6 +919,11 @@ export default function Dashboard() {
                               <span className="text-[11px] text-muted-foreground truncate">
                                 {d.section_name}
                               </span>
+                              {d.warnings?.map((warning, index) => (
+                                <span key={`${warning.code}-${index}`} className={cn("text-xs", "text-muted-foreground")}>
+                                  {warning.message}
+                                </span>
+                              ))}
                             </div>
                             <Badge
                               size="sm"
@@ -1047,6 +1082,9 @@ export default function Dashboard() {
                                   Weighted and transmuted, as in the class record. Passing grade is set per subject group.
                                   {sec.warnings?.map((warning: { code: string; message: string }) => (
                                     <span key={warning.code}> {warning.message}</span>
+                                  ))}
+                                  {sec.engagement?.warnings.map((warning: { code: string; message: string }, index: number) => (
+                                    <span key={`engagement-${warning.code}-${index}`}> {warning.message}</span>
                                   ))}
                                 </Card.Description>
                               </Card>

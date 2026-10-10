@@ -10,6 +10,41 @@ class DashboardWarning(BaseModel):
     message: str
     subject_id: int | None = None
     class_id: int | None = None
+    assignment_id: int | None = None
+
+
+class DashboardEngagementSummary(BaseModel):
+    expected_count: int = Field(default=0, ge=0)
+    completed_count: int | None = Field(default=0, ge=0)
+    pending_grading_count: int | None = Field(default=0, ge=0)
+    # Resolved rows are useful even when ambiguous attempts make totals unknown.
+    resolved_completed_count: int = Field(default=0, ge=0)
+    resolved_pending_grading_count: int = Field(default=0, ge=0)
+    completion_rate_percent: float | None = None
+    avg_score_percent: float | None = None
+    scored_count: int = Field(default=0, ge=0)
+    graded_task_count: int = Field(default=0, ge=0)
+    warnings: list[DashboardWarning] = Field(default_factory=list)
+
+
+class DashboardTrendPoint(BaseModel):
+    date_key: date
+    assignment_ids: list[int]
+    task_count: int = Field(ge=1)
+    classwork_id: int | None = None
+    title: str
+    category: str = "Grouped tasks"
+    due_date: str | None = None
+    label: str
+    short_label: str
+    avg_score_percent: float | None = None
+    completion_rate_percent: float | None = None
+    submitted_count: int | None = Field(default=0, ge=0)
+    total_enrolled: int = Field(default=0, ge=0)
+    eligible_count: int = Field(default=0, ge=0)
+    scored_count: int = Field(default=0, ge=0)
+    graded_task_count: int = Field(default=0, ge=0)
+    warnings: list[DashboardWarning] = Field(default_factory=list)
 
 
 class ThresholdResolution(BaseModel):

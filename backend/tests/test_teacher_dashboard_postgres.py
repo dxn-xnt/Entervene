@@ -467,6 +467,7 @@ def _utc_timestamp(value):
 def _numeric_snapshot(result, data):
     """Compare numeric behavior and absolute times without DB IDs or people."""
     assignment_keys = {row.classwork_id: key for key, row in data["assignments"].items()}
+    assignment_id_keys = {row.classwork_assignment_id: key for key, row in data["assignments"].items()}
     submission_keys = {row.submission_id: key for key, row in data["submissions"].items()}
     class_keys = {data[key].class_id: key for key in ("class_", "other_class", "previous_class")}
     subject_keys = {data[key].subject_id: key for key in ("subject", "other_subject", "off_load_subject")}
@@ -480,7 +481,8 @@ def _numeric_snapshot(result, data):
         ),
         "sufficient_mastery": chart["has_sufficient_data"],
         "trend": [(
-            assignment_keys[row["classwork_id"]], row["avg_score_percent"],
+            (assignment_keys[row["classwork_id"]] if row["classwork_id"] is not None else
+             tuple(assignment_id_keys[aid] for aid in row["assignment_ids"])), row["avg_score_percent"],
             row["completion_rate_percent"], row["submitted_count"], row["total_enrolled"],
             _utc_timestamp(row["due_date"]),
         ) for row in chart["points"]],
@@ -938,3 +940,145 @@ def test_teacher_dashboard_phase_three_queries_execute_on_guarded_postgres(postg
     finally:
         engine.dispose()
     _assert_matches_sqlite(postgres_samples, sqlite_samples)
+
+
+def _phase_four_snapshot(result, data):
+    """Count/date-only parity; translate generated IDs into fixture keys."""
+    keys = {row.classwork_assignment_id: key for key, row in data["assignments"].items()}
+    return {
+        "engagement": {key: value for key, value in result["engagement"].items() if key != "warnings"},
+        "warnings": sorted((warning["code"], keys.get(warning["assignment_id"]))
+                           for warning in result["engagement"]["warnings"]),
+        "trend": [(point["date_key"], tuple(keys[aid] for aid in point["assignment_ids"]),
+                   point["task_count"], point["avg_score_percent"], point["completion_rate_percent"],
+                   point["eligible_count"], point["submitted_count"], point["scored_count"])
+                  for point in result["trend_chart"]["points"]],
+        "trend_evidence": (result["trend_chart"]["graded_task_count"], result["trend_chart"]["date_group_count"]),
+        "deadlines": [(keys[row["assignment_id"]], row["eligible_count"], row["submitted_count"],
+                       tuple(warning["code"] for warning in row["warnings"]))
+                      for row in result["action_queue"]["upcoming_deadlines"]],
+        "late": {key: value for key, value in result["phase_two"]["late_submissions"].items() if key != "warnings"},
+        "weekdays": {key: value for key, value in result["phase_two"]["weekdays"].items() if key != "warnings"},
+    }
+
+
+def _collect_phase_four_scenarios(db, data):
+    """Synthetic setup only; all production evaluations reject writes/flushes."""
+    from test_teacher_dashboard_health import NOW, add_submission, make_targeted_assignment
+    samples = {}
+    def capture(key):
+        db.flush()
+        result = _read_only_dashboard(db, data["teacher"].staff_id, data["period"])
+        samples[key] = _phase_four_snapshot(result, data)
+        return result
+    capture("base")
+    latest = add_submission(db, data, "phase_four_retake", data["assignments"]["main_graded"], data["students"]["active_one"])
+    latest.submitted_at = NOW - timedelta(seconds=1)
+    result = capture("latest_ungraded_retake")
+    assert result["engagement"]["completed_count"] == 3 and result["kpis"]["ungraded_count"] == 2
+    assert result["trend_chart"]["points"][0]["avg_score_percent"] == 91.0
+    # UTC October 7 is October 8 Manila: these tasks must be grouped together.
+    target = make_targeted_assignment(db, data, "phase_four_target", data["students"]["active_one"],
+                                     due_date=datetime(2026, 10, 7, 17, tzinfo=timezone.utc))
+    add_submission(db, data, "phase_four_target", target, data["students"]["active_one"], status="graded", grade=Decimal("40.25"))
+    add_submission(db, data, "phase_four_nonrecipient", target, data["students"]["active_two"], status="graded", grade=Decimal("50"))
+    result = capture("target_and_manila_group")
+    assert result["engagement"]["expected_count"] == 5 and result["engagement"]["completed_count"] == 4
+    point = result["trend_chart"]["points"][0]
+    assert point["date_key"] == "2026-10-08" and point["task_count"] == 2
+    assert point["scored_count"] == 2 and point["avg_score_percent"] == 85.8
+    outside = make_targeted_assignment(db, data, "phase_four_outside_target", data["students"]["withdrawn"], due_date=NOW)
+    result = capture("outside_target")
+    deadline = next(row for row in result["action_queue"]["upcoming_deadlines"] if row["assignment_id"] == outside.classwork_assignment_id)
+    assert deadline["eligible_count"] == 0 and deadline["warnings"][0]["code"] == "targeted_recipient_outside_active_roster"
+    future = add_submission(db, data, "phase_four_future", target, data["students"]["active_one"])
+    future.submitted_at = NOW + timedelta(seconds=1)
+    capture("future_attempt_excluded")
+    assert samples["future_attempt_excluded"] == samples["outside_target"]
+    # Excuse preserves target completion/performance but excludes lateness.
+    db.add(AttendanceRecord(student_id=data["students"]["active_one"].student_id,
+        class_id=data["class_"].class_id, subject_id=data["other_subject"].subject_id,
+        date=date(2026, 10, 8), status="excused"))
+    result = capture("excuse_keeps_completion")
+    assert result["engagement"]["completed_count"] == 4
+    assert result["phase_two"]["late_submissions"]["excused_excluded_count"] == 2
+    # After selected-period end, completion remains cohort-based; dates do not.
+    data["period"].end_date = date(2026, 10, 7)
+    result = capture("cohort_vs_calendar_window")
+    assert result["engagement"]["completed_count"] == 4
+    assert result["phase_two"]["weekdays"]["total_count"] == 0
+    data["period"].end_date = date(2026, 12, 31)
+    tied = add_submission(db, data, "phase_four_ambiguous", data["assignments"]["main_pending"], data["students"]["active_one"])
+    tied.submitted_at = data["submissions"]["pending_active"].submitted_at
+    result = capture("ambiguous_attempts")
+    assert result["engagement"]["completion_rate_percent"] is None and result["kpis"]["ungraded_count"] is None
+    samples["empty_period"] = _phase_four_snapshot(_read_only_dashboard(db, data["teacher"].staff_id, data["empty_period"]), data)
+    other = _read_only_dashboard(db, data["other_teacher"].staff_id, data["period"])
+    samples["teacher_isolation"] = _phase_four_snapshot(other, data)
+    assert all(not key.startswith("phase_four") for point in samples["teacher_isolation"]["trend"] for key in point[1])
+    return samples
+
+
+def test_teacher_dashboard_phase_four_scenarios_execute_on_isolated_sqlite(dashboard_clock):
+    """Mocked-behavior: exercise every new parity fixture with no PostgreSQL."""
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(bind=engine) as db:
+            data, _ = _seed_and_dashboard(db)
+            samples = _collect_phase_four_scenarios(db, data)
+        assert len(samples) == 10
+    finally:
+        engine.dispose()
+
+
+def test_phase_four_postgres_fixture_skips_before_connecting_when_unset(monkeypatch):
+    """Unit: even the new parity suite cannot connect unless explicitly enabled."""
+    monkeypatch.delenv("DASHBOARD_TEST_PG_URL", raising=False)
+    create = Mock(side_effect=AssertionError("No database connection is allowed"))
+    monkeypatch.setattr(sys.modules[__name__], "_guarded_postgres_engine", create)
+    with pytest.raises(pytest.skip.Exception, match="DASHBOARD_TEST_PG_URL is unset"):
+        next(postgres_dashboard_session.__wrapped__())
+    create.assert_not_called()
+
+
+def test_phase_four_queries_compile_for_postgres_without_connecting(dashboard_clock):
+    """Mocked-behavior: compile the actual bulk reads, no PostgreSQL execution."""
+    engine = create_engine("sqlite:///:memory:")
+    statements = []
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(bind=engine) as db:
+            data, _ = _seed_and_dashboard(db)
+            def capture(state):
+                if state.is_select:
+                    statements.append(state.statement)
+            event.listen(db, "do_orm_execute", capture)
+            try:
+                _collect_phase_four_scenarios(db, data)
+            finally:
+                event.remove(db, "do_orm_execute", capture)
+        compiled = [str(statement.compile(dialect=postgresql.dialect())).lower() for statement in statements]
+        assert any("left outer join classwork" in sql for sql in compiled)
+        assert any("left outer join academic_level" in sql for sql in compiled)
+        queue_names = [sql for sql in compiled if "student.first_name" in sql and "student.middle_name" not in sql and "student.student_lrn" not in sql]
+        assert queue_names
+        assert all("email" not in sql and "contact" not in sql for sql in queue_names)
+        assert all("strftime" not in sql and "julianday" not in sql for sql in compiled)
+    finally:
+        engine.dispose()
+
+
+def test_teacher_dashboard_phase_four_queries_execute_on_guarded_postgres(postgres_dashboard_session, dashboard_clock):
+    """Opt-in only: selected attempts, targeted eligibility, Decimal and Manila parity."""
+    data, _ = _seed_and_dashboard(postgres_dashboard_session)
+    actual = _collect_phase_four_scenarios(postgres_dashboard_session, data)
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(bind=engine) as db:
+            sqlite_data, _ = _seed_and_dashboard(db)
+            expected = _collect_phase_four_scenarios(db, sqlite_data)
+        _assert_matches_sqlite(actual, expected)
+    finally:
+        engine.dispose()

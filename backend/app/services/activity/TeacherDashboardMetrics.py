@@ -1,4 +1,4 @@
-"""Read-only Phase 2 teacher-dashboard policies, not app-wide grade policies.
+"""Read-only teacher-dashboard grade, attendance and engagement policies.
 
 The existing class-record calculation remains authoritative. This module never
 finalizes grades, persists results, or substitutes a passing-grade constant.
@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
+from math import isfinite
 from typing import TYPE_CHECKING, Collection, Mapping, Sequence
 from unicodedata import normalize
 from uuid import UUID
@@ -19,6 +20,7 @@ from fastapi import HTTPException
 from app.schemas.TeacherDashboard import (
     AttendanceSummary,
     DashboardGrade,
+    DashboardEngagementSummary,
     DashboardGradeBand,
     DashboardGradeDistribution,
     DashboardPerformerItem,
@@ -26,6 +28,7 @@ from app.schemas.TeacherDashboard import (
     DashboardScopeLabel,
     DashboardWindow,
     DashboardWarning,
+    DashboardTrendPoint,
     GradeSummary,
     LateSubmissionSummary,
     TermProgress,
@@ -36,6 +39,7 @@ from app.schemas.TeacherDashboard import (
 from app.services.student_record.StudentRecordService import teacher_student_gradebook
 from app.services.classes.ClassQueryService import _student_full_name
 from app.models.people.Student import Student
+from app.services.classwork.ClassworkAccessService import assignment_allows_student
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -423,6 +427,148 @@ def select_dashboard_submissions(
             message="Submission metrics unavailable: ambiguous duplicate submissions.",
         ))
     return selected, warnings
+
+
+@dataclass(frozen=True)
+class DashboardEngagementSnapshot:
+    """Request-local ORM inputs, never serialized or persisted."""
+    assignments: Mapping[int, ClassworkAssignment]
+    eligible_by_assignment: Mapping[int, frozenset[str]]
+    selected_by_assignment: Mapping[int, Sequence[StudentSubmission]]
+    warnings_by_assignment: Mapping[int, Sequence[DashboardWarning]]
+    # Calendar metrics retain their existing filter-before-attempt-selection rule.
+    eligible_submissions: Sequence[StudentSubmission]
+
+
+def dashboard_assignment_student_ids(
+    assignment: ClassworkAssignment, enrolled_student_ids: Collection[object]
+) -> frozenset[str]:
+    """Intersect the authoritative active roster with shared recipient eligibility."""
+    return frozenset(str(student_id) for student_id in enrolled_student_ids
+                     if assignment_allows_student(assignment, student_id))
+
+
+def build_dashboard_engagement(
+    assignments: Mapping[int, ClassworkAssignment],
+    enrolled_by_class: Mapping[int, Collection[object]],
+    submissions: Sequence[StudentSubmission],
+    now: datetime,
+) -> DashboardEngagementSnapshot:
+    """One unique latest completed attempt per eligible learner/task through now.
+
+    The assignment's selected period is the cohort; completion can include a
+    submission after that period's end. Excuses never remove an obligation.
+    Future timestamps are filtered before selecting, without falling back to
+    an older graded attempt when the newest completed attempt is ungraded.
+    """
+    eligible = {aid: dashboard_assignment_student_ids(a, enrolled_by_class.get(a.class_id, ()))
+                for aid, a in assignments.items()}
+    candidates = {aid: [] for aid in assignments}
+    scoped = []
+    cutoff = _dashboard_aware_timestamp(now)
+    for row in submissions:
+        aid = row.classwork_assignment_id
+        if aid not in eligible or str(row.student_id) not in eligible[aid]:
+            continue
+        if row.submitted_at is not None and _dashboard_aware_timestamp(row.submitted_at) > cutoff:
+            continue
+        scoped.append(row)
+        candidates[aid].append(row)
+    selected, warnings = {}, {}
+    for aid, assignment in assignments.items():
+        selected[aid], attempt_warnings = select_dashboard_submissions(candidates[aid])
+        warnings[aid] = [warning.model_copy(update={
+            "assignment_id": aid, "class_id": assignment.class_id,
+            "subject_id": assignment.classwork.subject_id,
+        }) for warning in attempt_warnings]
+        if assignment.recipient_student_id is not None and not eligible[aid]:
+            warnings[aid].append(DashboardWarning(
+                code="targeted_recipient_outside_active_roster",
+                message="Assignment configuration: targeted recipient is outside the active roster.",
+                assignment_id=aid, class_id=assignment.class_id,
+                subject_id=assignment.classwork.subject_id,
+            ))
+        if not (assignment.due_date or assignment.publish_date or assignment.classwork.created_at):
+            warnings[aid].append(DashboardWarning(
+                code="missing_trend_date",
+                message="Trend incomplete: an assignment has no deadline, publish or creation date.",
+                assignment_id=aid, class_id=assignment.class_id,
+                subject_id=assignment.classwork.subject_id,
+            ))
+    return DashboardEngagementSnapshot(assignments, eligible, selected, warnings, scoped)
+
+
+def _dashboard_task_percent(submission: StudentSubmission, assignment: ClassworkAssignment) -> float | None:
+    if submission.grade is None or assignment.classwork.total_points is None:
+        return None
+    points, maximum = float(submission.grade), float(assignment.classwork.total_points)
+    if not isfinite(points) or not isfinite(maximum) or maximum <= 0:
+        return None
+    return points / maximum * 100.0
+
+
+def summarize_dashboard_engagement(
+    snapshot: DashboardEngagementSnapshot, assignment_ids: Collection[int] | None = None
+) -> DashboardEngagementSummary:
+    """Python aggregation, equal weight per scored learner-task, no ORM reads."""
+    ids = sorted(snapshot.assignments if assignment_ids is None else set(assignment_ids))
+    warnings = [warning for aid in ids for warning in snapshot.warnings_by_assignment[aid]]
+    ambiguous = any(warning.code == "ambiguous_submission_attempts" for warning in warnings)
+    expected = sum(len(snapshot.eligible_by_assignment[aid]) for aid in ids)
+    completed = sum(len(snapshot.selected_by_assignment[aid]) for aid in ids)
+    pending = sum(row.status in {"submitted", "late"} and row.grade is None
+                  for aid in ids for row in snapshot.selected_by_assignment[aid])
+    scores = []
+    graded_tasks = 0
+    for aid in ids:
+        task_scores = [score for row in snapshot.selected_by_assignment[aid]
+                       if (score := _dashboard_task_percent(row, snapshot.assignments[aid])) is not None]
+        scores.extend(task_scores)
+        graded_tasks += bool(task_scores)
+    no_eligible_target = expected == 0 and any(
+        warning.code == "targeted_recipient_outside_active_roster" for warning in warnings
+    )
+    return DashboardEngagementSummary(
+        expected_count=expected,
+        completed_count=None if ambiguous else completed,
+        pending_grading_count=None if ambiguous else pending,
+        resolved_completed_count=completed, resolved_pending_grading_count=pending,
+        completion_rate_percent=(None if ambiguous or no_eligible_target else
+                                 round(float(completed) / float(expected) * 100.0, 1) if expected else 0.0),
+        avg_score_percent=(round(sum(scores) / float(len(scores)), 1) if scores and not ambiguous else None),
+        scored_count=len(scores), graded_task_count=graded_tasks, warnings=warnings,
+    )
+
+
+def build_dashboard_performance_trend(
+    snapshot: DashboardEngagementSnapshot, assignments: Sequence[ClassworkAssignment]
+) -> list[DashboardTrendPoint]:
+    """One point per Manila deadline day (publish/creation fallback), not per task."""
+    groups: dict[date, list[ClassworkAssignment]] = {}
+    for assignment in assignments:
+        timestamp = assignment.due_date or assignment.publish_date or assignment.classwork.created_at
+        if timestamp is not None:
+            groups.setdefault(dashboard_manila_date(timestamp), []).append(assignment)
+    points = []
+    for day, tasks in sorted(groups.items()):
+        tasks.sort(key=lambda a: a.classwork_assignment_id)
+        ids = [a.classwork_assignment_id for a in tasks]
+        summary = summarize_dashboard_engagement(snapshot, ids)
+        label = day.strftime("%b %d")
+        points.append(DashboardTrendPoint(
+            date_key=day, assignment_ids=ids, task_count=len(tasks),
+            # A multi-task point must not invent a representative navigation ID.
+            classwork_id=tasks[0].classwork_id if len(tasks) == 1 else None,
+            due_date=tasks[0].due_date.isoformat() if len(tasks) == 1 and tasks[0].due_date is not None else None,
+            title=f"{len(tasks)} {'task' if len(tasks) == 1 else 'tasks'}", label=label, short_label=label,
+            avg_score_percent=summary.avg_score_percent,
+            completion_rate_percent=summary.completion_rate_percent,
+            submitted_count=summary.completed_count,
+            total_enrolled=summary.expected_count, eligible_count=summary.expected_count,
+            scored_count=summary.scored_count, graded_task_count=summary.graded_task_count,
+            warnings=summary.warnings,
+        ))
+    return points
 
 
 def summarize_dashboard_submissions(

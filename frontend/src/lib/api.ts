@@ -2710,16 +2710,23 @@ export interface TeacherDashboardHealthFilter {
 }
 
 export interface TrendChartPoint {
-  classwork_id: number;
+  classwork_id: number | null;
   title: string;
   category: string;
   due_date: string | null;
   label: string;
   short_label: string;
   avg_score_percent: number | null;
-  completion_rate_percent: number;
-  submitted_count: number;
+  completion_rate_percent: number | null;
+  submitted_count: number | null;
   total_enrolled: number;
+  date_key?: string;
+  assignment_ids?: number[];
+  task_count?: number;
+  eligible_count?: number;
+  scored_count?: number;
+  graded_task_count?: number;
+  warnings?: TeacherDashboardWarning[];
 }
 
 export interface TeacherDashboardWarning {
@@ -2727,6 +2734,20 @@ export interface TeacherDashboardWarning {
   message: string;
   subject_id?: number | null;
   class_id?: number | null;
+  assignment_id?: number | null;
+}
+
+export interface TeacherDashboardEngagementSummary {
+  expected_count: number;
+  completed_count: number | null;
+  pending_grading_count: number | null;
+  resolved_completed_count: number;
+  resolved_pending_grading_count: number;
+  completion_rate_percent: number | null;
+  avg_score_percent: number | null;
+  scored_count: number;
+  graded_task_count: number;
+  warnings: TeacherDashboardWarning[];
 }
 
 export interface TeacherDashboardGradeSummary {
@@ -2793,8 +2814,9 @@ export interface SectionHealthItem extends Partial<TeacherDashboardGradeSummary>
   published_classworks: number;
   avg_score_percent: number | null;
   passing_rate_percent: number | null;
-  completion_rate_percent: number;
+  completion_rate_percent: number | null;
   attendance_rate_percent: number | null;
+  engagement?: TeacherDashboardEngagementSummary;
 }
 
 export interface ActionQueuePendingItem {
@@ -2812,8 +2834,11 @@ export interface ActionQueueDeadlineItem {
   title: string;
   section_name: string;
   due_date: string | null;
-  submitted_count: number;
+  submitted_count: number | null;
   total_students: number;
+  assignment_id?: number;
+  eligible_count?: number;
+  warnings?: TeacherDashboardWarning[];
 }
 
 export interface TeacherDashboardPerformer {
@@ -2852,9 +2877,10 @@ export interface TeacherDashboardHealthResponse {
   kpis: {
     active_classes: number;
     enrolled_students: number;
-    overall_completion_rate: number;
-    ungraded_count: number;
+    overall_completion_rate: number | null;
+    ungraded_count: number | null;
   };
+  engagement?: TeacherDashboardEngagementSummary;
   trend_chart: {
     available_filters: TeacherDashboardHealthFilter[];
     selected_class_id: number | null;
@@ -2862,6 +2888,9 @@ export interface TeacherDashboardHealthResponse {
     selected_section_name: string;
     selected_subject_name: string;
     has_sufficient_data: boolean;
+    graded_task_count?: number;
+    date_group_count?: number;
+    warnings?: TeacherDashboardWarning[];
     points: TrendChartPoint[];
   };
   section_matrix: SectionHealthItem[];

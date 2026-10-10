@@ -99,7 +99,7 @@ def get_teacher_dashboard_health(
     """
     Returns authentic, real class-health metrics for the teacher dashboard:
     - KPIs (active classes, enrolled students, overall completion rate, ungraded queue)
-    - Trend chart (chronological mastery & completion data points for selected class/subject)
+    - Trend chart (Manila-date grouped raw task performance & eligible completion for selected class/subject)
     - Section health matrix (side-by-side section comparison with graceful partial states)
     - Live action queue (submissions to review, upcoming deadlines)
     - Dashboard-only Phase 2 policies: class-record Current grade, strict runtime

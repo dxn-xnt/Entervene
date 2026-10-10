@@ -724,3 +724,155 @@ def test_bulk_name_read_uses_class_record_display_format(dashboard_sample):
     assert metrics.read_dashboard_student_names(db, [str(learner.student_id)]) == {
         str(learner.student_id): "Sample Jr., Alex T.",
     }
+
+
+def engagement_assignment(identifier=1, *, recipient=None, due=None, maximum=50):
+    item = assignment(identifier, due=due)
+    item.recipient_student_id = recipient
+    item.classwork_id = identifier + 100
+    item.publish_date = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    item.classwork.created_at = datetime(2026, 9, 30, tzinfo=timezone.utc)
+    item.classwork.total_points = maximum
+    return item
+
+
+def engagement_row(identifier=1, *, learner="a", submitted=None, status="graded", score=25):
+    row = submission(identifier, learner=learner, submitted=submitted, status=status)
+    row.grade = score
+    return row
+
+
+@pytest.mark.parametrize("recipient,expected", [(None, {"a", "b"}), ("a", {"a"}), ("outside", set())])
+def test_dashboard_assignment_eligibility_is_active_roster_intersection(recipient, expected):
+    """Validator-unit: delegate targeting to the unchanged shared helper."""
+    assert metrics.dashboard_assignment_student_ids(engagement_assignment(recipient=recipient), {"a", "b"}) == expected
+
+
+def test_engagement_latest_completed_attempt_drives_all_cohort_metrics():
+    """Unit: latest ungraded attempt replaces an older, higher graded score."""
+    now = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    old = engagement_row(submitted=now - timedelta(days=1), score=50)
+    newest = engagement_row(submitted=now, status="late", score=None)
+    snapshot = metrics.build_dashboard_engagement({1: engagement_assignment(due=now)}, {1: {"a", "b"}}, [old, newest], now)
+    summary = metrics.summarize_dashboard_engagement(snapshot)
+    assert snapshot.selected_by_assignment[1] == [newest]
+    assert summary.expected_count == 2 and summary.completed_count == summary.pending_grading_count == 1
+    assert summary.completion_rate_percent == 50.0
+    assert summary.avg_score_percent is None and summary.scored_count == 0
+
+
+@pytest.mark.parametrize("status", ["pending", "missed", "draft"])
+def test_engagement_incomplete_attempt_does_not_replace_completed_attempt(status):
+    """Unit: only completed attempts determine completion and performance."""
+    now = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    old = engagement_row(submitted=now - timedelta(days=1), score=25)
+    unfinished = engagement_row(submitted=now, status=status, score=None)
+    snapshot = metrics.build_dashboard_engagement({1: engagement_assignment()}, {1: {"a"}}, [old, unfinished], now)
+    summary = metrics.summarize_dashboard_engagement(snapshot)
+    assert snapshot.selected_by_assignment[1] == [old]
+    assert summary.completed_count == 1 and summary.pending_grading_count == 0
+    assert summary.avg_score_percent == 50.0
+
+
+@pytest.mark.parametrize("missing", [True, False])
+def test_engagement_ambiguous_attempts_make_totals_unavailable_but_keep_valid_rows(missing):
+    """Unit: no invented ID or complete-looking partial completion/review total."""
+    now = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    rows = [engagement_row(submitted=now), engagement_row(submitted=None if missing else now),
+            engagement_row(learner="b", submitted=now, status="submitted", score=None)]
+    snapshot = metrics.build_dashboard_engagement({1: engagement_assignment()}, {1: {"a", "b"}}, rows, now)
+    summary = metrics.summarize_dashboard_engagement(snapshot)
+    assert summary.completed_count is summary.pending_grading_count is summary.completion_rate_percent is summary.avg_score_percent is None
+    assert summary.resolved_completed_count == summary.resolved_pending_grading_count == 1
+    assert summary.warnings[0].assignment_id == 1
+    assert summary.warnings[0].code == "ambiguous_submission_attempts"
+
+
+def test_engagement_filters_nonrecipients_outsiders_and_future_attempts_before_selection():
+    """Unit: future or unauthorized evidence cannot inflate any dashboard metric."""
+    now = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    accepted = engagement_row(submitted=now)
+    rows = [accepted, engagement_row(learner="b", submitted=now), engagement_row(learner="outside", submitted=now),
+            engagement_row(submitted=now + timedelta(seconds=1), score=50)]
+    snapshot = metrics.build_dashboard_engagement({1: engagement_assignment(recipient="a")}, {1: {"a", "b"}}, rows, now)
+    assert snapshot.eligible_submissions == [accepted]
+    assert snapshot.selected_by_assignment[1] == [accepted]
+    assert metrics.summarize_dashboard_engagement(snapshot).completion_rate_percent == 100.0
+
+
+def test_engagement_outside_target_is_zero_eligible_and_configuration_warning():
+    """Unit: retain the assignment, never turn it into a classwide obligation."""
+    now = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    snapshot = metrics.build_dashboard_engagement({1: engagement_assignment(recipient="outside")}, {1: {"a"}}, [], now)
+    summary = metrics.summarize_dashboard_engagement(snapshot)
+    assert snapshot.assignments.keys() == {1}
+    assert summary.expected_count == summary.completed_count == 0
+    assert summary.completion_rate_percent is None
+    assert summary.warnings[0].code == "targeted_recipient_outside_active_roster"
+
+
+def test_engagement_assignment_cohort_can_differ_from_calendar_metrics():
+    """Unit: completion after period end is real; dated metrics keep their window."""
+    now = datetime(2027, 1, 2, tzinfo=timezone.utc)
+    work = engagement_assignment(due=datetime(2026, 12, 30, tzinfo=timezone.utc))
+    row = engagement_row(submitted=now)
+    snapshot = metrics.build_dashboard_engagement({1: work}, {1: {"a"}}, [row], now)
+    assert metrics.summarize_dashboard_engagement(snapshot).completed_count == 1
+    late, weekdays = metrics.summarize_dashboard_submissions(snapshot.assignments, snapshot.eligible_submissions, [], now,
+                                                           date(2026, 10, 1), date(2026, 12, 31))
+    assert late.completed_count == weekdays.total_count == 0
+
+
+def test_engagement_excuse_keeps_completion_performance_and_weekday_evidence():
+    """Unit: attendance exemptions apply only to the lateness assessment."""
+    now = datetime(2026, 10, 8, 2, tzinfo=timezone.utc)
+    work = engagement_assignment(due=now - timedelta(hours=1))
+    row = engagement_row(learner="learner", submitted=now)
+    snapshot = metrics.build_dashboard_engagement({1: work}, {1: {"learner", "b"}}, [row], now)
+    summary = metrics.summarize_dashboard_engagement(snapshot)
+    late, weekdays = metrics.summarize_dashboard_submissions(snapshot.assignments, snapshot.eligible_submissions, [excuse()], now,
+                                                           date(2026, 10, 1), date(2026, 12, 31))
+    assert summary.expected_count == 2 and summary.completed_count == 1 and summary.avg_score_percent == 50.0
+    assert late.excused_excluded_count == 1 and late.eligible_count == 0
+    assert weekdays.total_count == 1
+
+
+def test_trend_groups_manila_dates_and_weights_each_scored_learner_task_equally():
+    """Unit: not an average of task averages, and not pooled points."""
+    now = datetime(2026, 10, 10, tzinfo=timezone.utc)
+    works = {1: engagement_assignment(1, due=datetime(2026, 10, 7, 17, tzinfo=timezone.utc), maximum=10),
+             2: engagement_assignment(2, due=datetime(2026, 10, 8, 1, tzinfo=timezone.utc), maximum=100)}
+    rows = [engagement_row(1, submitted=now, score=10), engagement_row(2, submitted=now, score=20),
+            engagement_row(2, learner="b", submitted=now, score=40)]
+    snapshot = metrics.build_dashboard_engagement(works, {1: {"a", "b"}}, rows, now)
+    points = metrics.build_dashboard_performance_trend(snapshot, list(works.values()))
+    assert len(points) == 1
+    point = points[0]
+    assert point.date_key == date(2026, 10, 8) and point.short_label == "Oct 08"
+    assert point.assignment_ids == [1, 2] and point.classwork_id is None
+    assert point.task_count == point.graded_task_count == 2
+    assert point.scored_count == 3 and point.eligible_count == point.total_enrolled == 4
+    assert point.submitted_count == 3 and point.completion_rate_percent == 75.0
+    assert point.avg_score_percent == 53.3  # (100 + 20 + 40) / 3, not 65 or 33.3.
+
+
+@pytest.mark.parametrize("fallback,expected", [("publish", date(2026, 10, 2)), ("created", date(2026, 10, 1))])
+def test_trend_fallback_dates_use_manila_and_keep_real_single_task_id(fallback, expected):
+    """Unit: no raw UTC date labels and no synthetic task/date identity."""
+    now = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    work = engagement_assignment()
+    work.publish_date = datetime(2026, 10, 1, 17, tzinfo=timezone.utc) if fallback == "publish" else None
+    work.classwork.created_at = datetime(2026, 9, 30, 17, tzinfo=timezone.utc)
+    snapshot = metrics.build_dashboard_engagement({1: work}, {1: {"a"}}, [], now)
+    point = metrics.build_dashboard_performance_trend(snapshot, [work])[0]
+    assert point.date_key == expected and point.classwork_id == work.classwork_id
+    assert point.avg_score_percent is None and point.completion_rate_percent == 0.0
+
+
+def test_trend_missing_all_dates_is_flagged_not_given_an_invented_date():
+    """Unit: unknown calendar data never becomes a fake task label/point."""
+    work = engagement_assignment()
+    work.publish_date = work.classwork.created_at = None
+    snapshot = metrics.build_dashboard_engagement({1: work}, {1: {"a"}}, [], datetime(2026, 10, 8, tzinfo=timezone.utc))
+    assert metrics.build_dashboard_performance_trend(snapshot, [work]) == []
+    assert metrics.summarize_dashboard_engagement(snapshot).warnings[0].code == "missing_trend_date"
