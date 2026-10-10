@@ -428,11 +428,11 @@ describe("teacher dashboard Phase 2 mocked component behavior", () => {
     expect(within(cardFor("Current grade")).getByText(/2 of 3 student-subject grades available/)).toBeTruthy();
     expect(within(cardFor("Current grade")).getByText(/Weighted and transmuted, as in the class record/)).toBeTruthy();
     expect(countFor("Passing Rate")).toBe("50%");
-    expect(within(cardFor("Passing Rate")).getByText(/Against each subject group's passing grade/)).toBeTruthy();
+    expect(within(cardFor("Passing Rate")).getByText("1 of 2 available grades pass.")).toBeTruthy();
     expect(within(cardFor("Passing Rate")).getByText(/Passing grade is set per subject group/)).toBeTruthy();
     expect(countFor("Late Submissions")).toBe("25%");
-    expect(within(cardFor("Late Submissions")).getByText(/1 of 4 assessed submissions · 2 excused excluded/)).toBeTruthy();
-    expect(within(cardFor("Late Submissions")).getByText(/Late submissions, excluding excused submissions/)).toBeTruthy();
+    expect(within(cardFor("Late Submissions")).getByText("1 of 4 assessed submissions are late.")).toBeTruthy();
+    expect(within(cardFor("Late Submissions")).getByText(/2 excused submissions excluded/)).toBeTruthy();
     expect(countFor("Attendance Today")).toBe("2 / 4");
     expect(within(cardFor("Attendance Today")).getByText(/1 late · 1 absent · 1 excused/)).toBeTruthy();
     expect(countFor("Term Progress")).toBe("Week 2");
@@ -461,7 +461,7 @@ describe("teacher dashboard Phase 2 mocked component behavior", () => {
     await waitFor(() => expect(countFor("Current grade")).toBe("80.5"));
     expect(countFor("Passing Rate")).toBe("—");
     expect(within(cardFor("Passing Rate")).getByText(/Passing rate unavailable/)).toBeTruthy();
-    expect(within(cardFor("Late Submissions")).getByText(/2 excused excluded/)).toBeTruthy();
+    expect(within(cardFor("Late Submissions")).getByText(/2 excused submissions excluded/)).toBeTruthy();
     expect(countFor("Term Progress")).toBe("Ended");
   });
 
@@ -583,7 +583,7 @@ describe("teacher dashboard Phase 2 mocked component behavior", () => {
     render(<Dashboard />);
     await waitFor(() => expect(countFor("Late Submissions")).toBe("—"));
     expect(within(cardFor("Late Submissions")).getByText(/submission timestamps are missing/)).toBeTruthy();
-    expect(within(cardFor("Late Submissions")).getByText(/2 excused excluded/)).toBeTruthy();
+    expect(within(cardFor("Late Submissions")).getByText(/2 excused submissions excluded/)).toBeTruthy();
   });
 
   it("clears old monthly and overview metrics on a period change and ignores a stale Phase 2 response", async () => {
@@ -667,6 +667,38 @@ function phaseThreeResponse(): TeacherDashboardHealthResponse {
       top_performer_limit: 3, cutoff_tie_omitted_count: 0, warnings: [] },
   } });
 }
+
+// Part 1: mocked component behavior, preserving the existing card structure.
+describe("teacher dashboard small UI fixes", () => {
+  it("keeps the complete Below 75 label and top-aligns uniformly styled weekday bars", async () => {
+    mocks.load.mockResolvedValue(phaseThreeResponse());
+    render(<Dashboard />);
+    await waitFor(() => expect(countFor("Current grade")).toBe("80.5"));
+    const label = within(cardFor("Grade distribution")).getByText("Below 75", { exact: true });
+    expect(label.className).toContain("w-20 whitespace-nowrap");
+    expect(label.className).not.toContain("truncate");
+    const weekday = cardFor("Submissions by weekday");
+    expect(weekday.className).toContain("justify-start");
+    expect(weekday.className).not.toContain("justify-between");
+    const bars = within(weekday).getAllByRole("progressbar");
+    expect(bars).toHaveLength(6);
+    expect(bars.every((bar) => !bar.className.includes("bg-success"))).toBe(true);
+    expect(new Set(bars.map((bar) => bar.className)).size).toBe(1);
+  });
+
+  it("separates metric sentences without repeating policy text, including singular exclusions", async () => {
+    const result = phaseThreeResponse();
+    result.phase_two!.late_submissions.excused_excluded_count = 1;
+    mocks.load.mockResolvedValue(result);
+    render(<Dashboard />);
+    await waitFor(() => expect(countFor("Current grade")).toBe("80.5"));
+    expect(cardFor("Current grade").textContent).toContain("available. Weighted and transmuted, as in the class record.");
+    expect(cardFor("Passing Rate").textContent).toContain("grades pass. Passing grade is set per subject group.");
+    expect(cardFor("Passing Rate").textContent?.match(/Passing grade is set per subject group/g)).toHaveLength(1);
+    expect(cardFor("Late Submissions").textContent).toContain("are late. 1 excused submission excluded.");
+    expect(cardFor("Late Submissions").textContent).not.toContain("Late submissions, excluding");
+  });
+});
 
 describe("teacher dashboard Phase 3 mocked component behavior", () => {
   it("renders real student-subject grade points, neutral bands and explicit coverage without demo data", async () => {

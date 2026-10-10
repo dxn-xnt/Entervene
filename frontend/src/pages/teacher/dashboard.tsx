@@ -272,7 +272,7 @@ export default function Dashboard() {
     const attendance = phaseTwo?.attendance_today;
     const progress = phaseTwo?.term_progress;
     const gradeCoverage = grades
-      ? `${grades.available_grade_count} of ${grades.total_grade_count} student-subject grades available`
+      ? `${grades.available_grade_count} of ${grades.total_grade_count} student-subject grades available.`
       : undefined;
     const phaseTwoCards: OverviewCardData[] = [
       {
@@ -280,28 +280,28 @@ export default function Dashboard() {
         count: formatGrade(grades?.current_grade),
         stat: gradeCoverage,
         statDescription: grades?.available_grade_count === 0
-          ? "No current grades available. Weighted and transmuted, as in the class record."
+          ? "No current grades available."
           : "Weighted and transmuted, as in the class record.",
       },
       {
         title: "Passing Rate",
         count: formatPercent(grades?.passing_rate_percent),
         stat: grades?.passing_count != null
-          ? `${grades.passing_count} of ${grades.available_grade_count} available grades`
+          ? `${grades.passing_count} of ${grades.available_grade_count} available grades pass.`
           : gradeCoverage,
         statDescription: grades?.warnings.length
           ? grades.warnings.map((warning) => warning.message).join(" ")
-          : "Against each subject group's passing grade.",
+          : "Passing grade is set per subject group.",
       },
       {
         title: "Late Submissions",
         count: formatPercent(late?.late_rate_percent),
         stat: late
-          ? `${late.late_count} of ${late.eligible_count} assessed submissions · ${late.excused_excluded_count} excused excluded`
+          ? `${late.late_count} of ${late.eligible_count} assessed submissions are late.`
           : undefined,
-        statDescription: late?.warnings.length
-          ? late.warnings.map((warning) => warning.message).join(" ")
-          : "Late submissions, excluding excused submissions.",
+        statDescription: late
+          ? `${late.excused_excluded_count} excused ${late.excused_excluded_count === 1 ? "submission" : "submissions"} excluded. ${late.warnings.map((warning) => warning.message).join(" ")}`.trim()
+          : undefined,
       },
       {
         title: "Attendance Today",
@@ -326,12 +326,21 @@ export default function Dashboard() {
     return defaultTeacherCards.map((fallback, index) => {
       const card = data.cards?.find((item) => item.title === fallback.title) ??
         (index < phaseOneCards.length ? phaseOneCards[index] : phaseTwoCards[index - phaseOneCards.length]);
-      if (card.title === "Current grade" && grades?.available_grade_count === 0) {
-        return { ...card, statDescription: `No current grades available. Weighted and transmuted, as in the class record. ${grades.warnings.map((warning) => warning.message).join(" ")}`.trim() };
+      if (["Current grade", "Passing Rate", "Late Submissions"].includes(card.title)) {
+        const metric = phaseTwoCards[index - phaseOneCards.length];
+        // Normalize presentation locally, retaining configuration warnings from
+        // older API card payloads as well as the typed metric warnings.
+        const backendWarning = card.count === "—" && card.statDescription &&
+          card.statDescription !== metric.statDescription ? card.statDescription : undefined;
+        return {
+          ...card,
+          stat: card.title === "Passing Rate" && card.count === "—" ? gradeCoverage : metric.stat,
+          statDescription: backendWarning ?? (card.title === "Current grade" && grades?.warnings.length
+            ? `${metric.statDescription} ${grades.warnings.map((warning) => warning.message).join(" ")}`
+            : metric.statDescription),
+        };
       }
-      return card.title === "Passing Rate"
-        ? { ...card, statDescription: `${card.statDescription ?? ""} Passing grade is set per subject group.`.trim() }
-        : card;
+      return card;
     });
   }, [data, isLoading, isPeriodLoading, error]);
 
@@ -400,7 +409,6 @@ export default function Dashboard() {
   const submissionsWeekday = weekdayLabels.map((day, dayIndex) => ({
     day,
     count: visiblePhaseTwo?.weekdays.days.find((item) => item.day_index === dayIndex)?.count ?? null,
-    isHighlight: dayIndex === 4,
   }));
   const hardestQuestions =
     data?.details?.hardest_questions || defaultHardestQuestions;
@@ -1068,7 +1076,7 @@ export default function Dashboard() {
                   {/* 4. Submissions by weekday & Hardest questions */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {/* Submissions by weekday */}
-                    <Card className="flex flex-col justify-between p-4 sm:p-5">
+                    <Card className="flex flex-col justify-start p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0">
                         <Card.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
                           Submissions by weekday
@@ -1092,10 +1100,7 @@ export default function Dashboard() {
                               value={Math.round(
                                 ((item.count ?? 0) / maxWeekdayCount) * 100,
                               )}
-                              className={cn(
-                                "h-3 flex-1",
-                                item.isHighlight && "[&>div]:bg-success",
-                              )}
+                              className="h-3 flex-1"
                             />
                             <span className="font-semibold text-foreground text-right w-8 shrink-0">
                               {item.count ?? "—"}
@@ -1171,7 +1176,7 @@ export default function Dashboard() {
                               key={item.band}
                               className="flex items-center justify-between gap-3 text-xs sm:text-sm"
                             >
-                              <span className="font-medium text-foreground/90 shrink-0 w-14 truncate">
+                              <span className="font-medium text-foreground/90 shrink-0 w-20 whitespace-nowrap">
                                 {item.band}
                               </span>
                               <Progress
