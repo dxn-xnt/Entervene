@@ -31,7 +31,7 @@ export function QuizTextAnswerInput({ question, value, onChange, disabled }: Tex
         onChange={(e) => onChange(e.target.value)}
         placeholder={IDENTIFICATION_PLACEHOLDER}
         disabled={disabled}
-        className="w-full border-2 border-black bg-white p-4 text-base focus:outline-none focus:border-[#F6E9B2]"
+        className="w-full border-2 border-black bg-white p-4 text-base"
       />
     );
   }
@@ -42,7 +42,7 @@ export function QuizTextAnswerInput({ question, value, onChange, disabled }: Tex
       placeholder={SHORT_ANSWER_PLACEHOLDER}
       disabled={disabled}
       rows={4}
-      className="w-full border-2 border-black bg-white p-4 text-sm focus:outline-none focus:border-[#F6E9B2] resize-none"
+      className="w-full border-2 border-black bg-white p-4 text-sm resize-none"
     />
   );
 }

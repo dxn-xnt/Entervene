@@ -194,7 +194,7 @@ export default function ManageLessonModal({
                     )
                   }
                   disabled={isSavingLesson}
-                  className="min-h-20 w-full rounded-none border-2 border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/35"
+                  className="min-h-20 w-full rounded-none border-2 border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
                   placeholder="Short lesson summary"
                 />
               </div>
@@ -217,7 +217,7 @@ export default function ManageLessonModal({
                     )
                   }
                   disabled={isSavingLesson}
-                  className="min-h-32 w-full rounded-none border-2 border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/35"
+                  className="min-h-32 w-full rounded-none border-2 border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
                   placeholder="Write the lesson notes or learning content students will read."
                 />
               </div>
