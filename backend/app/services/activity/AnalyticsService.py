@@ -33,6 +33,7 @@ from app.services.activity.TeacherDashboardMetrics import (
     dashboard_month_window,
     dashboard_term_progress,
     read_dashboard_current_grades,
+    read_dashboard_lesson_evidence,
     read_dashboard_student_names,
     rank_dashboard_performers,
     resolve_dashboard_passing_threshold,
@@ -41,6 +42,7 @@ from app.services.activity.TeacherDashboardMetrics import (
     summarize_dashboard_grades,
     summarize_dashboard_grade_distribution,
     summarize_dashboard_engagement,
+    summarize_dashboard_lesson_performance,
 )
 
 
@@ -709,6 +711,14 @@ def build_teacher_dashboard_health(
         ).all()
     engagement = build_dashboard_engagement(assignments_by_id, enrolled_by_class, submissions, now)
     engagement_summary = summarize_dashboard_engagement(engagement)
+    lesson_subjects = {
+        sid: (subjects_by_id[sid].subject_name if sid in subjects_by_id else "Subject name unavailable",
+              tuple(sorted({item["class_id"] for item in available_filters if item["subject_id"] == sid})))
+        for sid in scoped_subject_ids
+    }
+    lesson_performance = summarize_dashboard_lesson_performance(
+        read_dashboard_lesson_evidence(db, engagement, subjects=lesson_subjects),
+    )
     thresholds = {
         subject.subject_id: resolve_dashboard_passing_threshold(subject)
         for subject in threshold_subjects
@@ -1099,13 +1109,7 @@ def build_teacher_dashboard_health(
                 {"title": "Lab report: Cells", "section": "Curie · Science 9", "due_label": "Thu", "variant": "warning"},
                 {"title": "Sanaysay", "section": "Archimedes · Filipino 9", "due_label": "Fri", "variant": "warning"},
             ],
-            "topic_mastery": [
-                {"topic": "Pang-uri", "rate": 91},
-                {"topic": "Fractions", "rate": 88},
-                {"topic": "Cells", "rate": 80},
-                {"topic": "Geometry", "rate": 64},
-                {"topic": "Essay writing", "rate": 59},
-            ],
+            "lesson_performance": lesson_performance.model_dump(mode="json"),
             "submissions_by_weekday": [
                 {"day": day.label, "count": day.count}
                 for day in weekdays.days

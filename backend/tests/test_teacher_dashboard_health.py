@@ -36,6 +36,11 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.models.academic.Lesson import Lesson
+from app.models.quiz.Question import Question
+from app.models.quiz.Quiz import Quiz
+from app.models.quiz.QuizAnswer import QuizAnswer
+from app.models.quiz.QuizQuestion import QuizQuestion
 from app.services.activity import AnalyticsService
 
 
@@ -943,3 +948,220 @@ def test_phase_four_engagement_query_count_does_not_grow_with_fixture_size(db, d
         name_reads = [sql for sql in statements if "student.first_name" in sql and "FROM student " in sql]
         assert len(name_reads) == 1
         assert all(column not in name_reads[0] for column in ("student_lrn", "email", "contact", "password"))
+
+
+def seed_dashboard_lesson_data(db, data):
+    """Synthetic mapped quiz for SQLite and opt-in PostgreSQL parity tests."""
+    learner = Student(student_id=uuid.uuid4(), student_lrn="900000000003",
+        first_name="Third", last_name="Synthetic", academic_level_id=data["class_"].academic_level_id)
+    db.add(learner)
+    db.flush()
+    db.add(StudentClass(student_id=learner.student_id, class_id=data["class_"].class_id,
+        academic_year_id=data["year"].academic_year_id, enrollment_status="enrolled"))
+    lesson = Lesson(title="Actual quiz lesson", subject_id=data["subject"].subject_id,
+        created_by_staff_id=data["teacher"].staff_id, competency_id=None)
+    db.add(lesson)
+    assignment = add_assignment(db, data, "lesson_quiz", due_date=NOW)
+    assignment.classwork.classwork_type = "QUIZ"
+    db.flush()
+    quiz = Quiz(classwork_id=assignment.classwork_id, status="READY", total_items=4)
+    db.add(quiz)
+    db.flush()
+    links = []
+    for order, maximum in enumerate(("2.50", "7.50", "10.00", "5.00"), 1):
+        question = Question(question_text=f"Private synthetic question {order}", question_type="SHORT_ANSWER",
+            points=Decimal(maximum), lesson_id=lesson.lesson_id if order <= 3 else None)
+        db.add(question)
+        db.flush()
+        link = QuizQuestion(quiz_id=quiz.quiz_id, question_id=question.question_id, display_order=order)
+        db.add(link)
+        db.flush()
+        links.append(link)
+    learners = [data["students"]["active_one"], data["students"]["active_two"], learner]
+    submissions = []
+    for index, student in enumerate(learners):
+        submission = add_submission(db, data, f"lesson_{index}", assignment, student,
+            status="graded", grade=Decimal("15.75"))
+        submissions.append(submission)
+        db.add_all([QuizAnswer(submission_id=submission.submission_id, quiz_question_id=link.quiz_question_id,
+            answer_text="Private synthetic answer", is_correct=None, points_awarded=Decimal(score))
+            for link, score in zip(links, ("0", "3.75", "10", "2"))])
+    db.commit()
+    return {"assignment": assignment, "lesson": lesson, "links": links, "submissions": submissions, "learners": learners}
+
+
+def test_phase_five_real_lesson_performance_and_private_response(db, data):
+    """Mocked-behavior: actual SELECT integration, partial essays and zero scores."""
+    import json
+    seed_dashboard_lesson_data(db, data)
+    result = dashboard(db, data)
+    assert "topic_mastery" not in result["details"]
+    payload = result["details"]["lesson_performance"]
+    item = payload["subjects"][0]["items"][0]
+    assert item["performance_percent"] == 68.8
+    assert item["awarded_points"] == 41.25 and item["possible_points"] == 60
+    assert (item["learner_count"], item["question_count"], item["scored_response_count"]) == (3, 3, 9)
+    coverage = payload["subjects"][0]["coverage"]
+    assert coverage["unmapped_response_count"] == 3
+    assert coverage["ungraded_response_count"] == 0
+    encoded = json.dumps(payload)
+    for private in ("student_id", "student_name", "question_text", "answer_text", "Private synthetic", "Synthetic"):
+        assert private not in encoded
+
+
+def test_phase_five_unmapped_seed_style_quiz_returns_real_empty_state(db, data):
+    """Mocked-behavior: awarded points without lesson links never invent topics."""
+    fixture = seed_dashboard_lesson_data(db, data)
+    for link in fixture["links"]:
+        link.question.lesson_id = None
+    result = dashboard(db, data)["details"]["lesson_performance"]["subjects"][0]
+    assert result["items"] == []
+    assert result["coverage"]["unmapped_response_count"] == 12
+    assert result["coverage"]["scored_mapped_response_count"] == 0
+
+
+def test_phase_five_latest_attempt_selected_before_answers_and_no_older_score_fallback(db, data):
+    """Mocked-behavior: latest completed attempt may be only partially scored."""
+    fixture = seed_dashboard_lesson_data(db, data)
+    latest = add_submission(db, data, "latest_lesson", fixture["assignment"], fixture["learners"][0])
+    latest.submitted_at = NOW - timedelta(minutes=1)
+    db.add(QuizAnswer(submission_id=latest.submission_id, quiz_question_id=fixture["links"][0].quiz_question_id,
+        answer_text="Unscored retake", points_awarded=None))
+    result = dashboard(db, data)["details"]["lesson_performance"]["subjects"][0]
+    assert result["items"] == []
+    assert result["coverage"]["scored_mapped_response_count"] == 6
+    assert result["coverage"]["ungraded_response_count"] == 3
+    assert result["coverage"]["insufficient_lesson_count"] == 1
+
+
+@pytest.mark.parametrize("scope", ["teacher", "period", "withdrawn", "targeted", "future", "ambiguous", "pending"])
+def test_phase_five_teacher_period_recipient_and_attempt_isolation(db, data, scope):
+    """Mocked-behavior: reuse authoritative scope/recipient/attempt policies."""
+    fixture = seed_dashboard_lesson_data(db, data)
+    if scope == "teacher":
+        fixture["assignment"].assigned_by_staff_id = data["other_teacher"].staff_id
+        fixture["assignment"].classwork.created_by_staff_id = data["other_teacher"].staff_id
+    elif scope == "period":
+        fixture["assignment"].academic_period_id = data["previous_period"].academic_period_id
+    elif scope == "withdrawn":
+        db.query(StudentClass).filter(StudentClass.student_id == fixture["learners"][0].student_id).one().enrollment_status = "withdrawn"
+    elif scope == "targeted":
+        # The real targeted pair check needs a real intervention. Reuse the
+        # existing fixture helper used by Phase 4, not a relaxed DB constraint.
+        target = make_targeted_assignment(db, data, "lesson_target", fixture["learners"][0], due_date=NOW)
+        fixture["assignment"].recipient_student_id = target.recipient_student_id
+        fixture["assignment"].source_intervention_id = target.source_intervention_id
+        fixture["assignment"].remediation_request_id = uuid.uuid4()
+    elif scope == "future":
+        fixture["submissions"][0].submitted_at = NOW + timedelta(seconds=1)
+    elif scope == "ambiguous":
+        add_submission(db, data, "tied_lesson", fixture["assignment"], fixture["learners"][0])
+    else:
+        fixture["submissions"][0].status = "pending"
+        fixture["submissions"][0].submitted_at = None
+    result = dashboard(db, data)["details"]["lesson_performance"]["subjects"][0]
+    assert result["items"] == []
+    assert result["coverage"]["scored_mapped_response_count"] == (
+        0 if scope in {"teacher", "period"} else 3 if scope == "targeted" else 6)
+    if scope == "ambiguous":
+        assert any(w["code"] == "ambiguous_submission_attempts" for w in result["warnings"])
+
+
+def test_phase_five_empty_period_has_no_fabricated_subjects(db, data):
+    """Mocked-behavior: subject list comes from selected-period assigned loads."""
+    assert dashboard(db, data, period=data["empty_period"])["details"]["lesson_performance"]["subjects"] == []
+
+
+def test_phase_five_two_bulk_selects_constant_and_columns_are_private(db, data):
+    """Mocked-behavior: two actual SELECTs regardless of learners/questions."""
+    from sqlalchemy import event
+    from sqlalchemy.orm import joinedload
+    from app.services.activity import TeacherDashboardMetrics as metrics
+    fixture = seed_dashboard_lesson_data(db, data)
+    def measured():
+        db.flush()
+        assignments = db.query(ClassworkAssignment).options(joinedload(ClassworkAssignment.classwork)).filter(
+            ClassworkAssignment.classwork_assignment_id == fixture["assignment"].classwork_assignment_id).all()
+        learners = {row.student_id for row in db.query(StudentClass).filter(
+            StudentClass.class_id == data["class_"].class_id, StudentClass.enrollment_status == "enrolled").all()}
+        submissions = db.query(StudentSubmission).filter(
+            StudentSubmission.classwork_assignment_id == fixture["assignment"].classwork_assignment_id).all()
+        snapshot = metrics.build_dashboard_engagement({a.classwork_assignment_id: a for a in assignments},
+            {data["class_"].class_id: learners}, submissions, NOW)
+        subjects = {data["subject"].subject_id: (data["subject"].subject_name, (data["class_"].class_id,))}
+        statements = []
+        def capture(_connection, _cursor, statement, _parameters, _context, _many):
+            assert statement.lstrip().upper().startswith("SELECT")
+            statements.append(statement)
+        event.listen(db.get_bind(), "before_cursor_execute", capture)
+        try:
+            evidence = metrics.read_dashboard_lesson_evidence(db, snapshot, subjects=subjects)
+            metrics.summarize_dashboard_lesson_performance(evidence)
+        finally:
+            event.remove(db.get_bind(), "before_cursor_execute", capture)
+        assert len(statements) == 2
+        for statement in statements:
+            columns = statement.split("FROM", 1)[0].lower()
+            assert all(private not in columns for private in (
+                "student_id", "student_lrn", "first_name", "last_name", "question_text", "answer_text", "email", "password"))
+        return len(statements)
+    small = measured()
+    for index in range(8):
+        learner = Student(student_id=uuid.uuid4(), student_lrn=f"{910000000000 + index:012d}",
+            first_name="Synthetic", last_name="Larger", academic_level_id=data["class_"].academic_level_id)
+        db.add(learner)
+        db.flush()
+        db.add(StudentClass(student_id=learner.student_id, class_id=data["class_"].class_id,
+            academic_year_id=data["year"].academic_year_id, enrollment_status="enrolled"))
+        submission = add_submission(db, data, f"larger_lesson_{index}", fixture["assignment"], learner, status="graded")
+        db.add_all([QuizAnswer(submission_id=submission.submission_id, quiz_question_id=link.quiz_question_id,
+            points_awarded=Decimal(0)) for link in fixture["links"]])
+    question = Question(question_text="More private evidence", question_type="SHORT_ANSWER",
+        points=Decimal(1), lesson_id=fixture["lesson"].lesson_id)
+    db.add(question)
+    db.flush()
+    db.add(QuizQuestion(quiz_id=fixture["links"][0].quiz_id, question_id=question.question_id, display_order=5))
+    large = measured()
+    assert small == large == 2
+    print(f"Lesson evidence SELECT count: small={small}, large={large}.")
+
+
+def test_phase_five_entire_dashboard_never_writes_even_with_dirty_session(db, data, monkeypatch):
+    """Mocked-behavior: no DML, flush or commit anywhere in the production path."""
+    from sqlalchemy import event
+    fixture = seed_dashboard_lesson_data(db, data)
+    staff_id, period = data["teacher"].staff_id, data["period"]
+    fixture["lesson"].title = "Dirty title must not persist"
+    def reject_write(*_args, **_kwargs):
+        raise AssertionError("Dashboard attempted to persist a change")
+    for method in ("add", "add_all", "delete", "flush", "commit"):
+        monkeypatch.setattr(db, method, reject_write)
+    def select_only(_connection, _cursor, statement, _parameters, _context, _many):
+        assert statement.lstrip().upper().startswith("SELECT")
+    event.listen(db.get_bind(), "before_cursor_execute", select_only)
+    try:
+        result = AnalyticsService.build_teacher_dashboard_health(db, staff_id, period)
+    finally:
+        event.remove(db.get_bind(), "before_cursor_execute", select_only)
+    assert result["details"]["lesson_performance"]["subjects"][0]["items"][0]["title"] == "Actual quiz lesson"
+    assert fixture["lesson"] in db.dirty
+
+
+def test_phase_five_bulk_reader_accepts_ready_and_published_but_not_draft_or_archived_quizzes(db, data):
+    """Mocked-behavior: honor quiz attempt states within published assignments."""
+    fixture = seed_dashboard_lesson_data(db, data)
+    quiz = fixture["links"][0].quiz
+    for state, count in [("READY", 1), ("PUBLISHED", 1), ("DRAFT", 0), ("ARCHIVED", 0)]:
+        quiz.status = state
+        result = dashboard(db, data)["details"]["lesson_performance"]["subjects"][0]
+        assert len(result["items"]) == count
+
+
+def test_phase_five_lesson_data_not_tied_to_trend_filter_and_subjects_are_real(db, data):
+    """Mocked-behavior: lesson performance pools all authorized classes."""
+    seed_dashboard_lesson_data(db, data)
+    first = dashboard(db, data)["details"]["lesson_performance"]
+    filtered = dashboard(db, data, class_id=99999, subject_id=99999)["details"]["lesson_performance"]
+    assert first == filtered
+    assert [(s["subject_id"], s["class_ids"]) for s in first["subjects"]] == [
+        (data["subject"].subject_id, [data["class_"].class_id])]

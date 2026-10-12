@@ -1,6 +1,7 @@
 """Dashboard-only policy units and mocked gradebook behavior; no live calls."""
 
 from contextlib import nullcontext
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -876,3 +877,123 @@ def test_trend_missing_all_dates_is_flagged_not_given_an_invented_date():
     snapshot = metrics.build_dashboard_engagement({1: work}, {1: {"a"}}, [], datetime(2026, 10, 8, tzinfo=timezone.utc))
     assert metrics.build_dashboard_performance_trend(snapshot, [work]) == []
     assert metrics.summarize_dashboard_engagement(snapshot).warnings[0].code == "missing_trend_date"
+
+
+def lesson_evidence(*, learners=3, questions=3, score=Decimal("1")):
+    """Synthetic policy inputs, never serialized identities or answer text."""
+    return metrics.DashboardLessonEvidence(
+        subjects={1: ("Actual subject", (8, 7, 8))},
+        questions=[metrics.DashboardLessonQuestion(q, q, 10, 1, Decimal(2), 20, "Actual lesson", 1)
+                   for q in range(1, questions + 1)],
+        attempts={s: metrics.DashboardLessonAttempt(f"synthetic-{s}", 10, 1)
+                  for s in range(1, learners + 1)},
+        answers=[metrics.DashboardLessonAnswer(s, q, score)
+                 for s in range(1, learners + 1) for q in range(1, questions + 1)],
+        warnings_by_subject={}, manual_assignment_counts={1: 2})
+
+
+def lesson_summary(evidence, **policy):
+    return metrics.summarize_dashboard_lesson_performance(evidence, **policy).subjects[0]
+
+
+@pytest.mark.parametrize("learners,questions,shown", [(2, 3, False), (3, 2, False), (3, 3, True), (4, 4, True)])
+def test_lesson_evidence_floor_counts_distinct_learners_and_questions(learners, questions, shown):
+    """Validator-unit: floor boundaries, not numbers of submissions alone."""
+    result = lesson_summary(lesson_evidence(learners=learners, questions=questions))
+    assert bool(result.items) is shown
+    assert result.coverage.insufficient_lesson_count == int(not shown)
+    assert result.class_ids == [7, 8]
+
+
+def test_lesson_floor_and_limit_are_parameterized_policy_not_test_constants():
+    """Validator-unit: policy can be exercised with a smaller synthetic roster."""
+    result = metrics.summarize_dashboard_lesson_performance(lesson_evidence(learners=1, questions=1),
+        min_learners=1, min_questions=1, limit_per_subject=2)
+    assert result.policy.model_dump() == {"min_learners": 1, "min_questions": 1, "limit_per_subject": 2}
+    assert result.subjects[0].items[0].performance_percent == 50
+
+
+def test_lesson_points_pooling_is_not_equal_question_or_equal_student_weighting():
+    """Validator-unit: partial essays count by awarded points, not is_correct."""
+    evidence = lesson_evidence(learners=2, questions=2)
+    evidence = replace(evidence,
+        questions=[replace(evidence.questions[0], points=Decimal(10)), evidence.questions[1]],
+        answers=[metrics.DashboardLessonAnswer(1, 1, Decimal(10)),
+                 metrics.DashboardLessonAnswer(1, 2, Decimal(0)),
+                 metrics.DashboardLessonAnswer(2, 2, Decimal(1))])
+    item = lesson_summary(evidence, min_learners=2, min_questions=2).items[0]
+    assert item.awarded_points == 11 and item.possible_points == 14
+    assert item.performance_percent == 78.6 and item.scored_response_count == 3
+
+
+@pytest.mark.parametrize("score,bucket", [
+    (Decimal(0), "scored_mapped_response_count"), (None, "ungraded_response_count"),
+    (Decimal("0.5"), "scored_mapped_response_count"), (Decimal(-1), "invalid_response_count"),
+    (Decimal(3), "invalid_response_count"), (Decimal("NaN"), "invalid_response_count"),
+    (float("inf"), "invalid_response_count"), (True, "invalid_response_count"), ("1", "invalid_response_count"),
+])
+def test_lesson_missing_zero_partial_and_invalid_scores_are_not_conflated(score, bucket):
+    """Validator-unit: invalid evidence is excluded, never clamped."""
+    result = lesson_summary(lesson_evidence(score=score))
+    assert getattr(result.coverage, bucket) == 9
+    assert len(result.items) == int(bucket == "scored_mapped_response_count")
+    if bucket == "scored_mapped_response_count" and score == 0:
+        assert result.items[0].performance_percent == 0
+
+
+@pytest.mark.parametrize("changes,bucket", [
+    ({"lesson_id": None, "lesson_subject_id": None}, "unmapped_response_count"),
+    ({"lesson_subject_id": None}, "unmapped_response_count"),
+    ({"lesson_subject_id": 2}, "invalid_response_count"), ({"subject_id": 2}, "invalid_response_count"),
+    ({"points": Decimal(0)}, "invalid_response_count"), ({"points": Decimal("Infinity")}, "invalid_response_count"),
+])
+def test_lesson_mapping_and_maximum_validation(changes, bucket):
+    """Validator-unit: task coverage never substitutes for a question mapping."""
+    evidence = lesson_evidence()
+    result = lesson_summary(replace(evidence, questions=[replace(q, **changes) for q in evidence.questions]))
+    assert getattr(result.coverage, bucket) == 9 and result.items == []
+
+
+def test_lesson_repeated_question_and_student_ids_do_not_satisfy_floor():
+    """Validator-unit: occurrences count, distinct evidence stays distinct."""
+    evidence = lesson_evidence()
+    evidence = replace(evidence, questions=[replace(q, question_id=1) for q in evidence.questions],
+        attempts={s: replace(a, student_id="one-learner") for s, a in evidence.attempts.items()})
+    result = lesson_summary(evidence)
+    assert result.coverage.scored_mapped_response_count == 9
+    assert result.items == [] and result.coverage.insufficient_lesson_count == 1
+
+
+def test_lesson_ranking_uses_unrounded_percentage_then_nfc_title_then_id_and_caps_five():
+    """Validator-unit: equal displayed percentages need not be equal underneath."""
+    evidence = lesson_evidence(learners=1, questions=1)
+    values = [(31, "A", "50.04"), (32, "Z", "50.01"), (33, "E\u0301", "60"),
+              (34, "\u00c9", "60"), (35, "Other", "70"), (36, "Last", "80")]
+    evidence = replace(evidence,
+        questions=[metrics.DashboardLessonQuestion(lid, lid, 10, 1, Decimal(100), lid, title, 1)
+                   for lid, title, _ in values],
+        answers=[metrics.DashboardLessonAnswer(1, lid, Decimal(score)) for lid, _, score in values])
+    result = lesson_summary(evidence, min_learners=1, min_questions=1)
+    assert [row.lesson_id for row in result.items] == [32, 31, 33, 34, 35]
+    assert result.items[0].performance_percent == result.items[1].performance_percent == 50
+    assert result.coverage.omitted_lesson_count == 1
+
+
+def test_lesson_duplicate_answers_and_missing_answers_are_flagged_not_invented():
+    """Validator-unit: duplicate answer scores never silently choose the last."""
+    evidence = lesson_evidence()
+    result = lesson_summary(replace(evidence, answers=[*evidence.answers[:-1], evidence.answers[0]]))
+    assert result.coverage.invalid_response_count == result.coverage.ungraded_response_count == 1
+    assert result.coverage.scored_mapped_response_count == 7
+    assert [warning.code for warning in result.warnings] == ["invalid_lesson_evidence"]
+
+
+def test_lesson_empty_and_partial_summaries_contain_only_aggregate_metadata():
+    """Validator-unit: public output excludes identities and question/answer text."""
+    import json
+    evidence = lesson_evidence()
+    encoded = json.dumps(metrics.summarize_dashboard_lesson_performance(evidence).model_dump())
+    for forbidden in ("student_id", "student_name", "question_text", "answer_text", "synthetic-"):
+        assert forbidden not in encoded
+    assert lesson_summary(replace(evidence, attempts={}, answers=[])).items == []
+    assert metrics.summarize_dashboard_lesson_performance(replace(evidence, subjects={})).subjects == []
