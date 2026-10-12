@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import HTTPException
 
-from app.schemas.TeacherDashboard import DashboardGrade
+from app.schemas.TeacherDashboard import DashboardGrade, DashboardSupportPolicy
 from app.services.activity import TeacherDashboardMetrics as metrics
 
 
@@ -29,6 +29,243 @@ def grade(value, *, subject_id=1, student_id="learner", class_id=1):
         student_id=student_id, class_id=class_id, subject_id=subject_id,
         academic_period_id=1, current_grade=value,
     )
+
+
+def support_assignment(aid=1, *, due=None, recipient=None, class_id=1, subject_id=1):
+    return SimpleNamespace(
+        classwork_assignment_id=aid, class_id=class_id, due_date=due,
+        recipient_student_id=recipient, publish_date=None,
+        classwork=SimpleNamespace(subject_id=subject_id, created_at=None),
+    )
+
+
+def support_result(*, grades=None, assignments=(), submissions=(), attendance=(), excuses=(),
+                   thresholds=None, policy=None, now=None, names=None, require_subject_match=False):
+    """Unit-only inputs: no ORM, network or prediction methods."""
+    now = now or datetime(2026, 10, 10, 4, tzinfo=timezone.utc)
+    grades = [grade(90)] if grades is None else grades
+    enrolled = {}
+    for item in grades:
+        enrolled.setdefault(item.class_id, set()).add(item.student_id)
+    snapshot = metrics.build_dashboard_engagement(
+        {a.classwork_assignment_id: a for a in assignments}, enrolled, submissions, now,
+    )
+    return metrics.summarize_dashboard_support(
+        grades, thresholds if thresholds is not None else {
+            1: metrics.resolve_dashboard_passing_threshold(subject(Decimal("85"))),
+        }, snapshot, attendance, excuses, now,
+        metrics.dashboard_month_window(now, date(2026, 10, 1), date(2026, 12, 31)),
+        date(2026, 10, 1), date(2026, 12, 31),
+        names if names is not None else {g.student_id: g.student_id for g in grades}, {},
+        policy=policy, require_subject_match=require_subject_match,
+    )
+
+
+def support_attendance(day, status, *, student_id="learner", class_id=1, subject_id=1):
+    return SimpleNamespace(student_id=student_id, class_id=class_id, subject_id=subject_id,
+                           date=date(2026, 10, day), status=status)
+
+
+@pytest.mark.parametrize("threshold", [Decimal("75"), Decimal("83"), Decimal("85"), Decimal("83.25")])
+@pytest.mark.parametrize("offset,qualifies", [(Decimal("-0.01"), True), (Decimal("0"), False), (Decimal("0.01"), False)])
+def test_support_below_passing_uses_runtime_threshold_before_rounding(threshold, offset, qualifies):
+    """Validator-unit: no universal passing grade or rounded comparison."""
+    result = support_result(grades=[grade(float(threshold + offset))], thresholds={
+        1: metrics.resolve_dashboard_passing_threshold(subject(threshold)),
+    })
+    assert bool(result.items) is qualifies
+    if qualifies:
+        assert [r.code for r in result.items[0].reasons] == ["below_passing"]
+        assert result.items[0].reasons[0].passing_threshold == float(threshold)
+
+
+def test_support_defaults_are_parameterized_and_frozen():
+    """Validator-unit: all five policy numbers are explicit and immutable."""
+    assert DashboardSupportPolicy().model_dump() == {
+        "min_overdue_tasks": 1, "min_late_submissions": 2,
+        "min_recorded_attendance_days": 5, "min_unexcused_absence_days": 2, "limit": 3,
+    }
+    with pytest.raises(ValueError):
+        DashboardSupportPolicy().limit = 9
+
+
+@pytest.mark.parametrize("field", list(DashboardSupportPolicy.model_fields))
+def test_support_policy_refuses_zero_limits(field):
+    """Validator-unit: thresholds cannot qualify everybody accidentally."""
+    with pytest.raises(ValueError):
+        DashboardSupportPolicy(**{field: 0})
+
+
+@pytest.mark.parametrize("minutes,qualifies", [(-1, True), (0, False), (1, False)])
+def test_support_overdue_deadline_equality_and_upcoming_work(minutes, qualifies):
+    """Validator-unit: deadline equality is not overdue."""
+    now = datetime(2026, 10, 10, 4, tzinfo=timezone.utc)
+    result = support_result(assignments=[support_assignment(due=now + timedelta(minutes=minutes))])
+    assert bool(result.items) is qualifies
+    if qualifies:
+        assert result.items[0].reasons[0].code == "overdue_work"
+
+
+def test_support_overdue_policy_targeting_and_completed_work_are_respected():
+    """Validator-unit: eligibility and completion, not score absence, determine overdue work."""
+    due = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    assignments = [support_assignment(1, due=due), support_assignment(2, due=due, recipient="other")]
+    assert support_result(assignments=assignments, policy=DashboardSupportPolicy(min_overdue_tasks=2)).items == []
+    row = SimpleNamespace(student_id="learner", classwork_assignment_id=1, status="submitted", submitted_at=due)
+    assert support_result(assignments=assignments, submissions=[row]).items == []
+
+
+@pytest.mark.parametrize("changes,suppresses", [
+    ({}, True), ({"subject_id": 99}, True), ({"student_id": "other"}, False),
+    ({"class_id": 99}, False), ({"status": "absent"}, False), ({"date": date(2026, 10, 7)}, False),
+])
+def test_support_overdue_excuse_is_student_class_manila_deadline_date(changes, suppresses):
+    """Validator-unit: UTC Oct 7 is Manila Oct 8; subject matching is off."""
+    record = support_attendance(8, "excused")
+    for name, value in changes.items():
+        setattr(record, name, value)
+    result = support_result(assignments=[support_assignment(due=datetime(2026, 10, 7, 16, tzinfo=timezone.utc))], excuses=[record])
+    assert bool(result.items) is not suppresses
+
+
+@pytest.mark.parametrize("count,minimum,qualifies", [(1, 2, False), (2, 2, True), (2, 3, False), (3, 3, True)])
+def test_support_late_minimum_is_parameterized(count, minimum, qualifies):
+    """Validator-unit: a single late submission is not enough under the default policy."""
+    due = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    assignments = [support_assignment(i, due=due) for i in range(count)]
+    rows = [SimpleNamespace(student_id="learner", classwork_assignment_id=i, status="graded", submitted_at=due + timedelta(hours=1)) for i in range(count)]
+    result = support_result(assignments=assignments, submissions=rows, policy=DashboardSupportPolicy(min_late_submissions=minimum))
+    assert bool(result.items) is qualifies
+    if qualifies:
+        assert result.items[0].reasons[0].code == "late_submissions"
+        assert result.items[0].reasons[0].count == count
+    assert support_result(assignments=assignments, submissions=rows, excuses=[support_attendance(8, "excused", subject_id=99)]).items == []
+
+
+@pytest.mark.parametrize("status,qualifies", [("present", False), ("late", False), ("excused", False), ("absent", True)])
+def test_support_attendance_all_four_statuses_use_distinct_recorded_dates(status, qualifies):
+    """Validator-unit: excused and late attendance never qualify as absence."""
+    result = support_result(attendance=[support_attendance(day, status) for day in range(1, 6)])
+    assert bool(result.items) is qualifies
+    if qualifies:
+        assert result.items[0].reasons[0].count == 5
+        assert result.items[0].reasons[0].recorded_day_count == 5
+
+
+def test_support_attendance_floor_duplicates_excuses_and_manila_month():
+    """Validator-unit: five rows on one day are not five recorded dates."""
+    assert support_result(attendance=[support_attendance(1, "absent")] * 5).items == []
+    rows = [support_attendance(day, "absent" if day < 3 else "present") for day in range(1, 6)]
+    assert len(support_result(attendance=rows).items) == 1
+    assert support_result(attendance=rows, policy=DashboardSupportPolicy(min_unexcused_absence_days=3)).items == []
+    assert support_result(attendance=rows, policy=DashboardSupportPolicy(min_recorded_attendance_days=6)).items == []
+    assert support_result(attendance=rows + [support_attendance(1, "excused", subject_id=99)]).items == []
+    assert support_result(attendance=rows[:4]).items == []
+    assert support_result(attendance=[SimpleNamespace(**{**vars(row), "date": date(2026, 9, row.date.day)}) for row in rows]).items == []
+    assert support_result(attendance=[support_attendance(11, "absent")] * 5).items == []
+
+
+def test_support_unknown_grade_or_threshold_is_not_failure_but_other_confirmed_reasons_remain():
+    """Validator-unit: preserve coverage and warnings, not a complete-looking empty result."""
+    assert support_result(grades=[grade(None)]).items == []
+    missing = support_result(grades=[grade(60)], thresholds={})
+    assert missing.items == []
+    assert missing.warnings[0].code == "invalid_passing_threshold"
+    result = support_result(grades=[grade(None)], thresholds={}, assignments=[support_assignment(due=datetime(2026, 10, 8, tzinfo=timezone.utc))], names={})
+    assert result.unavailable_grade_count == 1
+    assert result.items[0].name == "Name unavailable"
+    assert result.items[0].current_grade is None
+    assert [r.code for r in result.items[0].reasons] == ["overdue_work"]
+    assert {w.code for w in result.warnings} == {"invalid_passing_threshold", "student_name_unavailable"}
+
+
+def test_support_any_one_reason_priority_limit_and_no_composite_score():
+    """Validator-unit: category priority, then NFC/case-insensitive name; no hidden score."""
+    due = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    grades = [grade(80, student_id="low"), grade(90, student_id="overdue"), grade(90, student_id="absent"), grade(90, student_id="late")]
+    assignments = [support_assignment(1, due=due, recipient="overdue"), support_assignment(2, due=due, recipient="late"), support_assignment(3, due=due, recipient="late")]
+    submissions = [SimpleNamespace(student_id="late", classwork_assignment_id=i, status="graded", submitted_at=due + timedelta(hours=1)) for i in (2, 3)]
+    attendance = [support_attendance(day, "absent" if day < 3 else "present", student_id="absent") for day in range(1, 6)]
+    result = support_result(grades=grades, assignments=assignments, submissions=submissions, attendance=attendance)
+    assert [item.student_id for item in result.items] == ["low", "overdue", "absent"]
+    assert result.qualifying_entry_count == 4 and result.omitted_entry_count == 1
+    assert len(support_result(grades=grades, assignments=assignments, submissions=submissions, attendance=attendance, policy=DashboardSupportPolicy(limit=4)).items) == 4
+    assert "score" not in result.model_dump_json() and "falling" not in result.model_dump_json()
+
+
+def test_support_multi_subject_and_class_entries_mixed_thresholds_and_normalized_name_order():
+    """Validator-unit: retain each scope, compare its own group, deterministic ties."""
+    grades = [grade(84, subject_id=1, student_id="b"), grade(84, subject_id=2, student_id="b"), grade(84, subject_id=1, student_id="a"), grade(84, subject_id=1, student_id="b", class_id=2)]
+    result = support_result(grades=grades, thresholds={
+        1: metrics.resolve_dashboard_passing_threshold(subject(Decimal("85"))),
+        2: metrics.resolve_dashboard_passing_threshold(subject(Decimal("83"), subject_id=2)),
+    }, names={"a": "e\u0301", "b": "É"})
+    assert [(row.student_id, row.subject_id, row.class_id) for row in result.items] == [("a", 1, 1), ("b", 1, 1), ("b", 1, 2)]
+    assert support_result(grades=[]).items == []
+
+
+def test_support_reason_order_is_explicit_when_all_four_are_confirmed():
+    """Validator-unit: reason order is policy, not a composite risk calculation."""
+    due = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    assignments = [support_assignment(i, due=due) for i in (1, 2, 3)]
+    rows = [SimpleNamespace(student_id="learner", classwork_assignment_id=i, status="graded", submitted_at=due + timedelta(hours=1)) for i in (1, 2)]
+    attendance = [support_attendance(day, "absent" if day < 3 else "present") for day in range(1, 6)]
+    result = support_result(grades=[grade(84)], assignments=assignments, submissions=rows, attendance=attendance)
+    assert [r.code for r in result.items[0].reasons] == ["below_passing", "overdue_work", "unexcused_absences", "late_submissions"]
+
+
+def test_support_repeated_attempts_are_one_late_task_and_ambiguous_attempts_are_not_missing():
+    """Validator-unit: canonical latest selection prevents inflated or inferred reasons."""
+    due = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    assignment = support_assignment(due=due)
+    rows = [SimpleNamespace(student_id="learner", classwork_assignment_id=1, status="graded", submitted_at=due + timedelta(hours=i)) for i in (1, 2)]
+    assert support_result(assignments=[assignment], submissions=rows).items == []
+    rows[1].status = "submitted"  # Latest completed but ungraded: no older-grade fallback.
+    result = support_result(assignments=[assignment], submissions=rows, policy=DashboardSupportPolicy(min_late_submissions=1))
+    assert [r.code for r in result.items[0].reasons] == ["late_submissions"]
+    assert result.items[0].reasons[0].count == 1
+    rows[1].submitted_at = rows[0].submitted_at
+    ambiguous = support_result(assignments=[assignment], submissions=rows)
+    assert ambiguous.items == []
+    assert {w.code for w in ambiguous.warnings} == {"ambiguous_submission_attempts"}
+
+
+@pytest.mark.parametrize("kind", ["missing_submission", "missing_deadline", "status_only", "equal_deadline"])
+def test_support_unknown_or_on_time_submission_is_not_confirmed_lateness(kind):
+    """Validator-unit: status labels and missing timestamps cannot fabricate a late reason."""
+    due = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    assignment = support_assignment(due=None if kind == "missing_deadline" else due)
+    row = SimpleNamespace(student_id="learner", classwork_assignment_id=1, status="late",
+                          submitted_at=None if kind == "missing_submission" else due)
+    result = support_result(assignments=[assignment], submissions=[row], policy=DashboardSupportPolicy(min_late_submissions=1))
+    assert result.items == []
+    assert bool(result.warnings) is kind.startswith("missing_")
+
+
+def test_support_late_period_and_attendance_month_use_manila_midnight():
+    """Validator-unit: UTC September 30 16:00 is an October 1 submission/date."""
+    due = datetime(2026, 9, 30, 15, tzinfo=timezone.utc)
+    assignment = support_assignment(due=due)
+    row = SimpleNamespace(student_id="learner", classwork_assignment_id=1, status="graded", submitted_at=due + timedelta(hours=1))
+    policy = DashboardSupportPolicy(min_late_submissions=1)
+    assert support_result(assignments=[assignment], submissions=[row], policy=policy).items[0].reasons[0].code == "late_submissions"
+    row.submitted_at -= timedelta(microseconds=1)
+    assert support_result(assignments=[assignment], submissions=[row], policy=policy).items == []
+    now = datetime(2026, 10, 4, 16, tzinfo=timezone.utc)  # Manila October 5.
+    attendance = [support_attendance(day, "absent" if day < 3 else "present") for day in range(1, 6)]
+    assert support_result(attendance=attendance, now=now).items[0].reasons[0].recorded_day_count == 5
+    assert support_result(attendance=attendance, now=now - timedelta(microseconds=1)).items == []
+
+
+def test_support_excused_late_and_overdue_never_qualify_even_with_low_policy_limits():
+    """Validator-unit: subject/advisory match is off, even with a one-late policy."""
+    due = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    assignments = [support_assignment(1, due=due), support_assignment(2, due=due)]
+    row = SimpleNamespace(student_id="learner", classwork_assignment_id=1, status="late", submitted_at=due + timedelta(hours=1))
+    excuse = support_attendance(8, "excused", subject_id=99)
+    result = support_result(assignments=assignments, submissions=[row], excuses=[excuse], policy=DashboardSupportPolicy(min_late_submissions=1))
+    assert result.items == []
+    assert len(support_result(assignments=assignments, submissions=[row], excuses=[excuse], require_subject_match=True).items) == 1
 
 
 @pytest.mark.parametrize("threshold", [Decimal("75"), Decimal("83"), Decimal("85"), Decimal("83.25"), Decimal("0"), Decimal("100")])

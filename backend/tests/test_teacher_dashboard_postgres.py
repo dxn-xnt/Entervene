@@ -1332,3 +1332,96 @@ def test_phase_five_guarded_fixture_skips_without_url_and_never_constructs_engin
     with pytest.raises(pytest.skip.Exception, match="DASHBOARD_TEST_PG_URL is unset"):
         next(postgres_dashboard_session.__wrapped__())
     factory.assert_not_called()
+
+
+def _phase_six_support_snapshot(db):
+    """Synthetic fixture writes, followed by guarded SELECT-only dashboard reads."""
+    from test_teacher_dashboard_health import NOW, add_assignment, add_submission, seed_dashboard_data
+    data = seed_dashboard_data(db)
+    students = data["students"]
+    aliases = {str(student.student_id): key for key, student in students.items()}
+    records = [StudentPeriodGrade(
+        student_id=students[key].student_id, class_id=data["class_"].class_id,
+        subject_id=data["subject"].subject_id, academic_period_id=data["period"].academic_period_id,
+        transmuted_grade=Decimal(value), is_finalized=True,
+    ) for key, value in (("active_one", "84.99"), ("active_two", "86.25"))]
+    db.add_all(records)
+    overdue = add_assignment(db, data, "phase_six_overdue", due_date=NOW - timedelta(days=1))
+    db.add(AttendanceRecord(student_id=students["active_one"].student_id,
+        class_id=data["class_"].class_id, subject_id=data["other_subject"].subject_id,
+        date=date(2026, 10, 7), status="excused"))
+    for day in range(1, 5):
+        db.add(AttendanceRecord(student_id=students["active_two"].student_id,
+            class_id=data["class_"].class_id, subject_id=data["subject"].subject_id,
+            date=date(2026, 10, day), status="absent" if day < 3 else "present"))
+    db.commit()
+
+    def capture():
+        summary = _read_only_dashboard(db, data["teacher"].staff_id, data["period"])["details"]["students_to_check_in_with"]
+        return {
+            **{key: value for key, value in summary.items() if key not in {"items", "warnings"}},
+            "items": [{**{key: value for key, value in item.items()
+                         if key not in {"student_id", "class_id", "subject_id", "academic_period_id"}},
+                       "student_alias": aliases[item["student_id"]]} for item in summary["items"]],
+            "warning_codes": sorted(warning["code"] for warning in summary["warnings"]),
+        }
+    samples = {"initial": capture()}
+    data["subject"].subject_group_rel.passing_threshold = Decimal("83.25")
+    db.commit()
+    samples["changed_threshold"] = capture()
+    # UTC Oct 7 16:00 is Manila Oct 8: an unrelated-subject excuse suppresses
+    # overdue work for the ungraded learner, without hiding completion evidence.
+    records[1].transmuted_grade = None
+    data["submissions"]["graded_two"].grade = None
+    data["submissions"]["graded_two"].status = "submitted"
+    overdue.due_date = datetime(2026, 10, 7, 16, tzinfo=timezone.utc)
+    db.add_all([AttendanceRecord(student_id=students[key].student_id,
+        class_id=data["class_"].class_id, subject_id=data["other_subject"].subject_id,
+        date=date(2026, 10, 8), status="excused") for key in ("active_one", "active_two")])
+    db.commit()
+    samples["ungraded_excused"] = capture()
+    add_submission(db, data, "phase_six_latest_completed", overdue, students["active_two"])
+    db.commit()
+    samples["completed"] = capture()
+    return samples
+
+
+def test_phase_six_parity_fixture_runs_on_isolated_sqlite(dashboard_clock):
+    """Mocked-behavior: verify parity scenarios without PostgreSQL or an API."""
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(engine) as session:
+            samples = _phase_six_support_snapshot(session)
+        assert [item["student_alias"] for item in samples["initial"]["items"]] == ["active_one", "active_two"]
+        assert [reason["code"] for reason in samples["initial"]["items"][0]["reasons"]] == ["below_passing"]
+        assert [reason["code"] for reason in samples["initial"]["items"][1]["reasons"]] == ["overdue_work", "unexcused_absences"]
+        assert samples["changed_threshold"]["qualifying_entry_count"] == 1
+        assert samples["ungraded_excused"]["unavailable_grade_count"] == 1
+        assert [reason["code"] for reason in samples["ungraded_excused"]["items"][0]["reasons"]] == ["unexcused_absences"]
+        assert samples["ungraded_excused"]["items"][0]["name"] == "Student, active_two"
+    finally:
+        engine.dispose()
+
+
+def test_teacher_dashboard_phase_six_queries_execute_on_guarded_postgres(postgres_dashboard_session, dashboard_clock):
+    """Opt-in parity: expanded name projection, Decimal thresholds and Manila excuses."""
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=engine)
+        with Session(engine) as session:
+            sqlite = _phase_six_support_snapshot(session)
+        postgres = _phase_six_support_snapshot(postgres_dashboard_session)
+        _expect_equal(postgres, sqlite, "Phase 6 support indicator dialect parity")
+    finally:
+        engine.dispose()
+
+
+def test_phase_six_guarded_fixture_skips_when_unset_without_constructing_engine(monkeypatch):
+    """Mocked-behavior: exercise the skip guard without running the guarded test."""
+    monkeypatch.delenv("DASHBOARD_TEST_PG_URL", raising=False)
+    factory = Mock(side_effect=AssertionError("No PostgreSQL engine may be constructed"))
+    monkeypatch.setattr(sys.modules[__name__], "_guarded_postgres_engine", factory)
+    with pytest.raises(pytest.skip.Exception, match="DASHBOARD_TEST_PG_URL is unset"):
+        next(postgres_dashboard_session.__wrapped__())
+    factory.assert_not_called()

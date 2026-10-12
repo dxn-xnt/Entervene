@@ -73,39 +73,6 @@ const defaultTeacherCards: OverviewCardData[] = [
   },
 ];
 
-const defaultStudentsNeedingSupport = [
-  {
-    grade_level: 9,
-    class_id: 1,
-    student_id: 1,
-    prediction_id: 1,
-    name: "Jose Reyes",
-    section: "Archimedes · 3 missing tasks",
-    score: 52,
-    variant: "destructive",
-  },
-  {
-    grade_level: 9,
-    class_id: 2,
-    student_id: 2,
-    prediction_id: 2,
-    name: "Ana Lim",
-    section: "Newton · falling 12 pts",
-    score: 61,
-    variant: "destructive",
-  },
-  {
-    grade_level: 9,
-    class_id: 3,
-    student_id: 3,
-    prediction_id: 3,
-    name: "Paolo Cruz",
-    section: "Curie · low attendance",
-    score: 68,
-    variant: "warning",
-  },
-];
-
 const weekdayLabels = ["M", "T", "W", "Th", "F", "S"];
 const trendAxisRange = [50, 100];
 
@@ -368,9 +335,8 @@ export default function Dashboard() {
       setSubjectFilter(subjects.length ? String(subjects[0].subject_id) : "");
   }, [subjects, subjectFilter, lessonPerformance]);
 
-  const studentsSupport =
-    data?.details?.students_needing_support || defaultStudentsNeedingSupport;
   const visibleGradeData = isLoading || isPeriodLoading || error ? undefined : data?.details;
+  const support = visibleGradeData?.students_to_check_in_with;
   const gradeDetails = visibleGradeData?.grade_details;
   const topPerformers = gradeDetails ? visibleGradeData?.top_performers ?? [] : [];
   const dueWeek = data?.action_queue?.upcoming_deadlines ?? [];
@@ -464,11 +430,11 @@ export default function Dashboard() {
                 <div className="flex min-w-0 flex-col gap-3 lg:col-span-9 xl:col-span-9 md:gap-4">
                   {/* 1. Students Support, Top Performers, Due this Week, Topic Mastery */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    {/* Students needing support */}
+                    {/* Observed check-in indicators, not AI or intervention eligibility */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
                         <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
-                          Students Needing Support
+                          Students to check in with
                         </Card.Title>
                         <Tooltip >
                           <TooltipTrigger
@@ -477,55 +443,66 @@ export default function Dashboard() {
                                 variant="secondary"
                                 size="sm"
                                 autoIcon={false}
-                                onClick={() => navigate(routes.teacher.predictions)}
+                                aria-label="View grades"
+                                onClick={() => navigate(routes.teacher.grades)}
                                 className="text-foreground shadow-none px-1.5"
                               >
                                 <ArrowUpRight className="size-4" />
                               </Button>
                             }
                           />
-                          <TooltipContent side="right">View at risk students</TooltipContent>
+                          <TooltipContent side="right">View grades</TooltipContent>
                         </Tooltip>
                       </Card.Header>
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {studentsSupport.map((s: any, idx: number) => (
+                        {!support?.items.length && (
+                          <Card.Description className="text-[11px] text-muted-foreground">
+                            {emptyMessage(support?.warnings.length
+                              ? "No confirmed check-in indicators in the available data."
+                              : "No students meet the check-in criteria.")}
+                          </Card.Description>
+                        )}
+                        {support?.items.map((s) => (
                           <Card
-                            key={idx}
-                            onClick={() => {
-                              if (!data?.details?.students_needing_support || !isPositiveId(s.grade_level) || !isPositiveId(s.class_id)) return;
-                              const grade = s.grade_level;
-                              const classId = s.class_id;
-                              const params = new URLSearchParams();
-                              if (s.prediction_id) params.set("predictionId", String(s.prediction_id));
-                              if (s.student_id) params.set("studentId", String(s.student_id));
-                              if (s.name) params.set("studentName", s.name);
-                              navigate(`/teacher/predictions/${grade}/${classId}?${params.toString()}`);
-                            }}
-                            className="flex items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm cursor-pointer hover:bg-retro hover:-translate-y-1"
+                            key={`${s.student_id}-${s.class_id}-${s.subject_id}`}
+                            className="flex items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm"
                           >
                             <div className="flex flex-col min-w-0 pr-2">
                               <span className="font-semibold text-foreground truncate">
                                 {s.name}
                               </span>
                               <span className="text-xs text-muted-foreground truncate">
-                                {s.section}
+                                {s.section_name ?? "Section unavailable"} · {s.subject_name ?? "Subject unavailable"}
                               </span>
+                              <ul className="text-xs text-muted-foreground">
+                                {s.reasons.map((reason) => <li key={reason.code}>{reason.message}</li>)}
+                              </ul>
                             </div>
                             <Badge
                               size="sm"
-                              variant={
-                                s.variant === "destructive" || s.score <= 65
-                                  ? "destructive"
-                                  : "default"
-                              }
+                              variant="default"
                               className="shrink-0"
                             >
-                              {s.score}%
+                              Grade {formatGrade(s.current_grade)}
                             </Badge>
                           </Card>
                         ))}
-
+                        {support?.warnings.map((warning, index) => (
+                          <Card.Description key={`${warning.code}-${index}`} className="text-[11px] text-muted-foreground">
+                            {warning.message}
+                          </Card.Description>
+                        ))}
+                        {support && (
+                          <Card.Description className="text-[11px] text-muted-foreground">
+                            {support.qualifying_entry_count} of {support.total_entry_count} student-class-subject entries meet the criteria.
+                            {support.omitted_entry_count > 0 && ` Showing ${support.items.length}; ${support.omitted_entry_count} more not shown.`}
+                            {support.unavailable_grade_count > 0 && ` Current grade unavailable: ${support.unavailable_grade_count}.`}
+                          </Card.Description>
+                        )}
+                        <Card.Description className="text-[11px] text-muted-foreground">
+                          Observed indicators only. Not an AI prediction or an Intervention candidate list.
+                        </Card.Description>
                       </Card.Content>
                     </Card>
                     {/* Submissions to Review */}

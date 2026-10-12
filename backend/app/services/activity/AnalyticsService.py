@@ -25,7 +25,7 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
-from app.schemas.TeacherDashboard import DashboardGradeDetails, DashboardScopeLabel
+from app.schemas.TeacherDashboard import DashboardGradeDetails, DashboardScopeLabel, DashboardSupportSummary
 from app.services.activity.TeacherDashboardMetrics import (
     DashboardScope,
     build_dashboard_engagement,
@@ -43,6 +43,7 @@ from app.services.activity.TeacherDashboardMetrics import (
     summarize_dashboard_grade_distribution,
     summarize_dashboard_engagement,
     summarize_dashboard_lesson_performance,
+    summarize_dashboard_support,
 )
 
 
@@ -732,14 +733,15 @@ def build_teacher_dashboard_health(
     ])
     grade_summary = summarize_dashboard_grades(current_grades, thresholds)
     student_names = read_dashboard_student_names(db, {
-        grade.student_id for grade in current_grades if grade.current_grade is not None
+        grade.student_id for grade in current_grades
     })
-    performers = rank_dashboard_performers(current_grades, student_names, {
+    scope_labels = {
         (item["class_id"], item["subject_id"]): DashboardScopeLabel(
             section_name=item["section_name"], subject_name=item["subject_name"],
         )
         for item in available_filters
-    })
+    }
+    performers = rank_dashboard_performers(current_grades, student_names, scope_labels)
     distribution = summarize_dashboard_grade_distribution(current_grades)
     grade_details = DashboardGradeDetails(
         total_grade_count=distribution.total_grade_count,
@@ -800,6 +802,12 @@ def build_teacher_dashboard_health(
         target_period.end_date if target_period else school_now.date(),
         require_subject_match=False,
     )
+    support = summarize_dashboard_support(
+        current_grades, thresholds, engagement,
+        [record for records in attendance_by_class.values() for record in records],
+        excuses, now, month_window, target_period.start_date, target_period.end_date,
+        student_names, scope_labels, require_subject_match=False,
+    ) if target_period is not None and month_window is not None else DashboardSupportSummary()
     term_progress = dashboard_term_progress(
         target_period.start_date, target_period.end_date, school_now.date(),
     ) if target_period else None
@@ -1097,11 +1105,7 @@ def build_teacher_dashboard_health(
             "upcoming_deadlines": upcoming_deadlines_list,
         },
         "details": {
-            "students_needing_support": [
-                {"name": "Jose Reyes", "section": "Archimedes · 3 missing tasks", "score": 52, "variant": "destructive"},
-                {"name": "Ana Lim", "section": "Newton · falling 12 pts", "score": 61, "variant": "destructive"},
-                {"name": "Paolo Cruz", "section": "Curie · low attendance", "score": 68, "variant": "warning"},
-            ],
+            "students_to_check_in_with": support.model_dump(mode="json"),
             "top_performers": [item.model_dump(mode="json") for item in performers.items],
             "grade_details": grade_details.model_dump(mode="json"),
             "due_this_week": [

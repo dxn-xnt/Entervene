@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TeacherDashboardHealthResponse, TeacherDashboardLessonPerformance, TrendChartPoint } from "@/lib/api";
+import type { TeacherDashboardHealthResponse, TeacherDashboardLessonPerformance, TeacherDashboardSupportSummary, TrendChartPoint } from "@/lib/api";
 import Dashboard from "./dashboard";
 
 const mocks = vi.hoisted(() => ({
@@ -107,6 +107,27 @@ function lessonResponse(payload = lessonPayload()): TeacherDashboardHealthRespon
   return response({ details: { lesson_performance: payload } });
 }
 
+function supportPayload(): TeacherDashboardSupportSummary {
+  return {
+    policy: { min_overdue_tasks: 1, min_late_submissions: 2, min_recorded_attendance_days: 5,
+      min_unexcused_absence_days: 2, limit: 3 },
+    items: [{ student_id: "actual-student", class_id: 53, subject_id: 25, academic_period_id: 3,
+      name: "Actual check-in learner", section_name: "Actual Section", subject_name: "Actual Subject",
+      current_grade: 60, reasons: [
+        { code: "below_passing", message: "Below subject-group passing grade (85)", count: null,
+          passing_threshold: 85, recorded_day_count: null },
+        { code: "overdue_work", message: "1 overdue assigned task", count: 1,
+          passing_threshold: null, recorded_day_count: null },
+      ] }],
+    total_entry_count: 5, qualifying_entry_count: 4, omitted_entry_count: 3,
+    unavailable_grade_count: 1, warnings: [],
+  };
+}
+
+function supportResponse(payload = supportPayload()): TeacherDashboardHealthResponse {
+  return response({ details: { students_to_check_in_with: payload } });
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason: unknown) => void;
@@ -149,6 +170,105 @@ afterEach(() => {
 
 // These exercise the page with mocked requests, contexts, navigation, and charts;
 // they are component behavior tests, not live API integration or end-to-end tests.
+describe("teacher dashboard Phase 6 mocked component behavior", () => {
+  it("shows loading without demo names or stale check-in entries", () => {
+    render(<Dashboard />);
+    const card = cardFor("Students to check in with");
+    expect(within(card).getByText("Loading dashboard data...")).toBeTruthy();
+    expect(screen.queryByText("Jose Reyes")).toBeNull();
+    expect(within(card).getByText("Observed indicators only. Not an AI prediction or an Intervention candidate list.")).toBeTruthy();
+  });
+
+  it("renders all transparent reasons and a neutral grade, never an AI percentage", async () => {
+    mocks.load.mockResolvedValue(supportResponse());
+    render(<Dashboard />);
+    await screen.findByText("Actual check-in learner");
+    const card = cardFor("Students to check in with");
+    expect(within(card).getByText("Actual Section · Actual Subject")).toBeTruthy();
+    expect(within(card).getByText("Below subject-group passing grade (85)")).toBeTruthy();
+    expect(within(card).getByText("1 overdue assigned task")).toBeTruthy();
+    expect(within(card).getByText("Grade 60").className).not.toContain("bg-destructive");
+    expect(card.textContent).not.toContain("60%");
+    expect(card.textContent).not.toContain("falling");
+    expect(card.textContent).toContain("4 of 5 student-class-subject entries meet the criteria.");
+    expect(card.textContent).toContain("Showing 1; 3 more not shown.");
+    expect(card.textContent).toContain("Current grade unavailable: 1.");
+    fireEvent.click(screen.getByText("Actual check-in learner"));
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    fireEvent.click(within(card).getByRole("button", { name: "View grades" }));
+    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith("/teacher/grades");
+  });
+
+  it("shows honest empty data without any fabricated names or navigation IDs", async () => {
+    const payload = supportPayload();
+    payload.items = []; payload.qualifying_entry_count = 0; payload.omitted_entry_count = 0;
+    mocks.load.mockResolvedValue(supportResponse(payload));
+    render(<Dashboard />);
+    await screen.findByText("No students meet the check-in criteria.");
+    for (const name of ["Jose Reyes", "Ana Lim", "Paolo Cruz", "Actual check-in learner"]) {
+      expect(screen.queryByText(name)).toBeNull();
+    }
+    expect(within(cardFor("Students to check in with")).queryByText(/Grade \d/)).toBeNull();
+  });
+
+  it("retains unavailable grades, missing names and configuration warnings", async () => {
+    const payload = supportPayload();
+    payload.items[0].name = "Name unavailable";
+    payload.items[0].current_grade = null;
+    payload.items[0].reasons = [payload.items[0].reasons[1]];
+    payload.warnings = [{ code: "invalid_passing_threshold", message: "Subject-group passing grade unavailable." }];
+    mocks.load.mockResolvedValue(supportResponse(payload));
+    render(<Dashboard />);
+    await screen.findByText("Name unavailable");
+    const card = cardFor("Students to check in with");
+    expect(within(card).getByText("Grade —")).toBeTruthy();
+    expect(within(card).getByText("Subject-group passing grade unavailable.")).toBeTruthy();
+    expect(within(card).queryByText(/Below subject-group/)).toBeNull();
+  });
+
+  it("does not describe unavailable evidence as a complete-looking empty check-in list", async () => {
+    const payload = supportPayload();
+    payload.items = []; payload.qualifying_entry_count = 0; payload.omitted_entry_count = 0;
+    payload.warnings = [{ code: "grade_scope_unavailable", message: "Current grade unavailable for this teacher scope." }];
+    mocks.load.mockResolvedValue(supportResponse(payload));
+    render(<Dashboard />);
+    await screen.findByText("No confirmed check-in indicators in the available data.");
+    expect(screen.getByText("Current grade unavailable for this teacher scope.")).toBeTruthy();
+    expect(screen.queryByText("No students meet the check-in criteria.")).toBeNull();
+  });
+
+  it("renders the existing Alert and unavailable state when the request fails", async () => {
+    mocks.load.mockRejectedValue(new Error("Dashboard access denied"));
+    render(<Dashboard />);
+    await screen.findByText("Dashboard access denied");
+    expect(within(cardFor("Students to check in with")).getByText("Dashboard data is unavailable.")).toBeTruthy();
+    expect(screen.queryByText("Actual check-in learner")).toBeNull();
+    expect(screen.queryByText("Jose Reyes")).toBeNull();
+  });
+
+  it("waits for period readiness and ignores an older-period support response", async () => {
+    mocks.period.isLoading = true;
+    const old = deferred<TeacherDashboardHealthResponse>();
+    const current = deferred<TeacherDashboardHealthResponse>();
+    mocks.load.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise);
+    const page = render(<Dashboard />);
+    expect(mocks.load).not.toHaveBeenCalled();
+    mocks.period.isLoading = false;
+    page.rerender(<Dashboard />);
+    await waitFor(() => expect(mocks.load).toHaveBeenCalledTimes(1));
+    mocks.period.selectedPeriodId = 4;
+    page.rerender(<Dashboard />);
+    await waitFor(() => expect(mocks.load).toHaveBeenCalledTimes(2));
+    const next = supportPayload(); next.items[0].name = "Current-period learner";
+    next.items[0].academic_period_id = 4;
+    await act(async () => current.resolve(supportResponse(next)));
+    await screen.findByText("Current-period learner");
+    await act(async () => old.resolve(supportResponse()));
+    expect(screen.queryByText("Actual check-in learner")).toBeNull();
+    expect(screen.getByText("Current-period learner")).toBeTruthy();
+  });
+});
+
 describe("teacher dashboard Phase 1 mocked component behavior", () => {
   it("keeps eight overview skeletons and empty Phase 1 widgets while loading", () => {
     const { container } = render(<Dashboard />);
@@ -160,7 +280,7 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     expect(screen.queryByText("Panganganak ng Pang-uri")).toBeNull();
     expect(screen.queryByText("Fractions worksheet")).toBeNull();
     expect(screen.queryByText("17 Students")).toBeNull();
-    expect(screen.getByText("Jose Reyes")).toBeTruthy();
+    expect(screen.queryByText("Jose Reyes")).toBeNull();
     expect(screen.queryByText("Maria Santos")).toBeNull();
     expect(within(cardFor("Top Performers")).getByText("Loading dashboard data...")).toBeTruthy();
   });
@@ -201,7 +321,7 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     expect(within(cardFor("Section-by-Section Health")).queryByText("Archimedes", { exact: true })).toBeNull();
     expect([countFor("Current grade"), countFor("Passing Rate"), countFor("Late Submissions"), countFor("Attendance Today"), countFor("Term Progress")])
       .toEqual(["—", "—", "—", "—", "—"]);
-    expect(screen.getByText("Jose Reyes")).toBeTruthy();
+    expect(screen.queryByText("Jose Reyes")).toBeNull();
     expect(screen.queryByText("Maria Santos")).toBeNull();
     expect(within(cardFor("Top Performers")).getByText("Dashboard data is unavailable.")).toBeTruthy();
   });
@@ -316,18 +436,19 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     expect(mocks.navigate).toHaveBeenCalledWith("/teacher/classworks/812");
   });
 
-  it("does not turn retained support or removed lesson mock IDs into navigation targets", async () => {
+  it("does not turn removed support or lesson mock IDs into navigation targets", async () => {
     mocks.load.mockResolvedValue(response());
     render(<Dashboard />);
     await waitFor(() => expect(countFor("Active Classes")).toBe("0"));
-    fireEvent.click(screen.getByText("Jose Reyes"));
+    expect(screen.queryByText("Jose Reyes")).toBeNull();
+    fireEvent.click(within(cardFor("Students to check in with")).getByText("No students meet the check-in criteria."));
     fireEvent.click(within(cardFor("Lesson performance")).getByRole("button", { name: "View lesson subject" }));
     expect(mocks.navigate).not.toHaveBeenCalled();
     expect(screen.queryByText("Pang-uri")).toBeNull();
     expect(within(cardFor("Lesson performance")).getByText("No subjects assigned for this academic period.")).toBeTruthy();
   });
 
-  it("requires both a real grade and class for support navigation and an authorized lesson destination", async () => {
+  it("ignores obsolete support mock IDs and retains the authorized lesson destination", async () => {
     mocks.classes = [{ class_id: 53, subject_id: 25, subject_name: "Actual Subject" }];
     mocks.load.mockResolvedValue(response({ details: { students_needing_support: [
       { name: "Missing grade", class_id: 53, score: 50, section: "Actual Section" },
@@ -335,12 +456,11 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
       { name: "Actual support", grade_level: 8, class_id: 53, student_id: "s-5", prediction_id: 45, score: 60, section: "Actual Section" },
     ], lesson_performance: lessonPayload() } }));
     render(<Dashboard />);
-    await waitFor(() => expect(screen.getByText("Actual support")).toBeTruthy());
-    fireEvent.click(screen.getByText("Missing grade"));
-    fireEvent.click(screen.getByText("Missing class"));
+    await waitFor(() => expect(countFor("Active Classes")).toBe("0"));
+    for (const name of ["Missing grade", "Missing class", "Actual support"]) {
+      expect(screen.queryByText(name)).toBeNull();
+    }
     expect(mocks.navigate).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByText("Actual support"));
-    expect(mocks.navigate).toHaveBeenCalledWith("/teacher/predictions/8/53?predictionId=45&studentId=s-5&studentName=Actual+support");
     fireEvent.click(within(cardFor("Lesson performance")).getByRole("button", { name: "View lesson subject" }));
     expect(mocks.navigate).toHaveBeenCalledWith("/teacher/classes/53/subjects/25");
   });
@@ -748,7 +868,7 @@ describe("teacher dashboard Phase 3 mocked component behavior", () => {
     expect(screen.queryByText("Maria Santos")).toBeNull();
     expect(within(bands).queryByText("80-89")).toBeNull();
     expect(within(bands).getByText("Bands use unrounded grades and do not indicate passing.")).toBeTruthy();
-    expect(screen.getByText("Jose Reyes")).toBeTruthy(); // Untouched later-phase demo.
+    expect(screen.queryByText("Jose Reyes")).toBeNull();
   });
 
   it.each([0, 2])("shows cutoff tie text only for actually omitted entries (%s)", async (omitted) => {
