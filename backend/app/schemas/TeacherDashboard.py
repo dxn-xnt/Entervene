@@ -1,6 +1,7 @@
 """Additive, nullable metrics for the teacher dashboard only."""
 
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -210,3 +211,42 @@ class DashboardLessonSubjectSummary(BaseModel):
 class DashboardLessonPerformanceSummary(BaseModel):
     policy: DashboardLessonPolicy = Field(default_factory=DashboardLessonPolicy)
     subjects: list[DashboardLessonSubjectSummary] = Field(default_factory=list)
+
+
+class DashboardSupportPolicy(BaseModel):
+    model_config = {"frozen": True}
+    min_overdue_tasks: int = Field(default=1, ge=1)
+    min_late_submissions: int = Field(default=2, ge=1)
+    min_recorded_attendance_days: int = Field(default=5, ge=1)
+    min_unexcused_absence_days: int = Field(default=2, ge=1)
+    limit: int = Field(default=3, ge=1)
+
+
+class DashboardSupportReason(BaseModel):
+    code: Literal["below_passing", "overdue_work", "unexcused_absences", "late_submissions"]
+    message: str
+    count: int | None = Field(default=None, ge=0)
+    passing_threshold: float | None = None
+    recorded_day_count: int | None = Field(default=None, ge=0)
+
+
+class DashboardSupportItem(BaseModel):
+    student_id: str
+    class_id: int
+    subject_id: int
+    academic_period_id: int
+    name: str
+    section_name: str | None = None
+    subject_name: str | None = None
+    current_grade: float | None = None
+    reasons: list[DashboardSupportReason]
+
+
+class DashboardSupportSummary(BaseModel):
+    policy: DashboardSupportPolicy = Field(default_factory=DashboardSupportPolicy)
+    items: list[DashboardSupportItem] = Field(default_factory=list)
+    total_entry_count: int = Field(default=0, ge=0)
+    qualifying_entry_count: int = Field(default=0, ge=0)
+    omitted_entry_count: int = Field(default=0, ge=0)
+    unavailable_grade_count: int = Field(default=0, ge=0)
+    warnings: list[DashboardWarning] = Field(default_factory=list)
