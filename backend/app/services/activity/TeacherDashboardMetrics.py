@@ -31,6 +31,10 @@ from app.schemas.TeacherDashboard import (
     DashboardPerformerItem,
     DashboardPerformerSummary,
     DashboardScopeLabel,
+    DashboardSupportItem,
+    DashboardSupportPolicy,
+    DashboardSupportReason,
+    DashboardSupportSummary,
     DashboardWindow,
     DashboardWarning,
     DashboardTrendPoint,
@@ -240,7 +244,11 @@ def summarize_dashboard_grades(
 def read_dashboard_student_names(
     db: Session, student_ids: Collection[str]
 ) -> dict[str, str]:
-    """One name-only SELECT for the authorized grade population, never autoflush."""
+    """One name-only SELECT for the authorized dashboard roster, never autoflush.
+
+    The caller includes learners with unavailable grades so confirmed work or
+    attendance indicators never require a second lookup or invented names.
+    """
     ids = {UUID(student_id) for student_id in student_ids}
     if not ids:
         return {}
@@ -677,6 +685,167 @@ def summarize_dashboard_submissions(
         warnings=weekday_warnings,
     )
     return late_summary, weekday_summary
+
+
+def summarize_dashboard_support(
+    grades: Sequence[DashboardGrade],
+    thresholds: Mapping[int, ThresholdResolution],
+    engagement: DashboardEngagementSnapshot,
+    attendance: Sequence[AttendanceRecord],
+    excuses: Sequence[AttendanceRecord],
+    now: datetime,
+    month_window: DashboardWindow,
+    period_start: date,
+    period_end: date,
+    student_names: Mapping[str, str],
+    scope_labels: Mapping[tuple[int, int], DashboardScopeLabel],
+    *,
+    policy: DashboardSupportPolicy | None = None,
+    require_subject_match: bool = False,
+) -> DashboardSupportSummary:
+    """Confirmed, observed indicators only; no queries, predictions or risk score.
+
+    The grade population is the authoritative active student/class/subject scope.
+    Excuses suppress deadline indicators and absence dates, not obligations or
+    completion totals. Attendance evidence is DISTINCT recorded calendar dates.
+    """
+    policy = policy or DashboardSupportPolicy()
+    cutoff = _dashboard_aware_timestamp(now)
+    today = dashboard_manila_date(cutoff)
+    warnings: dict[tuple, DashboardWarning] = {}
+
+    def warn(warning: DashboardWarning) -> None:
+        warnings[(warning.code, warning.class_id, warning.subject_id, warning.assignment_id)] = warning
+
+    population = {(g.student_id, g.class_id, g.subject_id, g.academic_period_id): g for g in grades}
+    authorized = {(g.student_id, g.class_id) for g in population.values()}
+    recorded: dict[tuple[str, int], dict[date, set[str]]] = {}
+    for record in attendance:
+        key = (str(record.student_id), record.class_id)
+        if (key in authorized and month_window.start_date <= record.date <= month_window.end_date
+                and record.status in {"present", "late", "excused", "absent"}):
+            recorded.setdefault(key, {}).setdefault(record.date, set()).add(record.status)
+
+    overdue: dict[tuple[str, int, int], int] = {}
+    for aid, assignment in engagement.assignments.items():
+        assignment_warnings = engagement.warnings_by_assignment[aid]
+        for warning in assignment_warnings:
+            if warning.code in {"ambiguous_submission_attempts", "targeted_recipient_outside_active_roster"}:
+                warn(warning)
+        # A duplicate-attempt ambiguity must not be misreported as missing work.
+        if any(w.code == "ambiguous_submission_attempts" for w in assignment_warnings):
+            continue
+        if assignment.due_date is None or _dashboard_aware_timestamp(assignment.due_date) >= cutoff:
+            continue
+        completed = {str(row.student_id) for row in engagement.selected_by_assignment[aid]}
+        for student_id in engagement.eligible_by_assignment[aid] - completed:
+            if dashboard_excuse_covers_submission(
+                student_id, assignment.class_id, assignment.classwork.subject_id,
+                assignment.due_date, excuses, require_subject_match=require_subject_match,
+            ):
+                continue
+            key = (student_id, assignment.class_id, assignment.classwork.subject_id)
+            overdue[key] = overdue.get(key, 0) + 1
+
+    # Match Phase 2/4 calendar lateness: filter by period before canonical selection.
+    in_period = [row for row in engagement.eligible_submissions if row.submitted_at is None or (
+        _dashboard_aware_timestamp(row.submitted_at) <= cutoff
+        and period_start <= dashboard_manila_date(row.submitted_at) <= min(today, period_end)
+    )]
+    selected, attempt_warnings = select_dashboard_submissions(in_period)
+    for warning in attempt_warnings:
+        warn(warning)
+    late: dict[tuple[str, int, int], int] = {}
+    for row in selected:
+        assignment = engagement.assignments[row.classwork_assignment_id]
+        if dashboard_excuse_covers_submission(
+            row.student_id, assignment.class_id, assignment.classwork.subject_id,
+            assignment.due_date, excuses, require_subject_match=require_subject_match,
+        ):
+            continue
+        is_late = dashboard_submission_is_late(row.submitted_at, assignment.due_date)
+        if is_late is None:
+            warn(DashboardWarning(
+                code="missing_submission_timestamp" if row.submitted_at is None else "missing_deadline_timestamp",
+                message="Late-submission indicator unavailable: a submission or deadline timestamp is missing.",
+                class_id=assignment.class_id, subject_id=assignment.classwork.subject_id,
+                assignment_id=assignment.classwork_assignment_id,
+            ))
+        elif is_late:
+            key = (str(row.student_id), assignment.class_id, assignment.classwork.subject_id)
+            late[key] = late.get(key, 0) + 1
+
+    items = []
+    unavailable = 0
+    for grade in population.values():
+        if grade.warning is not None:
+            warn(grade.warning)
+        value = _finite_grade_number(grade.current_grade)
+        unavailable += value is None
+        resolution = thresholds.get(grade.subject_id)
+        threshold = (_finite_grade_number(resolution.passing_threshold)
+                     if resolution is not None and resolution.warning is None
+                     and resolution.subject_id == grade.subject_id else None)
+        if threshold is None:
+            warn(resolution.warning if resolution and resolution.warning else DashboardWarning(
+                code="invalid_passing_threshold",
+                message="Below-passing indicator unavailable: subject-group passing grade is missing or invalid.",
+                subject_id=grade.subject_id,
+            ))
+        reasons = []
+        if value is not None and threshold is not None and value < threshold:
+            reasons.append(DashboardSupportReason(
+                code="below_passing", message=f"Below subject-group passing grade ({threshold:g})",
+                passing_threshold=float(threshold),
+            ))
+        key = (grade.student_id, grade.class_id, grade.subject_id)
+        count = overdue.get(key, 0)
+        if count >= policy.min_overdue_tasks:
+            reasons.append(DashboardSupportReason(
+                code="overdue_work", count=count,
+                message=f"{count} overdue assigned {'task' if count == 1 else 'tasks'}",
+            ))
+        days = recorded.get((grade.student_id, grade.class_id), {})
+        absence_days = sum("absent" in statuses and "excused" not in statuses for statuses in days.values())
+        if len(days) >= policy.min_recorded_attendance_days and absence_days >= policy.min_unexcused_absence_days:
+            reasons.append(DashboardSupportReason(
+                code="unexcused_absences", count=absence_days, recorded_day_count=len(days),
+                message=f"{absence_days} unexcused absence dates this month ({len(days)} recorded dates)",
+            ))
+        count = late.get(key, 0)
+        if count >= policy.min_late_submissions:
+            reasons.append(DashboardSupportReason(
+                code="late_submissions", count=count,
+                message=f"{count} non-excused late {'submission' if count == 1 else 'submissions'}",
+            ))
+        if not reasons:
+            continue
+        name = student_names.get(grade.student_id)
+        if not name or not name.strip():
+            name = "Name unavailable"
+            warn(DashboardWarning(
+                code="student_name_unavailable", message="Student name unavailable for one or more check-in entries.",
+                class_id=grade.class_id, subject_id=grade.subject_id,
+            ))
+        label = scope_labels.get((grade.class_id, grade.subject_id), DashboardScopeLabel())
+        items.append(DashboardSupportItem(
+            student_id=grade.student_id, class_id=grade.class_id, subject_id=grade.subject_id,
+            academic_period_id=grade.academic_period_id, name=name,
+            section_name=label.section_name, subject_name=label.subject_name,
+            current_grade=float(value) if value is not None else None, reasons=reasons,
+        ))
+    priority = {code: i for i, code in enumerate((
+        "below_passing", "overdue_work", "unexcused_absences", "late_submissions",
+    ))}
+    items.sort(key=lambda item: (
+        priority[item.reasons[0].code], normalize("NFC", item.name).casefold(),
+        item.student_id, item.subject_id, item.class_id,
+    ))
+    return DashboardSupportSummary(
+        policy=policy, items=items[:policy.limit], total_entry_count=len(population),
+        qualifying_entry_count=len(items), omitted_entry_count=max(0, len(items) - policy.limit),
+        unavailable_grade_count=unavailable, warnings=list(warnings.values()),
+    )
 
 
 def dashboard_term_progress(period_start: date, period_end: date, today: date) -> TermProgress:

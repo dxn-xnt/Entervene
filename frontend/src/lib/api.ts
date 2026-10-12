@@ -2895,6 +2895,38 @@ export interface TeacherDashboardLessonPerformance {
   }>;
 }
 
+export interface TeacherDashboardSupportSummary {
+  policy: {
+    min_overdue_tasks: number;
+    min_late_submissions: number;
+    min_recorded_attendance_days: number;
+    min_unexcused_absence_days: number;
+    limit: number;
+  };
+  items: Array<{
+    student_id: string;
+    class_id: number;
+    subject_id: number;
+    academic_period_id: number;
+    name: string;
+    section_name: string | null;
+    subject_name: string | null;
+    current_grade: number | null;
+    reasons: Array<{
+      code: "below_passing" | "overdue_work" | "unexcused_absences" | "late_submissions";
+      message: string;
+      count: number | null;
+      passing_threshold: number | null;
+      recorded_day_count: number | null;
+    }>;
+  }>;
+  total_entry_count: number;
+  qualifying_entry_count: number;
+  omitted_entry_count: number;
+  unavailable_grade_count: number;
+  warnings: TeacherDashboardWarning[];
+}
+
 export interface TeacherDashboardHealthResponse {
   term_info: {
     period_id: number | null;
@@ -2934,6 +2966,7 @@ export interface TeacherDashboardHealthResponse {
     grade_distribution?: TeacherDashboardGradeBand[];
     grade_details?: TeacherDashboardGradeDetails;
     lesson_performance?: TeacherDashboardLessonPerformance;
+    students_to_check_in_with?: TeacherDashboardSupportSummary;
   };
 }
 

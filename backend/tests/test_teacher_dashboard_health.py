@@ -251,6 +251,175 @@ def dashboard(db, data, **kwargs):
     )
 
 
+def test_phase_six_real_support_payload_without_demo_or_private_contact_fields(db, data):
+    """Mocked-behavior: actual roster and class-record grades, never predictions."""
+    result = dashboard(db, data)
+    support = result["details"]["students_to_check_in_with"]
+    assert "students_needing_support" not in result["details"]
+    assert support["total_entry_count"] == 2
+    assert support["qualifying_entry_count"] >= 1
+    assert {row["student_id"] for row in support["items"]}.issubset({
+        str(data["students"][key].student_id) for key in ("active_one", "active_two")
+    })
+    for row in support["items"]:
+        assert row["name"].startswith("Student, ")
+        assert row["academic_period_id"] == data["period"].academic_period_id
+        assert {reason["code"] for reason in row["reasons"]} == {"below_passing"}
+        assert not ({"student_lrn", "email", "phone", "score", "prediction_id"} & row.keys())
+
+
+def test_phase_six_expanded_name_lookup_keeps_ungraded_learner_with_overdue_work(db, data, monkeypatch):
+    """Mocked-behavior: one expanded name lookup, no invented identity or grade."""
+    from types import SimpleNamespace
+    from app.services.activity import TeacherDashboardMetrics
+    ids = [data["students"][key].student_id for key in ("active_one", "active_two")]
+    monkeypatch.setattr(TeacherDashboardMetrics, "teacher_student_gradebook", lambda *_args: SimpleNamespace(studentGrades=[
+        SimpleNamespace(student_id=ids[0], transmuted_grade=90),
+        SimpleNamespace(student_id=ids[1], transmuted_grade=None),
+    ]))
+    data["assignments"]["main_pending"].due_date = NOW - timedelta(hours=1)
+    result = dashboard(db, data)["details"]["students_to_check_in_with"]
+    assert result["unavailable_grade_count"] == 1
+    assert len(result["items"]) == 1
+    row = result["items"][0]
+    assert row["student_id"] == str(ids[1]) and row["name"] == "Student, active_two"
+    assert row["current_grade"] is None
+    assert [reason["code"] for reason in row["reasons"]] == ["overdue_work"]
+
+
+@pytest.mark.parametrize("scope", ["empty_period", "previous_period", "empty_teacher", "other_teacher"])
+def test_phase_six_support_remains_teacher_period_and_active_roster_scoped(db, data, scope):
+    """Mocked-behavior: all scope inputs are existing authorized dashboard reads."""
+    staff = data[scope] if scope.endswith("teacher") else data["teacher"]
+    period = data[scope] if scope.endswith("period") else data["period"]
+    db.flush()
+    result = AnalyticsService.build_teacher_dashboard_health(db, staff.staff_id, period)
+    support = result["details"]["students_to_check_in_with"]
+    combos = {(f["class_id"], f["subject_id"]) for f in result["trend_chart"]["available_filters"]}
+    assert all(row["academic_period_id"] == period.academic_period_id
+               and (row["class_id"], row["subject_id"]) in combos for row in support["items"])
+    if scope in {"empty_period", "empty_teacher"}:
+        assert support["items"] == [] and support["total_entry_count"] == 0
+    assert all(row["student_id"] not in {str(data["students"][key].student_id) for key in ("withdrawn", "inactive")} for row in support["items"])
+
+
+def test_phase_six_excused_events_do_not_qualify_but_unexcused_absence_dates_do(db, data, monkeypatch):
+    """Mocked-behavior: one excuse covers deadline indicators across subjects."""
+    from types import SimpleNamespace
+    from app.services.activity import TeacherDashboardMetrics
+    ids = [data["students"][key].student_id for key in ("active_one", "active_two")]
+    monkeypatch.setattr(TeacherDashboardMetrics, "teacher_student_gradebook", lambda *_args: SimpleNamespace(studentGrades=[
+        SimpleNamespace(student_id=student_id, transmuted_grade=90) for student_id in ids
+    ]))
+    due = NOW - timedelta(days=1)
+    overdue = add_assignment(db, data, "support_excused_overdue", due_date=due)
+    late = add_assignment(db, data, "support_excused_late", due_date=due)
+    add_submission(db, data, "support_late_one", late, data["students"]["active_one"])
+    add_submission(db, data, "support_late_two", late, data["students"]["active_two"])
+    for student_id in ids:
+        db.add(AttendanceRecord(student_id=student_id, class_id=data["class_"].class_id,
+            subject_id=data["other_subject"].subject_id, date=date(2026, 10, 7), status="excused"))
+    full_result = dashboard(db, data)
+    result = full_result["details"]["students_to_check_in_with"]
+    assert result["items"] == []
+    assert result["qualifying_entry_count"] == 0
+    assert full_result["engagement"]["expected_count"] == 8
+    assert full_result["engagement"]["completed_count"] == 5
+    for day in range(1, 6):
+        db.add(AttendanceRecord(student_id=ids[0], class_id=data["class_"].class_id,
+            subject_id=data["subject"].subject_id, date=date(2026, 10, day),
+            status="absent" if day < 3 else "present"))
+    result = dashboard(db, data)["details"]["students_to_check_in_with"]
+    assert len(result["items"]) == 1 and result["items"][0]["student_id"] == str(ids[0])
+    assert [r["code"] for r in result["items"][0]["reasons"]] == ["unexcused_absences"]
+    assert result["items"][0]["reasons"][0]["count"] == 2
+    assert dashboard(db, data)["engagement"]["expected_count"] == 8
+
+
+def test_phase_six_runtime_threshold_change_and_missing_configuration(db, data):
+    """Mocked-behavior: candidate membership follows the current subject group."""
+    from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
+    rows = [StudentPeriodGrade(student_id=data["students"][key].student_id,
+        class_id=data["class_"].class_id, subject_id=data["subject"].subject_id,
+        academic_period_id=data["period"].academic_period_id,
+        transmuted_grade=Decimal("84.99"), is_finalized=True) for key in ("active_one", "active_two")]
+    db.add_all(rows)
+    assert dashboard(db, data)["details"]["students_to_check_in_with"]["qualifying_entry_count"] == 2
+    data["subject"].subject_group_rel.passing_threshold = Decimal("83.25")
+    assert dashboard(db, data)["details"]["students_to_check_in_with"]["items"] == []
+    data["subject"].subject_group_rel = None
+    support = dashboard(db, data)["details"]["students_to_check_in_with"]
+    assert support["items"] == [] and support["warnings"][0]["code"] == "invalid_passing_threshold"
+
+
+def test_phase_six_entire_path_read_only_even_with_a_dirty_name(db, data, monkeypatch):
+    """Mocked-behavior: forbid every write API and SQL DML after fixture setup."""
+    from sqlalchemy import event
+    db.flush()
+    staff_id, period = data["teacher"].staff_id, data["period"]
+    learner = data["students"]["active_one"]
+    student_id = str(learner.student_id)
+    learner.first_name = "Unsaved fixture edit"
+    def reject_write(*_args, **_kwargs):
+        raise AssertionError("Dashboard support attempted a write")
+    for method in ("add", "add_all", "delete", "flush", "commit"):
+        monkeypatch.setattr(db, method, reject_write)
+    def select_only(_connection, _cursor, statement, _parameters, _context, _many):
+        assert statement.lstrip().upper().startswith("SELECT")
+    event.listen(db.get_bind(), "before_cursor_execute", select_only)
+    try:
+        support = AnalyticsService.build_teacher_dashboard_health(db, staff_id, period)["details"]["students_to_check_in_with"]
+    finally:
+        event.remove(db.get_bind(), "before_cursor_execute", select_only)
+    row = next(item for item in support["items"] if item["student_id"] == student_id)
+    assert row["name"] == "Student, active_one" and learner in db.dirty
+
+
+def test_phase_six_no_additional_selects_and_one_expanded_name_query(db, data, monkeypatch):
+    """Mocked-behavior: compare enabled/disabled aggregation and larger rosters."""
+    from sqlalchemy import event
+    from app.schemas.TeacherDashboard import DashboardSupportSummary
+    real_helper = AnalyticsService.summarize_dashboard_support
+    staff_id, period_id = data["teacher"].staff_id, data["period"].academic_period_id
+    def capture(helper):
+        monkeypatch.setattr(AnalyticsService, "summarize_dashboard_support", helper)
+        db.flush()
+        db.expire_all()
+        period = db.get(AcademicPeriod, period_id)
+        statements = []
+        def read(_connection, _cursor, statement, _parameters, _context, _many):
+            assert statement.lstrip().upper().startswith("SELECT")
+            statements.append(statement)
+        event.listen(db.get_bind(), "before_cursor_execute", read)
+        try:
+            AnalyticsService.build_teacher_dashboard_health(db, staff_id, period)
+        finally:
+            event.remove(db.get_bind(), "before_cursor_execute", read)
+        names = [sql for sql in statements if "student.first_name" in sql and "FROM student " in sql
+                 and "student.middle_name" in sql and "student.suffix" in sql
+                 and "student.student_lrn" not in sql]
+        assert len(names) == 1
+        assert all(field not in names[0] for field in ("student_lrn", "email", "contact", "password"))
+        return len(statements)
+    without = capture(lambda *_args, **_kwargs: DashboardSupportSummary())
+    small = capture(real_helper)
+    assert small == without
+    for index in range(6):
+        learner = Student(student_id=uuid.uuid4(), student_lrn=f"{200 + index:012d}",
+            first_name=f"Support{index}", last_name="Synthetic", academic_level_id=data["class_"].academic_level_id)
+        db.add(learner)
+        db.flush()
+        db.add(StudentClass(student_id=learner.student_id, class_id=data["class_"].class_id,
+            academic_year_id=data["year"].academic_year_id, enrollment_status="enrolled"))
+    large_without = capture(lambda *_args, **_kwargs: DashboardSupportSummary())
+    large = capture(real_helper)
+    # The protected class-record implementation reads period grades per learner.
+    # Phase 6 must add zero reads at BOTH sizes, rather than hide that baseline.
+    assert large == large_without
+    print(f"Phase 6 SELECT count: small={small}/{without}, large={large}/{large_without} "
+          "(enabled/disabled); additional SELECTs=0; name SELECTs=1")
+
+
 def create_client(db, identity):
     app = FastAPI()
     app.include_router(router, prefix="/analytics")
