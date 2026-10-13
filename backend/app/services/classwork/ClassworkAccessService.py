@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 from app.models.academic.StudentCLass import StudentClass
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
-from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.classwork.ClassworkShared import assignment_is_available, assignment_is_locked
+from app.services.academic.ContentAuthorizationService import authorize_teacher_content, resolve_content_staff_id
 
 
 def assignment_allows_student(assignment: ClassworkAssignment, student_id) -> bool:
@@ -37,24 +37,21 @@ def authorize_classwork_access(
     if role == "admin":
         return
     if role == "teacher":
-        staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
-        if staff:
-            if cw.created_by_staff_id == staff.staff_id:
-                return
-            from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+        def read_scopes():
+            query = db.query(ClassworkAssignment).filter(
+                ClassworkAssignment.classwork_id == cw.classwork_id,
+            )
             if class_id is not None:
-                asgn = db.query(ClassworkAssignment).filter(
-                    ClassworkAssignment.classwork_id == cw.classwork_id,
-                    ClassworkAssignment.class_id == class_id,
-                ).first()
-                if asgn and asgn.academic_period_id:
-                    if SubjectLoadAuthorizationService.can_view(db, staff.staff_id, class_id, cw.subject_id, asgn.academic_period_id):
-                        return
-            else:
-                assignments = db.query(ClassworkAssignment).filter(ClassworkAssignment.classwork_id == cw.classwork_id).all()
-                for asgn in assignments:
-                    if asgn.academic_period_id and SubjectLoadAuthorizationService.can_view(db, staff.staff_id, asgn.class_id, cw.subject_id, asgn.academic_period_id):
-                        return
+                query = query.filter(ClassworkAssignment.class_id == class_id)
+            for assignment in query.all():
+                if assignment.academic_period_id is not None:
+                    yield assignment.class_id, cw.subject_id, assignment.academic_period_id
+        authorize_teacher_content(
+            db, staff_id=resolve_content_staff_id(db, current_user),
+            owner_staff_id=cw.created_by_staff_id, detail="Classwork not found",
+            read_scopes=read_scopes(),
+        )
+        return
     if cw.is_archived:
         raise HTTPException(status_code=404, detail="Classwork not found")
     if role == "student":
@@ -90,15 +87,17 @@ def authorize_assignment_access(
     role = current_user.get("role")
     user_id = user_id_from_claims(current_user)
     if role == "teacher":
-        staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
-        if staff:
-            if cw.created_by_staff_id == staff.staff_id:
-                return
-            from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
-            if assignment.academic_period_id and SubjectLoadAuthorizationService.can_view(
-                db, staff.staff_id, assignment.class_id, cw.subject_id, assignment.academic_period_id
-            ):
-                return
+        scopes = (
+            [(assignment.class_id, cw.subject_id, assignment.academic_period_id)]
+            if assignment.academic_period_id is not None and assignment.classwork_id == cw.classwork_id
+            else []
+        )
+        authorize_teacher_content(
+            db, staff_id=resolve_content_staff_id(db, current_user),
+            owner_staff_id=cw.created_by_staff_id, detail="Assignment not found",
+            read_scopes=scopes,
+        )
+        return
     if cw.is_archived:
         raise HTTPException(status_code=404, detail="Classwork not found")
     if role == "student" and assignment_is_available(assignment):

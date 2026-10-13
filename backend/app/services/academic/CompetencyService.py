@@ -8,6 +8,7 @@ from app.models.academic.LessonAssignment import LessonAssignment
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.Class_ import Class
 from app.models.people.AcademicStaff import AcademicStaff
 from app.schemas.Competency import (
     CompetencyCreate,
@@ -17,6 +18,7 @@ from app.schemas.Competency import (
     SubjectHierarchyTreeResponse,
 )
 from app.services.lesson.LessonResponseService import build_lesson_response
+from app.services.academic.ContentAuthorizationService import authorize_teacher_content, resolve_content_staff_id
 
 
 def build_competency_response(competency: Competency, db: Session) -> CompetencyResponse:
@@ -75,57 +77,33 @@ def get_competency_detail(competency_id: int, current_user: dict, db: Session) -
         raise HTTPException(status_code=404, detail="Competency not found")
 
     role = current_user.get("role")
-    user_id = current_user.get("sub")
-    try:
-        from uuid import UUID
-        user_uuid = UUID(user_id) if isinstance(user_id, str) else user_id
-    except ValueError:
-        user_uuid = user_id
 
     if role == "admin":
         return build_competency_response(competency, db)
 
     if role == "teacher":
-        staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_uuid).first()
-        if staff:
-            # 1. Owning creator teacher
-            if competency.created_by_staff_id == staff.staff_id:
-                return build_competency_response(competency, db)
-
-            # 2. Legacy competency without created_by_staff_id: allow if teacher has active load for subject
-            if competency.created_by_staff_id is None:
-                has_load = db.query(SubjectLoad.subject_load_id).filter(
-                    SubjectLoad.staff_id == staff.staff_id,
-                    SubjectLoad.subject_id == competency.subject_id,
-                    SubjectLoad.status.in_(["active", "published"]),
-                    SubjectLoad.is_active_version.is_(True),
-                ).first()
-                if has_load:
-                    return build_competency_response(competency, db)
-
-            # 3. Authorized substitute covering the creator teacher's load for this subject
-            from app.models.academic.TeacherSubstitution import TeacherSubstitution
-            from app.services.academic.SubstitutionService import SubstitutionService
-            from sqlalchemy import or_
-            today_date = SubstitutionService.get_academic_date()
-            is_sub = (
-                db.query(TeacherSubstitution.substitution_id)
-                .join(SubjectLoad, SubjectLoad.subject_load_id == TeacherSubstitution.subject_load_id)
+        def read_scopes():
+            query = (
+                db.query(LessonAssignment.class_id, AcademicPeriod.academic_period_id)
+                .join(Lesson, Lesson.lesson_id == LessonAssignment.lesson_id)
+                .join(Class, Class.class_id == LessonAssignment.class_id)
+                .join(AcademicPeriod, AcademicPeriod.academic_year_id == Class.academic_year_id)
                 .filter(
-                    SubjectLoad.staff_id == competency.created_by_staff_id,
-                    SubjectLoad.subject_id == competency.subject_id,
-                    SubjectLoad.status.in_(["active", "published"]),
-                    SubjectLoad.is_active_version.is_(True),
-                    TeacherSubstitution.substitute_staff_id == staff.staff_id,
-                    TeacherSubstitution.status == "active",
-                    or_(TeacherSubstitution.end_date.is_(None), TeacherSubstitution.end_date >= today_date),
+                    Lesson.competency_id == competency.competency_id,
+                    Lesson.subject_id == competency.subject_id,
+                    Lesson.is_archived.is_(False),
                 )
-                .first()
             )
-            if is_sub:
-                return build_competency_response(competency, db)
-
-            # TODO (Future Clone Grant): Hook in here when approved clone grants exist for competencies
+            if competency.academic_period_id is not None:
+                query = query.filter(AcademicPeriod.academic_period_id == competency.academic_period_id)
+            for class_id, period_id in query.all():
+                yield class_id, competency.subject_id, period_id
+        authorize_teacher_content(
+            db, staff_id=resolve_content_staff_id(db, current_user),
+            owner_staff_id=competency.created_by_staff_id, detail="Competency not found",
+            read_scopes=read_scopes(),
+        )
+        return build_competency_response(competency, db)
 
     # Note: Student access is not permitted directly via this endpoint as students consume
     # competencies via published lessons (LessonResponse.competency_* fields).
@@ -171,8 +149,10 @@ def update_competency_record(
         raise HTTPException(status_code=404, detail="Competency not found")
 
     if not is_admin:
-        if not staff_id or competency.created_by_staff_id != staff_id:
-            raise HTTPException(status_code=403, detail="You do not have permission to update this competency")
+        authorize_teacher_content(
+            db, staff_id=staff_id, owner_staff_id=competency.created_by_staff_id,
+            detail="Competency not found", owner_only=True,
+        )
 
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(competency, field, value)
@@ -193,8 +173,10 @@ def archive_competency_record(
         raise HTTPException(status_code=404, detail="Competency not found")
 
     if not is_admin:
-        if not staff_id or competency.created_by_staff_id != staff_id:
-            raise HTTPException(status_code=403, detail="You do not have permission to delete this competency")
+        authorize_teacher_content(
+            db, staff_id=staff_id, owner_staff_id=competency.created_by_staff_id,
+            detail="Competency not found", owner_only=True,
+        )
 
     competency.is_archived = True
     db.commit()

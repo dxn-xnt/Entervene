@@ -64,4 +64,5 @@ def delete_lesson_goals(
         subject_id=subject_id,
         academic_period_id=academic_period_id,
         db=db,
+        current_user=current_user,
     )
