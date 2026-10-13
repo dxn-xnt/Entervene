@@ -170,7 +170,7 @@ const Login = () => {
               variant="default"
               autoIcon={false}
               className="mt-4 shadow-md hover:shadow-none"
-              disabled={loading}
+              disabled={loading || isLoading}
             >
               Sign In
             </Button>

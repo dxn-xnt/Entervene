@@ -451,11 +451,12 @@ function getCookie(name: string): string | null {
 let refreshRequest: Promise<boolean> | null = null;
 let lastRefreshResult = false;
 let refreshReuseUntil = 0;
+let sessionCsrfToken: string | null = null;
 
 function request(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   const method = (init.method ?? "GET").toUpperCase();
-  const csrfToken = getCookie("entervene_csrf");
+  const csrfToken = getCookie("entervene_csrf") ?? sessionCsrfToken;
 
   if (csrfToken && !["GET", "HEAD", "OPTIONS"].includes(method)) {
     headers.set("X-CSRF-Token", csrfToken);
@@ -475,6 +476,14 @@ function request(path: string, init: RequestInit = {}) {
     ...init,
     headers,
     credentials: "include",
+  }).then((response) => {
+    const issuedCsrfToken = response.headers.get("X-CSRF-Token");
+    if (issuedCsrfToken) {
+      sessionCsrfToken = issuedCsrfToken;
+      refreshReuseUntil = 0;
+    }
+    if (path.endsWith("/auth/logout") && response.ok) sessionCsrfToken = null;
+    return response;
   });
 }
 
