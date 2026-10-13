@@ -21,4 +21,11 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             if not csrf_header or csrf_header != csrf_cookie:
                 return JSONResponse({"detail": "Invalid CSRF token"}, status_code=403)
 
-        return await call_next(request)
+        response = await call_next(request)
+        # A browser on a different frontend host cannot read the API cookie.
+        # /auth/me is the first session probe, including when access has expired.
+        if request.method == "GET" and request.url.path == "/api/v1/auth/me":
+            csrf_token = request.cookies.get(CSRF_COOKIE_NAME)
+            if csrf_token:
+                response.headers["X-CSRF-Token"] = csrf_token
+        return response

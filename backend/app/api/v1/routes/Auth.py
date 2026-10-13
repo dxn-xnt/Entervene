@@ -57,13 +57,15 @@ def set_auth_cookies(response: Response, access_token: str, refresh_token: str) 
         refresh_token,
         settings.refresh_token_expire_days * 24 * 60 * 60,
     )
+    csrf_token = secrets.token_urlsafe(32)
     _set_cookie(
         response,
         CSRF_COOKIE_NAME,
-        secrets.token_urlsafe(32),
+        csrf_token,
         settings.refresh_token_expire_days * 24 * 60 * 60,
         httponly=False,
     )
+    response.headers["X-CSRF-Token"] = csrf_token
 
 
 def clear_auth_cookies(response: Response) -> None:

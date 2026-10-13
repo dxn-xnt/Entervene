@@ -27,6 +27,40 @@ it("shares a failed refresh across a burst of unauthorized requests", async () =
   expect(fetch).toHaveBeenCalledTimes(3);
 });
 
+it("uses the token issued at login when the API cookie is hidden from the frontend host", async () => {
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ role: "teacher" }), {
+      status: 200,
+      headers: { "X-CSRF-Token": "first-session-token" },
+    }))
+    .mockResolvedValueOnce(new Response("{}", { status: 200 }));
+  vi.stubGlobal("fetch", fetch);
+  const { apiFetch } = await import("./api");
+
+  await apiFetch("/api/v1/auth/login", { method: "POST" });
+  await apiFetch("/api/v1/some-write", { method: "POST" });
+
+  const writeHeaders = new Headers(fetch.mock.calls[1][1].headers);
+  expect(writeHeaders.get("X-CSRF-Token")).toBe("first-session-token");
+});
+
+it("recovers the hidden API cookie token before refreshing an expired session", async () => {
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response("", {
+      status: 401,
+      headers: { "X-CSRF-Token": "existing-session-token" },
+    }))
+    .mockResolvedValueOnce(new Response("{}", { status: 200 }));
+  vi.stubGlobal("fetch", fetch);
+  const { apiFetch } = await import("./api");
+
+  await apiFetch("/api/v1/auth/me");
+  await apiFetch("/api/v1/auth/refresh", { method: "POST" });
+
+  const refreshHeaders = new Headers(fetch.mock.calls[1][1].headers);
+  expect(refreshHeaders.get("X-CSRF-Token")).toBe("existing-session-token");
+});
+
 it("exports teacher advisory student SF9 report card correctly", async () => {
   const mockBlob = new Blob(["fake-sf9-content"], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

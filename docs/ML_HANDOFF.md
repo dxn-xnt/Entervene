@@ -1,5 +1,7 @@
 # Entervene Dual-Purpose ML System Documentation
 
+> **Historical handoff — superseded as a current-system reference (2026-10-13).** This document contains proposed and older dual-purpose behavior that does not match every active route, model selector, or local registry state. Use [PREDICTION_SYSTEM.md](PREDICTION_SYSTEM.md) for the verified implementation, limitations, and current evidence. Retained here as historical design context.
+
 > Architectural specification, operations guide, and defense manual for the Dual-Purpose AI Prediction and At-Risk Detection System.
 
 > **Operational Status (Updated September 2026):** Entervene operates a verified **Dual-Purpose Machine Learning Architecture**. The system decouples incoming baseline cross-period forecasting from in-progress same-period grade projection, maintaining strict boundaries between academic regression estimates and rule-based risk classification. This document serves as the authoritative operational handoff.
