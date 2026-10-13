@@ -257,6 +257,28 @@ def test_student_cannot_access_unpublished_lesson(lesson_context):
     assert response.status_code == 403
 
 
+def test_owner_can_update_and_publish_lesson(lesson_context):
+    """Mocked-behavior: ownership preserves edits and visibility changes."""
+    c = lesson_context
+    detail_url = f"/api/v1/lessons/{c['lesson'].lesson_id}"
+
+    updated = c["client"].put(detail_url, json={
+        "title": "Owner edit", "is_published": False, "is_draft": True,
+    })
+    assert updated.status_code == 200
+    c["db"].refresh(c["lesson"])
+    assert c["lesson"].title == "Owner edit"
+    assert c["lesson"].is_published is False
+    assert c["lesson"].is_draft is True
+
+    published = c["client"].put(f"{detail_url}/publish")
+    assert published.status_code == 200
+    c["db"].refresh(c["lesson"])
+    assert c["lesson"].is_published is True
+    assert c["lesson"].is_draft is False
+    assert c["client"].get(detail_url).status_code == 200
+
+
 def test_lesson_delete_archives_and_preserves_linked_classwork(lesson_context):
     c = lesson_context
     classwork = Classwork(
@@ -492,6 +514,8 @@ def test_primary_teacher_keeps_read_only_class_access_during_substitution(lesson
 @pytest.mark.parametrize(
     ("method", "suffix", "body"),
     [("PUT", "", {"title": "Unauthorized edit"}),
+     ("PUT", "", {"is_published": False}),
+     ("PUT", "", {"is_draft": True}),
      ("DELETE", "", None), ("PUT", "/publish", None),
      ("POST", "/assign", "class"), ("PUT", "/archive", None),
      ("PUT", "/unarchive", None), ("DELETE", "/classwork/999", None)],
@@ -501,7 +525,7 @@ def test_read_grants_never_allow_lesson_mutations(
 ):
     c = lesson_context
     _share_with_reader(c, reader)
-    before = (c["lesson"].title, c["lesson"].is_archived, c["lesson"].is_published)
+    before = (c["lesson"].title, c["lesson"].is_archived, c["lesson"].is_published, c["lesson"].is_draft)
     denied_commit = Mock(side_effect=AssertionError("Denied request must not commit"))
     monkeypatch.setattr(c["db"], "commit", denied_commit)
     if body == "class":
@@ -513,7 +537,7 @@ def test_read_grants_never_allow_lesson_mutations(
     assert response.json() == {"detail": "Lesson not found"}
     denied_commit.assert_not_called()
     c["db"].refresh(c["lesson"])
-    assert before == (c["lesson"].title, c["lesson"].is_archived, c["lesson"].is_published)
+    assert before == (c["lesson"].title, c["lesson"].is_archived, c["lesson"].is_published, c["lesson"].is_draft)
 
 
 @pytest.mark.parametrize("same_subject", [True, False])
@@ -825,14 +849,15 @@ def test_shared_read_exceptions_cannot_write_sibling_content(lesson_context, tmp
     commits.assert_not_called()
 
 
-@pytest.mark.parametrize("period_mismatch", ["different_year", "different_term"])
+@pytest.mark.parametrize("period_mismatch", ["different_year", "past_year", "different_term"])
 def test_lesson_read_scope_matches_assigned_school_year_and_tagged_period(lesson_context, period_mismatch):
     """Mocked-behavior: a same-section load in another year/term is not a grant."""
     c = lesson_context
     _share_with_reader(c, "assigned_teacher")
     year_id = c["class"].academic_year_id
-    if period_mismatch == "different_year":
-        year = AcademicYear(year_label="Other year", start_date=date(2027, 1, 1), end_date=date(2027, 12, 31))
+    calendar_year = 2024 if period_mismatch == "past_year" else 2027
+    if period_mismatch in {"different_year", "past_year"}:
+        year = AcademicYear(year_label="Other year", start_date=date(calendar_year, 1, 1), end_date=date(calendar_year, 12, 31))
         c["db"].add(year)
         c["db"].flush()
         year_id = year.academic_year_id
@@ -847,7 +872,7 @@ def test_lesson_read_scope_matches_assigned_school_year_and_tagged_period(lesson
         c["lesson"].competency_id = competency.competency_id
     period = AcademicPeriod(
         period_name="Other term", period_type="TERM", period_sequence=2,
-        academic_year_id=year_id, start_date=date(2027, 1, 1), end_date=date(2027, 4, 30),
+        academic_year_id=year_id, start_date=date(calendar_year, 1, 1), end_date=date(calendar_year, 4, 30),
     )
     c["db"].add(period)
     c["db"].flush()
@@ -855,7 +880,7 @@ def test_lesson_read_scope_matches_assigned_school_year_and_tagged_period(lesson
     c["db"].commit()
     assert c["client"].get(f"/api/v1/lessons/{c['lesson'].lesson_id}").status_code == 404
     listing = c["client"].get(f"/api/v1/lessons/my-class/{c['class'].class_id}/subject/{c['subject'].subject_id}")
-    assert listing.status_code == (404 if period_mismatch == "different_year" else 200)
+    assert listing.status_code == (200 if period_mismatch == "different_term" else 404)
     if listing.status_code == 200:
         assert listing.json() == []
 
