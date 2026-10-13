@@ -94,7 +94,16 @@ def teacher_lessons_for_class_subject(
         .order_by(Lesson.order_index.asc(), Lesson.created_at.desc())
         .all()
     )
-    return [build_lesson_response(lesson, db) for lesson in lessons]
+    responses = []
+    for lesson in lessons:
+        try:
+            authorize_lesson_access(db, lesson, staff_id=staff_id, class_id=class_id)
+        except HTTPException as error:
+            if error.status_code != 404:
+                raise
+            continue
+        responses.append(build_lesson_response(lesson, db))
+    return responses
 
 
 def teacher_lesson_linked_classwork(

@@ -22,6 +22,9 @@ from app.schemas.lesson_goal import (
     LessonGoalResponse,
     LessonGoalSetRequest,
 )
+from app.services.academic.ContentAuthorizationService import authorize_teacher_content, resolve_content_staff_id
+from app.services.lesson.LessonShared import authorize_lesson_access
+from app.services.classwork.ClassworkAccessService import authorize_classwork_access
 
 
 def get_curated_lesson_goal(
@@ -52,6 +55,14 @@ def get_curated_lesson_goal(
         )
         .first()
     )
+
+    if current_user.get("role") == "teacher":
+        authorize_teacher_content(
+            db, staff_id=resolve_content_staff_id(db, current_user),
+            owner_staff_id=goal.created_by_staff_id if goal else None,
+            detail="Lesson goal not found",
+            read_scopes=[(class_id, subject_id, academic_period_id)],
+        )
 
     if not goal:
         return LessonGoalResponse(
@@ -109,6 +120,19 @@ def get_curated_lesson_goal(
     for it in goal.items:
         lesson_detail: LessonGoalItemDetailLesson | None = None
         classwork_detail: LessonGoalItemDetailClasswork | None = None
+
+        # Curated summaries must not bypass the detail policy for teachers.
+        # Preserve the established administrator and student visibility paths.
+        if user_role == "teacher":
+            try:
+                if it.lesson:
+                    authorize_lesson_access(db, it.lesson, current_user, class_id=class_id)
+                if it.classwork:
+                    authorize_classwork_access(it.classwork, current_user, db, class_id)
+            except HTTPException as error:
+                if error.status_code != 404:
+                    raise
+                continue
 
         if it.item_type == "LESSON" and it.lesson_id and it.lesson:
             if not it.lesson.is_archived:
@@ -194,6 +218,24 @@ def save_curated_lesson_goal(
         .first()
     )
 
+    if current_user.get("role") == "teacher":
+        # Authorize before creating, replacing, flushing, or deleting any row.
+        authorize_teacher_content(
+            db, staff_id=staff_id, owner_staff_id=goal.created_by_staff_id if goal else None,
+            detail="Lesson goal not found", owner_only=goal is not None,
+            read_scopes=[(class_id, subject_id, request.academic_period_id)],
+        )
+        for item in request.items:
+            model = Lesson if item.item_type.upper().strip() == "LESSON" else Classwork
+            content_id = item.lesson_id if model is Lesson else item.classwork_id
+            content = db.get(model, content_id) if content_id is not None else None
+            if not content or content.subject_id != subject_id:
+                raise HTTPException(status_code=404, detail="Lesson goal item not found")
+            authorize_teacher_content(
+                db, staff_id=staff_id, owner_staff_id=content.created_by_staff_id,
+                detail="Lesson goal item not found", owner_only=True,
+            )
+
     if not goal:
         goal = LessonGoal(
             class_id=class_id,
@@ -241,6 +283,7 @@ def clear_curated_lesson_goal(
     subject_id: int,
     academic_period_id: int,
     db: Session,
+    current_user: dict,
 ) -> None:
     goal = (
         db.query(LessonGoal)
@@ -252,5 +295,11 @@ def clear_curated_lesson_goal(
         .first()
     )
     if goal:
+        if current_user.get("role") == "teacher":
+            authorize_teacher_content(
+                db, staff_id=resolve_content_staff_id(db, current_user),
+                owner_staff_id=goal.created_by_staff_id,
+                detail="Lesson goal not found", owner_only=True,
+            )
         db.delete(goal)
         db.commit()

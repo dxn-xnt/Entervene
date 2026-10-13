@@ -5,8 +5,13 @@ from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAssignment import LessonAssignment
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.StudentCLass import StudentClass
-from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
+from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.Class_ import Class
+from app.services.academic.ContentAuthorizationService import (
+    authorize_teacher_content,
+    resolve_content_staff_id,
+)
 
 # SHARED LESSON RULES
 # Keep common lesson ownership and enrollment checks out of HTTP route handlers.
@@ -28,6 +33,15 @@ def ensure_teacher_class_subject(
 ) -> None:
     """Require active class/subject authority, retaining substitute/view-only reads."""
     from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+    if read_only:
+        periods = db.query(AcademicPeriod.academic_period_id).join(
+            Class, Class.academic_year_id == AcademicPeriod.academic_year_id
+        ).filter(Class.class_id == class_id).all()
+        authorize_teacher_content(
+            db, staff_id=staff_id, owner_staff_id=None, detail="Lesson not found",
+            read_scopes=((class_id, subject_id, period_id) for (period_id,) in periods),
+        )
+        return
     load = db.query(SubjectLoad).filter(
         SubjectLoad.class_id == class_id,
         SubjectLoad.subject_id == subject_id,
@@ -66,6 +80,22 @@ def get_owned_lesson(db: Session, staff_id: str, lesson_id: int) -> Lesson:
     return lesson
 
 
+def lesson_read_scopes(db: Session, lesson: Lesson, class_id: int | None = None):
+    """Lesson assignments carry a class/year, not their own period column."""
+    query = (
+        db.query(LessonAssignment.class_id, AcademicPeriod.academic_period_id)
+        .join(Class, Class.class_id == LessonAssignment.class_id)
+        .join(AcademicPeriod, AcademicPeriod.academic_year_id == Class.academic_year_id)
+        .filter(LessonAssignment.lesson_id == lesson.lesson_id)
+    )
+    if class_id is not None:
+        query = query.filter(LessonAssignment.class_id == class_id)
+    if lesson.competency and lesson.competency.academic_period_id is not None:
+        query = query.filter(AcademicPeriod.academic_period_id == lesson.competency.academic_period_id)
+    for assigned_class_id, period_id in query.all():
+        yield assigned_class_id, lesson.subject_id, period_id
+
+
 def authorize_lesson_access(
     db: Session,
     lesson: Lesson,
@@ -85,9 +115,11 @@ def authorize_lesson_access(
     Student and administrator detail-read behavior is unchanged.
     """
     if owner_only:
-        if staff_id and lesson.created_by_staff_id == staff_id:
-            return
-        raise HTTPException(status_code=404, detail="Lesson not found")
+        authorize_teacher_content(
+            db, staff_id=staff_id, owner_staff_id=lesson.created_by_staff_id,
+            detail="Lesson not found", owner_only=True,
+        )
+        return
 
     current_user = current_user or {}
     role = current_user.get("role", "teacher" if staff_id is not None else None)
@@ -102,34 +134,12 @@ def authorize_lesson_access(
         return
     if role == "teacher":
         if staff_id is None:
-            staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_uuid).first()
-            staff_id = staff.staff_id if staff else None
-        if staff_id:
-            # 1. Creator teacher
-            if lesson.created_by_staff_id == staff_id:
-                return
-
-            # 2. Explicit class assignment: retain authorized teacher/substitute reads.
-            from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
-            assignments_query = db.query(LessonAssignment).filter(LessonAssignment.lesson_id == lesson.lesson_id)
-            if class_id is not None:
-                assignments_query = assignments_query.filter(LessonAssignment.class_id == class_id)
-            assignments = assignments_query.all()
-            for asgn in assignments:
-                load = db.query(SubjectLoad).filter(
-                    SubjectLoad.class_id == asgn.class_id,
-                    SubjectLoad.subject_id == lesson.subject_id,
-                    SubjectLoad.is_active_version.is_(True),
-                    SubjectLoad.status.in_(["active", "published"]),
-                ).first()
-                if load and SubjectLoadAuthorizationService.can_view(
-                    db, staff_id, load.class_id, load.subject_id, load.academic_period_id
-                ):
-                    return
-
-            # TODO (Future Clone Grant): Hook in here when approved clone grants exist for lessons
-        # An unauthorized teacher cannot distinguish an existing ID from a missing one.
-        raise HTTPException(status_code=404, detail="Lesson not found")
+            staff_id = resolve_content_staff_id(db, current_user)
+        authorize_teacher_content(
+            db, staff_id=staff_id, owner_staff_id=lesson.created_by_staff_id,
+            detail="Lesson not found", read_scopes=lesson_read_scopes(db, lesson, class_id),
+        )
+        return
     if lesson.is_archived:
         raise HTTPException(status_code=404, detail="Lesson not found")
     if role == "student" and lesson.is_published:

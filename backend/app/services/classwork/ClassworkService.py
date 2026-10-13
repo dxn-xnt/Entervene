@@ -656,7 +656,11 @@ def classwork_detail(
         if assignment:
             due_date = assignment.due_date
 
-    result = build_classwork_response(classwork).model_dump()
+    response = build_classwork_response(classwork)
+    if current_user.get("role") == "teacher":
+        from app.services.classwork.ClassworkResponseService import authorized_teacher_linked_lessons
+        response.linked_lessons = authorized_teacher_linked_lessons(classwork, current_user, db, class_id)
+    result = response.model_dump()
     result["due_date"] = due_date
     return result
 
@@ -1105,7 +1109,11 @@ def classwork_assignment_detail(assignment_id: int, current_user: dict, db: Sess
     authorize_assignment_access(assignment, classwork, current_user, db)
     class_ = db.query(Class).filter(Class.class_id == assignment.class_id).first()
     staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == classwork.created_by_staff_id).first()
-    return _assignment_response(assignment, classwork, class_, staff, None)
+    response = _assignment_response(assignment, classwork, class_, staff, None)
+    if current_user.get("role") == "teacher":
+        from app.services.classwork.ClassworkResponseService import authorized_teacher_linked_lessons
+        response.linked_lessons = authorized_teacher_linked_lessons(classwork, current_user, db, assignment.class_id)
+    return response
 
 
 def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None = None) -> list[dict]:
@@ -1310,30 +1318,19 @@ def teacher_assignments_for_class_subject(
     staff_id: str,
     db: Session,
 ) -> list[ClassworkAssignmentResponse]:
-    active_load = (
-        db.query(SubjectLoad)
-        .filter(
-            SubjectLoad.class_id == class_id,
-            SubjectLoad.subject_id == subject_id,
-            SubjectLoad.is_active_version.is_(True),
-            SubjectLoad.status.in_(["published", "active"]),
-        )
-        .first()
+    from app.models.academic.AcademicPeriod import AcademicPeriod
+    from app.services.academic.ContentAuthorizationService import authorize_teacher_content
+    from app.services.classwork.ClassworkResponseService import authorized_teacher_linked_lessons
+
+    periods = db.query(AcademicPeriod.academic_period_id).join(
+        Class, Class.academic_year_id == AcademicPeriod.academic_year_id
+    ).filter(Class.class_id == class_id).all()
+    authorize_teacher_content(
+        db, staff_id=staff_id, owner_staff_id=None, detail="Classwork not found",
+        read_scopes=((class_id, subject_id, period_id) for (period_id,) in periods),
     )
-    if not active_load:
-        active_load = db.query(SubjectLoad).filter(
-            SubjectLoad.staff_id == staff_id,
-            SubjectLoad.class_id == class_id,
-            SubjectLoad.subject_id == subject_id,
-            SubjectLoad.status.in_(["active", "published"]),
-        ).first()
-
-    if not active_load:
-        raise HTTPException(status_code=403, detail="Not assigned to this class/subject")
-
-    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
-    if not SubjectLoadAuthorizationService.can_view(db, staff_id, class_id, subject_id, active_load.academic_period_id):
-        raise HTTPException(status_code=403, detail="Not authorized to view this class/subject")
+    actor = db.get(AcademicStaff, staff_id)
+    claims = {"role": "teacher", "sub": actor.user_id if actor else None}
 
     rows = (
         db.query(ClassworkAssignment, Classwork, Class)
@@ -1349,8 +1346,21 @@ def teacher_assignments_for_class_subject(
     )
     results = []
     for assignment, classwork, class_ in rows:
+        try:
+            authorize_teacher_content(
+                db, staff_id=staff_id, owner_staff_id=classwork.created_by_staff_id,
+                detail="Classwork not found",
+                read_scopes=[(class_id, subject_id, assignment.academic_period_id)]
+                if assignment.academic_period_id is not None else [],
+            )
+        except HTTPException as error:
+            if error.status_code != 404:
+                raise
+            continue
         staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == classwork.created_by_staff_id).first()
-        results.append(_assignment_response(assignment, classwork, class_, staff, None))
+        response = _assignment_response(assignment, classwork, class_, staff, None)
+        response.linked_lessons = authorized_teacher_linked_lessons(classwork, claims, db, class_id)
+        results.append(response)
     return results
 
 
