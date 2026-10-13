@@ -1,8 +1,9 @@
 import uuid
-from datetime import date
+from datetime import date, timedelta
+from unittest.mock import Mock
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import CheckConstraint, create_engine
 from sqlalchemy.orm import sessionmaker
@@ -26,10 +27,14 @@ from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
+from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.ClassworkAttachment import ClassworkAttachment
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
+from app.services.classwork.ClassworkService import download_classwork_file
+from app.services.lesson.LessonShared import authorize_lesson_access
 
 
 TABLES = [
@@ -221,7 +226,7 @@ def test_lesson_detail_follows_access_matrix(lesson_context):
 
     assert c["client"].get(detail_url).status_code == 200
     _act_as(c, "other_teacher", "teacher")
-    assert c["client"].get(detail_url).status_code == 403
+    assert c["client"].get(detail_url).status_code == 404
     _act_as(c, "student", "student")
     assert c["client"].get(detail_url).status_code == 200
     _act_as(c, "other_student", "student")
@@ -301,7 +306,7 @@ def test_lesson_detail_blocks_same_subject_different_class_teacher(lesson_contex
 
     # other_teacher teaches the same subject, but lesson is assigned to class_, not other_class
     _act_as(c, "other_teacher", "teacher")
-    assert c["client"].get(detail_url).status_code == 403
+    assert c["client"].get(detail_url).status_code == 404
 
 
 def test_lesson_detail_allows_substitute_for_assigned_class(lesson_context):
@@ -390,5 +395,294 @@ def test_teacher_lessons_for_class_subject_excludes_unassigned_lessons_from_othe
     returned_ids_owner = [l["lesson_id"] for l in resp_owner.json()]
     # Owner DOES see their own unassigned lesson
     assert unassigned_lesson.lesson_id in returned_ids_owner
+
+
+# Unit: mutation-mode policy must never inherit read grants or admin bypasses.
+@pytest.mark.parametrize(
+    ("creator", "staff_id", "allowed"),
+    [("T-1", "T-1", True), ("T-1", "T-2", False),
+     ("T-1", None, False), (None, None, False)],
+)
+def test_shared_lesson_policy_owner_only_mode(creator, staff_id, allowed):
+    db = Mock()
+    lesson = Lesson(created_by_staff_id=creator)
+    if allowed:
+        authorize_lesson_access(
+            db, lesson, {"role": "admin"}, staff_id=staff_id, owner_only=True
+        )
+    else:
+        with pytest.raises(HTTPException) as denied:
+            authorize_lesson_access(
+                db, lesson, {"role": "admin"}, staff_id=staff_id, owner_only=True
+            )
+        assert denied.value.status_code == 404
+        assert denied.value.detail == "Lesson not found"
+    db.query.assert_not_called()
+
+
+def _owner_load(c):
+    return c["db"].query(SubjectLoad).filter_by(
+        class_id=c["class"].class_id,
+        subject_id=c["subject"].subject_id,
+        academic_period_id=c["period"].academic_period_id,
+    ).one()
+
+
+def _share_with_reader(c, reader):
+    if reader == "assigned_teacher":
+        _owner_load(c).staff_id = c["other_teacher"].staff_id
+    elif reader == "substitute":
+        c["db"].add(TeacherSubstitution(
+            subject_load_id=_owner_load(c).subject_load_id,
+            original_staff_id=c["owner"].staff_id,
+            substitute_staff_id=c["other_teacher"].staff_id,
+            start_date=date.today() - timedelta(days=1),
+            status="active",
+        ))
+    c["db"].commit()
+    _act_as(c, "other_teacher", "admin" if reader == "admin" else "teacher")
+
+
+# Mocked-behavior: in-process HTTP routes with an isolated SQLite roster.
+@pytest.mark.parametrize("reader", ["assigned_teacher", "substitute"])
+def test_shared_assigned_lesson_reads_remain_available(lesson_context, reader):
+    c = lesson_context
+    _share_with_reader(c, reader)
+    lesson_id = c["lesson"].lesson_id
+    class_id = c["class"].class_id
+    assert c["client"].get(f"/api/v1/lessons/{lesson_id}").status_code == 200
+    listed = c["client"].get(
+        f"/api/v1/lessons/my-class/{class_id}/subject/{c['subject'].subject_id}"
+    )
+    assert listed.status_code == 200
+    assert lesson_id in [item["lesson_id"] for item in listed.json()]
+    linked = c["client"].get(
+        f"/api/v1/lessons/my-class/{class_id}/lesson/{lesson_id}/linked-classwork"
+    )
+    assert linked.status_code == 200
+
+
+def test_primary_teacher_keeps_read_only_class_access_during_substitution(lesson_context):
+    c = lesson_context
+    _share_with_reader(c, "substitute")
+    _act_as(c, "owner", "teacher")
+    class_id, lesson_id = c["class"].class_id, c["lesson"].lesson_id
+    assert c["client"].get(
+        f"/api/v1/lessons/my-class/{class_id}/subject/{c['subject'].subject_id}"
+    ).status_code == 200
+    assert c["client"].get(
+        f"/api/v1/lessons/my-class/{class_id}/lesson/{lesson_id}/linked-classwork"
+    ).status_code == 200
+
+
+@pytest.mark.parametrize("reader", ["assigned_teacher", "substitute", "admin"])
+@pytest.mark.parametrize(
+    ("method", "suffix", "body"),
+    [("PUT", "", {"title": "Unauthorized edit"}),
+     ("DELETE", "", None), ("PUT", "/publish", None),
+     ("POST", "/assign", "class"), ("PUT", "/archive", None),
+     ("PUT", "/unarchive", None), ("DELETE", "/classwork/999", None)],
+)
+def test_read_grants_never_allow_lesson_mutations(
+    lesson_context, monkeypatch, reader, method, suffix, body
+):
+    c = lesson_context
+    _share_with_reader(c, reader)
+    before = (c["lesson"].title, c["lesson"].is_archived, c["lesson"].is_published)
+    denied_commit = Mock(side_effect=AssertionError("Denied request must not commit"))
+    monkeypatch.setattr(c["db"], "commit", denied_commit)
+    if body == "class":
+        body = {"class_ids": [c["class"].class_id]}
+    response = c["client"].request(
+        method, f"/api/v1/lessons/{c['lesson'].lesson_id}{suffix}", json=body
+    )
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Lesson not found"}
+    denied_commit.assert_not_called()
+    c["db"].refresh(c["lesson"])
+    assert before == (c["lesson"].title, c["lesson"].is_archived, c["lesson"].is_published)
+
+
+@pytest.mark.parametrize("same_subject", [True, False])
+def test_unrelated_teacher_detail_is_indistinguishable_from_missing_id(
+    lesson_context, same_subject
+):
+    c = lesson_context
+    subject = c["subject"]
+    if not same_subject:
+        subject = Subject(
+            subject_name="Mathematics", academic_level_id=subject.academic_level_id
+        )
+        c["db"].add(subject)
+        c["db"].flush()
+    c["db"].add(SubjectLoad(
+        staff_id=c["other_teacher"].staff_id, subject_id=subject.subject_id,
+        class_id=c["other_class"].class_id,
+        academic_period_id=c["period"].academic_period_id, status="active",
+    ))
+    c["db"].commit()
+    _act_as(c, "other_teacher", "teacher")
+    existing = c["client"].get(f"/api/v1/lessons/{c['lesson'].lesson_id}")
+    missing = c["client"].get("/api/v1/lessons/999999")
+    assert existing.status_code == missing.status_code == 404
+    assert existing.json() == missing.json() == {"detail": "Lesson not found"}
+
+
+def test_unassigned_ownerless_lesson_has_no_subject_only_read_grant(lesson_context):
+    c = lesson_context
+    legacy = Lesson(title="Legacy", subject_id=c["subject"].subject_id)
+    c["db"].add(legacy)
+    c["db"].commit()
+    assert c["client"].get(f"/api/v1/lessons/{legacy.lesson_id}").status_code == 404
+    class_id = c["class"].class_id
+    listed = c["client"].get(
+        f"/api/v1/lessons/my-class/{class_id}/subject/{c['subject'].subject_id}"
+    )
+    assert listed.status_code == 200
+    assert legacy.lesson_id not in [item["lesson_id"] for item in listed.json()]
+    linked = c["client"].get(
+        f"/api/v1/lessons/my-class/{class_id}/lesson/{legacy.lesson_id}/linked-classwork"
+    )
+    assert linked.status_code == 404
+
+
+def test_ownerless_assigned_lesson_keeps_explicit_load_read_grant(lesson_context):
+    c = lesson_context
+    c["lesson"].created_by_staff_id = None
+    c["db"].commit()
+    assert c["client"].get(f"/api/v1/lessons/{c['lesson'].lesson_id}").status_code == 200
+
+
+def test_private_lesson_linked_work_cannot_bypass_owner_check(lesson_context):
+    c = lesson_context
+    private = Lesson(
+        title="Private", subject_id=c["subject"].subject_id,
+        created_by_staff_id=c["other_teacher"].staff_id,
+    )
+    c["db"].add(private)
+    c["db"].commit()
+    response = c["client"].get(
+        f"/api/v1/lessons/my-class/{c['class'].class_id}/lesson/"
+        f"{private.lesson_id}/linked-classwork"
+    )
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Lesson not found"}
+
+
+def test_read_grant_for_another_class_does_not_leak_linked_work(lesson_context):
+    c = lesson_context
+    _share_with_reader(c, "assigned_teacher")
+    c["db"].add(SubjectLoad(
+        staff_id=c["other_teacher"].staff_id, subject_id=c["subject"].subject_id,
+        class_id=c["other_class"].class_id,
+        academic_period_id=c["period"].academic_period_id, status="active",
+    ))
+    c["db"].commit()
+    response = c["client"].get(
+        f"/api/v1/lessons/my-class/{c['other_class'].class_id}/lesson/"
+        f"{c['lesson'].lesson_id}/linked-classwork"
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize("state", ["future", "expired", "cancelled", "inactive_load"])
+def test_substitution_read_grant_requires_active_current_authority(lesson_context, state):
+    c = lesson_context
+    _share_with_reader(c, "substitute")
+    substitution = c["db"].query(TeacherSubstitution).one()
+    if state == "future":
+        substitution.start_date = date.today() + timedelta(days=1)
+    elif state == "expired":
+        substitution.end_date = date.today() - timedelta(days=1)
+    elif state == "cancelled":
+        substitution.status = "cancelled"
+    else:
+        _owner_load(c).is_active_version = False
+    c["db"].commit()
+    assert c["client"].get(f"/api/v1/lessons/{c['lesson'].lesson_id}").status_code == 404
+
+
+def test_adviser_alone_does_not_grant_lesson_detail_access(lesson_context):
+    c = lesson_context
+    c["class"].adviser_staff_id = c["other_teacher"].staff_id
+    c["db"].commit()
+    _act_as(c, "other_teacher", "teacher")
+    assert c["client"].get(f"/api/v1/lessons/{c['lesson'].lesson_id}").status_code == 404
+
+
+@pytest.mark.parametrize("restricted", ["unpublished", "archived", "unassigned"])
+def test_admin_detail_read_stays_available_without_staff_profile(lesson_context, restricted):
+    c = lesson_context
+    if restricted == "unpublished":
+        c["lesson"].is_published = False
+    elif restricted == "archived":
+        c["lesson"].is_archived = True
+    else:
+        c["db"].query(LessonAssignment).delete()
+    c["db"].commit()
+    _act_as(c, "other_student", "admin")
+    assert c["client"].get(f"/api/v1/lessons/{c['lesson'].lesson_id}").status_code == 200
+
+
+@pytest.mark.parametrize("restricted", ["assignment_unpublished", "unenrolled", "archived"])
+def test_student_visibility_rules_stay_unchanged(lesson_context, restricted):
+    c = lesson_context
+    if restricted == "assignment_unpublished":
+        c["db"].query(LessonAssignment).one().is_published = False
+    elif restricted == "unenrolled":
+        c["db"].query(StudentClass).filter_by(
+            student_id=c["student"].student_id
+        ).one().enrollment_status = "withdrawn"
+    else:
+        c["lesson"].is_archived = True
+    c["db"].commit()
+    _act_as(c, "student", "student")
+    expected = 404 if restricted == "archived" else 403
+    assert c["client"].get(f"/api/v1/lessons/{c['lesson'].lesson_id}").status_code == expected
+
+
+# Mocked-behavior: the existing classwork file-download policy is not tightened.
+@pytest.mark.parametrize(
+    ("account", "role", "allowed"),
+    [("owner", "teacher", True), ("other_teacher", "teacher", False),
+     ("student", "student", True), ("other_student", "student", False),
+     ("other_student", "admin", True)],
+)
+def test_existing_classwork_download_access_is_unchanged(
+    lesson_context, tmp_path, account, role, allowed
+):
+    c = lesson_context
+    file_path = tmp_path / "synthetic-material.txt"
+    file_path.write_text("Synthetic test material", encoding="utf-8")
+    work = Classwork(
+        title="Material", classwork_type="READING", subject_id=c["subject"].subject_id,
+        created_by_staff_id=c["owner"].staff_id,
+    )
+    c["db"].add(work)
+    c["db"].flush()
+    attachment = ClassworkAttachment(
+        classwork_id=work.classwork_id, file_name=file_path.name,
+        file_path=str(file_path), file_size=file_path.stat().st_size,
+    )
+    c["db"].add_all([attachment, ClassworkAssignment(
+        classwork_id=work.classwork_id, class_id=c["class"].class_id,
+        academic_period_id=c["period"].academic_period_id,
+        assigned_by_staff_id=c["owner"].staff_id, is_published=True,
+    )])
+    c["db"].commit()
+    _act_as(c, account, role)
+    if allowed:
+        response = download_classwork_file(
+            work.classwork_id, attachment.classwork_attachment_id,
+            c["identity"], False, c["db"],
+        )
+        assert response.path == str(file_path)
+    else:
+        with pytest.raises(HTTPException) as denied:
+            download_classwork_file(
+                work.classwork_id, attachment.classwork_attachment_id,
+                c["identity"], False, c["db"],
+            )
+        assert denied.value.status_code == 403
 
 
