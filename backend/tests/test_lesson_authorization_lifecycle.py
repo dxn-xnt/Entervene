@@ -1,4 +1,5 @@
 import uuid
+import warnings
 from contextlib import contextmanager
 from datetime import date, timedelta
 from unittest.mock import Mock
@@ -7,6 +8,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import CheckConstraint, create_engine
+from sqlalchemy.exc import SAWarning
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -500,9 +502,13 @@ def test_shared_assigned_lesson_reads_remain_available(lesson_context, reader):
     lesson_id = c["lesson"].lesson_id
     class_id = c["class"].class_id
     assert c["client"].get(f"/api/v1/lessons/{lesson_id}").status_code == 200
-    listed = c["client"].get(
-        f"/api/v1/lessons/my-class/{class_id}/subject/{c['subject'].subject_id}"
-    )
+    # Also exercised by PostgreSQL parity adapters: query coercion must never
+    # silently reappear in either dialect.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", SAWarning)
+        listed = c["client"].get(
+            f"/api/v1/lessons/my-class/{class_id}/subject/{c['subject'].subject_id}"
+        )
     assert listed.status_code == 200
     assert lesson_id in [item["lesson_id"] for item in listed.json()]
     linked = c["client"].get(
