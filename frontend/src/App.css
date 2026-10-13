@@ -541,16 +541,23 @@ textarea::placeholder,
   color: #111827;
 }
 
-/* One theme-aware focus treatment for native and shared form controls. */
-:where(input,
+/* Inputs and selects use a neutral black focus treatment in every theme. */
+:where(input:not([type="checkbox"]):not([type="radio"]),
   textarea,
   select,
   [role="combobox"],
-  [role="checkbox"],
-  [role="radio"],
-  [role="switch"],
   [data-slot="input"],
   [data-slot="select-trigger"]):where(:focus, :focus-visible):not(:disabled):not([aria-disabled="true"]):not([readonly]):not([aria-invalid="true"]):not([data-invalid="true"]) {
+  border-color: #000;
+  box-shadow: none;
+  outline: none;
+}
+
+/* Keep native and custom check controls on their existing focus treatment. */
+:where(input[type="checkbox"], input[type="radio"],
+  [role="checkbox"],
+  [role="radio"],
+  [role="switch"]):where(:focus, :focus-visible):not(:disabled):not([aria-disabled="true"]):not([readonly]):not([aria-invalid="true"]):not([data-invalid="true"]) {
   border-color: var(--theme-focus-ring);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-focus-ring) 35%, transparent);
   outline: none;
@@ -560,12 +567,8 @@ textarea::placeholder,
   textarea,
   select,
   [role="combobox"],
-  [role="checkbox"],
-  [role="radio"],
-  [role="switch"],
   [data-slot="input"],
-  [data-slot="select-trigger"])[aria-invalid="true"]:where(:focus, :focus-visible),
-:where(input, textarea, select)[data-invalid="true"]:where(:focus, :focus-visible) {
+  [data-slot="select-trigger"]):is([aria-invalid="true"], [data-invalid="true"]):where(:focus, :focus-visible) {
   border-color: var(--destructive);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--destructive) 35%, transparent);
   outline: none;
@@ -692,9 +695,4 @@ textarea::placeholder,
 /* Flatten dialog content, not the popup or action buttons. */
 body:has(:is([data-teacher-page="true"], [data-student-page="true"], [data-admin-page="true"])) [data-slot="dialog-content"] :not(button):not([role="button"]) {
   box-shadow: none !important;
-}
-
-body:has(:is([data-teacher-page="true"], [data-student-page="true"], [data-admin-page="true"])) [data-slot="dialog-content"] :is(input, textarea, select, [role="combobox"]):focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
 }

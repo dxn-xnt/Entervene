@@ -318,7 +318,7 @@ export function SuggestionPanel({
                 <select
                   value={subjectId}
                   onChange={(event) => setSubjectId(Number(event.target.value))}
-                  className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 text-xs font-medium text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/35"
+                  className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 text-xs font-medium text-foreground"
                 >
                   {activeSubjects.map((subject) => (
                     <option
@@ -340,7 +340,7 @@ export function SuggestionPanel({
                       event.target.value as SuggestionResourceType,
                     )
                   }
-                  className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 text-xs font-medium text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/35"
+                  className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 text-xs font-medium text-foreground"
                 >
                   <option value="CLASSWORK">Classwork or Reading</option>
                   <option value="LESSON">Lesson</option>
@@ -354,7 +354,7 @@ export function SuggestionPanel({
                 value={resourceId}
                 onChange={(event) => setResourceId(event.target.value)}
                 disabled={isResourceLoading || resources.length === 0}
-                className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 text-xs font-medium text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/35 disabled:opacity-60"
+                className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 text-xs font-medium text-foreground disabled:opacity-60"
               >
                 {resources.length ? (
                   resources.map((resource) => (
@@ -387,7 +387,7 @@ export function SuggestionPanel({
                 rows={3}
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                className="mt-1 w-full resize-none rounded-none border-2 border-border bg-background p-2 text-xs font-medium text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/35"
+                className="mt-1 w-full resize-none rounded-none border-2 border-border bg-background p-2 text-xs font-medium text-foreground"
                 placeholder="Why this material will help the student..."
               />
             </label>
@@ -400,7 +400,7 @@ export function SuggestionPanel({
                   onChange={(event) =>
                     setPriority(event.target.value as SuggestionPriority)
                   }
-                  className="mt-1 h-10 w-full rounded-none border-2 border-border bg-background px-2 text-xs font-medium text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/35"
+                  className="mt-1 h-10 w-full rounded-none border-2 border-border bg-background px-2 text-xs font-medium text-foreground"
                 >
                   {priorities.map((item) => (
                     <option key={item} value={item}>
