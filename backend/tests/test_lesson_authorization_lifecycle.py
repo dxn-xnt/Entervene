@@ -1,4 +1,5 @@
 import uuid
+from contextlib import contextmanager
 from datetime import date, timedelta
 from unittest.mock import Mock
 
@@ -87,7 +88,23 @@ def lesson_context(tmp_path):
         if lrn_check and lrn_check not in Student.__table__.constraints:
             Student.__table__.append_constraint(lrn_check)
     db = sessionmaker(bind=engine)()
+    try:
+        with _lesson_context_for_session(db) as context:
+            yield context
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
 
+
+@contextmanager
+def _lesson_context_for_session(db):
+    """Seed identical synthetic accounts and routes in a caller-owned session.
+
+    This helper never creates/drops tables or chooses a database. The ordinary
+    fixture owns its private SQLite engine; opt-in PostgreSQL tests must pass
+    a session supplied by the guarded, uniquely named schema fixture.
+    """
     year = AcademicYear(
         year_label="2025-2026",
         start_date=date(2025, 6, 1),
@@ -221,9 +238,6 @@ def lesson_context(tmp_path):
             "other_class": other_class,
             "lesson": lesson,
         }
-    db.close()
-    Base.metadata.drop_all(bind=engine)
-    engine.dispose()
 
 
 def _act_as(context, account_name: str, role: str) -> None:
