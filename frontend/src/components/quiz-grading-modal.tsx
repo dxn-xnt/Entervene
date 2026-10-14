@@ -146,34 +146,26 @@ export default function QuizGradingModal({
       "";
 
     return (
-      <div
+      <Card
         key={ans.quiz_question_id}
         id={`quiz-question-card-${idx}`}
-        className={`rounded border-2 border-black p-5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all ${isUngraded && currentScoreStr === "" ? "bg-[#FFD08A]/10 border-[#FFD08A]" : "bg-white"
+        className={`block w-full p-5 ${isUngraded && currentScoreStr === "" ? "bg-[#FFD08A]/10 border-[#FFD08A]" : "bg-card"
           }`}
       >
         {/* Question Header */}
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b-2 border-black/10 pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-base font-extrabold text-black">
                 Q{idx + 1}. {ans.question_text}
               </span>
-              <span className="rounded border border-black bg-gray-100 px-2 py-0.5 text-xs font-bold capitalize text-gray-700">
+              <Badge variant="outline" size="sm" className="border border-border font-bold capitalize text-foreground outline-0">
                 {ans.question_type.replace("_", " ")}
-              </span>
+              </Badge>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge
-              size="sm"
-              className={`border border-black font-bold text-xs ${status === "correct"
-                ? "bg-[#8BCB88] text-black"
-                : status === "incorrect"
-                  ? "bg-[#FF6B6B] text-black"
-                  : "bg-[#FFD08A] text-black"
-                }`}
-            >
+            <Badge size="sm" variant={status === "correct" ? "success" : status === "incorrect" ? "destructive" : "secondary"} className="border border-border font-bold text-xs outline-0">
               {status === "correct" ? "Correct" : status === "incorrect" ? "Incorrect" : "Needs Grading"}
             </Badge>
             <span className="text-xs font-bold text-gray-600">Max: {maxPts} pts</span>
@@ -210,14 +202,14 @@ export default function QuizGradingModal({
                         </span>
                         <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
                           {isCorrect && (
-                            <span className="rounded bg-[#8BCB88] px-1.5 py-0.5 text-[10px] font-black uppercase text-black">
+                            <Badge variant="success" size="sm" className="px-1.5 py-0.5 text-[10px] font-black uppercase outline-0">
                               Correct Key
-                            </span>
+                            </Badge>
                           )}
                           {isSelected && (
-                            <span className="rounded bg-black px-1.5 py-0.5 text-[10px] font-black uppercase text-white">
+                            <Badge variant="solid" size="sm" className="px-1.5 py-0.5 text-[10px] font-black uppercase">
                               Student Answer
-                            </span>
+                            </Badge>
                           )}
                         </div>
                       </div>
@@ -293,7 +285,7 @@ export default function QuizGradingModal({
         </div>
 
         {/* Manual Scoring Control */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t-2 border-black/10 pt-3">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold uppercase text-gray-700">Quick Score:</span>
             <Button
@@ -345,7 +337,7 @@ export default function QuizGradingModal({
             <span className="text-sm font-bold text-gray-700">/ {maxPts} pts</span>
           </div>
         </div>
-      </div>
+      </Card>
     );
   };
 
@@ -419,13 +411,13 @@ export default function QuizGradingModal({
                   </p>
                 </div>
                 {/* View Mode Toggle */}
-                <div className="flex items-center gap-1  border-2 border-black bg-white p-1">
+                <div className="flex items-center gap-2 rounded border-2 border-black bg-white p-1">
                   <Button
                     type="button"
                     size="sm"
                     variant={viewMode === "single" ? "default" : "ghost"}
                     onClick={() => setViewMode("single")}
-                    className="shadow-none hover:translate-y-0"
+                    className="gap-2 shadow-none hover:translate-y-0"
                   >
                     Single Question
                   </Button>
@@ -434,7 +426,7 @@ export default function QuizGradingModal({
                     size="sm"
                     variant={viewMode === "all" ? "default" : "ghost"}
                     onClick={() => setViewMode("all")}
-                    className="shadow-none hover:translate-y-0"
+                    className="gap-2 shadow-none hover:translate-y-0"
                   >
                     View All ({detail.answers.length})
                   </Button>
@@ -538,7 +530,7 @@ export default function QuizGradingModal({
               )}
 
               {/* Overall Feedback Box */}
-              <div className="rounded border-2 border-black bg-white p-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <Card className="block w-full p-4">
                 <label className="text-xs font-bold uppercase text-gray-700 block mb-1">
                   Teacher Feedback / Notes for Student (Optional)
                 </label>
@@ -549,13 +541,14 @@ export default function QuizGradingModal({
                   placeholder="Add feedback on this attempt..."
                   className="w-full rounded border-2 border-black px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-black"
                 />
-              </div>
+              </Card>
             </div>
 
             {/* Dialog Footer */}
             <Dialog.Footer position="fixed">
               <Button
                 type="button"
+                size="header"
                 variant="outline"
                 onClick={onClose}
                 disabled={saving}
@@ -564,9 +557,9 @@ export default function QuizGradingModal({
               </Button>
               <Button
                 type="submit"
+                size="header"
                 variant="default"
                 disabled={saving}
-                className="gap-2 border-black bg-[#7ABA78] font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#68a966]"
               >
                 <Save size={16} />
                 {saving ? "Saving Grade..." : `Save Grade (${calculateTotal()} pts)`}
