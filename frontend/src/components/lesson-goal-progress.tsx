@@ -186,7 +186,7 @@ export function LessonGoalProgress({
         {isCuratedEmpty ? (
           <Card.Content className="p-2 pt-1 flex flex-col gap-3">
             <Card.Title className="text-xl">{title}</Card.Title>
-            <Empty className="border-2 bg-retro p-6 shadow-none">
+            <Empty className="border-0 bg-retro p-6 shadow-none">
               <EmptyHeader>
                 <EmptyMedia>
                   <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">

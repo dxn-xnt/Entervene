@@ -31,6 +31,8 @@ import { API_URL, apiFetch } from "@/lib/api";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import IconContainer from "@/components/icon-container";
+import { StudentDialogCloseButton } from "@/components/student/student-dialog-close-button";
 
 interface Attachment {
   classwork_attachment_id: number;
@@ -1253,10 +1255,13 @@ export default function SubjectClassworkTab({
           >
             <Dialog.Content size="3xl" className="max-h-[90vh] p-0">
               {/* Modal header */}
-              <Dialog.Header position="fixed" className="bg-primary text-primary-foreground">
-                <h2 className="text-xl font-bold">
-                  {selectedClasswork?.title || "Classwork"}
-                </h2>
+              <Dialog.Header position="fixed" className="bg-primary text-primary-foreground" asChild>
+                <div className="flex w-full items-center justify-between gap-3">
+                  <h2 className="min-w-0 truncate text-xl font-bold">
+                    {selectedClasswork?.title || "Classwork"}
+                  </h2>
+                  <StudentDialogCloseButton onClick={closeClassworkDetail} />
+                </div>
               </Dialog.Header>
 
               {/* Modal body */}
@@ -1326,26 +1331,13 @@ export default function SubjectClassworkTab({
                       </div>
                     </Card>
 
-                    {/* Description + instructions */}
-                    {(selectedClasswork.description ||
-                      selectedClasswork.instructions) && (
+                    {/* Instructions */}
+                    {selectedClasswork.instructions && (
                       <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
-                        {selectedClasswork.description && (
-                          <div>
-                            <h4 className="font-bold">Description</h4>
-                            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
-                              {selectedClasswork.description}
-                            </p>
-                          </div>
-                        )}
-                        {selectedClasswork.instructions && (
-                          <div className="mt-4">
-                            <h4 className="font-bold">Instructions</h4>
-                            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
-                              {selectedClasswork.instructions}
-                            </p>
-                          </div>
-                        )}
+                        <h4 className="font-bold">Instructions</h4>
+                        <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
+                          {selectedClasswork.instructions}
+                        </p>
                       </Card>
                     )}
 
@@ -1355,7 +1347,9 @@ export default function SubjectClassworkTab({
                       selectedClasswork.linked_lessons.length > 0 && (
                         <Card className="block w-full border-black shadow-none hover:shadow-none">
                           <div className="mb-2 flex items-center gap-2">
-                            <GraduationCap size={18} className="text-black" />
+                            <IconContainer variant="primary" size="xs" className="text-black">
+                              <GraduationCap />
+                            </IconContainer>
                             <h4 className="font-bold text-black">Coverage</h4>
                           </div>
                           <div className="space-y-3">
@@ -1472,13 +1466,15 @@ export default function SubjectClassworkTab({
                   {/* Right: submission or quiz attempt */}
                   <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
                     <div className="mb-3 flex items-center gap-2">
-                      {isQuizType(selectedClasswork.classwork_type) ? (
-                        <ClipboardList size={18} />
-                      ) : selectedSubmission ? (
-                        <FileText size={18} />
-                      ) : (
-                        <BookOpen size={18} />
-                      )}
+                      <IconContainer variant="primary" size="xs">
+                        {isQuizType(selectedClasswork.classwork_type) ? (
+                          <ClipboardList />
+                        ) : selectedSubmission ? (
+                          <FileText />
+                        ) : (
+                          <BookOpen />
+                        )}
+                      </IconContainer>
                       <h3 className="font-bold">
                         {isReadingType(selectedClasswork.classwork_type)
                           ? "Reading Material"
@@ -1509,20 +1505,21 @@ export default function SubjectClassworkTab({
                               finished, mark it as completed to update your
                               progress.
                             </p>
-                            <Button
-                              type="button"
-                              onClick={() =>
-                                handleCompleteReading(
-                                  selectedClasswork.classwork_assignment_id,
-                                )
-                              }
-                              disabled={isMarkingRead}
-                              className="w-full disabled:opacity-50"
-                            >
-                              {isMarkingRead
-                                ? "Marking as completed..."
-                                : "Mark as Completed"}
-                            </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() =>
+                                  handleCompleteReading(
+                                    selectedClasswork.classwork_assignment_id,
+                                  )
+                                }
+                                disabled={isMarkingRead}
+                                className="w-full gap-2 disabled:opacity-50"
+                              >
+                                {isMarkingRead
+                                  ? "Marking as completed..."
+                                  : "Mark as Completed"}
+                              </Button>
                           </div>
                         )}
                       </div>
@@ -1588,7 +1585,7 @@ export default function SubjectClassworkTab({
                             {selectedQuizAttempt.status !== "pending" ? (
                               <div className="space-y-2">
                                 {selectedQuizAttempt.summary_message ? (
-                                  <div className="rounded border border-black bg-white px-3 py-2 text-xs font-semibold text-gray-700">
+                                  <div className="w-full rounded border border-black bg-white px-3 py-2 text-xs font-semibold text-gray-700">
                                     {selectedQuizAttempt.summary_release_at
                                       ? `Your quiz has been submitted successfully. Your quiz summary will be available on ${formatDateTime(selectedQuizAttempt.summary_release_at)}.`
                                       : selectedQuizAttempt.summary_message}
@@ -1608,7 +1605,7 @@ export default function SubjectClassworkTab({
                                     disabled={
                                       !selectedQuizAttempt.summary_available
                                     }
-                                    className="w-full rounded border-black bg-white text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="w-full gap-2 rounded border-black bg-white text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
                                   >
                                     {selectedQuizAttempt.summary_available
                                       ? "View Summary"
@@ -1620,12 +1617,13 @@ export default function SubjectClassworkTab({
                                 ) : null}
                                 <Button
                                   type="button"
+                                  size="sm"
                                   onClick={startQuizAttempt}
                                   disabled={
                                     !selectedQuizAttempt.can_submit ||
                                     isQuizSubmitting
                                   }
-                                  className="w-full border-black bg-success text-sm font-bold text-black hover:bg-success disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="w-full gap-2 border-black bg-success text-sm font-bold text-black hover:bg-success disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   {selectedQuizAttempt.status === "not_started"
                                     ? "Start Quiz"

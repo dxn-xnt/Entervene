@@ -74,7 +74,7 @@ const Login = () => {
 
   return (
     <main className="retro-squares-bg retro-squares-motion flex min-h-dvh w-full items-center justify-center px-4 py-6 sm:px-6">
-      <Card className="block w-full max-w-md p-0">
+      <Card className="block w-full max-w-md overflow-hidden p-0">
         <Card.Header className="mb-6 flex flex-col justify-center border-b-2 border-border bg-primary px-4 pb-5 pt-6 sm:mb-8 sm:px-8 sm:pb-6 sm:pt-8">
           <div className="flex items-center gap-4 mb-1">
             <EnterveneLogo className="size-14" />
