@@ -332,7 +332,7 @@ export default function QuizGradingModal({
               value={currentScoreStr}
               onChange={(e) => handleScoreChange(ans.quiz_question_id, e.target.value)}
               placeholder="0"
-              className="w-24 rounded border-2 border-black px-3 py-1.5 text-sm font-bold text-black focus:outline-none focus:ring-2 focus:ring-black"
+              className="w-24 rounded! border-2 border-black px-3 py-1.5 text-sm font-bold text-black focus:outline-none focus:ring-2 focus:ring-black"
             />
             <span className="text-sm font-bold text-gray-700">/ {maxPts} pts</span>
           </div>
@@ -539,7 +539,7 @@ export default function QuizGradingModal({
                   onChange={(e) => setFeedback(e.target.value)}
                   rows={2}
                   placeholder="Add feedback on this attempt..."
-                  className="w-full rounded border-2 border-black px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-black"
+                  className="w-full rounded! border-2 border-black px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-black"
                 />
               </Card>
             </div>

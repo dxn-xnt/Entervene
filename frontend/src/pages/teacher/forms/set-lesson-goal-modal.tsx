@@ -285,7 +285,7 @@ export function SetLessonGoalModal({
             Choose and order the goals students will see.
           </Dialog.Description>
           {/* Available source items */}
-          <Card className="block w-full min-w-0 rounded-none! bg-card p-4 shadow-none hover:shadow-none">
+          <Card className="block w-full min-w-0 bg-card p-4 shadow-none hover:shadow-none">
             <Card.Header className="mb-4 gap-1">
               <Card.Title className="text-base font-bold">
                 Available Items
@@ -302,7 +302,7 @@ export function SetLessonGoalModal({
                 <span className="text-sm font-bold text-foreground">
                   Lessons & Classworks
                 </span>
-                <Badge variant="secondary" size="sm" className="rounded-none!">
+                <Badge variant="secondary" size="sm">
                   {lessons.length}
                 </Badge>
               </div>
@@ -320,7 +320,7 @@ export function SetLessonGoalModal({
                   return (
                     <div
                       key={lesson.lesson_id}
-                      className="w-full overflow-hidden border-2 border-border bg-background"
+                      className="w-full overflow-hidden rounded border-2 border-border bg-background"
                     >
                       {/* Lesson Row */}
                       <div className="flex items-center justify-between bg-muted/50 p-2.5">
@@ -384,7 +384,7 @@ export function SetLessonGoalModal({
                                     {cw.title}
                                   </span>
                                 </div>
-                                <Badge variant="outline" size="sm" className="shrink-0 rounded-none!">
+                                <Badge variant="outline" size="sm" className="shrink-0">
                                   {cw.classwork_type || "Task"}
                                 </Badge>
                               </label>
@@ -402,7 +402,7 @@ export function SetLessonGoalModal({
                 <span className="text-sm font-bold text-foreground">
                   Exams / Term Assessments
                 </span>
-                <Badge variant="secondary" size="sm" className="rounded-none!">
+                <Badge variant="secondary" size="sm">
                   {subjectLevelExams.length}
                 </Badge>
               </div>
@@ -421,7 +421,7 @@ export function SetLessonGoalModal({
                   return (
                     <label
                       key={exam.classwork_id}
-                      className="flex cursor-pointer select-none items-center justify-between gap-2 border-2 border-border bg-background p-3"
+                      className="flex cursor-pointer select-none items-center justify-between gap-2 rounded border-2 border-border bg-background p-3"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <Checkbox
@@ -440,7 +440,7 @@ export function SetLessonGoalModal({
                           )}
                         </div>
                       </div>
-                      <Badge variant="outline" size="sm" className="shrink-0 rounded-none!">
+                      <Badge variant="outline" size="sm" className="shrink-0">
                         Exam
                       </Badge>
                     </label>
@@ -452,13 +452,13 @@ export function SetLessonGoalModal({
           </Card>
 
           {/* Selected and ordered goals */}
-          <Card className="block w-full min-w-0 rounded-none! bg-card p-4 shadow-none hover:shadow-none">
+          <Card className="block w-full min-w-0 bg-card p-4 shadow-none hover:shadow-none">
             <Card.Header className="mb-4 flex-row flex-wrap items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
                 <Card.Title className="text-base font-bold">
                   Curated Goal Layout
                 </Card.Title>
-                <Badge variant="secondary" size="sm" className="rounded-none!">
+                <Badge variant="secondary" size="sm">
                   {selectedItems.length}
                 </Badge>
               </div>
@@ -476,7 +476,7 @@ export function SetLessonGoalModal({
             <Card.Content className="min-w-0">
 
             {selectedItems.length === 0 ? (
-              <div className="border-2 border-dashed border-border bg-background px-4 py-8 text-center">
+              <div className="rounded border-2 border-dashed border-border bg-background px-4 py-8 text-center">
                 <p className="text-sm font-bold text-foreground">No goals selected yet</p>
                 <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
                   Check items above to add them. You can reorder them to dictate the exact order shown to students.
@@ -487,17 +487,17 @@ export function SetLessonGoalModal({
                 {selectedItems.map((item, index) => (
                   <div
                     key={item.id}
-                    className="flex flex-wrap items-center justify-between gap-2 border-2 border-border bg-background p-3 text-card-foreground"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded border-2 border-border bg-background p-3 text-card-foreground"
                   >
                     {/* Index & Title */}
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <Badge variant="solid" size="sm" className="shrink-0 rounded-none!">
+                      <Badge variant="solid" size="sm" className="shrink-0">
                         {index + 1}
                       </Badge>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <p className="truncate text-xs font-bold text-foreground">{item.title}</p>
-                          <Badge variant="outline" size="sm" className="shrink-0 rounded-none!">
+                          <Badge variant="outline" size="sm" className="shrink-0">
                             {item.typeBadge}
                           </Badge>
                         </div>
