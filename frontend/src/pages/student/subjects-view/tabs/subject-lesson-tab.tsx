@@ -13,6 +13,7 @@ import { apiFetch, getLessonGoals, type LessonGoalItemResponse } from "@/lib/api
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { Card } from "@/components/retroui/Card";
+import IconContainer from "@/components/icon-container";
 import { Accordion } from "@/components/retroui/Accordion";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { Badge } from "@/components/retroui/Badge";
@@ -1085,9 +1086,9 @@ export default function SubjectLessonTab({
             <Card className="block">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2.5">
-                  <div className="flex h-9 w-9 items-center justify-center border border-black bg-primary shadow-sm">
-                    <GraduationCap size={20} />
-                  </div>
+                  <IconContainer variant="primary" className="size-9 rounded-none border p-0 shadow-sm [&_svg]:size-5">
+                    <GraduationCap />
+                  </IconContainer>
                   <div>
                     <h3 className="text-xl font-bold tracking-tight text-black">
                       Exams
@@ -1124,9 +1125,9 @@ export default function SubjectLessonTab({
                       className="w-full rounded border border-black bg-white px-5 py-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between gap-4 hover:bg-gray-50 transition-all text-left"
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-black bg-[#F6E9B2]">
-                          <ClipboardList size={20} />
-                        </div>
+                        <IconContainer variant="primary" className="size-10 border bg-[#F6E9B2] p-0 [&_svg]:size-5">
+                          <ClipboardList />
+                        </IconContainer>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <h4 className="font-bold text-sm md:text-base leading-tight line-clamp-2 break-words [overflow-wrap:anywhere]">
