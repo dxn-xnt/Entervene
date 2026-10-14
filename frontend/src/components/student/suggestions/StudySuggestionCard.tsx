@@ -1,5 +1,6 @@
 import { BookOpen, CheckCircle2, ClipboardList, Eye, ExternalLink, Loader2 } from "lucide-react";
 import type { SuggestionResponse } from "@/types/suggestion";
+import IconContainer from "@/components/icon-container";
 
 type StudySuggestionCardProps = {
   suggestion: SuggestionResponse;
@@ -34,9 +35,9 @@ export default function StudySuggestionCard({
     <article className="rounded border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
       <div className="flex flex-col gap-4 p-5 md:flex-row md:items-start md:justify-between">
         <div className="flex min-w-0 flex-1 gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-black bg-[#F6E9B2]">
-            <Icon size={21} />
-          </div>
+          <IconContainer variant="primary" className="size-11 border bg-[#F6E9B2] p-0 [&_svg]:size-[21px]">
+            <Icon />
+          </IconContainer>
           <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-xl font-bold text-gray-900">{suggestion.title}</h3>

@@ -373,8 +373,10 @@ def test_classwork_and_assignment_direct_access_follow_access_matrix(authz_conte
     assert c["client"].get(classwork_url).status_code == 200
     assert c["client"].get(classwork_url).json()["assignments"][0]["class_id"] == c["assignment"].class_id
     _act_as(c, "other_teacher", "teacher")
-    assert c["client"].get(classwork_url).status_code == 403
-    assert c["client"].get(assignment_url).status_code == 403
+    assert c["client"].get(classwork_url).status_code == 404
+    assert c["client"].get(assignment_url).status_code == 404
+    assert c["client"].get(classwork_url).json() == c["client"].get("/api/v1/classwork-assignments/classwork/999999").json()
+    assert c["client"].get(assignment_url).json() == c["client"].get("/api/v1/classwork-assignments/assignment/999999").json()
     _act_as(c, "student", "student")
     assert c["client"].get(classwork_url).status_code == 200
     assert c["client"].get(assignment_url).status_code == 200

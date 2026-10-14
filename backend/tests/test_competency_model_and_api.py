@@ -212,13 +212,13 @@ def test_competency_per_teacher_scoping_and_cross_teacher_isolation():
     assert len(resp_a.json()) == 2
     assert {c["competency_id"] for c in resp_a.json()} == {c1_id, c2_id}
 
-    # Teacher B attempts to update Teacher A's competency -> 403 Forbidden
+    # Teacher B cannot mutate another teacher's competency or learn its existence.
     unauth_update = client_b.put(f"/api/v1/competencies/{c1_id}", json={"statement": "Hacked"})
-    assert unauth_update.status_code == 403
+    assert unauth_update.status_code == 404
 
-    # Teacher B attempts to delete Teacher A's competency -> 403 Forbidden
+    # The delete path uses the same owner-only 404 policy.
     unauth_delete = client_b.delete(f"/api/v1/competencies/{c1_id}")
-    assert unauth_delete.status_code == 403
+    assert unauth_delete.status_code == 404
 
     # Teacher B creates their own competency
     cb_resp = client_b.post("/api/v1/competencies/", json={
@@ -343,9 +343,9 @@ def test_competency_detail_authorization():
     assert resp_owner.status_code == 200
     assert resp_owner.json()["statement"] == "Private Competency by Teacher A"
 
-    # 2. Teacher B (teaches same subject, but not creator and not substitute) -> 403 Forbidden
+    # 2. Unassigned non-owner teachers get the same 404 as a missing ID.
     resp_other_teacher = client_b.get(f"/api/v1/competencies/{comp_id}")
-    assert resp_other_teacher.status_code == 403
+    assert resp_other_teacher.status_code == 404
 
     # 3. Student -> 403 Forbidden
     resp_student = client_student.get(f"/api/v1/competencies/{comp_id}")
@@ -356,6 +356,14 @@ def test_competency_detail_authorization():
     assert resp_admin.status_code == 200
 
     # 5. Teacher C as active substitute for Teacher A on this subject load -> 200 OK
+    # The read exception requires an explicitly assigned lesson, not subject alone.
+    linked_lesson = Lesson(
+        title="Assigned competency lesson", subject_id=ctx["subject_id"],
+        competency_id=comp_id, created_by_staff_id=ctx["staff_a_id"],
+    )
+    db.add(linked_lesson)
+    db.flush()
+    db.add(LessonAssignment(lesson_id=linked_lesson.lesson_id, class_id=10))
     user_c_id = uuid.uuid4()
     user_c = UserAccount(user_id=user_c_id, email="sub@school.edu", password_hash="hash", account_status="ACTIVE")
     staff_c = AcademicStaff(staff_id="STAFF_SUB", user_id=user_c_id, first_name="Sub", last_name="Teacher")

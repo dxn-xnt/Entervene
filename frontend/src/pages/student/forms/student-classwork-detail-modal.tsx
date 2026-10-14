@@ -12,6 +12,8 @@ import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
+import IconContainer from "@/components/icon-container";
+import { StudentDialogCloseButton } from "@/components/student/student-dialog-close-button";
 import AttachmentDisplay from "@/components/attachment-display";
 import SubmissionForm from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
@@ -164,10 +166,14 @@ export default function StudentClassworkDetailModal({
             <Dialog.Header
               position="fixed"
               className="bg-primary text-primary-foreground"
+              asChild
             >
-              <h2 className="text-xl font-bold">
-                {selectedClasswork?.title || "Classwork"}
-              </h2>
+              <div className="flex w-full items-center justify-between gap-3">
+                <h2 className="min-w-0 truncate text-xl font-bold">
+                  {selectedClasswork?.title || "Classwork"}
+                </h2>
+                <StudentDialogCloseButton onClick={onClose} />
+              </div>
             </Dialog.Header>
 
             {/* Modal body */}
@@ -237,26 +243,13 @@ export default function StudentClassworkDetailModal({
                     </div>
                   </Card>
 
-                  {/* Description + instructions */}
-                  {(selectedClasswork.description ||
-                    selectedClasswork.instructions) && (
+                  {/* Instructions */}
+                  {selectedClasswork.instructions && (
                     <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
-                      {selectedClasswork.description && (
-                        <div>
-                          <h4 className="font-bold">Description</h4>
-                          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
-                            {selectedClasswork.description}
-                          </p>
-                        </div>
-                      )}
-                      {selectedClasswork.instructions && (
-                        <div className="mt-4">
-                          <h4 className="font-bold">Instructions</h4>
-                          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
-                            {selectedClasswork.instructions}
-                          </p>
-                        </div>
-                      )}
+                      <h4 className="font-bold">Instructions</h4>
+                      <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
+                        {selectedClasswork.instructions}
+                      </p>
                     </Card>
                   )}
 
@@ -266,7 +259,9 @@ export default function StudentClassworkDetailModal({
                     selectedClasswork.linked_lessons.length > 0 && (
                       <Card className="block w-full border-black bg-primary shadow-none hover:shadow-none">
                         <div className="mb-2 flex items-center gap-2">
-                          <GraduationCap size={18} className="text-black" />
+                          <IconContainer variant="primary" size="xs" className="text-black">
+                            <GraduationCap />
+                          </IconContainer>
                           <h4 className="font-bold text-black">Coverage</h4>
                         </div>
                         <div className="space-y-3">
@@ -383,13 +378,15 @@ export default function StudentClassworkDetailModal({
                 {/* Right: submission or quiz attempt */}
                 <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
                   <div className="mb-3 flex items-center gap-2">
-                    {isQuizType(selectedClasswork.classwork_type) ? (
-                      <ClipboardList size={18} />
-                    ) : selectedSubmission ? (
-                      <FileText size={18} />
-                    ) : (
-                      <BookOpen size={18} />
-                    )}
+                    <IconContainer variant="primary" size="xs">
+                      {isQuizType(selectedClasswork.classwork_type) ? (
+                        <ClipboardList />
+                      ) : selectedSubmission ? (
+                        <FileText />
+                      ) : (
+                        <BookOpen />
+                      )}
+                    </IconContainer>
                     <h3 className="font-bold">
                       {isReadingType(selectedClasswork.classwork_type)
                         ? "Reading Material"
@@ -418,20 +415,21 @@ export default function StudentClassworkDetailModal({
                             finished, mark it as completed to update your
                             progress.
                           </p>
-                          <Button
-                            type="button"
-                            onClick={() =>
-                              onCompleteReading(
-                                selectedClasswork.classwork_assignment_id,
-                              )
-                            }
-                            disabled={isMarkingRead}
-                            className="w-full disabled:opacity-50"
-                          >
-                            {isMarkingRead
-                              ? "Marking as completed..."
-                              : "Mark as Completed"}
-                          </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() =>
+                                onCompleteReading(
+                                  selectedClasswork.classwork_assignment_id,
+                                )
+                              }
+                              disabled={isMarkingRead}
+                              className="w-full gap-2 disabled:opacity-50"
+                            >
+                              {isMarkingRead
+                                ? "Marking as completed..."
+                                : "Mark as Completed"}
+                            </Button>
                         </div>
                       )}
                     </div>
@@ -495,7 +493,7 @@ export default function StudentClassworkDetailModal({
                           {selectedQuizAttempt.status !== "pending" ? (
                             <div className="space-y-2">
                               {selectedQuizAttempt.summary_message ? (
-                                <div className="rounded border border-black bg-white px-3 py-2 text-xs font-semibold text-gray-700">
+                                <div className="w-full rounded border border-black bg-white px-3 py-2 text-xs font-semibold text-gray-700">
                                   {selectedQuizAttempt.summary_release_at
                                     ? `Your quiz has been submitted successfully. Your quiz summary will be available on ${formatDateTime(selectedQuizAttempt.summary_release_at)}.`
                                     : selectedQuizAttempt.summary_message}
@@ -514,7 +512,7 @@ export default function StudentClassworkDetailModal({
                                   disabled={
                                     !selectedQuizAttempt.summary_available
                                   }
-                                  className="w-full rounded border-black bg-white text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="w-full gap-2 rounded border-black bg-white text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   {selectedQuizAttempt.summary_available
                                     ? "View Summary"
@@ -526,12 +524,13 @@ export default function StudentClassworkDetailModal({
                               ) : null}
                               <Button
                                 type="button"
+                                size="sm"
                                 onClick={onStartQuiz}
                                 disabled={
                                   !selectedQuizAttempt.can_submit ||
                                   isQuizSubmitting
                                 }
-                                className="w-full rounded border-black bg-success text-sm font-bold text-black hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
+                                className="w-full gap-2 rounded border-black bg-success text-sm font-bold text-black hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 {selectedQuizAttempt.status === "not_started"
                                   ? "Start Quiz"

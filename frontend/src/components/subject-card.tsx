@@ -93,7 +93,7 @@ export function SubjectCard({
         aria-label={`Open ${title}${teacher ? `, taught by ${teacher}` : ""}`}
         className="group block h-full min-w-0 text-foreground no-underline outline-offset-4 focus-visible:outline-3 focus-visible:outline-ring"
       >
-        <Card className={cn("flex h-full min-h-60 min-w-0 flex-col gap-0 p-0", className)}>
+        <Card className={cn("flex h-full min-h-60 min-w-0 flex-col gap-0 overflow-hidden p-0", className)}>
           <div className="retro-theme-stripes h-20 shrink-0 border-b-2 border-black bg-primary p-2.5 transition-colors group-hover:bg-primary-hover">
             <div className="flex items-start justify-between gap-2">
               <Badge size="sm" variant="outline" className="min-w-0 max-w-[60%] break-words">

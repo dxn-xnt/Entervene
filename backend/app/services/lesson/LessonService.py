@@ -3,7 +3,7 @@ from typing import Optional
 
 from fastapi import HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
@@ -75,7 +75,7 @@ def teacher_lessons_for_class_subject(
     staff_id: str,
     db: Session,
 ) -> list[LessonResponse]:
-    ensure_teacher_class_subject(db, staff_id, class_id, subject_id)
+    ensure_teacher_class_subject(db, staff_id, class_id, subject_id, read_only=True)
     assigned_subquery = (
         db.query(LessonAssignment.lesson_id)
         .filter(LessonAssignment.class_id == class_id)
@@ -87,15 +87,23 @@ def teacher_lessons_for_class_subject(
             Lesson.subject_id == subject_id,
             Lesson.is_archived == False,
             or_(
-                Lesson.lesson_id.in_(assigned_subquery),
+                Lesson.lesson_id.in_(select(assigned_subquery.c.lesson_id)),
                 and_(~Lesson.assignments.any(), Lesson.created_by_staff_id == staff_id),
-                and_(~Lesson.assignments.any(), Lesson.created_by_staff_id.is_(None)),
             ),
         )
         .order_by(Lesson.order_index.asc(), Lesson.created_at.desc())
         .all()
     )
-    return [build_lesson_response(lesson, db) for lesson in lessons]
+    responses = []
+    for lesson in lessons:
+        try:
+            authorize_lesson_access(db, lesson, staff_id=staff_id, class_id=class_id)
+        except HTTPException as error:
+            if error.status_code != 404:
+                raise
+            continue
+        responses.append(build_lesson_response(lesson, db))
+    return responses
 
 
 def teacher_lesson_linked_classwork(
@@ -107,13 +115,14 @@ def teacher_lesson_linked_classwork(
     lesson = db.query(Lesson).filter(Lesson.lesson_id == lesson_id).first()
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
-    ensure_teacher_class_subject(db, staff_id, class_id, lesson.subject_id)
+    authorize_lesson_access(db, lesson, staff_id=staff_id, class_id=class_id)
+    ensure_teacher_class_subject(db, staff_id, class_id, lesson.subject_id, read_only=True)
 
     assigned_here = db.query(LessonAssignment).filter(
         LessonAssignment.lesson_id == lesson_id,
         LessonAssignment.class_id == class_id,
     ).first()
-    # If not explicitly in LessonAssignment, allow if it belongs to this subject and has no restricting class assignment
+    # An unassigned lesson is readable here only by its owner (checked above).
     if not assigned_here:
         has_other_assignment = db.query(LessonAssignment).filter(
             LessonAssignment.lesson_id == lesson_id

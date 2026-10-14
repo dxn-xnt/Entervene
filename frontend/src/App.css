@@ -629,6 +629,11 @@ textarea::placeholder,
   flex-shrink: 0;
 }
 
+/* Teacher dialogs render in a portal, outside the teacher page element. */
+body:has([data-teacher-page]) [data-slot="dialog-footer"] {
+  border-top-color: #000;
+}
+
 /* Modal actions share the same 6px system radius as page-header buttons.
    Keep this after the form/dialog square-geometry rule so legacy form
    descendants cannot flatten shared Button instances in action footers. */

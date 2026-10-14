@@ -737,6 +737,7 @@ export default function ClassworkView({
             <div className="flex items-center gap-2 flex-col lg:flex-row lg:flex-nowrap">
               <Button
                 type="button"
+                size="header"
                 variant="outline"
                 onClick={() => setShowEditModal(true)}
                 disabled={isArchiving}
@@ -748,6 +749,7 @@ export default function ClassworkView({
 
               <Button
                 type="button"
+                size="header"
                 variant="outline"
                 onClick={() => setShowArchiveConfirm(true)}
                 disabled={isArchiving}
@@ -798,18 +800,49 @@ export default function ClassworkView({
                             );
                           })()}
 
-                          {selected.created_at && selected.is_published && (
-                            <div className="">
-                              <p className="font-normal text-sm">Created on
-                                <span className="ml-1">
-                                  {selected.created_at
-                                    ? formatDate(selected.created_at)
-                                    : selected.is_published
-                                      ? "Published"
-                                      : "No published date"}
-                                </span>
-                              </p>
-                            </div>
+                          {(Boolean(selected.linked_lessons?.length) || Boolean(selected.subject_name)) && (
+                            <p className="font-normal text-sm text-muted-foreground">
+                              {selected.linked_lessons && selected.linked_lessons.length > 0 ? (
+                                <>
+                                  Linked under {selected.linked_lessons.length === 1 ? "lesson" : "lessons"}{" "}
+                                  {selected.linked_lessons.map((lesson, idx) => (
+                                    <span key={lesson.lesson_id}>
+                                      {idx > 0 && <span className="text-muted-foreground">, </span>}
+                                      <button
+                                        type="button"
+                                        onClick={() => void navigateToLesson(lesson.lesson_id)}
+                                        className="font-semibold text-foreground hover:underline cursor-pointer transition-colors"
+                                      >
+                                        {lesson.title}
+                                      </button>
+                                    </span>
+                                  ))}
+                                  {selected.subject_name ? (
+                                    <>
+                                      {" "}in{" "}
+                                      <button
+                                        type="button"
+                                        onClick={() => void navigateToSubject()}
+                                        className="font-semibold text-foreground hover:underline cursor-pointer transition-colors"
+                                      >
+                                        {selected.subject_name}
+                                      </button>
+                                    </>
+                                  ) : null}
+                                </>
+                              ) : selected.subject_name ? (
+                                <>
+                                  Subject:{" "}
+                                  <button
+                                    type="button"
+                                    onClick={() => void navigateToSubject()}
+                                    className="font-semibold text-foreground hover:underline cursor-pointer transition-colors"
+                                  >
+                                    {selected.subject_name}
+                                  </button>
+                                </>
+                              ) : null}
+                            </p>
                           )}
                         </div>
                       </div>
@@ -881,50 +914,11 @@ export default function ClassworkView({
               </div>
 
 
-              {(Boolean(selected.linked_lessons?.length) || Boolean(selected.subject_name)) && (
+              {selected.created_at && selected.is_published && (
                 <Card className="w-full p-0 border-0! shadow-none px-2 -mt-1">
                   <Card.Content>
                     <p className="text-sm text-muted-foreground">
-                      {selected.linked_lessons && selected.linked_lessons.length > 0 ? (
-                        <>
-                          Linked under {selected.linked_lessons.length === 1 ? "lesson" : "lessons"}{" "}
-                          {selected.linked_lessons.map((lesson, idx) => (
-                            <span key={lesson.lesson_id}>
-                              {idx > 0 && <span className="text-muted-foreground">, </span>}
-                              <button
-                                type="button"
-                                onClick={() => void navigateToLesson(lesson.lesson_id)}
-                                className="font-semibold text-foreground hover:underline cursor-pointer transition-colors"
-                              >
-                                {lesson.title}
-                              </button>
-                            </span>
-                          ))}
-                          {selected.subject_name ? (
-                            <>
-                              {" "}in{" "}
-                              <button
-                                type="button"
-                                onClick={() => void navigateToSubject()}
-                                className="font-semibold text-foreground hover:underline cursor-pointer transition-colors"
-                              >
-                                {selected.subject_name}
-                              </button>
-                            </>
-                          ) : null}
-                        </>
-                      ) : selected.subject_name ? (
-                        <>
-                          Subject:{" "}
-                          <button
-                            type="button"
-                            onClick={() => void navigateToSubject()}
-                            className="font-semibold text-foreground hover:underline cursor-pointer transition-colors"
-                          >
-                            {selected.subject_name}
-                          </button>
-                        </>
-                      ) : null}
+                      Created on {formatDate(selected.created_at)}
                     </p>
                   </Card.Content>
                 </Card>

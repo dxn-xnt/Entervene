@@ -1,4 +1,5 @@
 from pathlib import Path
+from fastapi import HTTPException
 
 from app.models.academic.Lesson import Lesson
 from app.models.classwork.Classwork import Classwork
@@ -80,6 +81,36 @@ def build_linked_lesson_response(lesson: Lesson) -> LinkedLessonResponse:
         ],
         readings=readings,
     )
+
+
+def authorized_teacher_linked_lessons(cw: Classwork, current_user: dict, db, class_id=None):
+    """Do not let a readable classwork expose a private linked lesson/reading."""
+    from app.services.lesson.LessonShared import authorize_lesson_access
+    from app.services.classwork.ClassworkAccessService import authorize_classwork_access
+
+    responses = []
+    for lesson in cw.lessons:
+        try:
+            authorize_lesson_access(db, lesson, current_user, class_id=class_id)
+        except HTTPException as error:
+            if error.status_code != 404:
+                raise
+            continue
+        response = build_linked_lesson_response(lesson)
+        readable_ids = set()
+        for reading in lesson.linked_classworks:
+            if reading.classwork_type != "READING" or reading.is_archived:
+                continue
+            try:
+                authorize_classwork_access(reading, current_user, db, class_id)
+            except HTTPException as error:
+                if error.status_code != 404:
+                    raise
+                continue
+            readable_ids.add(reading.classwork_id)
+        response.readings = [reading for reading in response.readings if reading.classwork_id in readable_ids]
+        responses.append(response)
+    return responses
 
 
 def build_classwork_response(cw: Classwork) -> ClassworkResponse:

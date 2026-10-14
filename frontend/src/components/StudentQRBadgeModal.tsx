@@ -6,6 +6,7 @@ import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { Download, ShieldCheck } from "lucide-react";
+import { StudentDialogCloseButton } from "@/components/student/student-dialog-close-button";
 
 interface StudentQRBadgeModalProps {
   isOpen: boolean;
@@ -82,11 +83,12 @@ export default function StudentQRBadgeModal({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Content className="max-w-md p-0">
-        <Dialog.Header className="border-border bg-primary text-primary-foreground">
-          <div className="flex min-w-0 flex-col items-start">
+        <Dialog.Header className="border-border bg-primary text-primary-foreground" asChild>
+          <div className="flex w-full min-w-0 items-center justify-between gap-3">
             <Dialog.Title className="text-lg font-bold">
               Student Attendance QR Card
             </Dialog.Title>
+            <StudentDialogCloseButton onClick={onClose} />
           </div>
         </Dialog.Header>
 
