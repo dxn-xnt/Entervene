@@ -333,17 +333,17 @@ export default function QuizAnalysisView({
                                         correct <Check size={12} className="inline shrink-0" />
                                       </span>
                                     ) : (
-                                      <span className="text-gray-500 inline-flex items-center gap-1 font-bold">
+                                      <span className="text-[#B42323] inline-flex items-center gap-1 font-bold">
                                         incorrect <X size={12} className="inline shrink-0" />
                                       </span>
                                     )}
                                   </div>
                                   <div className="w-56 sm:w-64 h-7 border border-black rounded bg-white relative overflow-hidden flex items-center shrink-0">
                                     <div
-                                      className={`absolute top-0 left-0 h-full ${opt.is_correct ? 'bg-[#3A6D38]' : 'bg-gray-100'}`}
+                                      className={`absolute top-0 left-0 h-full ${opt.is_correct ? 'bg-[#8BCB88]' : 'bg-[#FF6B6B]'}`}
                                       style={{ width: `${percent}%` }}
                                     />
-                                    <span className={`relative z-10 text-xs px-2.5 font-bold whitespace-nowrap ${opt.is_correct && percent > 15 ? 'text-white' : 'text-black'}`}>
+                                    <span className="relative z-10 px-2.5 text-xs font-bold text-black whitespace-nowrap">
                                       {opt.selected_count} answered
                                     </span>
                                   </div>

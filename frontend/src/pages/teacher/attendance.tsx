@@ -1233,7 +1233,7 @@ export default function TeacherAttendancePage() {
                     <Card className="p-4 border-2 border-border bg-card shadow-retro flex flex-col items-center">
                       <div className="attendance-scanner-heading w-full flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <Camera className="w-4 h-4 text-primary" />
+                          <Camera className="w-4 h-4 text-black" />
                           <span className="text-sm font-bold">Webcam QR Scanner</span>
                         </div>
                         <Badge variant={scannerRunning ? "surface" : "outline"} className="text-xs">
@@ -1248,14 +1248,14 @@ export default function TeacherAttendancePage() {
                           <div className="absolute inset-0 bg-background/95 p-4 flex flex-col items-center justify-center text-center gap-2 z-10">
                             <AlertTriangle className="w-8 h-8 text-destructive" />
                             <p className="text-xs font-semibold text-destructive">{scannerError}</p>
-                            <Button size="sm" variant="outline" onClick={() => startScanner()} className="mt-2 text-xs">
+                            <Button size="sm" variant="outline" onClick={() => startScanner()} className="mt-2 gap-2 text-xs">
                               Retry Camera
                             </Button>
                           </div>
                         )}
                       </div>
 
-                      <div className="attendance-scanner-actions w-full flex items-center justify-between mt-4 pt-3 border-t border-border">
+                      <div className="attendance-scanner-actions -mx-4 flex items-center justify-between mt-4 border-t border-border px-4 pt-3 self-stretch">
                         <p className="text-xs text-muted-foreground">
                           Hold student QR ID badge steady facing the webcam.
                         </p>
@@ -1279,9 +1279,9 @@ export default function TeacherAttendancePage() {
                   {/* Right Column: Live Scanned Stream */}
                   <div className="lg:col-span-6 flex flex-col gap-3">
                     <Card className="attendance-scan-feed p-4 border-2 border-border bg-card shadow-retro flex-1 flex flex-col min-h-[420px]">
-                      <div className="flex items-center justify-between pb-3 border-b border-border mb-3">
+                      <div className="-mx-4 flex items-center justify-between border-b border-border px-4 pb-3 mb-3">
                         <div className="flex items-center gap-2">
-                          <QrCode className="w-4 h-4 text-primary" />
+                          <QrCode className="w-4 h-4 text-black" />
                           <span className="text-sm font-bold">Live Scan Activity</span>
                         </div>
                         {recentScans.length > 0 && (
