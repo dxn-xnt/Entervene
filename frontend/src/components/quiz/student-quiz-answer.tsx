@@ -82,7 +82,7 @@ export function QuizTextAnswerSummary({ question }: TextAnswerSummaryProps) {
 
   return (
     <div className="mt-3 space-y-2 text-sm">
-      <div className="border border-primary bg-primary px-3 py-2 text-primary-foreground">
+      <div className="border border-black bg-primary px-3 py-2 text-primary-foreground">
         <p className="text-xs font-bold uppercase">Your answer</p>
         <p className="mt-1 whitespace-pre-wrap break-words">
           {question.answer_text?.trim() || "No answer recorded."}
