@@ -246,21 +246,18 @@ export default function ClassworkDetailModal({
                   </Card.Content>
                 </Card>
 
-                {(selectedClasswork.description ||
-                  selectedClasswork.instructions ||
+                {(selectedClasswork.instructions ||
                   (selectedClasswork.attachments &&
                     selectedClasswork.attachments.length > 0)) && (
                     <div
-                      className={`grid grid-cols-1 ${(selectedClasswork.description ||
-                        selectedClasswork.instructions) &&
+                      className={`grid grid-cols-1 ${selectedClasswork.instructions &&
                         selectedClasswork.attachments &&
                         selectedClasswork.attachments.length > 0
                         ? "md:grid-cols-3"
                         : ""
                         } gap-3`}
                     >
-                      {(selectedClasswork.description ||
-                        selectedClasswork.instructions) && (
+                      {selectedClasswork.instructions && (
                           <div
                             className={
                               selectedClasswork.attachments &&
@@ -271,16 +268,6 @@ export default function ClassworkDetailModal({
                           >
                             <Card className="w-full h-full shadow-none">
                               <Card.Content className="space-y-3">
-                                {selectedClasswork.description && (
-                                  <div>
-                                    <Card.Title className="mb-1 font-bold text-sm">
-                                      Description
-                                    </Card.Title>
-                                    <p className="text-sm text-gray-800">
-                                      {selectedClasswork.description}
-                                    </p>
-                                  </div>
-                                )}
                                 {selectedClasswork.instructions && (
                                   <div>
                                     <Card.Title className="mb-1 font-bold text-sm">
@@ -301,8 +288,7 @@ export default function ClassworkDetailModal({
                         selectedClasswork.attachments.length > 0 && (
                           <div
                             className={
-                              selectedClasswork.description ||
-                                selectedClasswork.instructions
+                              selectedClasswork.instructions
                                 ? "md:col-span-1"
                                 : ""
                             }
