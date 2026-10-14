@@ -126,6 +126,13 @@ def goal_context():
     )
     db.add_all([cls, subj])
     db.flush()
+    db.add_all([
+        SubjectLoad(
+            staff_id=teacher.staff_id, subject_id=subj.subject_id, class_id=cls.class_id,
+            academic_period_id=period.academic_period_id, status="active", is_active_version=True,
+        )
+        for period in (period1, period2)
+    ])
 
     db.add(StudentClass(student_id=student.student_id, class_id=cls.class_id, academic_year_id=year.academic_year_id, enrollment_status="enrolled"))
     db.flush()

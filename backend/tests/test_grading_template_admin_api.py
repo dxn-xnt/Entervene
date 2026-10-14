@@ -297,6 +297,8 @@ def test_multi_subject_assignment_and_locking(client, db):
     body = res.json()
     assert body["assigned_subject_count"] == 2
     assert len(body["assigned_subjects"]) == 2
+    assert {item["grade_level"] for item in body["assigned_subjects"]} == {level.grade_level}
+    assert {item["academic_level_id"] for item in body["assigned_subjects"]} == {level.academic_level_id}
 
     template_id = body["grading_template_id"]
 

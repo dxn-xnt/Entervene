@@ -409,3 +409,117 @@ def test_first_pass_and_repair_schema_are_structurally_identical(isolated, monke
     assert first["repair_round"] == 0 and repair["repair_round"] == 1
     assert first["existing_stems_do_not_repeat"] == [] and len(repair["existing_stems_do_not_repeat"]) == 1
     assert first["instruction"] != repair["instruction"]
+
+
+@pytest.mark.parametrize("options,expected", [
+    ([], (0, 0, [])),
+    ([PRIVATE, "", " \t", PRIVATE], (4, 2, [1, 2])),
+    ([PRIVATE], (1, 0, [])),
+    (None, (None, None, [])),
+    (PRIVATE, (None, None, [])),
+    ([None, {PRIVATE: PRIVATE}, 5, " "], (4, 1, [3])),
+])
+def test_mc_failed_generation_reports_only_option_counts_and_zero_based_indexes(options, expected):
+    candidate = model_item(options=options)
+    detail = failed_generation_detail(json.dumps({"questions": [candidate]}),
+        generation.question_schema("MULTIPLE_CHOICE", 6, None))
+    row = detail["item_problems"][0]
+    assert (row["option_count"], row["empty_option_count"], row["empty_option_indexes"]) == expected
+    assert PRIVATE not in json.dumps(detail)
+
+
+def test_mc_missing_options_are_unknown_not_a_fabricated_empty_array():
+    candidate = model_item()
+    del candidate["options"]
+    detail = failed_generation_detail(json.dumps({"questions": [candidate]}),
+        generation.question_schema("MULTIPLE_CHOICE", 1, None))
+    row = detail["item_problems"][0]
+    assert row["option_count"] is row["empty_option_count"] is None
+    assert row["empty_option_indexes"] == []
+    assert row["problems"]["missing_field:options"] == 1
+
+
+def test_mc_option_diagnostics_use_batch_context_even_when_model_type_conflicts():
+    candidate = model_item(options=["", PRIVATE, PRIVATE, PRIVATE], question_type="ESSAY")
+    detail = failed_generation_detail(json.dumps({"questions": [candidate]}),
+        generation.question_schema("MULTIPLE_CHOICE", 1, None), question_type="MULTIPLE_CHOICE")
+    assert detail["item_problems"][0]["empty_option_indexes"] == [0]
+    assert detail["item_problems"][0]["option_count"] == 4
+    assert PRIVATE not in json.dumps(detail)
+
+
+@pytest.mark.parametrize("kind", ["TRUE_FALSE", "IDENTIFICATION", "ESSAY", "MATCHING"])
+def test_non_mc_schema_and_validation_diagnostics_do_not_gain_mc_fields(kind):
+    candidate = model_item(kind=kind, points="wrong-type")
+    detail = failed_generation_detail(json.dumps({"questions": [candidate]}),
+        generation.question_schema(kind, 1, None), question_type=kind)
+    assert not {"option_count", "empty_option_count", "empty_option_indexes"} & detail["item_problems"][0].keys()
+    batch = generation._validate_batch(json.dumps({"questions": [candidate]}), kind, None)
+    assert batch.discards == {"invalid_schema": 1}
+    assert batch.mc_option_discards == []
+
+
+@pytest.mark.parametrize("options,reason,expected", [
+    ([], "invalid_option_count", (0, 0, [])),
+    (["", PRIVATE, " \t", PRIVATE], "empty_option", (4, 2, [0, 2])),
+    ([PRIVATE, PRIVATE + "other"], "invalid_option_count", (2, 0, [])),
+    ([None, PRIVATE, PRIVATE + "other", PRIVATE + "third"], "invalid_schema", (4, 0, [])),
+])
+def test_mocked_mc_400_and_discard_telemetry_share_count_only_option_diagnostics(
+        isolated, monkeypatch, smoke, capsys, caplog, options, reason, expected):
+    caplog.set_level("INFO")
+    bad = model_item(options=options, question_text=PRIVATE)
+    raw = json.dumps({"questions": [bad, model_item(2)]})
+    op, questions, sent = run_mocked_generation(monkeypatch, [(400, raw)], target=1)
+    summary = op.summary()
+    count, empty_count, indexes = expected
+    assert len(sent) == len(questions) == 1
+    assert summary["schema_retries"] == summary["repair_rounds_used"] == 0
+    assert summary["credits_charged"] == 1
+    assert summary["discard_reasons"] == {reason: 1}
+    assert summary["mc_option_discards"] == [{
+        "item": 1, "reason": reason, "repair_round": 0, "batch_offset": 0,
+        "option_count": count, "empty_option_count": empty_count, "empty_option_indexes": indexes}]
+    assert len(questions[0]["options"]) == 4
+    assert sum(option["is_correct"] for option in questions[0]["options"]) == 1
+    smoke.print_results([("Grammar", summary, "OK")],
+        [("Grammar", row) for row in op.provider_failures])
+    output = capsys.readouterr().out
+    assert "Per-item MC options (count / empty count / empty indexes, zero-based)" in output
+    assert f"1[{count} / {empty_count} / {indexes}]" in output
+    assert f"options={count} empty={empty_count} empty_indexes={indexes}" in output
+    assert PRIVATE not in output and PRIVATE not in json.dumps(summary) and PRIVATE not in caplog.text
+
+
+def test_kept_items_and_candidate_discards_keep_existing_behavior_with_option_telemetry(
+        isolated, monkeypatch):
+    first = model_item(1)
+    raw = json.dumps({"questions": [first, first, model_item(3)]})
+    op, questions, sent = run_mocked_generation(monkeypatch, [(200, raw)], target=1)
+    summary = op.summary()
+    assert len(sent) == len(questions) == 1
+    assert summary["discard_reasons"] == {"duplicate_stem_same_batch": 1, "trimmed_over_target": 1}
+    assert [row["item"] for row in summary["mc_option_discards"]] == [2, 3]
+    assert [row["reason"] for row in summary["mc_option_discards"]] == [
+        "duplicate_stem_same_batch", "trimmed_over_target"]
+    assert all(row["option_count"] == 4 and row["empty_option_count"] == 0
+        and row["empty_option_indexes"] == [] for row in summary["mc_option_discards"])
+    assert summary["repair_rounds_used"] == 0 and summary["credits_charged"] == 1
+
+
+def test_mc_option_discards_identify_repair_round_without_double_counting_recovered_validation(
+        isolated, monkeypatch):
+    first = json.dumps({"questions": [model_item(options=[]), model_item(1)]})
+    repaired = json.dumps({"questions": [
+        model_item(3, options=["Root", "Stem", "Leaf", " "]), model_item(2)]})
+    op, questions, sent = run_mocked_generation(monkeypatch, [(200, first), (400, repaired)])
+    summary = op.summary()
+    assert len(sent) == len(questions) == 2
+    assert summary["repair_rounds_used"] == 1 and summary["schema_retries"] == 0
+    assert summary["recovered_from_400"] == 1 and summary["credits_charged"] == 1
+    assert summary["discard_reasons"] == {"invalid_option_count": 1, "empty_option": 1}
+    assert summary["mc_option_discards"] == [
+        {"item": 1, "reason": "invalid_option_count", "repair_round": 0, "batch_offset": 0,
+         "option_count": 0, "empty_option_count": 0, "empty_option_indexes": []},
+        {"item": 1, "reason": "empty_option", "repair_round": 1, "batch_offset": 0,
+         "option_count": 4, "empty_option_count": 1, "empty_option_indexes": [3]}]

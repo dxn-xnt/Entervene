@@ -464,14 +464,14 @@ function EditUserModal({
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
       <Dialog.Content size="2xl">
         <Dialog.Header position="static">
-          <div>
-            <h2 className="font-sans text-xl font-bold">Edit User</h2>
-            <p className="text-sm font-normal">Update profile information only. Role changes are handled separately.</p>
-          </div>
+          <h2 className="font-sans text-xl font-bold">Edit User</h2>
         </Dialog.Header>
 
         <form onSubmit={submit}>
           <section className="grid gap-4 p-4">
+            <Dialog.Description className="text-sm text-muted-foreground">
+              Role changes are handled separately.
+            </Dialog.Description>
             <div className="grid gap-3 md:grid-cols-3">
               <EditField label="First Name">
                 <Input

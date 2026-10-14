@@ -314,6 +314,19 @@ export default function AdminSubjects() {
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [gradingTemplates, subjects, archivedSubjects]);
 
+  const gradingTemplatesByGrade = useMemo(() => {
+    const groups = new Map<number | null, GradingTemplateListItem[]>();
+    for (const template of gradingTemplates) {
+      const grade = template.academic_level?.grade_level ?? null;
+      const group = groups.get(grade) ?? [];
+      group.push(template);
+      groups.set(grade, group);
+    }
+    return Array.from(groups).sort(([first], [second]) =>
+      first == null ? 1 : second == null ? -1 : first - second
+    );
+  }, [gradingTemplates]);
+
   const filteredCatalogSubjects = useMemo(() => {
     let list = subjects;
 
@@ -1090,23 +1103,37 @@ export default function AdminSubjects() {
                     </Button>
                   </EmptyStateCard>
                 ) : (
-                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                    {gradingTemplates.map((template) => (
-                      <GradingTemplateRow
-                        key={template.grading_template_id}
-                        template={template}
-                        onEdit={openEditGradingTemplate}
-                        readOnly={isViewingInactiveAcademicYear}
-                        readOnlyReason={readOnlyReason}
-                        onArchive={(itemToArchive) =>
-                          setPendingAction({
-                            kind: "grading",
-                            action: "archive",
-                            id: itemToArchive.grading_template_id,
-                            label: itemToArchive.template_name,
-                          })
-                        }
-                      />
+                  <div className="flex flex-col gap-6">
+                    {gradingTemplatesByGrade.map(([grade, templates]) => (
+                      <section key={grade ?? "all-grades"} className="flex flex-col gap-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-lg font-bold">
+                            {grade == null ? "All Grade Levels" : `Grade ${grade}`}
+                          </h3>
+                          <Badge size="sm" variant="outline">
+                            {templates.length} template{templates.length !== 1 ? "s" : ""}
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                          {templates.map((template) => (
+                            <GradingTemplateRow
+                              key={template.grading_template_id}
+                              template={template}
+                              onEdit={openEditGradingTemplate}
+                              readOnly={isViewingInactiveAcademicYear}
+                              readOnlyReason={readOnlyReason}
+                              onArchive={(itemToArchive) =>
+                                setPendingAction({
+                                  kind: "grading",
+                                  action: "archive",
+                                  id: itemToArchive.grading_template_id,
+                                  label: itemToArchive.template_name,
+                                })
+                              }
+                            />
+                          ))}
+                        </div>
+                      </section>
                     ))}
                   </div>
                 )}

@@ -135,7 +135,25 @@ def _field_problems(value, schema):
     return dict(problems)
 
 
-def failed_generation_detail(raw, schema=None, *, finish_reason=None):
+def mc_option_counts(item):
+    """Inspect structure only; indexes are zero-based and values never escape."""
+    options = item.get("options") if isinstance(item, dict) else None
+    if not isinstance(options, list):
+        return {"option_count": None, "empty_option_count": None, "empty_option_indexes": []}
+    empty = [index for index, option in enumerate(options)
+             if isinstance(option, str) and not option.strip()]
+    return {"option_count": len(options), "empty_option_count": len(empty),
+            "empty_option_indexes": empty}
+
+
+def mc_option_discard_detail(item, reason, *, item_index):
+    """Fixed reason codes and numeric structure only, never option content."""
+    return {"item": token_count(item_index),
+            "reason": reason if reason in DISCARD_CODES else "unknown_validation",
+            **mc_option_counts(item)}
+
+
+def failed_generation_detail(raw, schema=None, *, finish_reason=None, question_type=None):
     """Never return raw keys, values, parsing exceptions, schema enums or content."""
     detail = {"characters": len(raw) if isinstance(raw, str) else None,
               "estimated_tokens": math.ceil(len(raw) / 4) if isinstance(raw, str) else None,
@@ -168,8 +186,14 @@ def failed_generation_detail(raw, schema=None, *, finish_reason=None):
         detail["inspected_items"] = min(len(items), 100)
         detail["uninspected_items"] = max(0, len(items) - 100)
         item_schema = (schema or {}).get("properties", {}).get("questions", {}).get("items", {})
+        option_schema = item_schema.get("properties", {}).get("options", {})
+        is_mc = (question_type == "MULTIPLE_CHOICE" if question_type is not None else
+                 option_schema.get("minItems") == option_schema.get("maxItems") == 4)
         for index, item in enumerate(items[:100], 1):
-            detail["item_problems"].append({"item": index, "problems": _field_problems(item, item_schema)})
+            row = {"item": index, "problems": _field_problems(item, item_schema)}
+            if is_mc and isinstance(item, dict):
+                row.update(mc_option_counts(item))
+            detail["item_problems"].append(row)
     counts = Counter(detail["root_problems"])
     for row in detail["item_problems"]:
         counts.update(row["problems"])
@@ -431,5 +455,6 @@ def record_provider_failure(operation, provider, *, response=None, exception=Non
         choices = body.get("choices") if isinstance(body, dict) else None
         if finish is None and isinstance(choices, list) and choices and isinstance(choices[0], dict):
             finish = choices[0].get("finish_reason")
-        row["schema_detail"] = failed_generation_detail(error["failed_generation"], output_schema, finish_reason=finish)
+        row["schema_detail"] = failed_generation_detail(error["failed_generation"], output_schema,
+            finish_reason=finish, question_type=call["question_type"] if call["question_type"] in KINDS else None)
     operation.provider_failures.append(row)

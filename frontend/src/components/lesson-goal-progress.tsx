@@ -179,44 +179,48 @@ export function LessonGoalProgress({
 
   return (
     <div className={className}>
-      <div className="flex items-center justify-between mb-1.5">
-        <h3 className="text-xl sm:text-2xl font-bold">{title}</h3>
-      </div>
+
 
       <Card className="block w-full min-w-0">
         {/* State 1: Curated Mode is empty */}
         {isCuratedEmpty ? (
-          <Empty className="border-0 bg-transparent p-6 shadow-none">
-            <EmptyHeader>
-              <EmptyMedia>
-                <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
-                  <Sparkles className="size-5 text-black" />
-                </div>
-              </EmptyMedia>
-              <EmptyTitle>
-                {isTeacher ? "No goals set for this term" : "No lesson goals set yet"}
-              </EmptyTitle>
-              <EmptyDescription>
-                {isTeacher
-                  ? "Curate specific lessons and exams to be highlighted for this week."
-                  : "Your teacher has not highlighted any lesson goal yet."}
-              </EmptyDescription>
-            </EmptyHeader>
-            {isTeacher && onSetGoal && (
-              <EmptyContent className="mt-4">
-                <Button
-                  size="sm"
-                  onClick={onSetGoal}
-                  className="border-black bg-primary"
-                >
-                  <Pencil className="mr-1.5 size-3.5" /> Set Lesson Goal
-                </Button>
-              </EmptyContent>
-            )}
-          </Empty>
+          <Card.Content className="p-2 pt-1 flex flex-col gap-3">
+            <Card.Title className="text-xl">{title}</Card.Title>
+            <Empty className="border-2 bg-retro p-6 shadow-none">
+              <EmptyHeader>
+                <EmptyMedia>
+                  <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
+                    <Sparkles className="size-5 text-black" />
+                  </div>
+                </EmptyMedia>
+                <EmptyTitle>
+                  {isTeacher ? "No goals set for this term" : "No lesson goals set yet"}
+                </EmptyTitle>
+                <EmptyDescription>
+                  {isTeacher
+                    ? "Curate specific lessons and exams to be highlighted for this week."
+                    : "Your teacher has not highlighted any lesson goal yet."}
+                </EmptyDescription>
+              </EmptyHeader>
+              {isTeacher && onSetGoal && (
+                <EmptyContent className="mt-4">
+                  <Button
+                    size="sm"
+                    onClick={onSetGoal}
+                    className="border-black bg-primary"
+                  >
+                    <Pencil className="mr-1.5 size-3.5" /> Set Lesson Goal
+                  </Button>
+                </EmptyContent>
+              )}
+            </Empty>
+          </Card.Content>
         ) : hasCuratedMode && goalItems && goalItems.length > 0 ? (
           /* State 2: Curated Mode with Teacher-Selected Items */
           <Card.Content className="p-4 flex flex-col gap-3">
+            <Card.Title>
+              Lesson Goals
+            </Card.Title>
             {goalItems.map((item, idx) => {
               const isFirst = idx === 0;
               const isLast = idx === goalItems.length - 1;

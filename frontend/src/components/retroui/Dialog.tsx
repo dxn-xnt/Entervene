@@ -99,7 +99,9 @@ const overlayVariants = cva(
 
 interface IDialogBackgroupProps
   extends HTMLAttributes<HTMLDivElement>,
-  VariantProps<typeof overlayVariants> { }
+  VariantProps<typeof overlayVariants> {
+  forceRender?: boolean;
+}
 
 const DialogBackdrop = (inputProps: IDialogBackgroupProps & { ref?: React.Ref<HTMLDivElement> }) => {
   const { variant = "default", className, ref, ...props } = inputProps;
@@ -146,6 +148,7 @@ interface IDialogContentProps
   extends HTMLAttributes<HTMLDivElement>,
   VariantProps<typeof dialogVariants> {
   overlay?: IDialogBackgroupProps;
+  portalContainer?: React.ComponentProps<typeof BaseDialog.Portal>["container"];
 }
 
 const DialogContent = (inputProps: IDialogContentProps & { ref?: React.Ref<HTMLDivElement> }) => {
@@ -154,12 +157,13 @@ const DialogContent = (inputProps: IDialogContentProps & { ref?: React.Ref<HTMLD
     size = "auto",
     className,
     overlay,
+    portalContainer,
     ref,
     ...props
   } = inputProps;
 
   return (
-    <BaseDialog.Portal>
+    <BaseDialog.Portal container={portalContainer}>
       <DialogBackdrop {...overlay} />
       <BaseDialog.Popup
         data-slot="dialog-content"

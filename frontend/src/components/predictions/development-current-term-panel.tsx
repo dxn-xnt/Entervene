@@ -22,7 +22,7 @@ import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@/components/retroui/Skeleton";
 import { BLOCKED_MESSAGES, INTERVENTION_LABELS } from "./development-current-term-contract";
 import { ExaminationEvidence } from "./prediction-detail-sheet";
 
@@ -68,23 +68,23 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
     let cancelled = false;
     const request = role === "admin"
       ? Promise.all([getClasses(), getSubjects({ status: "active" })]).then(([classData, subjectData]) => {
-          if (!cancelled) {
-            setClasses(classData.classes);
-            setSubjects(subjectData.subjects);
-          }
-        })
+        if (!cancelled) {
+          setClasses(classData.classes);
+          setSubjects(subjectData.subjects);
+        }
+      })
       : fetchDashboardFilters().then((scope) => {
-          if (!cancelled) {
-            setTeacherClasses(scope.classes);
-            setTeacherTerms(scope.terms);
-            setTeacherPeriodId((current) => {
-              const preferred = current ?? periodId;
-              return preferred !== null && scope.terms.some((item) => item.academic_period_id === preferred)
-                ? preferred
-                : null;
-            });
-          }
-        });
+        if (!cancelled) {
+          setTeacherClasses(scope.classes);
+          setTeacherTerms(scope.terms);
+          setTeacherPeriodId((current) => {
+            const preferred = current ?? periodId;
+            return preferred !== null && scope.terms.some((item) => item.academic_period_id === preferred)
+              ? preferred
+              : null;
+          });
+        }
+      });
     request
       .catch((cause: unknown) => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Unable to load prediction scope."); })
       .finally(() => { if (!cancelled) setLoadingScope(false); });

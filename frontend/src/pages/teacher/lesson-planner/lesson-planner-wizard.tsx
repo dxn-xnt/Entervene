@@ -40,7 +40,7 @@ const TABS = [
     value: "info",
     label: "Info",
     headerTitle: "Information",
-    headerDescription: "Fill in the basic details of the lesson plan.",
+    headerDescription: "",
     icon: FileText,
     color: "text-blue-600",
     bgColor: "bg-blue-50",
@@ -171,11 +171,6 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
             <Text as="h5" className="truncate font-sans text-lg font-bold sm:text-xl">
               {TABS[currentIndex]?.headerTitle || "Lesson Plan"}
             </Text>
-            {TABS[currentIndex]?.headerDescription && (
-              <p className="text-xs md:text-sm font-normal text-foreground">
-                {TABS[currentIndex].headerDescription}
-              </p>
-            )}
           </div>
           <Text as="h5" className="shrink-0 whitespace-nowrap font-sans text-sm font-semibold sm:text-base">
             Step {currentIndex + 1} of {TABS.length}
@@ -184,6 +179,11 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
       </Dialog.Header>
 
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 py-4 [scrollbar-gutter:stable] sm:gap-6 sm:px-6 sm:py-6">
+        {TABS[currentIndex]?.headerDescription && (
+          <Text as="p" className="text-sm text-muted-foreground">
+            {TABS[currentIndex].headerDescription}
+          </Text>
+        )}
         {/* Global error banner */}
         {apiError && (
           <div className="flex items-center gap-2.5 rounded border border-red-300 bg-red-50 p-4 text-sm text-red-800 shadow-2xs w-full animate-in fade-in slide-in-from-top-1 duration-200">

@@ -136,9 +136,6 @@ export function SF9PreviewModal({
               <Dialog.Title className="text-base font-bold font-head">
                 Learner's Performance Report (SF9 / Form 138)
               </Dialog.Title>
-              <Dialog.Description className="text-xs font-semibold text-muted-foreground">
-                {studentName} {data ? `· ${data.class_info.grade_level} - ${data.class_info.section_name} (SY ${data.class_info.academic_year})` : ""}
-              </Dialog.Description>
             </div>
           </div>
 
@@ -146,6 +143,9 @@ export function SF9PreviewModal({
 
         {/* Modal Scrollable Body */}
         <div className="flex-1 overflow-auto p-4 md:p-6 bg-muted/40 [scrollbar-width:thin]">
+          <Dialog.Description className="mb-4 text-sm text-muted-foreground">
+            {studentName}{data ? ` · ${data.class_info.grade_level} ${data.class_info.section_name} · SY ${data.class_info.academic_year}` : ""}
+          </Dialog.Description>
           {isLoading && !data ? (
             <div className="flex flex-col items-center justify-center p-16 text-center text-muted-foreground">
               <Loader2 className="size-8 animate-spin text-primary mb-3" />

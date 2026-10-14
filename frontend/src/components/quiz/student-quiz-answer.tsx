@@ -31,7 +31,7 @@ export function QuizTextAnswerInput({ question, value, onChange, disabled }: Tex
         onChange={(e) => onChange(e.target.value)}
         placeholder={IDENTIFICATION_PLACEHOLDER}
         disabled={disabled}
-        className="w-full border-2 border-black bg-white p-4 text-base focus:outline-none focus:border-[#F6E9B2]"
+        className="w-full border-2 border-black bg-white p-4 text-base"
       />
     );
   }
@@ -42,7 +42,7 @@ export function QuizTextAnswerInput({ question, value, onChange, disabled }: Tex
       placeholder={SHORT_ANSWER_PLACEHOLDER}
       disabled={disabled}
       rows={4}
-      className="w-full border-2 border-black bg-white p-4 text-sm focus:outline-none focus:border-[#F6E9B2] resize-none"
+      className="w-full border-2 border-black bg-white p-4 text-sm resize-none"
     />
   );
 }
@@ -82,8 +82,8 @@ export function QuizTextAnswerSummary({ question }: TextAnswerSummaryProps) {
 
   return (
     <div className="mt-3 space-y-2 text-sm">
-      <div className="border border-gray-200 bg-gray-50 px-3 py-2">
-        <p className="text-xs font-bold uppercase text-gray-500">Your answer</p>
+      <div className="border border-primary bg-primary px-3 py-2 text-primary-foreground">
+        <p className="text-xs font-bold uppercase">Your answer</p>
         <p className="mt-1 whitespace-pre-wrap break-words">
           {question.answer_text?.trim() || "No answer recorded."}
         </p>

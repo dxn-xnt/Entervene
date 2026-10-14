@@ -68,7 +68,7 @@ function Calendar({
           defaultClassNames.dropdowns
         ),
         dropdown_root: cn(
-          "relative has-focus:outline-ring outline outline-input has-focus:ring-ring/50 has-focus:ring-[3px] rounded",
+          "relative has-focus:outline-black outline outline-input rounded",
           defaultClassNames.dropdown_root
         ),
         dropdown: cn(

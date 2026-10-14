@@ -64,11 +64,13 @@ export default function ClassworkFormModal({
         <Dialog.Header className="border-border">
           <div>
             <h2 className="text-lg font-bold">{classworkModalTitle}</h2>
-            <p className="text-xs font-medium">{modalSubtitle}</p>
           </div>
         </Dialog.Header>
 
         <div className="space-y-4 p-5">
+          <Dialog.Description className="text-sm text-muted-foreground">
+            {modalSubtitle}
+          </Dialog.Description>
           {error && (
             <div className="border-2 border-red-600 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               {error}
@@ -228,28 +230,6 @@ export default function ClassworkFormModal({
               </span>
             </label>
           )}
-
-          <div>
-            <label
-              htmlFor="classwork-description"
-              className="mb-1 block text-sm font-semibold"
-            >
-              Description
-            </label>
-            <textarea
-              id="classwork-description"
-              value={classworkDraft.description}
-              onChange={(event) =>
-                setClassworkDraft((current) => ({
-                  ...current,
-                  description: event.target.value,
-                }))
-              }
-              disabled={isCreatingClasswork}
-              className="min-h-20 w-full rounded border-2 border-black px-3 py-2 text-sm"
-              placeholder="Optional summary"
-            />
-          </div>
 
           <div>
             <label

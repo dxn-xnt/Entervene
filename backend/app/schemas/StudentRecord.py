@@ -49,6 +49,8 @@ class StudentRecordProfile(BaseModel):
     email: Optional[str] = None
     academic_level: Optional[str] = None
     section_name: str
+    gender: Optional[str] = None
+    status: Optional[str] = None
 
 
 class StudentRecordSummary(BaseModel):

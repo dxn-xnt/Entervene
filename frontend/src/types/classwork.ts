@@ -34,6 +34,12 @@ export type ClassworkAssignment = {
   is_locked?: boolean | null;
 };
 
+export type LinkedLesson = {
+  lesson_id: number;
+  title: string;
+  description?: string | null;
+};
+
 export type TeacherClasswork = {
   classwork_id: number;
   title: string;
@@ -51,6 +57,7 @@ export type TeacherClasswork = {
   subject_name?: string | null;
   attachments: ClassworkAttachment[];
   assignments?: ClassworkAssignment[] | null;
+  linked_lessons?: LinkedLesson[];
   created_at?: string | null;
   updated_at?: string | null;
   rubric_levels?: ActivityRubricLevel[];
@@ -66,6 +73,7 @@ export type TeacherClassLoad = {
   class_id: number;
   section_name: string;
   grade_level?: string;
+  student_count?: number;
   academic_period_id?: number;
 };
 
@@ -76,6 +84,8 @@ export type TeacherLesson = {
   is_published: boolean;
   show_scores: boolean;
   is_draft: boolean;
+  is_archived?: boolean;
+  is_locked?: boolean;
   subject_id: number;
 };
 
@@ -96,6 +106,8 @@ export type AssignmentTracking = {
   classwork_assignment_id: number;
   classwork_id: number;
   classwork_title?: string | null;
+  class_id?: number;
+  due_date?: string | null;
   total_students: number;
   submitted_count: number;
   missing_count: number;
@@ -111,6 +123,9 @@ export type ClassworkTracking = {
   missing_count: number;
   submitted: TrackingStudent[];
   missing: TrackingStudent[];
+  due_date?: string | null;
+  class_id?: number;
+  classwork_assignment_id?: number;
 };
 
 export type SubmissionAttachment = {

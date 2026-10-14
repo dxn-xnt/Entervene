@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 import app.models  # noqa: F401
 from app.api.v1.routes.Auth import get_current_user
 from app.db.Session import get_db
+from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.services.activity.AnalyticsService import (
     build_class_overview,
     build_subject_overview,
@@ -98,9 +99,12 @@ def get_teacher_dashboard_health(
     """
     Returns authentic, real class-health metrics for the teacher dashboard:
     - KPIs (active classes, enrolled students, overall completion rate, ungraded queue)
-    - Trend chart (chronological mastery & completion data points for selected class/subject)
+    - Trend chart (Manila-date grouped raw task performance & eligible completion for selected class/subject)
     - Section health matrix (side-by-side section comparison with graceful partial states)
     - Live action queue (submissions to review, upcoming deadlines)
+    - Dashboard-only Phase 2 policies: class-record Current grade, strict runtime
+      subject-group passing thresholds, and Manila attendance/submission windows.
+      Nullable metrics include coverage/configuration warnings; this is read-only.
     """
     user_role = current_user.get("role")
     user_id = current_user.get("user_id") or current_user.get("sub")
@@ -109,13 +113,22 @@ def get_teacher_dashboard_health(
         raise HTTPException(status_code=403, detail="Teacher or Admin access required")
 
     target_staff_id = staff_id if (user_role == "admin" and staff_id) else user_id
-    target_period = get_target_period(db, academic_period_id=academic_period_id)
+    # Include the route's period lookup in the read-only/no-autoflush boundary.
+    with db.no_autoflush:
+        if academic_period_id is not None:
+            target_period = db.query(AcademicPeriod).filter(
+                AcademicPeriod.academic_period_id == academic_period_id,
+            ).first()
+            if target_period is None:
+                raise HTTPException(status_code=404, detail="Academic period not found")
+        else:
+            target_period = get_target_period(db)
 
-    return build_teacher_dashboard_health(
-        db=db,
-        staff_id_or_user_id=target_staff_id,
-        target_period=target_period,
-        class_id=class_id,
-        subject_id=subject_id,
-    )
+        return build_teacher_dashboard_health(
+            db=db,
+            staff_id_or_user_id=target_staff_id,
+            target_period=target_period,
+            class_id=class_id,
+            subject_id=subject_id,
+        )
 

@@ -186,7 +186,7 @@ def _stage_targeted_assignment_notification(db: Session, assignment: ClassworkAs
 
 def create_classwork_record(body: ClassworkCreate, staff_id: str, db: Session) -> ClassworkResponse:
     classwork_type = normalize_classwork_type(body.classwork_type)
-    rubric_levels = body.rubric_levels if classwork_type == "ACTIVITY" else None
+    rubric_levels = body.rubric_levels if classwork_type in {"ACTIVITY", "ASSIGNMENT"} else None
     total_points = (
         max(level.points for level in rubric_levels)
         if rubric_levels
@@ -493,7 +493,7 @@ def _parse_quiz_payload(raw_payload: Optional[str], normalized_type: str) -> Qui
 def _parse_rubric_payload(
     raw_payload: Optional[str], normalized_type: str
 ) -> list[ActivityRubricLevelInput] | None:
-    if normalized_type != "ACTIVITY":
+    if normalized_type not in {"ACTIVITY", "ASSIGNMENT"}:
         return None
     if not raw_payload:
         return None
@@ -510,7 +510,7 @@ def _replace_activity_rubric(
     classwork: Classwork,
     levels: list[ActivityRubricLevelInput] | None,
 ) -> None:
-    if classwork.classwork_type != "ACTIVITY" or levels is None:
+    if classwork.classwork_type not in {"ACTIVITY", "ASSIGNMENT"} or levels is None:
         return
     existing = {level.rubric_level_id: level for level in classwork.rubric_levels}
     retained_ids: set[int] = set()
@@ -609,6 +609,7 @@ def teacher_classworks(staff_id: str, db: Session, academic_period_id: int | Non
             joinedload(Classwork.staff),
             selectinload(Classwork.attachments),
             selectinload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
+            selectinload(Classwork.lessons),
         )
         .filter(Classwork.created_by_staff_id == staff_id, Classwork.is_archived == False)
     )
@@ -637,6 +638,7 @@ def classwork_detail(
             joinedload(Classwork.staff),
             selectinload(Classwork.attachments),
             selectinload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
+            selectinload(Classwork.lessons),
         )
         .filter(Classwork.classwork_id == classwork_id)
         .first()
@@ -654,7 +656,11 @@ def classwork_detail(
         if assignment:
             due_date = assignment.due_date
 
-    result = build_classwork_response(classwork).model_dump()
+    response = build_classwork_response(classwork)
+    if current_user.get("role") == "teacher":
+        from app.services.classwork.ClassworkResponseService import authorized_teacher_linked_lessons
+        response.linked_lessons = authorized_teacher_linked_lessons(classwork, current_user, db, class_id)
+    result = response.model_dump()
     result["due_date"] = due_date
     return result
 
@@ -672,6 +678,7 @@ def update_classwork_record(
             joinedload(Classwork.staff),
             selectinload(Classwork.attachments),
             selectinload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
+            selectinload(Classwork.lessons),
         )
         .filter(Classwork.classwork_id == classwork_id, Classwork.created_by_staff_id == staff_id)
         .first()
@@ -705,8 +712,8 @@ def update_classwork_record(
         values["total_points"] = None
     target_type = values.get("classwork_type", classwork.classwork_type)
     if rubric_levels is not None:
-        if target_type != "ACTIVITY":
-            raise HTTPException(status_code=400, detail="Rubrics are only supported for Activity classwork")
+        if target_type not in {"ACTIVITY", "ASSIGNMENT"}:
+            raise HTTPException(status_code=400, detail="Rubrics are only supported for Activity and Assignment classwork")
         submissions = [
             submission
             for assignment in classwork.assignments
@@ -714,9 +721,9 @@ def update_classwork_record(
         ]
         if submissions and not confirm_rubric_change:
             detail = (
-                "This activity already has graded submissions. Updating the rubric will not change previously recorded grades."
+                "This classwork already has graded submissions. Updating the rubric will not change previously recorded grades."
                 if any(s.status == "graded" or s.grade is not None for s in submissions)
-                else "This activity already has student submissions. Rubric changes will apply when these submissions are graded."
+                else "This classwork already has student submissions. Rubric changes will apply when these submissions are graded."
             )
             raise HTTPException(status_code=409, detail=detail)
         parsed_levels = [ActivityRubricLevelInput.model_validate(level) for level in rubric_levels]
@@ -1102,7 +1109,11 @@ def classwork_assignment_detail(assignment_id: int, current_user: dict, db: Sess
     authorize_assignment_access(assignment, classwork, current_user, db)
     class_ = db.query(Class).filter(Class.class_id == assignment.class_id).first()
     staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == classwork.created_by_staff_id).first()
-    return _assignment_response(assignment, classwork, class_, staff, None)
+    response = _assignment_response(assignment, classwork, class_, staff, None)
+    if current_user.get("role") == "teacher":
+        from app.services.classwork.ClassworkResponseService import authorized_teacher_linked_lessons
+        response.linked_lessons = authorized_teacher_linked_lessons(classwork, current_user, db, assignment.class_id)
+    return response
 
 
 def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None = None) -> list[dict]:
@@ -1307,30 +1318,19 @@ def teacher_assignments_for_class_subject(
     staff_id: str,
     db: Session,
 ) -> list[ClassworkAssignmentResponse]:
-    active_load = (
-        db.query(SubjectLoad)
-        .filter(
-            SubjectLoad.class_id == class_id,
-            SubjectLoad.subject_id == subject_id,
-            SubjectLoad.is_active_version.is_(True),
-            SubjectLoad.status.in_(["published", "active"]),
-        )
-        .first()
+    from app.models.academic.AcademicPeriod import AcademicPeriod
+    from app.services.academic.ContentAuthorizationService import authorize_teacher_content
+    from app.services.classwork.ClassworkResponseService import authorized_teacher_linked_lessons
+
+    periods = db.query(AcademicPeriod.academic_period_id).join(
+        Class, Class.academic_year_id == AcademicPeriod.academic_year_id
+    ).filter(Class.class_id == class_id).all()
+    authorize_teacher_content(
+        db, staff_id=staff_id, owner_staff_id=None, detail="Classwork not found",
+        read_scopes=((class_id, subject_id, period_id) for (period_id,) in periods),
     )
-    if not active_load:
-        active_load = db.query(SubjectLoad).filter(
-            SubjectLoad.staff_id == staff_id,
-            SubjectLoad.class_id == class_id,
-            SubjectLoad.subject_id == subject_id,
-            SubjectLoad.status.in_(["active", "published"]),
-        ).first()
-
-    if not active_load:
-        raise HTTPException(status_code=403, detail="Not assigned to this class/subject")
-
-    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
-    if not SubjectLoadAuthorizationService.can_view(db, staff_id, class_id, subject_id, active_load.academic_period_id):
-        raise HTTPException(status_code=403, detail="Not authorized to view this class/subject")
+    actor = db.get(AcademicStaff, staff_id)
+    claims = {"role": "teacher", "sub": actor.user_id if actor else None}
 
     rows = (
         db.query(ClassworkAssignment, Classwork, Class)
@@ -1346,8 +1346,21 @@ def teacher_assignments_for_class_subject(
     )
     results = []
     for assignment, classwork, class_ in rows:
+        try:
+            authorize_teacher_content(
+                db, staff_id=staff_id, owner_staff_id=classwork.created_by_staff_id,
+                detail="Classwork not found",
+                read_scopes=[(class_id, subject_id, assignment.academic_period_id)]
+                if assignment.academic_period_id is not None else [],
+            )
+        except HTTPException as error:
+            if error.status_code != 404:
+                raise
+            continue
         staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == classwork.created_by_staff_id).first()
-        results.append(_assignment_response(assignment, classwork, class_, staff, None))
+        response = _assignment_response(assignment, classwork, class_, staff, None)
+        response.linked_lessons = authorized_teacher_linked_lessons(classwork, claims, db, class_id)
+        results.append(response)
     return results
 
 

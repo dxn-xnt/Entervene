@@ -2,12 +2,14 @@ import type { ReactNode } from "react";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { scoreBand } from "@/lib/classwork-utils";
+import { cn } from "@/lib/utils";
 import type { ActivityRubricLevel } from "@/types/classwork";
 
 interface RubricsScoreBoardProps {
   totalPoints?: number | null;
   title?: string;
   className?: string;
+  gridClassName?: string;
   selectedScore?: number | null;
   onSelectScore?: (points: number) => void;
   rightSlot?: ReactNode;
@@ -18,6 +20,7 @@ export default function RubricsScoreBoard({
   totalPoints = 0,
   title = "Scoring Rubric",
   className = "",
+  gridClassName = "",
   selectedScore = null,
   onSelectScore,
   rightSlot,
@@ -57,7 +60,7 @@ export default function RubricsScoreBoard({
     : fallbackBands;
 
   return (
-    <Card className={`block ${className} shadow-none`}>
+    <Card className={cn("@container block shadow-none border-2 border-black", className)}>
       <Card.Content className="space-y-3">
         <div className="flex items-center justify-between">
           <Card.Title className="mb-0 text-xl">{title}</Card.Title>
@@ -71,7 +74,7 @@ export default function RubricsScoreBoard({
           )}
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className={cn("grid gap-3 grid-cols-1 @sm:grid-cols-2 @4xl:grid-cols-5", gridClassName)}>
           {bands.map(({ label, points, description }) => {
             const ptsNum = Number(points.replace(" pts", ""));
             const isSelected =
@@ -81,26 +84,29 @@ export default function RubricsScoreBoard({
               selectedScore === ptsNum;
 
             return (
-              <Card
+              <div
                 key={label}
                 onClick={() => onSelectScore?.(ptsNum)}
-                className={`shadow-none transition-all ${onSelectScore ? "cursor-pointer" : ""
+                className={`flex flex-col justify-between rounded! border-2 border-black p-3.5 shadow-none transition-all hover:-translate-y-1 ${onSelectScore ? "cursor-pointer" : ""
                   } ${isSelected
-                    ? "!bg-primary !text-foreground"
-                    : "hover:bg-accent"
+                    ? "bg-primary text-foreground"
+                    : "bg-white text-foreground hover:bg-retro"
                   }`}
                 title={onSelectScore ? `Click to set score to ${points}` : undefined}
               >
-                <div className="mb-1 flex items-start justify-between gap-2">
-                  <p className="font-bold">{label}</p>
-                  <p className="text-sm font-bold whitespace-nowrap">{points}</p>
+                <div>
+                  <div className="mb-1 flex items-start justify-between gap-2">
+                    <p className="font-bold">{label}</p>
+                    <p className="text-sm font-bold whitespace-nowrap">{points}</p>
+                  </div>
+                  <p
+                    className={`text-sm ${isSelected ? "text-foreground" : "text-muted-foreground"
+                      }`}
+                  >
+                    {description}
+                  </p>
                 </div>
-                <p className={`text-sm
-                  ${isSelected
-                    ? " text-foreground"
-                    : "text-muted-foreground"
-                  }`}>{description}</p>
-              </Card>
+              </div>
             );
           })}
         </div>

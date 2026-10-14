@@ -275,15 +275,15 @@ export function SetLessonGoalModal({
               <Dialog.Title className="text-lg font-black">
                 Set Lesson Goals {periodName ? `— ${periodName}` : ""}
               </Dialog.Title>
-              <Dialog.Description className="text-xs font-semibold text-current/80">
-                Choose and order the specific lessons and exams to highlight for your students.
-              </Dialog.Description>
             </div>
           </div>
         </Dialog.Header>
 
         {/* Modal Body - stacked sections */}
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-5">
+          <Dialog.Description className="text-sm text-muted-foreground">
+            Choose and order the goals students will see.
+          </Dialog.Description>
           {/* Available source items */}
           <Card className="block w-full min-w-0 rounded-none! bg-card p-4 shadow-none hover:shadow-none">
             <Card.Header className="mb-4 gap-1">

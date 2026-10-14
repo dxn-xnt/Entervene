@@ -5,17 +5,20 @@ import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Progress } from "@/components/retroui/Progress";
-import { BookOpen, CheckSquare, ClipboardList, FileText, X } from "lucide-react";
+import { BookOpen, CheckSquare, ClipboardList, ExternalLink, FileText, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { API_URL, apiFetch } from "@/lib/api";
+import { formatDate } from "@/lib/formatters";
+import { isReadingType } from "@/lib/classwork-utils";
 import type { ClassworkDetail, SubmissionTracking } from "../subject-details/types";
+import IconContainer from "@/components/icon-container";
 
 interface ClassworkDetailModalProps {
   selectedClasswork: ClassworkDetail | null;
   detailLoadingId: number | null;
   detailError: string;
   onClose: () => void;
-  sectionName?: string;
+  sectionName?: string | null;
   tracking?: SubmissionTracking | null;
 }
 
@@ -27,28 +30,26 @@ function toTitleCase(str?: string | null, fallback = "Classwork") {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function ClassworkIcon({
+function ClassworkTypeIcon({
   type,
-  size = 24,
-  className = "",
+  size = 18,
 }: {
   type?: string | null;
   size?: number;
-  className?: string;
 }) {
   switch (type?.toUpperCase()) {
-    case "READING":
-      return <BookOpen size={size} className={className} />;
-    case "ACTIVITY":
-      return <CheckSquare size={size} className={className} />;
     case "QUIZ":
-      return <ClipboardList size={size} className={className} />;
+      return <ClipboardList size={size} />;
     case "ASSIGNMENT":
+      return <BookOpen size={size} />;
+    case "ACTIVITY":
+      return <CheckSquare size={size} />;
+    case "READING":
+      return <FileText size={size} />;
     default:
-      return <FileText size={size} className={className} />;
+      return <FileText size={size} />;
   }
 }
-
 export default function ClassworkDetailModal({
   selectedClasswork,
   detailLoadingId,
@@ -172,100 +173,76 @@ export default function ClassworkDetailModal({
           ) : selectedClasswork ? (
             <div className="flex flex-col gap-3 p-4">
               <div className="space-y-3">
-                <Card className="p-0 border-0 w-full shadow-none">
+                <Card className="p-0 border-0! w-full shadow-none">
                   <Card.Header className="flex flex-row justify-between">
-                    <Card.Title className="text-2xl font-bold flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-3">
-                        <ClassworkIcon
-                          type={selectedClasswork.classwork_type}
-                          size={28}
-                          className="shrink-0"
-                        />
-                        <span>{selectedClasswork.title}</span>
-                      </div>
-                    </Card.Title>
-                  </Card.Header>
+                    <div className="flex flex-col w-full gap-3 md:flex-row items-center md:justify-between">
+                      <Card.Title className="flex flex-row items-center gap-3 mb-0 text-3xl font-bold">
 
-                  <Card.Content className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge
-                        variant="solid"
-                        size="sm"
-                      >
-                        {selectedClasswork.is_published ? "Published" : "Draft"}
-                      </Badge>
-                      <Badge
-                        variant="secondary"
-                        size="sm"
-                      >
-                        {toTitleCase(selectedClasswork.classwork_type)}
-                      </Badge>
-                      {selectedClasswork.is_locked && (
-                        <Badge variant="outline" size="sm">
-                          Locked
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="pt-2 grid gap-3 text-sm sm:grid-cols-5">
-                      <div className="rounded! border-2 border-black bg-background p-2 px-3 rounded">
-                        <p className="font-semibold text-gray-600 text-xs">
-                          Due date
-                        </p>
-                        <p className="font-bold text-sm">
-                          {selectedClasswork.due_date
-                            ? new Date(
-                              selectedClasswork.due_date,
-                            ).toLocaleString()
-                            : "No due date"}
-                        </p>
-                      </div>
-                      <div className="rounded! border-2 border-black bg-background p-2 px-3 rounded">
-                        <p className="font-semibold text-gray-600 text-xs">
-                          Published date
-                        </p>
-                        <p className="font-bold text-sm">
-                          {selectedClasswork.publish_date || selectedClasswork.created_at
-                            ? new Date(
-                              (selectedClasswork.publish_date || selectedClasswork.created_at)!,
-                            ).toLocaleString()
-                            : selectedClasswork.is_published
-                              ? "Published"
-                              : "No published date"}
-                        </p>
-                      </div>
-                      <div className="flex flex-col rounded! border-2 border-black bg-background gap-1 p-2 px-3 rounded">
-                        <p className="font-semibold text-gray-600 text-xs">
-                          Category
-                        </p>
-                        {selectedClasswork.classwork_category && (
+                        <IconContainer variant="primary" size="xl" className="rounded!">
+                          <ClassworkTypeIcon type={selectedClasswork.classwork_type} size={48} />
+                        </IconContainer>
+
+                        <div className="flex flex-col gap-1">
+                          <div className="flex flex-row items-center gap-2">
+                            <span>{selectedClasswork.title}</span>
+                            <Badge variant="secondary" size="sm" className="h-fit ml-1">
+                              {toTitleCase(selectedClasswork.classwork_type)}
+                            </Badge>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            {selectedClasswork.due_date && (
+                              <div>
+                                <p className="font-normal text-sm">
+                                  Due on {new Date(selectedClasswork.due_date).toLocaleString()}
+                                </p>
+                              </div>
+                            )}
+
+                            {selectedClasswork.due_date && selectedClasswork.created_at && selectedClasswork.is_published && (
+                              <span className="font-normal text-sm text-muted-foreground">|</span>
+                            )}
+
+                            {selectedClasswork.created_at && selectedClasswork.is_published && (
+                              <div>
+                                <p className="font-normal text-sm">
+                                  Created on
+                                  <span className="ml-1">
+                                    {selectedClasswork.publish_date || selectedClasswork.created_at
+                                      ? formatDate(selectedClasswork.publish_date || selectedClasswork.created_at)
+                                      : selectedClasswork.is_published
+                                        ? "Published"
+                                        : "No published date"}
+                                  </span>
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                      </Card.Title>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {!isReadingType(selectedClasswork.classwork_type) && selectedClasswork.classwork_category && (
                           <Badge
-                            variant="solid"
-                            size="sm"
-                            className="w-fit font-normal"
+                            variant="outline"
+                            size="md"
+                            className="w-fit"
                           >
                             {toTitleCase(selectedClasswork.classwork_category)}
                           </Badge>
                         )}
+                        <Badge
+                          variant={selectedClasswork.is_published ? "solid" : "default"}
+                        >
+                          {selectedClasswork.is_published ? "Published" : "Draft"}
+                        </Badge>
                       </div>
-                      <div className="rounded! border-2 border-black bg-background p-2 px-3 rounded">
-                        <p className="font-semibold text-gray-600 text-xs">
-                          Points
-                        </p>
-                        <p className="font-bold text-sm">
-                          {selectedClasswork.total_points ?? "Not set"}
-                        </p>
-                      </div>
-                      <div className="rounded! border-2 border-black bg-background p-2 px-3 rounded">
-                        <p className="font-semibold text-gray-600 text-xs">
-                          Section
-                        </p>
-                        <p className="font-bold text-sm truncate">
-                          {selectedClasswork.section_name ||
-                            sectionName ||
-                            "Class"}
-                        </p>
-                      </div>
+
                     </div>
+                  </Card.Header>
+
+                  <Card.Content className="space-y-3">
+
                   </Card.Content>
                 </Card>
 
@@ -453,7 +430,6 @@ export default function ClassworkDetailModal({
         <Dialog.Footer className="mt-0">
           <Button
             size="sm"
-            autoIcon={false}
             variant="outline"
             onClick={onClose}
           >
@@ -465,10 +441,11 @@ export default function ClassworkDetailModal({
             onClick={() => selectedClasswork && navigate(`/teacher/classworks/${selectedClasswork.classwork_id}`)}
             disabled={!selectedClasswork}
           >
+            <ExternalLink />
             View Classwork
           </Button>
         </Dialog.Footer>
       </Dialog.Content>
-    </Dialog>
+    </Dialog >
   );
 }

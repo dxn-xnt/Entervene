@@ -21,6 +21,22 @@ from app.services.ai.tos_generation_session import ExamGeneration, RowMetrics, c
 PRIVATE = "PRIVATE_QUESTION_PROMPT_PASSAGE_CREDENTIAL_SENTINEL"
 
 
+def test_mc_option_discard_reason_and_missing_shape_cannot_echo_content(smoke, capsys):
+    from app.services.ai.provider_diagnostics import mc_option_discard_detail
+    detail = mc_option_discard_detail({"options": PRIVATE, PRIVATE: PRIVATE},
+        PRIVATE, item_index=1)
+    assert detail == {"item": 1, "reason": "unknown_validation", "option_count": None,
+                      "empty_option_count": None, "empty_option_indexes": []}
+    op = ExamGeneration(PRIVATE, Counter(MULTIPLE_CHOICE=1))
+    op.rows = [RowMetrics(mc_option_discards=[{
+        **detail, "repair_round": 1, "batch_offset": 0}])]
+    smoke.print_results([("Grammar", op.summary(), "OK")], [])
+    output = capsys.readouterr().out
+    assert "round=1 batch=0 item=1 reason=unknown_validation" in output
+    assert "options=None empty=None empty_indexes=[]" in output
+    assert PRIVATE not in output and PRIVATE not in json.dumps(op.summary())
+
+
 def test_recovery_counters_are_counts_only_in_summary_and_smoke(smoke, capsys):
     op = ExamGeneration(PRIVATE, Counter(MULTIPLE_CHOICE=2))
     op.rows = [RowMetrics(recovered_from_400=2, context_fields_filled=3,
