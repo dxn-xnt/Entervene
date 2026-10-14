@@ -119,7 +119,7 @@ export default function QuizAnalysisView({
         />
       </div>
 
-      <div className="w-full gap-2 px-4 pt-2">
+      <div className="-mx-4 w-[calc(100%+2rem)] gap-2 px-4 pt-2">
         <Tabs
           tabs={QUIZ_TABS}
           activeTab={activeTab}
@@ -130,8 +130,8 @@ export default function QuizAnalysisView({
             students: quizAnalysis.students.length,
           }}
         />
-        <div className="-mx-4 border-2 border-border border-t-0 px-4 pb-4">
-          <Card className="w-full border-2 border-black shadow-none mt-4">
+        <div className="-mx-4 px-4 pb-4">
+          <Card className="mt-4 w-full border-0 p-0 shadow-none">
             {activeTab === "overview" && (
               <div className="overflow-x-auto">
                 <Table className="w-full text-left text-sm border-collapse">
@@ -434,12 +434,12 @@ export default function QuizAnalysisView({
                   </div>
                 </div>
                 <div className="w-full">
-                  <Table className="w-full text-left text-sm border-separate border-spacing-0">
+                  <Table className="w-full text-left text-sm border-separate border-spacing-0" wrapperClassName="shadow-none">
                     <Table.Header>
                       <Table.Row className="border-b-2 border-black">
                         <Table.Head className="pb-3 font-head text-primary-foreground whitespace-nowrap pl-4 w-52 sm:w-60 shrink-0">Learner's Name</Table.Head>
                         <Table.Head className="pb-3 font-head text-primary-foreground min-w-[160px]"></Table.Head>
-                        <Table.Head className="pb-3 font-head text-primary-foreground text-center px-4 sticky right-[280px] z-20 w-[90px] min-w-[90px] max-w-[90px] bg-primary border-l-2 border-primary-foreground/30 shadow-[-6px_0_10px_-2px_rgba(0,0,0,0.2)]">Accuracy</Table.Head>
+                        <Table.Head className="pb-3 font-head text-primary-foreground text-center px-4 sticky right-[280px] z-20 w-[90px] min-w-[90px] max-w-[90px] bg-primary border-l-2 border-primary-foreground/30">Accuracy</Table.Head>
                         <Table.Head className="pb-3 font-head text-primary-foreground text-center px-4 sticky right-[190px] z-20 w-[90px] min-w-[90px] max-w-[90px] bg-primary">Points</Table.Head>
                         <Table.Head className="pb-3 font-head text-primary-foreground text-center px-4 sticky right-[110px] z-20 w-[80px] min-w-[80px] max-w-[80px] bg-primary">Score</Table.Head>
                         <Table.Head className="pb-3 font-head text-primary-foreground text-right pr-4 sticky right-0 z-20 w-[110px] min-w-[110px] max-w-[110px] bg-primary">Action</Table.Head>
@@ -495,7 +495,7 @@ export default function QuizAnalysisView({
                                 </span>
                               </div>
                             </Table.Cell>
-                            <Table.Cell className="py-4 px-4 text-center font-bold text-lg sticky right-[280px] z-10 w-[90px] min-w-[90px] max-w-[90px] bg-card group-hover:bg-muted/50 border-l-2 border-border shadow-[-6px_0_10px_-2px_rgba(0,0,0,0.12)]">
+                            <Table.Cell className="py-4 px-4 text-center font-bold text-lg sticky right-[280px] z-10 w-[90px] min-w-[90px] max-w-[90px] bg-card group-hover:bg-muted/50 border-l-2 border-border">
                               {student.score_percent ?? 0}<span className="text-xs font-normal text-gray-500">%</span>
                             </Table.Cell>
                             <Table.Cell className="py-4 px-4 text-center font-bold text-lg sticky right-[190px] z-10 w-[90px] min-w-[90px] max-w-[90px] bg-card group-hover:bg-muted/50">

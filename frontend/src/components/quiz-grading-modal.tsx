@@ -366,9 +366,6 @@ export default function QuizGradingModal({
               <h2 className="text-xl font-bold text-black">
                 Grade Quiz Answers: {detail?.student_name || "Student"}
               </h2>
-              <p className="text-xs font-normal">
-                Review responses, inspect auto-graded answers, and manually score subjective items.
-              </p>
             </div>
             <button
               type="button"
