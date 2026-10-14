@@ -32,6 +32,18 @@ from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 
 
+# Independent expectations from docs/GRADE_TRANSMUTATION_CONTRACT_4G.md.
+# The fixture has no grading template, so the existing fallback is 30/50/20.
+# Initial grade 90 is in 88.88-90.05 -> 91; do not call the production lookup
+# to derive the expected value for either the response or the stored audit.
+EXPECTED_COMPLETE_INITIAL_GRADE = float(
+    Decimal("90") * Decimal("0.30")
+    + Decimal("90") * Decimal("0.50")
+    + Decimal("90") * Decimal("0.20")
+)
+EXPECTED_COMPLETE_TERM_GRADE = 91.0
+
+
 @pytest.fixture
 def adviser_send_context():
     engine = create_engine(
@@ -211,9 +223,24 @@ def adviser_send_context():
     db.add_all([cw_ww, cw_pt, cw_qa])
     db.flush()
 
-    ca_ww = ClassworkAssignment(classwork_id=cw_ww.classwork_id, class_id=class_.class_id, assigned_by_staff_id=teacher.staff_id)
-    ca_pt = ClassworkAssignment(classwork_id=cw_pt.classwork_id, class_id=class_.class_id, assigned_by_staff_id=teacher.staff_id)
-    ca_qa = ClassworkAssignment(classwork_id=cw_qa.classwork_id, class_id=class_.class_id, assigned_by_staff_id=teacher.staff_id)
+    ca_ww = ClassworkAssignment(
+        classwork_id=cw_ww.classwork_id,
+        class_id=class_.class_id,
+        academic_period_id=period.academic_period_id,
+        assigned_by_staff_id=teacher.staff_id,
+    )
+    ca_pt = ClassworkAssignment(
+        classwork_id=cw_pt.classwork_id,
+        class_id=class_.class_id,
+        academic_period_id=period.academic_period_id,
+        assigned_by_staff_id=teacher.staff_id,
+    )
+    ca_qa = ClassworkAssignment(
+        classwork_id=cw_qa.classwork_id,
+        class_id=class_.class_id,
+        academic_period_id=period.academic_period_id,
+        assigned_by_staff_id=teacher.staff_id,
+    )
     db.add_all([ca_ww, ca_pt, ca_qa])
     db.flush()
 
@@ -281,7 +308,7 @@ def test_send_single_student_grade_and_audit_log(adviser_send_context):
     url = f"/api/v1/student-records/teacher/classes/{ctx['class'].class_id}/subjects/{ctx['subject'].subject_id}/students/{ctx['student1'].student_id}/send-to-adviser"
     payload = {
         "academic_period_id": ctx["period"].academic_period_id,
-        "expected_transmuted_grade": 95.0,
+        "expected_transmuted_grade": EXPECTED_COMPLETE_TERM_GRADE,
         "remarks": "Finalized Q1 grade for Juan",
     }
     resp = client.post(url, json=payload)
@@ -289,8 +316,9 @@ def test_send_single_student_grade_and_audit_log(adviser_send_context):
     data = resp.json()
     assert data["student_id"] == str(ctx["student1"].student_id)
     assert data["is_finalized"] is True
-    assert data["transmuted_grade"] == 95.0
-    assert data["final_period_grade"] == 95.0
+    assert data["initial_grade"] == EXPECTED_COMPLETE_INITIAL_GRADE
+    assert data["transmuted_grade"] == EXPECTED_COMPLETE_TERM_GRADE
+    assert data["final_period_grade"] == EXPECTED_COMPLETE_TERM_GRADE
     assert data["status"] == "newly_sent"
     assert data["finalized_by_name"] == "Maria Santos"
 
@@ -308,7 +336,8 @@ def test_send_single_student_grade_and_audit_log(adviser_send_context):
     )
     assert pg is not None
     assert pg.is_finalized is True
-    assert float(pg.final_period_grade) == 95.0
+    assert float(pg.initial_grade) == EXPECTED_COMPLETE_INITIAL_GRADE
+    assert float(pg.final_period_grade) == EXPECTED_COMPLETE_TERM_GRADE
     assert pg.finalized_by_staff_id == ctx["teacher"].staff_id
     assert pg.entered_by_staff_id == ctx["teacher"].staff_id
 
@@ -320,7 +349,8 @@ def test_send_single_student_grade_and_audit_log(adviser_send_context):
     )
     assert len(logs) == 1
     assert logs[0].submission_type == "single"
-    assert float(logs[0].final_period_grade) == 95.0
+    assert float(logs[0].initial_grade) == EXPECTED_COMPLETE_INITIAL_GRADE
+    assert float(logs[0].final_period_grade) == EXPECTED_COMPLETE_TERM_GRADE
     assert logs[0].submitted_by_staff_id == ctx["teacher"].staff_id
 
 
@@ -334,6 +364,8 @@ def test_resend_after_score_edit_idempotent(adviser_send_context):
     # Initial send
     resp1 = client.post(url, json={"academic_period_id": ctx["period"].academic_period_id})
     assert resp1.status_code == 200
+    assert resp1.json()["initial_grade"] == EXPECTED_COMPLETE_INITIAL_GRADE
+    assert resp1.json()["transmuted_grade"] == EXPECTED_COMPLETE_TERM_GRADE
 
     # Modify a classwork score for student 1 from 90 to 100
     sub = (
@@ -352,6 +384,15 @@ def test_resend_after_score_edit_idempotent(adviser_send_context):
     assert resp2.status_code == 200
     data2 = resp2.json()
     assert data2["status"] == "updated"
+    edited_initial_grade = float(
+        Decimal("100") * Decimal("0.30")
+        + Decimal("90") * Decimal("0.50")
+        + Decimal("90") * Decimal("0.20")
+    )
+    assert data2["initial_grade"] == edited_initial_grade
+    # Task 4G interval 92.42-93.59 -> 94, independently of the implementation.
+    assert data2["transmuted_grade"] == 94.0
+    assert data2["final_period_grade"] == 94.0
 
     # Verify StudentPeriodGrade is updated, NOT duplicated
     pg_count = (
@@ -390,7 +431,10 @@ def test_completeness_warning_allows_send_with_incomplete_components(adviser_sen
     assert "performance_task" in data["incomplete_components"]
     assert "quarterly_assessment" in data["incomplete_components"]
     assert "written_work" not in data["incomplete_components"]
-    assert data["transmuted_grade"] is not None
+    assert data["initial_grade"] == float(Decimal("80") * Decimal("0.30"))
+    # Task 4G interval 23.35-28.00 -> 65; missing components still warn.
+    assert data["transmuted_grade"] == 65.0
+    assert data["final_period_grade"] == 65.0
 
 
 def test_bulk_send_with_incomplete_components_sets_warning_count(adviser_send_context):
@@ -412,7 +456,7 @@ def test_recompute_vs_display_conflict_check(adviser_send_context):
     ctx = adviser_send_context
     client = _make_client(ctx["db"], ctx["user"])
 
-    # Student 1 computed grade is 93, but frontend passes expected 85
+    # Student 1 has Initial Grade 90 -> Term Grade 91, but the UI passes 85.
     url = f"/api/v1/student-records/teacher/classes/{ctx['class'].class_id}/subjects/{ctx['subject'].subject_id}/students/{ctx['student1'].student_id}/send-to-adviser"
     resp = client.post(
         url,
@@ -532,7 +576,7 @@ def test_grade_submission_log_set_null_on_period_grade_deletion(adviser_send_con
     )
     assert log is not None
     assert log.student_period_grade_id is None
-    assert float(log.final_period_grade) == 95.0
+    assert float(log.final_period_grade) == EXPECTED_COMPLETE_TERM_GRADE
 
 
 def test_send_single_student_rejected_outside_timing_window(adviser_send_context):
