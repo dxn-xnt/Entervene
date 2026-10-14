@@ -13,6 +13,7 @@ import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
 import IconContainer from "@/components/icon-container";
+import { StudentDialogCloseButton } from "@/components/student/student-dialog-close-button";
 import AttachmentDisplay from "@/components/attachment-display";
 import SubmissionForm from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
@@ -165,10 +166,14 @@ export default function StudentClassworkDetailModal({
             <Dialog.Header
               position="fixed"
               className="bg-primary text-primary-foreground"
+              asChild
             >
-              <h2 className="text-xl font-bold">
-                {selectedClasswork?.title || "Classwork"}
-              </h2>
+              <div className="flex w-full items-center justify-between gap-3">
+                <h2 className="min-w-0 truncate text-xl font-bold">
+                  {selectedClasswork?.title || "Classwork"}
+                </h2>
+                <StudentDialogCloseButton onClick={onClose} />
+              </div>
             </Dialog.Header>
 
             {/* Modal body */}
@@ -238,26 +243,13 @@ export default function StudentClassworkDetailModal({
                     </div>
                   </Card>
 
-                  {/* Description + instructions */}
-                  {(selectedClasswork.description ||
-                    selectedClasswork.instructions) && (
+                  {/* Instructions */}
+                  {selectedClasswork.instructions && (
                     <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
-                      {selectedClasswork.description && (
-                        <div>
-                          <h4 className="font-bold">Description</h4>
-                          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
-                            {selectedClasswork.description}
-                          </p>
-                        </div>
-                      )}
-                      {selectedClasswork.instructions && (
-                        <div className="mt-4">
-                          <h4 className="font-bold">Instructions</h4>
-                          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
-                            {selectedClasswork.instructions}
-                          </p>
-                        </div>
-                      )}
+                      <h4 className="font-bold">Instructions</h4>
+                      <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
+                        {selectedClasswork.instructions}
+                      </p>
                     </Card>
                   )}
 
