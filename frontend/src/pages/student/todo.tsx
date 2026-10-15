@@ -151,9 +151,6 @@ export default function ToDo() {
                       )}
 
                       <section className="flex flex-col gap-4">
-                        <h3 className="text-xl md:text-3xl font-semibold">
-                          Pending Tasks
-                        </h3>
                         {regularUpcomingItems.length === 0 &&
                         interventionItems.length === 0 ? (
                           <EmptyStateCard
@@ -181,7 +178,6 @@ export default function ToDo() {
 
                   {activeTab === "pastdue" && (
                     <section className="flex flex-col gap-4">
-                      <h3 className="text-xl md:text-3xl font-semibold">Past Due</h3>
                       {pastDueItems.length === 0 ? (
                         <EmptyStateCard
                           title="No past due items!"
@@ -205,7 +201,6 @@ export default function ToDo() {
 
                   {activeTab === "completed" && (
                     <section className="flex flex-col gap-4">
-                      <h3 className="text-xl md:text-3xl font-semibold">Completed</h3>
                       {completedItems.length === 0 ? (
                         <EmptyStateCard
                           title="No completed tasks yet."
