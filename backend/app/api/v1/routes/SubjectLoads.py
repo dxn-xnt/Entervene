@@ -9,6 +9,7 @@ from app.db.Session import get_db
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
@@ -36,6 +37,7 @@ from sqlalchemy import text
 from app.services.academic.ConflictDetectorService import ConflictDetectorService
 from app.services.academic.AutoSchedulerService import AutoSchedulerService
 from app.services.classes.ClassQueryService import class_pathway_code
+from app.services.pathways.PathwayScopeService import resolve_pathway_scope
 from app.services.academic.SubstitutionService import SubstitutionService
 
 router = APIRouter()
@@ -273,7 +275,11 @@ def get_subject_load_studio_data(
     selected_period_id = selected_period.academic_period_id if selected_period else 1
 
     levels = db.query(AcademicLevel).order_by(AcademicLevel.grade_level).all()
-    classes = db.query(Class).filter(Class.class_status == "active").all()
+    classes = db.query(Class).filter(
+        Class.class_status == "active",
+        Class.academic_year_id == selected_period.academic_year_id,
+    ).all() if selected_period else []
+    pathway_by_id = {pathway.id: pathway for pathway in db.query(AcademicPathway).all()}
     subjects = db.query(Subject).filter(Subject.status == "active").all()
     teachers = (
         db.query(AcademicStaff)
@@ -288,12 +294,6 @@ def get_subject_load_studio_data(
         )
         .all()
     )
-
-    try:
-        db.execute(text("UPDATE subject_load SET status = 'draft', is_locked = FALSE, published_at = NULL, published_by = NULL WHERE staff_id IS NULL OR staff_id = '';"))
-        db.commit()
-    except Exception:
-        db.rollback()
 
     period_deps = SubjectLoadDependencyService.get_batched_period_dependencies(db, selected_period_id)
     all_period_loads = db.query(SubjectLoad).filter(SubjectLoad.academic_period_id == selected_period_id).all()
@@ -354,6 +354,10 @@ def get_subject_load_studio_data(
                 "academic_level_id": c.academic_level_id,
                 "academic_year_id": c.academic_year_id,
                 "pathway": class_pathway_code(c),
+                "pathway_id": c.pathway_id,
+                "pathway_name": pathway_by_id[c.pathway_id].name if c.pathway_id in pathway_by_id else None,
+                "pathway_is_enabled": pathway_by_id[c.pathway_id].is_enabled if c.pathway_id in pathway_by_id else None,
+                "requires_pathway": resolve_pathway_scope(db, c.academic_year_id, c.academic_level_id),
                 "paired_class_id": getattr(c, "paired_class_id", None),
                 "period_template_group": getattr(c, "period_template_group", None),
             }
@@ -366,6 +370,7 @@ def get_subject_load_studio_data(
                 "subject_codename": s.subject_codename,
                 "academic_level_id": s.academic_level_id,
                 "subject_group": s.subject_group or "General",
+                "is_core": bool(getattr(s, "is_core", False)),
                 "is_math_or_science": bool(
                     getattr(s, "is_math_or_science", False)
                     or any(
@@ -481,22 +486,30 @@ def update_period_templates(
                 new_end = item.end_time
                 grp = db_slot.template_group
 
-                # Automatically cascade time updates to matching subject loads (including locked/published schedules) by slot_id or time window
+                # Class-slot edits cascade into loads. Never change a published
+                # section through the global template editor.
                 if db_slot.slot_type == "CLASS" and (old_start != new_start or old_end != new_end):
                     target_classes = db.query(Class).filter(
                         (Class.period_template_group == grp) | ((Class.period_template_group == None) & (grp == "JHS_45MIN"))
-                    ).all()
+                    ).order_by(Class.class_id).with_for_update().all()
                     target_class_ids = [c.class_id for c in target_classes]
 
                     if target_class_ids:
-                        db.query(SubjectLoad).filter(
+                        affected = db.query(SubjectLoad).filter(
                             (SubjectLoad.slot_id == db_slot.slot_id) | (
                                 (SubjectLoad.slot_id == None) &
                                 (SubjectLoad.class_id.in_(target_class_ids)) &
                                 (SubjectLoad.start_time == old_start) &
                                 (SubjectLoad.end_time == old_end)
                             ),
-                        ).update(
+                        )
+                        if affected.filter(
+                            SubjectLoad.is_active_version.is_(True),
+                            SubjectLoad.status.in_(["published", "active"]),
+                        ).first():
+                            db.rollback()
+                            raise HTTPException(status_code=409, detail="This class period belongs to a locked published section. Unlock and revise affected sections before changing its time.")
+                        affected.filter(SubjectLoad.status == "draft").update(
                             {
                                 SubjectLoad.start_time: new_start,
                                 SubjectLoad.end_time: new_end,
@@ -537,9 +550,16 @@ def update_class_template_group(
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    cls = db.query(Class).filter(Class.class_id == class_id).first()
+    cls = db.query(Class).filter(Class.class_id == class_id).with_for_update().first()
     if not cls:
         raise HTTPException(status_code=404, detail="Class not found")
+
+    if cls.period_template_group != payload.template_group and db.query(SubjectLoad).filter(
+        SubjectLoad.class_id == class_id,
+        SubjectLoad.is_active_version.is_(True),
+        SubjectLoad.status.in_(["published", "active"]),
+    ).first():
+        raise HTTPException(status_code=409, detail="Section is locked. Unlock Section before changing its bell schedule template.")
 
     cls.period_template_group = payload.template_group
     db.commit()
@@ -598,10 +618,44 @@ def auto_schedule_subject_loads(
     db: Session = Depends(get_db),
 ):
     period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == payload.academic_period_id).first()
-    if mode == "teacher_swap":
-        auto_scheduled_loads = AutoSchedulerService.auto_schedule_paired_swap(db=db, loads=payload.loads, academic_period=period)
+    class_ids = {item.class_id for item in payload.loads}
+    published = db.query(SubjectLoad).filter(
+        SubjectLoad.class_id.in_(class_ids),
+        SubjectLoad.academic_period_id == payload.academic_period_id,
+        SubjectLoad.is_active_version.is_(True),
+        SubjectLoad.status.in_(["published", "active"]),
+    ).all() if class_ids else []
+    draft_class_ids = {row[0] for row in db.query(SubjectLoad.class_id).filter(
+        SubjectLoad.class_id.in_(class_ids),
+        SubjectLoad.academic_period_id == payload.academic_period_id,
+        SubjectLoad.status == "draft",
+    ).distinct().all()} if class_ids else set()
+    locked_class_ids = {load.class_id for load in published} - draft_class_ids
+    protected_loads = [SubjectLoadItem(
+        subject_load_id=load.subject_load_id,
+        class_id=load.class_id,
+        subject_id=load.subject_id,
+        staff_id=load.staff_id,
+        academic_period_id=load.academic_period_id,
+        slot_id=load.slot_id,
+        start_time=load.start_time,
+        end_time=load.end_time,
+        days_of_week=load.days_of_week or [],
+        status=load.status,
+        is_locked=True,
+        section_revision=load.section_revision or 1,
+    ) for load in published if load.class_id in locked_class_ids]
+    scheduling_input = [item.model_copy(deep=True) for item in payload.loads if item.class_id not in locked_class_ids]
+    scheduling_input.extend(item.model_copy(deep=True) for item in protected_loads)
+    if not any(item.class_id not in locked_class_ids for item in scheduling_input):
+        auto_scheduled_loads = protected_loads
+    elif mode == "teacher_swap":
+        auto_scheduled_loads = AutoSchedulerService.auto_schedule_paired_swap(db=db, loads=scheduling_input, academic_period=period)
     else:
-        auto_scheduled_loads = AutoSchedulerService.auto_schedule_loads(db=db, loads=payload.loads, academic_period=period)
+        auto_scheduled_loads = AutoSchedulerService.auto_schedule_loads(db=db, loads=scheduling_input, academic_period=period)
+
+    auto_scheduled_loads = [item for item in auto_scheduled_loads if item.class_id not in locked_class_ids]
+    auto_scheduled_loads.extend(protected_loads)
 
     validation_res = ConflictDetectorService.validate_loads(db=db, loads=auto_scheduled_loads, academic_period=period)
     
@@ -787,6 +841,57 @@ def batch_save_subject_loads(
     else:
         target_class_ids = set(affected_class_ids)
 
+    # Lock the section rows before deciding whether a published revision may be
+    # changed. The request's status/is_locked fields are never authoritative.
+    for cid in sorted(target_class_ids):
+        db.query(Class).filter(Class.class_id == cid).with_for_update().first()
+        published = db.query(SubjectLoad).filter(
+            SubjectLoad.class_id == cid,
+            SubjectLoad.academic_period_id == payload.academic_period_id,
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(["published", "active"]),
+        ).all()
+        if not published:
+            continue
+        drafts = db.query(SubjectLoad).filter(
+            SubjectLoad.class_id == cid,
+            SubjectLoad.academic_period_id == payload.academic_period_id,
+            SubjectLoad.status == "draft",
+        ).all()
+        current_revision = max(load.section_revision or 1 for load in published)
+        if drafts and any(d.base_revision != current_revision for d in drafts):
+            raise HTTPException(status_code=409, detail=f"Section revision conflict for class {cid}: discard the stale draft and unlock again.")
+        items = [item for item in payload.loads if item.class_id == cid]
+        if not items and scope != "section":
+            target_class_ids.remove(cid)
+            continue
+        if drafts:
+            published_ids = {load.subject_load_id for load in published}
+            if any(item.subject_load_id in published_ids for item in items):
+                raise HTTPException(status_code=409, detail=f"Section {cid} is locked: edit its unlocked draft, not published rows.")
+            if any(item.base_revision is not None and item.base_revision != current_revision for item in items):
+                raise HTTPException(status_code=409, detail=f"Section revision conflict for class {cid}: reload the current draft.")
+            continue
+
+        if payload.base_revision is not None and payload.base_revision != current_revision:
+            raise HTTPException(status_code=409, detail=f"Section revision conflict for class {cid}: reload the published section.")
+        if any(item.section_revision != current_revision for item in items if item.status in ("published", "active")):
+            raise HTTPException(status_code=409, detail=f"Section revision conflict for class {cid}: reload the published section.")
+        if any(item.status not in ("published", "active") for item in items):
+            raise HTTPException(status_code=409, detail=f"Section {cid} is locked. Unlock Section before saving a draft.")
+
+        def schedule_signature(load):
+            return (
+                load.subject_id, load.staff_id, load.start_time, load.end_time,
+                tuple(sorted(load.days_of_week or [])), load.slot_id,
+            )
+
+        # An unchanged published section in a global request is a no-op.
+        # Any changed or added item requires the explicit unlock workflow.
+        if sorted(map(schedule_signature, items), key=str) != sorted(map(schedule_signature, published), key=str):
+            raise HTTPException(status_code=409, detail=f"Section {cid} is locked. Unlock Section before editing schedules or teacher assignments.")
+        target_class_ids.remove(cid)
+
     # 1. Validation across loads
     # Fetch all active version DB loads for full-school merged validation
     db_all_period_loads = (
@@ -866,6 +971,9 @@ def batch_save_subject_loads(
         # ACTION == DRAFT: Save only working draft loads for target sections
         for cid in target_class_ids:
             cls_items = [item for item in payload.loads if item.class_id == cid]
+            if not cls_items:
+                continue
+            db.query(Class).filter(Class.class_id == cid).with_for_update().first()
             # Fetch existing draft rows for this class
             existing_drafts = (
                 db.query(SubjectLoad)
@@ -876,6 +984,33 @@ def batch_save_subject_loads(
                 )
                 .all()
             )
+            if not existing_drafts and all(
+                item.status in ("published", "active") and item.is_locked for item in cls_items
+            ):
+                continue
+            published_loads = (
+                db.query(SubjectLoad)
+                .filter(
+                    SubjectLoad.class_id == cid,
+                    SubjectLoad.academic_period_id == payload.academic_period_id,
+                    SubjectLoad.is_active_version.is_(True),
+                    SubjectLoad.status.in_(["published", "active"]),
+                )
+                .all()
+            )
+            current_base = max((load.section_revision or 1 for load in published_loads), default=0)
+            if published_loads and any(draft.base_revision != current_base for draft in existing_drafts):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Section revision conflict for class {cid}: the saved draft is older than published Revision {current_base}. Discard the draft and unlock the section again.",
+                )
+            if published_loads and any(
+                item.base_revision is not None and item.base_revision != current_base for item in cls_items
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Section revision conflict for class {cid}: your edit is based on an older revision than published Revision {current_base}. Reload the section before saving.",
+                )
             draft_map = {d.subject_load_id: d for d in existing_drafts}
             incoming_ids = {item.subject_load_id for item in cls_items if item.subject_load_id is not None}
 
@@ -906,8 +1041,8 @@ def batch_save_subject_loads(
                 d_load.is_active_version = False
                 d_load.is_locked = False
                 d_load.last_modified_by = user_email
-                d_load.section_revision = item.section_revision or 2
-                d_load.base_revision = item.base_revision or 1
+                d_load.section_revision = current_base + 1 if published_loads else (item.section_revision or 1)
+                d_load.base_revision = current_base if published_loads else item.base_revision
                 d_load.continued_from_load_id = item.continued_from_load_id
                 saved_count += 1
 
@@ -938,7 +1073,7 @@ def batch_save_subject_loads(
             if payload.base_revision is not None and current_pub_loads and payload.base_revision != current_base:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Section revision conflict for '{cls_obj.section_name if cls_obj else cid}': Another administrator published Revision {current_base} while you were editing. Please reload the section before publishing.",
+                    detail=f"Section revision conflict for '{cls_obj.section_name if cls_obj else cid}': your edit is based on Revision {payload.base_revision}, but the published section is Revision {current_base}. Reload the section before publishing.",
                 )
 
             cls_items = [item for item in payload.loads if item.class_id == cid]

@@ -4,7 +4,6 @@ import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
-import type { TeacherAdvisoryClassDetailResponse } from "@/types/adminClasses";
 
 export interface SubjectClassHeaderProps {
   detail: {

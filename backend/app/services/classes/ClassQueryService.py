@@ -303,7 +303,10 @@ def list_classes_data(db: Session, status: str) -> dict:
                 "pathway_id": class_.pathway_id,
                 "pathway": _pathway_option(pathway),
                 "academic_year": _academic_year_option(academic_year),
-                "academic_level": _academic_level_option(academic_level),
+                "academic_level": _academic_level_option(
+                    academic_level,
+                    requires_pathway=resolve_pathway_scope(db, academic_year.academic_year_id, academic_level.academic_level_id),
+                ),
                 "adviser": _adviser_option(adviser, adviser_avatar),
                 "student_count": count,
                 "subject_count": 0,
@@ -740,7 +743,15 @@ def get_class_transfer_options_data(db: Session, class_id: int) -> dict:
             "level_name": academic_level.level_name,
         },
         "available_sections": [
-            {"class_id": section.class_id, "section_name": section.section_name}
+            {
+                "class_id": section.class_id,
+                "section_name": section.section_name,
+                "grade_level": academic_level.grade_level,
+                "pathway_id": section.pathway_id,
+                "pathway_name": section.pathway.name if section.pathway else None,
+                "pathway_is_enabled": section.pathway.is_enabled if section.pathway else None,
+                "requires_pathway": resolve_pathway_scope(db, section.academic_year_id, section.academic_level_id),
+            }
             for section in sections
         ],
     }
@@ -779,7 +790,10 @@ def get_class_detail_data(db: Session, class_id: int) -> dict:
         "pathway": _pathway_option(class_.pathway),
         "created_at": class_.created_at,
         "academic_year": _academic_year_option(academic_year),
-        "academic_level": _academic_level_option(academic_level),
+        "academic_level": _academic_level_option(
+            academic_level,
+            requires_pathway=resolve_pathway_scope(db, academic_year.academic_year_id, academic_level.academic_level_id),
+        ),
         "adviser": _adviser_option(adviser, adviser_avatar),
         "statistics": {
             "student_count": int(student_count or 0),

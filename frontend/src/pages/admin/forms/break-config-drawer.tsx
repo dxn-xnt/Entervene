@@ -19,6 +19,7 @@ import type { SubjectLoadStudioData } from "@/lib/api";
 import { useSettings } from "@/context/SettingsContext";
 import { validatePeriodTimeRange } from "@/lib/time-utils";
 import { cn } from "@/lib/utils";
+import { classPathwayLabel } from "@/lib/class-pathway";
 import { Clock, Save, Coffee, Utensils, Sunrise, Plus, Trash2, FolderPlus } from "lucide-react";
 
 export type PeriodTemplateSlotItem = {
@@ -70,12 +71,26 @@ function formatGroupName(grp: string): string {
     case "JHS_45MIN":
       return "Junior High (Grades 7–10)";
     case "SHS_CAMPOS_ZARA":
-      return "SHS Engineering / Medical (Campos & Zara)";
+      return "SHS Template A";
     case "SHS_DELMUNDO_REYES":
-      return "SHS General (Del Mundo & Reyes)";
+      return "SHS Template B";
     default:
       return grp.replace(/_/g, " ");
   }
+}
+
+function sectionLabel(
+  cls: SubjectLoadStudioData["classes"][number],
+  levels: SubjectLoadStudioData["academic_levels"] = []
+): string {
+  const pathway = classPathwayLabel({
+    gradeLevel: levels.find((level) => level.academic_level_id === cls.academic_level_id)?.grade_level ?? 0,
+    requiresPathway: cls.requires_pathway,
+    pathwayId: cls.pathway_id,
+    pathwayName: cls.pathway_name,
+    pathwayEnabled: cls.pathway_is_enabled,
+  });
+  return pathway ? `${cls.section_name} — ${pathway}` : cls.section_name;
 }
 
 export default function BreakConfigDrawer({
@@ -403,7 +418,7 @@ export default function BreakConfigDrawer({
                         size="sm"
                         className="font-bold bg-background text-[11px]"
                       >
-                        {c.section_name}
+                        {sectionLabel(c, studioData?.academic_levels)}
                       </Badge>
                     ))
                   )}
@@ -426,7 +441,7 @@ export default function BreakConfigDrawer({
                       <Select.Content>
                         {otherClasses.map((c) => (
                           <Select.Item key={c.class_id} value={String(c.class_id)}>
-                            {c.section_name} ({c.period_template_group ? formatGroupName(c.period_template_group) : "Unassigned"})
+                            {sectionLabel(c, studioData?.academic_levels)} ({c.period_template_group ? formatGroupName(c.period_template_group) : "Unassigned"})
                           </Select.Item>
                         ))}
                       </Select.Content>

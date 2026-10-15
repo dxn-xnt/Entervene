@@ -13,6 +13,7 @@ import {
 import { ArchiveIcon, EllipsisIcon, PenIcon } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { classPathwayLabel } from "@/lib/class-pathway";
 
 export default function ClassCard({ item, onEdit, onArchive }: {
   item: ClassListItem;
@@ -25,6 +26,13 @@ export default function ClassCard({ item, onEdit, onArchive }: {
       .filter(Boolean)
       .join(" ")
     : "No adviser assigned";
+  const pathwayLabel = classPathwayLabel({
+    gradeLevel: item.academic_level.grade_level,
+    requiresPathway: item.academic_level.requires_pathway,
+    pathwayId: item.pathway_id,
+    pathwayName: item.pathway?.name,
+    pathwayEnabled: item.pathway?.is_enabled,
+  });
 
   return (
     <Card className={`group relative flex min-w-[340px] shrink-0 flex-col justify-between shadow-none p-3 hover:-translate-y-1 ${isArchived ? "opacity-60" : ""}`}>
@@ -36,6 +44,7 @@ export default function ClassCard({ item, onEdit, onArchive }: {
           aria-label={`View ${item.section_name}`}
         >
           <h3 className="text-2xl font-bold leading-tight">{item.section_name}</h3>
+          {pathwayLabel && <p className="mt-1 text-xs font-semibold text-muted-foreground">Academic Pathway: {pathwayLabel}</p>}
         </Link>
         <div className="flex items-center gap-2 shrink-0">
           <Badge variant={isArchived ? "default" : "surface"}>

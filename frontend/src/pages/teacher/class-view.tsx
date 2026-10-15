@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
   ArrowDownAZ,
@@ -54,7 +54,6 @@ import type {
   ClassworkKind,
   ClassworkTracking,
   SortMode,
-  TabId,
   TeacherClassLoad,
   TeacherClasswork,
 } from "@/types/classwork";
@@ -352,7 +351,6 @@ function LessonsTab({
   );
   const [lessons, setLessons] = useState<LessonItem[]>([]);
   const [, setCompetencies] = useState<CompetencyItem[]>([]);
-  const [isLoadingLessons, setIsLoadingLessons] = useState(false);
   const [lessonsError, setLessonsError] = useState("");
   const [expandedLessonId, setExpandedLessonId] = useState<number | null>(null);
   const [linkedClassworks, setLinkedClassworks] = useState<
@@ -430,11 +428,9 @@ function LessonsTab({
     if (!selectedSubjectId || !detail.class_id) {
       setLessons([]);
       setCompetencies([]);
-      setIsLoadingLessons(false);
       return;
     }
 
-    setIsLoadingLessons(true);
     setLessonsError("");
 
     try {
@@ -486,8 +482,6 @@ function LessonsTab({
       );
       setLessons([]);
       setCompetencies([]);
-    } finally {
-      setIsLoadingLessons(false);
     }
   };
 
@@ -2120,27 +2114,6 @@ function StudentRow({
         onSuccess={loadHistory}
       />
     </>
-  );
-}
-
-function StatePanel({
-  message,
-  children,
-}: {
-  message: string;
-  children?: ReactNode;
-}) {
-  return (
-    <main className="flex flex-1 flex-col gap-5 px-4 py-4 md:px-6 md:py-5">
-      <Card className="block w-full border-black">
-        <Card.Content className="p-8 text-center text-sm text-black/60">
-          <p className="font-bold text-black">{message}</p>
-          {children && (
-            <div className="mt-3 flex justify-center">{children}</div>
-          )}
-        </Card.Content>
-      </Card>
-    </main>
   );
 }
 

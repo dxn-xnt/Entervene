@@ -66,6 +66,8 @@ import { useSettings } from "@/context/SettingsContext";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { timeStringToMinutes, validatePeriodTimeRange } from "@/lib/time-utils";
 import { cn } from "@/lib/utils";
+import { classPathwayLabel } from "@/lib/class-pathway";
+import { getLockedSectionIds } from "@/pages/admin/subject-load-lock";
 
 function stringToTimeValue(str?: string | null, fallbackHour = 8): TimeValue {
   if (!str) return { hour: fallbackHour, minute: 0, period: "AM" };
@@ -100,9 +102,9 @@ function formatTime12h(str?: string | null): string {
 }
 
 function isSubjectOfferedForClass(
-  sub: { subject_id: number; academic_level_id: number },
-  cls: { academic_level_id: number; pathway?: string | null },
-  offerings: Array<{ subject_id: number; academic_level_id: number; pathway?: string | null }>
+  sub: { subject_id: number; academic_level_id: number; is_core?: boolean },
+  cls: { academic_level_id: number; pathway?: string | null; pathway_id?: number | null },
+  offerings: Array<{ subject_id: number; academic_level_id: number; pathway?: string | null; pathway_ids?: number[] }>
 ): boolean {
   if (sub.academic_level_id !== cls.academic_level_id) return false;
   if (!offerings || offerings.length === 0) return true;
@@ -111,7 +113,24 @@ function isSubjectOfferedForClass(
     if (so.subject_id !== sub.subject_id || so.academic_level_id !== cls.academic_level_id) {
       return false;
     }
+    if (sub.is_core) return true;
+    if (so.pathway_ids?.length && cls.pathway_id != null) {
+      return so.pathway_ids.includes(cls.pathway_id);
+    }
     return isOfferingCompatibleWithClass(so.pathway, cls.pathway);
+  });
+}
+
+function studioClassPathwayLabel(
+  cls: SubjectLoadStudioData["classes"][number],
+  levels: Array<{ academic_level_id: number; grade_level?: number }> = []
+): string | null {
+  return classPathwayLabel({
+    gradeLevel: levels.find((level) => level.academic_level_id === cls.academic_level_id)?.grade_level ?? 0,
+    requiresPathway: cls.requires_pathway,
+    pathwayId: cls.pathway_id,
+    pathwayName: cls.pathway_name,
+    pathwayEnabled: cls.pathway_is_enabled,
   });
 }
 
@@ -133,7 +152,7 @@ const TIMETABLE_DAYS = [
 
 function GradeGroupCarousel({
   classes = [],
-  academicLevels: _academicLevels = [],
+  academicLevels = [],
   viewMode = "grid",
   onViewModeChange,
   renderHeaderActions,
@@ -182,6 +201,7 @@ function GradeGroupCarousel({
 
   const activeClass = classes[activeIdx] || classes[0];
   const currentSectionName = activeClass?.section_name || (classes.length > 0 ? `Section ${activeIdx + 1}` : "No Sections");
+  const currentPathwayLabel = activeClass ? studioClassPathwayLabel(activeClass, academicLevels) : null;
 
   // Distinct grade levels in the current classes list in order of appearance
   const distinctGradeLevelIds = useMemo(() => {
@@ -272,6 +292,7 @@ function GradeGroupCarousel({
               <span className="text-left">
                 {currentSectionName}
               </span>
+              {currentPathwayLabel && <span className="max-w-64 text-left text-xs font-medium whitespace-normal">{currentPathwayLabel}</span>}
             </div>
           </Badge>
           {!hideSectionNav && (
@@ -356,6 +377,8 @@ export default function AdminSubjectLoadStudio() {
   const [discardTargetClass, setDiscardTargetClass] = useState<{ classId: number; sectionName: string } | null>(null);
   const [publishTargetClass, setPublishTargetClass] = useState<{ classId: number; sectionName: string; isRevisionUpdate?: boolean } | null>(null);
   const [teacherModalTarget, setTeacherModalTarget] = useState<TeacherModalTarget | null>(null);
+  const lockedSectionIds = useMemo(() => getLockedSectionIds(studioData), [studioData]);
+  const isSectionLocked = (classId: number) => lockedSectionIds.has(classId);
 
   // Fetch period templates directly on mount
   useEffect(() => {
@@ -465,9 +488,9 @@ export default function AdminSubjectLoadStudio() {
 
 
   // Load studio data
-  const loadStudio = useCallback(async (periodId?: number) => {
+  const loadStudio = useCallback(async (periodId?: number, preserveNotice = false) => {
     setIsLoading(true);
-    setNotice(null);
+    if (!preserveNotice) setNotice(null);
     try {
       const data = await getSubjectLoadStudioData(periodId);
       setStudioData(data);
@@ -505,6 +528,7 @@ export default function AdminSubjectLoadStudio() {
                 subject_id: m.subject_id,
                 staff_id: m.staff_id || null,
                 academic_period_id: periodIdToUse,
+                slot_id: m.slot_id,
                 start_time: m.start_time || null,
                 end_time: m.end_time || null,
                 days_of_week: m.days_of_week || [],
@@ -512,7 +536,9 @@ export default function AdminSubjectLoadStudio() {
                 is_locked: Boolean(m.is_locked || m.status === "published"),
                 logical_load_id: m.logical_load_id,
                 section_revision: m.section_revision,
-                base_revision: m.base_revision,
+                base_revision: m.status === "published" || m.status === "active"
+                  ? m.section_revision
+                  : m.base_revision,
                 has_live_data: m.has_live_data,
                 dependencies: m.dependencies,
               });
@@ -578,6 +604,7 @@ export default function AdminSubjectLoadStudio() {
 
   // Load update handlers
   const handleTeacherChange = (classId: number, subjectId: number, staffId: string | null) => {
+    if (isSectionLocked(classId)) return;
     const updated = loads.map((item) =>
       item.class_id === classId && item.subject_id === subjectId
         ? { ...item, staff_id: staffId === "none" ? null : staffId, status: "draft", is_locked: false }
@@ -594,6 +621,7 @@ export default function AdminSubjectLoadStudio() {
   ) => {
     const item = loads.find(i => i._key === slotKey);
     if (!item) return;
+    if (isSectionLocked(item.class_id)) return;
 
     const start = field === "start_time" ? val : (item.start_time || "00:00");
     const end = field === "end_time" ? val : (item.end_time || "00:00");
@@ -631,6 +659,7 @@ export default function AdminSubjectLoadStudio() {
   };
 
   const handleToggleDay = (slotKey: string, dayKey: string) => {
+    if (loads.some((item) => item._key === slotKey && isSectionLocked(item.class_id))) return;
     const updated = loads.map((item) => {
       if (item._key === slotKey) {
         const currentDays = item.days_of_week || [];
@@ -646,6 +675,7 @@ export default function AdminSubjectLoadStudio() {
   };
 
   const handleAddSlot = (classId: number, subjectId: number) => {
+    if (isSectionLocked(classId)) return;
     const existingSlots = loads.filter(
       (l) => l.class_id === classId && l.subject_id === subjectId
     );
@@ -676,6 +706,7 @@ export default function AdminSubjectLoadStudio() {
   };
 
   const handleRemoveSlot = (slotKey: string) => {
+    if (loads.some((item) => item._key === slotKey && isSectionLocked(item.class_id))) return;
     const updated = loads.filter((l) => l._key !== slotKey);
     setLoads(updated);
     void runValidation(updated);
@@ -689,11 +720,7 @@ export default function AdminSubjectLoadStudio() {
     try {
       let currentLoads = [...loads];
 
-      const isClassLocked = (classId: number) => {
-        const cLoads = currentLoads.filter((l) => l.class_id === classId);
-        if (cLoads.length === 0) return false;
-        return cLoads.some((l) => Boolean(l.is_locked) || l.status === "published");
-      };
+      const isClassLocked = isSectionLocked;
 
       let targetClassIds: number[] = [];
       if (targetClassId) {
@@ -761,7 +788,7 @@ export default function AdminSubjectLoadStudio() {
 
       const mergedLoads = currentLoads.map((item) => {
         // Preserve locked sections / loads untouched
-        if (lockedClassIds.has(item.class_id) || item.is_locked || item.status === "published") {
+        if (lockedClassIds.has(item.class_id) || isSectionLocked(item.class_id)) {
           return item;
         }
 
@@ -845,12 +872,12 @@ export default function AdminSubjectLoadStudio() {
       if (selectedGradeId !== "all") {
         const levelId = parseInt(selectedGradeId);
         const classIds = new Set(studioData?.classes.filter(c => c.academic_level_id === levelId).map(c => c.class_id));
-        currentLoads = currentLoads.filter(l => !classIds.has(l.class_id));
+        currentLoads = currentLoads.filter(l => !classIds.has(l.class_id) || isSectionLocked(l.class_id));
       } else {
-        currentLoads = [];
+        currentLoads = currentLoads.filter((l) => isSectionLocked(l.class_id));
       }
 
-      const newLoads: SubjectLoadItem[] = sourceLoads.map(sl => ({
+      const newLoads: SubjectLoadItem[] = sourceLoads.filter((sl) => !isSectionLocked(sl.class_id)).map(sl => ({
         ...sl,
         _key: `copy_${sl.class_id}_${sl.subject_id}_${Math.random().toString(36).substr(2, 5)}`,
         academic_period_id: selectedPeriodId || 1,
@@ -884,6 +911,7 @@ export default function AdminSubjectLoadStudio() {
     sourceClassId: number,
     mode: "stagger" | "exact" = "stagger"
   ) => {
+    if (isSectionLocked(targetClassId)) return;
     // ── Step 0: Data-driven bell-schedule compatibility guard ──
     const sourceClass = studioData?.classes.find((c) => c.class_id === sourceClassId);
     const targetClass = studioData?.classes.find((c) => c.class_id === targetClassId);
@@ -1266,6 +1294,7 @@ export default function AdminSubjectLoadStudio() {
 
   // Preset pattern applications
   const handleApplyPreset = (classId: number, subjectId: number, pattern: "2day" | "3day" | "4day") => {
+    if (isSectionLocked(classId)) return;
     const classObj = studioData?.classes.find((c) => c.class_id === classId);
     const targetGroup = classObj?.period_template_group || "JHS_45MIN";
     const groupClassSlots = periodTemplateSlots.filter((s) => s.template_group === targetGroup && !s.is_locked_break && s.slot_type === "CLASS");
@@ -1303,17 +1332,29 @@ export default function AdminSubjectLoadStudio() {
 
     try {
       const levelIdToSave = selectedGradeId !== "all" ? Number(selectedGradeId) : 1;
+      const draftClassIds = new Set(
+        loads.filter((load) => !isSectionLocked(load.class_id) && (load.status === "draft" || !load.is_locked)).map((load) => load.class_id)
+      );
+      const loadsToSave = action === "draft"
+        ? loads.filter((load) => draftClassIds.has(load.class_id))
+        : loads.filter((load) => !isSectionLocked(load.class_id));
       let baseRevToPass: number | null = null;
       if (publishScope === "section" && targetClassId) {
-        const secLoad = loads.find((l) => l.class_id === targetClassId && l.base_revision !== undefined && l.base_revision !== null);
-        baseRevToPass = secLoad?.base_revision ?? null;
+        const sectionLoads = loads.filter((l) => l.class_id === targetClassId);
+        const draft = sectionLoads.find((l) => l.status === "draft" && l.base_revision != null);
+        const published = sectionLoads.filter((l) => l.status === "published" || l.status === "active");
+        baseRevToPass = draft?.base_revision ?? (
+          published.length > 0
+            ? Math.max(...published.map((l) => l.section_revision ?? 1))
+            : null
+        );
       }
 
       const res = await batchSaveSubjectLoads(
         selectedPeriodId,
         levelIdToSave,
         action,
-        loads,
+        loadsToSave,
         publishScope,
         publishScope === "level" ? levelIdToSave : null,
         targetClassId ?? null,
@@ -1336,7 +1377,14 @@ export default function AdminSubjectLoadStudio() {
     } catch (err: any) {
       const detail = err?.data?.detail || err?.message || "";
       if (err?.status === 409) {
-        if (detail.includes("Cannot remove") || detail.includes("SUBJECT_LOAD_HAS_LIVE_DATA")) {
+        if (typeof detail === "string" && detail.includes("is locked")) {
+          setNotice({
+            title: "Section Locked",
+            message: detail,
+            type: "error",
+          });
+          void loadStudio(selectedPeriodId, true);
+        } else if (detail.includes("Cannot remove") || detail.includes("SUBJECT_LOAD_HAS_LIVE_DATA")) {
           setNotice({
             title: "Cannot Remove Populated Subject",
             message: detail,
@@ -1345,10 +1393,10 @@ export default function AdminSubjectLoadStudio() {
         } else if (detail.includes("conflict") || detail.includes("revision")) {
           setNotice({
             title: "Revision Conflict",
-            message: "Another administrator has published changes to this section. Your draft has been refreshed to prevent overwriting.",
+            message: `${detail} If the draft remains after reloading, use Discard Draft, then Unlock Section to start from the current published revision. Discarding loses that draft's changes.`,
             type: "error",
           });
-          void loadStudio(selectedPeriodId);
+          void loadStudio(selectedPeriodId, true);
         } else {
           setNotice({
             title: "Conflict Error",
@@ -1438,7 +1486,8 @@ export default function AdminSubjectLoadStudio() {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchName = (cls.section_name || "").toLowerCase().includes(q);
-        const matchPathway = (cls.pathway || "").toLowerCase().includes(q);
+        const matchPathway = (studioClassPathwayLabel(cls, studioData?.academic_levels) || "").toLowerCase().includes(q)
+          || (cls.pathway || "").toLowerCase().includes(q);
         if (!matchName && !matchPathway) return false;
       }
       return true;
@@ -1771,7 +1820,7 @@ export default function AdminSubjectLoadStudio() {
                               <Select.Item value="all" className="whitespace-nowrap">All Sections</Select.Item>
                               {availableSections.map((cls) => (
                                 <Select.Item key={cls.class_id} value={String(cls.class_id)} className="whitespace-nowrap">
-                                  {cls.section_name}
+                                  {cls.section_name}{studioClassPathwayLabel(cls, studioData?.academic_levels) ? ` — ${studioClassPathwayLabel(cls, studioData?.academic_levels)}` : ""}
                                 </Select.Item>
                               ))}
                             </Select.Group>
@@ -1872,14 +1921,9 @@ export default function AdminSubjectLoadStudio() {
                     const renderSectionActions = (cls?: (typeof filteredClasses)[number]) => {
                       if (!cls) return null;
 
-                      const offerings = studioData?.subject_offerings || [];
-                      const classSubjects = (studioData?.subjects || []).filter((sub) =>
-                        isSubjectOfferedForClass(sub, cls, offerings)
-                      );
                       const sectionLoads = loads.filter((l) => l.class_id === cls.class_id);
                       const sectionUnassignedCount = sectionLoads.filter((l) => !l.staff_id).length;
-                      const hasUnassigned = sectionUnassignedCount > 0 || classSubjects.length === 0;
-                      const isSectionPublished = !hasUnassigned && sectionLoads.length > 0 && sectionLoads.every((l) => l.status === "published");
+                      const isSectionPublished = isSectionLocked(cls.class_id);
                       const sectionErrors = conflicts.filter(
                         (c) => c.severity === "error" && (c.class_id === cls.class_id || (c.affected_key && c.affected_key.startsWith(`${cls.class_id}_`)))
                       );
@@ -1976,6 +2020,7 @@ export default function AdminSubjectLoadStudio() {
                               <Button
                                 size="sm"
                                 variant="secondary"
+                                disabled={isSectionPublished || isSaving}
                                 className="p-[7px] shadow-white"
                                 aria-label="More options"
                                 onClick={(e) => e.preventDefault()}
@@ -2009,7 +2054,7 @@ export default function AdminSubjectLoadStudio() {
                                     <DropdownMenuSub>
                                       <DropdownMenuSubTrigger className="gap-2 cursor-pointer whitespace-nowrap">
                                         <Copy className="size-4" />
-                                        <span>Copy from <span className="font-bold">{sib.section_name}</span></span>
+                                        <span>Copy from <span className="font-bold">{sib.section_name}{studioClassPathwayLabel(sib, studioData?.academic_levels) ? ` — ${studioClassPathwayLabel(sib, studioData?.academic_levels)}` : ""}</span></span>
                                       </DropdownMenuSubTrigger>
                                       <DropdownMenuPortal>
                                         <DropdownMenuSubContent className="border-2 min-w-[210px]">
@@ -2047,7 +2092,7 @@ export default function AdminSubjectLoadStudio() {
                                           {configuredSiblings.map((sib) => (
                                             <DropdownMenuSub key={sib.class_id}>
                                               <DropdownMenuSubTrigger className="cursor-pointer font-bold focus:bg-gray-100">
-                                                {sib.section_name}
+                                                {sib.section_name}{studioClassPathwayLabel(sib, studioData?.academic_levels) ? ` — ${studioClassPathwayLabel(sib, studioData?.academic_levels)}` : ""}
                                               </DropdownMenuSubTrigger>
                                               <DropdownMenuPortal>
                                                 <DropdownMenuSubContent className="border-2 min-w-[210px]">
@@ -2145,6 +2190,7 @@ export default function AdminSubjectLoadStudio() {
                           );
 
                           const sectionLoads = loads.filter((l) => l.class_id === cls.class_id);
+                          const sectionLocked = isSectionLocked(cls.class_id);
 
                           const timesBySubject = new Map<string, { start: number; end: number }>();
                           for (const l of sectionLoads) {
@@ -2168,6 +2214,12 @@ export default function AdminSubjectLoadStudio() {
 
                           return (
                             <div key={cls.class_id} className="w-full min-w-0 ">
+                              {sectionLocked && (
+                                <div role="status" className="my-2 rounded border-2 border-black bg-amber-50 px-3 py-2 text-sm">
+                                  <strong>Section Locked</strong>
+                                  <span className="ml-2">This section is locked. Unlock it to modify subject schedules or teacher assignments.</span>
+                                </div>
+                              )}
                               <div
                                 key={cls.class_id}
                                 className="block min-w-0 overflow-hidden shadow-none"
@@ -2417,15 +2469,11 @@ export default function AdminSubjectLoadStudio() {
                                                   <span className="font-bold text-base text-black">
                                                     {sub.subject_name}
                                                   </span>
-                                                  {/* {conflict && (
-                                              <span
-                                                className={`text-[11px] font-bold px-1.5 py-0.5 rounded border border-black ${conflict.severity === "error" ? "bg-red-200 text-red-950" : "bg-amber-200 text-amber-950"
-                                                  }`}
-                                                title={conflict.message}
-                                              >
-                                                ⚠️ {conflict.severity === "error" ? "Conflict" : "15 min short"}
-                                              </span>
-                                            )} */}
+                                                  {conflict && (
+                                                    <span className="rounded border border-black bg-red-100 px-1.5 py-0.5 text-[11px] font-bold" title={conflict.message}>
+                                                      {conflict.severity === "error" ? "Conflict" : "Warning"}: {conflict.message}
+                                                    </span>
+                                                  )}
                                                 </div>
                                                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                                   {/* <Badge variant="default" size="sm">
@@ -2529,6 +2577,7 @@ export default function AdminSubjectLoadStudio() {
                                                               <button
                                                                 key={d.key}
                                                                 type="button"
+                                                                disabled={sectionLocked}
                                                                 onClick={() => handleToggleDay(slotKey, d.key)}
                                                                 className={`size-6 text-[11px] font-bold border-2 border-black transition-all ${isSelected
                                                                   ? "bg-primary text-primary-foreground shadow-[1px_1px_0_#000]"
@@ -2542,7 +2591,7 @@ export default function AdminSubjectLoadStudio() {
                                                         </div>
 
                                                         {/* Time Picker */}
-                                                        <div className="flex items-center gap-1">
+                                                        <fieldset disabled={sectionLocked} className="flex items-center gap-1">
                                                           <TimePickerSingle
                                                             value={stringToTimeValue(slot.start_time, 8)}
                                                             onChange={(newStart) =>
@@ -2557,13 +2606,14 @@ export default function AdminSubjectLoadStudio() {
                                                               handleTimeChange(slotKey, "end_time", timeValueToString(newEnd))
                                                             }
                                                           />
-                                                        </div>
+                                                        </fieldset>
 
                                                         {/* Delete slot button */}
                                                         {subjectSlots.length > 1 && (
                                                           <Tooltip>
                                                             <TooltipTrigger render={<button
                                                               type="button"
+                                                              disabled={sectionLocked}
                                                               onClick={() => handleRemoveSlot(slotKey)}
                                                               className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 border border-red-300 rounded ml-1"
                                                               aria-label="Remove time slot"
@@ -2603,6 +2653,7 @@ export default function AdminSubjectLoadStudio() {
                                                     <Button
                                                       size="sm"
                                                       variant="outline"
+                                                      disabled={sectionLocked}
                                                       onClick={() => {
                                                         setTeacherModalTarget({
                                                           classId: cls.class_id,
@@ -2636,7 +2687,7 @@ export default function AdminSubjectLoadStudio() {
                                                     </Button>
 
                                                     {/* Row Action Overflow Menu (⋯) */}
-                                                    <div className="flex">
+                                                    {!sectionLocked && <div className="flex">
                                                       <Tooltip>
                                                         <TooltipTrigger render={<Button
                                                         onClick={() => setOpenRowKey(isRowMenuOpen ? null : rowKey)}
@@ -2688,7 +2739,7 @@ export default function AdminSubjectLoadStudio() {
                                                           </button>
                                                         </div>
                                                       )}
-                                                    </div>
+                                                    </div>}
                                                   </div>
                                                 );
                                               })()}

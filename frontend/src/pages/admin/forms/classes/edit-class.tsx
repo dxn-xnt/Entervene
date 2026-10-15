@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ApiRequestError, getClassDetail, getClassFormOptions, updateClass } from "@/lib/api";
-import type { AdviserOption, ClassDetailResponse, ClassFormOptions, UpdateClassRequest } from "@/types/adminClasses";
+import { ApiRequestError, fetchPathways, getClassDetail, getClassFormOptions, updateClass } from "@/lib/api";
+import type { AcademicPathwayRead, AdviserOption, ClassDetailResponse, ClassFormOptions, UpdateClassRequest } from "@/types/adminClasses";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
@@ -24,6 +24,8 @@ export default function EditClass({
 }) {
   const [classDetail, setClassDetail] = useState<ClassDetailResponse | null>(initialClass ?? null);
   const [options, setOptions] = useState<ClassFormOptions | null>(null);
+  const [pathways, setPathways] = useState<AcademicPathwayRead[]>([]);
+  const [pathwayId, setPathwayId] = useState(initialClass?.pathway_id == null ? "__none__" : String(initialClass.pathway_id));
   const [sectionName, setSectionName] = useState(initialClass?.section_name ?? "");
   const [adviserStaffId, setAdviserStaffId] = useState(initialClass?.adviser?.staff_id || "__none__");
   const [loading, setLoading] = useState(!initialClass);
@@ -39,13 +41,16 @@ export default function EditClass({
       setLoading(true);
       setLoadError("");
       try {
-        const [detail, formOptions] = await Promise.all([
+        const [detail, formOptions, pathwayResponse] = await Promise.all([
           initialClass ? Promise.resolve(initialClass) : getClassDetail(classId),
           getClassFormOptions(),
+          fetchPathways(),
         ]);
         if (cancelled) return;
         setClassDetail(detail);
         setOptions(formOptions);
+        setPathways(pathwayResponse.pathways);
+        setPathwayId(detail.pathway_id == null ? "__none__" : String(detail.pathway_id));
         setSectionName(detail.section_name);
         setAdviserStaffId(detail.adviser?.staff_id || "__none__");
       } catch (error: unknown) {
@@ -83,6 +88,14 @@ export default function EditClass({
     if (trimmedSectionName !== classDetail.section_name) payload.section_name = trimmedSectionName;
     const currentAdviserId = classDetail.adviser?.staff_id || "__none__";
     if (adviserStaffId !== currentAdviserId) payload.adviser_staff_id = adviserStaffId === "__none__" ? null : adviserStaffId;
+    const currentPathwayId = classDetail.pathway_id == null ? "__none__" : String(classDetail.pathway_id);
+    if (pathwayId !== currentPathwayId) {
+      if (classDetail.academic_level.requires_pathway && pathwayId === "__none__") {
+        setSaveError("Select an enabled pathway for this academic level.");
+        return;
+      }
+      payload.pathway_id = pathwayId === "__none__" ? null : Number(pathwayId);
+    }
 
     if (!Object.keys(payload).length) {
       setSaveError("No changes to save.");
@@ -97,6 +110,7 @@ export default function EditClass({
       setClassDetail(updatedClass);
       setSectionName(updatedClass.section_name);
       setAdviserStaffId(updatedClass.adviser?.staff_id || "__none__");
+      setPathwayId(updatedClass.pathway_id == null ? "__none__" : String(updatedClass.pathway_id));
       setSaveSuccess("Class updated successfully.");
       onSaved(updatedClass);
     } catch (error: unknown) {
@@ -159,6 +173,29 @@ export default function EditClass({
                     placeholder="Section name"
                   />
                 </Field>
+
+                {classDetail.academic_level.grade_level >= 11 && (
+                  <Field label="Academic Pathway">
+                    <Select value={pathwayId} onValueChange={(value) => { setPathwayId(value); setSaveError(""); }}>
+                      <Select.Trigger className="w-full text-base">
+                        <Select.Value placeholder="Select pathway" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Group>
+                          <Select.Item value="__none__" disabled={classDetail.academic_level.requires_pathway && classDetail.pathway_id != null}>No pathway assigned</Select.Item>
+                          {pathways.filter((pathway) => (classDetail.academic_level.requires_pathway && pathway.is_enabled) || pathway.id === classDetail.pathway_id).map((pathway) => (
+                            <Select.Item key={pathway.id} value={String(pathway.id)} disabled={!pathway.is_enabled || !classDetail.academic_level.requires_pathway}>
+                              {pathway.name}{pathway.is_enabled ? "" : " (inactive)"}
+                            </Select.Item>
+                          ))}
+                        </Select.Group>
+                      </Select.Content>
+                    </Select>
+                    {!classDetail.academic_level.requires_pathway && (
+                      <Text as="p" className="mt-1 text-xs text-muted-foreground">This grade does not require a pathway in this academic year.</Text>
+                    )}
+                  </Field>
+                )}
 
                 <Field label="Class Adviser">
                   <Select

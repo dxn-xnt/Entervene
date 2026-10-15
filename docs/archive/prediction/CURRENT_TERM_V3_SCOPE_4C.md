@@ -2,7 +2,7 @@
 
 Audited the configured PostgreSQL curriculum on 2026-09-24. All offering/load counts below refer to the configured 2025–2026 year; the separate 2026–2027 year has no listed subject offerings. `Load` counts mean published, active-version subject loads. An active subject without an active offering or load is a catalog entry, not proof of a current taught class. This is a development prediction scope, not production validation.
 
-The client [Grades 2–10 official ECR contract](CLIENT_THREE_TERM_ECR_CONTRACT.md) establishes the JHS three-term core 20/50/30 format and EPP/TLE 20/60/20 format. It does not supply an SHS ECR or completed independent records.
+The client [Grades 2–10 official ECR contract](../../CLIENT_THREE_TERM_ECR_CONTRACT.md) establishes the JHS three-term core 20/50/30 format and EPP/TLE 20/60/20 format. It does not supply an SHS ECR or completed independent records.
 
 ## JHS Grades 7–10
 

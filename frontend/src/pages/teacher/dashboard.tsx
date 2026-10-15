@@ -76,27 +76,6 @@ const defaultTeacherCards: OverviewCardData[] = [
 const weekdayLabels = ["M", "T", "W", "Th", "F", "S"];
 const trendAxisRange = [50, 100];
 
-const defaultHardestQuestions = [
-  {
-    code: "Q7 · Simplify mixed fractions",
-    quiz: "Fractions Quiz",
-    rate: "34% correct",
-    variant: "destructive",
-  },
-  {
-    code: "Q3 · Parts of the cell",
-    quiz: "Lab Quiz",
-    rate: "48% correct",
-    variant: "destructive",
-  },
-  {
-    code: "Q5 · Uri ng pang-uri",
-    quiz: "Pagsusulit 1",
-    rate: "57% correct",
-    variant: "warning",
-  },
-];
-
 function isPositiveId(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
@@ -348,8 +327,6 @@ export default function Dashboard() {
     day,
     count: visiblePhaseTwo?.weekdays.days.find((item) => item.day_index === dayIndex)?.count ?? null,
   }));
-  const hardestQuestions =
-    data?.details?.hardest_questions || defaultHardestQuestions;
   const reviewSubmissions = (data?.action_queue?.pending_grading ?? []).map((item) => ({
     ...item,
     title: item.classwork_title,

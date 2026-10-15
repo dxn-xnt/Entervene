@@ -20,7 +20,6 @@ type NotificationCardProps = {
 export function NotificationCard({
     title,
     description,
-    date,
     user,
     type,
     category,
