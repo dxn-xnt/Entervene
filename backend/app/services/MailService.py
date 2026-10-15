@@ -2,6 +2,7 @@ import logging
 import os
 import smtplib
 import time
+from urllib.parse import quote
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -154,6 +155,37 @@ def send_invitation_email(email: str, token: str) -> None:
     except Exception as exc:
         logger.error(f"Failed to send email to {email} via SMTP: {exc}")
         raise
+
+
+def send_password_reset_email(email: str, token: str) -> None:
+    frontend_url = (getattr(settings, "frontend_url", None) or "http://localhost:5173").rstrip("/")
+    link = f"{frontend_url}/reset-password?token={quote(token, safe='')}"
+    mail_driver = (os.getenv("MAIL_DRIVER") or settings.mail_driver).lower()
+    if mail_driver == "console":
+        logger.info("[MailService] Password reset email skipped because MAIL_DRIVER is console.")
+        return
+
+    smtp_user = os.getenv("SMTP_USER") or settings.smtp_user
+    smtp_pass = os.getenv("SMTP_PASSWORD") or settings.smtp_password
+    if not smtp_user or not smtp_pass:
+        logger.warning("SMTP credentials are not configured; password reset email was not sent.")
+        return
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "Reset your Entervene password"
+    msg["From"] = f"{settings.mail_from_name} <{smtp_user}>"
+    msg["To"] = email
+    msg.attach(MIMEText(
+        f"Use this link to reset your password within 30 minutes:\n{link}\n\n"
+        "If you did not request this, you can ignore this email.", "plain"
+    ))
+    reserve_email(email)
+    smtp_host = os.getenv("SMTP_HOST") or settings.smtp_host
+    smtp_port = int(os.getenv("SMTP_PORT") or settings.smtp_port)
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.sendmail(smtp_user, [email], msg.as_string())
 
 
 def send_batch_invitations(items: list[dict], delay_seconds: float = 0.35) -> dict[str, list[str]]:

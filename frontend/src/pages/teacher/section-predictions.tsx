@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams, Link, useSearchParams } from "react-router-dom";
+import { useParams, Link, useSearchParams, Navigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
@@ -25,7 +25,9 @@ import {
   buildCurrentTermDashboard,
   loadAuthorizedCurrentTermPredictions,
   currentTermPredictionErrorMessage,
+  formatSubjectDisplayName,
   type AuthorizedCurrentTermRow,
+  type AssignedSubjectSectionScope,
 } from "@/components/predictions/current-term-dashboard-adapter";
 
 export default function SectionPredictions() {
@@ -402,13 +404,20 @@ function LegacySectionPredictions() {
 }
 
 function TeacherCurrentTermSectionPredictions() {
-  const { grade, classId: classSlug } = useParams<{ grade: string; classId: string }>();
+  const { grade, classId: classSlug, subjectId: routeSubjectSlug } = useParams<{
+    grade?: string;
+    classId?: string;
+    subjectId?: string;
+  }>();
   const { selectedPeriodId } = useAcademicPeriod();
+  const isSubjectRoute = Boolean(routeSubjectSlug);
+  const routeSubjectId = routeSubjectSlug && !Number.isNaN(Number(routeSubjectSlug)) ? Number(routeSubjectSlug) : undefined;
   const resolvedClassId = classSlug && !Number.isNaN(Number(classSlug)) ? Number(classSlug) : undefined;
+
   const [rows, setRows] = useState<AuthorizedCurrentTermRow[]>([]);
+  const [assignedScopes, setAssignedScopes] = useState<AssignedSubjectSectionScope[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [subjectId, setSubjectId] = useState<number | undefined>();
   const [riskLevel, setRiskLevel] = useState<string | undefined>();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
@@ -466,13 +475,26 @@ function TeacherCurrentTermSectionPredictions() {
       }
     });
 
-    loadAuthorizedCurrentTermPredictions(selectedPeriodId, { classId: resolvedClassId })
-      .then(({ rows: loaded }) => {
-        if (!cancelled) setRows(loaded);
+    const constraints: { classId: number; subjectId?: number; gradeLevel?: number } = {
+      classId: resolvedClassId,
+    };
+    if (routeSubjectId !== undefined) {
+      constraints.subjectId = routeSubjectId;
+    } else if (grade && !Number.isNaN(Number(grade))) {
+      constraints.gradeLevel = Number(grade);
+    }
+
+    loadAuthorizedCurrentTermPredictions(selectedPeriodId, constraints)
+      .then(({ rows: loaded, assignedScopes: loadedScopes }) => {
+        if (!cancelled) {
+          setRows(loaded);
+          setAssignedScopes(loadedScopes);
+        }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
           setRows([]);
+          setAssignedScopes([]);
           setLoadError(currentTermPredictionErrorMessage(error));
         }
       })
@@ -483,31 +505,113 @@ function TeacherCurrentTermSectionPredictions() {
     return () => {
       cancelled = true;
     };
-  }, [resolvedClassId, selectedPeriodId]);
+  }, [resolvedClassId, routeSubjectId, grade, selectedPeriodId]);
 
-  const subjects = useMemo(
-    () => [
-      ...new Map(
-        rows.map((row) => [
-          row.subject_id,
-          { subject_id: row.subject_id, subject_name: row.subject_name },
-        ])
-      ).values(),
-    ],
-    [rows]
-  );
-  const effectiveSubjectId = subjects.some((item) => item.subject_id === subjectId)
-    ? subjectId
-    : subjects[0]?.subject_id;
-  const scopedRows = rows.filter(
-    (row) => effectiveSubjectId === undefined || row.subject_id === effectiveSubjectId
-  );
-  const data = buildCurrentTermDashboard(scopedRows, {
+  // Handle legacy route navigation
+  if (!isSubjectRoute) {
+    if (loading) {
+      return (
+        <AppLayout>
+          <div className="flex flex-1 flex-col items-center justify-center py-20 text-gray-500 font-semibold">
+            Loading section information...
+          </div>
+        </AppLayout>
+      );
+    }
+    if (loadError) {
+      return (
+        <AppLayout>
+          <div className="p-6">
+            <div role="alert" className="border-2 border-red-600 bg-red-50 p-4 font-semibold text-red-900">
+              {loadError}
+            </div>
+          </div>
+        </AppLayout>
+      );
+    }
+    if (assignedScopes.length === 1 && resolvedClassId) {
+      return (
+        <Navigate
+          to={`/teacher/predictions/subject/${assignedScopes[0].subject_id}/section/${resolvedClassId}`}
+          replace
+        />
+      );
+    }
+    if (assignedScopes.length > 1 && resolvedClassId) {
+      const sectionName = assignedScopes[0].section_name;
+      return (
+        <AppLayout>
+          <div className="flex flex-1 flex-col p-6 max-w-2xl mx-auto gap-4">
+            <h1 className="text-2xl font-bold">Select Subject for {sectionName}</h1>
+            <p className="text-sm text-gray-600">
+              Multiple subjects are assigned to this section. Please select which subject predictions you want to view:
+            </p>
+            <div className="flex flex-col gap-2 pt-2">
+              {assignedScopes.map((scope) => (
+                <Button
+                  key={scope.subject_id}
+                  asChild
+                  variant="outline"
+                  className="justify-start border-2 border-black font-bold p-4 text-left"
+                >
+                  <Link to={`/teacher/predictions/subject/${scope.subject_id}/section/${resolvedClassId}`}>
+                    {formatSubjectDisplayName(scope.subject_name, scope.grade_level)}
+                  </Link>
+                </Button>
+              ))}
+            </div>
+            <div className="pt-4">
+              <Button asChild variant="secondary" className="border-2 border-black font-bold">
+                <Link to="/teacher/predictions">Return to AI Predictions</Link>
+              </Button>
+            </div>
+          </div>
+        </AppLayout>
+      );
+    }
+    return (
+      <AppLayout>
+        <div className="flex flex-1 flex-col p-6 max-w-2xl mx-auto gap-4">
+          <div role="alert" className="border-2 border-amber-600 bg-amber-50 p-6 font-semibold flex flex-col items-start gap-4">
+            <p className="text-amber-950 font-bold">No authorized subjects were found for this section in the selected term.</p>
+            <Button asChild variant="outline" className="border-2 border-black font-bold">
+              <Link to="/teacher/predictions">Return to AI Predictions</Link>
+            </Button>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  // Invalid IDs check for subject-first route
+  if (!routeSubjectId || !resolvedClassId) {
+    return (
+      <AppLayout>
+        <div className="flex flex-1 flex-col p-6 max-w-2xl mx-auto gap-4">
+          <div role="alert" className="border-2 border-red-600 bg-red-50 p-6 font-semibold flex flex-col items-start gap-4">
+            <p className="text-red-950 font-bold">Invalid subject or section identifier in the address.</p>
+            <Button asChild variant="outline" className="border-2 border-black font-bold">
+              <Link to="/teacher/predictions">Return to AI Predictions</Link>
+            </Button>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const matchingScope = assignedScopes.find((s) => s.subject_id === routeSubjectId);
+  const subjectDisplayName = matchingScope
+    ? formatSubjectDisplayName(matchingScope.subject_name, matchingScope.grade_level)
+    : rows[0]
+      ? formatSubjectDisplayName(rows[0].subject_name, rows[0].grade_level)
+      : "Subject";
+  const sectionName = matchingScope?.section_name || rows[0]?.class_name || `Section ${classSlug}`;
+
+  const data = buildCurrentTermDashboard(rows, {
     search,
     interventionLevel: riskLevel,
-    limit: Math.max(10, scopedRows.length),
+    limit: Math.max(10, rows.length),
   });
-  const sectionName = rows[0]?.class_name || `Section ${classSlug}`;
 
   return (
     <AppLayout>
@@ -524,7 +628,7 @@ function TeacherCurrentTermSectionPredictions() {
               <Breadcrumb.Separator />
               <Breadcrumb.Item>
                 <Breadcrumb.Link asChild>
-                  <Link to={`/teacher/predictions/${grade}`}>Grade {grade}</Link>
+                  <Link to="/teacher/predictions">{subjectDisplayName}</Link>
                 </Breadcrumb.Link>
               </Breadcrumb.Item>
               <Breadcrumb.Separator />
@@ -539,9 +643,9 @@ function TeacherCurrentTermSectionPredictions() {
           <div className="flex flex-col gap-4">
             <PredictionFilters
               filters={null}
-              gradeLevel={grade ? Number(grade) : undefined}
+              gradeLevel={matchingScope?.grade_level ?? (rows[0]?.grade_level ?? undefined)}
               classId={resolvedClassId}
-              subjectId={effectiveSubjectId}
+              subjectId={routeSubjectId}
               academicPeriodId={selectedPeriodId ?? undefined}
               riskLevel={riskLevel}
               search={search}
@@ -550,7 +654,7 @@ function TeacherCurrentTermSectionPredictions() {
               hideSubjectFilter
               hidePeriodFilter
               riskSummary={data.risk_summary}
-              onSubjectChange={setSubjectId}
+              onSubjectChange={() => undefined}
               onRiskChange={setRiskLevel}
               onSearchChange={setSearch}
               onClearAll={() => {
@@ -559,32 +663,8 @@ function TeacherCurrentTermSectionPredictions() {
               }}
             />
 
-            {subjects.length > 0 && (
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                <span className="shrink-0 text-sm font-regular text-muted-foreground">
-                  Subject:
-                </span>
-                {subjects.map((subject) => (
-                  <Button
-                    key={subject.subject_id}
-                    autoIcon={false}
-                    variant={
-                      effectiveSubjectId === subject.subject_id
-                        ? "default"
-                        : "outline"
-                    }
-                    size="sm"
-                    onClick={() => setSubjectId(subject.subject_id)}
-                    className="shrink-0 border-black shadow-none"
-                  >
-                    {subject.subject_name}
-                  </Button>
-                ))}
-              </div>
-            )}
-
             {loadError && (
-              <div role="alert" className="border-2 border-red-600 bg-red-50 p-4 font-semibold">
+              <div role="alert" className="border-2 border-red-600 bg-red-50 p-4 font-semibold text-red-900">
                 {loadError}
               </div>
             )}
@@ -593,7 +673,29 @@ function TeacherCurrentTermSectionPredictions() {
               <div className="py-20 text-center font-semibold text-gray-500">
                 Loading current-term projections...
               </div>
-            ) : loadError ? null : (
+            ) : loadError ? null : !selectedPeriodId ? (
+              <Card className="border-2 border-black bg-white p-6 text-center font-semibold text-gray-700">
+                Select an academic term to view projections.
+              </Card>
+            ) : assignedScopes.length === 0 ? (
+              <div role="alert" className="border-2 border-red-600 bg-red-50 p-6 font-semibold flex flex-col items-start gap-4">
+                <p className="text-red-950 font-bold">
+                  This subject is not assigned to this section or you do not have permission to access it in the selected term.
+                </p>
+                <Button asChild variant="outline" className="border-2 border-black font-bold">
+                  <Link to="/teacher/predictions">Return to AI Predictions</Link>
+                </Button>
+              </div>
+            ) : rows.length === 0 ? (
+              <Card className="flex flex-col items-center justify-center gap-2 p-8 text-center border-2 border-black bg-white">
+                <p className="text-lg font-bold text-gray-900">
+                  No predictions available for {subjectDisplayName} in {sectionName}.
+                </p>
+                <p className="text-sm text-gray-600 mt-1 max-w-md mx-auto">
+                  There are currently no generated predictions for this subject and section in the selected term.
+                </p>
+              </Card>
+            ) : (
               <PredictionTable
                 items={data.items}
                 total={data.total}

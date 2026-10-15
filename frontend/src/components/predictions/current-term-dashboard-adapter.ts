@@ -21,15 +21,27 @@ export function currentTermPredictionErrorMessage(error: unknown): string {
 export async function loadAuthorizedCurrentTermPredictions(
   academicPeriodId: number,
   constraints: { gradeLevel?: number; classId?: number; subjectId?: number } = {},
-): Promise<{ filters: DashboardFilters; rows: AuthorizedCurrentTermRow[] }> {
+): Promise<{ filters: DashboardFilters; rows: AuthorizedCurrentTermRow[]; assignedScopes: AssignedSubjectSectionScope[] }> {
   const filters = await fetchDashboardFilters();
   const classes = filters.classes.filter((item) =>
     (constraints.gradeLevel === undefined || item.grade_level === constraints.gradeLevel)
     && (constraints.classId === undefined || item.class_id === constraints.classId));
 
+  const assignedScopes: AssignedSubjectSectionScope[] = [];
+
   const nested = await Promise.all(classes.map(async (classItem) => {
     const scoped = await fetchDashboardFilters({ class_id: classItem.class_id, academic_period_id: academicPeriodId });
     const subjects = scoped.subjects.filter((item) => constraints.subjectId === undefined || item.subject_id === constraints.subjectId);
+    subjects.forEach((subj) => {
+      assignedScopes.push({
+        subject_id: subj.subject_id,
+        subject_name: subj.subject_name,
+        subject_codename: subj.subject_codename,
+        grade_level: classItem.grade_level ?? null,
+        class_id: classItem.class_id,
+        section_name: classItem.section_name,
+      });
+    });
     const responses = await Promise.all(subjects.map((subject) => fetchDevelopmentCurrentTermPredictions({
       class_id: classItem.class_id,
       subject_id: subject.subject_id,
@@ -40,7 +52,7 @@ export async function loadAuthorizedCurrentTermPredictions(
 
   const unique = new Map<number, AuthorizedCurrentTermRow>();
   nested.flat().forEach((row) => unique.set(row.prediction_id, row));
-  return { filters, rows: [...unique.values()] };
+  return { filters, rows: [...unique.values()], assignedScopes };
 }
 
 export function currentTermRiskSummary(rows: AuthorizedCurrentTermRow[]): RiskSummary {
@@ -116,3 +128,193 @@ export function buildCurrentTermGradeSummaries(rows: AuthorizedCurrentTermRow[])
   });
   return [...grades.values()].sort((a, b) => a.grade_level - b.grade_level);
 }
+
+export interface DashboardSubjectSectionSummaryItem {
+  class_id: number;
+  section_name: string;
+  grade_level: number | null;
+  subject_id: number;
+  total_students: number;
+  total_predictions: number;
+  at_risk_count: number;
+  high_risk_count: number;
+  moderate_risk_count: number;
+  needs_monitoring_count: number;
+  low_risk_count: number;
+}
+
+export interface DashboardSubjectGroupSummary {
+  subject_id: number;
+  subject_name: string;
+  subject_codename: string | null;
+  grade_level: number | null;
+  display_name: string;
+  total_students: number;
+  total_predictions: number;
+  at_risk_count: number;
+  high_risk_count: number;
+  moderate_risk_count: number;
+  needs_monitoring_count: number;
+  low_risk_count: number;
+  sections: DashboardSubjectSectionSummaryItem[];
+}
+
+export interface AssignedSubjectSectionScope {
+  subject_id: number;
+  subject_name: string;
+  subject_codename?: string | null;
+  grade_level?: number | null;
+  class_id: number;
+  section_name: string;
+}
+
+export function formatSubjectDisplayName(subjectName: string, gradeLevel?: number | null): string {
+  const trimmed = (subjectName || "").trim();
+  if (!trimmed) {
+    return gradeLevel !== null && gradeLevel !== undefined ? `Subject ${gradeLevel}` : "Subject";
+  }
+  if (gradeLevel === null || gradeLevel === undefined) {
+    return trimmed;
+  }
+  const endsWithGrade = new RegExp(`(?:^|\\s|-)${gradeLevel}$`, "i").test(trimmed);
+  const mentionsGrade = new RegExp(`\\bgrade\\s*${gradeLevel}\\b`, "i").test(trimmed);
+  if (endsWithGrade || mentionsGrade) {
+    return trimmed;
+  }
+  return `${trimmed} ${gradeLevel}`;
+}
+
+export function buildCurrentTermSubjectSummaries(
+  rows: AuthorizedCurrentTermRow[],
+  assignedScopes?: AssignedSubjectSectionScope[],
+): DashboardSubjectGroupSummary[] {
+  const subjects = new Map<number, DashboardSubjectGroupSummary>();
+
+  if (assignedScopes && assignedScopes.length > 0) {
+    assignedScopes.forEach((scope) => {
+      let subject = subjects.get(scope.subject_id);
+      if (!subject) {
+        subject = {
+          subject_id: scope.subject_id,
+          subject_name: scope.subject_name,
+          subject_codename: scope.subject_codename ?? null,
+          grade_level: scope.grade_level ?? null,
+          display_name: formatSubjectDisplayName(scope.subject_name, scope.grade_level),
+          total_students: 0,
+          total_predictions: 0,
+          at_risk_count: 0,
+          high_risk_count: 0,
+          moderate_risk_count: 0,
+          needs_monitoring_count: 0,
+          low_risk_count: 0,
+          sections: [],
+        };
+        subjects.set(scope.subject_id, subject);
+      }
+      let section = subject.sections.find((item) => item.class_id === scope.class_id);
+      if (!section) {
+        section = {
+          class_id: scope.class_id,
+          section_name: scope.section_name,
+          grade_level: scope.grade_level ?? null,
+          subject_id: scope.subject_id,
+          total_students: 0,
+          total_predictions: 0,
+          at_risk_count: 0,
+          high_risk_count: 0,
+          moderate_risk_count: 0,
+          needs_monitoring_count: 0,
+          low_risk_count: 0,
+        };
+        subject.sections.push(section);
+      }
+    });
+  }
+
+  rows.forEach((row) => {
+    let subject = subjects.get(row.subject_id);
+    if (!subject) {
+      subject = {
+        subject_id: row.subject_id,
+        subject_name: row.subject_name,
+        subject_codename: row.subject_codename ?? null,
+        grade_level: row.grade_level ?? null,
+        display_name: formatSubjectDisplayName(row.subject_name, row.grade_level),
+        total_students: 0,
+        total_predictions: 0,
+        at_risk_count: 0,
+        high_risk_count: 0,
+        moderate_risk_count: 0,
+        needs_monitoring_count: 0,
+        low_risk_count: 0,
+        sections: [],
+      };
+      subjects.set(row.subject_id, subject);
+    }
+
+    let section = subject.sections.find((item) => item.class_id === row.class_id);
+    if (!section) {
+      section = {
+        class_id: row.class_id,
+        section_name: row.class_name,
+        grade_level: row.grade_level ?? null,
+        subject_id: row.subject_id,
+        total_students: 0,
+        total_predictions: 0,
+        at_risk_count: 0,
+        high_risk_count: 0,
+        moderate_risk_count: 0,
+        needs_monitoring_count: 0,
+        low_risk_count: 0,
+      };
+      subject.sections.push(section);
+    }
+
+    subject.total_students += 1;
+    subject.total_predictions += 1;
+    section.total_students += 1;
+    section.total_predictions += 1;
+
+    const isActionable = !row.official_final_grade_available && row.term_context.is_active;
+    if (isActionable) {
+      if (row.intervention_level !== "LOW_RISK") {
+        subject.at_risk_count += 1;
+        section.at_risk_count += 1;
+      }
+      if (row.intervention_level === "HIGH_RISK") {
+        subject.high_risk_count += 1;
+        section.high_risk_count += 1;
+      } else if (row.intervention_level === "MODERATE_RISK") {
+        subject.moderate_risk_count += 1;
+        section.moderate_risk_count += 1;
+      } else if (row.intervention_level === "NEEDS_MONITORING") {
+        subject.needs_monitoring_count += 1;
+        section.needs_monitoring_count += 1;
+      } else if (row.intervention_level === "LOW_RISK") {
+        subject.low_risk_count += 1;
+        section.low_risk_count += 1;
+      }
+    }
+  });
+
+  const sortedSubjects = [...subjects.values()].map((subject) => {
+    subject.sections.sort((a, b) => {
+      const nameCompare = a.section_name.localeCompare(b.section_name);
+      if (nameCompare !== 0) return nameCompare;
+      return a.class_id - b.class_id;
+    });
+    return subject;
+  });
+
+  sortedSubjects.sort((a, b) => {
+    const gradeA = a.grade_level ?? 999;
+    const gradeB = b.grade_level ?? 999;
+    if (gradeA !== gradeB) return gradeA - gradeB;
+    const nameCompare = a.display_name.localeCompare(b.display_name);
+    if (nameCompare !== 0) return nameCompare;
+    return a.subject_id - b.subject_id;
+  });
+
+  return sortedSubjects;
+}
+

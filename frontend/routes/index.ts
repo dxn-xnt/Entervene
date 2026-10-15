@@ -3,6 +3,8 @@ import SetupPassword from "../src/pages/setup-password";
 export const routes = {
   auth: {
     login: "/login",
+    forgotPassword: "/forgot-password",
+    resetPassword: "/reset-password",
     register: "/register",
   },
 
@@ -47,6 +49,7 @@ export const routes = {
     predictions: "/teacher/predictions",
     gradePredictions: "/teacher/predictions/:grade",
     sectionPredictions: "/teacher/predictions/:grade/:classId",
+    subjectSectionPredictions: "/teacher/predictions/subject/:subjectId/section/:classId",
     profile: "/teacher/profile",
     attendance: "/teacher/attendance",
     lessonPlanner: "/teacher/classes/:classId/subjects/:subjectId/lesson-planner",

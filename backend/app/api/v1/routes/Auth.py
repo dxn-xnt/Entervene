@@ -1,6 +1,8 @@
 import secrets
 import re
 import hashlib
+from datetime import timedelta
+from fastapi import BackgroundTasks
 from app.core.RequestLimits import login_limiter
 from datetime import datetime, timezone
 
@@ -11,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.Config import settings
 from app.core.Security import (
+    create_token,
     create_access_token,
     create_refresh_token,
     decode_access_token,
@@ -26,7 +29,8 @@ from app.models.auth.UserLoginLog import UserLoginLog
 from app.models.auth.UserRoles import UserRoles
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
-from app.schemas.Auth import AvatarUpdate, LoginRequest, LoginResponse
+from app.schemas.Auth import AvatarUpdate, ForgotPasswordRequest, LoginRequest, LoginResponse, ResetPasswordRequest
+from app.services.MailService import send_password_reset_email
 
 router = APIRouter()
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -118,7 +122,41 @@ def _user_identity_query(db: Session):
 
 
 def _role_name_to_client_role(role_name: str | None) -> str:
-    return {"Teacher": "teacher", "Student": "student", "Admin": "admin"}.get(role_name or "", "student")
+    return {"teacher": "teacher", "student": "student", "admin": "admin"}.get((role_name or "").strip().lower(), "student")
+
+
+def _password_fingerprint(password_hash: str | None) -> str:
+    return hashlib.sha256((password_hash or "").encode()).hexdigest()
+
+
+@router.post("/forgot-password")
+def forgot_password(body: ForgotPasswordRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    # Keep the response identical for unknown, pending, and active accounts.
+    email = str(body.email).strip().lower()
+    if not login_limiter.allow("reset:" + hashlib.sha256(email.encode()).hexdigest(), 3):
+        raise HTTPException(429, "Too many requests. Please wait.", headers={"Retry-After": "60"})
+    account = db.query(UserAccount).filter(func.lower(UserAccount.email) == email).first()
+    if account and (account.account_status or "").strip().lower() == "active":
+        token = create_token(str(account.user_id), "", "password_reset", timedelta(minutes=30))
+        # A password change invalidates every earlier reset link.
+        background_tasks.add_task(send_password_reset_email, account.email, token + "." + _password_fingerprint(account.password_hash))
+    return {"message": "If this email has an active account, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)):
+    if body.password != body.confirm_password:
+        raise HTTPException(400, "Passwords do not match")
+    signed_token, separator, fingerprint = body.token.rpartition(".")
+    payload = decode_token(signed_token, expected_type="password_reset") if separator else None
+    if not payload or not fingerprint:
+        raise HTTPException(400, "Invalid or expired reset link")
+    account = db.query(UserAccount).filter(UserAccount.user_id == payload.get("sub")).first()
+    if not account or (account.account_status or "").strip().lower() != "active" or not secrets.compare_digest(fingerprint, _password_fingerprint(account.password_hash)):
+        raise HTTPException(400, "Invalid or expired reset link")
+    account.password_hash = hash_password(body.password)
+    db.commit()
+    return {"message": "Password updated. You can now sign in."}
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -126,7 +164,7 @@ def login(body: LoginRequest, response: Response, db: Session = Depends(get_db))
     account_key = hashlib.sha256(str(body.email).strip().lower().encode()).hexdigest()
     if not login_limiter.allow(account_key, 10):
         raise HTTPException(429, "Too many login attempts. Please wait.", headers={"Retry-After": "60"})
-    result = _user_identity_query(db).filter(UserAccount.email == body.email).first()
+    result = _user_identity_query(db).filter(func.lower(UserAccount.email) == str(body.email).strip().lower()).first()
     if not result:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
@@ -139,7 +177,7 @@ def login(body: LoginRequest, response: Response, db: Session = Depends(get_db))
 
     if not password_ok:
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    if result.account_status != "active":
+    if (result.account_status or "").strip().lower() != "active":
         raise HTTPException(status_code=403, detail="Account is inactive")
 
     role = _role_name_to_client_role(result.role_name)
@@ -217,7 +255,7 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     result = _user_identity_query(db).filter(UserAccount.user_id == payload["sub"]).first()
-    if not result or result.account_status != "active":
+    if not result or (result.account_status or "").strip().lower() != "active":
         clear_auth_cookies(response)
         raise HTTPException(status_code=401, detail="Invalid session")
 
@@ -239,19 +277,23 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
 
 @router.post("/logout")
 def logout(
+    request: Request,
     response: Response,
-    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    log_entry = (
-        db.query(UserLoginLog)
-        .filter(UserLoginLog.user_id == current_user["sub"], UserLoginLog.logout_at.is_(None))
-        .order_by(UserLoginLog.login_at.desc())
-        .first()
-    )
-    if log_entry:
-        log_entry.logout_at = datetime.now(timezone.utc)
-        db.commit()
+    token = request.cookies.get(ACCESS_COOKIE_NAME)
+    if token:
+        payload = decode_access_token(token)
+        if payload and "sub" in payload:
+            log_entry = (
+                db.query(UserLoginLog)
+                .filter(UserLoginLog.user_id == payload["sub"], UserLoginLog.logout_at.is_(None))
+                .order_by(UserLoginLog.login_at.desc())
+                .first()
+            )
+            if log_entry:
+                log_entry.logout_at = datetime.now(timezone.utc)
+                db.commit()
 
     clear_auth_cookies(response)
     return {"message": "Logged out successfully"}

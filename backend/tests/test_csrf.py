@@ -77,3 +77,31 @@ def test_session_probe_returns_csrf_token_even_when_access_is_expired():
 
     assert response.status_code == 401
     assert response.headers["X-CSRF-Token"] == "existing-session-token"
+
+
+def test_auth_handshake_endpoints_are_exempt_from_csrf_header():
+    app = FastAPI()
+    app.add_middleware(CSRFMiddleware)
+
+    @app.post("/api/v1/auth/refresh")
+    def refresh():
+        return {"refreshed": True}
+
+    @app.post("/api/v1/auth/logout")
+    def logout():
+        return {"logged_out": True}
+
+    @app.post("/api/v1/auth/accept-invitation")
+    def accept():
+        return {"accepted": True}
+
+    client = TestClient(app)
+    client.cookies.set(CSRF_COOKIE_NAME, "stale-or-existing-csrf-cookie")
+
+    # None of these should fail with 403 Invalid CSRF token even without X-CSRF-Token header
+    assert client.post("/api/v1/auth/refresh").status_code == 200
+    assert client.post("/api/v1/auth/logout").status_code == 200
+    assert client.post("/api/v1/auth/accept-invitation").status_code == 200
+    # Also trailing slashes should be tolerated safely
+    assert client.post("/api/v1/auth/refresh/").status_code == 200
+
