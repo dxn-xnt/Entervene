@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
   ArrowDownAZ,
@@ -351,6 +351,7 @@ function LessonsTab({
   );
   const [lessons, setLessons] = useState<LessonItem[]>([]);
   const [, setCompetencies] = useState<CompetencyItem[]>([]);
+  const [, setIsLoadingLessons] = useState(false);
   const [lessonsError, setLessonsError] = useState("");
   const [expandedLessonId, setExpandedLessonId] = useState<number | null>(null);
   const [linkedClassworks, setLinkedClassworks] = useState<

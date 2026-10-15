@@ -1,9 +1,17 @@
-import { ClipboardList, UserRound } from "lucide-react";
+import { useState, useMemo } from "react";
+import { BookOpen } from "lucide-react";
+import { Avatar } from "@/components/retroui/Avatar";
 import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
+import { Button } from "@/components/retroui/Button";
+import { Progress } from "@/components/retroui/Progress";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { OverviewCard } from "@/components/overview-cards";
+import { ClassworkItemLine } from "@/components/item-line/classwork";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { isReadingType } from "@/lib/classwork-utils";
 import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
 import type {
   StudentRecordDetailResponse,
@@ -24,11 +32,6 @@ function formatOfficialGrade(value?: number | null) {
   return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
-function formatDateTime(value?: string | null) {
-  if (!value) return "No due date";
-  return new Date(value).toLocaleString();
-}
-
 function statusLabel(status: string) {
   return status
     .replace(/_/g, " ")
@@ -46,31 +49,95 @@ export function StudentRecordDetail({
   subjectLoads: TeacherAdvisorySubjectLoadItem[];
   showSuggestionPanel?: boolean;
 }) {
+  const [performanceFilter, setPerformanceFilter] = useState<string>("all");
+  const [showAllPerformance, setShowAllPerformance] = useState(false);
+
+  const availableTypes = useMemo(() => {
+    const types = Array.from(
+      new Set(detail.classwork_results.map((c) => c.type).filter(Boolean)),
+    );
+    return types;
+  }, [detail.classwork_results]);
+
+  const performanceItems = useMemo(() => {
+    let items = detail.classwork_results;
+    if (performanceFilter !== "all") {
+      items = items.filter(
+        (c) => c.type?.toUpperCase() === performanceFilter.toUpperCase(),
+      );
+    }
+    return items.map((item) => {
+      let percent = 0;
+      if (item.percentage !== null && item.percentage !== undefined) {
+        percent = Math.round(Number(item.percentage));
+      } else if (item.score !== null && item.score !== undefined && item.total_points) {
+        percent = Math.round((Number(item.score) / Number(item.total_points)) * 100);
+      } else if (isReadingType(item.type)) {
+        const isOpened =
+          item.status === "submitted" ||
+          item.status === "completed" ||
+          item.status === "opened" ||
+          item.status === "late" ||
+          item.status === "graded" ||
+          Boolean(item.submitted_at);
+        percent = isOpened ? 100 : 0;
+      }
+      return {
+        id: item.assignment_id,
+        title: item.title,
+        score: item.score,
+        total_points: item.total_points,
+        status: item.status,
+        type: item.type,
+        percent: Math.min(100, Math.max(0, percent)),
+      };
+    });
+  }, [detail.classwork_results, performanceFilter]);
+
+  const displayedPerformanceItems = showAllPerformance
+    ? performanceItems
+    : performanceItems.slice(0, 5);
+
   return (
     <div className="space-y-4">
-      <Card className="block w-full border-2 border-black bg-primary text-primary-foreground shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-        <Card.Content className="flex flex-col gap-4 p-4 sm:p-5 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" size="sm" className="h-fit">
-                Student Record
-              </Badge>
-              {detail.student.status && (
-                <Badge variant="solid" size="sm">
-                  {statusLabel(detail.student.status)}
-                </Badge>
-              )}
-            </div>
-            <Card.Title className="text-2xl sm:text-3xl font-extrabold text-black">
-              {detail.student.full_name}
+      <Card className="block w-full border-black bg-primary p-6">
+        <Card.Content className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="flex flex-col gap-2">
+            <Card.Title className="flex items-center gap-3 text-2xl sm:text-3xl">
+              <Avatar variant="student" className="size-12 shrink-0">
+                <Avatar.Image
+                  src={(detail.student as any)?.avatar || "/avatars/student-avatars/1.svg"}
+                  alt={detail.student.full_name}
+                />
+                <Avatar.Fallback>
+                  {(detail.student.full_name || "?").charAt(0).toUpperCase()}
+                </Avatar.Fallback>
+              </Avatar>
+              <div>
+                <div className="flex items-center gap-4">
+                  <p className="text-2xl sm:text-3xl font-extrabold text-black">
+                    {detail.student.full_name}
+                  </p>
+
+                  <Badge variant="outline" size="sm">
+                    {detail.student.academic_level || "Student"}
+                  </Badge>
+                </div>
+
+                <p className="text-xs sm:text-sm font-normal pl-0.5">
+                  LRN: {detail.student.lrn}
+                </p>
+              </div>
+
             </Card.Title>
-            <p className="text-xs sm:text-sm font-medium text-black/80">
-              {detail.student.academic_level || "Student"} | {detail.student.section_name} | LRN {detail.student.lrn}
-              {detail.student.gender ? ` | ${detail.student.gender}` : ""}
-            </p>
           </div>
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-black bg-[#F6E9B2] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-            <UserRound size={24} className="text-black" />
+
+          <div className="flex gap-2">
+            {detail.student.status && (
+              <Badge variant="solid" size="sm">
+                {statusLabel(detail.student.status)}
+              </Badge>
+            )}
           </div>
         </Card.Content>
       </Card>
@@ -86,130 +153,228 @@ export function StudentRecordDetail({
         />
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="block w-full border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-          <Card.Content className="space-y-1 p-4">
-            <Card.Description className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Official Grade
-            </Card.Description>
-            <Card.Title className="text-2xl sm:text-3xl font-extrabold">
-              {formatOfficialGrade(detail.summary.official_period_grade)}
-            </Card.Title>
-            <p className="text-xs font-medium text-muted-foreground">
-              Encoded period grade
-            </p>
-          </Card.Content>
-        </Card>
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
+        {/* Main Content: Classwork History */}
+        <div className="lg:col-span-8 xl:col-span-9 flex flex-col gap-4">
+          {/* Lesson Performance Card */}
+          <Card className="flex flex-col p-4 sm:p-5">
+            <Card.Header className="mb-0 p-0 flex flex-col gap-2">
+              <div className="flex flex-row items-center justify-between">
+                <Card.Title className="text-xl sm:text-2xl font-bold text-foreground">
+                  Lesson Performance
+                </Card.Title>
+                <Badge variant="secondary" size="sm" className="h-fit">
+                  {detail.summary.graded_count} / {detail.summary.assigned_count} graded
+                </Badge>
+              </div>
 
-        <Card className="block w-full border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-          <Card.Content className="space-y-1 p-4">
-            <Card.Description className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Running Average
-            </Card.Description>
-            <Card.Title className="text-2xl sm:text-3xl font-extrabold">
-              {formatMetric(detail.summary.running_classwork_percentage)}
-            </Card.Title>
-            <p className="text-xs font-medium text-muted-foreground">
-              Classwork only
-            </p>
-          </Card.Content>
-        </Card>
+              {availableTypes.length > 1 && (
+                <div className="flex flex-row flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                  <Button
+                    autoIcon={false}
+                    variant={performanceFilter === "all" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPerformanceFilter("all")}
+                    className="shrink-0 border-black shadow-none text-[11px] px-2 py-0.5"
+                  >
+                    All ({detail.classwork_results.length})
+                  </Button>
+                  {availableTypes.map((type) => {
+                    const count = detail.classwork_results.filter(
+                      (c) => c.type?.toUpperCase() === type.toUpperCase(),
+                    ).length;
+                    const label =
+                      type.toUpperCase() === "QUIZ"
+                        ? "Quizzes"
+                        : type.toUpperCase() === "ASSIGNMENT"
+                          ? "Assignments"
+                          : type.toUpperCase() === "ACTIVITY"
+                            ? "Activities"
+                            : type.toUpperCase() === "READING"
+                              ? "Readings"
+                              : type.replace(/_/g, " ");
 
-        <Card className="block w-full border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-          <Card.Content className="space-y-1 p-4">
-            <Card.Description className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Completion
-            </Card.Description>
-            <Card.Title className="text-2xl sm:text-3xl font-extrabold">
-              {formatMetric(detail.summary.completion_rate)}
-            </Card.Title>
-            <p className="text-xs font-medium text-muted-foreground">
-              {detail.summary.submitted_count}/{detail.summary.assigned_count} done
-            </p>
-          </Card.Content>
-        </Card>
-
-        <Card className="block w-full border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-          <Card.Content className="space-y-1 p-4">
-            <Card.Description className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Needs Attention
-            </Card.Description>
-            <Card.Title className="text-2xl sm:text-3xl font-extrabold">
-              {detail.summary.missing_count + detail.summary.ungraded_count}
-            </Card.Title>
-            <p className="text-xs font-medium text-muted-foreground">
-              Missing or ungraded
-            </p>
-          </Card.Content>
-        </Card>
-      </div>
-
-      <Card className="block w-full border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-        <Card.Content className="p-4 sm:p-5">
-          <div className="mb-4 flex items-center justify-between gap-2 border-b-2 border-black pb-3">
-            <div className="flex items-center gap-2">
-              <ClipboardList size={20} className="text-black" />
-              <Card.Title className="mb-0 text-lg sm:text-xl font-bold text-black">
-                Classwork History
-              </Card.Title>
-            </div>
-            <Badge
-              variant="secondary"
-              size="sm"
-              className="bg-accent font-semibold text-accent-foreground"
-            >
-              {detail.classwork_results.length}{" "}
-              {detail.classwork_results.length === 1 ? "task" : "tasks"}
-            </Badge>
-          </div>
-          <div className="space-y-2.5">
-            {detail.classwork_results.length ? (
-              detail.classwork_results.map((item) => (
-                <div
-                  key={item.assignment_id}
-                  className="border-2 border-black bg-background p-3 sm:p-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
-                >
-                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="text-sm font-bold text-black sm:text-base">{item.title}</p>
-                      <p className="mt-0.5 text-xs font-medium text-muted-foreground">
-                        {item.type}{" "}
-                        {item.category
-                          ? `| ${item.category.replace(/_/g, " ")}`
-                          : ""}{" "}
-                        | {formatDateTime(item.due_date)}
-                      </p>
-                    </div>
-                    <div className="flex items-center justify-between gap-2 md:flex-col md:items-end">
-                      <p className="text-sm font-bold sm:text-base">
-                        {item.score ?? 0} / {item.total_points ?? 0}
-                      </p>
-                      <Badge
-                        variant={
-                          item.status === "graded" || item.status === "submitted"
-                            ? "solid"
-                            : item.status === "late"
-                              ? "outline"
-                              : "default"
-                        }
+                    return (
+                      <Button
+                        key={type}
+                        autoIcon={false}
+                        variant={performanceFilter === type ? "default" : "outline"}
                         size="sm"
-                        className="text-[10px]"
+                        onClick={() => setPerformanceFilter(type)}
+                        className="shrink-0 border-black shadow-none text-[11px] px-2 py-0.5 capitalize"
                       >
-                        {statusLabel(item.status)}
-                      </Badge>
-                    </div>
-                  </div>
+                        {label} ({count})
+                      </Button>
+                    );
+                  })}
                 </div>
-              ))
-            ) : (
-              <p className="border-2 border-dashed border-black/30 p-8 text-center text-sm font-medium text-muted-foreground">
-                No classwork records for this period yet.
-              </p>
-            )}
-          </div>
-        </Card.Content>
-      </Card>
-    </div>
+              )}
+            </Card.Header>
+
+            <Card.Content className="flex flex-col justify-between gap-2.5 p-0 h-full mt-3">
+              <div className="flex flex-col gap-2.5">
+                {!performanceItems.length ? (
+                  <EmptyStateCard
+                    icon={<BookOpen className="size-6 text-muted-foreground" />}
+                    title="No classwork performance records found for this filter."
+                    className="border-none bg-transparent shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground"
+                  />
+                ) : (
+                  displayedPerformanceItems.map((item) => (
+                    <div
+                      key={item.id}
+                      title={`${item.title} — ${item.score !== null && item.score !== undefined
+                        ? `${item.score} / ${item.total_points ?? 0} pts`
+                        : isReadingType(item.type)
+                          ? item.percent === 100
+                            ? "Opened"
+                            : "Not Opened"
+                          : "Not Graded"
+                        } (${item.percent}%)`}
+                      className="flex items-center justify-between gap-3 text-xs sm:text-sm"
+                    >
+                      <span
+                        className="font-medium text-foreground/90 shrink-0 w-32 sm:w-48 truncate"
+                        title={item.title}
+                      >
+                        {item.title}
+                      </span>
+                      <Progress value={item.percent} className="h-2.5 flex-1" />
+                      <span className="font-semibold text-foreground text-right w-12 shrink-0">
+                        {item.percent}%
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {performanceItems.length > 5 && (
+                <div className="flex items-center justify-end pt-1">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    autoIcon={false}
+                    onClick={() => setShowAllPerformance((prev) => !prev)}
+                    className="text-xs font-semibold px-2.5 py-1 h-7 text-foreground shadow-none"
+                  >
+                    {showAllPerformance
+                      ? "Show less"
+                      : `View all (${performanceItems.length})`}
+                  </Button>
+                </div>
+              )}
+
+              <Card.Description className="text-xs text-muted-foreground mt-1">
+                {detail.summary.graded_count} of {detail.summary.assigned_count} classwork tasks graded
+              </Card.Description>
+            </Card.Content>
+          </Card>
+
+          <Card className="w-full gap-2 p-4 ">
+            <Card.Header className="flex flex-row justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Card.Title className="text-xl sm:text-2xl">
+                  Classwork History
+                </Card.Title>
+              </div>
+              <Badge
+                variant="secondary"
+                size="sm"
+                className="h-fit"
+              >
+                {detail.classwork_results.length}{" "}
+                {detail.classwork_results.length === 1 ? "task" : "tasks"}
+              </Badge>
+            </Card.Header>
+            <Card.Content className="mt-2">
+              <div className="space-y-2.5">
+                {detail.classwork_results.length ? (
+                  detail.classwork_results.map((item) => {
+                    const isReading = isReadingType(item.type);
+                    const isOpened =
+                      item.status === "submitted" ||
+                      item.status === "completed" ||
+                      item.status === "opened" ||
+                      item.status === "late" ||
+                      item.status === "graded" ||
+                      Boolean(item.submitted_at);
+                    const isGraded =
+                      item.status === "graded" ||
+                      (item.score !== null && item.score !== undefined);
+
+                    return (
+                      <ClassworkItemLine
+                        key={item.assignment_id}
+                        item={item}
+                        showPublicationStatus={false}
+                        showCategoryBadge={false}
+                        showTypeBadge={false}
+                        className="shadow-none! hover:bg-retro hover:-translate-y-1 transition-all"
+                        rightContent={
+                          <div className="flex items-center gap-2 sm:gap-3">
+                            {isReading ? (
+                              isOpened ? (
+                                <Badge variant="secondary" size="sm">
+                                  Opened
+                                </Badge>
+                              ) : (
+                                <Badge variant="default" size="sm">
+                                  Not Opened
+                                </Badge>
+                              )
+                            ) : isGraded ? (
+                              <Badge variant="secondary" size="sm" className="text-sm font-bold whitespace-nowrap">
+                                {item.score ?? 0} / {item.total_points ?? 0}
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="default"
+                                size="sm"
+                              >
+                                Not Graded
+                              </Badge>
+                            )}
+                          </div>
+                        }
+                      />
+                    );
+                  })
+                ) : (
+                  <p className="border-2 border-dashed border-black/30 p-8 text-center text-sm font-medium text-muted-foreground">
+                    No classwork records for this period yet.
+                  </p>
+                )}
+              </div>
+            </Card.Content>
+          </Card>
+        </div>
+
+        {/* Side Overview Cards */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1 lg:col-span-4 xl:col-span-3">
+          <OverviewCard
+            title="Official Grade"
+            count={formatOfficialGrade(detail.summary.official_period_grade)}
+            statDescription="Encoded period grade"
+          />
+          <OverviewCard
+            title="Running Average"
+            count={formatMetric(detail.summary.running_classwork_percentage)}
+            statDescription="Classwork only"
+          />
+          <OverviewCard
+            title="Completion"
+            count={formatMetric(detail.summary.completion_rate)}
+            stat={`${detail.summary.submitted_count}/${detail.summary.assigned_count}`}
+            statDescription="done"
+          />
+          <OverviewCard
+            title="Needs Attention"
+            count={String(detail.summary.missing_count + detail.summary.ungraded_count)}
+            statDescription="Missing or ungraded"
+          />
+        </div>
+      </div>
+    </div >
   );
 }
 

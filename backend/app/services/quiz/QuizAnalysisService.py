@@ -9,6 +9,7 @@ from app.models.academic.StudentCLass import StudentClass
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.Student import Student
+from app.models.auth.UserAccount import UserAccount
 from app.models.quiz.Question import Question
 from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizAnswer import QuizAnswer
@@ -66,8 +67,19 @@ def build_teacher_quiz_analysis(
     submissions_by_student = {str(submission.student_id): submission for submission in submissions}
 
     total_points = Decimal(str(classwork.total_points)) if classwork.total_points is not None else None
+    avatars = dict(
+        db.query(Student.student_id, UserAccount.avatar_path)
+        .join(UserAccount, Student.user_id == UserAccount.user_id)
+        .filter(Student.student_id.in_([student.student_id for student in roster]))
+        .all()
+    ) if roster else {}
     student_rows = [
-        _student_score_out(student, submissions_by_student.get(str(student.student_id)), total_points)
+        _student_score_out(
+            student,
+            submissions_by_student.get(str(student.student_id)),
+            total_points,
+            avatar=avatars.get(student.student_id),
+        )
         for student in roster
     ]
     submitted = [
@@ -162,6 +174,7 @@ def _student_score_out(
     student: Student,
     submission: StudentSubmission | None,
     total_points: Decimal | None,
+    avatar: str | None = None,
 ) -> QuizStudentScoreOut:
     grade = float(submission.grade) if submission and submission.grade is not None else None
     
@@ -184,6 +197,7 @@ def _student_score_out(
     return QuizStudentScoreOut(
         student_id=str(student.student_id),
         student_name=_student_name(student),
+        avatar=avatar,
         submission_id=submission.submission_id if submission else None,
         status=submission.status if submission else "not_submitted",
         attempt_count=submission.attempt_count if submission else 0,
@@ -300,6 +314,8 @@ def get_teacher_quiz_submission_detail(
 
     student = db.query(Student).filter(Student.student_id == submission.student_id).first()
     student_name = _student_name(student) if student else "Student"
+    account = db.query(UserAccount).filter(UserAccount.user_id == student.user_id).first() if student and student.user_id else None
+    avatar = account.avatar_path if account else None
 
     existing_answers = {
         ans.quiz_question_id: ans
@@ -363,6 +379,7 @@ def get_teacher_quiz_submission_detail(
         classwork_id=classwork.classwork_id,
         student_id=str(submission.student_id),
         student_name=student_name,
+        avatar=avatar,
         status=submission.status,
         attempt_count=submission.attempt_count,
         total_points=total_pts,

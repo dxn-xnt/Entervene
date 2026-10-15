@@ -57,6 +57,7 @@ export type QuizStudentQuestionAnswer = {
 export type QuizStudentScore = {
   student_id: string;
   student_name: string;
+  avatar?: string | null;
   submission_id?: number | null;
   status: string;
   attempt_count: number;
@@ -123,6 +124,7 @@ export type TeacherQuizSubmissionDetail = {
   classwork_id: number;
   student_id: string;
   student_name: string;
+  avatar?: string | null;
   status: string;
   attempt_count: number;
   total_points: number;

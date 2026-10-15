@@ -2,12 +2,11 @@ import {
   Archive,
   FileText,
   Pencil,
-  AlertTriangle,
   ClipboardList,
   BookOpen,
   CheckSquare,
 } from "lucide-react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AttachmentDisplay from "@/components/attachment-display";
 import { API_URL, apiFetch } from "@/lib/api";
@@ -43,7 +42,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/to
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
-import DeadlineSummaryModal from "@/components/teacher/deadline-summary-modal";
 import IconContainer from "@/components/icon-container";
 import { toTitleCase } from "@/lib/formatters";
 
@@ -94,7 +92,6 @@ export default function ClassworkView({
   const toast = useToast();
   const navigate = useNavigate();
   const params = useParams<{ classworkId: string }>();
-  const [searchParams, setSearchParams] = useSearchParams();
   const isStandalone = !classwork;
 
   const [selected, setSelected] = useState<TeacherClasswork | null>(classwork ?? null);
@@ -116,7 +113,6 @@ export default function ClassworkView({
   const [isArchiving, setIsArchiving] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [isDeadlineSummaryOpen, setIsDeadlineSummaryOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<
     "all" | "graded" | "on_time" | "late" | "missing"
   >("all");
@@ -135,26 +131,6 @@ export default function ClassworkView({
   const [feedbackDraft, setFeedbackDraft] = useState("");
   const [isPostingGrade, setIsPostingGrade] = useState(false);
   const [gradeSuccess, setGradeSuccess] = useState("");
-
-  useEffect(() => {
-    if (searchParams.get("focus") === "deadline_summary") {
-      setIsDeadlineSummaryOpen(true);
-    }
-  }, [searchParams]);
-
-  const handleCloseDeadlineSummary = () => {
-    setIsDeadlineSummaryOpen(false);
-    if (searchParams.has("focus")) {
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.delete("focus");
-      setSearchParams(nextParams, { replace: true });
-    }
-  };
-
-  const handleSelectStudentFromSummary = (student: TrackingStudent) => {
-    handleCloseDeadlineSummary();
-    void openStudentSubmission(student);
-  };
 
   // Sync internal selected state when prop changes or fetch if standalone
   useEffect(() => {
@@ -766,7 +742,6 @@ export default function ClassworkView({
                 <Card.Content className="flex flex-col gap-1">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <Card.Title className="flex flex-row items-center gap-3 mb-0 text-3xl font-bold">
-
                       <IconContainer variant="primary" size="xl">
                         <ClassworkTypeIcon type={selected.classwork_type} size={48} />
                       </IconContainer>
@@ -780,25 +755,6 @@ export default function ClassworkView({
                         </div>
 
                         <div className="gap-3">
-                          {(() => {
-                            const activeAssignment =
-                              selectedAssignmentId !== "all"
-                                ? selected.assignments?.find(
-                                  (a) =>
-                                    a.classwork_assignment_id === selectedAssignmentId,
-                                )
-                                : selected.assignments?.find((a) => a.due_date);
-                            const due = activeAssignment?.due_date;
-                            if (!due) return null;
-                            return (
-                              <div className="">
-                                <p className="font-normal text-sm">
-                                  Due on {new Date(due).toLocaleString()} |
-                                </p>
-                              </div>
-                            );
-                          })()}
-
                           {(Boolean(selected.linked_lessons?.length) || Boolean(selected.subject_name)) && (
                             <p className="font-normal text-sm text-muted-foreground">
                               {selected.linked_lessons && selected.linked_lessons.length > 0 ? (
@@ -831,7 +787,7 @@ export default function ClassworkView({
                                 </>
                               ) : selected.subject_name ? (
                                 <>
-                                  Subject:{" "}
+                                  Linked to {" "}
                                   <button
                                     type="button"
                                     onClick={() => void navigateToSubject()}
@@ -915,24 +871,31 @@ export default function ClassworkView({
 
               {selected.created_at && selected.is_published && (
                 <Card className="w-full p-0 border-0! shadow-none px-2 -mt-1">
-                  <Card.Content>
+                  <Card.Content className="flex flex-row gap-1">
+                    {(() => {
+                      const activeAssignment =
+                        selectedAssignmentId !== "all"
+                          ? selected.assignments?.find(
+                            (a) =>
+                              a.classwork_assignment_id === selectedAssignmentId,
+                          )
+                          : selected.assignments?.find((a) => a.due_date);
+                      const due = activeAssignment?.due_date;
+                      if (!due) return null;
+                      return (
+                        <div className="">
+                          <p className="font-normal text-sm font-semibold">
+                            Due on {formatDate(due)}  |
+                          </p>
+                        </div>
+                      );
+                    })()}
                     <p className="text-sm text-muted-foreground">
                       Created on {formatDate(selected.created_at)}
                     </p>
                   </Card.Content>
                 </Card>
               )}
-
-              {(selected.classwork_type === "ACTIVITY" ||
-                selected.classwork_type === "ASSIGNMENT") && (
-                  <div className="w-full mb-2">
-                    <RubricsScoreBoard
-                      totalPoints={selected.total_points}
-                      rubricLevels={selected.rubric_levels}
-                    />
-                  </div>
-
-                )}
               <ConfirmDialog
                 open={showArchiveConfirm}
                 onOpenChange={setShowArchiveConfirm}
@@ -951,7 +914,7 @@ export default function ClassworkView({
             {/* Submissions & Grading / Reading Engagement Progress Card */}
             <Card className="w-full">
               <Card.Header className="pb-1 flex flex-row flex-wrap items-center justify-between gap-2">
-                <Card.Title className="text-lg font-bold">
+                <Card.Title className="text-xl sm:text-2xl font-bold">
                   {isReadingType(selected.classwork_type)
                     ? "Reading Engagement Rate"
                     : isQuizType(selected.classwork_type)
@@ -971,8 +934,19 @@ export default function ClassworkView({
               </Card.Header>
 
               {/* Assigned Sections Filter */}
+              {(selected.classwork_type === "ACTIVITY" ||
+                selected.classwork_type === "ASSIGNMENT") && (
+                  <div className="w-full mb-2">
+                    <RubricsScoreBoard
+                      totalPoints={selected.total_points}
+                      rubricLevels={selected.rubric_levels}
+                    />
+                  </div>
+
+                )}
+
               {selected.assignments && selected.assignments.length > 0 && (
-                <div className="flex flex-row items-center gap-2 overflow-x-auto pb-1 px-2">
+                <div className="flex flex-row items-center gap-2 overflow-x-auto py-2 pb-3 px-2">
                   <span className="shrink-0 text-sm font-regular text-muted-foreground">
                     Section:
                   </span>
@@ -1204,18 +1178,6 @@ export default function ClassworkView({
                   <div className="space-y-4 mt-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex flex-wrap items-center gap-3">
-                        {(filterCounts.late > 0 || filterCounts.missing > 0) && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setIsDeadlineSummaryOpen(true)}
-                            className="h-7 gap-1 px-2.5 text-xs font-bold border-black bg-[#F6E9B2] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#F6E9B2]/80"
-                          >
-                            <AlertTriangle className="size-3.5" />
-                            <span>Deadline Summary</span>
-                          </Button>
-                        )}
-
                         {/* Status Filter Chips */}
                         <div className="flex flex-row items-center gap-2 overflow pb-1 px-2">
                           <span className="shrink-0 text-sm font-regular text-muted-foreground">
@@ -1377,24 +1339,6 @@ export default function ClassworkView({
           }}
         />
       )}
-
-      {/* Deadline Summary Modal */}
-      <DeadlineSummaryModal
-        isOpen={isDeadlineSummaryOpen}
-        onClose={handleCloseDeadlineSummary}
-        tracking={tracking}
-        classworkTitle={selected?.title}
-        dueDate={
-          (selectedAssignmentId !== "all"
-            ? selected?.assignments?.find(
-              (a) => a.classwork_assignment_id === selectedAssignmentId,
-            )
-            : selected?.assignments?.[0]
-          )?.due_date
-        }
-        totalPoints={selected?.total_points}
-        onSelectStudent={handleSelectStudentFromSummary}
-      />
     </main>
   );
 

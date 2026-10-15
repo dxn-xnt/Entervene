@@ -7,6 +7,9 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { apiFetch } from "@/lib/api";
 import type { TeacherQuizSubmissionDetail } from "@/pages/teacher/classworks/quiz-builder-types";
 import { Card } from "./retroui/Card";
+import { SegmentedControl } from "@/components/retroui/SegmentedControl";
+import { formatDate, toTitleCase } from "@/lib/formatters";
+import { Avatar } from "@/components/retroui/Avatar";
 
 interface QuizGradingModalProps {
   submissionId: number;
@@ -16,6 +19,15 @@ interface QuizGradingModalProps {
 }
 
 type QuestionGradingStatus = "correct" | "incorrect" | "needs_grading" | "neutral";
+
+function formatQuestionType(type?: string): string {
+  if (!type) return "";
+  return type
+    .toLowerCase()
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 
 export default function QuizGradingModal({
   submissionId,
@@ -159,16 +171,19 @@ export default function QuizGradingModal({
               <span className="text-base font-extrabold text-black">
                 Q{idx + 1}. {ans.question_text}
               </span>
-              <Badge variant="outline" size="sm" className="border border-border font-bold capitalize text-foreground outline-0">
-                {ans.question_type.replace("_", " ")}
+              <Badge variant="solid" size="sm">
+                {formatQuestionType(ans.question_type)}
               </Badge>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge size="sm" variant={status === "correct" ? "success" : status === "incorrect" ? "destructive" : "secondary"} className="border border-border font-bold text-xs outline-0">
+            <Badge size="sm" variant={status === "correct" ? "success" : status === "incorrect" ? "destructive" : "secondary"}>
               {status === "correct" ? "Correct" : status === "incorrect" ? "Incorrect" : "Needs Grading"}
             </Badge>
-            <span className="text-xs font-bold text-gray-600">Max: {maxPts} pts</span>
+
+            <Badge size="sm" variant="secondary" className="font-medium!">
+              Max: <span className="text-xs font-bold text-black ml-1">{maxPts} pts</span>
+            </Badge>
           </div>
         </div>
 
@@ -176,8 +191,7 @@ export default function QuizGradingModal({
         <div className="mt-4 space-y-3">
           {(qType === "multiple_choice" || qType === "multiplechoice") && ans.options && (
             <div className="space-y-2">
-              <p className="text-xs font-bold uppercase text-gray-600">Answer Choices:</p>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="flex flex-col gap-2">
                 {ans.options.map((opt) => {
                   const isSelected =
                     opt.option_id === ans.selected_option_id ||
@@ -185,35 +199,23 @@ export default function QuizGradingModal({
                   const isCorrect = opt.is_correct;
 
                   return (
-                    <div
+                    <Card
                       key={opt.option_id}
-                      className={`rounded border-2 p-3 text-sm font-semibold transition-all ${isCorrect
-                        ? "border-[#3A6D38] bg-[#8BCB88]/25 text-black"
+                      className={`rounded border-2! p-3 text-sm font-semibold transition-all ${isCorrect
+                        ? "border-success/100! bg-success/40 text-black"
                         : isSelected && !isCorrect
-                          ? "border-red-500 bg-red-50 text-black"
+                          ? "border-destructive bg-destructive/40 text-black"
                           : isSelected
                             ? "border-black bg-[#F6E9B2] text-black"
-                            : "border-gray-200 bg-gray-50 text-gray-700"
+                            : "border-muted-border text-gray-700"
                         }`}
                     >
                       <div className="flex items-start justify-between gap-2 min-w-0">
                         <span className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere] leading-snug">
                           {opt.option_text}
                         </span>
-                        <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                          {isCorrect && (
-                            <Badge variant="success" size="sm" className="px-1.5 py-0.5 text-[10px] font-black uppercase outline-0">
-                              Correct Key
-                            </Badge>
-                          )}
-                          {isSelected && (
-                            <Badge variant="solid" size="sm" className="px-1.5 py-0.5 text-[10px] font-black uppercase">
-                              Student Answer
-                            </Badge>
-                          )}
-                        </div>
                       </div>
-                    </div>
+                    </Card>
                   );
                 })}
               </div>
@@ -222,7 +224,7 @@ export default function QuizGradingModal({
 
           {qType === "true_false" && (
             <div className="space-y-2">
-              <p className="text-xs font-bold uppercase text-gray-600">Student Response:</p>
+              <p className="text-xs font-bold    text-gray-600">Student Response:</p>
               <div className="flex flex-wrap items-center gap-3">
                 <div
                   className={`rounded border-2 px-4 py-2 text-sm font-bold ${studentAnswerText.toLowerCase() === "true"
@@ -242,7 +244,7 @@ export default function QuizGradingModal({
                 </div>
                 {correctAnswerText && (
                   <span className="text-xs font-bold text-gray-600">
-                    Correct Key: <span className="font-extrabold text-black uppercase">{correctAnswerText}</span>
+                    Correct Key: <span className="font-extrabold text-black   ">{correctAnswerText}</span>
                   </span>
                 )}
               </div>
@@ -252,14 +254,14 @@ export default function QuizGradingModal({
           {(qType === "identification" || qType === "fill_in_the_blank") && (
             <div className="space-y-2">
               <div className="rounded border-2 border-black bg-gray-50 p-3">
-                <p className="text-xs font-bold uppercase text-gray-600">Student Written Answer:</p>
+                <p className="text-xs font-bold    text-gray-600">Student Written Answer:</p>
                 <p className="mt-1 text-sm font-bold text-black">
                   {studentAnswerText || <span className="italic text-gray-400 font-normal">No answer submitted</span>}
                 </p>
               </div>
               {correctAnswerText && (
                 <div className="rounded border-2 border-dashed border-[#8BCB88] bg-[#8BCB88]/10 p-3">
-                  <p className="text-xs font-bold uppercase text-[#3A6D38]">Expected Key Answer:</p>
+                  <p className="text-xs font-bold    text-[#3A6D38]">Expected Key Answer:</p>
                   <p className="mt-1 text-sm font-bold text-black">{correctAnswerText}</p>
                 </div>
               )}
@@ -269,14 +271,14 @@ export default function QuizGradingModal({
           {(qType === "essay" || qType === "short_answer" || qType === "shortanswer") && (
             <div className="space-y-2">
               <div className="rounded border-2 border-black bg-gray-50 p-4">
-                <p className="text-xs font-bold uppercase text-gray-600">Student Response:</p>
+                <p className="text-xs font-bold    text-gray-600">Student Response:</p>
                 <p className="mt-2 whitespace-pre-wrap text-sm font-medium text-black">
                   {studentAnswerText || <span className="italic text-gray-400">No response written</span>}
                 </p>
               </div>
               {correctAnswerText && (
                 <div className="rounded border-2 border-dashed border-[#8BCB88] bg-[#8BCB88]/10 p-3">
-                  <p className="text-xs font-bold uppercase text-[#3A6D38]">Expected Key / Reference Answer:</p>
+                  <p className="text-xs font-bold    text-[#3A6D38]">Expected Key / Reference Answer:</p>
                   <p className="mt-1 text-sm font-bold text-black">{correctAnswerText}</p>
                 </div>
               )}
@@ -287,41 +289,44 @@ export default function QuizGradingModal({
         {/* Manual Scoring Control */}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase text-gray-700">Quick Score:</span>
+            <span className="text-xs font-bold text-gray-700">Quick Score:</span>
             <Button
               type="button"
               variant="outline"
               size="sm"
+              autoIcon={false}
               onClick={() => handleScoreChange(ans.quiz_question_id, String(maxPts))}
-              className="border-2 border-black bg-[#8BCB88] px-2.5 py-1 text-xs font-bold text-black hover:bg-[#7ABA78]"
+              className="bg-success/80 px-2.5 py-1 text-xs text-black hover:bg-success"
             >
-              Full ({maxPts} pts)
+              Full <span className="font-bold ml-1">({maxPts} pts)</span>
             </Button>
             {maxPts > 1 && (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
+                autoIcon={false}
                 onClick={() => handleScoreChange(ans.quiz_question_id, String(Math.round(maxPts / 2)))}
-                className="border-2 border-black bg-[#FFD08A] px-2.5 py-1 text-xs font-bold text-black hover:bg-amber-300"
+                className="bg-primary/80 px-2.5 py-1 text-xs text-black hover:bg-primary"
               >
-                Half ({Math.round(maxPts / 2)} pts)
+                Half <span className="font-bold ml-1">({Math.round(maxPts / 2)} pts)</span>
               </Button>
             )}
             <Button
               type="button"
               variant="outline"
               size="sm"
+              autoIcon={false}
               onClick={() => handleScoreChange(ans.quiz_question_id, "0")}
-              className="border-2 border-black bg-[#FF6B6B] px-2.5 py-1 text-xs font-bold text-black hover:bg-red-400"
+              className="bg-destructive/70 px-2.5 py-1 text-xs text-black hover:bg-destructive/80"
             >
-              Zero (0 pts)
+              Zero <span className="font-bold ml-1">(0 pts)</span>
             </Button>
           </div>
 
           <div className="flex items-center gap-2">
-            <label htmlFor={`score-input-${ans.quiz_question_id}`} className="text-xs font-bold text-gray-700 uppercase">
-              Awarded Points:
+            <label htmlFor={`score-input-${ans.quiz_question_id}`} className="text-xs font-bold text-gray-700   ">
+              Points:
             </label>
             <input
               id={`score-input-${ans.quiz_question_id}`}
@@ -390,69 +395,70 @@ export default function QuizGradingModal({
           <form onSubmit={handleSaveGrade} className="flex flex-col flex-1 overflow-hidden">
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {/* Submission Summary Banner */}
-              <Card className="font-sans flex flex-wrap items-center justify-between shadow-none">
-                <div>
-                  <p className="text-sm text-semibold">Student Name</p>
-                  <p className="text-lg font-extrabold text-black">{detail.student_name}</p>
+              <Card className="font-sans bg-primary flex flex-wrap items-center justify-between shadow-none">
+                <div className="flex items-center gap-3">
+                  <Avatar variant="student" className="size-10 shrink-0">
+                    <Avatar.Image
+                      src={detail.avatar || "/avatars/student-avatars/1.svg"}
+                      alt={detail.student_name}
+                    />
+                    <Avatar.Fallback>
+                      {detail.student_name.slice(0, 1).toUpperCase()}
+                    </Avatar.Fallback>
+                  </Avatar>
+                  <div className="flex flex-col">
+                    <p className="text-lg font-extrabold text-black">{detail.student_name}</p>
+                    {detail.submitted_at && (
+                      <p className="text-xs font-normal text-foreground">
+                        Submitted on {formatDate(detail.submitted_at)}
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <div>
-                  <p className="text-sm text-semibold">Status</p>
                   <Badge
                     size="sm"
-                    variant={detail.needs_grading ? "secondary" : "surface"}
+                    className="text-sm"
+                    variant={detail.needs_grading ? "default" : "solid"}
                   >
-                    {detail.needs_grading ? "Needs Grading" : detail.status.toUpperCase()}
+                    {detail.needs_grading ? "Needs Grading" : toTitleCase(detail.status)}
                   </Badge>
                 </div>
                 <div>
-                  <p className="text-sm text-semibold">Total Score</p>
-                  <p className="text-lg font-black text-black">
-                    {calculateTotal()} / {detail.total_points} pts
-                  </p>
+                  <Badge size="sm" variant="outline" className="text-sm font-bold">
+                    {calculateTotal()} pts
+                  </Badge>
                 </div>
-                {/* View Mode Toggle */}
-                <div className="flex items-center gap-2 rounded border-2 border-black bg-white p-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={viewMode === "single" ? "default" : "ghost"}
-                    onClick={() => setViewMode("single")}
-                    className="gap-2 shadow-none hover:translate-y-0"
-                  >
-                    Single Question
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={viewMode === "all" ? "default" : "ghost"}
-                    onClick={() => setViewMode("all")}
-                    className="gap-2 shadow-none hover:translate-y-0"
-                  >
-                    View All ({detail.answers.length})
-                  </Button>
-                </div>
+
               </Card>
 
               {/* Question Navigation Chips */}
-              <Card className="shadow-none w-full">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-xs font-extrabold uppercase text-gray-700">
-                    Question Navigator ({detail.answers.length} Questions)
-                  </span>
-                  <div className="flex items-center gap-3 text-[11px] font-bold text-gray-600">
-                    <span className="flex items-center gap-1">
-                      <span className="h-2.5 w-2.5 rounded-full bg-primary border border-black" /> Correct
+              <Card className="p-0 border-none shadow-none w-full px-2">
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap w-full items-center gap-3 justify-between">
+                    <span className="text-xl font-extrabold text-foreground">
+                      Question Navigator
                     </span>
-                    <span className="flex items-center gap-1">
-                      <span className="h-2.5 w-2.5 rounded-full bg-destructive border border-black" /> Incorrect
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="h-2.5 w-2.5 rounded-full bg-muted border border-black" /> Needs Grading
-                    </span>
+                    {/* View Mode Toggle */}
+                    <SegmentedControl
+                      size="sm"
+                      value={viewMode}
+                      onValueChange={(val) => setViewMode(val as "single" | "all")}
+                    >
+                      <SegmentedControl.Item value="single">
+                        Single Question
+                      </SegmentedControl.Item>
+                      <SegmentedControl.Item value="all">
+                        View All ({detail.answers.length})
+                      </SegmentedControl.Item>
+                    </SegmentedControl>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
+                <div
+                  data-testid="question-navigator-grid"
+                  className="pl-1 flex flex-wrap gap-2 max-h-36 sm:max-h-40 overflow-y-auto py-1 pr-1"
+                >
                   {detail.answers.map((ans, idx) => {
                     const status = getQuestionStatus(ans.quiz_question_id, ans.max_points, ans.is_correct);
                     const isActive = activeQuestionIndex === idx;
@@ -468,14 +474,13 @@ export default function QuizGradingModal({
                             el?.scrollIntoView({ behavior: "smooth", block: "center" });
                           }
                         }}
-                        className={`relative flex h-8 min-w-8 items-center justify-center rounded border-2 px-2 text-xs font-black transition-all cursor-pointer ${status === "correct"
-                          ? "bg-[#8BCB88] text-black border-black"
-                          : status === "incorrect"
-                            ? "bg-[#FF6B6B] text-black border-black"
-                            : "bg-[#FFD08A] text-black border-black"
-                          } ${isActive
-                            ? "ring-2 ring-black ring-offset-2 scale-110 z-10 shadow-md"
-                            : "opacity-90 hover:opacity-100"
+                        className={`relative flex h-8 min-w-8 items-center rounded! justify-center rounded border-2 border-black px-2 text-xs font-black transition cursor-pointer hover:translate-y-1 active:translate-y-2 ${isActive
+                          ? "bg-primary text-black z-10"
+                          : status === "correct"
+                            ? "bg-success/40 text-black opacity-90 hover:opacity-100"
+                            : status === "incorrect"
+                              ? "bg-destructive/40 text-black opacity-90 hover:opacity-100"
+                              : "bg-primary/40 text-black opacity-90 hover:opacity-100"
                           }`}
                         title={`Q${idx + 1}: ${status.replace("_", " ")}`}
                       >
@@ -490,28 +495,25 @@ export default function QuizGradingModal({
               {viewMode === "single" ? (
                 <div className="space-y-4">
                   {/* Previous / Next Bar */}
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between px-1">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       onClick={() => setActiveQuestionIndex((prev) => Math.max(0, prev - 1))}
                       disabled={activeQuestionIndex === 0}
-                      className="gap-1 border-2 border-black font-bold disabled:opacity-40"
+                      className="gap-1 border-2 border-black font-bold disabled:opacity-40 pl-2"
                     >
                       <ChevronLeft size={16} />
                       Previous Question
                     </Button>
-                    <span className="text-sm font-extrabold text-black">
-                      Question {activeQuestionIndex + 1} of {detail.answers.length}
-                    </span>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       onClick={() => setActiveQuestionIndex((prev) => Math.min(detail.answers.length - 1, prev + 1))}
                       disabled={activeQuestionIndex === detail.answers.length - 1}
-                      className="gap-1 border-2 border-black font-bold disabled:opacity-40"
+                      className="gap-1 border-2 border-black font-bold disabled:opacity-40 pr-2"
                     >
                       Next Question
                       <ChevronRight size={16} />
@@ -530,16 +532,17 @@ export default function QuizGradingModal({
               )}
 
               {/* Overall Feedback Box */}
-              <Card className="block w-full p-4">
-                <label className="text-xs font-bold uppercase text-gray-700 block mb-1">
-                  Teacher Feedback / Notes for Student (Optional)
+              <Card className="block w-full p-0 border-none px-1">
+                <label className="text-sm font-semibold text-foreground block mb-1">
+                  Teacher Feedback
+                  <span className="text-xs font-normal text-gray-500 ml-1 pb-1">(Optional)</span>
                 </label>
                 <textarea
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
                   rows={2}
                   placeholder="Add feedback on this attempt..."
-                  className="w-full rounded! border-2 border-black px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-black"
+                  className="w-full rounded! border-2 border-black px-3 py-2 text-sm focus:outline-none"
                 />
               </Card>
             </div>

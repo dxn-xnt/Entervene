@@ -5,6 +5,7 @@ import DocumentViewer, { type PreviewDocumentKind } from "./document-viewer";
 import { API_URL, apiFetch } from "@/lib/api";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "./retroui/Card";
+import { IconContainer } from "@/components/icon-container";
 
 interface Attachment {
   classwork_attachment_id?: number;
@@ -244,7 +245,9 @@ export default function AttachmentDisplay({
             {/* Top Bar Header */}
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-neutral-800 bg-neutral-900 px-4">
               <div className="flex min-w-0 items-center gap-2.5">
-                <ImageIcon className="size-5 shrink-0 text-blue-400" />
+                <IconContainer variant="primary" size="sm">
+                  <ImageIcon />
+                </IconContainer>
                 <p
                   className="truncate text-sm font-medium text-neutral-200"
                   title={selectedImage.name}
