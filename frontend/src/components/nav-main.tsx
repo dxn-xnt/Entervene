@@ -7,6 +7,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/retroui/Badge";
+import { studentClassworkSidebarPath } from "@/lib/student-classwork-navigation";
 
 export function NavMain({
   items,
@@ -20,10 +21,11 @@ export function NavMain({
   }[];
   badgeCounts?: Record<string, number | undefined>;
 }) {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const activePath = studentClassworkSidebarPath(pathname, search);
 
   const matchesPath = (path: string) =>
-    pathname === path || pathname.startsWith(path + "/");
+    activePath === path || activePath.startsWith(path + "/");
 
   return (
     <SidebarGroup>
@@ -37,7 +39,7 @@ export function NavMain({
                   tooltip={item.title}
                   isActive={
                     item.url === "/"
-                      ? pathname === item.url
+                      ? activePath === item.url
                       : matchesPath(item.url) ||
                       item.activePaths?.some(matchesPath) === true
                   }
