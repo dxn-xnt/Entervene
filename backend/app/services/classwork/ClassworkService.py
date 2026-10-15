@@ -1413,7 +1413,7 @@ def student_assignments(student, db: Session) -> dict:
             "is_locked": assignment_is_locked(assignment),
             "max_attempts": assignment.max_attempts,
             "submission_status": submission.status if submission else None,
-            "grade": float(submission.grade) if submission and submission.grade else None,
+            "grade": float(submission.grade) if submission and submission.grade is not None else None,
             "submitted_at": submission.submitted_at.isoformat() if submission and submission.submitted_at else None,
             "attempt_count": submission.attempt_count if submission else 0,
         }
