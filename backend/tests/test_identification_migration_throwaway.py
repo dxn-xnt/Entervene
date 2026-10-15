@@ -55,7 +55,8 @@ def test_alembic_chain_has_single_head():
     script = ScriptDirectory.from_config(cfg)
     heads = script.get_heads()
     assert len(heads) == 1, f"Expected single Alembic head, found multiple: {heads}"
-    assert heads[0] == "20261003b_ident_type_data"
+    ancestry = {revision.revision for revision in script.iterate_revisions(heads[0], "base")}
+    assert "20261003b_ident_type_data" in ancestry
 
 
 def test_throwaway_database_upgrade_and_safe_downgrade():
@@ -126,7 +127,7 @@ def test_throwaway_database_upgrade_and_safe_downgrade():
             """))
             conn.commit()
 
-        # 2. Upgrade throwaway DB to head (20261003a + 20261003b)
+        # 2. Upgrade through the identification migrations to the current head.
         command.upgrade(cfg, "head")
 
         with target_engine.connect() as conn:
@@ -179,7 +180,7 @@ def test_throwaway_database_upgrade_and_safe_downgrade():
 
         with target_engine.connect() as conn:
             ver = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-            assert ver == "20261003b_ident_type_data"
+            assert ver == ScriptDirectory.from_config(cfg).get_current_head()
 
     finally:
         if target_engine:

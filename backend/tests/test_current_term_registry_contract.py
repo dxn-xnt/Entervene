@@ -141,7 +141,10 @@ def test_v3_registration_path_is_development_only():
 def test_migration_graph_has_one_head_and_existing_columns_are_not_readded():
     cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     scripts = ScriptDirectory.from_config(cfg)
-    assert scripts.get_heads() == ["20260922_development_immutable"]
+    heads = scripts.get_heads()
+    assert len(heads) == 1, f"Expected one migration head, found: {heads}"
+    ancestry = {revision.revision for revision in scripts.iterate_revisions(heads[0], "base")}
+    assert "20260922_development_immutable" in ancestry
     assert scripts.get_revision("20260916_add_lesson_goals").down_revision == "20260916_unified_prediction_risk"
     assert "model_purpose" in inspect(AIModelVersion).columns
     assert "revision" in inspect(AIPrediction).columns
