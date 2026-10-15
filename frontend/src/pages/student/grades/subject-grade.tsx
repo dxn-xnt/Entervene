@@ -7,7 +7,6 @@ import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Table } from "@/components/retroui/Table";
 import { getStudentTodos, type TodoItem } from "@/lib/api";
-import { routes } from "@/../routes";
 import { Progress } from "@/components/retroui/Progress";
 
 type SubjectGradeProps = {
@@ -18,7 +17,6 @@ type SubjectGradeProps = {
 };
 
 const SubjectGrade = ({
-  classId,
   subjectId,
   subject,
   onBack,
@@ -174,8 +172,7 @@ const SubjectGrade = ({
                     </Table.Row>
                   ) : (
                     gradableTodos.map((item) => {
-                      const canNavigate =
-                        !!(classId ?? item.class_id) && subjectId;
+                      const canNavigate = Boolean(item.assignment_id);
                       return (
                         <Table.Row
                           key={item.assignment_id}
@@ -185,18 +182,13 @@ const SubjectGrade = ({
                               : "hover:bg-transparent"
                           }
                           onClick={() => {
-                            const targetClassId = classId ?? item.class_id;
-                            if (!targetClassId || !subjectId) return;
                             navigate(
-                              routes.student.subjectDetail
-                                .replace(":classId", String(targetClassId))
-                                .replace(":subjectId", String(subjectId)) +
-                                `?tab=classwork&classworkAssignmentId=${item.assignment_id}`,
+                              `/student/classworks/${item.assignment_id}?from=${encodeURIComponent(window.location.pathname + window.location.search)}`,
                             );
                           }}
                           title={
                             canNavigate
-                              ? `Open "${item.title}" in classwork tab`
+                              ? `Open "${item.title}" classwork`
                               : undefined
                           }
                         >

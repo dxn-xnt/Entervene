@@ -75,7 +75,11 @@ export type QuizSubmitRequest = {
 export async function getQuizAttempt(assignmentId: number): Promise<QuizAttemptResponse> {
   const res = await apiFetch(`/api/v1/quizzes/assignment/${assignmentId}/attempt`);
   if (!res.ok) throw new Error("Failed to fetch quiz attempt.");
-  return res.json();
+  const attempt = (await res.json()) as QuizAttemptResponse;
+  if (!attempt || typeof attempt !== "object") {
+    throw new Error("Invalid quiz response.");
+  }
+  return { ...attempt, questions: Array.isArray(attempt.questions) ? attempt.questions : [] };
 }
 
 /**

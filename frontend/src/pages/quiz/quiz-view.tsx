@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ChevronLeft, FileEdit, Clock, HelpCircle, Award, AlertCircle, RotateCcw } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
@@ -10,11 +10,14 @@ import { Card } from "@/components/retroui/Card";
 import { routes } from "@/../routes";
 import AppLayout from "@/layouts/app-layout";
 import { getQuizAttempt, type QuizAttemptResponse } from "@/lib/quiz-api";
+import { quizPathWithContext, quizReturnContext } from "@/lib/student-quiz-navigation";
 
 const StudentQuizView = () => {
   const { assignmentId } = useParams<{ assignmentId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const aid = Number(assignmentId);
+  const origin = quizReturnContext(location.search);
 
   const [quiz, setQuiz] = useState<QuizAttemptResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,10 +66,10 @@ const StudentQuizView = () => {
                 <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 text-lg font-extrabold tracking-tight text-black sm:gap-2 sm:text-2xl md:text-3xl">
                   <Breadcrumb.Item>
                     <Breadcrumb.Link
-                      onClick={() => navigate(routes.student.todo)}
+                      onClick={() => navigate(origin.path)}
                       className="cursor-pointer whitespace-nowrap text-lg text-black/50 hover:text-black sm:text-2xl md:text-4xl"
                     >
-                      To-Do
+                      {origin.label}
                     </Breadcrumb.Link>
                   </Breadcrumb.Item>
                   <Breadcrumb.Separator />
@@ -86,14 +89,14 @@ const StudentQuizView = () => {
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20">
                   <AlertCircle className="w-10 h-10 text-red-500" />
                   <p className="text-lg font-bold text-center text-red-600">{error || "Quiz not found."}</p>
-                  <Button onClick={() => navigate(-1)}>Go Back</Button>
+                  <Button onClick={() => navigate(origin.path)}>Go Back</Button>
                 </div>
               ) : (
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => navigate(-1)}
+                        onClick={() => navigate(origin.path)}
                         className="text-black/70 hover:text-black cursor-pointer p-1"
                         aria-label="Go back"
                       >
@@ -117,7 +120,7 @@ const StudentQuizView = () => {
                       {isCompleted && (
                         <Button
                           variant="outline"
-                          onClick={() => navigate(routes.student.quizResult.replace(":assignmentId", String(aid)))}
+                          onClick={() => navigate(quizPathWithContext(routes.student.quizResult.replace(":assignmentId", String(aid)), location.search))}
                           className="hover:shadow-none transition-all cursor-pointer font-bold"
                         >
                           View Results
@@ -126,7 +129,7 @@ const StudentQuizView = () => {
 
                       {quiz.can_submit ? (
                         <Button
-                          onClick={() => navigate(routes.student.quizTake.replace(":assignmentId", String(aid)))}
+                          onClick={() => navigate(quizPathWithContext(routes.student.quizTake.replace(":assignmentId", String(aid)), location.search))}
                           className="hover:shadow-none transition-all cursor-pointer font-bold"
                         >
                           {isPending ? "Resume Quiz" : isCompleted ? "Retake Quiz" : "Take Quiz"}
@@ -195,7 +198,7 @@ const StudentQuizView = () => {
                         <div>
                           <h3 className="font-bold text-lg">Your Latest Score</h3>
                           <p className="text-sm text-black/60">
-                            Submitted on {quiz.submitted_at ? new Date(quiz.submitted_at).toLocaleDateString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "N/A"}
+                            Submitted on {quiz.submitted_at ? new Date(quiz.submitted_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "N/A"}
                           </p>
                         </div>
                         <div className="flex items-center gap-3">
