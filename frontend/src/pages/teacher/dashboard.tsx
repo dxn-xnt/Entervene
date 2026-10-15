@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Calendar, AlertCircle, ArrowUpRight } from "lucide-react";
+import { Calendar, AlertCircle, ArrowUpRight, BookOpen } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/to
 import { Select } from "@/components/retroui/Select";
 import { Progress } from "@/components/retroui/Progress";
 import { OverviewCard } from "@/components/overview-cards";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { routes } from "@/../routes";
@@ -16,6 +17,7 @@ import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import {
   getTeacherDashboardHealth,
   type TeacherDashboardHealthResponse,
+  type TeacherDashboardSupportSummary,
   type OverviewCardData,
 } from "@/lib/api";
 import {
@@ -96,6 +98,25 @@ function formatDeadline(dueDate: string | null): string {
   if (dateKey(date) === dateKey(new Date())) return "Today";
   if (dateKey(date) === dateKey(new Date(Date.now() + 24 * 60 * 60 * 1000))) return "Tomorrow";
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "Asia/Manila" });
+}
+
+type SupportReason = TeacherDashboardSupportSummary["items"][number]["reasons"][number];
+
+// Short, badge-sized labels; the full backend message stays available as a tooltip.
+function reasonBadgeLabel(reason: SupportReason): string {
+  const count = reason.count ?? 0;
+  switch (reason.code) {
+    case "below_passing":
+      return reason.passing_threshold != null ? `Below ${reason.passing_threshold}` : "Below passing";
+    case "overdue_work":
+      return `${count} overdue`;
+    case "unexcused_absences":
+      return `${count} ${count === 1 ? "absence" : "absences"}`;
+    case "late_submissions":
+      return `${count} late`;
+    default:
+      return reason.message;
+  }
 }
 
 export default function Dashboard() {
@@ -375,7 +396,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
                 <div>
-                  <h1 className="text-xl font-bold sm:text-2xl md:text-4xl font-head tracking-tight">
+                  <h1 className="text-xl font-bold sm:text-2xl md:text-4xl font-head">
                     Dashboard
                   </h1>
                 </div>
@@ -410,8 +431,8 @@ export default function Dashboard() {
                     {/* Observed check-in indicators, not AI or intervention eligibility */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                        <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
-                          Students to check in with
+                        <Card.Title className="text-base font-bold text-foreground sm:text-lg">
+                          Students to Check In With
                         </Card.Title>
                         <Tooltip >
                           <TooltipTrigger
@@ -452,17 +473,20 @@ export default function Dashboard() {
                               <span className="text-xs text-muted-foreground truncate">
                                 {s.section_name ?? "Section unavailable"} · {s.subject_name ?? "Subject unavailable"}
                               </span>
-                              <ul className="text-xs text-muted-foreground">
-                                {s.reasons.map((reason) => <li key={reason.code}>{reason.message}</li>)}
-                              </ul>
                             </div>
-                            <Badge
-                              size="sm"
-                              variant="default"
-                              className="shrink-0"
-                            >
-                              Grade {formatGrade(s.current_grade)}
-                            </Badge>
+                            <div className="flex shrink-0 flex-wrap justify-end gap-1 max-w-[50%]">
+                              {s.reasons.map((reason) => (
+                                <Badge
+                                  key={reason.code}
+                                  size="sm"
+                                  variant="default"
+                                  title={reason.message}
+                                  className="whitespace-nowrap"
+                                >
+                                  {reasonBadgeLabel(reason)}
+                                </Badge>
+                              ))}
+                            </div>
                           </Card>
                         ))}
                         {support?.warnings.map((warning, index) => (
@@ -474,18 +498,14 @@ export default function Dashboard() {
                           <Card.Description className="text-[11px] text-muted-foreground">
                             {support.qualifying_entry_count} of {support.total_entry_count} student-class-subject entries meet the criteria.
                             {support.omitted_entry_count > 0 && ` Showing ${support.items.length}; ${support.omitted_entry_count} more not shown.`}
-                            {support.unavailable_grade_count > 0 && ` Current grade unavailable: ${support.unavailable_grade_count}.`}
                           </Card.Description>
                         )}
-                        <Card.Description className="text-[11px] text-muted-foreground">
-                          Observed indicators only. Not an AI prediction or an Intervention candidate list.
-                        </Card.Description>
                       </Card.Content>
                     </Card>
                     {/* Submissions to Review */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                        <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                        <Card.Title className="text-base font-bold text-foreground sm:text-lg">
                           Submissions to Review
                         </Card.Title>
                         <Tooltip >
@@ -703,11 +723,11 @@ export default function Dashboard() {
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {/* Scored quiz lesson performance */}
-                    <Card className="flex flex-col p-4 sm:p-5">
+                    <Card className="flex flex-col p-4 sm:p-5 min-h-62">
                       <Card.Header className="mb-0 p-0 flex flex-col gap-2">
                         <div className="flex flex-row items-center justify-between">
-                          <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
-                            Lesson performance
+                          <Card.Title className="text-base font-bold text-foreground sm:text-lg">
+                            Lesson Performance
                           </Card.Title>
                           <Tooltip>
                             <TooltipTrigger
@@ -751,21 +771,21 @@ export default function Dashboard() {
                             </Button>
                           ))}
                         </div>
-                        <Card.Description className="text-[11px] text-muted-foreground">
-                          Scored quiz answers · selected academic period.
-                        </Card.Description>
+
                       </Card.Header>
 
                       <Card.Content className="flex flex-col justify-between gap-2.5 p-0 justify-between h-full">
                         <div className="flex flex-col gap-2.5 ">
                           {!lessonSubject?.items.length && (
-                            <Card.Description className="text-[11px] text-muted-foreground">
-                              {emptyMessage(!lessonSubject
+                            <EmptyStateCard
+                              icon={<BookOpen className="size-6 text-muted-foreground" />}
+                              title={emptyMessage(!lessonSubject
                                 ? "No subjects assigned for this academic period."
                                 : lessonSubject.coverage.scored_mapped_response_count === 0
                                   ? "No scored quiz answers linked to lessons for this subject."
                                   : `Not enough evidence yet. Each lesson needs scores from at least ${lessonPerformance?.policy.min_learners ?? 3} learners across ${lessonPerformance?.policy.min_questions ?? 3} questions.`)}
-                            </Card.Description>
+                              className="border-none bg-transparent shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground"
+                            />
                           )}
                           {lessonSubject?.items.slice(0, 5).map((item) => (
                             <div
@@ -786,22 +806,16 @@ export default function Dashboard() {
                         {lessonSubject && (
                           <Card.Description className="text-[11px] text-muted-foreground">
                             {lessonSubject.coverage.scored_mapped_response_count} scored lesson-linked responses. {lessonSubject.coverage.unmapped_response_count} unmapped; {lessonSubject.coverage.ungraded_response_count} awaiting scores.
-                            {lessonSubject.coverage.insufficient_lesson_count > 0 && <span> {lessonSubject.coverage.insufficient_lesson_count} lessons have insufficient evidence.</span>}
                             {lessonSubject.warnings.map((warning, index) => <span key={`${warning.code}-${index}`}> {warning.message}</span>)}
                           </Card.Description>
                         )}
-
-                        <Card.Description className="text-[11px] text-muted-foreground">
-                          Lowest observed lesson scores may help identify topics to review.
-                        </Card.Description>
                       </Card.Content>
-
                     </Card>
 
                     {/* Due this week */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                        <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                        <Card.Title className="text-base font-bold text-foreground sm:text-lg">
                           Due this week
                         </Card.Title>
                         <Tooltip >
@@ -866,7 +880,7 @@ export default function Dashboard() {
                   {/* 3. Section-by-Section Health */}
                   <Card className="flex flex-col justify-between p-4 sm:p-5">
                     <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                      <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                      <Card.Title className="text-base font-bold text-foreground sm:text-lg">
                         Section-by-Section Health
                       </Card.Title>
                       <Tooltip >
@@ -1041,7 +1055,7 @@ export default function Dashboard() {
                     {/* Submissions by weekday */}
                     <Card className="flex flex-col justify-start p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
+                        <Card.Title className="text-base font-semibold text-foreground sm:text-lg">
                           Submissions by weekday
                         </Card.Title>
                         <Card.Description className="mt-0.5 text-xs text-muted-foreground">
@@ -1076,7 +1090,7 @@ export default function Dashboard() {
                     {/* Top performers */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+                        <Card.Title className="text-base font-bold text-foreground sm:text-lg">
                           Top Performers
                         </Card.Title>
                         <Card.Description className="mt-0.5 text-xs text-muted-foreground">
@@ -1120,7 +1134,7 @@ export default function Dashboard() {
                     {/* Grade Distribution */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
+                        <Card.Title className="text-base font-semibold text-foreground sm:text-lg">
                           Grade distribution
                         </Card.Title>
                         <Card.Description className="mt-0.5 text-xs text-muted-foreground">
@@ -1135,24 +1149,24 @@ export default function Dashboard() {
                           </Card.Description>
                         )}
                         {gradeDetails && gradeDetails.available_grade_count > 0 && gradeDistribution.map((item) => (
-                            <div
-                              key={item.band}
-                              className="flex items-center justify-between gap-3 text-xs sm:text-sm"
-                            >
-                              <span className="font-medium text-foreground/90 shrink-0 w-20 whitespace-nowrap">
-                                {item.band}
-                              </span>
-                              <Progress
-                                value={Math.round(
-                                  (item.count / maxGradeDistCount) * 100,
-                                )}
-                                className="h-3 flex-1"
-                                indicatorClassName="bg-muted-foreground"
-                              />
-                              <span className="font-semibold text-foreground text-right w-8 shrink-0">
-                                {item.count}
-                              </span>
-                            </div>
+                          <div
+                            key={item.band}
+                            className="flex items-center justify-between gap-3 text-xs sm:text-sm"
+                          >
+                            <span className="font-medium text-foreground/90 shrink-0 w-20 whitespace-nowrap">
+                              {item.band}
+                            </span>
+                            <Progress
+                              value={Math.round(
+                                (item.count / maxGradeDistCount) * 100,
+                              )}
+                              className="h-3 flex-1"
+                              indicatorClassName="bg-muted-foreground"
+                            />
+                            <span className="font-semibold text-foreground text-right w-8 shrink-0">
+                              {item.count}
+                            </span>
+                          </div>
                         ))}
                       </Card.Content>
                       {gradeCoverage()}
@@ -1164,7 +1178,7 @@ export default function Dashboard() {
                     {/* Attendance by Section */}
                     <Card className="flex flex-col justify-between p-4 sm:p-5 sm:col-span-2 xl:col-span-1">
                       <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
+                        <Card.Title className="text-base font-semibold text-foreground sm:text-lg">
                           Attendance by section
                         </Card.Title>
                       </Card.Header>

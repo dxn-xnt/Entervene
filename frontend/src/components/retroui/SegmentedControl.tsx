@@ -75,7 +75,7 @@ export function SegmentedControl<T extends string = string>({
       <div
         role="group"
         className={cn(
-          "inline-flex items-center rounded border-2 border-black bg-background",
+          "inline-flex items-center rounded! border-2 border-black bg-background",
           sizeContainerClasses,
           className
         )}
@@ -137,7 +137,7 @@ export function SegmentedControlItem({
         if (!event.defaultPrevented) context.onValueChange?.(value);
       }}
       className={cn(
-        "font-bold transition-all flex items-center rounded justify-center whitespace-nowrap cursor-pointer",
+        "font-bold transition-all flex items-center rounded! justify-center whitespace-nowrap cursor-pointer",
         sizeItemClasses,
         isSelected
           ? cn(

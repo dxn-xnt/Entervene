@@ -183,6 +183,7 @@ class QuizStudentQuestionAnswerOut(BaseModel):
 class QuizStudentScoreOut(BaseModel):
     student_id: str
     student_name: str
+    avatar: Optional[str] = None
     submission_id: Optional[int] = None
     status: str
     attempt_count: int
@@ -227,6 +228,7 @@ class TeacherQuizSubmissionDetailResponse(BaseModel):
     classwork_id: int
     student_id: str
     student_name: str
+    avatar: Optional[str] = None
     status: str
     attempt_count: int
     total_points: float
