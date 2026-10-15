@@ -839,6 +839,7 @@ export type SendGradeToAdviserItemResponse = {
   status: "newly_sent" | "updated" | "unchanged" | "conflict" | "skipped_incomplete";
   message?: string | null;
   incomplete_components?: string[];
+  skip_reason?: "grade_send_incomplete" | "grading_configuration_invalid" | "grade_not_computable" | null;
 };
 
 export type BulkSendGradesPayload = {
@@ -855,8 +856,7 @@ export type BulkSendGradesToAdviserResponse = {
   newly_sent_count: number;
   unchanged_skipped_count: number;
   incomplete_skipped_count?: number;
-  incomplete_warning_count?: number;
-  finalized_at: string;
+  finalized_at: string | null;
   finalized_by_staff_id: string;
   finalized_by_name: string;
   entries: SendGradeToAdviserItemResponse[];

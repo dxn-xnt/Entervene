@@ -39,7 +39,7 @@ from app.services.student_record.StudentRecordService import teacher_student_gra
 
 
 # Independent expectations from docs/GRADE_TRANSMUTATION_CONTRACT_4G.md.
-# The fixture has no grading template, so the existing fallback is 30/50/20.
+# The fixture explicitly configures 30/50/20; automatic sends cannot use fallback weights.
 # Initial grade 90 is in 88.88-90.05 -> 91; do not call the production lookup
 # to derive the expected value for either the response or the stored audit.
 EXPECTED_COMPLETE_INITIAL_GRADE = float(
@@ -141,6 +141,22 @@ def adviser_send_context():
     )
     db.add(subject)
     db.flush()
+
+    template = GradingTemplate(
+        template_name="Configured adviser-send weights",
+        subject_id=subject.subject_id,
+        academic_level_id=level.academic_level_id,
+        status="active",
+        components=[
+            GradingTemplateComponent(component_name=name, weight=Decimal(weight), display_order=index)
+            for index, (name, weight) in enumerate(
+                (("Written Works", "30"), ("Performance Tasks", "50"), ("Exams", "20")), start=1,
+            )
+        ],
+    )
+    db.add(template)
+    db.flush()
+    subject.default_grading_template = str(template.grading_template_id)
 
     class_ = Class(
         section_name="Diamond",
@@ -423,24 +439,22 @@ def test_resend_after_score_edit_idempotent(adviser_send_context):
     assert len(logs) == 2
 
 
-def test_completeness_warning_allows_send_with_incomplete_components(adviser_send_context):
+def test_single_send_rejects_incomplete_components(adviser_send_context):
     ctx = adviser_send_context
     client = _make_client(ctx["db"], ctx["user"])
 
-    # Student 2 is missing PT & QA - should succeed (200 OK) with warnings populated
+    # Student 2 is missing PT & QA: no partial grade may be finalized.
     url = f"/api/v1/student-records/teacher/classes/{ctx['class'].class_id}/subjects/{ctx['subject'].subject_id}/students/{ctx['student2'].student_id}/send-to-adviser"
     resp = client.post(url, json={"academic_period_id": ctx["period"].academic_period_id})
-    assert resp.status_code == 200, resp.text
-    data = resp.json()
-    assert data["student_id"] == str(ctx["student2"].student_id)
-    assert data["is_finalized"] is True
-    assert "performance_task" in data["incomplete_components"]
-    assert "quarterly_assessment" in data["incomplete_components"]
-    assert "written_work" not in data["incomplete_components"]
-    assert data["transmuted_grade"] is not None
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert detail["code"] == "grade_send_incomplete"
+    assert detail["missing_components"] == ["performance_task", "quarterly_assessment"]
+    assert ctx["db"].query(StudentPeriodGrade).count() == 0
+    assert ctx["db"].query(GradeSubmissionLog).count() == 0
 
 
-def test_bulk_send_with_incomplete_components_sets_warning_count(adviser_send_context):
+def test_bulk_send_skips_incomplete_components(adviser_send_context):
     ctx = adviser_send_context
     client = _make_client(ctx["db"], ctx["user"])
 
@@ -450,9 +464,15 @@ def test_bulk_send_with_incomplete_components_sets_warning_count(adviser_send_co
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["total_students"] == 2
-    assert data["newly_sent_count"] == 2
-    assert data["incomplete_warning_count"] == 1
-    assert data["incomplete_skipped_count"] == 0
+    assert data["newly_sent_count"] == 1
+    assert "incomplete_warning_count" not in data
+    assert data["incomplete_skipped_count"] == 1
+    skipped = next(row for row in data["entries"] if row["student_id"] == str(ctx["student2"].student_id))
+    assert skipped["status"] == "skipped_incomplete"
+    assert skipped["incomplete_components"] == ["performance_task", "quarterly_assessment"]
+    assert skipped["finalized_at"] is None
+    assert ctx["db"].query(StudentPeriodGrade).filter_by(student_id=ctx["student2"].student_id).count() == 0
+    assert ctx["db"].query(GradeSubmissionLog).filter_by(student_id=ctx["student2"].student_id).count() == 0
 
 
 def test_recompute_vs_display_conflict_check(adviser_send_context):
