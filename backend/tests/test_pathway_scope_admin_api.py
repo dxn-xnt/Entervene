@@ -17,6 +17,10 @@ from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.DepedCluster import DepedCluster
 from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
 from app.models.academic.AcademicLevelPathwayScope import AcademicLevelPathwayScope
+from app.models.academic.Class_ import Class
+from app.services.classes.ClassService import _resolve_class_pathway_id
+from fastapi import HTTPException
+import importlib
 from app.services.pathways.PathwayScopeService import (
     clone_prior_year_pathway_scopes,
     resolve_pathway_scope,
@@ -209,3 +213,94 @@ def test_copy_academic_year_clones_scopes(db):
         .all()
     )
     assert len(scopes_y2) == 2
+
+
+def test_shs_pathway_assignments_and_subject_load_data_follow_year_scope(client, db, admin_headers, monkeypatch):
+    year1 = AcademicYear(year_label="2026-2027", start_date=date(2026, 6, 1), end_date=date(2027, 3, 31), is_active=True)
+    year2 = AcademicYear(year_label="2027-2028", start_date=date(2027, 6, 1), end_date=date(2028, 3, 31), is_active=False)
+    grade11 = AcademicLevel(level_name="Grade 11", grade_level=11)
+    grade12 = AcademicLevel(level_name="Grade 12", grade_level=12)
+    medical = AcademicPathway(code="medical-courses", name="Medical Courses and Sciences Related", is_enabled=True)
+    engineering = AcademicPathway(code="engineering-math", name="Engineering and Mathematics Related", is_enabled=True)
+    db.add_all([year1, year2, grade11, grade12, medical, engineering])
+    db.flush()
+    term1 = AcademicPeriod(academic_year_id=year1.academic_year_id, period_name="Term 1", period_sequence=1,
+                           start_date=date(2026, 6, 1), end_date=date(2026, 8, 31), is_active=True)
+    term2 = AcademicPeriod(academic_year_id=year2.academic_year_id, period_name="Term 1", period_sequence=1,
+                           start_date=date(2027, 6, 1), end_date=date(2027, 8, 31), is_active=False)
+    db.add_all([term1, term2])
+    db.add_all([
+        AcademicLevelPathwayScope(academic_year_id=year1.academic_year_id, academic_level_id=grade11.academic_level_id, requires_pathway=True),
+        AcademicLevelPathwayScope(academic_year_id=year1.academic_year_id, academic_level_id=grade12.academic_level_id, requires_pathway=False),
+        AcademicLevelPathwayScope(academic_year_id=year2.academic_year_id, academic_level_id=grade12.academic_level_id, requires_pathway=True),
+    ])
+    zara = Class(section_name="Zara", class_status="active", academic_year_id=year1.academic_year_id,
+                 academic_level_id=grade11.academic_level_id, pathway_id=medical.id)
+    campos = Class(section_name="Campos", class_status="active", academic_year_id=year1.academic_year_id,
+                   academic_level_id=grade11.academic_level_id, pathway_id=engineering.id)
+    future = Class(section_name="Future", class_status="active", academic_year_id=year2.academic_year_id,
+                   academic_level_id=grade12.academic_level_id, pathway_id=engineering.id)
+    db.add_all([zara, campos, future])
+    db.commit()
+
+    listing = client.get("/api/v1/classes", headers=admin_headers)
+    assert listing.status_code == 200, listing.text
+    class_rows = {row["section_name"]: row for row in listing.json()["classes"]}
+    assert class_rows["Zara"]["pathway"]["name"] == medical.name
+    assert class_rows["Campos"]["pathway"]["name"] == engineering.name
+    assert class_rows["Zara"]["academic_level"]["requires_pathway"] is True
+    detail = client.get(f"/api/v1/classes/{future.class_id}", headers=admin_headers)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["academic_level"]["requires_pathway"] is True
+    transfers = client.get(f"/api/v1/classes/{zara.class_id}/transfer-options", headers=admin_headers)
+    assert transfers.status_code == 200, transfers.text
+    assert [(item["section_name"], item["pathway_name"]) for item in transfers.json()["available_sections"]] == [
+        ("Campos", engineering.name)
+    ]
+
+    subject_load_route = importlib.import_module("app.api.v1.routes.SubjectLoads")
+    monkeypatch.setattr(subject_load_route, "ensure_default_period_templates", lambda _db: None)
+    monkeypatch.setattr(subject_load_route, "ensure_shs_template_groups_backfilled", lambda _db: None)
+    first_term = client.get("/api/v1/subject-loads/studio-data", params={"academic_period_id": term1.academic_period_id}, headers=admin_headers)
+    assert first_term.status_code == 200, first_term.text
+    first_classes = {row["section_name"]: row for row in first_term.json()["classes"]}
+    assert set(first_classes) == {"Zara", "Campos"}
+    assert (first_classes["Zara"]["pathway_id"], first_classes["Zara"]["pathway_name"]) == (medical.id, medical.name)
+    assert (first_classes["Campos"]["pathway_id"], first_classes["Campos"]["pathway_name"]) == (engineering.id, engineering.name)
+    future_term = client.get("/api/v1/subject-loads/studio-data", params={"academic_period_id": term2.academic_period_id}, headers=admin_headers)
+    assert future_term.status_code == 200, future_term.text
+    assert [row["section_name"] for row in future_term.json()["classes"]] == ["Future"]
+
+    medical.is_enabled = False
+    db.commit()
+    disabled = client.get("/api/v1/subject-loads/studio-data", params={"academic_period_id": term1.academic_period_id}, headers=admin_headers)
+    disabled_zara = next(row for row in disabled.json()["classes"] if row["section_name"] == "Zara")
+    assert (disabled_zara["pathway_id"], disabled_zara["pathway_name"], disabled_zara["pathway_is_enabled"]) == (medical.id, medical.name, False)
+    assert db.query(Class).filter(Class.class_id == zara.class_id).one().pathway_id == medical.id
+    invalid_edit = client.patch(
+        f"/api/v1/classes/{campos.class_id}", json={"pathway_id": medical.id}, headers=admin_headers,
+    )
+    assert invalid_edit.status_code == 422
+    db.refresh(campos)
+    assert campos.pathway_id == engineering.id
+
+
+def test_class_pathway_assignment_rejects_disabled_and_out_of_scope_values(db):
+    year = AcademicYear(year_label="2026-2027", start_date=date(2026, 6, 1), end_date=date(2027, 3, 31), is_active=True)
+    grade11 = AcademicLevel(level_name="Grade 11", grade_level=11)
+    grade12 = AcademicLevel(level_name="Grade 12", grade_level=12)
+    enabled = AcademicPathway(code="medical-courses", name="Medical", is_enabled=True)
+    disabled = AcademicPathway(code="engineering-math", name="Engineering", is_enabled=False)
+    db.add_all([year, grade11, grade12, enabled, disabled])
+    db.flush()
+    db.add_all([
+        AcademicLevelPathwayScope(academic_year_id=year.academic_year_id, academic_level_id=grade11.academic_level_id, requires_pathway=True),
+        AcademicLevelPathwayScope(academic_year_id=year.academic_year_id, academic_level_id=grade12.academic_level_id, requires_pathway=False),
+    ])
+    db.commit()
+    assert _resolve_class_pathway_id(db, pathway_id=enabled.id, academic_year_id=year.academic_year_id, academic_level_id=grade11.academic_level_id) == enabled.id
+    for pathway_id, level_id in [(disabled.id, grade11.academic_level_id), (enabled.id, grade12.academic_level_id), (None, grade11.academic_level_id)]:
+        with pytest.raises(HTTPException) as error:
+            _resolve_class_pathway_id(db, pathway_id=pathway_id, academic_year_id=year.academic_year_id, academic_level_id=level_id)
+        assert error.value.status_code == 422
+    assert _resolve_class_pathway_id(db, academic_year_id=year.academic_year_id, academic_level_id=grade12.academic_level_id) is None

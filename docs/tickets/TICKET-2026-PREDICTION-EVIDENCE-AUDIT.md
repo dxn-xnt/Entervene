@@ -1,6 +1,6 @@
 # Prediction evidence: teacher terminology and audit implementation plan
 
-Status: architecture roadmap, not one implementation ticket; application changes have not been made.
+Status: partially implemented architecture roadmap. Phase 1 evidence extraction, snapshots, and teacher presentation exist; later activity identity, shared grade calculation, append-only general prediction series, reconciliation, and compatibility gates remain open. See the canonical [prediction system audit](../PREDICTION_SYSTEM.md) for current status.
 Updated: 2026-09-11.
 
 ## Delivery boundary

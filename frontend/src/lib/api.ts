@@ -1957,6 +1957,7 @@ export type SubjectLoadItem = {
   subject_id: number;
   staff_id?: string | null;
   academic_period_id: number;
+  slot_id?: number | null;
   start_time?: string | null;
   end_time?: string | null;
   days_of_week: string[];
@@ -2021,8 +2022,8 @@ export type SubjectLoadStudioData = {
   academic_years: Array<{ academic_year_id: number; year_label: string; is_active: boolean }>;
   academic_periods: Array<{ academic_period_id: number; period_name: string; is_active: boolean }>;
   academic_levels: Array<{ academic_level_id: number; level_name: string; grade_level: number }>;
-  classes: Array<{ class_id: number; section_name: string; academic_level_id: number; academic_year_id: number; pathway?: string; paired_class_id?: number | null; period_template_group?: string | null }>;
-  subjects: Array<{ subject_id: number; subject_name: string; subject_codename: string; academic_level_id: number; subject_group: string; is_math_or_science?: boolean }>;
+  classes: Array<{ class_id: number; section_name: string; academic_level_id: number; academic_year_id: number; pathway?: string; pathway_id?: number | null; pathway_name?: string | null; pathway_is_enabled?: boolean | null; requires_pathway?: boolean; paired_class_id?: number | null; period_template_group?: string | null }>;
+  subjects: Array<{ subject_id: number; subject_name: string; subject_codename: string; academic_level_id: number; subject_group: string; is_core?: boolean; is_math_or_science?: boolean }>;
   subject_offerings?: SubjectOfferingStudioItem[];
   teachers: Array<{ staff_id: string; name: string; department: string; specialization: string }>;
   existing_loads: SubjectLoadItem[];

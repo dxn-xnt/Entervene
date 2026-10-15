@@ -13,6 +13,7 @@ from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.schemas.Class import ClassUpdateRequest
 from app.services.classes.ClassQueryService import get_class_detail_data
+from app.services.pathways.PathwayScopeService import resolve_pathway_scope
 from app.services.classes.ClassShared import (
     ClassManagementError,
     eligible_advisers_query,
@@ -40,26 +41,33 @@ def _get_class_or_404(db: Session, class_id: int) -> Class:
     return class_
 
 
-def _resolve_class_pathway_id(db: Session, pathway: str | None = None, pathway_id: int | None = None) -> int | None:
+def _resolve_class_pathway_id(
+    db: Session, pathway: str | None = None, pathway_id: int | None = None,
+    academic_year_id: int | None = None, academic_level_id: int | None = None,
+) -> int | None:
     if pathway_id is not None:
-        existing = db.query(AcademicPathway.id).filter(AcademicPathway.id == pathway_id).first()
-        if existing is None:
+        pathway_obj = db.query(AcademicPathway).filter(AcademicPathway.id == pathway_id).first()
+        if pathway_obj is None:
             raise HTTPException(status_code=400, detail="Pathway not found.")
-        return pathway_id
+    else:
+        value = normalized_text(pathway)
+        if not value or value == "general":
+            pathway_obj = None
+        else:
+            code = LEGACY_PATHWAY_ALIASES.get(value, value)
+            pathway_obj = db.query(AcademicPathway).filter(func.lower(AcademicPathway.code) == code).first()
+            if pathway_obj is None:
+                raise HTTPException(status_code=400, detail="Pathway not found.")
 
-    value = normalized_text(pathway)
-    if not value or value == "general":
-        return None
-
-    code = LEGACY_PATHWAY_ALIASES.get(value, value)
-    pathway_obj = (
-        db.query(AcademicPathway)
-        .filter(func.lower(AcademicPathway.code) == code)
-        .first()
-    )
-    if pathway_obj is None:
-        raise HTTPException(status_code=400, detail="Pathway not found.")
-    return pathway_obj.id
+    if academic_year_id is not None and academic_level_id is not None:
+        requires = resolve_pathway_scope(db, academic_year_id, academic_level_id)
+        if requires and pathway_obj is None:
+            raise HTTPException(status_code=422, detail="This academic level requires an assigned pathway.")
+        if not requires and pathway_obj is not None:
+            raise HTTPException(status_code=422, detail="This academic level does not use pathway assignments in the selected academic year.")
+    if pathway_obj is not None and not pathway_obj.is_enabled:
+        raise HTTPException(status_code=422, detail="The selected pathway is disabled.")
+    return pathway_obj.id if pathway_obj else None
 
 
 def archive_class_record(db: Session, class_id: int) -> dict:
@@ -150,6 +158,8 @@ def update_class_record(
             db,
             pathway=changes.get("pathway"),
             pathway_id=changes.get("pathway_id"),
+            academic_year_id=class_.academic_year_id,
+            academic_level_id=class_.academic_level_id,
         )
 
     try:
@@ -317,7 +327,11 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                     submitted_student_ids.append(student_id)
                     section_student_ids.append(student_id)
 
-            pw_id = _resolve_class_pathway_id(db, pathway=getattr(section, "pathway", None))
+            pw_id = _resolve_class_pathway_id(
+                db, pathway=getattr(section, "pathway", None),
+                academic_year_id=academic_year.academic_year_id,
+                academic_level_id=academic_level.academic_level_id,
+            )
             template_group = getattr(section, "period_template_group", None)
             if not template_group:
                 if academic_level.grade_level >= 11:

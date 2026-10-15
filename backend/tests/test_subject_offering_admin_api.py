@@ -843,6 +843,17 @@ def test_multi_pathway_join_offering_and_filtering(client, db, offering_context)
     assert len(list_res.json()["subject_offerings"]) == 1
 
 
+def test_disabled_pathway_cannot_be_added_to_new_offering(client, db, offering_context):
+    pathway = db.query(AcademicPathway).filter(AcademicPathway.code == "medical-courses").one()
+    pathway.is_enabled = False
+    db.commit()
+    payload = offering_payload(offering_context, subject_id=offering_context["biology"].subject_id)
+    payload["pathway_ids"] = [pathway.id]
+    response = client.post("/api/v1/subject-offerings", json=payload)
+    assert response.status_code == 422
+    assert "enabled" in response.json()["detail"].lower()
+
+
 def test_grade11_section_query_returns_core_and_pathway_electives(client, db, offering_context):
     from app.models.academic.AcademicPathway import AcademicPathway
 

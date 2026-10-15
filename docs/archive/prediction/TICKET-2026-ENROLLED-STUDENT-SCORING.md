@@ -55,9 +55,9 @@ graph TD
 - **Current State**: Academic Term 1 is underway. Teachers have not completed encoding formative/summative scores.
 - **System Behavior**:
   - `data_coverage_ratio = 0.0` and `source_period_grade is None`.
-  - [PredictionFeatureBuilderService.py](file:///c:/Users/Roy%20Adrian%20Rondina/Desktop/3rd%20Year/2nd%20Sem/Entervene/Entervene/backend/app/services/prediction/PredictionFeatureBuilderService.py) triggers `data_coverage_below_50`.
-  - [RiskEngine.py](file:///c:/Users/Roy%20Adrian%20Rondina/Desktop/3rd%20Year/2nd%20Sem/Entervene/Entervene/backend/app/services/prediction/RiskEngine.py) cleanly classifies readiness as `INSUFFICIENT_DATA`.
-  - [DashboardPredictionService.py](file:///c:/Users/Roy%20Adrian%20Rondina/Desktop/3rd%20Year/2nd%20Sem/Entervene/Entervene/backend/app/services/prediction/DashboardPredictionService.py) correctly reports **0 High Risk** and **0 Monitoring** students.
+  - [PredictionFeatureBuilderService.py](../../../backend/app/services/prediction/PredictionFeatureBuilderService.py) triggers `data_coverage_below_50`.
+  - [RiskEngine.py](../../../backend/app/services/prediction/RiskEngine.py) cleanly classifies readiness as `INSUFFICIENT_DATA`.
+  - [DashboardPredictionService.py](../../../backend/app/services/prediction/DashboardPredictionService.py) correctly reports **0 High Risk** and **0 Monitoring** students.
 - **The Defense Narrative**:
   > *"The Entervene platform adheres to ethical AI principles and DepEd grading policies. Because Term 1 assessments are currently in progress, the engine enforces a strict minimum evidence threshold (50% data coverage). It refuses to guess or prematurely label real enrolled students as 'At Risk' without empirical classroom evidence. This protects learners from wrongful stigma and demonstrates robust guardrails against hallucinatory AI outputs."*
 
@@ -108,7 +108,7 @@ python scripts/score_enrolled_cohort.py --academic-period-id 1 [--dry-run]
 - Freshly generated predictions must set:
   - `source_period_id = 1` (Active Term 1)
   - `target_period_id = 1` (Matching `SubjectLoad.academic_period_id`)
-- **Outcome**: When teachers (such as Maria Cruz for Grade 9 Filipino) or admins inspect predictions, [TeacherAssignmentResolver.py](file:///c:/Users/Roy%20Adrian%20Rondina/Desktop/3rd%20Year/2nd%20Sem/Entervene/Entervene/backend/app/services/prediction/TeacherAssignmentResolver.py) matches `(class_id, subject_id, 1)` to the published load, correctly displaying **Tier 1 (`ASSIGNED`)** and `Cruz, Maria` without fallback downgrades.
+- **Outcome**: When teachers (such as Maria Cruz for Grade 9 Filipino) or admins inspect predictions, [TeacherAssignmentResolver.py](../../../backend/app/services/prediction/TeacherAssignmentResolver.py) matches `(class_id, subject_id, 1)` to the published load, correctly displaying **Tier 1 (`ASSIGNED`)** and `Cruz, Maria` without fallback downgrades.
 
 ---
 

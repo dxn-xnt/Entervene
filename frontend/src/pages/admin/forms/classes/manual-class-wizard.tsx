@@ -88,7 +88,8 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
 
   const selectedLevel = options?.academic_levels.find((item) => String(item.academic_level_id) === academicLevelId);
   const isSeniorHigh = selectedLevel ? selectedLevel.grade_level >= 11 : false;
-  const showPathwayColumn = isSeniorHigh && (selectedLevel?.requires_pathway ?? false) && activePathways.length > 0;
+  const needsPathway = isSeniorHigh && (selectedLevel?.requires_pathway ?? false);
+  const showPathwayColumn = needsPathway;
 
   function updateSection(localId: string, changes: Partial<ManualSectionDraft>) {
     setSections((current) => current.map((section) => section.localId === localId ? { ...section, ...changes } : section));
@@ -97,6 +98,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
   function validate() {
     const nextErrors: SetupErrors = { sectionRows: {} };
     if (!academicLevelId) nextErrors.academicLevel = "Select an academic level.";
+    if (needsPathway && !activePathways.length) nextErrors.academicLevel = "No enabled pathways are configured for this grade.";
     if (!sections.length) nextErrors.sections = "Add at least one section.";
 
     const names = new Map<string, string>();
@@ -171,7 +173,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
             const needsPw = isSHS && (nextLvl?.requires_pathway ?? false) && activePathways.length > 0;
             const targetPathway = needsPw ? (activePathways[0]?.code || "general") : "general";
             if (needsPw) {
-              setSections((current) => current.map((s) => ({ ...s, pathway: s.pathway && s.pathway !== "general" ? s.pathway : targetPathway })));
+              setSections((current) => current.map((s) => ({ ...s, pathway: activePathways.some((p) => p.code === s.pathway) ? s.pathway : targetPathway })));
             } else {
               setSections((current) => current.map((s) => ({ ...s, pathway: "general" })));
             }
@@ -191,6 +193,9 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
           </Select.Content>
         </Select>
         {errors.academicLevel && <InlineError message={errors.academicLevel} />}
+        {needsPathway && !activePathways.length && (
+          <InlineError message="No enabled academic pathways are configured. Enable one in System Settings before creating this class." />
+        )}
       </Field>
 
       <section className="grid gap-3">
@@ -301,7 +306,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
           <Button variant="outline" onClick={onBack}>Back</Button>
           <Button
             variant="default"
-            disabled={noLevels || noAdvisers}
+            disabled={noLevels || noAdvisers || (needsPathway && !activePathways.length)}
             onClick={continueToStudents}
           >
             Next

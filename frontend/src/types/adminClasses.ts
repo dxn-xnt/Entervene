@@ -222,6 +222,11 @@ export type TeacherAdvisoryClassDetailResponse = {
 export type ClassTransferOption = {
   class_id: number;
   section_name: string;
+  grade_level?: number;
+  pathway_id?: number | null;
+  pathway_name?: string | null;
+  pathway_is_enabled?: boolean | null;
+  requires_pathway?: boolean;
 };
 
 export type ClassTransferOptionsResponse = {

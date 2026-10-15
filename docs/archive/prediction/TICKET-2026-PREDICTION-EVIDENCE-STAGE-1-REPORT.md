@@ -4,7 +4,7 @@ Status: Stage 1 complete; runtime implementation intentionally not started.
 Audit date: 2026-09-11.  
 Scope: current repository plus the configured development PostgreSQL database, inspected read-only.
 
-The frozen characterization data is in [`backend/tests/fixtures/prediction_evidence_stage1_baseline.json`](../../backend/tests/fixtures/prediction_evidence_stage1_baseline.json). It deliberately records current defects as well as valid behavior so later stages can report every semantic difference.
+The frozen characterization data is in [`backend/tests/fixtures/prediction_evidence_stage1_baseline.json`](../../../backend/tests/fixtures/prediction_evidence_stage1_baseline.json). It deliberately records current defects as well as valid behavior so later stages can report every semantic difference.
 
 ## A. Verified current behavior
 
