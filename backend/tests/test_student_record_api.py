@@ -221,6 +221,7 @@ def student_record_context():
         ClassworkAssignment(
             classwork_id=classwork.classwork_id,
             class_id=class_.class_id,
+            academic_period_id=period.academic_period_id,
             assigned_by_staff_id=owner.staff_id,
             due_date=due_base + timedelta(days=offset),
             is_published=True,
@@ -400,7 +401,7 @@ def test_teacher_period_options_can_be_scoped_to_class_subject(student_record_co
     assert [item["period_name"] for item in scoped.json()["periods"]] == ["Term 1"]
 
 
-def test_student_record_falls_back_to_class_subject_work_when_period_dates_miss(student_record_context):
+def test_student_record_does_not_fall_back_to_other_period_work(student_record_context):
     ctx = student_record_context
     ctx["db"].add(
         SubjectLoad(
@@ -422,8 +423,36 @@ def test_student_record_falls_back_to_class_subject_work_when_period_dates_miss(
     assert response.status_code == 200
     body = response.json()
     assert body["scope"]["period_name"] == "Term 2"
-    assert len(body["classwork_results"]) == 3
-    assert body["summary"]["assigned_count"] == 3
+    assert body["classwork_results"] == []
+    assert body["summary"]["assigned_count"] == 0
+    assert body["summary"]["running_classwork_percentage"] is None
+
+
+def test_student_record_excludes_null_period_work_even_when_dates_match(student_record_context):
+    ctx = student_record_context
+    assignment = (
+        ctx["db"].query(ClassworkAssignment)
+        .join(Classwork)
+        .filter(Classwork.title == "Assignment 1")
+        .one()
+    )
+    assert ctx["period"].start_date <= assignment.due_date.date() <= ctx["period"].end_date
+    assignment.academic_period_id = None
+    ctx["db"].commit()
+
+    response = ctx["client"].get(
+        f"/api/v1/student-records/teacher/classes/{ctx['class'].class_id}"
+        f"/subjects/{ctx['subject'].subject_id}/students/{ctx['students'][0].student_id}",
+        params={"academic_period_id": ctx["period"].academic_period_id},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["title"] for item in body["classwork_results"]] == [
+        "Activity 1", "Assignment 2",
+    ]
+    assert body["summary"]["assigned_count"] == 2
+    assert body["summary"]["running_classwork_percentage"] is None
 
 
 def test_student_record_keeps_overdue_work_outside_period_date_window(student_record_context):
@@ -443,6 +472,7 @@ def test_student_record_keeps_overdue_work_outside_period_date_window(student_re
         ClassworkAssignment(
             classwork_id=outside_period_work.classwork_id,
             class_id=ctx["class"].class_id,
+            academic_period_id=ctx["period"].academic_period_id,
             assigned_by_staff_id=ctx["owner"].staff_id,
             due_date=datetime(2025, 10, 1, 12, 0, tzinfo=timezone.utc),
             is_published=True,

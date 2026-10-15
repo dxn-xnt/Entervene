@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { studentClassworkPath, studentClassworkReturnPath, studentClassworkSourceLabel } from "./student-classwork-navigation";
+import { studentClassworkPath, studentClassworkReturnPath, studentClassworkSidebarPath, studentClassworkSourceLabel } from "./student-classwork-navigation";
 
 describe("student classwork navigation", () => {
   it("keeps the originating subject tab and filters", () => {
@@ -20,5 +20,13 @@ describe("student classwork navigation", () => {
     expect(studentClassworkSourceLabel("/student/todo")).toBe("To Do");
     expect(studentClassworkSourceLabel("/student/subjects/3/8?tab=classwork&search=quiz")).toBe("Classwork");
     expect(studentClassworkSourceLabel("/student/subjects/3/8?tab=lessons")).toBe("Lessons");
+  });
+
+  it("keeps the originating sidebar item active on a classwork detail route", () => {
+    const subject = "/student/subjects/7/5?tab=classwork";
+    expect(studentClassworkSidebarPath("/student/classworks/14", `?from=${encodeURIComponent(subject)}`)).toBe("/student/subjects/7/5");
+    expect(studentClassworkSidebarPath("/student/classworks/14", "?from=%2Fstudent%2Ftodo")).toBe("/student/todo");
+    expect(studentClassworkSidebarPath("/student/classworks/14", "")).toBe("/student/subjects");
+    expect(studentClassworkSidebarPath("/teacher/classworks/14", "")).toBe("/teacher/classworks/14");
   });
 });

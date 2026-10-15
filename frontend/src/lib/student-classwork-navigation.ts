@@ -27,3 +27,9 @@ export function studentClassworkSourceLabel(returnPath: string): string {
   if (pathname.startsWith("/student/interventions")) return "Interventions";
   return "Subjects";
 }
+
+export function studentClassworkSidebarPath(pathname: string, search: string): string {
+  if (!pathname.startsWith("/student/classworks/")) return pathname;
+  const from = new URLSearchParams(search).get("from");
+  return studentClassworkReturnPath(from).split("?")[0];
+}

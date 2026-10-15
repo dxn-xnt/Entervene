@@ -453,10 +453,36 @@ let lastRefreshResult = false;
 let refreshReuseUntil = 0;
 let sessionCsrfToken: string | null = null;
 
+function getStoredCsrfToken(): string | null {
+  try {
+    if (typeof sessionStorage !== "undefined") {
+      return sessionStorage.getItem("entervene_csrf_token");
+    }
+  } catch {
+    // Ignore storage errors in non-browser or sandboxed environments
+  }
+  return null;
+}
+
+function setStoredCsrfToken(token: string | null) {
+  sessionCsrfToken = token;
+  try {
+    if (typeof sessionStorage !== "undefined") {
+      if (token) {
+        sessionStorage.setItem("entervene_csrf_token", token);
+      } else {
+        sessionStorage.removeItem("entervene_csrf_token");
+      }
+    }
+  } catch {
+    // Ignore storage errors in non-browser or sandboxed environments
+  }
+}
+
 function request(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   const method = (init.method ?? "GET").toUpperCase();
-  const csrfToken = getCookie("entervene_csrf") ?? sessionCsrfToken;
+  const csrfToken = getCookie("entervene_csrf") ?? sessionCsrfToken ?? getStoredCsrfToken();
 
   if (csrfToken && !["GET", "HEAD", "OPTIONS"].includes(method)) {
     headers.set("X-CSRF-Token", csrfToken);
@@ -479,10 +505,12 @@ function request(path: string, init: RequestInit = {}) {
   }).then((response) => {
     const issuedCsrfToken = response.headers.get("X-CSRF-Token");
     if (issuedCsrfToken) {
-      sessionCsrfToken = issuedCsrfToken;
+      setStoredCsrfToken(issuedCsrfToken);
       refreshReuseUntil = 0;
     }
-    if (path.endsWith("/auth/logout") && response.ok) sessionCsrfToken = null;
+    if (path.endsWith("/auth/logout")) {
+      setStoredCsrfToken(null);
+    }
     return response;
   });
 }

@@ -162,6 +162,7 @@ const StudentSubjectDetail = () => {
                       subject_id: numericSubjectId,
                       subject_name: subjectName,
                     }}
+                    teacherName={subjectInfo?.teacher_name}
                     statusLabel={
                       subjectInfo?.is_current_period ? "Active" : "Enrolled"
                     }

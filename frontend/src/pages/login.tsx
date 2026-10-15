@@ -119,7 +119,8 @@ const Login = () => {
                   variant="link"
                   autoIcon={false}
                   className="font-regular shrink-0 p-0 text-sm font-normal font-underline text-foreground shadow-none"
-                  onClick={() => navigate("/forgot-password")}
+                  type="button"
+                  onClick={() => navigate(routes.auth.forgotPassword)}
                 >
                   Forget password?
                 </Button>

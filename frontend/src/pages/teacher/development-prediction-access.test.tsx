@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import PredictionsDashboard from "./predictions";
 import PredictionTable from "@/components/predictions/prediction-table";
 import { buildCurrentTermDashboard, currentTermRiskSummary, toDashboardPrediction, type AuthorizedCurrentTermRow } from "@/components/predictions/current-term-dashboard-adapter";
@@ -70,16 +71,20 @@ afterEach(() => { cleanup(); vi.unstubAllEnvs(); vi.clearAllMocks(); });
 describe("shared prediction page access", () => {
   it("uses one AI Predictions experience and renders V3 semantics for teachers", async () => {
     auth.role = "teacher";
-    currentTerm.load.mockResolvedValue({ rows: [row], filters });
-    render(<PredictionsDashboard />);
-    await waitFor(() => expect(screen.getByText("Grade Cohort Summaries")).toBeTruthy());
+    currentTerm.load.mockResolvedValue({ rows: [row], filters, assignedScopes: [] });
+    render(
+      <MemoryRouter>
+        <PredictionsDashboard />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText("Subject Summaries")).toBeTruthy());
     expect(screen.getByRole("heading", { name: "AI Predictions" })).toBeTruthy();
     expect(screen.queryByText("Current-Term Development")).toBeNull();
     expect(screen.getByRole("button", { name: /High Risk\s+1/i })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /High Risk/i }));
-    expect(screen.getByText("Projected Final Term Grade")).toBeTruthy();
-    expect(screen.getByText("Intervention Level")).toBeTruthy();
+    expect(screen.getByText("Projected Term Grade")).toBeTruthy();
+    expect(screen.getByText("Risk Level")).toBeTruthy();
     expect(screen.queryByText("Risk Score")).toBeNull();
     fireEvent.click(screen.getByText("Alex Rivera"));
     expect(screen.getByText("Prediction detail for Alex Rivera")).toBeTruthy();
@@ -89,7 +94,11 @@ describe("shared prediction page access", () => {
     vi.stubEnv("DEV", false);
     vi.stubEnv("VITE_ENABLE_DEVELOPMENT_PREDICTIONS", "true");
     auth.role = role;
-    render(<PredictionsDashboard />);
+    render(
+      <MemoryRouter>
+        <PredictionsDashboard />
+      </MemoryRouter>
+    );
     expect(screen.queryByText("Current-Term Development")).toBeNull();
   });
 
@@ -97,7 +106,11 @@ describe("shared prediction page access", () => {
     vi.stubEnv("DEV", true);
     vi.stubEnv("VITE_ENABLE_DEVELOPMENT_PREDICTIONS", "true");
     auth.role = "admin";
-    render(<PredictionsDashboard />);
+    render(
+      <MemoryRouter>
+        <PredictionsDashboard />
+      </MemoryRouter>
+    );
     fireEvent.click(screen.getByRole("button", { name: "Current-Term Development" }));
     expect(screen.getByText("Development panel mounted for admin")).toBeTruthy();
   });

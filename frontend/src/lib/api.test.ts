@@ -61,6 +61,23 @@ it("recovers the hidden API cookie token before refreshing an expired session", 
   expect(refreshHeaders.get("X-CSRF-Token")).toBe("existing-session-token");
 });
 
+it("restores CSRF token from sessionStorage on fresh page load without needing probe", async () => {
+  const mockStorage: Record<string, string> = { "entervene_csrf_token": "persisted-csrf-token" };
+  vi.stubGlobal("sessionStorage", {
+    getItem: (key: string) => mockStorage[key] ?? null,
+    setItem: (key: string, val: string) => { mockStorage[key] = val; },
+    removeItem: (key: string) => { delete mockStorage[key]; },
+  });
+  const fetch = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+  vi.stubGlobal("fetch", fetch);
+  const { apiFetch } = await import("./api");
+
+  await apiFetch("/api/v1/some-post", { method: "POST" });
+  const postHeaders = new Headers(fetch.mock.calls[0][1].headers);
+  expect(postHeaders.get("X-CSRF-Token")).toBe("persisted-csrf-token");
+});
+
+
 it("exports teacher advisory student SF9 report card correctly", async () => {
   const mockBlob = new Blob(["fake-sf9-content"], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
