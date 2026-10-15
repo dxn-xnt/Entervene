@@ -7,7 +7,6 @@ import {
   ClipboardList,
   FileText,
   GraduationCap,
-  Info,
 } from "lucide-react";
 import { StudentLessonDetailScreen } from "@/pages/student/lesson-view";
 import { apiFetch, getLessonGoals, type LessonGoalItemResponse } from "@/lib/api";
@@ -22,7 +21,6 @@ import { Button } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
 import { LoadingPanel } from "@/components/loading-panel";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import type { StudentLesson as Lesson } from "@/types/student-subject";
 import StudentClassworkDetailModal from "@/pages/student/forms/student-classwork-detail-modal";
 import type {
@@ -99,7 +97,6 @@ export default function SubjectLessonTab({
   classId,
   subjectId,
   subjectName: propSubjectName,
-  teacherName: propTeacherName,
   onLessonSelect,
 }: SubjectLessonTabProps) {
   const navigate = useNavigate();
@@ -668,7 +665,6 @@ export default function SubjectLessonTab({
   // Derived values
   const displaySubjectName =
     propSubjectName ?? subjectInfo?.subject_name ?? "—";
-  const displayTeacherName = propTeacherName ?? subjectInfo?.teacher_name ?? "";
 
   const allClassworks = Object.values(classworksByLesson).flat();
   const hasOverdue = allClassworks.some(
@@ -986,33 +982,6 @@ export default function SubjectLessonTab({
         />
       ) : (
         <>
-          <Card className="flex min-w-0 justify-between gap-3 border-black bg-primary shadow-md hover:shadow-none">
-            <div className="min-w-0">
-              <Card.Title className="break-words text-xl font-bold sm:text-2xl">
-                {displaySubjectName}
-              </Card.Title>
-              <p className="text-sm">{displayTeacherName}</p>
-            </div>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <span className="inline-flex">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="rounded shadow-none hover:bg-transparent hover:shadow-none"
-                      aria-label="Subject information"
-                    >
-                      <Info size={18} />
-                    </Button>
-                  </span>
-                }
-              />
-              <TooltipContent>Subject information</TooltipContent>
-            </Tooltip>
-          </Card>
-
           {/* ── Activity overdue banner ── */}
           {hasOverdue && (
             <Card className="bg-[#F4B8C1] flex flex-col">
