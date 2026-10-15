@@ -166,6 +166,8 @@ class ClassworkAssignmentResponse(BaseModel):
     classwork_assignment_id: int
     classwork_id: int
     class_id: int
+    subject_id: int
+    subject_name: Optional[str] = None
     section_name: Optional[str] = None
     title: str
     description: Optional[str]
@@ -185,7 +187,9 @@ class ClassworkAssignmentResponse(BaseModel):
     is_locked: Optional[bool] = False
     max_attempts: Optional[int] = 1
     teacher_name: Optional[str] = None
+    teacher_avatar: Optional[str] = None
     attachments: list[ClassworkAttachmentResponse] = []
     assignments: Optional[list[CwAssignmentRow]] = None
     linked_lessons: list[LinkedLessonResponse] = []
     submission_status: Optional[str] = None  # for student view
+    rubric_levels: list[ActivityRubricLevelResponse] = []

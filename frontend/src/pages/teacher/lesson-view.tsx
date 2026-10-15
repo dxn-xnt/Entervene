@@ -147,7 +147,7 @@ export function TeacherLessonView({
             <div className="-mt-[3px] flex min-w-0 flex-col gap-3 border-t-2! border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
                 {/* ── Hero Lesson Information Card ── */}
                 <Card className="block w-full border-2 border-black bg-primary p-4 sm:p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-5">
                         <div className="flex flex-wrap items-center gap-2 justify-between">
                             <div className="flex flex-row gap-3 items-center">
                                 {/* Lesson Title */}
@@ -169,49 +169,35 @@ export function TeacherLessonView({
 
                         </div>
 
-                        <div className="flex flex-row gap-2 items-center">
-                            <p className="text-xs sm:text-sm text-foreground">
-                                Competency:
-                            </p>
-                            {(lesson.competency_code || lesson.competency_statement) && (
-                                <p className="text-sm sm:text-base font-semibold text-foreground">
-                                    {lesson.competency_code || lesson.competency_statement}
-                                </p>
+                        <div className={lesson.content ? "grid gap-5 md:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] md:gap-8" : "flex flex-col gap-3"}>
+                            <div className="flex flex-col gap-3">
+                                {(lesson.competency_code || lesson.competency_statement) && (
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-foreground/70">Competency</p>
+                                        <p className="mt-1 break-words text-sm font-semibold text-foreground sm:text-base">
+                                            {lesson.competency_code || lesson.competency_statement}
+                                        </p>
+                                    </div>
+                                )}
+                                {(lesson.updated_at || lesson.created_at) && (
+                                    <p className="text-sm text-foreground/80">
+                                        {lesson.updated_at && (!lesson.created_at || lesson.updated_at !== lesson.created_at)
+                                            ? `Updated ${formatDate(lesson.updated_at)}`
+                                            : `Created ${formatDate(lesson.created_at)}`}
+                                    </p>
+                                )}
+                            </div>
+                            {lesson.content && (
+                                <div className="min-w-0">
+                                    <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground/70">Lesson Content</h2>
+                                    <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground sm:text-base">
+                                        {lesson.content}
+                                    </p>
+                                </div>
                             )}
                         </div>
-
-                        {/* Timestamps */}
-                        {(lesson.updated_at || lesson.created_at) && (
-                            <div className="flex items-center text-xs sm:text-sm text-foreground">
-                                <span className="inline-flex items-center gap-1">
-                                    {lesson.updated_at && (!lesson.created_at || lesson.updated_at !== lesson.created_at)
-                                        ? `Updated ${formatDate(lesson.updated_at)}`
-                                        : `Created ${formatDate(lesson.created_at)}`}
-                                </span>
-                            </div>
-                        )}
                     </div>
                 </Card>
-
-                <section className="flex flex-col gap-3 px-1">
-                    {/* Lesson Content / Notes */}
-                    {lesson.content && (
-                        <Card className="shadow-none">
-                            <p className="mb-1 text-sm text-muted-foreground">
-                                Lesson Content
-                            </p>
-                            <div className="whitespace-pre-wrap text-sm text-foreground font-medium">
-                                {lesson.content}
-                            </div>
-                        </Card>
-                    )}
-                    {/* Description
-                    {lesson.description && (
-                        <p className="text-sm text-muted-foreground">
-                            {lesson.description}
-                        </p>
-                    )} */}
-                </section>
 
                 {/* ── Classwork Section ── */}
                 <section className="mt-2 flex flex-col gap-3 px-1">

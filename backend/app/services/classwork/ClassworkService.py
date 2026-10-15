@@ -1459,6 +1459,8 @@ def _assignment_response(
         classwork_assignment_id=cast(int, assignment.classwork_assignment_id),
         classwork_id=cast(int, classwork.classwork_id),
         class_id=cast(int, assignment.class_id),
+        subject_id=cast(int, classwork.subject_id),
+        subject_name=cast(str | None, getattr(classwork.subject, "subject_name", None)),
         section_name=_class_section_name(class_),
         title=cast(str, classwork.title),
         description=cast(Optional[str], classwork.description),
@@ -1477,12 +1479,23 @@ def _assignment_response(
         is_locked=assignment_is_locked(assignment),
         max_attempts=cast(Optional[int], assignment.max_attempts),
         teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
+        teacher_avatar=cast(str | None, staff.user_account.avatar_path if staff and staff.user_account else None),
         attachments=[build_attachment_response(attachment) for attachment in classwork.attachments],
         linked_lessons=[
             build_linked_lesson_response(lesson)
             for lesson in (getattr(classwork, "lessons", None) or [])
         ],
         submission_status=submission_status,
+        rubric_levels=[
+            {
+                "rubric_level_id": level.rubric_level_id,
+                "level_name": level.level_name,
+                "description": level.description,
+                "points": float(level.points),
+                "display_order": level.display_order,
+            }
+            for level in sorted(classwork.rubric_levels, key=lambda item: item.display_order)
+        ],
     )
 
 

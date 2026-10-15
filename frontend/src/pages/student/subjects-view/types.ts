@@ -60,6 +60,7 @@ export interface ClassworkDetail {
   is_locked?: boolean;
   max_attempts?: number;
   teacher_name?: string | null;
+  teacher_avatar?: string | null;
   submission_status?: string | null;
   attachments: ClassworkAttachment[];
   linked_lessons?: LinkedLesson[];

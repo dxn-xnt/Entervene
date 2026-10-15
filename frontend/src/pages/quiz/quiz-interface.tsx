@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ChevronLeft, SkipBack, SkipForward, Flag, Loader2, AlertCircle } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Button } from "@/components/retroui/Button";
@@ -7,6 +7,7 @@ import { Card } from "@/components/retroui/Card";
 import { QuizTextAnswerInput } from "@/components/quiz/student-quiz-answer";
 import { useToast } from "@/components/retroui/use-toast";
 import { routes } from "@/../routes";
+import { quizPathWithContext } from "@/lib/student-quiz-navigation";
 import {
   getQuizAttempt,
   startQuizAttempt,
@@ -32,6 +33,7 @@ const StudentQuizTake = () => {
   const toast = useToast();
   const { assignmentId } = useParams<{ assignmentId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const aid = Number(assignmentId);
 
   // Data state
@@ -184,13 +186,13 @@ const StudentQuizTake = () => {
       toast.success({ title: "Quiz submitted" });
 
       // Navigate to result page
-      navigate(routes.student.quizResult.replace(":assignmentId", String(aid)), { replace: true });
+      navigate(quizPathWithContext(routes.student.quizResult.replace(":assignmentId", String(aid)), location.search), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit quiz.");
       toast.error({ title: "Failed to submit quiz", description: err instanceof Error ? err.message : undefined });
       setSubmitting(false);
     }
-  }, [quiz, answers, aid, navigate, submitting, toast]);
+  }, [quiz, answers, aid, navigate, location.search, submitting, toast]);
 
   // --------------------------------------------------
   // Derived values
@@ -223,7 +225,7 @@ const StudentQuizTake = () => {
 
   // Already submitted
   if (!quiz.can_submit && quiz.status === "SUBMITTED") {
-    navigate(routes.student.quizResult.replace(":assignmentId", String(aid)), { replace: true });
+    navigate(quizPathWithContext(routes.student.quizResult.replace(":assignmentId", String(aid)), location.search), { replace: true });
     return null;
   }
 

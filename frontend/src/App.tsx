@@ -61,6 +61,7 @@ const StudentBoard = lazy(() => import("./pages/student/studyboard"));
 const StudentProfile = lazy(() => import("./pages/student/student-profile"));
 const StudentSubjects = lazy(() => import("./pages/student/subjects"));
 const StudentSubjectDetail = lazy(() => import("./pages/student/student-subject-detail"));
+const StudentClassworkView = lazy(() => import("./pages/student/student-classwork-view"));
 const StudentInterventions = lazy(() => import("./pages/student/student-interventions"));
 const StudentGrades = lazy(() => import("./pages/student/grades/grades"));
 const StudentTodo = lazy(() => import("./pages/student/todo"));
@@ -152,6 +153,7 @@ const App = () => {
                   <Route path={routes.student.profile} element={<StudentProfile />} />
                   <Route path={routes.student.subjects} element={<StudentSubjects />} />
                   <Route path={routes.student.subjectDetail} element={<StudentSubjectDetail />} />
+                  <Route path={routes.student.classworkDetail} element={<StudentClassworkView />} />
                   <Route path={routes.student.interventions} element={<StudentInterventions />} />
                   <Route path={routes.student.grades} element={<StudentGrades />} />
                   <Route path={routes.student.todo} element={<StudentTodo />} />

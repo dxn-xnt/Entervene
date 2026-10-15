@@ -45,6 +45,10 @@ export default function ToDo() {
   }, []);
 
   const openTodo = async (item: ApiTodoItem) => {
+    if (item.assignment_id) {
+      navigate(`/student/classworks/${item.assignment_id}?from=${encodeURIComponent("/student/todo")}`);
+      return;
+    }
     let targetClassId = item.class_id;
 
     if (!targetClassId && item.subject_id) {
