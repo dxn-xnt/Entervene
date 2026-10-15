@@ -306,14 +306,15 @@ export default function AttachmentDisplay({
                 className="flex w-full min-w-0 flex-row gap-2 p-3 shadow-none transition-colors hover:bg-retro overflow-hidden"
               >
                 <div className="flex w-full min-w-0 items-center gap-3">
-                  {isPdfFile ? (
-                    <FileText
-                      className="flex-shrink-0"
-                      size={24}
-                    />
-                  ) : (
-                    <File className="text-blue-500 flex-shrink-0" size={24} />
-                  )}
+                  <IconContainer variant="primary">
+                    {isImageFile ? (
+                      <ImageIcon />
+                    ) : isPdfFile ? (
+                      <FileText />
+                    ) : (
+                      <File />
+                    )}
+                  </IconContainer>
                   <div className="flex-1 min-w-0">
                     <p
                       className="truncate text-sm font-medium"

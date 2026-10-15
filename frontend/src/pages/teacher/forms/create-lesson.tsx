@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Save, Upload, X } from "lucide-react";
+import { Check, CheckCheck, Loader2, Save, Upload, X } from "lucide-react";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
+import { Card } from "@/components/retroui/Card";
 import { useToast } from "@/components/retroui/use-toast";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { Dialog } from "@/components/retroui/Dialog";
+import Field from "@/components/admin/classes/fields/Field";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { apiFetch } from "@/lib/api";
 
 import { useTeacherClasses } from "@/hooks/use-teacher-classes";
@@ -299,13 +302,7 @@ export default function CreateLessonModal({
           )}
 
           <div className="grid gap-4 sm:grid-cols-[1fr_140px]">
-            <div className="flex flex-col gap-1.5">
-              <label
-                htmlFor="subject"
-                className="text-sm"
-              >
-                Subject
-              </label>
+            <Field label="Subject" isRequired={true}>
               <Select
                 value={subjectId}
                 onValueChange={(v) => {
@@ -332,14 +329,9 @@ export default function CreateLessonModal({
                   ))}
                 </Select.Content>
               </Select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label
-                htmlFor="lesson-order"
-                className="text-sm"
-              >
-                Lesson order
-              </label>
+            </Field>
+
+            <Field label="Lesson order">
               <Input
                 id="lesson-order"
                 type="number"
@@ -348,19 +340,13 @@ export default function CreateLessonModal({
                 value={orderIndex}
                 onChange={(event) => setOrderIndex(event.target.value)}
                 disabled={isSubmitting}
-                className="w-full"
+                className="w-full h-10"
               />
-            </div>
+            </Field>
           </div>
 
           {/* ── Competency Selection ── */}
-          <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="competency"
-              className="text-sm"
-            >
-              Learning Competency <span className="text-destructive">*</span>
-            </label>
+          <Field label="Learning Competency" isRequired={true}>
             {competencies.length === 0 ? (
               <Alert status="warning">
                 ⚠️ No learning competencies found for this subject. Please create a Learning Competency first before adding lessons.
@@ -390,36 +376,9 @@ export default function CreateLessonModal({
                 </Select.Content>
               </Select>
             )}
-          </div>
+          </Field>
 
-          <div className="flex flex-col gap-1.5">
-            <p className="text-sm">Class or section</p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {classesForSubject.map((item) => (
-                <label
-                  key={item.subject_load_id}
-                  className="flex cursor-pointer items-center gap-2 rounded border-2 border-border bg-background px-3 py-2 text-sm shadow-md transition hover:bg-accent"
-                >
-                  <input
-                    type="checkbox"
-                    checked={classIds.includes(item.class_id)}
-                    onChange={() => toggleClass(item.class_id)}
-                    disabled={isSubmitting}
-                    className="size-4 accent-black"
-                  />
-                  {item.section_name}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="lesson"
-              className="text-sm"
-            >
-              Lesson name <span className="text-destructive">*</span>
-            </label>
+          <Field label="Lesson Name" isRequired={true}>
             <Input
               id="lesson"
               value={title}
@@ -428,42 +387,105 @@ export default function CreateLessonModal({
               placeholder="e.g. Term 1: Variables and Expressions"
               disabled={isSubmitting}
             />
-          </div>
+          </Field>
 
-          <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="description"
-              className="text-sm"
-            >
-              Description / Topic
-            </label>
-            <textarea
-              id="description"
-              rows={2}
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              className="w-full resize-none rounded border-2 border-border bg-background px-4 py-2 text-sm shadow-md transition focus:outline-hidden focus:shadow-xs"
-              placeholder="Short lesson summary or unit overview"
-              disabled={isSubmitting}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="lesson-content"
-              className="text-sm"
-            >
-              Lesson content
-            </label>
+          <Field label="Lesson Content">
             <textarea
               id="lesson-content"
               rows={4}
               value={content}
               onChange={(event) => setContent(event.target.value)}
-              className="w-full resize-none rounded border-2 border-border bg-background px-4 py-2 text-sm shadow-md transition focus:outline-hidden focus:shadow-xs"
+              className="w-full resize-none rounded! border-2 border-border bg-background px-4 py-2 text-sm shadow-md transition focus:outline-hidden focus:shadow-xs"
               placeholder="Write the lesson notes or learning content students will read."
               disabled={isSubmitting}
             />
+          </Field>
+
+          <div className="mt-2">
+            <Field label="Assign to sections">
+              {classesForSubject.length > 0 && (
+                <div className="flex items-center justify-end -mt-8 mb-2">
+                  <Button
+                    size="sm"
+                    className="shadow-none -mt-1"
+                    autoIcon={false}
+                    onClick={() =>
+                      setClassIds(
+                        classesForSubject.map((load) => load.class_id),
+                      )
+                    }
+                    disabled={isSubmitting}
+                  >
+                    <CheckCheck className="size-4 mr-2" />
+                    Select All
+                  </Button>
+                </div>
+              )}
+
+              {classesForSubject.length > 0 ? (
+                <Card className="-mt-1 grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                  {classesForSubject.map((load) => {
+                    const isSelected = classIds.includes(load.class_id);
+                    return (
+                      <button
+                        key={load.subject_load_id}
+                        type="button"
+                        onClick={() => toggleClass(load.class_id)}
+                        disabled={isSubmitting}
+                        className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isSelected
+                          ? "bg-primary text-black"
+                          : "bg-white text-black hover:bg-accent"
+                          }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between">
+                            <p className="font-bold text-base truncate">
+                              {load.section_name}
+                            </p>
+                            <div
+                              className={`flex size-5 shrink-0 items-center justify-center rounded border-2 border-black transition-colors ${isSelected ? "bg-black text-white" : "bg-white text-transparent"
+                                }`}
+                            >
+                              <Check className="size-3.5 stroke-[3]" />
+                            </div>
+                          </div>
+
+                          <div className="mt-1 flex items-center justify-between w-full">
+                            <p
+                              className={`text-xs font-medium ${isSelected
+                                ? "text-foreground"
+                                : "text-muted-foreground"
+                                }`}
+                            >
+                              {load.grade_level || "Active Section"}
+                            </p>
+                            {typeof load.student_count === "number" && (
+                              <p
+                                className={`text-xs font-medium ${isSelected
+                                  ? "text-foreground"
+                                  : "text-muted-foreground"
+                                  }`}
+                              >
+                                {load.student_count} {load.student_count === 1 ? "student" : "students"}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </Card>
+              ) : (
+                <Empty className="shadow-md hover:shadow-none transition-shadow">
+                  <EmptyHeader>
+                    <EmptyTitle>No Sections Found</EmptyTitle>
+                    <EmptyDescription className="text-center">
+                      No active sections are assigned to this subject.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              )}
+            </Field>
           </div>
         </section>
 

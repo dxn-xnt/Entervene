@@ -1,6 +1,6 @@
-import { useState } from "react";
 import {
     Archive,
+    BookOpen,
     ClipboardList,
     Pencil,
     Plus,
@@ -11,6 +11,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
+import IconContainer from "@/components/icon-container";
 import {
     Empty,
     EmptyContent,
@@ -23,6 +24,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { formatDate } from "@/lib/formatters";
 import ClassworkItemLine from "@/components/item-line/classwork";
 import type { Lesson, LinkedClasswork } from "./subject-details/types";
+import { useState } from "react";
 
 export interface TeacherLessonViewProps {
     lesson: Lesson;
@@ -147,16 +149,26 @@ export function TeacherLessonView({
             <div className="-mt-[3px] flex min-w-0 flex-col gap-3 border-t-2! border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
                 {/* ── Hero Lesson Information Card ── */}
                 <Card className="block w-full border-2 border-black bg-primary p-4 sm:p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                    <div className="flex flex-col gap-5">
-                        <div className="flex flex-wrap items-center gap-2 justify-between">
+                    <div className="flex flex-col gap-4">
+                        <div className="flex flex-wrap items-start gap-2 justify-between">
                             <div className="flex flex-row gap-3 items-center">
+                                <IconContainer variant="default" size="xl" className="rounded!">
+                                    <BookOpen />
+                                </IconContainer>
                                 {/* Lesson Title */}
-                                <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-black leading-tight break-words">
-                                    {lesson.title}
-                                </h1>
-                                <Badge variant="outline" size="sm" className="h-fit">
-                                    Lesson
-                                </Badge>
+                                <div className="flex flex-col gap-1">
+                                    <h1 className="text-xl sm:text-2xl font-extrabold text-black leading-tight break-words">
+                                        {lesson.title}
+                                    </h1>
+                                    {(lesson.competency_code || lesson.competency_statement) && (
+                                        <div className="flex flex-row gap-2 items-center">
+                                            <p className="text-sm font-normal text-foreground">Competency:</p>
+                                            <p className="text-sm font-semibold text-foreground break-words sm:text-base">
+                                                {lesson.competency_code || lesson.competency_statement}
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             <Badge
@@ -166,19 +178,18 @@ export function TeacherLessonView({
                             >
                                 {lesson.is_published ? "Published" : "Draft"}
                             </Badge>
-
                         </div>
 
-                        <div className={lesson.content ? "grid gap-5 md:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] md:gap-8" : "flex flex-col gap-3"}>
-                            <div className="flex flex-col gap-3">
-                                {(lesson.competency_code || lesson.competency_statement) && (
-                                    <div>
-                                        <p className="text-xs font-semibold uppercase tracking-wide text-foreground/70">Competency</p>
-                                        <p className="mt-1 break-words text-sm font-semibold text-foreground sm:text-base">
-                                            {lesson.competency_code || lesson.competency_statement}
-                                        </p>
-                                    </div>
-                                )}
+                        <div className="flex flex-col gap-3">
+
+                            {lesson.content && (
+                                <Card className="min-w-0 shadow-none py-2">
+                                    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
+                                        {lesson.content}
+                                    </p>
+                                </Card>
+                            )}
+                            <div className="flex flex-col gap-3 px-1">
                                 {(lesson.updated_at || lesson.created_at) && (
                                     <p className="text-sm text-foreground/80">
                                         {lesson.updated_at && (!lesson.created_at || lesson.updated_at !== lesson.created_at)
@@ -187,14 +198,6 @@ export function TeacherLessonView({
                                     </p>
                                 )}
                             </div>
-                            {lesson.content && (
-                                <div className="min-w-0">
-                                    <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground/70">Lesson Content</h2>
-                                    <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground sm:text-base">
-                                        {lesson.content}
-                                    </p>
-                                </div>
-                            )}
                         </div>
                     </div>
                 </Card>
@@ -222,7 +225,7 @@ export function TeacherLessonView({
                         </div>
                     ) : (
                         /* Empty State when Lesson has no Classworks */
-                        <Empty className="border-2 bg-white p-8 shadow-none">
+                        <Empty className="border-2 bg-white p-8 hover:shadow-none transition-all">
                             <EmptyHeader>
                                 <EmptyMedia>
                                     <div className="flex size-12 items-center justify-center border-2 border-black bg-primary">

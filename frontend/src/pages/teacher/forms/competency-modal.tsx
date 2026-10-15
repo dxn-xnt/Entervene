@@ -5,6 +5,7 @@ import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/use-toast";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
+import Field from "@/components/admin/classes/fields/Field";
 import { apiFetch } from "@/lib/api";
 import type { CompetencyItem } from "../subject-details/types";
 
@@ -163,18 +164,18 @@ export default function CompetencyModal({
             </p>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-              <label className="flex flex-col gap-1 text-sm sm:col-span-3">
-                <span>Competency Code <span className="text-muted-foreground"></span></span>
-                <Input
-                  value={competencyCode}
-                  onChange={(e) => setCompetencyCode(e.target.value)}
-                  placeholder="MELC Code (e.g. M7AL-IIa-1)"
-                  className="w-full font-mono"
-                />
-              </label>
+              <div className="sm:col-span-3">
+                <Field label="Competency Code">
+                  <Input
+                    value={competencyCode}
+                    onChange={(e) => setCompetencyCode(e.target.value)}
+                    placeholder="MELC Code (e.g. M7AL-IIa-1)"
+                    className="w-full font-mono"
+                  />
+                </Field>
+              </div>
 
-              <label className="flex flex-col gap-1 text-sm">
-                <span>Target Hours</span>
+              <Field label="Target Hours">
                 <Input
                   type="number"
                   min="0"
@@ -182,11 +183,10 @@ export default function CompetencyModal({
                   onChange={(e) => setTargetHours(e.target.value)}
                   className="w-full"
                 />
-              </label>
+              </Field>
             </div>
 
-            <label className="flex flex-col gap-1 text-sm">
-              <span>Competency Statement <span className="text-destructive">*</span></span>
+            <Field label="Competency Statement" isRequired={true}>
               <textarea
                 required
                 rows={3}
@@ -195,21 +195,21 @@ export default function CompetencyModal({
                 placeholder="e.g. Translates verbal phrases to mathematical expressions and vice versa."
                 className="w-full resize-none rounded border-2 border-border bg-background px-4 py-2 text-sm shadow-md transition focus:outline-hidden focus:shadow-xs"
               />
-            </label>
+            </Field>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-              <label className="flex flex-col gap-1 text-sm sm:col-span-3">
-                <span>Description</span>
-                <Input
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Brief term or unit note"
-                  className="w-full"
-                />
-              </label>
+              <div className="sm:col-span-3">
+                <Field label="Description">
+                  <Input
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Brief term or unit note"
+                    className="w-full"
+                  />
+                </Field>
+              </div>
 
-              <label className="flex flex-col gap-1 text-sm">
-                <span>Order Index</span>
+              <Field label="Order Index">
                 <Input
                   type="number"
                   min="1"
@@ -217,7 +217,7 @@ export default function CompetencyModal({
                   onChange={(e) => setOrderIndex(e.target.value)}
                   className="w-full"
                 />
-              </label>
+              </Field>
             </div>
 
 

@@ -39,6 +39,8 @@ interface CreateClassworkModalProps {
   subjects: Array<{ id: number; name: string }>;
   loads: TeacherClassLoad[];
   initialSubjectId?: string;
+  initialClassId?: number;
+  initialLessonId?: number;
   initialTitle?: string;
   initialInstructions?: string;
   remediationDraft?: boolean;
@@ -56,6 +58,8 @@ export default function CreateClassworkModal({
   subjects,
   loads,
   initialSubjectId,
+  initialClassId,
+  initialLessonId,
   initialTitle,
   initialInstructions,
   remediationDraft = false,
@@ -92,11 +96,17 @@ export default function CreateClassworkModal({
     }
   }, [initialSubjectId, subjects]);
   const [materials, setMaterials] = useState<File[]>([]);
-  const [selectedClassIds, setSelectedClassIds] = useState<number[]>(remediationTarget ? [remediationTarget.class_id] : []);
+  const [selectedClassIds, setSelectedClassIds] = useState<number[]>(() => {
+    if (remediationTarget) return [remediationTarget.class_id];
+    if (initialClassId) return [initialClassId];
+    return [];
+  });
   const [remediationRequestId] = useState(() => crypto.randomUUID());
   const [availableLessons, setAvailableLessons] = useState<TeacherLesson[]>([]);
   const toast = useToast();
-  const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>([]);
+  const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>(() =>
+    initialLessonId ? [initialLessonId] : []
+  );
   const [isLessonLoading, setIsLessonLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [rubricLevels, setRubricLevels] = useState<ActivityRubricLevel[]>(() =>
@@ -263,11 +273,17 @@ export default function CreateClassworkModal({
         );
 
         setAvailableLessons(lessons);
-        setSelectedLessonIds((current) =>
-          remediationFocus
-            ? remediationFocus.lesson_ids.filter((id) => uniqueLessons.has(id))
-            : current.filter((id) => uniqueLessons.has(id)),
-        );
+        setSelectedLessonIds((current) => {
+          if (remediationFocus) {
+            return remediationFocus.lesson_ids.filter((id) => uniqueLessons.has(id));
+          }
+          const filtered = current.filter((id) => uniqueLessons.has(id));
+          if (filtered.length > 0) return filtered;
+          if (initialLessonId && uniqueLessons.has(initialLessonId)) {
+            return [initialLessonId];
+          }
+          return filtered;
+        });
       } catch (err) {
         if (!isActive) return;
         setAvailableLessons([]);
@@ -459,7 +475,7 @@ export default function CreateClassworkModal({
                 </Select>
               </Field>
 
-              <Field label="Link Lesson">
+              <Field label="Lesson">
                 <Select
                   value={selectedLessonIds[0] ? String(selectedLessonIds[0]) : ""}
                   onValueChange={(val) => {
@@ -528,7 +544,7 @@ export default function CreateClassworkModal({
                   }
                   disabled={isCreating}
                   placeholder="What students need to read, answer, or submit"
-                  className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-md transition focus:outline-hidden focus:shadow-xs min-h-20 text-sm"
+                  className="px-4 py-2 w-full rounded! border-2 border-black bg-white shadow-md transition focus:outline-hidden focus:shadow-xs min-h-20 text-sm"
                 />
               </Field>
 
@@ -630,7 +646,7 @@ export default function CreateClassworkModal({
 
               <Field label="Upload Material">
                 {materials.length === 0 ? (
-                  <Empty className="shadow-md hover:shadow-none transition-shadow">
+                  <Empty className="shadow-md rounded! hover:shadow-none transition-shadow">
                     <EmptyHeader>
                       <EmptyTitle>No Materials Added</EmptyTitle>
                       <EmptyDescription className="flex flex-col -gap-3 text-center whitespace-nowrap">
