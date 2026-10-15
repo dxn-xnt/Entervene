@@ -31,12 +31,14 @@ import {
 } from "@/lib/prediction-api";
 import {
   buildCurrentTermDashboard,
-  buildCurrentTermGradeSummaries,
+  buildCurrentTermSubjectSummaries,
   currentTermRiskSummary,
   loadAuthorizedCurrentTermPredictions,
   currentTermPredictionErrorMessage,
   type AuthorizedCurrentTermRow,
+  type AssignedSubjectSectionScope,
 } from "@/components/predictions/current-term-dashboard-adapter";
+import { PredictionSubjectSection } from "@/components/predictions/prediction-subject-section";
 
 const EMPTY_SUMMARY: RiskSummary = {
   HIGH_RISK: 0,
@@ -390,6 +392,7 @@ function LegacyPredictionsDashboard() {
 function TeacherCurrentTermDashboard() {
   const { selectedPeriodId } = useAcademicPeriod();
   const [rows, setRows] = useState<AuthorizedCurrentTermRow[]>([]);
+  const [assignedScopes, setAssignedScopes] = useState<AssignedSubjectSectionScope[]>([]);
   const [filters, setFilters] = useState<DashboardFilters | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -420,11 +423,13 @@ function TeacherCurrentTermDashboard() {
         if (!cancelled) {
           setRows(result.rows);
           setFilters(result.filters);
+          setAssignedScopes(result.assignedScopes);
         }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
           setRows([]);
+          setAssignedScopes([]);
           setLoadError(currentTermPredictionErrorMessage(error));
         }
       })
@@ -449,7 +454,7 @@ function TeacherCurrentTermDashboard() {
     limit: Math.max(10, scopedRows.length),
   });
   const summary = currentTermRiskSummary(scopedRows);
-  const gradeSummaries = buildCurrentTermGradeSummaries(rows);
+  const subjectSummaries = buildCurrentTermSubjectSummaries(rows, assignedScopes);
   const filtered =
     gradeLevel !== undefined ||
     classId !== undefined ||
@@ -538,11 +543,11 @@ function TeacherCurrentTermDashboard() {
               />
             ) : (
               <div className="flex flex-col gap-3">
-                <h2 className="text-xl font-black">Grade Cohort Summaries</h2>
-                {gradeSummaries.length ? (
+                <h2 className="text-xl font-black">Subject Summaries</h2>
+                {subjectSummaries.length ? (
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    {gradeSummaries.map((group) => (
-                      <PredictionGradeSection key={group.grade_level} group={group} />
+                    {subjectSummaries.map((group) => (
+                      <PredictionSubjectSection key={group.subject_id} group={group} />
                     ))}
                   </div>
                 ) : (

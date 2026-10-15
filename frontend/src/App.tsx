@@ -9,6 +9,7 @@ import Login from "./pages/login";
 import Landing from "./pages/landing";
 import { routes } from "@/../routes";
 import SetupPassword from "./pages/setup-password";
+import PasswordRecovery from "./pages/password-recovery";
 import { NavigationProgress } from "./components/navigation-progress";
 import { Toaster } from "./components/retroui/Sonner";
 
@@ -95,6 +96,8 @@ const App = () => {
                 <Route path="/unavailable" element={<StatusPage variant="unavailable" />} />
                 <Route path="/error" element={<StatusPage />} />
                 <Route path={routes.auth.login} element={<Login />} />
+                <Route path={routes.auth.forgotPassword} element={<PasswordRecovery />} />
+                <Route path={routes.auth.resetPassword} element={<PasswordRecovery />} />
                 <Route path="/setup-password" element={<SetupPassword />} />
 
                 {/* Admin */}
@@ -140,6 +143,7 @@ const App = () => {
                   <Route path={routes.teacher.predictions} element={<PredictionsDashboard />} />
                   <Route path={routes.teacher.gradePredictions} element={<GradesPredictions />} />
                   <Route path={routes.teacher.sectionPredictions} element={<SectionPredictions />} />
+                  <Route path={routes.teacher.subjectSectionPredictions} element={<SectionPredictions />} />
                   <Route path={routes.teacher.lessonPlanner} element={<LessonPlannerListPage />} />
                   <Route path={routes.teacher.lessonPlannerCreate} element={<LessonPlannerPage />} />
                   <Route path={routes.teacher.lessonPlannerEdit} element={<LessonPlannerPage />} />
