@@ -36,6 +36,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { OverviewCard } from "@/components/overview-cards";
 import { routes } from "@/../routes";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { IconContainer } from "@/components/icon-container";
 
 import type { CompetencyItem, Lesson, LinkedClasswork } from "./types";
 
@@ -515,24 +524,34 @@ export default function SubjectLessonList({
                           {compLessons.length > 0 ? (
                             compLessons.map(renderLessonItem)
                           ) : (
-                            <div className="flex items-center justify-between border-2 border-dashed border-black bg-[#FFFDF0] p-4">
-                              <div className="flex items-center gap-2 text-xs font-bold text-black">
-                                <BookOpen size={16} className="text-black" />
-                                <span>No lessons assigned to this competency yet.</span>
-                              </div>
+                            <Empty className="border-2 border-black bg-retro p-6 shadow-none">
+                              <EmptyHeader>
+                                <EmptyMedia>
+                                  <IconContainer variant="primary">
+                                    <BookOpen className="size-5 text-black" />
+                                  </IconContainer>
+                                </EmptyMedia>
+                                <EmptyTitle className="text-sm font-bold">
+                                  No Lessons Found
+                                </EmptyTitle>
+                                <EmptyDescription className="text-xs">
+                                  No lessons assigned to this competency yet.
+                                </EmptyDescription>
+                              </EmptyHeader>
                               {onAddLessonToCompetency && (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => onAddLessonToCompetency(comp.competency_id)}
-                                  className="border-2 border-black bg-white hover:bg-yellow-50 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                                >
-                                  <Plus size={14} />
-                                  Create First Lesson
-                                </Button>
+                                <EmptyContent className="mt-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => onAddLessonToCompetency(comp.competency_id)}
+                                    className="gap-1.5"
+                                  >
+                                    <Plus size={14} />
+                                    Create First Lesson
+                                  </Button>
+                                </EmptyContent>
                               )}
-                            </div>
+                            </Empty>
                           )}
                         </div>
                       </Card>

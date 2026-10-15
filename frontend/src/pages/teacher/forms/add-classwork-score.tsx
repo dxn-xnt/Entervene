@@ -7,6 +7,7 @@ import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
+import Field from "@/components/admin/classes/fields/Field";
 import { createActivity, apiFetch } from "@/lib/api";
 
 interface AddClassworkScoreModalProps {
@@ -170,8 +171,7 @@ export default function AddClassworkScoreModal({
             </p>
           </div>
 
-          <div className="flex flex-col gap-1.5 w-full">
-            <label className="text-sm font-semibold">Grading Category</label>
+          <Field label="Grading Category">
             <Select value={selectedCategory} onValueChange={(val) => setSelectedCategory(val)}>
               <Select.Trigger className="w-full">
                 <Select.Value placeholder="Select category" />
@@ -184,11 +184,10 @@ export default function AddClassworkScoreModal({
                 </Select.Group>
               </Select.Content>
             </Select>
-          </div>
+          </Field>
 
           {isQuarterly && (
-            <div className="flex flex-col gap-1.5 w-full">
-              <label className="text-sm font-semibold">Exam Sub-type</label>
+            <Field label="Exam Sub-type">
               <Select value={examSubtype} onValueChange={(val) => setExamSubtype(val)}>
                 <Select.Trigger className="w-full">
                   <Select.Value placeholder="Select Exam Sub-type" />
@@ -201,21 +200,18 @@ export default function AddClassworkScoreModal({
                   </Select.Group>
                 </Select.Content>
               </Select>
-            </div>
+            </Field>
           )}
 
           {/* Multi-Select Covered Lessons */}
-          <div className="flex flex-col gap-1.5 w-full">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold">
-                Covered Lessons {isQuarterly ? "*" : "(Optional)"}
-              </label>
-              {availableLessons.length > 0 && (
+          <Field label={isQuarterly ? "Covered Lessons" : "Covered Lessons (Optional)"} isRequired={isQuarterly}>
+            {availableLessons.length > 0 && (
+              <div className="flex items-center justify-end -mt-6 mb-1">
                 <span className="text-xs text-muted-foreground font-medium">
                   {selectedLessonIds.length} selected
                 </span>
-              )}
-            </div>
+              </div>
+            )}
 
             {loadingLessons ? (
               <div className="text-xs text-muted-foreground py-2">Loading available lessons...</div>
@@ -255,14 +251,13 @@ export default function AddClassworkScoreModal({
               </div>
             )}
             {isQuarterly && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground mt-1">
                 Select one or more lessons that this Exam covers.
               </p>
             )}
-          </div>
+          </Field>
 
-          <div className="flex flex-col gap-1.5 w-full">
-            <label className="text-sm font-semibold">Activity Name *</label>
+          <Field label="Activity Name" isRequired={true}>
             <Input
               placeholder="e.g. Oral Recitation 1, Seatwork #2"
               type="text"
@@ -270,10 +265,9 @@ export default function AddClassworkScoreModal({
               onChange={(e) => setTitle(e.target.value)}
               required
             />
-          </div>
+          </Field>
 
-          <div className="flex flex-col gap-1.5 w-full">
-            <label className="text-sm font-semibold">Maximum Score *</label>
+          <Field label="Maximum Score" isRequired={true}>
             <Input
               placeholder="100"
               type="number"
@@ -282,26 +276,24 @@ export default function AddClassworkScoreModal({
               onChange={(e) => setMaxScore(e.target.value)}
               required
             />
-          </div>
+          </Field>
 
-          <div className="flex flex-col gap-1.5 w-full">
-            <label className="text-sm font-semibold">Date Activity Taken (Optional)</label>
+          <Field label="Date Activity Taken (Optional)">
             <Input
               type="date"
               value={dateTaken}
               onChange={(e) => setDateTaken(e.target.value)}
             />
-          </div>
+          </Field>
 
-          <div className="flex flex-col gap-1.5 w-full">
-            <label className="text-sm font-semibold">Description / Notes (Optional)</label>
+          <Field label="Description / Notes (Optional)">
             <Input
               placeholder="Additional notes for this activity"
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
-          </div>
+          </Field>
         </section>
 
         <Dialog.Footer>

@@ -228,12 +228,12 @@ export default function ClassworkCard({
   return (
     <>
       <ContextMenu>
-        <ContextMenuTrigger>
-          <div>
+        <ContextMenuTrigger className="flex h-full w-full flex-col">
+          <div className="flex h-full w-full flex-col flex-1">
             <Tooltip>
               <TooltipTrigger render={
                 <Card
-                  className="flex h-full w-full cursor-pointer flex-col"
+                  className="flex h-full w-full cursor-pointer flex-col flex-1"
                   tabIndex={0}
                   onClick={openCard}
                   onKeyDown={(event) => {
@@ -340,7 +340,7 @@ export default function ClassworkCard({
                     </div>
                   </Card.Header>
 
-                  <Card.Content className="mt-auto flex flex-col gap-3 mt-1">
+                  <Card.Content className="mt-auto flex flex-col gap-3 pt-2">
                     {tracking && (
                       <div className="flex flex-col gap-1.5">
                         <div className="flex items-center justify-between text-sm">

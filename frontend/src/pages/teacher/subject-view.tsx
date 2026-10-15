@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Award, BookOpen, BookOpenCheck, ClipboardList, Paperclip, Plus, Users, X } from "lucide-react";
+import { Award, BookOpen, BookOpenCheck, CheckSquare, ClipboardList, FileText, Paperclip, Plus, Users, X, type LucideIcon } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import AppLayout from "@/layouts/app-layout";
@@ -19,7 +19,12 @@ import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Badge } from "@/components/retroui/Badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import ClassworkFormModal from "./subject-details/classwork-form-modal";
+import { DialogueSelect } from "@/components/dialogue-select";
+import { Text } from "@/components/retroui/Text";
+import CreateClassworkModal from "./forms/create-classwork";
+import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
+import { isQuizType } from "@/lib/classwork-utils";
+import type { ClassworkKind } from "@/types/classwork";
 import CompetencyModal from "./forms/competency-modal";
 import ManageLessonModal from "./forms/manage-lesson";
 import SubjectLessonList from "./subject-details/subject-lesson-list";
@@ -28,13 +33,9 @@ import TeacherLessonDetailScreen from "./lesson-view";
 import TOSGeneratorScreen from "./subject-details/tos-generator-screen";
 import {
   LOCKED_CLASSWORK_MESSAGE,
-  allowedMaterialExtensions,
-  emptyClassworkDraft,
-  maxMaterialSize,
 } from "./subject-details/constants";
 import type {
   ClassworkDetail,
-  ClassworkDraft,
   CompetencyItem,
   Lesson,
   LessonDraft,
@@ -42,6 +43,38 @@ import type {
   SubmissionTracking,
   TeacherClassLoad,
 } from "./subject-details/types";
+
+const createOptions: Array<{
+  type: ClassworkKind;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+}> = [
+  {
+    type: "READING",
+    title: "Reading",
+    description: "Create and publish class topics or resources for learners",
+    icon: BookOpen,
+  },
+  {
+    type: "QUIZ",
+    title: "Quiz",
+    description: "Build and assign quizzes to assess learner understanding",
+    icon: ClipboardList,
+  },
+  {
+    type: "ASSIGNMENT",
+    title: "Assignment",
+    description: "Post tasks or projects for students to complete and submit",
+    icon: FileText,
+  },
+  {
+    type: "ACTIVITY",
+    title: "Activity",
+    description: "Design interactive tasks to enhance learner engagement",
+    icon: CheckSquare,
+  },
+];
 
 const tabs: Array<TabItem<"lessons" | "classwork">> = [
   { id: "lessons", label: "Lessons", icon: BookOpen },
@@ -81,10 +114,10 @@ export default function SubjectDetails() {
   const [expandedLessonId, setExpandedLessonId] = useState<number | null>(null);
   const [linkedClassworks, setLinkedClassworks] = useState<Record<number, LinkedClasswork[]>>({});
   const [loadingClassworkId, setLoadingClassworkId] = useState<number | null>(null);
+  // Classwork Wizard Dialog state
+  const [showCreateWizard, setShowCreateWizard] = useState(false);
+  const [selectedType, setSelectedType] = useState<ClassworkKind | null>(null);
   const [classworkLesson, setClassworkLesson] = useState<Lesson | null>(null);
-  const [classworkDraft, setClassworkDraft] = useState<ClassworkDraft>(emptyClassworkDraft);
-  const [classworkMaterials, setClassworkMaterials] = useState<File[]>([]);
-  const [isCreatingClasswork, setIsCreatingClasswork] = useState(false);
   const [selectedClasswork, setSelectedClasswork] = useState<ClassworkDetail | null>(null);
   const [selectedTracking, setSelectedTracking] = useState<SubmissionTracking | null>(null);
   const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
@@ -382,6 +415,20 @@ export default function SubjectDetails() {
       .filter((load) => load.subject_id === Number(subjectId))
       .sort((a, b) => a.section_name.localeCompare(b.section_name));
   }, [loads, subjectId]);
+
+  const subjects = useMemo(() => {
+    const map = new Map<number, { id: number; name: string }>();
+    loads.forEach((load) => {
+      map.set(load.subject_id, { id: load.subject_id, name: load.subject_name });
+    });
+    if (subjectId && !map.has(Number(subjectId))) {
+      map.set(Number(subjectId), {
+        id: Number(subjectId),
+        name: subjectLoad?.subject_name || "Current Subject",
+      });
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [loads, subjectId, subjectLoad?.subject_name]);
   const filteredLessons = useMemo(() => {
     const query = lessonSearch.trim().toLowerCase();
     const visibleLessons = query
@@ -480,9 +527,15 @@ export default function SubjectDetails() {
   const openClassworkForm = (lesson: Lesson) => {
     setError("");
     setClassworkLesson(lesson);
-    setClassworkDraft(emptyClassworkDraft);
-    setClassworkMaterials([]);
+    setSelectedType(null);
+    setShowCreateWizard(true);
     setExpandedLessonId(lesson.lesson_id);
+  };
+
+  const closeCreateWizard = () => {
+    setShowCreateWizard(false);
+    setSelectedType(null);
+    setClassworkLesson(null);
   };
 
   const openLessonManager = (lesson: Lesson) => {
@@ -529,7 +582,7 @@ export default function SubjectDetails() {
       setError("Lesson title is required.");
       return;
     }
-    if (lessonClassIds.length === 0) {
+    if (lessonDraft.is_published && lessonClassIds.length === 0) {
       setError("Select at least one class or section.");
       return;
     }
@@ -562,21 +615,23 @@ export default function SubjectDetails() {
 
       let updatedLesson = (await updateResponse.json()) as Lesson;
 
-      const assignResponse = await apiFetch(
-        `/api/v1/lessons/${selectedLesson.lesson_id}/assign`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            class_ids: lessonClassIds,
-            is_published: lessonDraft.is_published,
-          }),
-        },
-      );
-      if (!assignResponse.ok) {
-        throw new Error(
-          "Lesson details were saved, but section assignment failed.",
+      if (lessonClassIds.length > 0) {
+        const assignResponse = await apiFetch(
+          `/api/v1/lessons/${selectedLesson.lesson_id}/assign`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              class_ids: lessonClassIds,
+              is_published: lessonDraft.is_published,
+            }),
+          },
         );
+        if (!assignResponse.ok) {
+          throw new Error(
+            "Lesson details were saved, but section assignment failed.",
+          );
+        }
       }
 
       if (lessonDraft.is_published) {
@@ -606,15 +661,10 @@ export default function SubjectDetails() {
           )
           .sort((a, b) => a.order_index - b.order_index),
       );
-      setSelectedLesson(updatedLesson);
-      setLessonDraft({
-        title: updatedLesson.title,
-        description: updatedLesson.description || "",
-        content: updatedLesson.content || "",
-        order_index: String(updatedLesson.order_index || 1),
-        is_published: updatedLesson.is_published,
-        show_scores: updatedLesson.show_scores,
-      });
+      setSelectedLesson(null);
+      setLessonDraft(null);
+      setLessonClassIds([]);
+      setShowArchiveConfirm(false);
       toast.success("Lesson updated.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update lesson.");
@@ -702,57 +752,6 @@ export default function SubjectDetails() {
     }
   };
 
-  const closeClassworkForm = () => {
-    if (isCreatingClasswork) return;
-    setClassworkLesson(null);
-    setClassworkDraft(emptyClassworkDraft);
-    setClassworkMaterials([]);
-    setError("");
-  };
-
-  const addClassworkMaterials = (files: FileList | null) => {
-    if (!files) return;
-
-    const selected = Array.from(files);
-    const invalidType = selected.find((file) => {
-      const extension = `.${file.name.split(".").pop()?.toLowerCase()}`;
-      return !allowedMaterialExtensions.includes(extension);
-    });
-    if (invalidType) {
-      const msg = `${invalidType.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`;
-      setError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    const oversized = selected.find((file) => file.size > maxMaterialSize);
-    if (oversized) {
-      const msg = `${oversized.name} is larger than the 10 MB file limit.`;
-      setError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    setError("");
-    setClassworkMaterials((current) => {
-      const existing = new Set(
-        current.map((file) => `${file.name}-${file.size}`),
-      );
-      return [
-        ...current,
-        ...selected.filter(
-          (file) => !existing.has(`${file.name}-${file.size}`),
-        ),
-      ];
-    });
-  };
-
-  const removeClassworkMaterial = (index: number) => {
-    setClassworkMaterials((current) =>
-      current.filter((_, currentIndex) => currentIndex !== index),
-    );
-  };
-
   const openClassworkDetail = async (classwork: LinkedClasswork) => {
     setDetailLoadingId(classwork.classwork_assignment_id);
     setDetailError("");
@@ -801,152 +800,6 @@ export default function SubjectDetails() {
     setSelectedTracking(null);
     setDetailError("");
   };
-
-  const createClassworkForLesson = async () => {
-    if (!classworkLesson || !classId || !subjectId) return;
-
-    // Sentinel: lesson_id === 0 means this is a subject-level (quarterly assessment) classwork.
-    const isSubjectLevel = classworkLesson.lesson_id === 0;
-
-    setError("");
-    const isReadingClasswork = classworkDraft.classwork_type === "READING";
-    // Quiz question files go through the quiz import flow, not classwork attachments.
-    const allowsMaterialUpload = classworkDraft.classwork_type !== "QUIZ";
-    if (!classworkDraft.title.trim()) {
-      const msg = "Classwork title is required.";
-      setError(msg);
-      toast.error(msg);
-      return;
-    }
-    const totalPoints = Number(classworkDraft.total_points);
-    if (
-      !isReadingClasswork &&
-      classworkDraft.total_points &&
-      Number.isNaN(totalPoints)
-    ) {
-      const msg = "Total points must be a number.";
-      setError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    setIsCreatingClasswork(true);
-    try {
-      const createResponse = await apiFetch("/api/v1/classwork-assignments/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: classworkDraft.title.trim(),
-          description: classworkDraft.description.trim() || null,
-          instructions: classworkDraft.instructions.trim() || null,
-          classwork_type: classworkDraft.classwork_type,
-          classwork_category: classworkDraft.classwork_category || null,
-          total_points: isReadingClasswork
-            ? null
-            : classworkDraft.total_points
-              ? totalPoints
-              : null,
-          subject_id: Number(subjectId),
-          is_published: classworkDraft.is_published,
-          show_scores: classworkDraft.show_scores,
-          // Subject-level classworks (quarterly assessments) are not linked to any lesson.
-          lesson_ids: isSubjectLevel ? [] : [classworkLesson.lesson_id],
-        }),
-      });
-
-      if (!createResponse.ok) {
-        throw new Error("Unable to create classwork.");
-      }
-
-      const created = (await createResponse.json()) as { classwork_id: number };
-
-      for (const material of allowsMaterialUpload ? classworkMaterials : []) {
-        const formData = new FormData();
-        formData.append("file", material);
-        const uploadResponse = await apiFetch(
-          `/api/v1/classwork-assignments/classwork/${created.classwork_id}/attachments`,
-          {
-            method: "POST",
-            body: formData,
-          },
-        );
-
-        if (!uploadResponse.ok) {
-          const uploadError = await uploadResponse.json().catch(() => ({}));
-          throw new Error(
-            uploadError.detail ||
-            `Classwork was created, but ${material.name} could not be uploaded.`,
-          );
-        }
-      }
-
-      const activeLoad = loads.find(
-        (l) =>
-          String(l.class_id) === String(classId) &&
-          String(l.subject_id) === String(subjectId),
-      );
-
-      const assignResponse = await apiFetch(
-        `/api/v1/classwork-assignments/classwork/${created.classwork_id}/assign`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            class_ids: [Number(classId)],
-            academic_period_id: activeLoad?.academic_period_id || currentAcademicPeriodId || undefined,
-            due_date: classworkDraft.due_date
-              ? new Date(classworkDraft.due_date).toISOString()
-              : null,
-            allow_late_submissions: classworkDraft.allow_late_submissions,
-            is_published: classworkDraft.is_published,
-          }),
-        },
-      );
-
-      if (!assignResponse.ok) {
-        const assignError = await assignResponse.json().catch(() => ({}));
-        const detail = assignError.detail;
-        if (Array.isArray(detail)) {
-          const msgs = detail
-            .map((e: { loc?: (string | number)[]; msg?: string }) => {
-              const field = (e.loc || []).filter((x) => x !== "body").join(".");
-              return field ? `${field}: ${e.msg}` : (e.msg || "Validation error");
-            })
-            .join("; ");
-          throw new Error(msgs || "Assignment failed.");
-        }
-        throw new Error(
-          typeof detail === "string" ? detail : "Classwork was created, but assignment failed.",
-        );
-      }
-
-      if (isSubjectLevel) {
-        // Refresh the subject-level assignments count so the new quarterly assessment appears.
-        const refreshResponse = await apiFetch(
-          `/api/v1/classwork-assignments/teacher/class/${classId}/subject/${subjectId}/assignments`,
-        );
-        if (refreshResponse.ok) {
-          const refreshed = (await refreshResponse.json()) as LinkedClasswork[];
-          setClassworkCount(refreshed.length);
-        }
-      } else if (classworkLesson) {
-        await loadLessonClassworks(classworkLesson.lesson_id);
-      }
-
-      setClassworkLesson(null);
-      setClassworkDraft(emptyClassworkDraft);
-      setClassworkMaterials([]);
-      toast.success("Classwork created.");
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Unable to create classwork.";
-      setError(msg);
-      toast.error(msg);
-    } finally {
-      setIsCreatingClasswork(false);
-    }
-  };
-
 
   return (
     <AppLayout>
@@ -1143,6 +996,7 @@ export default function SubjectDetails() {
                 classesForSubject={classesForSubject}
                 classId={classId}
                 lessonClassIds={lessonClassIds}
+                setLessonClassIds={setLessonClassIds}
                 isSavingLesson={isSavingLesson}
                 isArchivingLesson={isArchivingLesson}
                 removingLessonAttachmentId={removingLessonAttachmentId}
@@ -1157,20 +1011,120 @@ export default function SubjectDetails() {
               />
             )}
 
-            {classworkLesson && (
-              <ClassworkFormModal
-                classworkLesson={classworkLesson}
-                classworkDraft={classworkDraft}
-                setClassworkDraft={setClassworkDraft}
-                classworkMaterials={classworkMaterials}
-                isCreatingClasswork={isCreatingClasswork}
-                error={error}
-                closeClassworkForm={closeClassworkForm}
-                addClassworkMaterials={addClassworkMaterials}
-                removeClassworkMaterial={removeClassworkMaterial}
-                createClassworkForLesson={createClassworkForLesson}
-              />
-            )}
+            <Dialog
+              open={showCreateWizard}
+              onOpenChange={(open) => {
+                if (!open) closeCreateWizard();
+              }}
+            >
+              {showCreateWizard &&
+                (selectedType === null ? (
+                  <Dialog.Content size="lg">
+                    <Dialog.Header position="fixed" asChild>
+                      <div className="flex items-center justify-between w-full">
+                        <Text as="h5" className="font-sans text-xl font-bold">
+                          Choose Classwork Type
+                        </Text>
+                        <Tooltip>
+                          <TooltipTrigger render={<button
+                            type="button"
+                            onClick={closeCreateWizard}
+                            className={dialogHeaderCloseButtonClassName}
+                            aria-label="Close modal"
+                          >
+                            <X className="size-4" />
+                          </button>} />
+                          <TooltipContent>Close modal</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </Dialog.Header>
+                    <section className="p-5">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        {createOptions.map((option) => {
+                          return (
+                            <DialogueSelect
+                              className="shadow-none hover:shadow-none"
+                              key={option.type}
+                              title={option.title}
+                              description={option.description}
+                              icon={option.icon}
+                              onClick={() => setSelectedType(option.type)}
+                            />
+                          );
+                        })}
+                      </div>
+                    </section>
+                    <Dialog.Footer position="fixed">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        autoIcon={false}
+                        onClick={closeCreateWizard}
+                      >
+                        Cancel
+                      </Button>
+                    </Dialog.Footer>
+                  </Dialog.Content>
+                ) : isQuizType(selectedType) ? (
+                  <CreateClassworkQuizModal
+                    selectedType={selectedType}
+                    subjects={subjects}
+                    loads={loads}
+                    initialSubjectId={subjectId ? String(subjectId) : undefined}
+                    initialClassId={classId ? Number(classId) : undefined}
+                    initialLessonId={
+                      classworkLesson && classworkLesson.lesson_id > 0
+                        ? classworkLesson.lesson_id
+                        : undefined
+                    }
+                    onClose={closeCreateWizard}
+                    onSuccess={async () => {
+                      if (classworkLesson && classworkLesson.lesson_id > 0) {
+                        await loadLessonClassworks(classworkLesson.lesson_id);
+                      } else if (classId && subjectId) {
+                        const refreshResponse = await apiFetch(
+                          `/api/v1/classwork-assignments/teacher/class/${classId}/subject/${subjectId}/assignments`,
+                        );
+                        if (refreshResponse.ok) {
+                          const refreshed = (await refreshResponse.json()) as LinkedClasswork[];
+                          setClassworkCount(refreshed.length);
+                        }
+                      }
+                      closeCreateWizard();
+                    }}
+                    onBack={() => setSelectedType(null)}
+                  />
+                ) : (
+                  <CreateClassworkModal
+                    selectedType={selectedType}
+                    subjects={subjects}
+                    loads={loads}
+                    initialSubjectId={subjectId ? String(subjectId) : undefined}
+                    initialClassId={classId ? Number(classId) : undefined}
+                    initialLessonId={
+                      classworkLesson && classworkLesson.lesson_id > 0
+                        ? classworkLesson.lesson_id
+                        : undefined
+                    }
+                    onClose={closeCreateWizard}
+                    onSuccess={async () => {
+                      if (classworkLesson && classworkLesson.lesson_id > 0) {
+                        await loadLessonClassworks(classworkLesson.lesson_id);
+                      } else if (classId && subjectId) {
+                        const refreshResponse = await apiFetch(
+                          `/api/v1/classwork-assignments/teacher/class/${classId}/subject/${subjectId}/assignments`,
+                        );
+                        if (refreshResponse.ok) {
+                          const refreshed = (await refreshResponse.json()) as LinkedClasswork[];
+                          setClassworkCount(refreshed.length);
+                        }
+                      }
+                      closeCreateWizard();
+                    }}
+                    onBack={() => setSelectedType(null)}
+                  />
+                ))}
+            </Dialog>
 
             {isCreatingLesson && (
               <CreateLessonModal

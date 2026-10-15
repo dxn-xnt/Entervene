@@ -57,7 +57,6 @@ import type {
   TeacherClassLoad,
   TeacherClasswork,
 } from "@/types/classwork";
-import ClassworkFormModal from "./subject-details/classwork-form-modal";
 import TeacherLessonDetailScreen from "./subject-details/teacher-lesson-detail-screen";
 import TeacherStudentView from "./student-view";
 import LessonItemLine, {
@@ -70,14 +69,8 @@ import {
   type StudentRecordDetailResponse,
   type StudentRecordPeriodOption,
 } from "@/lib/student-record-api";
-import {
-  emptyClassworkDraft,
-  allowedMaterialExtensions,
-  maxMaterialSize,
-} from "./subject-details/constants";
 import type {
   ClassworkDetail,
-  ClassworkDraft,
   CompetencyItem,
   LessonDraft,
 } from "./subject-details/types";
@@ -326,6 +319,38 @@ export default function TeacherClassDetail() {
   );
 }
 
+const classworkCreateOptions: Array<{
+  type: ClassworkKind;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+}> = [
+  {
+    type: "READING",
+    title: "Reading",
+    description: "Create and publish class topics or resources for learners",
+    icon: BookOpen,
+  },
+  {
+    type: "QUIZ",
+    title: "Quiz",
+    description: "Build and assign quizzes to assess learner understanding",
+    icon: ClipboardList,
+  },
+  {
+    type: "ASSIGNMENT",
+    title: "Assignment",
+    description: "Post tasks or projects for students to complete and submit",
+    icon: FileText,
+  },
+  {
+    type: "ACTIVITY",
+    title: "Activity",
+    description: "Design interactive tasks to enhance learner engagement",
+    icon: CheckSquare,
+  },
+];
+
 function LessonsTab({
   detail,
   initialSubjectId,
@@ -393,14 +418,27 @@ function LessonsTab({
   const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
   const [detailError, setDetailError] = useState("");
 
-  // Classwork Form Modal state
+  const { classes: loads, refetch: refetchClasses } = useTeacherClasses({ includeAdvisory: false });
+
+  const subjects = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          (loads.length > 0 ? loads : (detail.subject_loads as unknown as TeacherClassLoad[])).map((load) => [
+            load.subject_id,
+            { id: load.subject_id, name: load.subject_name },
+          ]),
+        ).values(),
+      ).sort((a, b) => a.name.localeCompare(b.name)),
+    [loads, detail.subject_loads],
+  );
+
+  // Classwork Wizard Dialog state
+  const [showCreateWizard, setShowCreateWizard] = useState(false);
+  const [selectedType, setSelectedType] = useState<ClassworkKind | null>(null);
   const [classworkLesson, setClassworkLesson] = useState<LessonItem | null>(
     null,
   );
-  const [classworkDraft, setClassworkDraft] =
-    useState<ClassworkDraft>(emptyClassworkDraft);
-  const [classworkMaterials, setClassworkMaterials] = useState<File[]>([]);
-  const [isCreatingClasswork, setIsCreatingClasswork] = useState(false);
 
   // Lesson Management Modal state
   const [selectedLesson, setSelectedLesson] = useState<LessonItem | null>(null);
@@ -604,67 +642,17 @@ function LessonsTab({
     setDetailLoadingId(null);
   };
 
-  // Classwork Form Modal Handlers
+  // Classwork Wizard Handlers
   const openClassworkForm = (lesson: LessonItem) => {
     setClassworkLesson(lesson);
-    setClassworkDraft(emptyClassworkDraft);
-    setClassworkMaterials([]);
+    setSelectedType(null);
+    setShowCreateWizard(true);
   };
 
-  const closeClassworkForm = () => {
+  const closeCreateWizard = () => {
+    setShowCreateWizard(false);
+    setSelectedType(null);
     setClassworkLesson(null);
-    setClassworkDraft(emptyClassworkDraft);
-    setClassworkMaterials([]);
-  };
-
-  const addClassworkMaterials = (files: FileList | null) => {
-    if (!files) return;
-    const nextFiles = Array.from(files).filter((file) => {
-      const ext = `.${file.name.split(".").pop()?.toLowerCase()}`;
-      return allowedMaterialExtensions.includes(ext) && file.size <= maxMaterialSize;
-    });
-    setClassworkMaterials((prev) => [...prev, ...nextFiles]);
-  };
-
-  const removeClassworkMaterial = (index: number) => {
-    setClassworkMaterials((prev) => prev.filter((_, idx) => idx !== index));
-  };
-
-  const createClassworkForLesson = async () => {
-    if (!classworkLesson || !selectedSubjectId) return;
-    setIsCreatingClasswork(true);
-    try {
-      const payload = {
-        title: classworkDraft.title,
-        description: classworkDraft.description,
-        instructions: classworkDraft.instructions,
-        classwork_type: classworkDraft.classwork_type,
-        classwork_category: classworkDraft.classwork_category,
-        total_points: Number(classworkDraft.total_points) || 100,
-        due_date: classworkDraft.due_date ? new Date(classworkDraft.due_date).toISOString() : null,
-        allow_late_submissions: classworkDraft.allow_late_submissions,
-        is_published: classworkDraft.is_published,
-        show_scores: classworkDraft.show_scores,
-        subject_id: selectedSubjectId,
-        lesson_id: classworkLesson.lesson_id,
-        class_ids: [detail.class_id],
-      };
-
-      const res = await apiFetch("/api/v1/classworks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        closeClassworkForm();
-        await loadLessonClassworks(classworkLesson.lesson_id);
-      }
-    } catch {
-      alert("Failed to create classwork.");
-    } finally {
-      setIsCreatingClasswork(false);
-    }
   };
 
   // Lesson Management Modal Handlers
@@ -980,21 +968,107 @@ function LessonsTab({
         sectionName={detail.section_name}
       />
 
-      {/* ── Classwork Form Modal ── */}
-      {classworkLesson && (
-        <ClassworkFormModal
-          classworkLesson={classworkLesson as any}
-          classworkDraft={classworkDraft}
-          setClassworkDraft={setClassworkDraft}
-          classworkMaterials={classworkMaterials}
-          isCreatingClasswork={isCreatingClasswork}
-          error={lessonsError}
-          closeClassworkForm={closeClassworkForm}
-          addClassworkMaterials={addClassworkMaterials}
-          removeClassworkMaterial={removeClassworkMaterial}
-          createClassworkForLesson={createClassworkForLesson}
-        />
-      )}
+      {/* ── Classwork Wizard Dialog ── */}
+      <Dialog
+        open={showCreateWizard}
+        onOpenChange={(open) => {
+          if (!open) closeCreateWizard();
+        }}
+      >
+        {showCreateWizard &&
+          (selectedType === null ? (
+            <Dialog.Content size="lg">
+              <Dialog.Header position="fixed" asChild>
+                <div className="flex items-center justify-between w-full">
+                  <Text as="h5" className="font-sans text-xl font-bold">
+                    Choose Classwork Type
+                  </Text>
+                  <Tooltip>
+                    <TooltipTrigger render={<button
+                      type="button"
+                      onClick={closeCreateWizard}
+                      className={dialogHeaderCloseButtonClassName}
+                      aria-label="Close modal"
+                    >
+                      <X className="size-4" />
+                    </button>} />
+                    <TooltipContent>Close modal</TooltipContent>
+                  </Tooltip>
+                </div>
+              </Dialog.Header>
+              <section className="p-5">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {classworkCreateOptions.map((option) => {
+                    return (
+                      <DialogueSelect
+                        className="shadow-none hover:shadow-none"
+                        key={option.type}
+                        title={option.title}
+                        description={option.description}
+                        icon={option.icon}
+                        onClick={() => setSelectedType(option.type)}
+                      />
+                    );
+                  })}
+                </div>
+              </section>
+              <Dialog.Footer position="fixed">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  autoIcon={false}
+                  onClick={closeCreateWizard}
+                >
+                  Cancel
+                </Button>
+              </Dialog.Footer>
+            </Dialog.Content>
+          ) : isQuizType(selectedType) ? (
+            <CreateClassworkQuizModal
+              selectedType={selectedType}
+              subjects={subjects}
+              loads={loads.length > 0 ? (loads as unknown as TeacherClassLoad[]) : (detail.subject_loads as unknown as TeacherClassLoad[])}
+              initialSubjectId={selectedSubjectId ? String(selectedSubjectId) : undefined}
+              initialClassId={detail.class_id}
+              initialLessonId={
+                classworkLesson && classworkLesson.lesson_id > 0
+                  ? classworkLesson.lesson_id
+                  : undefined
+              }
+              onClose={closeCreateWizard}
+              onSuccess={async () => {
+                if (classworkLesson && classworkLesson.lesson_id > 0) {
+                  await loadLessonClassworks(classworkLesson.lesson_id);
+                }
+                await refetchClasses();
+                closeCreateWizard();
+              }}
+              onBack={() => setSelectedType(null)}
+            />
+          ) : (
+            <CreateClassworkModal
+              selectedType={selectedType}
+              subjects={subjects}
+              loads={loads.length > 0 ? (loads as unknown as TeacherClassLoad[]) : (detail.subject_loads as unknown as TeacherClassLoad[])}
+              initialSubjectId={selectedSubjectId ? String(selectedSubjectId) : undefined}
+              initialClassId={detail.class_id}
+              initialLessonId={
+                classworkLesson && classworkLesson.lesson_id > 0
+                  ? classworkLesson.lesson_id
+                  : undefined
+              }
+              onClose={closeCreateWizard}
+              onSuccess={async () => {
+                if (classworkLesson && classworkLesson.lesson_id > 0) {
+                  await loadLessonClassworks(classworkLesson.lesson_id);
+                }
+                await refetchClasses();
+                closeCreateWizard();
+              }}
+              onBack={() => setSelectedType(null)}
+            />
+          ))}
+      </Dialog>
 
       {/* ── Lesson Management Dialog ── */}
       {selectedLesson && lessonDraft && (
@@ -1275,38 +1349,6 @@ function StudentsTab({
     </div>
   );
 }
-
-const classworkCreateOptions: Array<{
-  type: ClassworkKind;
-  title: string;
-  description: string;
-  icon: LucideIcon;
-}> = [
-    {
-      type: "READING",
-      title: "Reading",
-      description: "Create and publish class topics or resources for learners",
-      icon: BookOpen,
-    },
-    {
-      type: "QUIZ",
-      title: "Quiz",
-      description: "Build and assign quizzes to assess learner understanding",
-      icon: ClipboardList,
-    },
-    {
-      type: "ASSIGNMENT",
-      title: "Assignment",
-      description: "Post tasks or projects for students to complete and submit",
-      icon: FileText,
-    },
-    {
-      type: "ACTIVITY",
-      title: "Activity",
-      description: "Design interactive tasks to enhance learner engagement",
-      icon: CheckSquare,
-    },
-  ];
 
 const typeFilterOptions: Array<{ value: string; label: string }> = [
   { value: "all", label: "All" },
@@ -1788,6 +1830,7 @@ function ClassworkTab({
               subjects={subjects}
               loads={loads as unknown as TeacherClassLoad[]}
               initialSubjectId={activeSubjectId ? String(activeSubjectId) : undefined}
+              initialClassId={detail.class_id}
               onClose={closeCreateWizard}
               onSuccess={async () => {
                 await Promise.all([loadClassworks(), refetchClasses()]);
@@ -1801,6 +1844,7 @@ function ClassworkTab({
               subjects={subjects}
               loads={loads as unknown as TeacherClassLoad[]}
               initialSubjectId={activeSubjectId ? String(activeSubjectId) : undefined}
+              initialClassId={detail.class_id}
               onClose={closeCreateWizard}
               onSuccess={async () => {
                 await Promise.all([loadClassworks(), refetchClasses()]);

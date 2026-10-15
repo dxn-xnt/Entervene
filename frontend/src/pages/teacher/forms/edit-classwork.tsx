@@ -977,7 +977,7 @@ export default function EditClassworkModal({
                   )}
               </div>
 
-              <div className="mt-4">
+              <div className="mt-6">
                 <Field label="Assign to sections">
                   {selectedSubjectLoads.length > 0 && (
                     <div className="flex items-center justify-end -mt-8 mb-2">

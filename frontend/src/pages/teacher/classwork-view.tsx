@@ -18,7 +18,6 @@ import {
   formatDate,
   isQuizType,
   isReadingType,
-  submissionStatusLabel,
 } from "@/lib/classwork-utils";
 import type {
   AssignmentTracking,
@@ -114,7 +113,7 @@ export default function ClassworkView({
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [statusFilter, setStatusFilter] = useState<
-    "all" | "graded" | "on_time" | "late" | "missing"
+    "all" | "on_time" | "late" | "missing"
   >("all");
   const [detailError, setDetailError] = useState("");
   const [submissionSort, setSubmissionSort] = useState<"name" | "score">(
@@ -459,53 +458,40 @@ export default function ClassworkView({
     });
   }, [submissionSort, tracking]);
 
-  const filterCounts = useMemo(() => {
-    const all = [...(tracking?.submitted ?? []), ...(tracking?.missing ?? [])];
-    const graded = all.filter(
-      (s) => (s.grade !== null && s.grade !== undefined) || s.status === "graded",
-    ).length;
-    const onTime = all.filter((s) => s.status === "submitted").length;
-    const late = all.filter((s) => s.status === "late").length;
-    const missing = all.filter(
-      (s) =>
-        s.status === "not_submitted" ||
-        !s.submission_id ||
-        !["submitted", "late", "graded"].includes(s.status),
-    ).length;
-    return {
-      all: all.length,
-      graded,
-      on_time: onTime,
-      late,
-      missing,
-    };
-  }, [tracking]);
+  const getStudentSubmissionStatus = useCallback(
+    (student: TrackingStudent): "on_time" | "late" | "missing" => {
+      if (
+        !student.submission_id ||
+        student.status === "not_submitted" ||
+        !["submitted", "late", "graded"].includes(student.status)
+      ) {
+        return "missing";
+      }
+      if (student.status === "late") return "late";
+      if (student.status === "submitted") return "on_time";
+
+      const dueDate =
+        tracking?.due_date ||
+        selected?.assignments?.[0]?.due_date ||
+        (selected as any)?.due_date;
+      if (
+        student.submitted_at &&
+        dueDate &&
+        new Date(student.submitted_at).getTime() > new Date(dueDate).getTime()
+      ) {
+        return "late";
+      }
+      return "on_time";
+    },
+    [tracking?.due_date, selected],
+  );
 
   const filteredTrackingRows = useMemo(() => {
     return trackingRows.filter((student) => {
       if (statusFilter === "all") return true;
-      if (statusFilter === "graded") {
-        return (
-          (student.grade !== null && student.grade !== undefined) ||
-          student.status === "graded"
-        );
-      }
-      if (statusFilter === "on_time") {
-        return student.status === "submitted";
-      }
-      if (statusFilter === "late") {
-        return student.status === "late";
-      }
-      if (statusFilter === "missing") {
-        return (
-          student.status === "not_submitted" ||
-          !student.submission_id ||
-          !["submitted", "late", "graded"].includes(student.status)
-        );
-      }
-      return true;
+      return getStudentSubmissionStatus(student) === statusFilter;
     });
-  }, [statusFilter, trackingRows]);
+  }, [statusFilter, trackingRows, getStudentSubmissionStatus]);
 
   const isReading = Boolean(selected && isReadingType(selected.classwork_type));
   const totalStudents = tracking?.total_students ?? 0;
@@ -913,7 +899,7 @@ export default function ClassworkView({
 
             {/* Submissions & Grading / Reading Engagement Progress Card */}
             <Card className="w-full">
-              <Card.Header className="pb-1 flex flex-row flex-wrap items-center justify-between gap-2">
+              <Card.Header className="flex flex-row flex-wrap items-center justify-between gap-2">
                 <Card.Title className="text-xl sm:text-2xl font-bold">
                   {isReadingType(selected.classwork_type)
                     ? "Reading Engagement Rate"
@@ -923,9 +909,8 @@ export default function ClassworkView({
                 </Card.Title>
                 {tracking && totalStudents > 0 && (
                   <Badge
-                    variant="outline"
+                    variant="surface"
                     size="sm"
-                    className="bg-white"
                   >
                     <span className="font-bold! mr-1.5">{submittedCount} / {totalStudents}</span>
                     {isReadingType(selected.classwork_type) ? "Opened" : "Submitted"}
@@ -936,17 +921,16 @@ export default function ClassworkView({
               {/* Assigned Sections Filter */}
               {(selected.classwork_type === "ACTIVITY" ||
                 selected.classwork_type === "ASSIGNMENT") && (
-                  <div className="w-full mb-2">
+                  <div className="w-full my-2">
                     <RubricsScoreBoard
                       totalPoints={selected.total_points}
                       rubricLevels={selected.rubric_levels}
                     />
                   </div>
-
                 )}
 
               {selected.assignments && selected.assignments.length > 0 && (
-                <div className="flex flex-row items-center gap-2 overflow-x-auto py-2 pb-3 px-2">
+                <div className="flex flex-row items-center gap-2 overflow-x-auto py-2 pt-1 pb-3 px-2">
                   <span className="shrink-0 text-sm font-regular text-muted-foreground">
                     Section:
                   </span>
@@ -1185,7 +1169,6 @@ export default function ClassworkView({
                           </span>
                           {[
                             { id: "all" as const, label: "All" },
-                            { id: "graded" as const, label: "Graded" },
                             { id: "on_time" as const, label: "On Time" },
                             { id: "late" as const, label: "Late" },
                             { id: "missing" as const, label: "Missing" },
@@ -1283,14 +1266,14 @@ export default function ClassworkView({
                                     size="sm"
                                     className="w-fit rounded font-medium"
                                   >
-                                    {submissionStatusLabel(
-                                      isGraded
-                                        ? "graded"
-                                        : student.status,
-                                    )}
+                                    {getStudentSubmissionStatus(student) === "on_time"
+                                      ? "On Time"
+                                      : getStudentSubmissionStatus(student) === "late"
+                                        ? "Late"
+                                        : "Missing"}
                                   </Badge>
                                 </Table.Cell>
-                                <Table.Cell className="min-w-20 text-right text-sm font-semibold text-gray-700">
+                                <Table.Cell className="min-w-20 text-right text-sm font-semibold text-foreground">
                                   {scoreLabel}
                                 </Table.Cell>
                               </Table.Row>

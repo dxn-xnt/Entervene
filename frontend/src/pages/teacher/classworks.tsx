@@ -519,7 +519,7 @@ export default function Classworks() {
                 </div>
 
                 <div className="flex items-center gap-2 overflow-x-auto -mb-2 justify-between">
-                  <div className="flex flex-row gap-2 pb-1">
+                  <div className="flex flex-row gap-2 pb-1 items-center">
                     <span className="shrink-0 text-sm font-regular text-muted-foreground">
                       Subject:
                     </span>
@@ -593,8 +593,8 @@ export default function Classworks() {
                             `${item.classwork_id}:${classFilter}`
                             ]
                           }
-                          showSubject={true}
-                          showClassworkType={true}
+                          showSubject={subjectFilter === "all"}
+                          showClassworkType={activeTab === "all"}
                           onOpen={openClassworkDetail}
                           onReload={() => {
                             void loadClassworks();
