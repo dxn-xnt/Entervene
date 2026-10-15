@@ -272,6 +272,11 @@ def teacher_student_record_detail(
     )
 
 
+def _assignment_applies_to_student(assignment: ClassworkAssignment, student: Student) -> bool:
+    """Shared class-record applicability predicate; no change to its policy."""
+    return assignment.recipient_student_id is None or assignment.recipient_student_id == student.student_id
+
+
 def teacher_student_gradebook(
     db: Session,
     staff_id: str,
@@ -351,33 +356,30 @@ def teacher_student_gradebook(
             [*quarterly_assignments, *remedial_exam_assignments],
             {assignment.classwork_assignment_id: _extract_score(student_subs, assignment.classwork_assignment_id)
              for assignment in [*quarterly_assignments, *remedial_exam_assignments]
-             if assignment.recipient_student_id in (None, student.student_id)},
+             if _assignment_applies_to_student(assignment, student)},
         )
 
-        def assigned(assignment: ClassworkAssignment) -> bool:
-            return assignment.recipient_student_id is None or assignment.recipient_student_id == student.student_id
-
         written_scores = [
-            _extract_score(student_subs, asgn.classwork_assignment_id) if assigned(asgn) else None
+            _extract_score(student_subs, asgn.classwork_assignment_id) if _assignment_applies_to_student(asgn, student) else None
             for asgn in written_assignments
         ]
         performance_scores = [
-            _extract_score(student_subs, asgn.classwork_assignment_id) if assigned(asgn) else None
+            _extract_score(student_subs, asgn.classwork_assignment_id) if _assignment_applies_to_student(asgn, student) else None
             for asgn in performance_assignments
         ]
         quarterly_scores = [
-            exam_scores.get(asgn.classwork_assignment_id) if assigned(asgn) else None
+            exam_scores.get(asgn.classwork_assignment_id) if _assignment_applies_to_student(asgn, student) else None
             for asgn in quarterly_assignments
         ]
 
         # DepEd K-12 grade computation using resolved template weights
         grade_res = _deped_grade(
-            [score for score, asgn in zip(written_scores, written_assignments) if assigned(asgn)],
-            [asgn for asgn in written_assignments if assigned(asgn)],
-            [score for score, asgn in zip(performance_scores, performance_assignments) if assigned(asgn)],
-            [asgn for asgn in performance_assignments if assigned(asgn)],
-            [score for score, asgn in zip(quarterly_scores, quarterly_assignments) if assigned(asgn)],
-            [asgn for asgn in quarterly_assignments if assigned(asgn)],
+            [score for score, asgn in zip(written_scores, written_assignments) if _assignment_applies_to_student(asgn, student)],
+            [asgn for asgn in written_assignments if _assignment_applies_to_student(asgn, student)],
+            [score for score, asgn in zip(performance_scores, performance_assignments) if _assignment_applies_to_student(asgn, student)],
+            [asgn for asgn in performance_assignments if _assignment_applies_to_student(asgn, student)],
+            [score for score, asgn in zip(quarterly_scores, quarterly_assignments) if _assignment_applies_to_student(asgn, student)],
+            [asgn for asgn in quarterly_assignments if _assignment_applies_to_student(asgn, student)],
             weights=weights,
         )
         ps_ww = grade_res.ps_ww
@@ -850,6 +852,11 @@ def _compute_student_period_components(
     weights: GradingWeights,
 ) -> dict[str, Any]:
     student_subs = submissions_by_student.get(student.student_id, {})
+    # Filter assignments, not just score values: an inapplicable maximum must
+    # never dilute this learner's WW/PT or Examination denominator.
+    written_assignments = [a for a in written_assignments if _assignment_applies_to_student(a, student)]
+    performance_assignments = [a for a in performance_assignments if _assignment_applies_to_student(a, student)]
+    quarterly_assignments = [a for a in quarterly_assignments if _assignment_applies_to_student(a, student)]
 
     def _extract_score(subs: dict, asgn_id: int) -> float | None:
         sub = subs.get(asgn_id)
@@ -868,7 +875,7 @@ def _compute_student_period_components(
     effective = effective_exam_scores(
         quarterly_assignments,
         {asgn.classwork_assignment_id: _extract_score(student_subs, asgn.classwork_assignment_id)
-         for asgn in quarterly_assignments if asgn.recipient_student_id in (None, student.student_id)},
+         for asgn in quarterly_assignments},
     )
     official_quarterly_assignments = [asgn for asgn in quarterly_assignments if asgn.original_exam_assignment_id is None]
     quarterly_scores = [effective.get(asgn.classwork_assignment_id) for asgn in official_quarterly_assignments]

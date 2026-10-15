@@ -19,17 +19,23 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.GradeSubmissionLog import GradeSubmissionLog
+from app.models.academic.GradingTemplate import GradingTemplate
+from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.auth.UserAccount import UserAccount
+from app.models.ai.AIModelVersion import AIModelVersion
+from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
+from app.models.intervention.Intervention import Intervention
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.services.student_record.StudentRecordService import teacher_student_gradebook
 
 
 # Independent expectations from docs/GRADE_TRANSMUTATION_CONTRACT_4G.md.
@@ -709,4 +715,206 @@ def test_resend_of_finalized_grade_rejected_after_upper_cutoff(adviser_send_cont
     )
     assert resp2.status_code == 400
     assert resp2.json()["detail"] == f"The submission window for this term closed on {allowed_end_date}. Contact an administrator if this grade needs correction."
+
+
+@pytest.fixture
+def grade_send_comparison_context(adviser_send_context):
+    """Exercise real grade paths with explicit weights, not fallback policy."""
+    ctx = adviser_send_context
+    template = GradingTemplate(
+        template_name="Scope comparison 20-50-30",
+        subject_id=ctx["subject"].subject_id,
+        academic_level_id=ctx["subject"].academic_level_id,
+        status="active",
+        components=[
+            GradingTemplateComponent(component_name=name, weight=Decimal(weight), display_order=index)
+            for index, (name, weight) in enumerate(
+                (("Written Works", "20"), ("Performance Tasks", "50"), ("Exams", "30")),
+                start=1,
+            )
+        ],
+    )
+    ctx["db"].add(template)
+    ctx["db"].flush()
+    ctx["subject"].default_grading_template = str(template.grading_template_id)
+    ctx["db"].commit()
+    return ctx
+
+
+def _comparison_targeted_intervention(ctx, recipient):
+    """Persist valid provenance without calling predictions or AI services."""
+    db = ctx["db"]
+    model = AIModelVersion(
+        model_name="isolated-grade-scope-fixture",
+        model_type="REGRESSOR",
+        model_purpose="CURRENT_TERM_FINAL_GRADE_PROJECTION",
+        algorithm="fixture-only",
+        is_active=False,
+    )
+    db.add(model)
+    db.flush()
+    prediction = DevelopmentCurrentTermPrediction(
+        student_id=recipient.student_id,
+        class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        source_period_id=ctx["period"].academic_period_id,
+        target_period_id=ctx["period"].academic_period_id,
+        model_version_id=model.model_version_id,
+        revision=1,
+        predicted_period_grade=Decimal("80"),
+        intervention_level="NEEDS_MONITORING",
+        intervention_basis="fixture-only",
+        evidence_snapshot={},
+    )
+    db.add(prediction)
+    db.flush()
+    intervention = Intervention(
+        student_id=recipient.student_id,
+        class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        academic_period_id=ctx["period"].academic_period_id,
+        source_prediction_id=prediction.prediction_id,
+        status="CANDIDATE",
+        diagnosis_snapshot={},
+    )
+    db.add(intervention)
+    db.flush()
+    return intervention.intervention_id
+
+
+def _add_grade_scope_comparison_work(
+    ctx, category, recipient_key, score, *, remedial=False, forged_score=False, exam_subtype="TERM_EXAM",
+):
+    db = ctx["db"]
+    recipient = ctx[recipient_key] if recipient_key else None
+    classwork = Classwork(
+        title="Scope comparison work",
+        subject_id=ctx["subject"].subject_id,
+        classwork_category=category,
+        classwork_type="QUIZ" if category == "QUARTERLY_ASSESSMENT" else "ACTIVITY",
+        exam_subtype=exam_subtype if category == "QUARTERLY_ASSESSMENT" else None,
+        total_points=Decimal("100"),
+        created_by_staff_id=ctx["teacher"].staff_id,
+        is_graded=True,
+        is_archived=False,
+    )
+    db.add(classwork)
+    db.flush()
+    assignment = ClassworkAssignment(
+        classwork_id=classwork.classwork_id,
+        class_id=ctx["class"].class_id,
+        academic_period_id=ctx["period"].academic_period_id,
+        assigned_by_staff_id=ctx["teacher"].staff_id,
+        is_published=True,
+        recipient_student_id=recipient.student_id if recipient else None,
+        source_intervention_id=_comparison_targeted_intervention(ctx, recipient) if recipient else None,
+        remediation_request_id=uuid.uuid4() if recipient else None,
+        original_exam_assignment_id=ctx["ca_qa"].classwork_assignment_id if remedial else None,
+    )
+    db.add(assignment)
+    db.flush()
+    # Class-wide extra work is scored for the classmate, not student1.
+    scored_student = recipient or ctx["student2"]
+    db.add(StudentSubmission(
+        student_id=scored_student.student_id,
+        classwork_assignment_id=assignment.classwork_assignment_id,
+        grade=Decimal(score),
+        status="graded",
+    ))
+    if forged_score:
+        assert recipient_key == "student2"
+        db.add(StudentSubmission(
+            student_id=ctx["student1"].student_id,
+            classwork_assignment_id=assignment.classwork_assignment_id,
+            grade=Decimal("100"),
+            status="graded",
+        ))
+    db.commit()
+
+
+# The class record is the applicability oracle, not a duplicated recipient rule.
+# Every scenario must agree through both real send endpoints, with and without
+# the optional stale-display check. No incorrect pre-fix grade is an expectation.
+@pytest.mark.parametrize("send_kind", ["single", "bulk"])
+@pytest.mark.parametrize("include_expected_grade", [True, False], ids=["with-display-check", "without-display-check"])
+@pytest.mark.parametrize("exam_subtype", ["SUMMATIVE_1", "SUMMATIVE_2", "TERM_EXAM", None])
+@pytest.mark.parametrize(
+    "category,recipient_key,score,remedial,remove_original,forged_score",
+    [
+        pytest.param(None, None, "100", False, False, False, id="classwide-baseline"),
+        pytest.param("WRITTEN_WORK", "student2", "100", False, False, False, id="classmate-targeted-ww"),
+        pytest.param("PERFORMANCE_TASK", "student2", "100", False, False, False, id="classmate-targeted-pt"),
+        pytest.param("QUARTERLY_ASSESSMENT", "student2", "100", False, False, False, id="classmate-targeted-exam"),
+        pytest.param("WRITTEN_WORK", "student1", "100", False, False, False, id="own-targeted-ww"),
+        pytest.param("PERFORMANCE_TASK", "student1", "100", False, False, False, id="own-targeted-pt"),
+        pytest.param("QUARTERLY_ASSESSMENT", "student1", "100", False, False, False, id="own-targeted-exam"),
+        pytest.param("WRITTEN_WORK", None, "100", False, False, False, id="classwide-unscored-extra-ww"),
+        pytest.param("QUARTERLY_ASSESSMENT", "student1", "100", True, False, False, id="own-higher-remedial-exam"),
+        pytest.param("QUARTERLY_ASSESSMENT", "student1", "80", True, False, False, id="own-lower-remedial-exam"),
+        pytest.param("QUARTERLY_ASSESSMENT", "student2", "100", True, False, False, id="classmate-remedial-exam"),
+        pytest.param("QUARTERLY_ASSESSMENT", "student1", "100", True, True, False, id="own-remedial-with-unscored-original"),
+        pytest.param("WRITTEN_WORK", "student2", "100", False, False, True, id="ineligible-scored-ww"),
+        pytest.param("PERFORMANCE_TASK", "student2", "100", False, False, True, id="ineligible-scored-pt"),
+        pytest.param("QUARTERLY_ASSESSMENT", "student2", "100", False, False, True, id="ineligible-scored-exam"),
+        pytest.param("QUARTERLY_ASSESSMENT", "student2", "100", True, False, True, id="ineligible-scored-remedial"),
+    ],
+)
+def test_send_and_gradebook_applicability_parity(
+    grade_send_comparison_context, send_kind, include_expected_grade, exam_subtype, category, recipient_key, score,
+    remedial, remove_original, forged_score,
+):
+    ctx = grade_send_comparison_context
+    db = ctx["db"]
+    student = ctx["student1"]
+    ctx["ca_qa"].classwork.exam_subtype = exam_subtype
+    db.commit()
+    if remove_original:
+        original_score = db.query(StudentSubmission).filter_by(
+            student_id=student.student_id,
+            classwork_assignment_id=ctx["ca_qa"].classwork_assignment_id,
+        ).one()
+        db.delete(original_score)
+        db.commit()
+    if category:
+        _add_grade_scope_comparison_work(
+            ctx, category, recipient_key, score, remedial=remedial,
+            forged_score=forged_score, exam_subtype=exam_subtype,
+        )
+
+    gradebook = teacher_student_gradebook(
+        db, ctx["teacher"].staff_id, ctx["class"].class_id,
+        ctx["subject"].subject_id, ctx["period"].academic_period_id,
+    )
+    assert (
+        gradebook.grading_weights.ww_percentage,
+        gradebook.grading_weights.pt_percentage,
+        gradebook.grading_weights.exams_percentage,
+    ) == (20, 50, 30)
+    displayed = next(row for row in gradebook.studentGrades if row.student_id == str(student.student_id))
+    assert displayed.initial_grade is not None
+    assert displayed.transmuted_grade is not None
+
+    client = _make_client(db, ctx["user"])
+    prefix = f"/api/v1/student-records/teacher/classes/{ctx['class'].class_id}/subjects/{ctx['subject'].subject_id}"
+    url = (
+        f"{prefix}/students/{student.student_id}/send-to-adviser" if send_kind == "single"
+        else f"{prefix}/periods/{ctx['period'].academic_period_id}/send-to-adviser"
+    )
+    expected_payload = (
+        {"expected_transmuted_grade": displayed.transmuted_grade} if send_kind == "single"
+        else {"expected_student_grades": {str(student.student_id): displayed.transmuted_grade}}
+    ) if include_expected_grade else {}
+    response = client.post(url, json={"academic_period_id": ctx["period"].academic_period_id, **expected_payload})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    entry = payload if send_kind == "single" else next(
+        row for row in payload["entries"] if row["student_id"] == str(student.student_id)
+    )
+    assert entry["initial_grade"] == displayed.initial_grade
+    assert entry["transmuted_grade"] == displayed.transmuted_grade
+    assert entry["final_period_grade"] == displayed.transmuted_grade
+    stored = db.query(StudentPeriodGrade).filter_by(student_id=student.student_id).one()
+    audit = db.query(GradeSubmissionLog).filter_by(student_id=student.student_id).one()
+    assert float(stored.final_period_grade) == displayed.transmuted_grade
+    assert float(audit.final_period_grade) == displayed.transmuted_grade
 
