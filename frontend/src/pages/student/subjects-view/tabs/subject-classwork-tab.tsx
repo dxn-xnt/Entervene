@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { studentClassworkPath } from "@/lib/student-classwork-navigation";
 import {
   BookOpen,
   CalendarDays,
@@ -158,9 +159,6 @@ type Notice = {
   description: string;
 };
 
-const LOCKED_CLASSWORK_MESSAGE =
-  "This classwork is published but locked until the unlock time. You can view the title now, but files and submissions open after it unlocks.";
-
 function isReadingType(value?: string | null) {
   return value?.toUpperCase() === "READING";
 }
@@ -273,6 +271,8 @@ export default function SubjectClassworkTab({
   subjectId,
 }: SubjectClassworkTabProps) {
   const toast = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const autoOpenedAssignmentRef = useRef<number | null>(null);
   const [classworks, setClassworks] = useState<ClassworkAssignment[]>([]);
@@ -281,11 +281,11 @@ export default function SubjectClassworkTab({
   );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>("");
-  const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
+  const [detailLoadingId] = useState<number | null>(null);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [search, setSearch] = useState("");
-  const [sortMode, setSortMode] = useState<SortMode>("due");
+  const [search, setSearch] = useState(searchParams.get("search") ?? "");
+  const [sortMode, setSortMode] = useState<SortMode>((searchParams.get("sort") as SortMode) || "due");
   const [notice, setNotice] = useState<Notice | null>(null);
 
   // Selected Detail Modal & Quiz State
@@ -298,7 +298,7 @@ export default function SubjectClassworkTab({
   const [quizAnswers, setQuizAnswers] = useState<
     Record<number, { selected_option_id?: number; answer_text?: string }>
   >({});
-  const [isQuizLoading, setIsQuizLoading] = useState(false);
+  const [isQuizLoading] = useState(false);
   const [isQuizSubmitting, setIsQuizSubmitting] = useState(false);
   const [quizError, setQuizError] = useState("");
   const [isQuizFullscreen, setIsQuizFullscreen] = useState(false);
@@ -377,14 +377,9 @@ export default function SubjectClassworkTab({
 
   useEffect(() => {
     const rawTarget = searchParams.get("classworkAssignmentId");
-    if (!rawTarget || classworks.length === 0) return;
+    if (!rawTarget) return;
     const targetId = Number(rawTarget);
-    if (!targetId || autoOpenedAssignmentRef.current === targetId) return;
-
-    const targetCw = classworks.find(
-      (cw) => cw.classwork_assignment_id === targetId,
-    );
-    if (!targetCw) return;
+    if (!Number.isInteger(targetId) || targetId <= 0 || autoOpenedAssignmentRef.current === targetId) return;
 
     autoOpenedAssignmentRef.current = targetId;
 
@@ -393,8 +388,9 @@ export default function SubjectClassworkTab({
     nextParams.delete("classworkAssignmentId");
     setSearchParams(nextParams, { replace: true });
 
-    void openClassworkDetail(targetCw);
-  }, [classworks, searchParams, setSearchParams]);
+    const from = `${location.pathname}${nextParams.toString() ? `?${nextParams}` : ""}`;
+    navigate(studentClassworkPath(targetId, from));
+  }, [searchParams, setSearchParams, location.pathname, navigate]);
 
   const updateClassworkStatus = (assignmentId: number, status: string) => {
     setClassworks((prev) =>
@@ -430,27 +426,6 @@ export default function SubjectClassworkTab({
       };
     });
     setQuizAnswers(next);
-  };
-
-  const loadQuizAttempt = async (assignmentId: number) => {
-    setIsQuizLoading(true);
-    setQuizError("");
-    try {
-      const res = await apiFetch(
-        `/api/v1/quizzes/assignment/${assignmentId}/attempt`,
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || "Unable to load quiz.");
-      }
-      const attempt = (await res.json()) as QuizAttempt;
-      setSelectedQuizAttempt(attempt);
-      hydrateQuizAnswers(attempt);
-    } catch (err) {
-      setQuizError(err instanceof Error ? err.message : "Unable to load quiz.");
-    } finally {
-      setIsQuizLoading(false);
-    }
   };
 
   const startQuizAttempt = async () => {
@@ -595,47 +570,13 @@ export default function SubjectClassworkTab({
     };
   }, [isQuizFullscreen, selectedClasswork]);
 
-  const openClassworkDetail = async (cw: ClassworkAssignment) => {
-    setDetailLoadingId(cw.classwork_assignment_id);
-    setDetailError("");
-    try {
-      const res = await apiFetch(
-        `/api/v1/classwork-assignments/assignment/${cw.classwork_assignment_id}`,
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const detail = String(body.detail || "");
-        throw new Error(
-          detail.includes("locked") || detail.includes("not available")
-            ? LOCKED_CLASSWORK_MESSAGE
-            : "Unable to load classwork details.",
-        );
-      }
-      const detail = (await res.json()) as ClassworkDetail;
-      const submission = isQuizType(detail.classwork_type)
-        ? null
-        : await fetchSubmissionForAssignment(cw.classwork_assignment_id);
-      setSelectedClasswork(detail);
-      setSelectedSubmission(submission);
-      setSelectedQuizAttempt(null);
-      setQuizAnswers({});
-      setIsQuizFullscreen(false);
-      setQuizReviewMode(false);
-      setQuizCurrentIndex(0);
-      setFlaggedQuizQuestionIds(new Set());
-      autoSubmitRef.current = false;
-      if (isQuizType(detail.classwork_type)) {
-        await loadQuizAttempt(cw.classwork_assignment_id);
-      }
-    } catch (err) {
-      setDetailError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load classwork details.",
-      );
-    } finally {
-      setDetailLoadingId(null);
-    }
+  const openClassworkDetail = (cw: ClassworkAssignment) => {
+    const returnParams = new URLSearchParams(searchParams);
+    returnParams.delete("classworkAssignmentId");
+    if (search) returnParams.set("search", search);
+    if (sortMode !== "due") returnParams.set("sort", sortMode);
+    const from = `${location.pathname}${returnParams.toString() ? `?${returnParams}` : ""}`;
+    navigate(studentClassworkPath(cw.classwork_assignment_id, from));
   };
 
   const closeClassworkDetail = () => {

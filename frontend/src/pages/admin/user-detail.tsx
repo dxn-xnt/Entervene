@@ -30,7 +30,7 @@ import {
   type UserRole,
 } from "../../lib/api";
 import { mergeAnalytics } from "../../mocks/userAnalytics";
-import { Archive, BookOpen, Clock, GraduationCap, Layers, Pencil, RefreshCw, Search, Users } from "lucide-react";
+import { Archive, BookOpen, Clock, GraduationCap, Layers, Pencil, RefreshCw, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -750,30 +750,8 @@ function TeacherHandledSideCard({
   className?: string;
 }) {
   const [activeTab, setActiveTab] = useState<"subjects" | "classes">("subjects");
-  const [search, setSearch] = useState("");
-
-  const filteredSubjects = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return handledSubjects;
-    return handledSubjects.filter(
-      (s) =>
-        s.subject_name.toLowerCase().includes(q) ||
-        (s.subject_code && s.subject_code.toLowerCase().includes(q)) ||
-        s.sections?.some((sec) => sec.toLowerCase().includes(q)) ||
-        s.grade_levels?.some((gl) => gl.toLowerCase().includes(q))
-    );
-  }, [handledSubjects, search]);
-
-  const filteredClasses = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return handledClasses;
-    return handledClasses.filter(
-      (c) =>
-        c.section_name.toLowerCase().includes(q) ||
-        (c.grade_level && String(c.grade_level).includes(q)) ||
-        c.subjects?.some((sub) => sub.toLowerCase().includes(q))
-    );
-  }, [handledClasses, search]);
+  const filteredSubjects = handledSubjects;
+  const filteredClasses = handledClasses;
 
   return (
     <Card className={cn("flex flex-col h-full p-4 bg-background", className)}>
@@ -946,7 +924,6 @@ function TeacherAnalytics({ user, data }: { user: UserDetail; data: ReturnType<t
   const totalStudents = summary.totalStudents !== undefined && summary.totalStudents !== null ? Number(summary.totalStudents) : null;
 
   const subjectCount = user.subjects?.length || (summary.subjectsHandled !== undefined && summary.subjectsHandled !== null ? Number(summary.subjectsHandled) : 0);
-  const subjectsList = user.subjects && user.subjects.length > 0 ? user.subjects : [];
 
   const rawPerf = summary.classPerformance;
   const hasPerf = rawPerf !== null && rawPerf !== undefined && rawPerf !== "N/A" && rawPerf !== "Unavailable";

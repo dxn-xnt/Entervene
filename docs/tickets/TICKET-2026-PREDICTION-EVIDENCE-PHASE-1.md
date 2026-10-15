@@ -1,6 +1,6 @@
 # Phase 1: truthful prediction evidence
 
-Status: Stage 2 minimum migrations applied after the [Stage 1 report](TICKET-2026-PREDICTION-EVIDENCE-STAGE-1-REPORT.md) and [Stage 1.5 decision record](TICKET-2026-PREDICTION-EVIDENCE-STAGE-1-5.md). Evidence extraction, snapshot persistence, and teacher presentation remain pending.
+Status: partially implemented. The migrations, evidence extraction, snapshot persistence, and teacher presentation have implementation and focused test coverage. The dated [Stage 1 report](../archive/prediction/TICKET-2026-PREDICTION-EVIDENCE-STAGE-1-REPORT.md), [Stage 1.5 decision](../archive/prediction/TICKET-2026-PREDICTION-EVIDENCE-STAGE-1-5.md), and [Stage 6 acceptance report](../archive/prediction/TICKET-2026-PREDICTION-EVIDENCE-STAGE-6-REPORT.md) record their historical gates. Reconcile the remaining release and compatibility gates against current code before closing this ticket; see the canonical [prediction system audit](../PREDICTION_SYSTEM.md).
 Date: 2026-09-11.
 Parent: [prediction evidence architecture roadmap](TICKET-2026-PREDICTION-EVIDENCE-AUDIT.md).
 

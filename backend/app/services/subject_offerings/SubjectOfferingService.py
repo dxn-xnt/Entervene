@@ -41,6 +41,13 @@ def _resolve_pathway_ids(db: Session, pathway_ids: list[int] | None, legacy_path
     if pathway_ids is not None and len(pathway_ids) > 0:
         if not requires_pathway:
             raise HTTPException(status_code=422, detail=f"Grade {academic_level.grade_level} offerings must use the general pathway for this academic year.")
+        enabled_ids = {
+            row[0] for row in db.query(AcademicPathway.id).filter(
+                AcademicPathway.id.in_(pathway_ids), AcademicPathway.is_enabled.is_(True)
+            ).all()
+        }
+        if set(pathway_ids) != enabled_ids:
+            raise HTTPException(status_code=422, detail="Subject offerings require enabled, existing pathways.")
         return pathway_ids
     if legacy_pathway is not None:
         norm = legacy_pathway.strip().lower()
@@ -51,16 +58,24 @@ def _resolve_pathway_ids(db: Session, pathway_ids: list[int] | None, legacy_path
         if norm in ("general", ""):
             return []
         if norm == "both":
-            return [p.id for p in db.query(AcademicPathway).filter(AcademicPathway.is_enabled.is_(True)).all()]
+            enabled = [p.id for p in db.query(AcademicPathway).filter(AcademicPathway.is_enabled.is_(True)).all()]
+            if not enabled:
+                raise HTTPException(status_code=422, detail="No enabled pathways are available for this academic level.")
+            return enabled
         if norm in ("stem_medical", "medical"):
             p = db.query(AcademicPathway).filter(AcademicPathway.code.like("%medical%")).first()
-            return [p.id] if p else []
+            if p and p.is_enabled:
+                return [p.id]
+            raise HTTPException(status_code=422, detail="The selected pathway is unavailable.")
         if norm in ("stem_engineering", "engineering"):
             p = db.query(AcademicPathway).filter(AcademicPathway.code.like("%engineering%")).first()
-            return [p.id] if p else []
+            if p and p.is_enabled:
+                return [p.id]
+            raise HTTPException(status_code=422, detail="The selected pathway is unavailable.")
         p = db.query(AcademicPathway).filter(func.lower(AcademicPathway.code) == norm).first()
-        if p:
+        if p and p.is_enabled:
             return [p.id]
+        raise HTTPException(status_code=422, detail="The selected pathway is unavailable.")
     if requires_pathway:
         raise HTTPException(status_code=422, detail=f"Grade {academic_level.grade_level} offerings require a specific pathway for this academic year.")
     return []

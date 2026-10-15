@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Download, Eye, FileText, File, X, Image as ImageIcon } from "lucide-react";
+import { Download, FileText, File, X, Image as ImageIcon } from "lucide-react";
 import DocumentViewer, { type PreviewDocumentKind } from "./document-viewer";
 import { API_URL, apiFetch } from "@/lib/api";
 import { Button } from "@/components/retroui/Button";

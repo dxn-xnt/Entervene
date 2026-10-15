@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { studentClassworkPath } from "@/lib/student-classwork-navigation";
 import {
   Award,
   BookOpen,
@@ -31,9 +32,6 @@ import type {
   Submission,
   SubjectLessonTabProps,
 } from "../types";
-
-const LOCKED_CLASSWORK_MESSAGE =
-  "This classwork is not available yet. Please check back later or contact your teacher for more information.";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -104,6 +102,8 @@ export default function SubjectLessonTab({
   teacherName: propTeacherName,
   onLessonSelect,
 }: SubjectLessonTabProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { selectedPeriodId } = useAcademicPeriod();
   const [curatedGoals, setCuratedGoals] = useState<
     LessonGoalItemResponse[] | undefined
@@ -158,7 +158,7 @@ export default function SubjectLessonTab({
   const [quizAnswers, setQuizAnswers] = useState<
     Record<number, { selected_option_id?: number; answer_text?: string }>
   >({});
-  const [isQuizLoading, setIsQuizLoading] = useState(false);
+  const [isQuizLoading] = useState(false);
   const [isQuizSubmitting, setIsQuizSubmitting] = useState(false);
   const [quizError, setQuizError] = useState("");
   const [isQuizFullscreen, setIsQuizFullscreen] = useState(false);
@@ -174,7 +174,7 @@ export default function SubjectLessonTab({
   const submitQuizAttemptRef = useRef<
     ((autoSubmit?: boolean) => Promise<void>) | null
   >(null);
-  const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
+  const [detailLoadingId] = useState<number | null>(null);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [detailError, setDetailError] = useState("");
@@ -418,27 +418,6 @@ export default function SubjectLessonTab({
     setQuizAnswers(next);
   };
 
-  const loadQuizAttempt = async (assignmentId: number) => {
-    setIsQuizLoading(true);
-    setQuizError("");
-    try {
-      const res = await apiFetch(
-        `/api/v1/quizzes/assignment/${assignmentId}/attempt`,
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || "Unable to load quiz.");
-      }
-      const attempt = (await res.json()) as QuizAttempt;
-      setSelectedQuizAttempt(attempt);
-      hydrateQuizAnswers(attempt);
-    } catch (err) {
-      setQuizError(err instanceof Error ? err.message : "Unable to load quiz.");
-    } finally {
-      setIsQuizLoading(false);
-    }
-  };
-
   const startQuizAttempt = async () => {
     if (!selectedClasswork) return;
     setIsQuizSubmitting(true);
@@ -582,47 +561,11 @@ export default function SubjectLessonTab({
     };
   }, [isQuizFullscreen, selectedClasswork]);
 
-  const openClassworkDetail = async (cw: LessonClasswork | ClassworkDetail) => {
-    setDetailLoadingId(cw.classwork_assignment_id);
-    setDetailError("");
-    try {
-      const res = await apiFetch(
-        `/api/v1/classwork-assignments/assignment/${cw.classwork_assignment_id}`,
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const detail = String(body.detail || "");
-        throw new Error(
-          detail.includes("locked") || detail.includes("not available")
-            ? LOCKED_CLASSWORK_MESSAGE
-            : "Unable to load classwork details.",
-        );
-      }
-      const detail = (await res.json()) as ClassworkDetail;
-      const submission = isQuizType(detail.classwork_type)
-        ? null
-        : await fetchSubmissionForAssignment(cw.classwork_assignment_id);
-      setSelectedClasswork(detail);
-      setSelectedSubmission(submission);
-      setSelectedQuizAttempt(null);
-      setQuizAnswers({});
-      setIsQuizFullscreen(false);
-      setQuizReviewMode(false);
-      setQuizCurrentIndex(0);
-      setFlaggedQuizQuestionIds(new Set());
-      autoSubmitRef.current = false;
-      if (isQuizType(detail.classwork_type)) {
-        await loadQuizAttempt(cw.classwork_assignment_id);
-      }
-    } catch (err) {
-      setDetailError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load classwork details.",
-      );
-    } finally {
-      setDetailLoadingId(null);
-    }
+  const openClassworkDetail = (cw: LessonClasswork | ClassworkDetail) => {
+    const returnParams = new URLSearchParams(searchParams);
+    returnParams.delete("classworkAssignmentId");
+    const from = `${location.pathname}${returnParams.toString() ? `?${returnParams}` : ""}`;
+    navigate(studentClassworkPath(cw.classwork_assignment_id, from));
   };
 
   const closeClassworkDetail = () => {

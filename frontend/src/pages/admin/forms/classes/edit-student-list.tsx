@@ -25,6 +25,18 @@ import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Text } from "@/components/retroui/Text";
+import { classPathwayLabel } from "@/lib/class-pathway";
+
+function transferSectionLabel(section: ClassTransferOption): string {
+  const pathway = classPathwayLabel({
+    gradeLevel: section.grade_level ?? 0,
+    requiresPathway: section.requires_pathway,
+    pathwayId: section.pathway_id,
+    pathwayName: section.pathway_name,
+    pathwayEnabled: section.pathway_is_enabled,
+  });
+  return pathway ? `${section.section_name} — ${pathway}` : section.section_name;
+}
 
 type ModalTab = "enrolled" | "available";
 type RowAction =
@@ -630,7 +642,7 @@ function StudentActionRow({
                   <Select.Group>
                     {availableSections.map((section) => (
                       <Select.Item key={section.class_id} value={String(section.class_id)}>
-                        {section.section_name}
+                        {transferSectionLabel(section)}
                       </Select.Item>
                     ))}
                   </Select.Group>
@@ -638,7 +650,7 @@ function StudentActionRow({
               </Select>
               {target && (
                 <Text as="p" className="text-xs font-semibold">
-                  Transfer {student.full_name} to {target.section_name}?
+                  Transfer {student.full_name} to {transferSectionLabel(target)}?
                 </Text>
               )}
               <div className="flex gap-2">
@@ -727,7 +739,7 @@ function BulkActionBar({
               <Select.Group>
                 {availableSections.map((section) => (
                   <Select.Item key={section.class_id} value={String(section.class_id)}>
-                    {section.section_name}
+                    {transferSectionLabel(section)}
                   </Select.Item>
                 ))}
               </Select.Group>
@@ -735,7 +747,7 @@ function BulkActionBar({
           </Select>
           {target && (
             <Text as="p" className="text-xs font-semibold">
-              Transfer {selectedCount} selected Students to {target.section_name}?
+              Transfer {selectedCount} selected Students to {transferSectionLabel(target)}?
             </Text>
           )}
           <div className="flex gap-2">

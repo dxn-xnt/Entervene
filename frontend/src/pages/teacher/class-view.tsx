@@ -351,7 +351,7 @@ function LessonsTab({
   );
   const [lessons, setLessons] = useState<LessonItem[]>([]);
   const [, setCompetencies] = useState<CompetencyItem[]>([]);
-  const [, setIsLoadingLessons] = useState(false);
+  const [isLoadingLessons, setIsLoadingLessons] = useState(false);
   const [lessonsError, setLessonsError] = useState("");
   const [expandedLessonId, setExpandedLessonId] = useState<number | null>(null);
   const [linkedClassworks, setLinkedClassworks] = useState<
@@ -429,11 +429,9 @@ function LessonsTab({
     if (!selectedSubjectId || !detail.class_id) {
       setLessons([]);
       setCompetencies([]);
-      setIsLoadingLessons(false);
       return;
     }
 
-    setIsLoadingLessons(true);
     setLessonsError("");
 
     try {
@@ -485,8 +483,6 @@ function LessonsTab({
       );
       setLessons([]);
       setCompetencies([]);
-    } finally {
-      setIsLoadingLessons(false);
     }
   };
 

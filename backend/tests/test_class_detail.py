@@ -216,6 +216,7 @@ def test_class_detail_returns_real_basic_information_counts_and_safe_fields(clie
         "middle_name": "Byron",
         "last_name": "Lovelace",
         "suffix": None,
+        "avatar": None,
     }
     assert body["statistics"] == {
         "student_count": 2,
@@ -931,7 +932,8 @@ def test_transfer_options_excludes_same_level_class_from_other_academic_year(cli
 
     assert response.status_code == 200
     assert response.json()["available_sections"] == [
-        {"class_id": same_year.class_id, "section_name": "Newton"}
+        {"class_id": same_year.class_id, "section_name": "Newton", "grade_level": 7,
+         "pathway_id": None, "pathway_name": None, "pathway_is_enabled": None, "requires_pathway": False}
     ]
 
 

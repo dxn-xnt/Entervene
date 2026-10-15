@@ -127,6 +127,7 @@ export default function AdminClasses() {
       const text = [
         item.section_name,
         item.academic_level.level_name,
+        item.pathway?.name ?? "",
         adviserName,
         item.adviser?.staff_id ?? "",
       ]

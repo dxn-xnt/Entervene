@@ -34,8 +34,8 @@ export default function StudentActiveInterventions() {
   }, [selectedId]);
 
   const open = (id: number) => { const next = new URLSearchParams(params); next.set("intervention", String(id)); setParams(next); };
-  const activityLink = (item: StudentPersistentIntervention, assignmentId: number) =>
-    `/student/subjects/${item.class_id}/${item.subject_id}?tab=classwork&classworkAssignmentId=${assignmentId}`;
+  const activityLink = (_item: StudentPersistentIntervention, assignmentId: number) =>
+    `/student/classworks/${assignmentId}?from=${encodeURIComponent(window.location.pathname + window.location.search)}`;
 
   return <section className="space-y-3" aria-label="Active Interventions">
     <h2 className="text-xl font-bold">Active Interventions</h2>

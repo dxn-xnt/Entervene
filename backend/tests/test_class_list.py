@@ -232,6 +232,7 @@ def test_list_classes_returns_real_rows_counts_null_adviser_and_sorted_order(cli
         "middle_name": "Byron",
         "last_name": "Lovelace",
         "suffix": None,
+        "avatar": None,
     }
     assert sapphire_item["student_count"] == 2
     assert "password_hash" not in response.text

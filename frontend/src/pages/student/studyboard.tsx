@@ -254,6 +254,10 @@ const StoryBoard = () => {
   };
 
   const openTodo = async (item: TodoItem) => {
+    if (item.assignment_id) {
+      navigate(`/student/classworks/${item.assignment_id}?from=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+      return;
+    }
     let targetClassId = item.class_id;
 
     if (!targetClassId && item.subject_id) {

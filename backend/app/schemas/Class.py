@@ -197,6 +197,11 @@ class TeacherAdvisoryClassDetailResponse(BaseModel):
 class ClassTransferOptionItem(BaseModel):
     class_id: int
     section_name: str
+    grade_level: int | None = None
+    pathway_id: int | None = None
+    pathway_name: str | None = None
+    pathway_is_enabled: bool | None = None
+    requires_pathway: bool = False
 
 
 class ClassTransferOptionsResponse(BaseModel):

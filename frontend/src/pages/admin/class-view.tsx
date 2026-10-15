@@ -40,6 +40,7 @@ import type {
   DetailTab,
   UpdateClassStudentListRequest,
 } from "@/types/adminClasses";
+import { classPathwayLabel } from "@/lib/class-pathway";
 
 function adviserDisplayName(classDetail: ClassDetailResponse) {
   if (!classDetail.adviser) return "No adviser assigned";
@@ -212,6 +213,13 @@ export default function AdminClassDetail() {
   const isArchived = normalizedClassStatus(loadedClass.class_status) === "Archived";
   const adviserName = adviserDisplayName(loadedClass);
   const activeSince = formatClassDate(loadedClass.created_at);
+  const pathwayLabel = classPathwayLabel({
+    gradeLevel: loadedClass.academic_level.grade_level,
+    requiresPathway: loadedClass.academic_level.requires_pathway,
+    pathwayId: loadedClass.pathway_id,
+    pathwayName: loadedClass.pathway?.name,
+    pathwayEnabled: loadedClass.pathway?.is_enabled,
+  });
   const placeholderClass = classData[0];
   const selectedClass: ClassRecord = {
     ...placeholderClass,
@@ -342,6 +350,7 @@ export default function AdminClassDetail() {
                       {selectedClass.grade} - {selectedClass.academicYear} | Active since{" "}
                       {activeSince}
                     </Text>
+                    {pathwayLabel && <Text as="p" className="text-sm font-semibold">Academic Pathway: {pathwayLabel}</Text>}
                   </div>
                 </RetroCard>
 
