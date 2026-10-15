@@ -175,6 +175,7 @@ export default function StudentClassworkView() {
     [searchParams, detail?.class_id, detail?.subject_id],
   );
   const sourceLabel = studentClassworkSourceLabel(returnPath);
+  const fromSubject = returnPath.startsWith("/student/subjects/");
   const quizLink = quizPathWithContext(
     routes.student.quizView.replace(":assignmentId", String(assignmentId)),
     `?from=${encodeURIComponent(`${location.pathname}${location.search}`)}`,
@@ -289,12 +290,25 @@ export default function StudentClassworkView() {
             <SidebarTrigger className="shrink-0 md:hidden" />
             <Breadcrumb className="min-w-0 flex-1">
               <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2 text-lg font-extrabold sm:text-2xl">
+                {fromSubject && (
+                  <>
+                    <Breadcrumb.Item className="shrink-0">
+                      <Breadcrumb.Link
+                        onClick={() => navigate(routes.student.subjects)}
+                        className="cursor-pointer text-muted-foreground"
+                      >
+                        Subjects
+                      </Breadcrumb.Link>
+                    </Breadcrumb.Item>
+                    <Breadcrumb.Separator />
+                  </>
+                )}
                 <Breadcrumb.Item>
                   <Breadcrumb.Link
                     onClick={back}
-                    className="cursor-pointer text-muted-foreground"
+                    className="block max-w-32 cursor-pointer truncate text-muted-foreground sm:max-w-56 md:max-w-72"
                   >
-                    {sourceLabel}
+                    {fromSubject ? detail?.subject_name || "Subject" : sourceLabel}
                   </Breadcrumb.Link>
                 </Breadcrumb.Item>
                 <Breadcrumb.Separator />
@@ -303,7 +317,7 @@ export default function StudentClassworkView() {
                     <TooltipTrigger
                       render={
                         <Breadcrumb.Page
-                          className="block max-w-[55vw] truncate font-bold"
+                          className="block max-w-[35vw] truncate font-bold sm:max-w-[45vw]"
                           tabIndex={0}
                         >
                           {detail?.title || "Classwork"}

@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
-import { ClipboardList } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
-import { Tabs } from "@/components/retroui/Tabs";
+import { Badge } from "@/components/retroui/Badge";
 import { routes } from "@/../routes";
 import type { StudentLesson } from "@/types/student-subject";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -12,8 +11,6 @@ export interface LessonViewProps {
   lesson: StudentLesson;
   displaySubjectName: string;
   closeLessonDetail: () => void;
-  lessonDetailTab: "classwork" | "suggestions";
-  setLessonDetailTab: (tab: "classwork" | "suggestions") => void;
   renderLessonClassworkCards: (lesson: StudentLesson) => ReactNode;
   classId?: number;
   subjectId?: number;
@@ -26,25 +23,10 @@ export function LessonView({
   lesson,
   displaySubjectName,
   closeLessonDetail,
-  lessonDetailTab,
-  setLessonDetailTab,
   renderLessonClassworkCards,
   fmtDate,
 }: LessonViewProps) {
   const navigate = useNavigate();
-  const tabs = [
-    {
-      id: "classwork",
-      label: "Classwork",
-      icon: ClipboardList,
-    },
-    // {
-    //   id: "suggestions",
-    //   label: "Recommended Materials",
-    //   icon: BookOpen,
-    // },
-  ];
-
   return (
     <>
       <div data-page-tabs-sticky-region>
@@ -81,50 +63,56 @@ export function LessonView({
             </Breadcrumb.List>
           </Breadcrumb>
         </header>
+        <div className="border-b-2 border-black" aria-hidden="true" />
 
-        <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-          <Tabs
-            tabs={tabs}
-            activeTab={lessonDetailTab}
-            onTabChange={(tab) =>
-              setLessonDetailTab(
-                tab === "suggestions" ? "suggestions" : "classwork",
-              )
-            }
-          />
-        </div>
       </div>
 
-      <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-        <Card className="block w-full border-black bg-primary shadow-md hover:shadow-none -mt-4">
-          <Card.Title className="break-words text-xl font-bold sm:text-2xl">
-            {lesson.title}
-          </Card.Title>
-          <p className="mt-1 text-sm font-semibold text-gray-800">
-            {lesson.description || "No lesson description provided."}
-          </p>
-          {lesson.content ? (
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-gray-800">
-              {lesson.content}
-            </p>
-          ) : null}
-          <p className="mt-2 text-xs font-normal">
-            {lesson.updated_at
-              ? `Updated ${fmtDate(lesson.updated_at)}`
-              : lesson.created_at
-                ? `Created ${fmtDate(lesson.created_at)}`
-                : ""}
-          </p>
+      <div className="flex min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+        <Card className="block w-full border-2 border-black bg-primary p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] sm:p-5">
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="break-words text-xl font-extrabold leading-tight text-black sm:text-2xl md:text-3xl">
+                  {lesson.title}
+                </h1>
+                <Badge variant="outline" size="sm">Lesson</Badge>
+              </div>
+              {lesson.is_published && <Badge variant="solid" size="sm">Published</Badge>}
+            </div>
+            <div className={lesson.content ? "grid gap-5 md:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] md:gap-8" : "flex flex-col gap-3"}>
+              <div className="flex flex-col gap-3">
+                {(lesson.competency_code || lesson.competency_statement) && (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-foreground/70">Competency</p>
+                    <p className="mt-1 break-words text-sm font-semibold text-foreground sm:text-base">
+                      {lesson.competency_code || lesson.competency_statement}
+                    </p>
+                  </div>
+                )}
+                {lesson.description && <p className="text-sm text-foreground/80">{lesson.description}</p>}
+                {(lesson.updated_at || lesson.created_at) && (
+                  <p className="text-sm text-foreground/80">
+                    {lesson.updated_at && (!lesson.created_at || lesson.updated_at !== lesson.created_at)
+                      ? `Updated ${fmtDate(lesson.updated_at)}`
+                      : `Created ${fmtDate(lesson.created_at!)}`}
+                  </p>
+                )}
+              </div>
+              {lesson.content && (
+                <div className="min-w-0">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground/70">Lesson Content</h2>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground sm:text-base">
+                    {lesson.content}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </Card>
 
-        {lessonDetailTab === "classwork" ? (
-          <section className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold">Classwork</h3>
-            </div>
-            {renderLessonClassworkCards(lesson)}
-          </section>
-        ) : null}
+        <section className="mt-2 flex flex-col gap-3 px-1">
+          {renderLessonClassworkCards(lesson)}
+        </section>
       </div>
     </>
   );

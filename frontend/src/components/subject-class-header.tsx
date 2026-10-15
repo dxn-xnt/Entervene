@@ -17,6 +17,7 @@ export interface SubjectClassHeaderProps {
     subject_name: string;
   } | null;
   statusLabel?: string;
+  teacherName?: string | null;
   className?: string;
   showViewSubjectButton?: boolean;
 }
@@ -25,13 +26,14 @@ export function SubjectClassHeader({
   detail,
   currentSubject,
   statusLabel,
+  teacherName,
   className,
   showViewSubjectButton = true,
 }: SubjectClassHeaderProps) {
   const navigate = useNavigate();
   const computedStatus = statusLabel ?? (detail.is_archived ? "Archived" : "Active");
   const title = currentSubject?.subject_name || detail.section_name || "Subject";
-  const subtitle = [detail.section_name, detail.academic_level].filter(Boolean).join(" | ");
+  const subtitle = teacherName || [detail.section_name, detail.academic_level].filter(Boolean).join(" | ");
 
   return (
     <Card className={`block w-full border-black bg-primary transition-none hover:shadow-md pt-3 pb-4 ${className || ""}`}>
