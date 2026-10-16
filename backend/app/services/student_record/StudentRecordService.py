@@ -48,6 +48,7 @@ from app.schemas.StudentRecord import (
     ClassworkCategoryHeader,
     GradebookCategoryHeaderGroup,
     GradingWeightsInfo,
+    GradeSendMissingItem,
     SendGradeToAdviserItemResponse,
     SendStudentGradeRequest,
     StudentClassworkResult,
@@ -890,6 +891,13 @@ def _compute_student_period_components(
         "written_scores": written_scores,
         "performance_scores": performance_scores,
         "quarterly_scores": quarterly_scores,
+        # Evidence follows the exact assignment/score pairs used above. Remedial
+        # exams contribute through their original's effective score, not twice.
+        "item_evidence": {
+            "written_work": list(zip(written_assignments, written_scores)),
+            "performance_task": list(zip(performance_assignments, performance_scores)),
+            "quarterly_assessment": list(zip(official_quarterly_assignments, quarterly_scores)),
+        },
         "ps_ww": grade_res.ps_ww,
         "ps_pt": grade_res.ps_pt,
         "ps_qa": grade_res.ps_qa,
@@ -906,6 +914,7 @@ GRADE_SEND_COMPONENTS = (
     ("PT", "performance_task", "ps_pt", "Performance Task"),
     ("QA", "quarterly_assessment", "ps_qa", "Examination"),
 )
+GRADE_SEND_MISSING_ITEM_LIMIT = 5
 
 
 @dataclass(frozen=True)
@@ -919,6 +928,8 @@ class GradeSendReadiness:
     code: str | None = None
     message: str = ""
     missing_components: tuple[str, ...] = ()
+    missing_items: tuple[GradeSendMissingItem, ...] = ()
+    missing_item_count: int = 0
 
 
 def _grade_send_requirements(
@@ -973,19 +984,49 @@ def _grade_send_requirements(
 def _grade_send_readiness(
     components: dict[str, Any], requirements: GradeSendRequirements,
 ) -> GradeSendReadiness:
-    """Category-level evidence policy: a computable zero is valid evidence."""
+    """Every applicable calculation item must be scored; numeric zero counts.
+
+    Assignment eligibility and effective examination scores have already been
+    selected by the shared calculator. No due-date or excuse exemption is added.
+    """
     if requirements.configuration_error:
         return GradeSendReadiness(code="grading_configuration_invalid", message=requirements.configuration_error)
+    labels_by_category = {name: label for _, name, _, label in GRADE_SEND_COMPONENTS}
+    gaps = [
+        (name, assignment)
+        for name in requirements.required_components
+        for assignment, score in components["item_evidence"][name]
+        if score is None
+    ]
+    gaps.sort(key=lambda item: (
+        _as_aware(item[1].due_date) or datetime.max.replace(tzinfo=timezone.utc),
+        item[1].classwork_assignment_id,
+    ))
+    gap_categories = {name for name, _ in gaps}
     missing = tuple(
         name for _, name, field, _ in GRADE_SEND_COMPONENTS
-        if name in requirements.required_components and components[field] is None
+        if name in requirements.required_components
+        and (components[field] is None or name in gap_categories)
     )
     if missing:
         labels = ", ".join(label for _, name, _, label in GRADE_SEND_COMPONENTS if name in missing)
         return GradeSendReadiness(
             code="grade_send_incomplete",
-            message=f"Grade not sent. Missing scored components: {labels}. Every configured category must have a computable percentage.",
+            message=(
+                f"Grade not sent. {len(gaps)} required item(s) need a score. Enter a score for every applicable item; a scored zero counts."
+                if gaps else f"Grade not sent. No computable score in required categories: {labels}."
+            ),
             missing_components=missing,
+            missing_items=tuple(
+                GradeSendMissingItem(
+                    assignment_id=assignment.classwork_assignment_id,
+                    title=assignment.classwork.title,
+                    category=labels_by_category[name],
+                    due_date=_as_aware(assignment.due_date),
+                )
+                for name, assignment in gaps[:GRADE_SEND_MISSING_ITEM_LIMIT]
+            ),
+            missing_item_count=len(gaps),
         )
     grade = components["transmuted_grade"]
     if grade is None or not Decimal(str(grade)).is_finite():
@@ -1063,6 +1104,8 @@ def send_student_grade_to_adviser(
                 "code": readiness.code,
                 "message": readiness.message,
                 "missing_components": list(readiness.missing_components),
+                "missing_items": [item.model_dump(mode="json") for item in readiness.missing_items],
+                "missing_item_count": readiness.missing_item_count,
             })
         computed_tg = tg
     else:
@@ -1317,6 +1360,8 @@ def bulk_send_grades_to_adviser(
                 skip_reason=readiness.code,
                 message=f"{readiness.message} Any previously stored grade is unchanged.",
                 incomplete_components=list(readiness.missing_components),
+                missing_items=list(readiness.missing_items),
+                missing_item_count=readiness.missing_item_count,
             ))
             continue
 
@@ -1458,6 +1503,7 @@ def bulk_send_grades_to_adviser(
         finalized_by_staff_id=staff_id,
         finalized_by_name=acting_staff_name,
         entries=entries,
+        message="Eligible grades were sent or updated." if modified_pg_ids else "No grades were sent.",
     )
 
 

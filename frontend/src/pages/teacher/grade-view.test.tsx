@@ -49,15 +49,19 @@ vi.mock("@/components/retroui/Select", () => ({
 function gradebook(): StudentGradebookResponse {
   return {
     scope: { section_name: "Example Section", subject_name: "Example Subject" },
-    classwork: [{ writtenWork: [], performanceTask: [], quarterlyAssessment: [] }],
+    classwork: [{ writtenWork: [
+      { id: 1, title: "Written item 1", maxScore: 100 },
+      { id: 2, title: "Written item 2", maxScore: 100 },
+      { id: 3, title: "Classmate-only work", maxScore: 100, recipientStudentId: "incomplete" },
+    ], performanceTask: [{ id: 4, title: "Performance item", maxScore: 100 }], quarterlyAssessment: [] }],
     grading_weights: { template_id: 7, template_name: "Two categories", ww_weight: 0.4, pt_weight: 0.6,
       exams_weight: 0, ww_percentage: 40, pt_percentage: 60, exams_percentage: 0 },
     studentGrades: [
-      { student_id: "complete", name: "Scored Zero", writtenWork: [0], performanceTask: [0],
+      { student_id: "complete", name: "Scored Zero", writtenWork: [0, 0, null], performanceTask: [0],
         quarterlyAssessment: [], ps_written: 0, ps_performance: 0, ps_quarterly: null,
         transmuted_grade: 60, initial_grade: 0, total: "60", finalized_at: null },
-      { student_id: "incomplete", name: "Missing Evidence", writtenWork: [90], performanceTask: [null],
-        quarterlyAssessment: [], ps_written: 90, ps_performance: null, ps_quarterly: null,
+      { student_id: "incomplete", name: "Missing Evidence", writtenWork: [90, null, 90], performanceTask: [90],
+        quarterlyAssessment: [], ps_written: 90, ps_performance: 90, ps_quarterly: null,
         transmuted_grade: null, total: "", finalized_at: null },
     ],
   };
@@ -69,12 +73,18 @@ function skippedResult(sentCount = 0, configuration = false): BulkSendGradesToAd
     newly_sent_count: sentCount, unchanged_skipped_count: 0, incomplete_skipped_count: 1,
     finalized_at: sentCount ? "2026-10-16T00:00:00Z" : null,
     finalized_by_staff_id: "test-staff", finalized_by_name: "Example Teacher",
+    message: sentCount ? "Eligible grades were sent or updated." : "No grades were sent.",
     entries: [{ student_id: "incomplete", name: "Missing Evidence", is_finalized: false,
       finalized_at: null, final_period_grade: null, status: "skipped_incomplete",
       skip_reason: configuration ? "grading_configuration_invalid" : "grade_send_incomplete",
       message: configuration ? "Grade not sent. Configure an active grading template for this subject first."
-        : "Grade not sent. Missing scored components: Performance Task. Any previously stored grade is unchanged.",
-      incomplete_components: configuration ? [] : ["performance_task"] }],
+        : "Grade not sent. 7 required item(s) need a score. Any previously stored grade is unchanged.",
+      incomplete_components: configuration ? [] : ["written_work"],
+      missing_item_count: configuration ? 0 : 7,
+      missing_items: configuration ? [] : Array.from({ length: 5 }, (_, index) => ({
+        assignment_id: index + 10, title: `Unscored item ${index + 1}`,
+        category: "Written Work", due_date: "2026-10-16T16:00:00Z",
+      })) }],
   };
 }
 
@@ -96,11 +106,13 @@ async function openConfirmation() {
 }
 
 describe("grade-send evidence rendering", () => {
-  it("counts scored zero and only configured category percentages in the preliminary check", async () => {
+  it("requires every applicable item even when category percentages exist, accepting zero and excluding classmates' work", async () => {
     const dialog = await openConfirmation();
-    expect(screen.getByText("Category Evidence Available").parentElement?.textContent).toContain("1");
+    expect(screen.getByText("All Required Items Scored").parentElement?.textContent).toContain("1");
     expect(screen.getByText("Missing Evidence (Will Skip)").parentElement?.textContent).toContain("1");
-    expect(dialog.textContent).toContain("A scored zero counts. Not every assignment must be graded.");
+    expect(dialog.textContent).toContain("Every applicable graded item in this period must have a score, including items not yet due.");
+    expect(dialog.textContent).toContain("A scored zero counts.");
+    expect(dialog.textContent).not.toContain("Not every assignment must be graded");
     expect(dialog.textContent).toContain("existing adviser grades will stay unchanged");
     expect(dialog.textContent).not.toMatch(/sending anyway|sent anyway|sent based on available scores/i);
   });
@@ -114,9 +126,15 @@ describe("grade-send evidence rendering", () => {
     fireEvent.click(send!);
     const list = await screen.findByRole("list", { name: "Students whose grades were not sent" });
     expect(list.textContent).toContain("Missing Evidence");
-    expect(list.textContent).toContain("Missing scored components: Performance Task");
+    expect(list.textContent).toContain("7 required item(s) need a score");
+    expect(list.textContent).toContain("Unscored item 1");
+    expect(list.textContent).toContain("Written Work");
+    expect(list.textContent).toContain("Oct 17, 2026");
+    expect(list.textContent).toContain("(Manila)");
+    expect(list.textContent).toContain("2 more missing items. Only the first 5 are shown.");
+    expect(list.textContent).not.toContain("Unscored item 6");
     expect(screen.getByText("Skipped (Not Sent)").parentElement?.textContent).toContain("1");
-    if (!sentCount) expect(screen.getByText(/No grades were sent or updated/)).toBeTruthy();
+    if (!sentCount) expect(screen.getByText("No grades were sent.")).toBeTruthy();
     expect(screen.queryByText("With Warnings")).toBeNull();
     expect(document.body.textContent).not.toMatch(/transmitted with missing classwork components/i);
   });
@@ -129,5 +147,17 @@ describe("grade-send evidence rendering", () => {
     const list = await screen.findByRole("list", { name: "Students whose grades were not sent" });
     expect(list.textContent).toContain("Configure an active grading template");
     expect(document.body.textContent).not.toContain("Invalid Date");
+  });
+
+  it("shows a missing item with no due date without inventing one", async () => {
+    const result = skippedResult();
+    result.entries[0].missing_item_count = 1;
+    result.entries[0].missing_items = [{ assignment_id: 9, title: "Undated item", category: "Examination", due_date: null }];
+    mocks.bulk.mockResolvedValue(result);
+    await openConfirmation();
+    fireEvent.click(Array.from(screen.getByRole("dialog").querySelectorAll("button")).find((button) => button.textContent?.includes("Confirm"))!);
+    const list = await screen.findByRole("list", { name: "Students whose grades were not sent" });
+    expect(list.textContent).toContain("Undated item · Examination · No due date");
+    expect(list.textContent).not.toContain("Invalid Date");
   });
 });

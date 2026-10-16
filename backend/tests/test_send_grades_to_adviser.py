@@ -804,6 +804,7 @@ def _comparison_targeted_intervention(ctx, recipient):
 
 def _add_grade_scope_comparison_work(
     ctx, category, recipient_key, score, *, remedial=False, forged_score=False, exam_subtype="TERM_EXAM",
+    classwide_student1_score=None,
 ):
     db = ctx["db"]
     recipient = ctx[recipient_key] if recipient_key else None
@@ -833,7 +834,8 @@ def _add_grade_scope_comparison_work(
     )
     db.add(assignment)
     db.flush()
-    # Class-wide extra work is scored for the classmate, not student1.
+    # By default class-wide extra work is scored only for the classmate. Parity
+    # fixtures explicitly score both learners when they require a successful send.
     scored_student = recipient or ctx["student2"]
     db.add(StudentSubmission(
         student_id=scored_student.student_id,
@@ -841,6 +843,13 @@ def _add_grade_scope_comparison_work(
         grade=Decimal(score),
         status="graded",
     ))
+    if recipient is None and classwide_student1_score is not None:
+        db.add(StudentSubmission(
+            student_id=ctx["student1"].student_id,
+            classwork_assignment_id=assignment.classwork_assignment_id,
+            grade=Decimal(classwide_student1_score),
+            status="graded",
+        ))
     if forged_score:
         assert recipient_key == "student2"
         db.add(StudentSubmission(
@@ -850,6 +859,7 @@ def _add_grade_scope_comparison_work(
             status="graded",
         ))
     db.commit()
+    return assignment
 
 
 # The class record is the applicability oracle, not a duplicated recipient rule.
@@ -868,7 +878,7 @@ def _add_grade_scope_comparison_work(
         pytest.param("WRITTEN_WORK", "student1", "100", False, False, False, id="own-targeted-ww"),
         pytest.param("PERFORMANCE_TASK", "student1", "100", False, False, False, id="own-targeted-pt"),
         pytest.param("QUARTERLY_ASSESSMENT", "student1", "100", False, False, False, id="own-targeted-exam"),
-        pytest.param("WRITTEN_WORK", None, "100", False, False, False, id="classwide-unscored-extra-ww"),
+        pytest.param("WRITTEN_WORK", None, "100", False, False, False, id="classwide-scored-extra-ww"),
         pytest.param("QUARTERLY_ASSESSMENT", "student1", "100", True, False, False, id="own-higher-remedial-exam"),
         pytest.param("QUARTERLY_ASSESSMENT", "student1", "80", True, False, False, id="own-lower-remedial-exam"),
         pytest.param("QUARTERLY_ASSESSMENT", "student2", "100", True, False, False, id="classmate-remedial-exam"),
@@ -899,6 +909,7 @@ def test_send_and_gradebook_applicability_parity(
         _add_grade_scope_comparison_work(
             ctx, category, recipient_key, score, remedial=remedial,
             forged_score=forged_score, exam_subtype=exam_subtype,
+            classwide_student1_score=score if recipient_key is None else None,
         )
 
     gradebook = teacher_student_gradebook(

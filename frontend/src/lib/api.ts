@@ -820,6 +820,13 @@ export type SendStudentGradePayload = {
   remarks?: string | null;
 };
 
+export type GradeSendMissingItem = {
+  assignment_id: number;
+  title: string;
+  category: string;
+  due_date: string | null;
+};
+
 export type SendGradeToAdviserItemResponse = {
   student_id: string;
   name: string;
@@ -840,6 +847,8 @@ export type SendGradeToAdviserItemResponse = {
   message?: string | null;
   incomplete_components?: string[];
   skip_reason?: "grade_send_incomplete" | "grading_configuration_invalid" | "grade_not_computable" | null;
+  missing_items?: GradeSendMissingItem[];
+  missing_item_count?: number;
 };
 
 export type BulkSendGradesPayload = {
@@ -860,6 +869,7 @@ export type BulkSendGradesToAdviserResponse = {
   finalized_by_staff_id: string;
   finalized_by_name: string;
   entries: SendGradeToAdviserItemResponse[];
+  message?: string | null;
 };
 
 export async function sendStudentGradeToAdviser(
