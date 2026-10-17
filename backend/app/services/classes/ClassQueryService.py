@@ -20,9 +20,11 @@ from app.services.classes.ClassShared import (
     normalized_text,
     readable_text,
     resolve_active_academic_year,
+    resolve_class_academic_year,
     student_sort_key,
 )
 from app.services.pathways.PathwayScopeService import resolve_pathway_scope
+from app.services.classes.OfficialSectionService import list_official_sections
 
 # READ SIDE OF CLASS MANAGEMENT
 # Functions in this module assemble data for admin pages without changing class
@@ -215,9 +217,10 @@ def _active_class_filter():
     return func.lower(func.coalesce(Class.class_status, "active")) != "archived"
 
 
-def get_class_form_options_data(db: Session) -> dict:
+def get_class_form_options_data(db: Session, academic_year_id: int | None = None) -> dict:
     # This is the first request made by the class-creation page.
-    academic_year = resolve_active_academic_year(db)
+    academic_year = resolve_class_academic_year(db, academic_year_id)
+    academic_years = db.query(AcademicYear).order_by(AcademicYear.start_date).all()
     academic_levels = (
         db.query(AcademicLevel)
         .order_by(AcademicLevel.grade_level, func.lower(AcademicLevel.level_name))
@@ -234,6 +237,7 @@ def get_class_form_options_data(db: Session) -> dict:
     )
     return {
         "academic_year": _academic_year_option(academic_year),
+        "academic_years": [_academic_year_option(year) for year in academic_years],
         "academic_levels": [
             _academic_level_option(
                 level,
@@ -242,6 +246,7 @@ def get_class_form_options_data(db: Session) -> dict:
             for level in academic_levels
         ],
         "eligible_advisers": [_adviser_option(adviser) for adviser in eligible_advisers],
+        "official_sections": list_official_sections(db, academic_year.academic_year_id)["sections"],
     }
 
 
@@ -602,8 +607,18 @@ def get_teacher_advisory_class_grades_data(
     }
 
 
-def get_unassigned_students_data(db: Session, academic_level_id: int) -> dict:
-    academic_year = resolve_active_academic_year(db)
+def get_unassigned_students_data(db: Session, academic_level_id: int, class_id: int | None = None, academic_year_id: int | None = None) -> dict:
+    # Creation uses the active year; roster editing must use the target class's
+    # own year so historical assignments cannot hide or expose wrong candidates.
+    if class_id is None:
+        academic_year = resolve_class_academic_year(db, academic_year_id)
+    else:
+        class_ = db.query(Class).filter(Class.class_id == class_id).first()
+        if class_ is None:
+            raise HTTPException(status_code=404, detail="Class not found.")
+        if class_.academic_level_id != academic_level_id:
+            raise HTTPException(status_code=400, detail="Class academic level does not match the request.")
+        academic_year = class_.academic_year
     academic_level = db.query(AcademicLevel).filter(AcademicLevel.academic_level_id == academic_level_id).first()
     if not academic_level:
         raise ClassManagementError(
@@ -618,9 +633,9 @@ def get_unassigned_students_data(db: Session, academic_level_id: int) -> dict:
             }],
         )
 
-    # "Unassigned" is year-specific: historical StudentClass rows must not hide
-    # a student from the active-year class creation workflow.
-    assigned_in_active_year = (
+    # "Unassigned" is year-specific: assignments in another year must not hide
+    # a student from class creation or an existing class's roster editor.
+    assigned_in_class_year = (
         db.query(StudentClass.student_class_id)
         .join(Class, StudentClass.class_id == Class.class_id)
         .filter(StudentClass.student_id == Student.student_id)
@@ -630,7 +645,7 @@ def get_unassigned_students_data(db: Session, academic_level_id: int) -> dict:
     students = (
         db.query(Student)
         .filter(Student.academic_level_id == academic_level_id)
-        .filter(~assigned_in_active_year)
+        .filter(~assigned_in_class_year)
         .all()
     )
     students.sort(key=student_sort_key)

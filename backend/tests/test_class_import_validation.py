@@ -16,6 +16,7 @@ from app.db.Session import get_db
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
+from app.models.academic.OfficialSection import OfficialSection
 from app.models.academic.StudentCLass import StudentClass
 from app.models.auth.Role import Role
 from app.models.auth.UserAccount import UserAccount
@@ -167,6 +168,9 @@ def import_data(db):
         add_student(db, level, "100000000002", "Amy", "Able", "Female", "Marie"),
         add_student(db, level, "100000000003", "Uma", "Unknown", "Female", None),
     ]
+    for name in ("Sapphire", "Emerald", "Aristotle", "Galileo"):
+        db.add(OfficialSection(academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id,
+                               section_name=name, normalized_name=name.casefold()))
     db.commit()
     return year, level, other_level, adviser, students
 
@@ -253,7 +257,7 @@ def test_valid_csv_groups_sorts_summarizes_handles_bom_blank_rows_and_writes_not
 
     assert response.status_code == 200
     body = response.json()
-    assert [section["section_name"] for section in body["sections"]] == ["Emerald", "sapphire"]
+    assert [section["section_name"] for section in body["sections"]] == ["Emerald", "Sapphire"]
     assert [student["student_lrn"] for student in body["sections"][1]["students"]] == [
         students[0].student_lrn,
         students[1].student_lrn,
@@ -529,16 +533,20 @@ def test_validate_import_requires_admin_and_authentication(client, import_data):
 
 
 def test_shs_pathway_validation_in_class_import(client, db):
-    add_year(db, "2025-2026", True)
+    year = add_year(db, "2025-2026", True)
     shs_level = add_level(db, "Grade 11", 11)
     teacher = add_staff(db, "T-SHS-1")
     student = add_student(db, shs_level, "100000000099", "Medical", "Student", "Female")
-    db.add(AcademicPathway(code="medical-courses", name="Medical Courses", is_enabled=True))
+    pathway = AcademicPathway(code="medical-courses", name="Medical Courses", is_enabled=True)
+    db.add(pathway)
+    db.flush()
+    db.add(OfficialSection(academic_year_id=year.academic_year_id, academic_level_id=shs_level.academic_level_id,
+                           section_name="Zara", normalized_name="zara", pathway_id=pathway.id))
     db.commit()
 
     # Valid SHS import with stem_medical
     valid_csv = HEADER + "\n" + csv_row(
-        section="11-Med-A",
+        section="Zara",
         grade="11",
         pathway="stem_medical",
         adviser_id=teacher.staff_id,
@@ -555,7 +563,7 @@ def test_shs_pathway_validation_in_class_import(client, db):
 
     # Invalid SHS import without pathway
     invalid_csv = HEADER + "\n" + csv_row(
-        section="11-Med-A",
+        section="Zara",
         grade="11",
         pathway="",
         adviser_id=teacher.staff_id,
@@ -572,14 +580,16 @@ def test_shs_pathway_validation_in_class_import(client, db):
 
 
 def test_grade12_and_jhs_class_permits_null_pathway(client, db):
-    add_year(db, "2025-2026", True)
+    year = add_year(db, "2025-2026", True)
     g12_level = add_level(db, "Grade 12", 12)
     teacher = add_staff(db, "T-G12-1")
     student = add_student(db, g12_level, "100000000088", "G12", "Student", "Male")
+    db.add(OfficialSection(academic_year_id=year.academic_year_id, academic_level_id=g12_level.academic_level_id,
+                           section_name="Del Mundo", normalized_name="del mundo"))
     db.commit()
 
     g12_csv = HEADER + "\n" + csv_row(
-        section="12-OldCurr",
+        section="Del Mundo",
         grade="12",
         pathway="",
         adviser_id=teacher.staff_id,

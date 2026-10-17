@@ -88,6 +88,17 @@ function normalizedStudentGender(gender: string) {
   return "Unspecified";
 }
 
+async function loadClassRoster(classId: number | string): Promise<ClassStudentListResponse> {
+  const firstPage = await getClassStudents(classId, { pageSize: 200 });
+  if (firstPage.pagination.total_pages <= 1) return firstPage;
+  const students = [...firstPage.students];
+  for (let page = 2; page <= firstPage.pagination.total_pages; page += 1) {
+    const nextPage = await getClassStudents(classId, { page, pageSize: 200 });
+    students.push(...nextPage.students);
+  }
+  return { ...firstPage, students };
+}
+
 export default function AdminClassDetail() {
   const toast = useToast();
   const { classId } = useParams();
@@ -146,7 +157,7 @@ export default function AdminClassDetail() {
       setStudentsLoading(true);
       setStudentsError("");
       try {
-        const data = await getClassStudents(classId, { pageSize: 200 });
+        const data = await loadClassRoster(classId);
         if (isMounted) setClassStudents(data);
       } catch {
         if (isMounted) setStudentsError("Unable to load students.");
@@ -233,7 +244,7 @@ export default function AdminClassDetail() {
   };
 
   async function refreshStudents() {
-    const data = await getClassStudents(loadedClass.class_id, { pageSize: 200 });
+    const data = await loadClassRoster(loadedClass.class_id);
     setClassStudents(data);
   }
 
@@ -242,9 +253,9 @@ export default function AdminClassDetail() {
     setTransferOptionsError("");
     try {
       const [studentData, options, available] = await Promise.all([
-        getClassStudents(loadedClass.class_id, { pageSize: 200 }),
+        loadClassRoster(loadedClass.class_id),
         getClassTransferOptions(loadedClass.class_id),
-        getUnassignedClassStudents(loadedClass.academic_level.academic_level_id),
+        getUnassignedClassStudents(loadedClass.academic_level.academic_level_id, loadedClass.class_id),
       ]);
       setClassStudents(studentData);
       setTransferOptions(options.available_sections);
@@ -258,15 +269,30 @@ export default function AdminClassDetail() {
   async function saveStudentListChanges(payload: UpdateClassStudentListRequest) {
     const updatedStudents = await updateClassStudentList(loadedClass.class_id, payload);
     toast.success({ title: "Student list updated" });
-    setClassStudents(updatedStudents);
+    setClassStudents(updatedStudents.pagination.total_pages > 1
+      ? await loadClassRoster(loadedClass.class_id)
+      : updatedStudents);
     const [availableResult, detailResult] = await Promise.allSettled([
-      getUnassignedClassStudents(loadedClass.academic_level.academic_level_id),
+      getUnassignedClassStudents(loadedClass.academic_level.academic_level_id, loadedClass.class_id),
       getClassDetail(loadedClass.class_id),
     ]);
     if (availableResult.status === "fulfilled")
       setAvailableStudents(availableResult.value.students);
     if (detailResult.status === "fulfilled") setClassDetail(detailResult.value);
     setStudentsSuccess("Student list updated successfully.");
+  }
+
+  async function distributionCommitted() {
+    setShowEditStudents(false);
+    const [roster, available, detail] = await Promise.allSettled([
+      loadClassRoster(loadedClass.class_id),
+      getUnassignedClassStudents(loadedClass.academic_level.academic_level_id, loadedClass.class_id),
+      getClassDetail(loadedClass.class_id),
+    ]);
+    if (roster.status === "fulfilled") setClassStudents(roster.value);
+    if (available.status === "fulfilled") setAvailableStudents(available.value.students);
+    if (detail.status === "fulfilled") setClassDetail(detail.value);
+    toast.success({ title: "Students distributed across classes" });
   }
 
   return (
@@ -389,10 +415,13 @@ export default function AdminClassDetail() {
           currentSectionId={loadedClass.class_id}
           currentSectionName={loadedClass.section_name}
           academicLevel={loadedClass.academic_level.level_name}
+            academicYear={loadedClass.academic_year.year_label}
+            requiresPathway={Boolean(loadedClass.academic_level.requires_pathway)}
           students={classStudents.students}
           availableStudents={availableStudents}
           availableSections={transferOptions}
           onSaveChanges={saveStudentListChanges}
+            onDistributionCommitted={distributionCommitted}
           onClose={() => setShowEditStudents(false)}
         />
       )}
@@ -602,6 +631,7 @@ function StudentsTab({
   error,
   success,
   editError,
+  isReadOnly,
   onRetry,
   onEdit,
 }: {
@@ -626,10 +656,8 @@ function StudentsTab({
 
   return (
     <div className="grid gap-4">
-      <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-3">
+      <div className="grid gap-4">
         <OverviewCard title="Total Students" count={String(studentData?.summary.total_students ?? 0)} />
-        <OverviewCard title="Avg. Class Score" count="88%" stat="12%" />
-        <OverviewCard title="At-Risk Students" count="3" stat="12%" />
       </div>
 
       <section className="flex flex-col gap-3">
@@ -644,7 +672,7 @@ function StudentsTab({
               placeholder="Search students..."
               className="h-10 max-w-100 w-full !bg-white"
             />
-            <Button onClick={onEdit} className="whitespace-nowrap">Edit Student List</Button>
+            {!isReadOnly && <Button onClick={onEdit} className="whitespace-nowrap">Add / Manage Students</Button>}
           </div>
         </div>
 
@@ -678,7 +706,7 @@ function StudentsTab({
             </div>
           ) : !students.length ? (
             <p className="p-6 text-center text-sm font-semibold text-black/60">
-              No students are currently assigned to this class.
+              {isReadOnly ? "No students were assigned to this class." : "No students assigned yet. Use Add / Manage Students to build the roster."}
             </p>
           ) : !filteredStudents.length ? (
             <p className="p-6 text-center text-sm font-semibold text-black/60">

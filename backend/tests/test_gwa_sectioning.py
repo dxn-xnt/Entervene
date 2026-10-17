@@ -130,11 +130,10 @@ def test_gwa_sorting_all_students_ranked(db):
 
     # Both sections should have balanced counts (total 5: 3 and 2)
     assert len(res["sec_a"]) + len(res["sec_b"]) == 5
-    # Males: Highest (m2=95) goes to sec_a, 2nd (m3=85) goes to sec_b, 3rd (m1=75) goes to sec_a
-    # Females: Highest (f2=98) goes to sec_b (lowest female count=0), 2nd (f1=78) goes to sec_a
+    # After equal roster sizes, the lower score total receives the next student.
     assert str(m2.student_id) in res["sec_a"]
     assert str(m3.student_id) in res["sec_b"]
-    assert str(m1.student_id) in res["sec_a"]
+    assert str(m1.student_id) in res["sec_b"]
 
 
 # 2. test_gwa_sorting_mixed_with_nulls: Null-GWA students sort after ranked students, alphabetically among themselves
@@ -149,10 +148,10 @@ def test_gwa_sorting_mixed_with_nulls(db):
 
     res = distribute_students_balanced(db, 2, sections, unassigned, current, mode="gwa")
 
-    # Ranked m1 placed first -> sec_a. Then Aaron (m2) -> sec_b, then Ben (m3) -> sec_a
+    # Missing values are ranked after known scores; direct helper callers can still include them.
     assert str(m1.student_id) in res["sec_a"]
     assert str(m2.student_id) in res["sec_b"]
-    assert str(m3.student_id) in res["sec_a"]
+    assert str(m3.student_id) in res["sec_b"]
 
 
 # 3. test_gwa_sorting_all_nulls: Output produces exact, byte-identical ordering and section assignments to standard alphabetical distribution
@@ -186,6 +185,18 @@ def test_gwa_sorting_tied_gwa(db):
     # Adam (m2) alphabetically before Zack (m1) -> m2 assigned first to sec_a, m1 to sec_b
     assert str(m2.student_id) in res["sec_a"]
     assert str(m1.student_id) in res["sec_b"]
+
+
+def test_gwa_balances_ranked_scores_across_equal_rosters(db):
+    students = [_make_student(db, f"Student{index}", "Ranked", "Male", prior_gwa=gwa)
+                for index, gwa in enumerate((100, 90, 80, 70))]
+    result = distribute_students_balanced(
+        db, 2, ["first", "second"], [student.student_id for student in students],
+        {"first": [], "second": []}, mode="gwa",
+    )
+    scores = {str(student.student_id): gwa for student, gwa in zip(students, (100, 90, 80, 70))}
+    assert sum(scores[student_id] for student_id in result["first"]) == 170
+    assert sum(scores[student_id] for student_id in result["second"]) == 170
 
 
 # 5. test_prior_year_gwa_resolution: Arithmetic mean across subjects for previous year with mixed period counts
@@ -333,6 +344,19 @@ def test_distribute_endpoint_read_only(client, db):
 
     # Zero database rows should be created
     assert db.query(StudentClass).count() == initial_assignments_count
+
+
+def test_distribute_endpoint_requires_gwa_instead_of_silent_fallback(client, db):
+    student = _make_student(db, "No", "Average", "Male", prior_gwa=None)
+    response = client.post("/api/v1/classes/distribute-students", json={
+        "academic_level_id": 2, "mode": "gwa",
+        "sections": [{"local_id": "first", "section_name": "First"}, {"local_id": "second", "section_name": "Second"}],
+        "unassigned_student_ids": [str(student.student_id)],
+        "assignments_by_section": {"first": [], "second": []},
+    })
+    assert response.status_code == 422
+    assert "GWA is unavailable" in response.json()["detail"]
+    assert db.query(StudentClass).count() == 0
 
 
 # 9. test_prior_gwa_not_in_list_users: prior_gwa does not appear in the list_users response

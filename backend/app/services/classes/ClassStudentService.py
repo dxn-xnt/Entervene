@@ -24,7 +24,7 @@ def update_class_student_assignments(
     if not payload.removals and not payload.transfers and not payload.additions:
         raise HTTPException(status_code=400, detail="Provide at least one student list change.")
 
-    class_ = db.query(Class).filter(Class.class_id == class_id).first()
+    class_ = db.query(Class).filter(Class.class_id == class_id).with_for_update().first()
     if class_ is None:
         raise HTTPException(status_code=404, detail="Class not found.")
     if normalized_text(class_.class_status or "active") == "archived":
@@ -54,6 +54,8 @@ def update_class_student_assignments(
         raise HTTPException(status_code=400, detail="Duplicate student changes are not allowed.")
 
     requested_student_ids = removal_id_set | transfer_id_set
+    if requested_student_ids:
+        db.query(Student.student_id).filter(Student.student_id.in_(requested_student_ids)).order_by(Student.student_id).with_for_update().all()
     assignments = {
         assignment.student_id: assignment
         for assignment in (
@@ -74,6 +76,7 @@ def update_class_student_assignments(
         for student in (
             db.query(Student)
             .filter(Student.student_id.in_(addition_id_set))
+            .order_by(Student.student_id)
             .with_for_update()
             .all()
         )

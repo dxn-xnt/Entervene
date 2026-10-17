@@ -13,13 +13,14 @@ from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.schemas.Class import ClassUpdateRequest
 from app.services.classes.ClassQueryService import get_class_detail_data
+from app.services.classes.OfficialSectionService import selected_official_section
 from app.services.pathways.PathwayScopeService import resolve_pathway_scope
 from app.services.classes.ClassShared import (
     ClassManagementError,
     eligible_advisers_query,
     normalized_text,
     readable_text,
-    resolve_active_academic_year,
+    resolve_class_academic_year,
 )
 
 # WRITE SIDE OF CLASS MANAGEMENT
@@ -162,6 +163,13 @@ def update_class_record(
             academic_level_id=class_.academic_level_id,
         )
 
+    if "section_name" in changes or "pathway_id" in changes or "pathway" in changes:
+        official = selected_official_section(db, class_.academic_year_id, class_.academic_level_id, class_.section_name)
+        if official is not None:
+            if class_.pathway_id != official.pathway_id:
+                raise HTTPException(status_code=422, detail="Section and pathway do not match the official academic-year configuration.")
+            class_.section_name = official.section_name
+
     try:
         db.commit()
     except Exception:
@@ -227,7 +235,7 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
     # The entire batch is validated before any class is persisted. A failure in
     # one section rejects the batch so classes and rosters cannot be half-created.
     try:
-        academic_year = resolve_active_academic_year(db)
+        academic_year = resolve_class_academic_year(db, getattr(payload, "academic_year_id", None))
         academic_level = (
             db.query(AcademicLevel)
             .filter(AcademicLevel.academic_level_id == payload.academic_level_id)
@@ -332,6 +340,11 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                 academic_year_id=academic_year.academic_year_id,
                 academic_level_id=academic_level.academic_level_id,
             )
+            official = selected_official_section(db, academic_year.academic_year_id, academic_level.academic_level_id, section_name) if section_name else None
+            if official is not None:
+                if pw_id != official.pathway_id:
+                    raise HTTPException(status_code=422, detail="Section and pathway do not match the official academic-year configuration.")
+                section_name = official.section_name
             template_group = getattr(section, "period_template_group", None)
             if not template_group:
                 if academic_level.grade_level >= 11:

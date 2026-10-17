@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ApiRequestError, fetchPathways, getClassDetail, getClassFormOptions, updateClass } from "@/lib/api";
-import type { AcademicPathwayRead, AdviserOption, ClassDetailResponse, ClassFormOptions, UpdateClassRequest } from "@/types/adminClasses";
+import { ApiRequestError, getClassDetail, getClassFormOptions, updateClass } from "@/lib/api";
+import type { AdviserOption, ClassDetailResponse, ClassFormOptions, UpdateClassRequest } from "@/types/adminClasses";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
@@ -24,7 +24,6 @@ export default function EditClass({
 }) {
   const [classDetail, setClassDetail] = useState<ClassDetailResponse | null>(initialClass ?? null);
   const [options, setOptions] = useState<ClassFormOptions | null>(null);
-  const [pathways, setPathways] = useState<AcademicPathwayRead[]>([]);
   const [pathwayId, setPathwayId] = useState(initialClass?.pathway_id == null ? "__none__" : String(initialClass.pathway_id));
   const [sectionName, setSectionName] = useState(initialClass?.section_name ?? "");
   const [adviserStaffId, setAdviserStaffId] = useState(initialClass?.adviser?.staff_id || "__none__");
@@ -41,15 +40,11 @@ export default function EditClass({
       setLoading(true);
       setLoadError("");
       try {
-        const [detail, formOptions, pathwayResponse] = await Promise.all([
-          initialClass ? Promise.resolve(initialClass) : getClassDetail(classId),
-          getClassFormOptions(),
-          fetchPathways(),
-        ]);
+        const detail = initialClass ?? await getClassDetail(classId);
+        const formOptions = await getClassFormOptions(detail.academic_year.academic_year_id);
         if (cancelled) return;
         setClassDetail(detail);
         setOptions(formOptions);
-        setPathways(pathwayResponse.pathways);
         setPathwayId(detail.pathway_id == null ? "__none__" : String(detail.pathway_id));
         setSectionName(detail.section_name);
         setAdviserStaffId(detail.adviser?.staff_id || "__none__");
@@ -75,6 +70,11 @@ export default function EditClass({
     options?.eligible_advisers.forEach((adviser) => advisers.set(adviser.staff_id, adviser));
     return Array.from(advisers.values()).sort((a, b) => adviserName(a).localeCompare(adviserName(b)));
   }, [classDetail, options]);
+
+  const officialSections = (options?.official_sections ?? []).filter((section) =>
+    section.academic_level_id === classDetail?.academic_level.academic_level_id
+    && ((section.is_active && !section.has_class) || section.section_name === classDetail?.section_name)
+  );
 
   async function saveClass() {
     if (!classDetail || saving) return;
@@ -162,35 +162,26 @@ export default function EditClass({
                 </Field>
 
                 <Field label="Section Name">
-                  <Input
-                    className="text-base"
-                    value={sectionName}
-                    onChange={(event) => {
-                      setSectionName(event.target.value);
-                      setSaveError("");
-                      setSaveSuccess("");
-                    }}
-                    placeholder="Section name"
-                  />
+                  <Select value={sectionName} onValueChange={(name) => {
+                    const selected = officialSections.find((section) => section.section_name === name);
+                    setSectionName(name);
+                    setPathwayId(selected?.pathway_id == null ? "__none__" : String(selected.pathway_id));
+                    setSaveError("");
+                    setSaveSuccess("");
+                  }}>
+                    <Select.Trigger className="w-full text-base"><Select.Value placeholder="Select official section" /></Select.Trigger>
+                    <Select.Content><Select.Group>
+                      {officialSections.map((section) => <Select.Item key={section.id} value={section.section_name}>{section.section_name}{section.pathway_name ? ` — ${section.pathway_name}` : ""}</Select.Item>)}
+                      {!officialSections.some((section) => section.section_name === classDetail.section_name) && <Select.Item value={classDetail.section_name} disabled>{classDetail.section_name} (historical)</Select.Item>}
+                    </Select.Group></Select.Content>
+                  </Select>
                 </Field>
 
                 {classDetail.academic_level.grade_level >= 11 && (
                   <Field label="Academic Pathway">
-                    <Select value={pathwayId} onValueChange={(value) => { setPathwayId(value); setSaveError(""); }}>
-                      <Select.Trigger className="w-full text-base">
-                        <Select.Value placeholder="Select pathway" />
-                      </Select.Trigger>
-                      <Select.Content>
-                        <Select.Group>
-                          <Select.Item value="__none__" disabled={classDetail.academic_level.requires_pathway && classDetail.pathway_id != null}>No pathway assigned</Select.Item>
-                          {pathways.filter((pathway) => (classDetail.academic_level.requires_pathway && pathway.is_enabled) || pathway.id === classDetail.pathway_id).map((pathway) => (
-                            <Select.Item key={pathway.id} value={String(pathway.id)} disabled={!pathway.is_enabled || !classDetail.academic_level.requires_pathway}>
-                              {pathway.name}{pathway.is_enabled ? "" : " (inactive)"}
-                            </Select.Item>
-                          ))}
-                        </Select.Group>
-                      </Select.Content>
-                    </Select>
+                    <Input readOnly value={officialSections.find((section) => section.section_name === sectionName)
+                      ? officialSections.find((section) => section.section_name === sectionName)?.pathway_name ?? "No pathway assigned"
+                      : classDetail.pathway?.name ?? "No pathway assigned"} className="bg-muted/50 text-muted-foreground text-base" />
                     {!classDetail.academic_level.requires_pathway && (
                       <Text as="p" className="mt-1 text-xs text-muted-foreground">This grade does not require a pathway in this academic year.</Text>
                     )}

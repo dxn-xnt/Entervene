@@ -30,8 +30,22 @@ class AdviserOption(BaseModel):
 
 class ClassFormOptionsResponse(BaseModel):
     academic_year: AcademicYearOption
+    academic_years: list[AcademicYearOption] = []
     academic_levels: list[AcademicLevelOption]
     eligible_advisers: list[AdviserOption]
+    official_sections: list["OfficialSectionOption"] = []
+
+
+class OfficialSectionOption(BaseModel):
+    id: int
+    academic_year_id: int
+    academic_level_id: int
+    section_name: str
+    pathway_id: int | None = None
+    pathway_name: str | None = None
+    pathway_code: str | None = None
+    is_active: bool
+    has_class: bool = False
 
 
 class ClassListItem(BaseModel):
@@ -282,6 +296,7 @@ class BatchCreateSectionRequest(BaseModel):
 
 
 class BatchCreateClassesRequest(BaseModel):
+    academic_year_id: int | None = None
     academic_level_id: int
     sections: list[BatchCreateSectionRequest]
 
@@ -314,6 +329,7 @@ class SectionDraftPayload(BaseModel):
 
 
 class DistributeStudentsRequest(BaseModel):
+    academic_year_id: int | None = None
     academic_level_id: int
     mode: Literal["alphabetical", "gwa"] = "alphabetical"
     sections: list[SectionDraftPayload]
@@ -323,6 +339,58 @@ class DistributeStudentsRequest(BaseModel):
 
 class DistributeStudentsResponse(BaseModel):
     assignments_by_section: dict[str, list[str]]
+
+
+class ExistingClassDistributionRequest(BaseModel):
+    class_ids: list[int]
+    mode: Literal["alphabetical", "gwa"] = "alphabetical"
+
+
+class ExistingClassDistributionTarget(BaseModel):
+    student_id: UUID
+    class_id: int
+
+
+class ExistingClassDistributionCommitRequest(ExistingClassDistributionRequest):
+    snapshot: str
+    assignments: list[ExistingClassDistributionTarget] | None = None
+
+
+class ExistingClassDistributionClass(BaseModel):
+    class_id: int
+    section_name: str
+    existing_count: int
+    to_add_count: int
+    final_count: int
+    male_count: int
+    female_count: int
+    unspecified_count: int
+    average_gwa: float | None = None
+
+
+class ExistingClassDistributionAssignment(BaseModel):
+    student_id: UUID
+    class_id: int
+    student_name: str
+    gender: str | None = None
+    gwa: float | None = None
+
+
+class ExistingClassDistributionPreview(BaseModel):
+    academic_year_id: int
+    academic_year_label: str
+    academic_level_id: int
+    grade_level: int
+    mode: Literal["alphabetical", "gwa"]
+    snapshot: str
+    unassigned_count: int
+    classes: list[ExistingClassDistributionClass]
+    assignments: list[ExistingClassDistributionAssignment]
+    imbalance: int
+
+
+class ExistingClassDistributionCommitResponse(ExistingClassDistributionPreview):
+    committed_count: int
 
 
 class AdvisorySubjectItem(BaseModel):

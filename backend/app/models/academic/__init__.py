@@ -11,6 +11,7 @@ from .SubjectOffering import SubjectOffering
 from .GradingTemplate import GradingTemplate
 from .GradingTemplateComponent import GradingTemplateComponent
 from .Class_         import Class
+from .OfficialSection import OfficialSection
 from .SubjectLoad    import SubjectLoad
 from .StudentCLass   import StudentClass
 from .Lesson         import Lesson

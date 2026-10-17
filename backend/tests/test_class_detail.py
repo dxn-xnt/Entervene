@@ -17,6 +17,7 @@ from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
+from app.models.academic.OfficialSection import OfficialSection
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
@@ -109,6 +110,12 @@ def add_level(db, name: str, grade: int) -> AcademicLevel:
     level = AcademicLevel(level_name=name, grade_level=grade)
     db.add(level)
     db.flush()
+    if grade == 7:
+        for year in db.query(AcademicYear).all():
+            for section_name in ("Galileo", "Newton"):
+                db.add(OfficialSection(academic_year_id=year.academic_year_id,
+                                       academic_level_id=level.academic_level_id,
+                                       section_name=section_name, normalized_name=section_name.casefold()))
     return level
 
 
@@ -935,6 +942,140 @@ def test_transfer_options_excludes_same_level_class_from_other_academic_year(cli
         {"class_id": same_year.class_id, "section_name": "Newton", "grade_level": 7,
          "pathway_id": None, "pathway_name": None, "pathway_is_enabled": None, "requires_pathway": False}
     ]
+
+
+def _grade12_distribution_fixture(db, existing_counts=(0, 0), unassigned_count=20):
+    year = add_year(db, "2025-2026")
+    level = add_level(db, "Grade 12", 12)
+    classes = [
+        Class(section_name=name, academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id)
+        for name in ("Del Mundo", "Reyes")
+    ]
+    db.add_all(classes)
+    db.flush()
+    for name in ("Del Mundo", "Reyes"):
+        db.add(OfficialSection(academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id,
+                               section_name=name, normalized_name=name.casefold()))
+    students = []
+    for index in range(sum(existing_counts) + unassigned_count):
+        student = add_student(db, level, f"{index + 1:012d}")
+        student.gender = "Male" if index % 2 == 0 else "Female"
+        student.prior_gwa = 80 + index % 15
+        students.append(student)
+    offset = 0
+    for class_, count in zip(classes, existing_counts):
+        for student in students[offset:offset + count]:
+            db.add(build_student_class_assignment(student.student_id, class_))
+        offset += count
+    db.commit()
+    return year, level, classes, students
+
+
+def test_existing_grade12_classes_preview_and_commit_evenly_without_moving_students(client, db):
+    year, _, classes, students = _grade12_distribution_fixture(db)
+    url = f"/api/v1/classes/{classes[0].class_id}"
+    payload = {"class_ids": [item.class_id for item in classes], "mode": "alphabetical"}
+    preview = client.post(f"{url}/distribution-preview", json=payload)
+    assert preview.status_code == 200
+    body = preview.json()
+    assert body["unassigned_count"] == 20
+    assert [item["final_count"] for item in body["classes"]] == [10, 10]
+    assert [sum(item["gender"] == gender for item in body["assignments"] if item["class_id"] == class_.class_id)
+            for class_ in classes for gender in ("Male", "Female")] == [5, 5, 5, 5]
+    assert db.query(StudentClass).count() == 0
+    committed = client.post(f"{url}/distribution-commit", json={**payload, "snapshot": body["snapshot"]})
+    assert committed.status_code == 200
+    assert committed.json()["committed_count"] == 20
+    assert [db.query(StudentClass).filter(StudentClass.class_id == item.class_id).count() for item in classes] == [10, 10]
+    assert db.query(StudentClass).filter(StudentClass.academic_year_id == year.academic_year_id).count() == 20
+    assert {item.student_id for item in db.query(StudentClass).all()} == {item.student_id for item in students}
+    assert client.post(f"{url}/distribution-commit", json={**payload, "snapshot": body["snapshot"]}).status_code == 409
+
+
+def test_existing_rosters_set_targets_and_stale_preview_is_rejected(client, db):
+    _, _, classes, students = _grade12_distribution_fixture(db, existing_counts=(7, 3), unassigned_count=10)
+    before = {student.student_id: db.query(StudentClass).filter(StudentClass.student_id == student.student_id).first().class_id
+              for student in students[:10]}
+    url = f"/api/v1/classes/{classes[0].class_id}"
+    payload = {"class_ids": [item.class_id for item in classes], "mode": "alphabetical"}
+    preview = client.post(f"{url}/distribution-preview", json=payload).json()
+    assert [item["to_add_count"] for item in preview["classes"]] == [3, 7]
+    db.add(build_student_class_assignment(students[10].student_id, classes[0]))
+    db.commit()
+    assert client.post(f"{url}/distribution-commit", json={**payload, "snapshot": preview["snapshot"]}).status_code == 409
+    refreshed = client.post(f"{url}/distribution-preview", json=payload).json()
+    assert client.post(f"{url}/distribution-commit", json={**payload, "snapshot": refreshed["snapshot"]}).status_code == 200
+    assert [db.query(StudentClass).filter(StudentClass.class_id == item.class_id).count() for item in classes] == [10, 10]
+    assert all(db.query(StudentClass).filter(StudentClass.student_id == student_id).one().class_id == class_id
+               for student_id, class_id in before.items())
+
+
+def test_distribution_requires_two_saved_classes_and_handles_empty_pool(client, db):
+    _, _, classes, _ = _grade12_distribution_fixture(db, unassigned_count=0)
+    url = f"/api/v1/classes/{classes[0].class_id}"
+    assert client.post(f"{url}/distribution-preview", json={"class_ids": [classes[0].class_id]}).status_code == 422
+    payload = {"class_ids": [item.class_id for item in classes], "mode": "alphabetical"}
+    preview = client.post(f"{url}/distribution-preview", json=payload)
+    assert preview.status_code == 200
+    assert preview.json()["assignments"] == []
+    assert client.post(f"{url}/distribution-commit", json={**payload, "snapshot": preview.json()["snapshot"]}).status_code == 409
+
+
+def test_distribution_includes_odd_and_unspecified_gender_students(client, db):
+    _, _, classes, students = _grade12_distribution_fixture(db, unassigned_count=5)
+    students[0].gender = None
+    db.commit()
+    body = client.post(f"/api/v1/classes/{classes[0].class_id}/distribution-preview", json={
+        "class_ids": [item.class_id for item in classes], "mode": "alphabetical",
+    }).json()
+    assert sorted(item["final_count"] for item in body["classes"]) == [2, 3]
+    assert len(body["assignments"]) == 5
+    assert any(item["gender"] is None for item in body["assignments"])
+    assert db.query(StudentClass).count() == 0
+
+
+def test_distribution_requires_real_gwa_and_does_not_fallback_silently(client, db):
+    _, _, classes, students = _grade12_distribution_fixture(db, unassigned_count=3)
+    students[0].prior_gwa = None
+    db.commit()
+    url = f"/api/v1/classes/{classes[0].class_id}/distribution-preview"
+    payload = {"class_ids": [item.class_id for item in classes], "mode": "gwa"}
+    response = client.post(url, json=payload)
+    assert response.status_code == 422
+    assert "GWA is unavailable" in response.json()["detail"]
+    assert client.post(url, json={**payload, "mode": "alphabetical"}).status_code == 200
+
+
+def test_distribution_rejects_other_year_and_pathway_based_grade(client, db):
+    year, level, classes, _ = _grade12_distribution_fixture(db, unassigned_count=2)
+    other_year = AcademicYear(year_label="2026-2027", start_date=date(2026, 6, 1), end_date=date(2027, 3, 31), is_active=False)
+    db.add(other_year)
+    db.flush()
+    future = Class(section_name="Future", academic_year_id=other_year.academic_year_id, academic_level_id=level.academic_level_id)
+    db.add(future)
+    db.commit()
+    url = f"/api/v1/classes/{classes[0].class_id}/distribution-preview"
+    assert client.post(url, json={"class_ids": [classes[0].class_id, future.class_id]}).status_code == 422
+    from app.models.academic.AcademicLevelPathwayScope import AcademicLevelPathwayScope
+    db.add(AcademicLevelPathwayScope(academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id, requires_pathway=True))
+    db.commit()
+    response = client.post(url, json={"class_ids": [item.class_id for item in classes]})
+    assert response.status_code == 422
+    assert "pathway-based" in response.json()["detail"]
+
+
+def test_distribution_commit_rolls_back_all_assignments_on_database_failure(client, db, monkeypatch):
+    _, _, classes, _ = _grade12_distribution_fixture(db, unassigned_count=4)
+    url = f"/api/v1/classes/{classes[0].class_id}"
+    payload = {"class_ids": [item.class_id for item in classes], "mode": "alphabetical"}
+    preview = client.post(f"{url}/distribution-preview", json=payload).json()
+    from sqlalchemy.exc import IntegrityError
+    def fail_commit():
+        raise IntegrityError("statement", {}, Exception("database conflict"))
+    monkeypatch.setattr(db, "commit", fail_commit)
+    response = client.post(f"{url}/distribution-commit", json={**payload, "snapshot": preview["snapshot"]})
+    assert response.status_code == 409
+    assert db.query(StudentClass).count() == 0
 
 
 def test_update_class_students_removes_and_transfers_assignments_without_deleting_students(client, db):

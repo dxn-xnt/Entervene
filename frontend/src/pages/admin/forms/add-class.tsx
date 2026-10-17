@@ -4,13 +4,13 @@ import { useState } from "react";
 import { Download, UserPlus } from "lucide-react";
 import { ApiRequestError, createClassesBatch } from "@/lib/api";
 import type {
-  BatchCreateClassesRequest,
   BatchCreateClassesResponse,
   ManualAssignmentWorkspaceState,
   ManualClassSetup,
   WizardMode,
 } from "@/types/adminClasses";
 import StudentAssignmentWorkspace from "@/components/admin/classes/assignment/StudentAssignmentWorkspace";
+import { buildBatchCreatePayload } from "./classes/build-batch-create-payload";
 import { sortAssignmentStudents } from "@/components/admin/classes/assignment/studentSorting";
 import ImportClassWizard from "@/pages/admin/forms/classes/import-class-wizard";
 import ManualClassWizard from "@/pages/admin/forms/classes/manual-class-wizard";
@@ -29,6 +29,7 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
   const [mode, setMode] = useState<WizardMode>("choice");
   const [manualSetup, setManualSetup] = useState<ManualClassSetup | null>(null);
   const [manualStep, setManualStep] = useState<"details" | "assignment" | "review">("details");
+  const [skippedStudents, setSkippedStudents] = useState(false);
   const [assignmentState, setAssignmentState] = useState<ManualAssignmentWorkspaceState | null>(null);
   const [resetWarning, setResetWarning] = useState("");
   const [saveSuccess, setSaveSuccess] = useState<BatchCreateClassesResponse | null>(null);
@@ -37,6 +38,7 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
     setMode("choice");
     setManualSetup(null);
     setManualStep("details");
+    setSkippedStudents(false);
     setAssignmentState(null);
     setResetWarning("");
     setSaveSuccess(null);
@@ -45,13 +47,19 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
 
   function continueFromDetails(setup: ManualClassSetup) {
     setSaveSuccess(null);
+    setSkippedStudents(false);
     setManualSetup(setup);
     setManualStep("assignment");
 
-    if (!assignmentState) return;
-    if (assignmentState.academicLevelId !== setup.academicLevelId) {
+    if (skippedStudents) {
       setAssignmentState(null);
-      setResetWarning("Student assignments were reset because the academic level changed.");
+      setResetWarning("");
+      return;
+    }
+    if (!assignmentState) return;
+    if (assignmentState.academicLevelId !== setup.academicLevelId || manualSetup?.academicYear.academic_year_id !== setup.academicYear.academic_year_id) {
+      setAssignmentState(null);
+      setResetWarning("Student assignments were reset because the grade or academic year changed.");
       return;
     }
 
@@ -70,15 +78,30 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
     setResetWarning("");
   }
 
+  function reviewWithoutStudents(setup: ManualClassSetup) {
+    setSaveSuccess(null);
+    setManualSetup(setup);
+    setAssignmentState({
+      academicLevelId: setup.academicLevelId,
+      unassignedStudents: [],
+      assignmentsBySection: Object.fromEntries(setup.sections.map((section) => [section.localId, []])),
+      selectedStudentIds: new Set(),
+    });
+    setSkippedStudents(true);
+    setManualStep("review");
+  }
+
   function resetManualState() {
     setManualSetup(null);
     setManualStep("details");
+    setSkippedStudents(false);
     setAssignmentState(null);
     setResetWarning("");
   }
 
   function continueFromImport(setup: ManualClassSetup, hydratedAssignmentState: ManualAssignmentWorkspaceState) {
     setSaveSuccess(null);
+    setSkippedStudents(false);
     if (manualSetup && assignmentState && sameImportedSetup(manualSetup, setup)) {
       setManualStep("assignment");
       return;
@@ -168,6 +191,7 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
               <ManualClassWizard
                 initialSetup={manualSetup}
                 onComplete={continueFromDetails}
+                onSkipStudents={reviewWithoutStudents}
                 onBack={() => setMode("choice")}
                 onClose={handleClose}
               />
@@ -185,7 +209,8 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
               <ManualReview
                 setup={manualSetup}
                 assignmentState={assignmentState}
-                onBack={() => setManualStep("assignment")}
+                skippedStudents={skippedStudents}
+                onBack={() => setManualStep(skippedStudents ? "details" : "assignment")}
                 onClose={handleClose}
                 onSaved={(result) => {
                   resetManualState();
@@ -235,6 +260,7 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
 
 function sameImportedSetup(current: ManualClassSetup, next: ManualClassSetup) {
   return current.academicLevelId === next.academicLevelId
+    && current.academicYear.academic_year_id === next.academicYear.academic_year_id
     && current.sections.length === next.sections.length
     && current.sections.every((section, index) => {
       const nextSection = next.sections[index];
@@ -243,9 +269,10 @@ function sameImportedSetup(current: ManualClassSetup, next: ManualClassSetup) {
     });
 }
 
-function ManualReview({ setup, assignmentState, onSaved, onBack, onClose }: {
+function ManualReview({ setup, assignmentState, skippedStudents, onSaved, onBack, onClose }: {
   setup: ManualClassSetup;
   assignmentState: ManualAssignmentWorkspaceState;
+  skippedStudents?: boolean;
   onBack: () => void;
   onClose: () => void;
   onSaved: (result: BatchCreateClassesResponse) => void;
@@ -295,7 +322,7 @@ function ManualReview({ setup, assignmentState, onSaved, onBack, onClose }: {
       </div>
 
       <Text as="p" className="text-sm font-bold">
-        Remaining Unassigned Students: {assignmentState.unassignedStudents.length}
+        {skippedStudents ? "Students can be assigned after the classes are saved." : `Remaining Unassigned Students: ${assignmentState.unassignedStudents.length}`}
       </Text>
 
       {saveError && (
@@ -355,54 +382,6 @@ function ManualSaveSuccess({ result, onDone }: { result: BatchCreateClassesRespo
       </div>
     </div>
   );
-}
-
-function buildBatchCreatePayload(setup: ManualClassSetup, assignmentState: ManualAssignmentWorkspaceState): { ok: true; payload: BatchCreateClassesRequest } | { ok: false; errors: string[] } {
-  const errors: string[] = [];
-  if (!setup.academicLevelId) errors.push("Select an academic level.");
-  if (!setup.sections.length) errors.push("Add at least one section.");
-  if (assignmentState.unassignedStudents.length > 0) errors.push("Assign all students to a section before saving.");
-
-  const sectionNames = new Map<string, string>();
-  const adviserIds = new Set<string>();
-  const studentIds = new Set<string>();
-  const sections = setup.sections.map((section) => {
-    const sectionName = section.sectionName.trim();
-    const normalizedSectionName = sectionName.toLocaleLowerCase();
-    const adviserStaffId = section.adviserStaffId.trim();
-    const assignedStudents = assignmentState.assignmentsBySection[section.localId] ?? [];
-
-    if (!sectionName) errors.push("Every section must have a section name.");
-    else if (sectionNames.has(normalizedSectionName)) errors.push(`Section name "${sectionName}" is duplicated.`);
-    else sectionNames.set(normalizedSectionName, sectionName);
-
-    if (!adviserStaffId) errors.push(`Select an adviser for ${sectionName || "each section"}.`);
-    else if (adviserIds.has(adviserStaffId)) errors.push("Each adviser can only be assigned to one submitted section.");
-    else adviserIds.add(adviserStaffId);
-
-    if (assignedStudents.length === 0) errors.push(`${sectionName || "Each section"} must contain at least one student.`);
-    const submittedStudentIds = assignedStudents.map((student) => {
-      if (!isUuid(student.student_id) || student.student_id === student.student_lrn) {
-        errors.push(`${student.first_name} ${student.last_name} is missing a valid student UUID.`);
-      }
-      if (studentIds.has(student.student_id)) errors.push(`${student.first_name} ${student.last_name} is assigned to more than one section.`);
-      studentIds.add(student.student_id);
-      return student.student_id;
-    });
-
-    return {
-      section_name: sectionName,
-      adviser_staff_id: adviserStaffId,
-      pathway: section.pathway || "general",
-      student_ids: submittedStudentIds,
-    };
-  });
-
-  return errors.length ? { ok: false, errors: [...new Set(errors)] } : { ok: true, payload: { academic_level_id: setup.academicLevelId, sections } };
-}
-
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function errorToSaveError(error: unknown): SaveErrorState {

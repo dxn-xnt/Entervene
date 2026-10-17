@@ -23,6 +23,10 @@ from app.schemas.Class import (
     ValidateClassImportResponse,
     DistributeStudentsRequest,
     DistributeStudentsResponse,
+    ExistingClassDistributionRequest,
+    ExistingClassDistributionCommitRequest,
+    ExistingClassDistributionPreview,
+    ExistingClassDistributionCommitResponse,
 )
 from app.services.classes.ClassService import archive_class_record, batch_create_classes, update_class_record
 from app.services.classes.ClassImportService import validate_class_import_file
@@ -38,7 +42,10 @@ from app.services.classes.ClassQueryService import (
     list_classes_data,
 )
 from app.services.classes.ClassStudentService import update_class_student_assignments
-from app.services.classes.StudentDistributionService import distribute_students_balanced
+from app.services.classes.StudentDistributionService import distribute_students_balanced, resolve_student_gwa
+from app.services.classes.ExistingClassDistributionService import preview_existing_class_distribution, commit_existing_class_distribution
+from app.schemas.OfficialSection import OfficialSectionCreate, OfficialSectionUpdate, OfficialSectionRead, OfficialSectionList
+from app.services.classes.OfficialSectionService import list_official_sections, create_official_section, update_official_section
 
 # CLASS MANAGEMENT FLOW
 # 1. The admin frontend sends a request to one of the endpoints in this file.
@@ -55,10 +62,40 @@ router = APIRouter()
 # Data used by the admin class-creation form: active year, levels, and advisers.
 @router.get("/form-options", response_model=ClassFormOptionsResponse)
 def get_class_form_options(
+    academic_year_id: int | None = Query(None),
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    return get_class_form_options_data(db=db)
+    return get_class_form_options_data(db=db, academic_year_id=academic_year_id)
+
+
+@router.get("/official-sections", response_model=OfficialSectionList)
+def get_official_sections(
+    academic_year_id: int = Query(...),
+    academic_level_id: int | None = Query(None),
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return list_official_sections(db, academic_year_id, academic_level_id)
+
+
+@router.post("/official-sections", response_model=OfficialSectionRead, status_code=201)
+def add_official_section(
+    payload: OfficialSectionCreate,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return create_official_section(db, payload)
+
+
+@router.patch("/official-sections/{section_id}", response_model=OfficialSectionRead)
+def edit_official_section(
+    section_id: int,
+    payload: OfficialSectionUpdate,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return update_official_section(db, section_id, payload)
 
 
 @router.get("", response_model=ClassListResponse)
@@ -103,6 +140,13 @@ def distribute_students(
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
+    if payload.mode == "gwa":
+        student_ids = set(payload.unassigned_student_ids)
+        for assignments in payload.assignments_by_section.values():
+            student_ids.update(assignments)
+        missing = sum(resolve_student_gwa(db, student_id, payload.academic_year_id) is None for student_id in student_ids)
+        if missing:
+            raise HTTPException(status_code=422, detail=f"GWA is unavailable for {missing} student(s). Choose alphabetical distribution or complete their prior grades.")
     assignments = distribute_students_balanced(
         db=db,
         academic_level_id=payload.academic_level_id,
@@ -110,8 +154,32 @@ def distribute_students(
         unassigned_student_ids=payload.unassigned_student_ids,
         current_assignments=payload.assignments_by_section,
         mode=payload.mode,
+        academic_year_id=payload.academic_year_id,
     )
     return DistributeStudentsResponse(assignments_by_section=assignments)
+
+
+@router.post("/{class_id}/distribution-preview", response_model=ExistingClassDistributionPreview)
+def preview_saved_class_distribution(
+    class_id: int,
+    payload: ExistingClassDistributionRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return preview_existing_class_distribution(db, class_id, payload.class_ids, payload.mode)
+
+
+@router.post("/{class_id}/distribution-commit", response_model=ExistingClassDistributionCommitResponse)
+def commit_saved_class_distribution(
+    class_id: int,
+    payload: ExistingClassDistributionCommitRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return commit_existing_class_distribution(
+        db, class_id, payload.class_ids, payload.mode, payload.snapshot,
+        [(item.student_id, item.class_id) for item in payload.assignments] if payload.assignments is not None else None,
+    )
 
 
 # These students can be selected during class creation because they do not yet
@@ -119,10 +187,12 @@ def distribute_students(
 @router.get("/unassigned-students", response_model=UnassignedStudentsResponse)
 def get_unassigned_students(
     academic_level_id: int = Query(...),
+    class_id: int | None = Query(None),
+    academic_year_id: int | None = Query(None),
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    return get_unassigned_students_data(db=db, academic_level_id=academic_level_id)
+    return get_unassigned_students_data(db=db, academic_level_id=academic_level_id, class_id=class_id, academic_year_id=academic_year_id)
 
 
 @router.get("/{class_id}/students", response_model=ClassStudentListResponse)

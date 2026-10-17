@@ -70,6 +70,15 @@ def resolve_active_academic_year(db: Session) -> AcademicYear:
     return active_years[0]
 
 
+def resolve_class_academic_year(db: Session, academic_year_id: int | None) -> AcademicYear:
+    if academic_year_id is None:
+        return resolve_active_academic_year(db)
+    year = db.get(AcademicYear, academic_year_id)
+    if year is None:
+        raise ClassManagementError(status_code=404, message="Academic year not found.", code="academic_year_not_found")
+    return year
+
+
 def eligible_advisers_query(db: Session):
     # Adviser eligibility is derived from both the staff profile and its active
     # teacher account; a staff row alone is not enough for admin assignment.

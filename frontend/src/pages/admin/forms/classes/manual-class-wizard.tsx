@@ -2,12 +2,11 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getClassFormOptions, fetchPathways, type AcademicPathwayRead } from "@/lib/api";
+import { getClassFormOptions } from "@/lib/api";
 import type { AdviserOption, ClassFormOptions, ManualClassSetup, ManualSectionDraft } from "@/types/adminClasses";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
-import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
@@ -33,17 +32,18 @@ function adviserName(adviser?: AdviserOption) {
   return [adviser.first_name, adviser.middle_name, adviser.last_name, adviser.suffix].filter(Boolean).join(" ");
 }
 
-export default function ManualClassWizard({ initialSetup, onComplete, onBack, onClose }: {
+export default function ManualClassWizard({ initialSetup, onComplete, onSkipStudents, onBack, onClose }: {
   initialSetup: ManualClassSetup | null;
   onComplete: (setup: ManualClassSetup) => void;
+  onSkipStudents: (setup: ManualClassSetup) => void;
   onBack: () => void;
   onClose: () => void;
 }) {
   const [options, setOptions] = useState<ClassFormOptions | null>(null);
-  const [activePathways, setActivePathways] = useState<AcademicPathwayRead[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [academicLevelId, setAcademicLevelId] = useState(initialSetup?.academicLevelId ? String(initialSetup.academicLevelId) : "");
+  const [selectedYearId, setSelectedYearId] = useState(initialSetup?.academicYear.academic_year_id ? String(initialSetup.academicYear.academic_year_id) : "");
   const [sections, setSections] = useState<ManualSectionDraft[]>(initialSetup?.sections ?? [createSectionDraft()]);
   const [errors, setErrors] = useState<SetupErrors>({ sectionRows: {} });
   const [retryKey, setRetryKey] = useState(0);
@@ -51,21 +51,16 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([getClassFormOptions(), fetchPathways(true)])
-      .then(([classData, pathwayData]) => {
+    getClassFormOptions(selectedYearId ? Number(selectedYearId) : undefined)
+      .then((classData) => {
         if (cancelled) return;
         setOptions(classData);
-        const active = pathwayData.pathways || [];
-        setActivePathways(active);
+        if (!selectedYearId) setSelectedYearId(String(classData.academic_year.academic_year_id));
         const defaultLevelId = initialSetup?.academicLevelId ? String(initialSetup.academicLevelId) : String(classData.academic_levels[0]?.academic_level_id ?? "");
         setAcademicLevelId((current) => current || defaultLevelId);
 
         if (!initialSetup?.sections) {
-          const initialLevel = classData.academic_levels.find((l) => String(l.academic_level_id) === (academicLevelId || defaultLevelId));
-          const isSHS = initialLevel ? initialLevel.grade_level >= 11 : false;
-          const needsPw = isSHS && (initialLevel?.requires_pathway ?? false) && active.length > 0;
-          const initialPathway = needsPw ? (active[0]?.code || "general") : "general";
-          setSections([createSectionDraft("", "", initialPathway)]);
+          setSections((current) => current.length ? current : [createSectionDraft()]);
         }
       })
       .catch((error: unknown) => {
@@ -78,7 +73,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
     return () => {
       cancelled = true;
     };
-  }, [retryKey]);
+  }, [retryKey, selectedYearId]);
 
   function retryLoading() {
     setLoading(true);
@@ -90,6 +85,19 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
   const isSeniorHigh = selectedLevel ? selectedLevel.grade_level >= 11 : false;
   const needsPathway = isSeniorHigh && (selectedLevel?.requires_pathway ?? false);
   const showPathwayColumn = needsPathway;
+  const configuredSections = (options?.official_sections ?? []).filter((section) => section.academic_level_id === Number(academicLevelId) && section.is_active);
+  const availableSections = configuredSections.filter((section) => !section.has_class);
+  const selectedSectionNames = new Set(sections.map((section) => section.sectionName).filter(Boolean));
+  const nextUnusedSection = availableSections.find((section) => !selectedSectionNames.has(section.section_name));
+  const canAddSection = sections.every((section) => Boolean(section.sectionName)) && Boolean(nextUnusedSection);
+
+  function addSection() {
+    setSections((current) => {
+      if (current.some((section) => !section.sectionName)) return current;
+      const next = availableSections.find((option) => !current.some((section) => section.sectionName === option.section_name));
+      return next ? [...current, createSectionDraft(next.section_name, "", next.pathway_code || "general")] : current;
+    });
+  }
 
   function updateSection(localId: string, changes: Partial<ManualSectionDraft>) {
     setSections((current) => current.map((section) => section.localId === localId ? { ...section, ...changes } : section));
@@ -98,7 +106,11 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
   function validate() {
     const nextErrors: SetupErrors = { sectionRows: {} };
     if (!academicLevelId) nextErrors.academicLevel = "Select an academic level.";
-    if (needsPathway && !activePathways.length) nextErrors.academicLevel = "No enabled pathways are configured for this grade.";
+    if (!configuredSections.length) {
+      nextErrors.academicLevel = "No official sections are configured for this grade and academic year. Configure them in System Settings or use another year.";
+    } else if (!availableSections.length) {
+      nextErrors.academicLevel = `All configured ${selectedLevel?.level_name || "Grade"} sections for this academic year already have classes. You can manage the existing classes or configure another authorized section.`;
+    }
     if (!sections.length) nextErrors.sections = "Add at least one section.";
 
     const names = new Map<string, string>();
@@ -109,6 +121,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
       const normalizedName = trimmedName.toLocaleLowerCase();
 
       if (!trimmedName) rowErrors.sectionName = "Enter a section name.";
+      else if (!availableSections.some((option) => option.section_name === trimmedName && option.pathway_code === (section.pathway === "general" ? null : section.pathway))) rowErrors.sectionName = "Select an available official section.";
       else if (names.has(normalizedName)) rowErrors.sectionName = `Section name duplicates "${names.get(normalizedName)}".`;
       else names.set(normalizedName, trimmedName);
       if (!section.adviserStaffId) rowErrors.adviserStaffId = "Select an adviser.";
@@ -121,18 +134,18 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
     return !nextErrors.academicLevel && !nextErrors.sections && Object.keys(nextErrors.sectionRows).length === 0;
   }
 
-  function continueToStudents() {
+  function completeDetails(next: (setup: ManualClassSetup) => void) {
     if (!options || !validate()) return;
     const level = options.academic_levels.find((item) => item.academic_level_id === Number(academicLevelId));
     if (!level) return;
-    onComplete({
+    next({
       academicLevelId: level.academic_level_id,
       academicLevelName: level.level_name,
       academicYear: options.academic_year,
       sections: sections.map((section) => ({
         ...section,
         sectionName: section.sectionName.trim(),
-        pathway: showPathwayColumn ? (section.pathway || activePathways[0]?.code || "general") : "general",
+        pathway: availableSections.find((option) => option.section_name === section.sectionName)?.pathway_code || "general",
         adviserName: adviserName(options.eligible_advisers.find((adviser) => adviser.staff_id === section.adviserStaffId)),
       })),
     });
@@ -155,6 +168,20 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
 
   return (
     <div className="grid gap-5">
+      <Field label="Academic Year">
+        <Select value={selectedYearId} onValueChange={(value) => {
+          setSelectedYearId(value);
+          setOptions(null);
+          setLoading(true);
+          setSections([createSectionDraft()]);
+          setErrors({ sectionRows: {} });
+        }}>
+          <Select.Trigger className="w-full"><Select.Value placeholder="Select academic year" /></Select.Trigger>
+          <Select.Content><Select.Group>
+            {(options.academic_years ?? [options.academic_year]).map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}</Select.Item>)}
+          </Select.Group></Select.Content>
+        </Select>
+      </Field>
       {noAdvisers && (
         <div className="rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-200 font-semibold">
           All advisers are currently assigned for the active academic year. You can create sections after freeing an adviser slot.
@@ -168,15 +195,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
           onChange={(e) => {
             const newLevelId = e.target.value;
             setAcademicLevelId(newLevelId);
-            const nextLvl = options.academic_levels.find((item) => String(item.academic_level_id) === newLevelId);
-            const isSHS = nextLvl ? nextLvl.grade_level >= 11 : false;
-            const needsPw = isSHS && (nextLvl?.requires_pathway ?? false) && activePathways.length > 0;
-            const targetPathway = needsPw ? (activePathways[0]?.code || "general") : "general";
-            if (needsPw) {
-              setSections((current) => current.map((s) => ({ ...s, pathway: activePathways.some((p) => p.code === s.pathway) ? s.pathway : targetPathway })));
-            } else {
-              setSections((current) => current.map((s) => ({ ...s, pathway: "general" })));
-            }
+            setSections((current) => current.map((s) => ({ ...s, sectionName: "", pathway: "general" })));
           }}
         >
           <Select.Trigger className="w-full">
@@ -193,8 +212,11 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
           </Select.Content>
         </Select>
         {errors.academicLevel && <InlineError message={errors.academicLevel} />}
-        {needsPathway && !activePathways.length && (
-          <InlineError message="No enabled academic pathways are configured. Enable one in System Settings before creating this class." />
+        {!configuredSections.length && (
+          <InlineError message="No official sections are configured for this grade and academic year. Configure them in System Settings or use another year." />
+        )}
+        {configuredSections.length > 0 && !availableSections.length && (
+          <InlineError message={`All configured ${selectedLevel?.level_name || "Grade"} sections for this academic year already have classes. You can manage the existing classes or configure another authorized section.`} />
         )}
       </Field>
 
@@ -222,32 +244,22 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
           return (
             <div key={section.localId} className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} items-start gap-2`}>
               <div>
-                <Input
-                  value={section.sectionName}
-                  onChange={(event) => updateSection(section.localId, { sectionName: event.target.value })}
-                  placeholder="e.g. Sapphire"
-                />
+                <Select value={section.sectionName} onValueChange={(name) => {
+                  const chosen = availableSections.find((option) => option.section_name === name);
+                  updateSection(section.localId, { sectionName: name, pathway: chosen?.pathway_code || "general" });
+                }}>
+                  <Select.Trigger className="w-full"><Select.Value placeholder="Select official section" /></Select.Trigger>
+                  <Select.Content><Select.Group>
+                    {availableSections
+                      .filter((option) => option.section_name === section.sectionName || !sections.some((other) => other.localId !== section.localId && other.sectionName === option.section_name))
+                      .map((option) => <Select.Item key={option.id} value={option.section_name}>{option.section_name}{option.pathway_name ? ` — ${option.pathway_name}` : ""}</Select.Item>)}
+                  </Select.Group></Select.Content>
+                </Select>
                 {rowErrors?.sectionName && <InlineError message={rowErrors.sectionName} />}
               </div>
               {showPathwayColumn && (
                 <div>
-                  <Select
-                    value={section.pathway || activePathways[0]?.code || "general"}
-                    onValueChange={(val) => updateSection(section.localId, { pathway: val })}
-                  >
-                    <Select.Trigger className="w-full">
-                      <Select.Value placeholder="Select pathway" />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Group>
-                        {activePathways.map((p) => (
-                          <Select.Item key={p.id} value={p.code}>
-                            {p.name}
-                          </Select.Item>
-                        ))}
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>
+                  <div className="flex min-h-10 items-center border-2 border-black px-2 text-xs">{availableSections.find((option) => option.section_name === section.sectionName)?.pathway_name ?? "Choose a section"}</div>
                 </div>
               )}
               <div>
@@ -294,9 +306,10 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
         <Button
           variant={"outline"}
           className="w-fit mt-1"
-          onClick={() => setSections((current) => [...current, createSectionDraft("", "", showPathwayColumn ? (activePathways[0]?.code || "general") : "general")])}
+          disabled={!canAddSection}
+          onClick={addSection}
         >
-          <Plus className="size-4 mr-2" />Add Another Section
+          <Plus className="size-4 mr-2" />{nextUnusedSection ? "Add Another Section" : "All Available Sections Added"}
         </Button>
       </section>
 
@@ -305,11 +318,18 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack, on
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={onBack}>Back</Button>
           <Button
-            variant="default"
-            disabled={noLevels || noAdvisers || (needsPathway && !activePathways.length)}
-            onClick={continueToStudents}
+            variant="outline"
+            disabled={noLevels || noAdvisers || !availableSections.length}
+            onClick={() => completeDetails(onSkipStudents)}
           >
-            Next
+            Review without Students
+          </Button>
+          <Button
+            variant="default"
+            disabled={noLevels || noAdvisers || !availableSections.length}
+            onClick={() => completeDetails(onComplete)}
+          >
+            Assign Students
           </Button>
         </div>
       </Dialog.Footer>
