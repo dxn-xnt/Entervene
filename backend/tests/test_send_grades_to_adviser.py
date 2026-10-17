@@ -134,29 +134,27 @@ def adviser_send_context():
     )
     db.add_all([user, sub_user])
 
-    subject = Subject(
-        subject_name="Science 7",
-        subject_codename="SCI7",
-        academic_level_id=level.academic_level_id,
-    )
-    db.add(subject)
-    db.flush()
-
     template = GradingTemplate(
         template_name="Configured adviser-send weights",
-        subject_id=subject.subject_id,
-        academic_level_id=level.academic_level_id,
+        passing_threshold=85,
         status="active",
         components=[
             GradingTemplateComponent(component_name=name, weight=Decimal(weight), display_order=index)
             for index, (name, weight) in enumerate(
-                (("Written Works", "30"), ("Performance Tasks", "50"), ("Exams", "20")), start=1,
+                (("Written Work", "30"), ("Performance Tasks", "50"), ("Exams", "20")), start=1,
             )
         ],
     )
     db.add(template)
     db.flush()
-    subject.default_grading_template = str(template.grading_template_id)
+    subject = Subject(
+        subject_name="Science 7",
+        subject_codename="SCI7",
+        academic_level_id=level.academic_level_id,
+        grading_template_id=template.grading_template_id,
+    )
+    db.add(subject)
+    db.flush()
 
     class_ = Class(
         section_name="Diamond",
@@ -743,20 +741,19 @@ def grade_send_comparison_context(adviser_send_context):
     ctx = adviser_send_context
     template = GradingTemplate(
         template_name="Scope comparison 20-50-30",
-        subject_id=ctx["subject"].subject_id,
-        academic_level_id=ctx["subject"].academic_level_id,
+        passing_threshold=85,
         status="active",
         components=[
             GradingTemplateComponent(component_name=name, weight=Decimal(weight), display_order=index)
             for index, (name, weight) in enumerate(
-                (("Written Works", "20"), ("Performance Tasks", "50"), ("Exams", "30")),
+                (("Written Work", "20"), ("Performance Tasks", "50"), ("Exams", "30")),
                 start=1,
             )
         ],
     )
     ctx["db"].add(template)
     ctx["db"].flush()
-    ctx["subject"].default_grading_template = str(template.grading_template_id)
+    ctx["subject"].grading_template_id = template.grading_template_id
     ctx["db"].commit()
     return ctx
 

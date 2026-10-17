@@ -22,7 +22,8 @@ from app.models.people.AcademicStaff import AcademicStaff
 from app.models.auth.UserAccount import UserAccount
 from app.models.settings.Setting import Setting, SettingType
 from app.models.academic.PeriodTemplateSlot import PeriodTemplateSlot
-from app.models.academic.SubjectGroup import SubjectGroup
+from app.models.academic.GradingTemplate import GradingTemplate
+from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 
 
 TABLES = [
@@ -36,7 +37,8 @@ TABLES = [
     AcademicStaff.__table__,
     SubjectLoad.__table__,
     UserAccount.__table__,
-    SubjectGroup.__table__,
+    GradingTemplate.__table__,
+    GradingTemplateComponent.__table__,
     PeriodTemplateSlot.__table__,
 ]
 
@@ -50,6 +52,20 @@ def db():
     )
     Base.metadata.create_all(bind=engine)
     session = sessionmaker(bind=engine)()
+
+    template = GradingTemplate(
+        grading_template_id=1,
+        template_name="Core",
+        passing_threshold=87.0,
+        status="active",
+    )
+    template.components = [
+        GradingTemplateComponent(component_name="Written Work", weight=20.0, display_order=1),
+        GradingTemplateComponent(component_name="Performance Tasks", weight=50.0, display_order=2),
+        GradingTemplateComponent(component_name="Exams", weight=30.0, display_order=3),
+    ]
+    session.add(template)
+    session.commit()
     
     def _override_get_db():
         try:

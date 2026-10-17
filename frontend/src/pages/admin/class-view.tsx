@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BookOpen, Pencil, Users } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/retroui/Accordion";
@@ -16,7 +16,6 @@ import { Input } from "@/components/retroui/Input";
 import { Loader } from "@/components/retroui/Loader";
 import { Tabs } from "@/components/retroui/Tabs";
 import { Text } from "@/components/retroui/Text";
-import { OverviewCard } from "@/components/overview-cards";
 import EditClassModal from "@/pages/admin/forms/classes/edit-class";
 import EditStudentListModal from "@/pages/admin/forms/classes/edit-student-list";
 import {
@@ -103,7 +102,15 @@ export default function AdminClassDetail() {
   const toast = useToast();
   const { classId } = useParams();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<DetailTab>("classes");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const actionParam = searchParams.get("action");
+  const [tab, setTab] = useState<DetailTab>(() => {
+    if (tabParam === "students" || tabParam === "subjects" || tabParam === "classes") {
+      return tabParam;
+    }
+    return "classes";
+  });
   const [classDetail, setClassDetail] = useState<ClassDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -172,6 +179,67 @@ export default function AdminClassDetail() {
       isMounted = false;
     };
   }, [classId, tab]);
+
+  useEffect(() => {
+    if (tabParam === "students" || tabParam === "subjects" || tabParam === "classes") {
+      setTab(tabParam);
+    }
+  }, [tabParam]);
+
+  const autoOpenedActionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    autoOpenedActionRef.current = null;
+  }, [classId]);
+
+  useEffect(() => {
+    if (!classDetail || isLoading) return;
+    const currentClassId = String(classDetail.class_id);
+    if (classId !== currentClassId) return;
+
+    if (actionParam === "manage-students") {
+      const isArchivedClass = normalizedClassStatus(classDetail.class_status) === "Archived";
+      const key = `${currentClassId}:manage-students`;
+
+      if (autoOpenedActionRef.current === key || isArchivedClass) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("action");
+          return next;
+        }, { replace: true });
+        return;
+      }
+
+      autoOpenedActionRef.current = key;
+      setTab("students");
+
+      async function triggerOpenEdit() {
+        if (!classDetail) return;
+        setTransferOptionsError("");
+        try {
+          const [studentData, options, available] = await Promise.all([
+            loadClassRoster(classDetail.class_id),
+            getClassTransferOptions(classDetail.class_id),
+            getUnassignedClassStudents(classDetail.academic_level.academic_level_id, classDetail.class_id),
+          ]);
+          setClassStudents(studentData);
+          setTransferOptions(options.available_sections);
+          setAvailableStudents(available.students);
+          setShowEditStudents(true);
+        } catch {
+          setTransferOptionsError("Unable to load student edit options.");
+        } finally {
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("action");
+            return next;
+          }, { replace: true });
+        }
+      }
+
+      void triggerOpenEdit();
+    }
+  }, [actionParam, classDetail, classId, isLoading, setSearchParams]);
 
   useEffect(() => {
     setClassStudents(null);
@@ -362,7 +430,7 @@ export default function AdminClassDetail() {
                 )}
 
                 {/* Class identity banner */}
-                <RetroCard className="bg-primary p-4">
+                <RetroCard className="bg-primary p-3.5 sm:p-4">
                   <div className="flex flex-col gap-1">
                     <div className="flex flex-row items-start gap-3 justify-between">
                       <Text as="h2" className="font-sans text-2xl font-bold">
@@ -372,11 +440,17 @@ export default function AdminClassDetail() {
                         {selectedClass.status}
                       </Badge>
                     </div>
-                    <Text as="p" className="text-sm font-normal">
-                      {selectedClass.grade} - {selectedClass.academicYear} | Active since{" "}
-                      {activeSince}
-                    </Text>
-                    {pathwayLabel && <Text as="p" className="text-sm font-semibold">Academic Pathway: {pathwayLabel}</Text>}
+                    <div className="flex flex-wrap items-center gap-x-2 text-xs sm:text-sm font-medium">
+                      <span>{selectedClass.grade} · AY {selectedClass.academicYear}</span>
+                      <span>•</span>
+                      <span>Active since {activeSince}</span>
+                      {pathwayLabel && (
+                        <>
+                          <span>•</span>
+                          <span className="font-semibold">{pathwayLabel}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </RetroCard>
 
@@ -521,9 +595,10 @@ function OverviewTab({
               Average mastery per subject load
             </Text>
             <div className="grid gap-2">
-              {(classSubjects.length > 0 ? classSubjects : selectedClass.subjects).map((subject: any, index: number) => {
+              {(classSubjects.length > 0 ? classSubjects : selectedClass.subjects).map((subjectItem, index: number) => {
+                const subject = subjectItem as { subject?: string; name?: string; progress?: number };
                 const name = subject.subject || subject.name || "Subject";
-                const progress = (subject as any).progress || 90;
+                const progress = subject.progress || 90;
                 return (
                   <div key={name} className="grid grid-cols-[80px_1fr_34px] items-center gap-2 text-xs">
                     <span className="truncate font-semibold">{name}</span>
@@ -653,26 +728,50 @@ function StudentsTab({
     .filter((student) => !searchTerm || student.full_name.toLocaleLowerCase().includes(searchTerm))
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
   const groupedStudents = groupClassStudents(filteredStudents);
+  const totalCount = studentData?.summary.total_students ?? students.length;
+  const genderCounts = studentData?.summary.gender_counts;
+  const genderSummary = genderCounts
+    ? [
+        genderCounts.male ? `${genderCounts.male} male${genderCounts.male !== 1 ? "s" : ""}` : null,
+        genderCounts.female ? `${genderCounts.female} female${genderCounts.female !== 1 ? "s" : ""}` : null,
+        genderCounts.other ? `${genderCounts.other} other` : null,
+        genderCounts.unspecified ? `${genderCounts.unspecified} unspecified` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : null;
 
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-4">
-        <OverviewCard title="Total Students" count={String(studentData?.summary.total_students ?? 0)} />
-      </div>
-
+    <div className="grid gap-3">
       <section className="flex flex-col gap-3">
-        <div className="flex w-full flex-row gap-2 items-end justify-between">
-          <Text as="h3" className="w-full font-sans text-xl font-bold">
-            Students
-          </Text>
-          <div className="flex flex-row gap-2 w-full">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b-2 border-border/70">
+          <div className="flex flex-wrap items-baseline gap-2">
+            <Text as="h3" className="font-sans text-xl font-bold">
+              Students
+            </Text>
+            <span className="text-sm font-bold text-foreground">
+              — {totalCount} enrolled
+            </span>
+            {genderSummary && (
+              <span className="text-xs font-semibold text-muted-foreground">
+                ({genderSummary})
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center w-full sm:w-auto">
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search students..."
-              className="h-10 max-w-100 w-full !bg-white"
+              className="h-9 sm:w-64 w-full !bg-white"
             />
-            {!isReadOnly && <Button onClick={onEdit} className="whitespace-nowrap">Add / Manage Students</Button>}
+            {!isReadOnly && (
+              <Button onClick={onEdit} size="sm" className="whitespace-nowrap font-bold h-9">
+                <Users className="size-4 mr-1.5" />
+                Add / Manage Students
+              </Button>
+            )}
           </div>
         </div>
 
@@ -803,7 +902,8 @@ function StudentsTab({
   );
 }
 
-function SubjectLoadTab({ selectedClass: _selectedClass }: { selectedClass?: ClassRecord }) {
+function SubjectLoadTab({ selectedClass }: { selectedClass?: ClassRecord }) {
+  void selectedClass;
   const { classId } = useParams();
   const [scheduleData, setScheduleData] = useState<DynamicScheduleResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);

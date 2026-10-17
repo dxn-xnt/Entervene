@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from app.core.Dependencies import require_role
 from app.db.Session import get_db
 from app.schemas.GradingTemplate import (
-    GradingTemplateCreate,
     GradingTemplateFormOptions,
+    GradingTemplateCreate,
     GradingTemplateListResponse,
     GradingTemplateResponse,
     GradingTemplateUpdate,
@@ -16,14 +16,21 @@ from app.services.grading_templates.GradingTemplateQueryService import (
     list_grading_templates_data,
 )
 from app.services.grading_templates.GradingTemplateService import (
-    archive_grading_template_record,
     create_grading_template_record,
-    restore_grading_template_record,
     update_grading_template_record,
 )
 
 
 router = APIRouter()
+
+
+@router.post("", response_model=GradingTemplateResponse, status_code=201)
+def create_grading_template(
+    payload: GradingTemplateCreate,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return create_grading_template_record(db=db, payload=payload)
 
 
 @router.get("/form-options", response_model=GradingTemplateFormOptions)
@@ -61,15 +68,6 @@ def get_grading_template_detail(
     return get_grading_template_detail_data(db=db, grading_template_id=grading_template_id)
 
 
-@router.post("", response_model=GradingTemplateResponse, status_code=201)
-def create_grading_template(
-    payload: GradingTemplateCreate,
-    current_user: dict = Depends(require_role("admin")),
-    db: Session = Depends(get_db),
-):
-    return create_grading_template_record(db=db, payload=payload)
-
-
 @router.patch("/{grading_template_id}", response_model=GradingTemplateResponse)
 def update_grading_template(
     grading_template_id: int,
@@ -78,21 +76,3 @@ def update_grading_template(
     db: Session = Depends(get_db),
 ):
     return update_grading_template_record(db=db, grading_template_id=grading_template_id, payload=payload)
-
-
-@router.patch("/{grading_template_id}/archive", response_model=GradingTemplateResponse)
-def archive_grading_template(
-    grading_template_id: int,
-    current_user: dict = Depends(require_role("admin")),
-    db: Session = Depends(get_db),
-):
-    return archive_grading_template_record(db=db, grading_template_id=grading_template_id)
-
-
-@router.patch("/{grading_template_id}/restore", response_model=GradingTemplateResponse)
-def restore_grading_template(
-    grading_template_id: int,
-    current_user: dict = Depends(require_role("admin")),
-    db: Session = Depends(get_db),
-):
-    return restore_grading_template_record(db=db, grading_template_id=grading_template_id)

@@ -94,8 +94,7 @@ export default function AdminSubjectLevel() {
         [
           subject.subject_name,
           subject.subject_codename,
-          subject.subject_group?.name,
-          subject.default_grading_template,
+          subject.grading_template.template_name,
         ].some((value) => value?.toLowerCase().includes(query));
       return matchesStatus && matchesSearch;
     });
@@ -111,7 +110,7 @@ export default function AdminSubjectLevel() {
     (subject) => subject.status === "archived",
   );
   const totalGroups = new Set(
-    gradeSubjects.map((s) => s.subject_group?.name).filter(Boolean),
+    gradeSubjects.map((s) => s.grading_template.template_name).filter(Boolean),
   ).size;
 
   const handleArchive = async () => {
@@ -199,7 +198,7 @@ export default function AdminSubjectLevel() {
                   title="Archived Subjects"
                   count={String(archivedSubjects.length)}
                 />
-                <OverviewCard title="Subject Groups" count={String(totalGroups)} />
+                <OverviewCard title="Grading Templates" count={String(totalGroups)} />
               </div>
             </section>
 
@@ -254,9 +253,9 @@ export default function AdminSubjectLevel() {
                       status={subject.status}
                       isArchived={subject.status === "archived"}
                       subjectCode={subject.subject_codename || "No code"}
-                      subjectGroup={subject.subject_group?.name || "Ungrouped"}
+                      subjectGroup={subject.grading_template.template_name}
                       gradingTemplate={
-                        subject.default_grading_template || "No template"
+                        subject.grading_template.template_name
                       }
                       onView={() =>
                         navigate(

@@ -72,8 +72,7 @@ DEFAULTS: list[tuple[str, str, SettingType, str, bool, str]] = [
     ),
 
     # ── Passing Thresholds ──
-    # NOTE: subject_passing_grade has been removed — per-group thresholds are
-    # now stored on the subject_groups table and resolved at finalization time.
+    # Subject passing thresholds come from each subject's grading template.
     (
         "general_average_passing_grade",
         "80",
@@ -194,7 +193,7 @@ OBSOLETE_KEYS = [
     "session_timeout_minutes",
     "max_login_attempts",
     "max_file_upload_mb",
-    # Superseded by SubjectGroup.passing_threshold (per-group, managed in System Settings)
+    # Superseded by GradingTemplate.passing_threshold.
     "subject_passing_grade",
 ]
 

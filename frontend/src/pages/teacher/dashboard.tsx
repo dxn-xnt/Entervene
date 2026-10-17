@@ -56,7 +56,7 @@ const defaultTeacherCards: OverviewCardData[] = [
   {
     title: "Passing Rate",
     count: "—",
-    statDescription: "Against each subject group's passing grade. Passing grade is set per subject group.",
+    statDescription: "Against each subject's grading template passing grade. Passing grade is set by the subject grading template.",
   },
   {
     title: "Late Submissions",
@@ -249,7 +249,7 @@ export default function Dashboard() {
           : gradeCoverage,
         statDescription: grades?.warnings.length
           ? grades.warnings.map((warning) => warning.message).join(" ")
-          : "Passing grade is set per subject group.",
+          : "Passing grade is set by the subject grading template.",
       },
       {
         title: "Late Submissions",
@@ -991,7 +991,7 @@ export default function Dashboard() {
                                         className="ml-1"
                                         title={sec.passing_threshold != null
                                           ? `Passing grade is set per subject group: ${sec.passing_threshold}. Compared before display rounding.`
-                                          : "Passing grade is set per subject group; unavailable for this section."}
+                                          : "Passing grade is set by the subject grading template; unavailable for this section."}
                                       >
                                         {formatGrade(sec.current_grade)}
                                       </Badge>
@@ -1018,7 +1018,7 @@ export default function Dashboard() {
                                   {sec.available_grade_count != null && sec.total_grade_count != null
                                     ? `${sec.available_grade_count} of ${sec.total_grade_count} student-subject grades available. `
                                     : ""}
-                                  Weighted and transmuted, as in the class record. Passing grade is set per subject group.
+                                  Weighted and transmuted, as in the class record. Passing grade is set by the subject grading template.
                                   {sec.warnings?.map((warning: { code: string; message: string }) => (
                                     <span key={warning.code}> {warning.message}</span>
                                   ))}

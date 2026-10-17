@@ -1,166 +1,171 @@
+from datetime import datetime, timezone
+
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
-from app.schemas.GradingTemplate import GradingTemplateCreate, GradingTemplateUpdate
 from app.models.academic.Subject import Subject
+from app.schemas.GradingTemplate import GradingTemplateCreate, GradingTemplateUpdate
 from app.services.grading_templates.GradingTemplateShared import (
-    DEFAULT_GRADING_TEMPLATE_STATUS,
-    check_template_locked,
-    ensure_template_name_available,
-    normalize_optional_text,
-    normalize_status,
-    normalized_components,
-    template_to_item,
-    validate_scope,
+    check_template_locked, normalize_optional_text, normalize_status,
+    normalized_components, template_to_item,
 )
 
 
-def get_template_or_404(db: Session, grading_template_id: int) -> GradingTemplate:
-    template = (
-        db.query(GradingTemplate)
-        .options(
-            joinedload(GradingTemplate.academic_level),
-            joinedload(GradingTemplate.subject),
-            joinedload(GradingTemplate.components),
-        )
-        .filter(GradingTemplate.grading_template_id == grading_template_id)
-        .first()
+def get_template_or_404(db: Session, grading_template_id: int, for_update: bool = False) -> GradingTemplate:
+    query = db.query(GradingTemplate).options(joinedload(GradingTemplate.components)).filter_by(
+        grading_template_id=grading_template_id,
     )
+    if for_update:
+        query = query.with_for_update(of=GradingTemplate)
+    template = query.first()
     if template is None:
         raise HTTPException(status_code=404, detail="Grading template not found.")
     return template
 
 
-def replace_components(template: GradingTemplate, components: list[dict], db: Session | None = None) -> None:
-    template.components.clear()
-    if db is not None and template.grading_template_id is not None:
-        db.flush()
-    for component in components:
-        template.components.append(
-            GradingTemplateComponent(
-                component_name=component["component_name"],
-                weight=component["weight"],
-                display_order=component["display_order"],
-            )
-        )
+def _utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
-def sync_subject_assignments(db: Session, template: GradingTemplate, subject_ids: list[int] | None) -> None:
-    if subject_ids is None:
-        return
-    # Find all subjects currently linked
-    existing = db.query(Subject).filter(
-        (Subject.default_grading_template == template.template_name) |
-        (Subject.default_grading_template == str(template.grading_template_id)) |
-        (Subject.subject_id == template.subject_id)
-    ).all()
-    
-    target_ids = set(subject_ids)
-    for sub in existing:
-        if sub.subject_id not in target_ids:
-            sub.default_grading_template = None
-            
-    if target_ids:
-        new_subjects = db.query(Subject).filter(Subject.subject_id.in_(target_ids)).all()
-        for sub in new_subjects:
-            sub.default_grading_template = template.template_name
+def _ensure_unique_name(
+    db: Session, template_name: str, exclude_template_id: int | None = None,
+) -> str:
+    name = normalize_optional_text(template_name)
+    if name is None:
+        raise HTTPException(status_code=422, detail="Template name is required.")
+    query = db.query(GradingTemplate.grading_template_id).filter(
+        func.lower(GradingTemplate.template_name) == name.casefold(),
+    )
+    if exclude_template_id is not None:
+        query = query.filter(GradingTemplate.grading_template_id != exclude_template_id)
+    if query.first():
+        raise HTTPException(status_code=409, detail="A grading template with this name already exists.")
+    return name
+
+
+def _subjects_for_ids(db: Session, subject_ids: list[int]) -> list[Subject]:
+    unique_ids = list(dict.fromkeys(subject_ids))
+    subjects = (
+        db.query(Subject).filter(Subject.subject_id.in_(unique_ids)).with_for_update().all()
+        if unique_ids else []
+    )
+    found = {subject.subject_id for subject in subjects}
+    missing = sorted(set(unique_ids) - found)
+    if missing:
+        raise HTTPException(status_code=422, detail=f"Unknown subject IDs: {missing}")
+    return subjects
+
+
+def _ensure_reassignment_unlocked(db: Session, subjects: list[Subject]) -> None:
+    from app.services.subjects.SubjectService import _assert_assignment_unlocked
+    for subject in subjects:
+        _assert_assignment_unlocked(db, subject.subject_id)
 
 
 def create_grading_template_record(db: Session, payload: GradingTemplateCreate) -> dict:
-    template_name = normalize_optional_text(payload.template_name)
-    if template_name is None:
-        raise HTTPException(status_code=422, detail="Template name is required.")
-
-    validate_scope(db, payload.academic_level_id, payload.subject_id)
-    ensure_template_name_available(db, template_name, payload.academic_level_id, payload.subject_id)
+    name = _ensure_unique_name(db, payload.template_name)
     components = normalized_components(payload.components)
-
+    subjects = _subjects_for_ids(db, payload.subject_ids)
+    status = normalize_status(payload.status)
+    if status == "archived" and subjects:
+        raise HTTPException(status_code=422, detail="An archived template cannot receive subject assignments.")
+    _ensure_reassignment_unlocked(db, subjects)
     template = GradingTemplate(
-        template_name=template_name,
+        template_name=name,
         description=normalize_optional_text(payload.description),
-        academic_level_id=payload.academic_level_id,
-        subject_id=payload.subject_id,
-        status=normalize_status(payload.status),
+        passing_threshold=payload.passing_threshold,
+        status=status,
+        updated_at=datetime.now(timezone.utc),
     )
-    replace_components(template, components)
+    template.components = [GradingTemplateComponent(**component) for component in components]
     db.add(template)
+    db.flush()
+    for subject in subjects:
+        subject.grading_template_id = template.grading_template_id
     try:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Unable to create grading template because it conflicts with existing data.") from exc
-    db.refresh(template)
-    
-    if payload.subject_ids:
-        sync_subject_assignments(db, template, payload.subject_ids)
-        db.commit()
-        
     return template_to_item(get_template_or_404(db, template.grading_template_id), db)
 
 
 def update_grading_template_record(db: Session, grading_template_id: int, payload: GradingTemplateUpdate) -> dict:
-    template = get_template_or_404(db, grading_template_id)
+    template = get_template_or_404(db, grading_template_id, for_update=True)
     data = payload.model_dump(exclude_unset=True)
-
-    target_name = normalize_optional_text(data.get("template_name", template.template_name))
-    if target_name is None:
-        raise HTTPException(status_code=422, detail="Template name is required.")
-
-    target_level_id = data.get("academic_level_id", template.academic_level_id)
-    target_subject_id = data.get("subject_id", template.subject_id)
-    if "subject_ids" in data and data["subject_ids"] and len(data["subject_ids"]) > 1:
-        target_subject_id = None
-        template.subject_id = None
-
-    validate_scope(db, target_level_id, target_subject_id)
-    ensure_template_name_available(
-        db,
-        target_name,
-        target_level_id,
-        target_subject_id,
-        exclude_template_id=template.grading_template_id,
-    )
-
-    is_locked, lock_reason = check_template_locked(db, template)
-
+    expected = data.get("updated_at")
+    if expected is None:
+        raise HTTPException(status_code=428, detail="Reload the template before saving changes.")
+    actual = template.updated_at
+    if actual is None or _utc(expected) != _utc(actual):
+        raise HTTPException(status_code=409, detail="This template changed. Reload it before saving.")
+    changed = any(key in data for key in (
+        "template_name", "description", "passing_threshold", "status", "subject_ids", "components",
+    ))
+    if not changed:
+        return template_to_item(template, db)
+    configuration_changed = any(key in data for key in (
+        "template_name", "description", "passing_threshold", "status", "components",
+    ))
+    if configuration_changed:
+        locked, reason = check_template_locked(db, template)
+        if locked:
+            raise HTTPException(status_code=409, detail=reason or "Template is locked.")
     if "template_name" in data:
-        template.template_name = target_name
+        template.template_name = _ensure_unique_name(db, data["template_name"], grading_template_id)
     if "description" in data:
         template.description = normalize_optional_text(data["description"])
-    if "academic_level_id" in data:
-        template.academic_level_id = target_level_id
-    if "subject_id" in data:
-        template.subject_id = target_subject_id
-    if "status" in data:
-        template.status = normalize_status(data["status"])
-    if "components" in data and payload.components is not None and not is_locked:
-        replace_components(template, normalized_components(payload.components), db=db)
-
+    if "passing_threshold" in data:
+        if data["passing_threshold"] is None:
+            raise HTTPException(status_code=422, detail="Passing threshold is required.")
+        template.passing_threshold = data["passing_threshold"]
+    if "components" in data:
+        components = normalized_components(payload.components or [])
+        template.components.clear()
+        db.flush()
+        template.components.extend(GradingTemplateComponent(**component) for component in components)
     if "subject_ids" in data:
-        sync_subject_assignments(db, template, payload.subject_ids)
-
+        requested = _subjects_for_ids(db, data["subject_ids"] or [])
+        requested_ids = {subject.subject_id for subject in requested}
+        current = (
+            db.query(Subject)
+            .filter(Subject.grading_template_id == grading_template_id)
+            .with_for_update()
+            .all()
+        )
+        removed = [subject for subject in current if subject.subject_id not in requested_ids]
+        added = [subject for subject in requested if subject.grading_template_id != grading_template_id]
+        _ensure_reassignment_unlocked(db, [*removed, *added])
+        if removed:
+            replacement_id = data.get("replacement_template_id")
+            if replacement_id is None or replacement_id == grading_template_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Choose a different replacement template for removed subjects.",
+                )
+            replacement = get_template_or_404(db, replacement_id)
+            if normalize_status(replacement.status) != "active":
+                raise HTTPException(status_code=422, detail="Replacement template must be active.")
+            for subject in removed:
+                subject.grading_template_id = replacement_id
+        for subject in added:
+            subject.grading_template_id = grading_template_id
+    if "status" in data:
+        target_status = normalize_status(data["status"])
+        assigned_count = db.query(Subject.subject_id).filter(
+            Subject.grading_template_id == grading_template_id,
+        ).count()
+        if target_status == "archived" and assigned_count:
+            raise HTTPException(status_code=409, detail="Reassign all subjects before archiving this template.")
+        template.status = target_status
+    template.updated_at = datetime.now(timezone.utc)
     try:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Unable to update grading template because it conflicts with existing data.") from exc
     return template_to_item(get_template_or_404(db, grading_template_id), db)
-
-
-def archive_grading_template_record(db: Session, grading_template_id: int) -> dict:
-    template = get_template_or_404(db, grading_template_id)
-    if (template.status or DEFAULT_GRADING_TEMPLATE_STATUS).casefold() == "archived":
-        raise HTTPException(status_code=409, detail="Grading template is already archived.")
-    template.status = "archived"
-    db.commit()
-    return template_to_item(get_template_or_404(db, grading_template_id))
-
-
-def restore_grading_template_record(db: Session, grading_template_id: int) -> dict:
-    template = get_template_or_404(db, grading_template_id)
-    template.status = "active"
-    db.commit()
-    return template_to_item(get_template_or_404(db, grading_template_id))

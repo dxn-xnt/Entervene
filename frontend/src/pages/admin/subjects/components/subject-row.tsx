@@ -34,10 +34,10 @@ export function SubjectRow({
           <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm md:grid-cols-3">
             <span><strong>Code:</strong> {subjectCode(subject)}</span>
             <span><strong>Grade:</strong> {subject.academic_level.level_name}</span>
-            <span><strong>Group:</strong> {subject.subject_group?.name || "Ungrouped"}</span>
-            <span><strong>Passing:</strong> {subject.subject_group?.passing_threshold ?? "—"}%</span>
+            <span><strong>Grading Template:</strong> {subject.grading_template.template_name}</span>
+            <span><strong>Passing:</strong> {subject.grading_template.passing_threshold}%</span>
             <span className="col-span-2 md:col-span-2">
-              <strong>Default template:</strong> {subject.default_grading_template || "No grading template"}
+              <strong>Assessment weights:</strong> {subject.grading_template.components.map((c) => `${c.component_name} ${c.weight}%`).join(" | ")}
             </span>
           </div>
           {subject.description ? <p className="text-xs text-muted-foreground">{subject.description}</p> : null}

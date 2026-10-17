@@ -29,7 +29,8 @@ from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 
 
-from app.models.academic.SubjectGroup import SubjectGroup
+from app.models.academic.GradingTemplate import GradingTemplate
+from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 
 
 TABLES = [
@@ -40,7 +41,8 @@ TABLES = [
     Student.__table__,
     AcademicPeriod.__table__,
     Class.__table__,
-    SubjectGroup.__table__,
+    GradingTemplate.__table__,
+    GradingTemplateComponent.__table__,
     Subject.__table__,
     AIModelVersion.__table__,
     AIPrediction.__table__,
@@ -122,13 +124,18 @@ def finalization_context():
         academic_year_id=year.academic_year_id,
         academic_level_id=level.academic_level_id,
     )
-    group = SubjectGroup(name="Core", passing_threshold=85.0, display_order=1)
-    db.add(group)
+    template = GradingTemplate(grading_template_id=1, template_name="Core", passing_threshold=85.0, status="active")
+    template.components = [
+        GradingTemplateComponent(component_name="Written Work", weight=20.0, display_order=1),
+        GradingTemplateComponent(component_name="Performance Tasks", weight=50.0, display_order=2),
+        GradingTemplateComponent(component_name="Exams", weight=30.0, display_order=3),
+    ]
+    db.add(template)
     db.flush()
 
     subject = Subject(
         subject_name="Science",
-        subject_group_id=group.subject_group_id,
+        grading_template_id=template.grading_template_id,
         academic_level_id=level.academic_level_id,
     )
     model_version = AIModelVersion(
@@ -349,8 +356,8 @@ def test_missing_period_grade_returns_404(finalization_context):
     assert response.json()["detail"] == "Student period grade not found"
 
 
-def test_finalization_uses_subject_group_passing_threshold(finalization_context):
-    # Subject has Core group with passing_threshold = 85.0
+def test_finalization_uses_grading_template_passing_threshold(finalization_context):
+    # Subject has Core template with passing_threshold = 85.0
     prediction = add_prediction(finalization_context)
     period_grade = add_period_grade(finalization_context)
 

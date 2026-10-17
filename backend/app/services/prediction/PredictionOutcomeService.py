@@ -69,13 +69,12 @@ def evaluate_prediction_outcome(
     if prediction.predicted_period_grade is None:
         raise ValueError("Prediction does not have a predicted_period_grade to evaluate.")
 
-    # Resolve passing threshold from SubjectGroup via subject FK.
-    # Falls back to 75.0 if the relation is missing.
-    passing_grade_float: float = 75.0
+    # Resolve passing threshold from the subject's grading template.
     from app.models.academic.Subject import Subject
     subject = db.get(Subject, prediction.subject_id)
-    if subject is not None and hasattr(subject, "subject_group_rel") and subject.subject_group_rel is not None:
-        passing_grade_float = float(subject.subject_group_rel.passing_threshold)
+    if subject is None or subject.grading_template is None:
+        raise ValueError("Prediction subject has no grading template.")
+    passing_grade_float = float(subject.grading_template.passing_threshold)
 
     actual_grade = _to_decimal(actual_period_grade, "actual_period_grade")
     threshold = _to_decimal(passing_grade_float, "passing_grade")
@@ -155,12 +154,12 @@ def evaluate_outcomes_for_finalized_period_grade(
             "outcomes": [],
         }
 
-    # Resolve passing threshold from SubjectGroup via subject FK.
-    passing_grade: float = 75.0
+    # Resolve passing threshold from the subject's grading template.
     from app.models.academic.Subject import Subject
     subject = db.get(Subject, period_grade.subject_id)
-    if subject is not None and hasattr(subject, "subject_group_rel") and subject.subject_group_rel is not None:
-        passing_grade = float(subject.subject_group_rel.passing_threshold)
+    if subject is None or subject.grading_template is None:
+        raise ValueError("Grade subject has no grading template.")
+    passing_grade = float(subject.grading_template.passing_threshold)
 
     predictions = _matching_predictions_for_period_grade(db, period_grade)
     if not predictions:

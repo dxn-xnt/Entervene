@@ -874,7 +874,7 @@ def generate_summary_of_grades_sheet(
                 )
                 for s in enrolled_students
             ],
-            passing_threshold=75.0,
+            passing_threshold=float(subj_obj.grading_template.passing_threshold),
         )
 
     # Ensure all configured periods for the academic year are included in summary.periods

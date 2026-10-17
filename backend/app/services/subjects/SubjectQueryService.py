@@ -3,10 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.Subject import Subject
-from app.models.academic.SubjectGroup import SubjectGroup
+from app.models.academic.GradingTemplate import GradingTemplate
 from app.services.subjects.SubjectShared import (
     ALLOWED_SUBJECT_STATUSES,
-    DEFAULT_GRADING_TEMPLATES,
     DEFAULT_SUBJECT_STATUS,
     normalize_optional_text,
     normalize_subject_status,
@@ -20,10 +19,10 @@ def get_subject_form_options_data(db: Session) -> dict:
         .order_by(AcademicLevel.grade_level, func.lower(AcademicLevel.level_name))
         .all()
     )
-    active_groups = (
-        db.query(SubjectGroup)
-        .filter(SubjectGroup.is_active.is_(True))
-        .order_by(SubjectGroup.display_order, func.lower(SubjectGroup.name))
+    active_templates = (
+        db.query(GradingTemplate)
+        .filter(GradingTemplate.status == "active")
+        .order_by(GradingTemplate.template_name)
         .all()
     )
     return {
@@ -35,17 +34,15 @@ def get_subject_form_options_data(db: Session) -> dict:
             }
             for level in academic_levels
         ],
-        "subject_groups": [
-            {
-                "subject_group_id": g.subject_group_id,
-                "name": g.name,
-                "passing_threshold": float(g.passing_threshold),
-            }
-            for g in active_groups
-        ],
         "statuses": ALLOWED_SUBJECT_STATUSES,
         "default_status": DEFAULT_SUBJECT_STATUS,
-        "grading_templates": DEFAULT_GRADING_TEMPLATES,
+        "grading_templates": [t.template_name for t in active_templates],
+        "grading_template_details": [{
+            "grading_template_id": t.grading_template_id,
+            "template_name": t.template_name,
+            "passing_threshold": float(t.passing_threshold),
+            "components": [{"component_name": c.component_name, "weight": float(c.weight)} for c in t.components],
+        } for t in active_templates],
     }
 
 
@@ -53,7 +50,7 @@ def list_subjects_data(
     db: Session,
     status: str | None = None,
     academic_level_id: int | None = None,
-    subject_group_id: int | None = None,
+    grading_template_id: int | None = None,
     search: str = "",
 ) -> dict:
     query = db.query(Subject, AcademicLevel).join(
@@ -66,8 +63,8 @@ def list_subjects_data(
         query = query.filter(func.lower(func.coalesce(Subject.status, DEFAULT_SUBJECT_STATUS)) == normalize_subject_status(status))
     if academic_level_id is not None:
         query = query.filter(Subject.academic_level_id == academic_level_id)
-    if subject_group_id is not None:
-        query = query.filter(Subject.subject_group_id == subject_group_id)
+    if grading_template_id is not None:
+        query = query.filter(Subject.grading_template_id == grading_template_id)
     search_term = normalize_optional_text(search)
     if search_term is not None:
         like_term = f"%{search_term.casefold()}%"
@@ -85,13 +82,17 @@ def list_subjects_data(
     )
     active_subjects = sum(1 for subject, _ in all_rows if (subject.status or DEFAULT_SUBJECT_STATUS).casefold() == "active")
     archived_subjects = sum(1 for subject, _ in all_rows if (subject.status or "").casefold() == "archived")
+    from app.models.academic.GradingTemplate import GradingTemplate
+    templates = db.query(GradingTemplate).all()
+    template_name_map = {str(t.grading_template_id): t.template_name for t in templates}
+
     return {
         "summary": {
             "total_subjects": len(all_rows),
             "active_subjects": active_subjects,
             "archived_subjects": archived_subjects,
         },
-        "subjects": [subject_to_item(subject, level) for subject, level in rows],
+        "subjects": [subject_to_item(subject, level, template_name_map) for subject, level in rows],
     }
 
 
@@ -106,4 +107,7 @@ def get_subject_detail_data(db: Session, subject_id: int) -> dict:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Subject not found.")
     subject, academic_level = row
-    return subject_to_item(subject, academic_level)
+    from app.models.academic.GradingTemplate import GradingTemplate
+    templates = db.query(GradingTemplate).all()
+    template_name_map = {str(t.grading_template_id): t.template_name for t in templates}
+    return subject_to_item(subject, academic_level, template_name_map)

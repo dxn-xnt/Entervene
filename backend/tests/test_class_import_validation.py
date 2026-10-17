@@ -605,3 +605,121 @@ def test_grade12_and_jhs_class_permits_null_pathway(client, db):
     assert res.json()["sections"][0]["pathway"] == "general"
 
 
+def test_modern_5_column_template_validates_successfully(client, db, import_data):
+    _, level, _, adviser, students = import_data
+    modern_header = "section_name,grade_level,pathway,adviser,student_lrn"
+    content = modern_header + "\n" + f"Aristotle,7,general,{adviser.first_name} {adviser.last_name},{students[0].student_lrn}"
+    res = upload(client, level.academic_level_id, content)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["format"] == "modern"
+    assert data["summary"]["section_count"] == 1
+    assert data["summary"]["student_count"] == 1
+    assert data["sections"][0]["section_name"] == "Aristotle"
+    assert data["sections"][0]["adviser"]["staff_id"] == adviser.staff_id
+
+
+def test_modern_csv_empty_class_without_students(client, db, import_data):
+    _, level, _, adviser, _ = import_data
+    modern_header = "section_name,grade_level,pathway,adviser,student_lrn"
+    content = modern_header + "\n" + f"Aristotle,7,general,{adviser.staff_id}," + "\n" + "Galileo,7,general,,"
+    res = upload(client, level.academic_level_id, content)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["summary"]["section_count"] == 2
+    assert data["summary"]["student_count"] == 0
+    sec_names = [s["section_name"] for s in data["sections"]]
+    assert sec_names == ["Aristotle", "Galileo"]
+    # Aristotle has resolved adviser from hint
+    aristotle = next(s for s in data["sections"] if s["section_name"] == "Aristotle")
+    assert aristotle["adviser"]["staff_id"] == adviser.staff_id
+    assert aristotle["students"] == []
+    # Galileo has no adviser hint, so adviser is None, ready for UI selection
+    galileo = next(s for s in data["sections"] if s["section_name"] == "Galileo")
+    assert galileo["adviser"] is None
+    assert galileo["students"] == []
+    # Eligible advisers are returned for UI dropdown
+    assert len(data["eligible_advisers"]) >= 1
+
+
+def test_modern_csv_mixed_empty_and_populated_sections(client, db, import_data):
+    _, level, _, adviser, students = import_data
+    modern_header = "section_name,grade_level,pathway,adviser,student_lrn"
+    content = modern_header + "\n" + "\n".join([
+        f"Aristotle,7,general,{adviser.staff_id},{students[0].student_lrn}",
+        f"Aristotle,7,general,{adviser.staff_id},{students[1].student_lrn}",
+        "Galileo,7,general,,",
+    ])
+    res = upload(client, level.academic_level_id, content)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["summary"]["section_count"] == 2
+    assert data["summary"]["student_count"] == 2
+    aristotle = next(s for s in data["sections"] if s["section_name"] == "Aristotle")
+    assert len(aristotle["students"]) == 2
+    galileo = next(s for s in data["sections"] if s["section_name"] == "Galileo")
+    assert len(galileo["students"]) == 0
+
+
+def test_modern_csv_ambiguous_teacher_name_emits_warning_and_requires_selection(client, db, import_data):
+    _, level, _, _, students = import_data
+    # Add two teachers with the identical name "Dan Bejec"
+    role = db.query(Role).filter(Role.role_name == "Teacher").first()
+    u1 = UserAccount(user_id=uuid.uuid4(), email="dan1@school.test", password_hash="hash", account_status="active")
+    u2 = UserAccount(user_id=uuid.uuid4(), email="dan2@school.test", password_hash="hash", account_status="active")
+    db.add_all([u1, u2])
+    db.flush()
+    db.add_all([UserRoles(user_id=u1.user_id, role_id=role.role_id), UserRoles(user_id=u2.user_id, role_id=role.role_id)])
+    s1 = AcademicStaff(staff_id="T-DAN-1", first_name="Dan", last_name="Bejec", user_id=u1.user_id)
+    s2 = AcademicStaff(staff_id="T-DAN-2", first_name="Dan", last_name="Bejec", user_id=u2.user_id)
+    db.add_all([s1, s2])
+    db.commit()
+
+    modern_header = "section_name,grade_level,pathway,adviser,student_lrn"
+    content = modern_header + "\n" + f"Aristotle,7,general,Dan Bejec,{students[0].student_lrn}"
+    res = upload(client, level.academic_level_id, content)
+    assert res.status_code == 200
+    data = res.json()
+    # Adviser is not auto-assigned because name is ambiguous
+    assert data["sections"][0]["adviser"] is None
+    assert any("ambiguous" in w.lower() for w in data["warnings"])
+
+
+def test_modern_csv_utf8_bom_handling(client, import_data):
+    _, level, _, adviser, students = import_data
+    modern_header = "section_name,grade_level,pathway,adviser,student_lrn"
+    content = "\ufeff" + modern_header + "\n" + f"Aristotle,7,general,{adviser.staff_id},{students[0].student_lrn}"
+    res = upload(client, level.academic_level_id, content)
+    assert res.status_code == 200
+    assert res.json()["format"] == "modern"
+    assert res.json()["sections"][0]["section_name"] == "Aristotle"
+
+
+def test_modern_csv_leading_zero_student_lrn_preservation(client, db, import_data):
+    _, level, _, adviser, _ = import_data
+    # Add a student with leading zeros in LRN
+    lz_student = add_student(db, level, "001234567890", "Zero", "Leading", "Female")
+    modern_header = "section_name,grade_level,pathway,adviser,student_lrn"
+    content = modern_header + "\n" + f"Aristotle,7,general,{adviser.staff_id},{lz_student.student_lrn}"
+    res = upload(client, level.academic_level_id, content)
+    assert res.status_code == 200
+    sec = res.json()["sections"][0]
+    assert len(sec["students"]) == 1
+    assert sec["students"][0]["student_lrn"] == "001234567890"
+    assert sec["students"][0]["student_lrn"].startswith("00")
+
+
+def test_generated_template_roundtrip_empty_sections(client, import_data):
+    _, level, _, _, _ = import_data
+    # Exact template format generated for Grade 7 available sections
+    generated_csv = (
+        "section_name,grade_level,pathway,adviser,student_lrn\n"
+        "Aristotle,7,general,,\n"
+        "Galileo,7,general,,\n"
+    )
+    res = upload(client, level.academic_level_id, generated_csv)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["summary"]["section_count"] == 2
+    assert data["summary"]["student_count"] == 0
+    assert len(data["eligible_advisers"]) >= 1

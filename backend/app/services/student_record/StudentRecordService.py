@@ -585,92 +585,26 @@ def _match_component_category(name: str) -> str | None:
     return classify_template_component_name(name)
 
 
-def resolve_subject_grading_weights(
-    db: Session,
-    subject_id: int,
-    academic_level_id: int | None = None,
-) -> GradingWeights:
-    """
-    Resolve grading component weights from the assigned GradingTemplate.
-    1. Looks up Subject.default_grading_template (by template ID or template_name).
-    2. Falls back to GradingTemplate linked directly to subject_id.
-    3. Falls back to GradingTemplate linked to academic_level_id (where subject_id is None).
-    4. Safety fallback: active "Core Subjects" template.
-    5. Matches component names for WW, PT, and QA/Exams.
-    6. Normalizes weights so their sum equals 1.0 (100%).
-    7. If no valid template or components found, returns FALLBACK_GRADING_WEIGHTS.
-    """
-    subject = db.query(Subject).filter(Subject.subject_id == subject_id).first()
-    if not subject:
-        return FALLBACK_GRADING_WEIGHTS
-
-    template: GradingTemplate | None = None
-
-    # 1. Check Subject.default_grading_template
-    raw_tpl_ref = (subject.default_grading_template or "").strip()
-    if raw_tpl_ref:
-        if raw_tpl_ref.isdigit():
-            template = db.query(GradingTemplate).filter(
-                GradingTemplate.grading_template_id == int(raw_tpl_ref),
-                GradingTemplate.status == "active",
-            ).first()
-        if not template:
-            template = db.query(GradingTemplate).filter(
-                func.lower(GradingTemplate.template_name) == raw_tpl_ref.casefold(),
-                GradingTemplate.status == "active",
-            ).first()
-
-    # 2. Check GradingTemplate linked directly to subject_id
-    if not template:
-        template = db.query(GradingTemplate).filter(
-            GradingTemplate.subject_id == subject_id,
-            GradingTemplate.status == "active",
-        ).first()
-
-    # 3. Check GradingTemplate linked to academic_level_id
-    if not template and academic_level_id is not None:
-        template = db.query(GradingTemplate).filter(
-            GradingTemplate.academic_level_id == academic_level_id,
-            GradingTemplate.subject_id.is_(None),
-            GradingTemplate.status == "active",
-        ).first()
-
-    # 4. Safety fallback: active "Core Subjects" template
-    if not template:
-        template = db.query(GradingTemplate).filter(
-            func.lower(GradingTemplate.template_name) == "core subjects",
-            GradingTemplate.status == "active",
-        ).first()
-
-    if not template or not template.components:
-        return FALLBACK_GRADING_WEIGHTS
-
-    # 5. Extract component weights
-    ww_raw = 0.0
-    pt_raw = 0.0
-    qa_raw = 0.0
-
-    for comp in template.components:
-        comp_name = getattr(comp, "component_name", "")
-        category = _match_component_category(comp_name)
-        comp_weight = float(getattr(comp, "weight", 0.0) or 0.0)
-        if category == "WW":
-            ww_raw += comp_weight
-        elif category == "PT":
-            pt_raw += comp_weight
-        elif category == "QA":
-            qa_raw += comp_weight
-
-    total_weight = ww_raw + pt_raw + qa_raw
-    if total_weight <= 0:
-        return FALLBACK_GRADING_WEIGHTS
-
-    # Normalize weights so they sum to 1.0
+def resolve_subject_grading_weights(db: Session, subject_id: int,
+                                    academic_level_id: int | None = None) -> GradingWeights:
+    """Resolve canonical weights from the subject's assigned template FK."""
+    subject = db.get(Subject, subject_id)
+    if subject is None:
+        raise HTTPException(status_code=404, detail="Subject not found.")
+    template = subject.grading_template
+    if template is None or template.status != "active":
+        raise HTTPException(status_code=422, detail="Subject has no active grading template.")
+    weights = {"WW": 0.0, "PT": 0.0, "QA": 0.0}
+    for component in template.components:
+        category = _match_component_category(component.component_name)
+        if category not in weights:
+            raise HTTPException(status_code=422, detail="Unknown grading component.")
+        weights[category] += float(component.weight)
+    if sum(weights.values()) != 100 or any(weight <= 0 for weight in weights.values()):
+        raise HTTPException(status_code=422, detail="Template weights must total 100%.")
     return GradingWeights(
-        ww_weight=round(ww_raw / total_weight, 4),
-        pt_weight=round(pt_raw / total_weight, 4),
-        qa_weight=round(qa_raw / total_weight, 4),
-        template_id=template.grading_template_id,
+        ww_weight=weights["WW"] / 100, pt_weight=weights["PT"] / 100,
+        qa_weight=weights["QA"] / 100, template_id=template.grading_template_id,
         template_name=template.template_name,
     )
 
@@ -803,14 +737,10 @@ def finalize_student_period_grade(
     if period_grade.final_period_grade is None:
         raise HTTPException(status_code=400, detail="final_period_grade is required to finalize a period grade")
 
-    # Resolve passing threshold from SubjectGroup via the subject FK.
-    # Falls back to 75.0 if the relation is not loaded (e.g. test environments
-    # that don't seed the SubjectGroup table yet).
-    passing_grade: float = 75.0
-    from app.models.academic.Subject import Subject
     subject = db.get(Subject, period_grade.subject_id)
-    if subject is not None and hasattr(subject, "subject_group_rel") and subject.subject_group_rel is not None:
-        passing_grade = float(getattr(subject.subject_group_rel, "passing_threshold", 75.0))
+    if subject is None or subject.grading_template is None:
+        raise HTTPException(status_code=422, detail="Subject has no grading template.")
+    passing_grade = float(subject.grading_template.passing_threshold)
 
     period_grade.is_finalized = True
     period_grade.finalized_at = datetime.now(timezone.utc)
@@ -947,20 +877,7 @@ def _grade_send_requirements(
     template = db.get(GradingTemplate, weights.template_id)
     if template is None or template.status != "active" or not template.components:
         return GradeSendRequirements(configuration_error=missing)
-    reference = (scope.subject.default_grading_template or "").strip()
-    if reference:
-        matches = (
-            int(reference) == template.grading_template_id if reference.isdigit()
-            else reference.casefold() == template.template_name.casefold()
-        )
-        if not matches:
-            return GradeSendRequirements(configuration_error=missing)
-    elif not (
-        template.subject_id == scope.subject.subject_id
-        or (template.subject_id is None and template.academic_level_id is not None
-            and template.academic_level_id == scope.class_.academic_level_id)
-    ):
-        # A generic Core Subjects safety fallback is not a subject assignment.
+    if scope.subject.grading_template_id != template.grading_template_id:
         return GradeSendRequirements(configuration_error=missing)
     categories: set[str] = set()
     total = Decimal("0")
@@ -1906,10 +1823,10 @@ def teacher_term_grade_summary(
     
     students = _roster(db, base_scope)
     
-    passing_grade: float = 75.0
-    if base_scope.subject is not None and hasattr(base_scope.subject, "subject_group_rel") and base_scope.subject.subject_group_rel is not None:
-        passing_grade = float(getattr(base_scope.subject.subject_group_rel, "passing_threshold", 75.0))
-        
+    if base_scope.subject is None or base_scope.subject.grading_template is None:
+        raise HTTPException(status_code=422, detail="Subject has no grading template.")
+    passing_grade = float(base_scope.subject.grading_template.passing_threshold)
+
     student_rows = {}
     for student in students:
         student_rows[student.student_id] = TermGradeSummaryRow(

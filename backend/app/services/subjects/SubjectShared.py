@@ -5,16 +5,11 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.Subject import Subject
-from app.models.academic.SubjectGroup import SubjectGroup
-
 
 ALLOWED_SUBJECT_STATUSES = ["active", "archived"]
 DEFAULT_SUBJECT_STATUS = "active"
-DEFAULT_GRADING_TEMPLATES = [
-    "Default SHS",
-    "STEM Written/Performance/Exam",
-]
 
 
 def readable_text(value: Any) -> str:
@@ -26,8 +21,7 @@ def normalized_text(value: Any) -> str:
 
 
 def normalize_optional_text(value: Any) -> str | None:
-    text = readable_text(value)
-    return text or None
+    return readable_text(value) or None
 
 
 def normalize_subject_status(value: Any) -> str:
@@ -38,65 +32,49 @@ def normalize_subject_status(value: Any) -> str:
 
 
 def get_academic_level_or_404(db: Session, academic_level_id: int) -> AcademicLevel:
-    academic_level = db.query(AcademicLevel).filter(AcademicLevel.academic_level_id == academic_level_id).first()
-    if academic_level is None:
+    level = db.get(AcademicLevel, academic_level_id)
+    if level is None:
         raise HTTPException(status_code=404, detail="Academic level not found.")
-    return academic_level
+    return level
 
 
-def get_subject_group_or_404(db: Session, subject_group_id: int) -> SubjectGroup:
-    group = db.get(SubjectGroup, subject_group_id)
-    if group is None:
-        raise HTTPException(status_code=404, detail="Subject group not found.")
-    return group
+def get_template_or_422(db: Session, template_id: int) -> GradingTemplate:
+    template = db.get(GradingTemplate, template_id)
+    if template is None or template.status != "active":
+        raise HTTPException(status_code=422, detail="Select an active grading template.")
+    return template
 
 
-def ensure_subject_code_available(
-    db: Session,
-    subject_codename: str | None,
-    academic_level_id: int,
-    exclude_subject_id: int | None = None,
-) -> None:
+def ensure_subject_code_available(db: Session, subject_codename: str | None, academic_level_id: int,
+                                  exclude_subject_id: int | None = None) -> None:
     code = normalize_optional_text(subject_codename)
     if code is None:
         return
-
-    query = (
-        db.query(Subject)
-        .filter(Subject.academic_level_id == academic_level_id)
-        .filter(func.lower(Subject.subject_codename) == code.casefold())
-    )
+    query = db.query(Subject).filter(Subject.academic_level_id == academic_level_id)
+    query = query.filter(func.lower(Subject.subject_codename) == code.casefold())
     if exclude_subject_id is not None:
         query = query.filter(Subject.subject_id != exclude_subject_id)
-
     if query.first() is not None:
-        raise HTTPException(
-            status_code=409,
-            detail="Subject code already exists for this academic level.",
-        )
+        raise HTTPException(status_code=409, detail="Subject code already exists for this academic level.")
 
 
-def _group_inline(group: SubjectGroup | None) -> dict | None:
-    if group is None:
-        return None
-    return {
-        "subject_group_id": group.subject_group_id,
-        "name": group.name,
-        "passing_threshold": float(group.passing_threshold),
-    }
-
-
-def subject_to_item(subject: Subject, academic_level: AcademicLevel | None = None) -> dict:
+def subject_to_item(subject: Subject, academic_level: AcademicLevel | None = None,
+                    template_name_map: dict[str, str] | None = None) -> dict:
     level = academic_level or subject.academic_level
-    group = getattr(subject, "subject_group_rel", None)
+    template = subject.grading_template
     return {
         "subject_id": subject.subject_id,
         "subject_name": subject.subject_name,
         "subject_codename": subject.subject_codename,
-        "subject_group": _group_inline(group),
-        "is_core": getattr(subject, "is_core", False),
-        "is_math_or_science": getattr(subject, "is_math_or_science", False),
-        "default_grading_template": subject.default_grading_template,
+        "grading_template_id": subject.grading_template_id,
+        "grading_template": {
+            "grading_template_id": template.grading_template_id,
+            "template_name": template.template_name,
+            "passing_threshold": float(template.passing_threshold),
+            "components": [{"component_name": c.component_name, "weight": float(c.weight)} for c in template.components],
+        },
+        "is_core": bool(subject.is_core),
+        "is_math_or_science": bool(subject.is_math_or_science),
         "description": subject.description,
         "status": subject.status or DEFAULT_SUBJECT_STATUS,
         "academic_level": {
@@ -104,6 +82,6 @@ def subject_to_item(subject: Subject, academic_level: AcademicLevel | None = Non
             "level_name": level.level_name,
             "grade_level": level.grade_level,
         },
-        "created_at": getattr(subject, "created_at", None),
-        "updated_at": getattr(subject, "updated_at", None),
+        "created_at": subject.created_at,
+        "updated_at": subject.updated_at,
     }

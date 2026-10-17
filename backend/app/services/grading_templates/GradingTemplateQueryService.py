@@ -15,38 +15,7 @@ from app.services.grading_templates.GradingTemplateShared import (
 
 
 def get_grading_template_form_options_data(db: Session) -> dict:
-    academic_levels = (
-        db.query(AcademicLevel)
-        .order_by(AcademicLevel.grade_level, func.lower(AcademicLevel.level_name))
-        .all()
-    )
-    subjects = (
-        db.query(Subject)
-        .order_by(Subject.academic_level_id, func.lower(Subject.subject_name))
-        .all()
-    )
-    return {
-        "academic_levels": [
-            {
-                "academic_level_id": level.academic_level_id,
-                "level_name": level.level_name,
-                "grade_level": level.grade_level,
-            }
-            for level in academic_levels
-        ],
-        "subjects": [
-            {
-                "subject_id": subject.subject_id,
-                "subject_name": subject.subject_name,
-                "subject_codename": subject.subject_codename,
-                "academic_level_id": subject.academic_level_id,
-            }
-            for subject in subjects
-        ],
-        "statuses": ALLOWED_GRADING_TEMPLATE_STATUSES,
-        "default_status": DEFAULT_GRADING_TEMPLATE_STATUS,
-        "default_components": DEFAULT_GRADING_TEMPLATE_COMPONENTS,
-    }
+    return {"default_components": DEFAULT_GRADING_TEMPLATE_COMPONENTS}
 
 
 def list_grading_templates_data(
@@ -60,16 +29,13 @@ def list_grading_templates_data(
     all_templates = base_query.all()
 
     query = base_query.options(
-        joinedload(GradingTemplate.academic_level),
-        joinedload(GradingTemplate.subject),
         joinedload(GradingTemplate.components),
     )
     if status is not None:
         query = query.filter(func.lower(GradingTemplate.status) == normalize_status(status))
-    if academic_level_id is not None:
-        query = query.filter(GradingTemplate.academic_level_id == academic_level_id)
-    if subject_id is not None:
-        query = query.filter(GradingTemplate.subject_id == subject_id)
+    if academic_level_id is not None or subject_id is not None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail="Template scope filters are no longer supported.")
 
     search_term = normalize_optional_text(search)
     if search_term is not None:
@@ -96,8 +62,6 @@ def get_grading_template_detail_data(db: Session, grading_template_id: int) -> d
     template = (
         db.query(GradingTemplate)
         .options(
-            joinedload(GradingTemplate.academic_level),
-            joinedload(GradingTemplate.subject),
             joinedload(GradingTemplate.components),
         )
         .filter(GradingTemplate.grading_template_id == grading_template_id)

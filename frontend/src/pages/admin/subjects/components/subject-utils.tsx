@@ -1,9 +1,9 @@
 import { Badge } from "@/components/retroui/Badge";
 import type {
   SubjectAcademicLevel,
-  GradingTemplateListItem,
   SubjectListItem,
   SubjectOfferingListItem,
+  SubjectOfferingFormOptions,
   SubjectOfferingPathway,
   SubjectStatus,
 } from "@/lib/api";
@@ -59,12 +59,37 @@ export type OfferingFilters = {
   search: string;
 };
 
+export function defaultOfferingFilters(options: SubjectOfferingFormOptions | null): OfferingFilters {
+  const activeYear = options?.academic_years.find((year) => year.is_active) ?? options?.academic_years[0];
+  const defaultLevel = targetLevels(options?.academic_levels ?? [])[0];
+  const defaultGrade = gradeValueForLevel(defaultLevel);
+  return {
+    academic_year_id: String(activeYear?.academic_year_id ?? ALL_VALUE),
+    grade: defaultGrade,
+    pathway: defaultPathwayForGrade(defaultGrade),
+    status: "active",
+    search: "",
+  };
+}
+
+export function offeringQueryFromFilters(filters: OfferingFilters, options: SubjectOfferingFormOptions | null) {
+  if (!options || filters.academic_year_id === ALL_VALUE || filters.grade === ALL_VALUE) return null;
+  const level = options.academic_levels.find((item) => String(item.grade_level) === filters.grade);
+  if (!level) return null;
+  return {
+    academic_year_id: Number(filters.academic_year_id),
+    academic_level_id: level.academic_level_id,
+    pathway: filters.pathway !== ALL_VALUE ? filters.pathway : undefined,
+    status: filters.status !== ALL_VALUE ? filters.status : undefined,
+    search: filters.search,
+  };
+}
+
 export type { CurriculumStatusValue };
 
 export type PendingAction =
   | { kind: "subject"; action: "archive" | "restore"; id: number; label: string }
-  | { kind: "offering"; action: "archive" | "restore"; id: number; label: string }
-  | { kind: "grading"; action: "archive" | "restore"; id: number; label: string };
+  | { kind: "offering"; action: "archive" | "restore"; id: number; label: string };
 
 export type OfferingFormState = {
   subject_id: string;
@@ -76,7 +101,6 @@ export type OfferingFormState = {
   pathway: SubjectOfferingPathway;
   minutes: string;
   status: SubjectStatus;
-  default_grading_template: string;
 };
 
 // ─── Utility Functions ──────────────────────────────────────────────────────
@@ -160,12 +184,6 @@ export function downloadBlob(blob: Blob, filename: string) {
 
 export function subjectRouteGrade(level: SubjectAcademicLevel) {
   return level.level_name || `Grade ${level.grade_level}`;
-}
-
-export function scopeLabel(template: GradingTemplateListItem) {
-  const level = template.academic_level?.level_name ?? "Any level";
-  const subject = template.subject?.subject_name ?? "Any subject";
-  return `${level} - ${subject}`;
 }
 
 export function formatSubjectMinutes(minutes: number | null | undefined): string {

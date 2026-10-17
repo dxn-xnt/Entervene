@@ -97,9 +97,9 @@ export function SubjectCatalogCard({
           </div>
         </div>
         <div className="mt-3 flex flex-row gap-2 text-xs justify-between">
-          <span className="col-span-2 line-clamp-1">{subject.default_grading_template || "No template"}</span>
+          <span className="col-span-2 line-clamp-1">{subject.grading_template.template_name}</span>
 
-          <span className="text-right font-semibold text-black/70">Passing: {subject.subject_group?.passing_threshold ?? "—"}%</span>
+          <span className="text-right font-semibold text-black/70">Passing: {subject.grading_template.passing_threshold}%</span>
         </div>
       </Link>
 

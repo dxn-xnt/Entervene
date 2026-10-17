@@ -30,6 +30,8 @@ from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizAnswer import QuizAnswer
 from app.models.quiz.QuizQuestion import QuizQuestion
 from app.models.quiz.QuizSetting import QuizSetting
+from app.models.academic.GradingTemplate import GradingTemplate
+from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.submissions.StudentSubmission import StudentSubmission
 
 
@@ -40,6 +42,8 @@ TABLES = [
     AcademicStaff.__table__,
     Student.__table__,
     Subject.__table__,
+    GradingTemplate.__table__,
+    GradingTemplateComponent.__table__,
     Class.__table__,
     StudentClass.__table__,
     Classwork.__table__,
@@ -112,7 +116,24 @@ def quiz_attempt_context():
         academic_level_id=level.academic_level_id,
         user_id=accounts["other_student"].user_id,
     )
-    subject = Subject(subject_name="Programming", academic_level_id=level.academic_level_id)
+    template = GradingTemplate(
+        grading_template_id=1,
+        template_name="Core",
+        passing_threshold=87.0,
+        status="active",
+    )
+    template.components = [
+        GradingTemplateComponent(component_name="Written Work", weight=20.0, display_order=1),
+        GradingTemplateComponent(component_name="Performance Tasks", weight=50.0, display_order=2),
+        GradingTemplateComponent(component_name="Exams", weight=30.0, display_order=3),
+    ]
+    db.add(template)
+    db.flush()
+    subject = Subject(
+        subject_name="Programming",
+        academic_level_id=level.academic_level_id,
+        grading_template_id=template.grading_template_id,
+    )
     class_ = Class(
         section_name="Sapphire",
         academic_year_id=year.academic_year_id,

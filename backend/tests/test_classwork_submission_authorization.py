@@ -43,7 +43,8 @@ from app.models.quiz.QuizSetting import QuizSetting
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.submissions.SubmissionAttachment import SubmissionAttachment
 from app.models.notifications.Notification import Notification
-from app.models.academic.SubjectGroup import SubjectGroup
+from app.models.academic.GradingTemplate import GradingTemplate
+from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 
 
 TABLES = [
@@ -71,7 +72,8 @@ TABLES = [
     QuizAnswer.__table__,
     SubmissionAttachment.__table__,
     Notification.__table__,
-    SubjectGroup.__table__,
+    GradingTemplate.__table__,
+    GradingTemplateComponent.__table__,
 ]
 
 
@@ -102,7 +104,18 @@ def authz_context(tmp_path):
         is_active=True,
     )
     level = AcademicLevel(level_name="Grade 7", grade_level=7)
-    db.add_all([year, level])
+    template = GradingTemplate(
+        grading_template_id=1,
+        template_name="Core",
+        passing_threshold=87.0,
+        status="active",
+    )
+    template.components = [
+        GradingTemplateComponent(component_name="Written Work", weight=20.0, display_order=1),
+        GradingTemplateComponent(component_name="Performance Tasks", weight=50.0, display_order=2),
+        GradingTemplateComponent(component_name="Exams", weight=30.0, display_order=3),
+    ]
+    db.add_all([year, level, template])
     db.flush()
     period = AcademicPeriod(
         period_name="Q1",
@@ -111,7 +124,11 @@ def authz_context(tmp_path):
         end_date=date(2025, 8, 31),
         academic_year_id=year.academic_year_id,
     )
-    subject = Subject(subject_name="Science", academic_level_id=level.academic_level_id)
+    subject = Subject(
+        subject_name="Science",
+        academic_level_id=level.academic_level_id,
+        grading_template_id=template.grading_template_id,
+    )
     db.add_all([period, subject])
     db.flush()
 

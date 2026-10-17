@@ -15,24 +15,21 @@ class Subject(Base):
     academic_level_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("academic_level.academic_level_id"), nullable=True)
     subject_name: Mapped[str] = mapped_column(String(150), nullable=False)
     subject_codename: Mapped[str | None] = mapped_column(String(50))
-    # Deprecated free-text column — kept for rollback safety, superseded by subject_group_id FK.
-    subject_group: Mapped[str | None] = mapped_column(String(50))
-    subject_group_id: Mapped[int | None] = mapped_column(
+    grading_template_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("subject_groups.subject_group_id", ondelete="RESTRICT"),
-        nullable=True,
+        ForeignKey("grading_template.grading_template_id", ondelete="RESTRICT"),
+        nullable=False,
+        default=1,
     )
     is_math_or_science: Mapped[bool | None] = mapped_column(Boolean, default=False)
     is_core: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str | None] = mapped_column(String(20), default="active")
-    default_grading_template: Mapped[str | None] = mapped_column(String(100))
     description: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
     academic_level: Mapped[object] = relationship("AcademicLevel", back_populates="subjects")
-    subject_group_rel: Mapped[object] = relationship("SubjectGroup", back_populates="subjects")
+    grading_template: Mapped[object] = relationship("GradingTemplate", back_populates="subjects")
     subject_loads: Mapped[list[object]] = relationship("SubjectLoad", back_populates="subject")
     subject_offerings: Mapped[list[object]] = relationship("SubjectOffering", back_populates="subject")
-    grading_templates: Mapped[list[object]] = relationship("GradingTemplate", back_populates="subject")

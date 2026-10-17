@@ -25,8 +25,6 @@ import {
 
 import { isSeniorHighGrade } from "../subjects/components/subject-utils";
 
-const NO_TEMPLATE_VALUE = "no-template";
-
 type AddSubjectModalProps = {
   open?: boolean;
   subjectToEdit?: SubjectListItem | null;
@@ -38,8 +36,7 @@ type SubjectFormState = {
   academic_level_id: string;
   subject_name: string;
   subject_codename: string;
-  subject_group: string;
-  default_grading_template: string;
+  grading_template_id: string;
   description: string;
   status: SubjectStatus;
   is_math_or_science: boolean;
@@ -55,8 +52,7 @@ const emptyForm: SubjectFormState = {
   academic_level_id: "",
   subject_name: "",
   subject_codename: "",
-  subject_group: "",
-  default_grading_template: NO_TEMPLATE_VALUE,
+  grading_template_id: "",
   description: "",
   status: "active",
   is_math_or_science: false,
@@ -85,9 +81,7 @@ function formWithDefaults(
     academic_level_id: String(
       options?.academic_levels[0]?.academic_level_id ?? "",
     ),
-    subject_group: options?.subject_groups[0]
-      ? String(options.subject_groups[0].subject_group_id)
-      : "",
+    grading_template_id: String(options?.grading_template_details.find((t) => t.template_name === "Core")?.grading_template_id ?? ""),
     status: options?.default_status ?? "active",
   };
 }
@@ -130,11 +124,7 @@ export default function AddSubjectModal({
         ),
         subject_name: subjectToEdit.subject_name,
         subject_codename: subjectToEdit.subject_codename || "",
-        subject_group: subjectToEdit.subject_group
-          ? String(subjectToEdit.subject_group.subject_group_id)
-          : "",
-        default_grading_template:
-          subjectToEdit.default_grading_template || NO_TEMPLATE_VALUE,
+        grading_template_id: String(subjectToEdit.grading_template_id ?? ""),
         description: subjectToEdit.description || "",
         status: subjectToEdit.status,
         is_math_or_science: subjectToEdit.is_math_or_science || false,
@@ -180,14 +170,9 @@ export default function AddSubjectModal({
           academic_level_id:
             current.academic_level_id ||
             String(nextOptions.academic_levels[0]?.academic_level_id ?? ""),
-          subject_group:
-            current.subject_group ||
-            (nextOptions.subject_groups[0]
-              ? String(nextOptions.subject_groups[0].subject_group_id)
-              : ""),
+          grading_template_id: current.grading_template_id ||
+            String(nextOptions.grading_template_details.find((t) => t.template_name === "Core")?.grading_template_id ?? ""),
           status: nextOptions.default_status,
-          default_grading_template:
-            current.default_grading_template || NO_TEMPLATE_VALUE,
         }));
         setOfferingForm((current) => ({
           ...current,
@@ -231,6 +216,10 @@ export default function AddSubjectModal({
   ) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
+
+  const selectedTemplateObj = gradingTemplates.find(
+    (t) => String(t.grading_template_id) === form.grading_template_id,
+  ) ?? null;
 
   const selectedLevel = options?.academic_levels.find(
     (level) => String(level.academic_level_id) === form.academic_level_id,
@@ -330,17 +319,17 @@ export default function AddSubjectModal({
 
     setIsSaving(true);
     try {
-      const selectedTemplate =
-        form.default_grading_template === NO_TEMPLATE_VALUE
-          ? null
-          : form.default_grading_template;
+      if (!selectedTemplateObj) {
+        setError("Select an active grading template.");
+        return;
+      }
+      const gradingTemplateId = selectedTemplateObj.grading_template_id;
 
       if (subjectToEdit) {
         await updateSubject(subjectToEdit.subject_id, {
           subject_name: form.subject_name.trim(),
           subject_codename: form.subject_codename.trim() || null,
-          subject_group_id: Number(form.subject_group),
-          default_grading_template: selectedTemplate,
+          grading_template_id: gradingTemplateId,
           description: form.description.trim() || null,
           status: form.status,
           is_math_or_science: form.is_math_or_science,
@@ -354,9 +343,8 @@ export default function AddSubjectModal({
       const created = await createSubject({
         subject_name: form.subject_name.trim(),
         subject_codename: form.subject_codename.trim() || null,
-        subject_group_id: Number(form.subject_group),
+        grading_template_id: gradingTemplateId,
         academic_level_id: Number(form.academic_level_id),
-        default_grading_template: selectedTemplate,
         description: form.description.trim() || null,
         status: form.status,
         is_math_or_science: form.is_math_or_science,
@@ -534,76 +522,29 @@ export default function AddSubjectModal({
               placeholder="Enter code"
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="subject-group" className="text-sm">
-              Subject Group
-            </label>
-            <Select
-              value={form.subject_group}
-              onValueChange={(value) => setField("subject_group", value)}
-            >
-              <Select.Trigger id="subject-group" className="w-full min-w-0">
-                <Select.Value placeholder="Select group" />
-              </Select.Trigger>
-              <Select.Content
-                position="popper"
-                className="max-h-72 overflow-y-auto"
-              >
-                <Select.Group>
-                  {options?.subject_groups.map((group) => (
-                    <Select.Item
-                      key={group.subject_group_id}
-                      value={String(group.subject_group_id)}
-                    >
-                      {group.name} (Passing: {group.passing_threshold})
-                    </Select.Item>
-                  ))}
-                </Select.Group>
-              </Select.Content>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-1 md:col-span-2">
-            <Text as="h6" className="font-sans text-base font-bold">
-              Grading Template optional
-            </Text>
-            <label htmlFor="grading-template" className="text-sm">
-              Grading Template
-            </label>
-            <Select
-              value={form.default_grading_template}
-              onValueChange={(value) =>
-                setField("default_grading_template", value)
-              }
-            >
+          <div className="flex flex-col gap-1.5 md:col-span-2">
+            <label htmlFor="grading-template" className="text-sm font-semibold">Grading Template</label>
+            <Select value={form.grading_template_id} onValueChange={(value) => setField("grading_template_id", value)}>
               <Select.Trigger id="grading-template" className="w-full min-w-0">
-                <Select.Value placeholder="No template yet" />
+                <Select.Value placeholder="Select grading template" />
               </Select.Trigger>
-              <Select.Content
-                position="item-aligned"
-                className="max-h-72 overflow-y-auto"
-              >
+              <Select.Content position="popper" className="max-h-72 overflow-y-auto">
                 <Select.Group>
-                  <Select.Item value={NO_TEMPLATE_VALUE}>
-                    No template yet
-                  </Select.Item>
                   {gradingTemplates.map((template) => (
-                    <Select.Item
-                      key={template.grading_template_id}
-                      value={template.template_name}
-                    >
+                    <Select.Item key={template.grading_template_id} value={String(template.grading_template_id)}>
                       {template.template_name}
                     </Select.Item>
                   ))}
                 </Select.Group>
               </Select.Content>
             </Select>
-            <Text as="p" className="text-xs text-black/70">
-              Optional. Select a reusable grading setup if this subject already
-              has known grading weights.
-            </Text>
-            <Text as="p" className="text-xs text-black/70">
-              Create or edit templates in the Grading Setup tab.
-            </Text>
+            {selectedTemplateObj && (
+              <div className="rounded border border-black/20 bg-muted/20 p-3 text-sm">
+                <strong>{selectedTemplateObj.template_name}</strong>
+                <p>Passing Threshold: {selectedTemplateObj.passing_threshold}%</p>
+                <p>Written Work: {selectedTemplateObj.components.find((c) => c.component_name === "Written Work")?.weight ?? 0}% | Performance Tasks: {selectedTemplateObj.components.find((c) => c.component_name === "Performance Tasks")?.weight ?? 0}% | Exams: {selectedTemplateObj.components.find((c) => c.component_name === "Exams")?.weight ?? 0}%</p>
+              </div>
+            )}
           </div>
           <div className="flex flex-col gap-1 md:col-span-2">
             <label htmlFor="subject-description" className="text-sm">

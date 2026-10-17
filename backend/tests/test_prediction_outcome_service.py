@@ -23,7 +23,8 @@ from app.models.people.Student import Student
 from app.services.prediction.PredictionOutcomeService import evaluate_prediction_outcome
 
 
-from app.models.academic.SubjectGroup import SubjectGroup
+from app.models.academic.GradingTemplate import GradingTemplate
+from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 
 
 TABLES = [
@@ -34,7 +35,8 @@ TABLES = [
     Student.__table__,
     AcademicPeriod.__table__,
     Class.__table__,
-    SubjectGroup.__table__,
+    GradingTemplate.__table__,
+    GradingTemplateComponent.__table__,
     Subject.__table__,
     AIModelVersion.__table__,
     AIPrediction.__table__,
@@ -104,13 +106,18 @@ def outcome_context():
         academic_year_id=year.academic_year_id,
         academic_level_id=level.academic_level_id,
     )
-    group = SubjectGroup(name="Core", passing_threshold=75.0, display_order=1)
-    db.add(group)
+    template = GradingTemplate(grading_template_id=1, template_name="Core", passing_threshold=75.0, status="active")
+    template.components = [
+        GradingTemplateComponent(component_name="Written Work", weight=20.0, display_order=1),
+        GradingTemplateComponent(component_name="Performance Tasks", weight=50.0, display_order=2),
+        GradingTemplateComponent(component_name="Exams", weight=30.0, display_order=3),
+    ]
+    db.add(template)
     db.flush()
 
     subject = Subject(
         subject_name="Science",
-        subject_group_id=group.subject_group_id,
+        grading_template_id=template.grading_template_id,
         academic_level_id=level.academic_level_id,
     )
     model_version = AIModelVersion(

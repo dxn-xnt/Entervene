@@ -369,7 +369,7 @@ def get_subject_load_studio_data(
                 "subject_name": s.subject_name,
                 "subject_codename": s.subject_codename,
                 "academic_level_id": s.academic_level_id,
-                "subject_group": s.subject_group or "General",
+                "grading_template": s.grading_template.template_name,
                 "is_core": bool(getattr(s, "is_core", False)),
                 "is_math_or_science": bool(
                     getattr(s, "is_math_or_science", False)

@@ -24,6 +24,8 @@ class OfficialSectionRead(BaseModel):
     pathway_code: str | None = None
     is_active: bool
     has_class: bool = False
+    class_id: int | None = None
+    class_status: str | None = None
 
 
 class OfficialSectionList(BaseModel):

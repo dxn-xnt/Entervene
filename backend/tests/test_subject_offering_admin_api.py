@@ -22,6 +22,8 @@ from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.DepedCluster import DepedCluster
 from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
 from app.models.academic.AcademicLevelPathwayScope import AcademicLevelPathwayScope
+from app.models.academic.GradingTemplate import GradingTemplate
+from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 
 TABLES = [
     AcademicYear.__table__,
@@ -124,46 +126,54 @@ def offering_context(db):
     db.add_all([term_1, term_2, other_year_term])
     db.flush()
 
+    template = GradingTemplate(template_name="Core", passing_threshold=85, status="active")
+    template.components = [
+        GradingTemplateComponent(component_name="Written Work", weight=20, display_order=1),
+        GradingTemplateComponent(component_name="Performance Tasks", weight=50, display_order=2),
+        GradingTemplateComponent(component_name="Exams", weight=30, display_order=3),
+    ]
+    db.add(template)
+    db.flush()
+
     biology = Subject(
         subject_name="General Biology 1",
         subject_codename="GENBIO1",
-        subject_group="Specialized",
-        default_grading_template="Default SHS",
+        grading_template_id=template.grading_template_id,
         status="active",
         academic_level_id=grade_11.academic_level_id,
     )
     math_7 = Subject(
         subject_name="Mathematics 7",
         subject_codename="MATH7",
-        subject_group="Core",
-        default_grading_template="Default JHS",
+        grading_template_id=template.grading_template_id,
         status="active",
         academic_level_id=grade_7.academic_level_id,
     )
     precal = Subject(
         subject_name="Pre-Calculus",
         subject_codename="PRECAL",
-        subject_group="Core",
-        default_grading_template="Default SHS",
+        grading_template_id=template.grading_template_id,
         status="active",
         academic_level_id=grade_11.academic_level_id,
     )
     archived_subject = Subject(
         subject_name="Old STEM Subject",
         subject_codename="OLDSTEM",
+        grading_template_id=template.grading_template_id,
         status="archived",
         academic_level_id=grade_11.academic_level_id,
     )
     grade_12_subject = Subject(
         subject_name="General Biology 2",
         subject_codename="GENBIO2",
+        grading_template_id=template.grading_template_id,
         status="active",
         academic_level_id=grade_12.academic_level_id,
     )
     genmath = Subject(
         subject_name="General Mathematics",
         subject_codename="GENMATH",
-        subject_group="Core",
+        grading_template_id=template.grading_template_id,
         is_core=True,
         status="active",
         academic_level_id=grade_11.academic_level_id,

@@ -591,3 +591,51 @@ def test_batch_create_requires_admin_and_authentication(client, batch_data):
 
     del client.app.dependency_overrides[get_current_user]
     assert post_batch(client, level.academic_level_id, payload).status_code == 401
+
+
+def test_official_section_read_includes_class_id_and_class_status(client, db, batch_data):
+    year, _, level, _, adviser, _, _, _ = batch_data
+    # 1. Create official section with no class
+    sec_resp = client.post(
+        "/api/v1/classes/official-sections",
+        json={"academic_year_id": year.academic_year_id, "academic_level_id": level.academic_level_id, "section_name": "TestSec"}
+    )
+    assert sec_resp.status_code == 201
+    sec_data = sec_resp.json()
+    assert sec_data["has_class"] is False
+    assert sec_data["class_id"] is None
+    assert sec_data["class_status"] is None
+
+    # 2. Create active class using this section
+    created_class = Class(
+        section_name="TestSec",
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+        adviser_staff_id=adviser.staff_id,
+        class_status="active",
+    )
+    db.add(created_class)
+    db.commit()
+    db.refresh(created_class)
+
+    # 3. Read official sections - class_id and class_status should now be populated
+    list_resp = client.get(
+        f"/api/v1/classes/official-sections?academic_year_id={year.academic_year_id}&academic_level_id={level.academic_level_id}"
+    )
+    assert list_resp.status_code == 200
+    listed_sec = next(s for s in list_resp.json()["sections"] if s["section_name"] == "TestSec")
+    assert listed_sec["has_class"] is True
+    assert listed_sec["class_id"] == created_class.class_id
+    assert listed_sec["class_status"] == "active"
+
+    # 4. If archived, class_status reflects "archived"
+    created_class.class_status = "archived"
+    db.commit()
+
+    list_resp2 = client.get(
+        f"/api/v1/classes/official-sections?academic_year_id={year.academic_year_id}&academic_level_id={level.academic_level_id}"
+    )
+    listed_sec2 = next(s for s in list_resp2.json()["sections"] if s["section_name"] == "TestSec")
+    assert listed_sec2["has_class"] is True
+    assert listed_sec2["class_id"] == created_class.class_id
+    assert listed_sec2["class_status"] == "archived"

@@ -77,18 +77,16 @@ def current_period_context():
         is_active=False,
     )
     class_ = Class(section_name="Archimedes", academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id)
-    subject = Subject(subject_name="Science", subject_codename="SCIENCE", academic_level_id=level.academic_level_id)
-    db.add_all([account, staff, student, period1, period2, class_, subject])
-    db.flush()
-    template = GradingTemplate(template_name="Current 40-40-20", academic_level_id=level.academic_level_id, subject_id=subject.subject_id, status="active")
+    template = GradingTemplate(template_name="Core", passing_threshold=87.0, status="active")
     db.add(template)
     db.flush()
     db.add_all([
-        GradingTemplateComponent(grading_template_id=template.grading_template_id, component_name="Written Works", weight=Decimal("40"), display_order=1),
+        GradingTemplateComponent(grading_template_id=template.grading_template_id, component_name="Written Work", weight=Decimal("40"), display_order=1),
         GradingTemplateComponent(grading_template_id=template.grading_template_id, component_name="Performance Tasks", weight=Decimal("40"), display_order=2),
-        GradingTemplateComponent(grading_template_id=template.grading_template_id, component_name="Quarterly Assessment", weight=Decimal("20"), display_order=3),
+        GradingTemplateComponent(grading_template_id=template.grading_template_id, component_name="Exams", weight=Decimal("20"), display_order=3),
     ])
-    subject.default_grading_template = str(template.grading_template_id)
+    subject = Subject(subject_name="Science", subject_codename="SCIENCE", academic_level_id=level.academic_level_id, grading_template_id=template.grading_template_id)
+    db.add_all([account, staff, student, period1, period2, class_, subject])
     db.commit()
     yield {"db": db, "student": student, "class": class_, "subject": subject, "staff": staff, "period": period1, "next_period": period2, "template": template, "level": level}
     db.close()

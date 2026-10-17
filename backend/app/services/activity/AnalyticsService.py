@@ -648,7 +648,7 @@ def build_teacher_dashboard_health(
             Class.class_id.in_(class_ids),
         ).all()
     } if class_ids else {}
-    threshold_subjects = db.query(Subject).options(joinedload(Subject.subject_group_rel)).filter(
+    threshold_subjects = db.query(Subject).options(joinedload(Subject.grading_template)).filter(
         Subject.subject_id.in_(scoped_subject_ids),
     ).all() if scoped_subject_ids else []
     subjects_by_id = {item.subject_id: item for item in threshold_subjects}
@@ -1008,7 +1008,7 @@ def build_teacher_dashboard_health(
             ),
             "statDescription": (
                 grade_summary.warnings[0].message if grade_summary.warnings else
-                "Against each subject group's passing grade."
+                "Against each subject's grading template passing grade."
             ),
         },
         {

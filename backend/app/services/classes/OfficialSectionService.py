@@ -13,11 +13,12 @@ from app.services.pathways.PathwayScopeService import resolve_pathway_scope
 
 
 def section_read(db: Session, section: OfficialSection) -> dict:
-    has_class = db.query(Class.class_id).filter(
+    existing_class = db.query(Class.class_id, Class.class_status).filter(
         Class.academic_year_id == section.academic_year_id,
         Class.academic_level_id == section.academic_level_id,
         func.lower(Class.section_name) == section.normalized_name,
-    ).first() is not None
+    ).first()
+    has_class = existing_class is not None
     return {
         "id": section.id,
         "academic_year_id": section.academic_year_id,
@@ -28,6 +29,8 @@ def section_read(db: Session, section: OfficialSection) -> dict:
         "pathway_code": section.pathway.code if section.pathway else None,
         "is_active": section.is_active,
         "has_class": has_class,
+        "class_id": existing_class[0] if existing_class else None,
+        "class_status": existing_class[1] if existing_class else None,
     }
 
 
