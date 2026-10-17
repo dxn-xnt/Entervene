@@ -26,6 +26,7 @@ import { Table } from "@/components/retroui/Table";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Text } from "@/components/retroui/Text";
 import { classPathwayLabel } from "@/lib/class-pathway";
+import ExistingClassDistribution from "./existing-class-distribution";
 
 function transferSectionLabel(section: ClassTransferOption): string {
   const pathway = classPathwayLabel({
@@ -53,25 +54,31 @@ const MODAL_TABS: Array<TabItem<ModalTab>> = [
 ];
 
 export default function EditStudentList({
-  currentSectionId: _currentSectionId,
+  currentSectionId,
   currentSectionName,
   academicLevel,
+  academicYear,
+  requiresPathway,
   students,
   availableStudents,
   availableSections,
   onSaveChanges,
+  onDistributionCommitted,
   onClose,
 }: {
   currentSectionId: number;
   currentSectionName: string;
   academicLevel: string;
+  academicYear: string;
+  requiresPathway: boolean;
   students: ClassStudentListItem[];
   availableStudents: ClassAssignmentStudent[];
   availableSections: ClassTransferOption[];
   onSaveChanges: (payload: UpdateClassStudentListRequest) => Promise<void>;
+  onDistributionCommitted: () => Promise<void>;
   onClose: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<ModalTab>("enrolled");
+  const [activeTab, setActiveTab] = useState<ModalTab>(students.length ? "enrolled" : "available");
   const [enrolledSearch, setEnrolledSearch] = useState("");
   const [availableSearch, setAvailableSearch] = useState("");
   const [selectMultiple, setSelectMultiple] = useState(false);
@@ -85,6 +92,7 @@ export default function EditStudentList({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState("");
+  const [showDistribution, setShowDistribution] = useState(false);
 
   const pendingEnrolledIds = useMemo(
     () => new Set([...pendingRemovals, ...pendingTransfers.keys()]),
@@ -102,6 +110,7 @@ export default function EditStudentList({
     [availableSearch, availableStudents]
   );
   const enrolledGroups = groupStudents(visibleEnrolledStudents);
+  const availableGroups = groupStudents(visibleAvailableStudents);
   const pendingCount = pendingAdditions.size + pendingRemovals.size + pendingTransfers.size;
 
   function toggleSelected(studentId: string) {
@@ -220,7 +229,8 @@ export default function EditStudentList({
   }
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) closeModal(); }}>
+    <>
+    <Dialog open={!showDistribution} onOpenChange={(open) => { if (!open && !showDistribution) closeModal(); }}>
       <Dialog.Content size="2xl">
         <Dialog.Header>
           <Text as="h5" className="font-sans text-xl font-bold">
@@ -274,13 +284,14 @@ export default function EditStudentList({
             ) : (
               <AvailableStudentsPanel
                 academicLevel={academicLevel}
-                students={visibleAvailableStudents}
-                totalStudents={availableStudents.length}
+                groups={availableGroups}
                 search={availableSearch}
                 onSearch={setAvailableSearch}
                 pendingAdditions={pendingAdditions}
                 onAdd={stageAddition}
                 onUndo={undoAddition}
+                onDistribute={() => setShowDistribution(true)}
+                canDistribute={pendingCount === 0 && !saving}
               />
             )}
           </main>
@@ -338,6 +349,18 @@ export default function EditStudentList({
         </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
+    {showDistribution && <ExistingClassDistribution
+      sourceClassId={currentSectionId}
+      sourceSectionName={currentSectionName}
+      academicYear={academicYear}
+      academicLevel={academicLevel}
+      requiresPathway={requiresPathway}
+      otherClasses={availableSections}
+      initialAvailableCount={availableStudents.length}
+      onClose={() => setShowDistribution(false)}
+      onCommitted={onDistributionCommitted}
+    />}
+    </>
   );
 }
 
@@ -451,32 +474,40 @@ function EnrolledStudentsPanel({
 
 function AvailableStudentsPanel({
   academicLevel,
-  students,
+  groups,
   search,
   onSearch,
   pendingAdditions,
   onAdd,
   onUndo,
+  onDistribute,
+  canDistribute,
 }: {
   academicLevel: string;
-  students: ClassAssignmentStudent[];
-  totalStudents: number;
+  groups: Array<readonly [string, ClassAssignmentStudent[]]>;
   search: string;
   onSearch: (value: string) => void;
   pendingAdditions: Set<string>;
   onAdd: (studentId: string) => void;
   onUndo: (studentId: string) => void;
+  onDistribute: () => void;
+  canDistribute: boolean;
 }) {
+  const totalCount = groups.reduce((count, [, students]) => count + students.length, 0);
   return (
-    <section className="grid h-full grid-rows-[auto_auto_1fr] gap-2">
-      <Input
-        value={search}
-        onChange={(event) => onSearch(event.target.value)}
-        placeholder="Search available students..."
-        className="max-w-xs h-9"
-      />
+    <section className="grid h-full grid-rows-[auto_1fr] gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Input
+          value={search}
+          onChange={(event) => onSearch(event.target.value)}
+          placeholder="Search available students..."
+          className="max-w-xs h-9"
+        />
+        <Button size="sm" variant="outline" disabled={!canDistribute} onClick={onDistribute}>Assign Evenly</Button>
+        {!canDistribute && <p className="w-full text-xs text-muted-foreground">Save or discard pending manual changes before distributing students.</p>}
+      </div>
       <div className="min-h-0 overflow-y-auto rounded border-2 border-border bg-card">
-        {!students.length ? (
+        {!totalCount ? (
           <Empty className="p-6 border-0 shadow-none bg-transparent">
             <Empty.Content>
               <Empty.Description className="text-sm font-semibold">
@@ -485,48 +516,52 @@ function AvailableStudentsPanel({
             </Empty.Content>
           </Empty>
         ) : (
-          students.map((student) => {
-            const pending = pendingAdditions.has(student.student_id);
-            return (
-              <div
-                key={student.student_id}
-                className={`flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 last:border-b-0 ${pending ? "bg-primary/10" : "bg-card"
-                  }`}
-              >
-                <Avatar variant="student" className="size-9 shrink-0">
-                  <Avatar.Image src={student.avatar || "/avatars/student-avatars/1.svg"} alt={assignmentStudentName(student)} />
-                  <Avatar.Fallback>
-                    {(student.first_name || "?").charAt(0).toUpperCase()}
-                  </Avatar.Fallback>
-                </Avatar>
-                <span className="min-w-0 flex-1">
-                  <Text as="p" className="block truncate text-sm font-bold">
-                    {assignmentStudentName(student)}
-                  </Text>
-                  <Text as="p" className="block text-xs font-semibold text-muted-foreground">
-                    LRN {student.student_lrn}
-                  </Text>
-                </span>
-                <Badge variant="outline">No section</Badge>
-                {pending && <Badge variant="default">Pending save</Badge>}
-                <Button
-                  size="sm"
-                  variant={pending ? "outline" : "default"}
-                  onClick={() => (pending ? onUndo(student.student_id) : onAdd(student.student_id))}
+          groups.map(([gender, students]) => <section key={gender} aria-label={`${gender} students`}>
+            <div className="bg-muted/60 px-4 py-2 text-xs font-bold uppercase text-muted-foreground">
+              {gender} ({students.length})
+            </div>
+            {students.map((student) => {
+              const pending = pendingAdditions.has(student.student_id);
+              return (
+                <div
+                  key={student.student_id}
+                  className={`flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 last:border-b-0 ${pending ? "bg-primary/10" : "bg-card"}`}
                 >
-                  {pending ? (
-                    <>
-                      <Check className="size-3 mr-1" /> Added
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="size-3 mr-1" /> Add
-                    </>
-                  )}
-                </Button>
-              </div>
-            );
-          })
+                  <Avatar variant="student" className="size-9 shrink-0">
+                    <Avatar.Image src={student.avatar || "/avatars/student-avatars/1.svg"} alt={assignmentStudentName(student)} />
+                    <Avatar.Fallback>
+                      {(student.first_name || "?").charAt(0).toUpperCase()}
+                    </Avatar.Fallback>
+                  </Avatar>
+                  <span className="min-w-0 flex-1">
+                    <Text as="p" className="block truncate text-sm font-bold">
+                      {assignmentStudentName(student)}
+                    </Text>
+                    <Text as="p" className="block text-xs font-semibold text-muted-foreground">
+                      LRN {student.student_lrn}
+                    </Text>
+                  </span>
+                  <Badge variant="outline">No section</Badge>
+                  {pending && <Badge variant="default">Pending save</Badge>}
+                  <Button
+                    size="sm"
+                    variant={pending ? "outline" : "default"}
+                    onClick={() => (pending ? onUndo(student.student_id) : onAdd(student.student_id))}
+                  >
+                    {pending ? (
+                      <>
+                        <Check className="size-3 mr-1" /> Added
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="size-3 mr-1" /> Add
+                      </>
+                    )}
+                  </Button>
+                </div>
+              );
+            })}
+          </section>)
         )}
       </div>
     </section>
@@ -768,7 +803,7 @@ function BulkActionBar({
   );
 }
 
-function groupStudents(students: ClassStudentListItem[]) {
+function groupStudents<T extends { gender: string | null }>(students: T[]) {
   const groups = ["Male", "Female", "Unspecified"].map(
     (gender) => [gender, students.filter((student) => normalizedGender(student.gender) === gender)] as const
   );
@@ -776,6 +811,8 @@ function groupStudents(students: ClassStudentListItem[]) {
 }
 
 function normalizedGender(gender: string | null | undefined) {
-  if (gender === "Female" || gender === "Male") return gender;
+  const value = gender?.trim().toLowerCase();
+  if (value === "male" || value === "m" || value === "boy") return "Male";
+  if (value === "female" || value === "f" || value === "girl") return "Female";
   return "Unspecified";
 }

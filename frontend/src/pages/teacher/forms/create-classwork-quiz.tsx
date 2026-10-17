@@ -6,7 +6,7 @@ import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { useToast } from "@/components/retroui/use-toast";
 import { Text } from "@/components/retroui/Text";
-import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
+import { Dialog } from "@/components/retroui/Dialog";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";

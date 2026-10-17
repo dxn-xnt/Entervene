@@ -53,7 +53,9 @@ def resolve_student_gwa(
         .filter(StudentClass.student_id == student_id)
     )
     if active_academic_year_id is not None:
-        prior_classes_query = prior_classes_query.filter(Class.academic_year_id < active_academic_year_id)
+        selected_year = db.get(AcademicYear, active_academic_year_id)
+        if selected_year is not None:
+            prior_classes_query = prior_classes_query.filter(AcademicYear.end_date < selected_year.start_date)
 
     prior_class = prior_classes_query.order_by(AcademicYear.start_date.desc()).first()
 
@@ -93,11 +95,13 @@ def _assignment_gender_group(gender: str | None) -> str:
     val = normalized_text(gender)
     if val in {"male", "m", "boy"}:
         return "male"
-    return "female"
+    if val in {"female", "f", "girl"}:
+        return "female"
+    return "unspecified"
 
 
 def _gender_priority(gender: str | None) -> int:
-    return 0 if _assignment_gender_group(gender) == "male" else 1
+    return {"male": 0, "female": 1, "unspecified": 2}[_assignment_gender_group(gender)]
 
 
 def _sort_students_alphabetical(students: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -138,6 +142,7 @@ def distribute_students_balanced(
     unassigned_student_ids: list[uuid.UUID],
     current_assignments: dict[str, list[uuid.UUID]],
     mode: Literal["alphabetical", "gwa"] = "alphabetical",
+    academic_year_id: int | None = None,
 ) -> dict[str, list[str]]:
     """Compute an even, gender-balanced (and optionally GWA-ranked) student distribution across sections.
     This function is strictly read-only and does not persist any StudentClass rows.
@@ -155,7 +160,7 @@ def distribute_students_balanced(
 
     # Resolve active academic year once for GWA lookups
     active_ay = db.query(AcademicYear.academic_year_id).filter(AcademicYear.is_active.is_(True)).first()
-    active_ay_id = active_ay[0] if active_ay else None
+    active_ay_id = academic_year_id if academic_year_id is not None else (active_ay[0] if active_ay else None)
 
     for s in student_rows:
         gwa = resolve_student_gwa(db, s, active_ay_id) if mode == "gwa" else None
@@ -184,18 +189,19 @@ def distribute_students_balanced(
         students_map[sid] for sid in unassigned_student_ids if sid in students_map
     ]
 
-    # Distribute by gender group: Male first, then Female
-    for group in ("male", "female"):
+    # Keep final roster sizes as even as possible; gender counts break ties.
+    for group in ("male", "female", "unspecified"):
         # Sort unassigned students of this gender using the mode's sort key
         group_unassigned = sort_fn([
             st for st in unassigned_students if _assignment_gender_group(st.get("gender")) == group
         ])
 
         for student in group_unassigned:
-            # Find section with lowest current count of this gender; tie-break on total roster count
+            # Fill the smallest roster first, then the roster with fewer students in this gender group.
             best_section_id: str | None = None
-            best_gender_count: int = 999999
             best_total_count: int = 999999
+            best_gender_count: int = 999999
+            best_gwa_sum: float = float("inf")
 
             for sec_id in section_ids:
                 sec_students = result_by_section[sec_id]
@@ -203,15 +209,13 @@ def distribute_students_balanced(
                     1 for st in sec_students if _assignment_gender_group(st.get("gender")) == group
                 )
                 total_count = len(sec_students)
+                gwa_sum = sum(float(st["gwa"]) for st in sec_students if st["gwa"] is not None) if mode == "gwa" else 0.0
 
-                if gender_count < best_gender_count:
+                if (total_count, gender_count, gwa_sum) < (best_total_count, best_gender_count, best_gwa_sum):
                     best_section_id = sec_id
                     best_gender_count = gender_count
                     best_total_count = total_count
-                elif gender_count == best_gender_count and total_count < best_total_count:
-                    best_section_id = sec_id
-                    best_gender_count = gender_count
-                    best_total_count = total_count
+                    best_gwa_sum = gwa_sum
 
             if best_section_id is not None:
                 result_by_section[best_section_id].append(student)

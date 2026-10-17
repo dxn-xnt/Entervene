@@ -93,7 +93,6 @@ export default function SubjectDetails() {
   const [editingCompetency, setEditingCompetency] = useState<CompetencyItem | null>(null);
   const [selectedCompetencyIdForNewLesson, setSelectedCompetencyIdForNewLesson] = useState<number | undefined>(undefined);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [currentAcademicPeriodId, setCurrentAcademicPeriodId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"lessons" | "classwork">("lessons");
   const [isCreatingLesson, setIsCreatingLesson] = useState(false);
   const [activeLessonDetail, setActiveLessonDetail] = useState<Lesson | null>(null);
@@ -338,7 +337,6 @@ export default function SubjectDetails() {
               periods.default_academic_period_id ||
               periods.periods[0]?.academic_period_id;
             if (periodId) {
-              setCurrentAcademicPeriodId(periodId);
               const roster = await getTeacherStudentRoster(
                 classId,
                 subjectId,

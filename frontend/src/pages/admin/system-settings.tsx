@@ -22,6 +22,7 @@ import { useToast } from "@/components/retroui/use-toast";
 import { ArrowUpRight, Lock, Plus, Calendar, Save } from "lucide-react";
 import AddAcademicPeriodModal from "./forms/add-academic-period";
 import AddPathwayModal from "./forms/add-pathway";
+import OfficialSectionsSettings from "./official-sections-settings";
 
 import {
   getAllSettings,
@@ -91,6 +92,7 @@ export default function AdminSystemSettings() {
     AcademicYearSettingItem[]
   >([]);
   const [selectedYearId, setSelectedYearId] = React.useState<string>("");
+  const [scopeConfigYearId, setScopeConfigYearId] = React.useState<string>("");
   const [academicPeriods, setAcademicPeriods] = React.useState<
     AcademicPeriodSettingItem[]
   >([]);
@@ -142,7 +144,7 @@ export default function AdminSystemSettings() {
   const [pathwayScopes, setPathwayScopes] = React.useState<PathwayScopeRead[]>(
     [],
   );
-  const [_isLoadingScopes, setIsLoadingScopes] = React.useState(false);
+  const [isLoadingScopes, setIsLoadingScopes] = React.useState(false);
 
   const loadSubjectGroups = React.useCallback(async () => {
     setIsLoadingGroups(true);
@@ -182,7 +184,7 @@ export default function AdminSystemSettings() {
 
   const handleTogglePathwayScope = async (scope: PathwayScopeRead) => {
     try {
-      const yearId = Number(selectedYearId) || 1;
+      const yearId = Number(scopeConfigYearId);
       const updatedScopes = await updatePathwayScopes({
         academic_year_id: yearId,
         scopes: [
@@ -321,6 +323,7 @@ export default function AdminSystemSettings() {
       const activeYear = yearsData.find((y) => y.is_active) || yearsData[0];
       if (activeYear) {
         setSelectedYearId(String(activeYear.academic_year_id));
+        setScopeConfigYearId(String(activeYear.academic_year_id));
         await Promise.all([
           loadAcademicPeriodsForYear(activeYear.academic_year_id),
           loadPathwayScopes(activeYear.academic_year_id),
@@ -549,6 +552,7 @@ export default function AdminSystemSettings() {
         })),
       );
       await loadAcademicPeriodsForYear(yearId);
+      setScopeConfigYearId(yearIdStr);
       await loadPathwayScopes(yearId);
       showToast(
         `Active academic year changed to ${selectedYear?.year_label || yearIdStr}`,
@@ -1339,6 +1343,20 @@ export default function AdminSystemSettings() {
                   </Card.Title>
                 </Card.Header>
                 <Card.Content className="flex flex-col gap-4">
+                  <div className="grid gap-1 sm:max-w-xs">
+                    <Text as="p" className="text-sm font-semibold">Configure academic year</Text>
+                    <Select value={scopeConfigYearId} onValueChange={(value) => {
+                      setScopeConfigYearId(value);
+                      void loadPathwayScopes(Number(value));
+                    }}>
+                      <Select.Trigger className="w-full"><Select.Value placeholder="Select academic year" /></Select.Trigger>
+                      <Select.Content><Select.Group>
+                        {academicYears.map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}</Select.Item>)}
+                      </Select.Group></Select.Content>
+                    </Select>
+                    <Text as="p" className="text-xs text-muted-foreground">Changing this configuration year does not activate it.</Text>
+                  </div>
+                  {isLoadingScopes && <Text as="p" className="text-sm">Loading pathway settings...</Text>}
                   <Table>
                     <Table.Header>
                       <Table.Row>
@@ -1427,6 +1445,14 @@ export default function AdminSystemSettings() {
                   </Table>
                 </Card.Content>
               </Card>
+
+              {scopeConfigYearId && !isLoadingScopes && <OfficialSectionsSettings
+                key={scopeConfigYearId}
+                academicYearId={Number(scopeConfigYearId)}
+                levels={academicLevels}
+                pathways={pathways}
+                pathwayScopes={pathwayScopes}
+              />}
 
               {/* Teacher Workload Caps */}
               <Card className="@container/card w-full">

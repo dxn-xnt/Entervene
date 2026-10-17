@@ -316,6 +316,20 @@ def test_unassigned_students_filters_by_level_and_active_year_then_sorts(client,
     assert students[1]["middle_name"] is None
     assert students[-1]["gender"] is None
 
+    previous_roster = client.get(
+        f"/api/v1/classes/unassigned-students?academic_level_id={selected_level.academic_level_id}&class_id={previous_class.class_id}"
+    )
+    assert previous_roster.status_code == 200
+    previous_ids = {student["student_id"] for student in previous_roster.json()["students"]}
+    assert str(previous_only.student_id) not in previous_ids
+    assert str(active_assigned.student_id) in previous_ids
+    assert previous_roster.json()["academic_year"]["academic_year_id"] == previous_year.academic_year_id
+
+    mismatched_level = client.get(
+        f"/api/v1/classes/unassigned-students?academic_level_id={other_level.academic_level_id}&class_id={previous_class.class_id}"
+    )
+    assert mismatched_level.status_code == 400
+
 
 def test_non_admin_cannot_access_either_endpoint(client):
     client.app.dependency_overrides[get_current_user] = lambda: {

@@ -117,10 +117,7 @@ export default function ImportClassWizard({ onContinue, onValidationStale, onBac
   }
 
   function downloadTemplate() {
-    const content = `${CLASS_IMPORT_TEMPLATE_HEADER_ROW}\n` +
-      `Grade 7 - Sapphire,7,general,STF-2026-001,John,A,Doe,109876543201,Alice,M,Smith,Female\n` +
-      `Grade 11 - STEM Med A,11,stem_medical,STF-2026-002,Jane,B,Smith,109876543202,Bob,K,Jones,Male\n` +
-      `Grade 11 - STEM Eng A,11,stem_engineering,STF-2026-003,Robert,C,Brown,109876543203,Charlie,L,Davis,Male\n`;
+    const content = `${CLASS_IMPORT_TEMPLATE_HEADER_ROW}\n`;
     const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");

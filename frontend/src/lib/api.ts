@@ -8,7 +8,10 @@ import type {
   ClassTransferOptionsResponse,
   DistributeStudentsPayload,
   DistributeStudentsResponse,
+  ExistingClassDistributionPreview,
+  ExistingClassDistributionCommitResponse,
   GetClassesResponse,
+  OfficialSectionOption,
   TeacherAdvisoryClassDetailResponse,
   TeacherAdvisoryClassGradesResponse,
   TeacherAdvisoryClassListItem,
@@ -1156,8 +1159,9 @@ export class ApiRequestError extends Error {
   }
 }
 
-export async function getClassFormOptions(): Promise<ClassFormOptions> {
-  const response = await apiFetch("/api/v1/classes/form-options");
+export async function getClassFormOptions(academicYearId?: number): Promise<ClassFormOptions> {
+  const query = academicYearId ? `?academic_year_id=${academicYearId}` : "";
+  const response = await apiFetch(`/api/v1/classes/form-options${query}`);
 
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null);
@@ -1839,8 +1843,47 @@ export async function updateClassStudentList(
   return (await response.json()) as ClassStudentListResponse;
 }
 
-export async function getUnassignedClassStudents(academicLevelId: number): Promise<UnassignedClassStudentsResponse> {
+export async function previewExistingClassDistribution(
+  classId: number,
+  classIds: number[],
+  mode: "alphabetical" | "gwa",
+): Promise<ExistingClassDistributionPreview> {
+  const response = await apiFetch(`/api/v1/classes/${classId}/distribution-preview`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ class_ids: classIds, mode }),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(classStudentsErrorMessage(data, response.status), response.status, data);
+  }
+  return (await response.json()) as ExistingClassDistributionPreview;
+}
+
+export async function commitExistingClassDistribution(
+  classId: number,
+  preview: ExistingClassDistributionPreview,
+  assignments?: Array<{ student_id: string; class_id: number }>,
+): Promise<ExistingClassDistributionCommitResponse> {
+  const response = await apiFetch(`/api/v1/classes/${classId}/distribution-commit`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      class_ids: preview.classes.map((item) => item.class_id),
+      mode: preview.mode,
+      snapshot: preview.snapshot,
+      assignments,
+    }),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(classStudentsErrorMessage(data, response.status), response.status, data);
+  }
+  return (await response.json()) as ExistingClassDistributionCommitResponse;
+}
+
+export async function getUnassignedClassStudents(academicLevelId: number, classId?: number, academicYearId?: number): Promise<UnassignedClassStudentsResponse> {
   const query = new URLSearchParams({ academic_level_id: String(academicLevelId) });
+  if (classId !== undefined) query.set("class_id", String(classId));
+  if (academicYearId !== undefined) query.set("academic_year_id", String(academicYearId));
   const response = await apiFetch(`/api/v1/classes/unassigned-students?${query.toString()}`);
 
   if (!response.ok) {
@@ -1849,6 +1892,26 @@ export async function getUnassignedClassStudents(academicLevelId: number): Promi
   }
 
   return (await response.json()) as UnassignedClassStudentsResponse;
+}
+
+export async function getOfficialSections(academicYearId: number, academicLevelId?: number): Promise<OfficialSectionOption[]> {
+  const query = new URLSearchParams({ academic_year_id: String(academicYearId) });
+  if (academicLevelId !== undefined) query.set("academic_level_id", String(academicLevelId));
+  const response = await apiFetch(`/api/v1/classes/official-sections?${query}`);
+  if (!response.ok) throw new Error("Unable to load official sections.");
+  return ((await response.json()) as { sections: OfficialSectionOption[] }).sections;
+}
+
+export async function createOfficialSection(payload: { academic_year_id: number; academic_level_id: number; section_name: string; pathway_id: number | null }): Promise<OfficialSectionOption> {
+  const response = await apiFetch("/api/v1/classes/official-sections", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  if (!response.ok) throw new Error(apiErrorMessage(await response.json().catch(() => null), "Unable to add official section."));
+  return (await response.json()) as OfficialSectionOption;
+}
+
+export async function updateOfficialSection(id: number, payload: { is_active?: boolean; section_name?: string; pathway_id?: number | null }): Promise<OfficialSectionOption> {
+  const response = await apiFetch(`/api/v1/classes/official-sections/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  if (!response.ok) throw new Error(apiErrorMessage(await response.json().catch(() => null), "Unable to update official section."));
+  return (await response.json()) as OfficialSectionOption;
 }
 
 function classListErrorMessage(data: unknown, status: number): string {

@@ -64,8 +64,22 @@ export type AcademicPathwayRead = {
 
 export type ClassFormOptions = {
   academic_year: AcademicYearOption;
+  academic_years?: AcademicYearOption[];
   academic_levels: AcademicLevelOption[];
   eligible_advisers: AdviserOption[];
+  official_sections?: OfficialSectionOption[];
+};
+
+export type OfficialSectionOption = {
+  id: number;
+  academic_year_id: number;
+  academic_level_id: number;
+  section_name: string;
+  pathway_id: number | null;
+  pathway_name: string | null;
+  pathway_code: string | null;
+  is_active: boolean;
+  has_class: boolean;
 };
 
 export type ClassListAdviser = AdviserOption;
@@ -238,6 +252,37 @@ export type ClassTransferOptionsResponse = {
   available_sections: ClassTransferOption[];
 };
 
+export type ExistingClassDistributionPreview = {
+  academic_year_id: number;
+  academic_year_label: string;
+  academic_level_id: number;
+  grade_level: number;
+  mode: "alphabetical" | "gwa";
+  snapshot: string;
+  unassigned_count: number;
+  classes: Array<{
+    class_id: number;
+    section_name: string;
+    existing_count: number;
+    to_add_count: number;
+    final_count: number;
+    male_count: number;
+    female_count: number;
+    unspecified_count: number;
+    average_gwa: number | null;
+  }>;
+  assignments: Array<{
+    student_id: string;
+    class_id: number;
+    student_name: string;
+    gender: string | null;
+    gwa: number | null;
+  }>;
+  imbalance: number;
+};
+
+export type ExistingClassDistributionCommitResponse = ExistingClassDistributionPreview & { committed_count: number };
+
 export type PendingStudentRemoval = {
   student_id: string;
 };
@@ -306,6 +351,7 @@ export type BatchCreateSectionRequest = {
 };
 
 export type BatchCreateClassesRequest = {
+  academic_year_id?: number;
   academic_level_id: number;
   sections: BatchCreateSectionRequest[];
 };
@@ -391,6 +437,7 @@ export type ClassImportValidationErrorResponse = {
 export type DistributionMode = "alphabetical" | "gwa";
 
 export type DistributeStudentsPayload = {
+  academic_year_id?: number;
   academic_level_id: number;
   mode: DistributionMode;
   sections: { local_id: string; section_name: string }[];

@@ -15,6 +15,9 @@ from app.api.v1.routes.Classes import router as classes_router
 from app.db.Base import Base
 from app.db.Session import get_db
 from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.AcademicPathway import AcademicPathway
+from app.models.academic.AcademicLevelPathwayScope import AcademicLevelPathwayScope
+from app.models.academic.OfficialSection import OfficialSection
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
@@ -154,6 +157,11 @@ def batch_data(db):
         add_student(db, level, "100000000003"),
     ]
     other_student = add_student(db, other_level, "200000000001")
+    # These are intentionally alternate school choices for generic class-service tests.
+    # The production migration seeds Entervene's actual names instead.
+    for name in ("Sapphire", "Emerald", "Ruby", "A", "B", "New", "Valid", "Invalid"):
+        db.add(OfficialSection(academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id,
+                               section_name=name, normalized_name=name.casefold()))
     db.commit()
     return year, other_year, level, other_level, adviser, adviser_two, students, other_student
 
@@ -207,6 +215,193 @@ def test_batch_create_persists_all_automatic_values_and_sorted_response(client, 
         == db.query(Class).filter(Class.class_id == assignment.class_id).one().academic_year_id
         for assignment in assignments
     )
+
+
+def test_grade_12_class_can_be_created_before_any_student_then_enrolled_later(client, db):
+    year = add_year(db, "2025-2026", True)
+    level = add_level(db, "Grade 12", 12)
+    adviser = add_staff(db, "T-12")
+    db.add(OfficialSection(academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id,
+                           section_name="Del Mundo", normalized_name="del mundo"))
+    db.commit()
+
+    created = post_batch(client, level.academic_level_id, [section("Del Mundo", adviser.staff_id)])
+    assert created.status_code == 201
+    class_id = created.json()["classes"][0]["class_id"]
+    assert created.json()["summary"]["student_assignment_count"] == 0
+    assert db.query(Student).count() == 0
+    assert db.query(StudentClass).count() == 0
+    listed = client.get("/api/v1/classes").json()["classes"]
+    assert next(item for item in listed if item["class_id"] == class_id)["student_count"] == 0
+    assert client.get(f"/api/v1/classes/{class_id}/students").json()["students"] == []
+
+    students = [add_student(db, level, "120000000001"), add_student(db, level, "120000000002")]
+    db.commit()
+    available = client.get(f"/api/v1/classes/unassigned-students?academic_level_id={level.academic_level_id}&class_id={class_id}")
+    assert available.status_code == 200
+    assert {item["student_id"] for item in available.json()["students"]} == {str(student.student_id) for student in students}
+    assigned = client.patch(f"/api/v1/classes/{class_id}/students", json={"additions": [{"student_id": str(student.student_id)} for student in students]})
+    assert assigned.status_code == 200
+    assert assigned.json()["summary"]["total_students"] == 2
+    assert db.query(StudentClass).filter(StudentClass.academic_year_id == year.academic_year_id).count() == 2
+    assert client.get(f"/api/v1/classes/{class_id}/students").json()["summary"]["total_students"] == 2
+
+
+@pytest.mark.parametrize("other_grade_student", [False, True])
+def test_grade_11_pathway_class_can_be_empty_with_or_without_other_grade_students(client, db, other_grade_student):
+    year = add_year(db, "2025-2026", True)
+    grade_11 = add_level(db, "Grade 11", 11)
+    grade_12 = add_level(db, "Grade 12", 12)
+    if other_grade_student:
+        add_student(db, grade_12, "120000000001")
+    adviser = add_staff(db, "T-11")
+    pathway = AcademicPathway(code="medical-courses", name="Medical Courses", is_enabled=True)
+    db.add(pathway)
+    db.flush()
+    db.add(OfficialSection(academic_year_id=year.academic_year_id, academic_level_id=grade_11.academic_level_id,
+                           section_name="Zara", normalized_name="zara", pathway_id=pathway.id))
+    db.commit()
+
+    request = section("Zara", adviser.staff_id)
+    request["pathway"] = pathway.code
+    created = post_batch(client, grade_11.academic_level_id, [request])
+    assert created.status_code == 201
+    assert created.json()["classes"][0]["student_count"] == 0
+    assert db.query(StudentClass).count() == 0
+
+    request["section_name"] = "Invalid"
+    request["pathway"] = "general"
+    invalid = post_batch(client, grade_11.academic_level_id, [request])
+    assert invalid.status_code == 422
+
+
+def test_configured_sections_are_year_and_grade_specific_and_reject_invalid_choices(client, db):
+    current = add_year(db, "2025-2026", True)
+    future = add_year(db, "2026-2027", False)
+    grade_7 = add_level(db, "Grade 7", 7)
+    grade_8 = add_level(db, "Grade 8", 8)
+    adviser = add_staff(db, "T-7")
+    db.add_all([
+        OfficialSection(academic_year_id=current.academic_year_id, academic_level_id=grade_7.academic_level_id, section_name="Aristotle", normalized_name="aristotle"),
+        OfficialSection(academic_year_id=current.academic_year_id, academic_level_id=grade_7.academic_level_id, section_name="Galileo", normalized_name="galileo"),
+        OfficialSection(academic_year_id=current.academic_year_id, academic_level_id=grade_8.academic_level_id, section_name="Newton", normalized_name="newton"),
+    ])
+    db.commit()
+
+    options = client.get(f"/api/v1/classes/form-options?academic_year_id={current.academic_year_id}")
+    assert options.status_code == 200
+    assert [item["section_name"] for item in options.json()["official_sections"] if item["academic_level_id"] == grade_7.academic_level_id] == ["Aristotle", "Galileo"]
+    for year_id, level_id, name in [
+        (current.academic_year_id, grade_7.academic_level_id, "Newton"),
+        (current.academic_year_id, grade_7.academic_level_id, "Invented"),
+        (future.academic_year_id, grade_7.academic_level_id, "Aristotle"),
+    ]:
+        rejected = client.post("/api/v1/classes/batch-create", json={"academic_year_id": year_id, "academic_level_id": level_id, "sections": [section(name, adviser.staff_id)]})
+        assert rejected.status_code == 422
+    assert db.query(Class).count() == 0
+
+    created = client.post("/api/v1/classes/batch-create", json={"academic_year_id": current.academic_year_id, "academic_level_id": grade_7.academic_level_id, "sections": [section(" aristotle ", adviser.staff_id)]})
+    assert created.status_code == 201
+    assert created.json()["classes"][0]["section_name"] == "Aristotle"
+    assert created.json()["classes"][0]["student_count"] == 0
+    duplicate = client.post("/api/v1/classes/batch-create", json={"academic_year_id": current.academic_year_id, "academic_level_id": grade_7.academic_level_id, "sections": [section("Aristotle", adviser.staff_id)]})
+    assert duplicate.status_code == 409
+
+
+def test_unconfigured_installation_rejects_free_text_class_creation(client, db):
+    year = add_year(db, "2025-2026", True)
+    level = add_level(db, "Grade 7", 7)
+    adviser = add_staff(db, "T-1")
+    db.commit()
+    response = client.post("/api/v1/classes/batch-create", json={
+        "academic_year_id": year.academic_year_id,
+        "academic_level_id": level.academic_level_id,
+        "sections": [section("Invented", adviser.staff_id)],
+    })
+    assert response.status_code == 422
+    assert db.query(Class).count() == 0
+
+
+def test_form_options_expose_all_official_grade_choices(client, db):
+    year = add_year(db, "2025-2026", True)
+    engineering = AcademicPathway(code="engineering-math", name="Engineering and Mathematics Related", is_enabled=True)
+    medical = AcademicPathway(code="medical-courses", name="Medical Courses and Sciences Related", is_enabled=True)
+    db.add_all([engineering, medical])
+    db.flush()
+    expected = {
+        7: ("Aristotle", "Galileo"), 8: ("Newton", "Plato"),
+        9: ("Archimedes", "Copernicus"), 10: ("Einstein", "Socrates"),
+        11: ("Campos", "Zara"), 12: ("Del Mundo", "Reyes"),
+    }
+    for grade, names in expected.items():
+        level = add_level(db, f"Grade {grade}", grade)
+        db.add(AcademicLevelPathwayScope(
+            academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id,
+            requires_pathway=grade == 11,
+        ))
+        for name in names:
+            pathway_id = engineering.id if name == "Campos" else medical.id if name == "Zara" else None
+            db.add(OfficialSection(
+                academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id,
+                section_name=name, normalized_name=name.casefold(), pathway_id=pathway_id,
+            ))
+    db.commit()
+
+    response = client.get(f"/api/v1/classes/form-options?academic_year_id={year.academic_year_id}")
+    assert response.status_code == 200
+    rows = response.json()["official_sections"]
+    levels = {row["academic_level_id"]: row["grade_level"] for row in response.json()["academic_levels"]}
+    by_grade = {grade: tuple(row["section_name"] for row in rows if levels[row["academic_level_id"]] == grade) for grade in expected}
+    assert by_grade == expected
+    assert {row["section_name"]: row["pathway_id"] for row in rows if levels[row["academic_level_id"]] == 11} == {"Campos": engineering.id, "Zara": medical.id}
+    assert all(row["pathway_id"] is None for row in rows if levels[row["academic_level_id"]] == 12)
+
+
+def test_grade_11_mapping_and_future_grade_12_scope_are_independent(client, db):
+    current = add_year(db, "2025-2026", True)
+    future = add_year(db, "2026-2027", False)
+    grade_11 = add_level(db, "Grade 11", 11)
+    grade_12 = add_level(db, "Grade 12", 12)
+    medical = AcademicPathway(code="medical-courses", name="Medical Courses and Sciences Related", is_enabled=True)
+    engineering = AcademicPathway(code="engineering-math", name="Engineering and Mathematics Related", is_enabled=True)
+    db.add_all([medical, engineering])
+    db.flush()
+    db.add_all([
+        AcademicLevelPathwayScope(academic_year_id=current.academic_year_id, academic_level_id=grade_11.academic_level_id, requires_pathway=True),
+        AcademicLevelPathwayScope(academic_year_id=current.academic_year_id, academic_level_id=grade_12.academic_level_id, requires_pathway=False),
+        AcademicLevelPathwayScope(academic_year_id=future.academic_year_id, academic_level_id=grade_12.academic_level_id, requires_pathway=True),
+        OfficialSection(academic_year_id=current.academic_year_id, academic_level_id=grade_11.academic_level_id, section_name="Campos", normalized_name="campos", pathway_id=engineering.id),
+        OfficialSection(academic_year_id=current.academic_year_id, academic_level_id=grade_11.academic_level_id, section_name="Zara", normalized_name="zara", pathway_id=medical.id),
+        OfficialSection(academic_year_id=current.academic_year_id, academic_level_id=grade_12.academic_level_id, section_name="Del Mundo", normalized_name="del mundo"),
+        OfficialSection(academic_year_id=current.academic_year_id, academic_level_id=grade_12.academic_level_id, section_name="Reyes", normalized_name="reyes"),
+    ])
+    adviser = add_staff(db, "T-11")
+    adviser_2 = add_staff(db, "T-12")
+    db.commit()
+
+    wrong = section("Campos", adviser.staff_id)
+    wrong["pathway"] = medical.code
+    assert post_batch(client, grade_11.academic_level_id, [wrong]).status_code == 422
+    right = section("Campos", adviser.staff_id)
+    right["pathway"] = engineering.code
+    assert post_batch(client, grade_11.academic_level_id, [right]).status_code == 201
+    current_12 = post_batch(client, grade_12.academic_level_id, [section("Del Mundo", adviser_2.staff_id)])
+    assert current_12.status_code == 201
+    assert current_12.json()["classes"][0]["pathway"] == "general"
+    assert db.query(Class).filter(Class.academic_year_id == current.academic_year_id, Class.academic_level_id == grade_12.academic_level_id).one().pathway_id is None
+
+    future_options = client.get(f"/api/v1/classes/form-options?academic_year_id={future.academic_year_id}").json()
+    assert next(level for level in future_options["academic_levels"] if level["grade_level"] == 12)["requires_pathway"] is True
+    assert future_options["official_sections"] == []
+    future_unconfigured = client.post("/api/v1/classes/batch-create", json={"academic_year_id": future.academic_year_id, "academic_level_id": grade_12.academic_level_id, "sections": [section("Del Mundo", adviser_2.staff_id)]})
+    assert future_unconfigured.status_code == 422
+    future_section = client.post("/api/v1/classes/official-sections", json={"academic_year_id": future.academic_year_id, "academic_level_id": grade_12.academic_level_id, "section_name": "Future Section", "pathway_id": engineering.id})
+    assert future_section.status_code == 201
+    future_class = client.post("/api/v1/classes/batch-create", json={"academic_year_id": future.academic_year_id, "academic_level_id": grade_12.academic_level_id, "sections": [{**section("Future Section", adviser_2.staff_id), "pathway": engineering.code}]})
+    assert future_class.status_code == 201
+    assert db.query(Class).filter(Class.academic_year_id == current.academic_year_id, Class.academic_level_id == grade_12.academic_level_id).one().pathway_id is None
+    used_section = client.patch(f"/api/v1/classes/official-sections/{future_section.json()['id']}", json={"is_active": False})
+    assert used_section.status_code == 409
 
 
 def test_same_adviser_cannot_advise_multiple_sections_in_active_year(client, db, batch_data):

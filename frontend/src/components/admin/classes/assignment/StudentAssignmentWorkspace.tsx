@@ -17,10 +17,7 @@ import AssignmentToolbar from "./AssignmentToolbar";
 import { Button } from "@/components/retroui/Button";
 import AssignEvenlyConfirmationModal from "./AssignEvenlyConfirmationModal";
 import AvailableStudentsPanel from "./AvailableStudentsPanel";
-import {
-  distributeUnassignedStudents,
-  recommendedTargets,
-} from "./assignmentDistribution";
+import { recommendedTargets } from "./assignmentDistribution";
 import SectionAssignmentCard from "./SectionAssignmentCard";
 import SectionDetailsModal from "./SectionDetailsModal";
 import { sortAssignmentStudents } from "./studentSorting";
@@ -47,10 +44,10 @@ export default function StudentAssignmentWorkspace({
   );
   const [loadError, setLoadError] = useState("");
   const [retryKey, setRetryKey] = useState(0);
-  const [reviewAttempted, setReviewAttempted] = useState(false);
   const [showAssignEvenlyConfirmation, setShowAssignEvenlyConfirmation] =
     useState(false);
   const [distributing, setDistributing] = useState(false);
+  const [distributionMode, setDistributionMode] = useState<DistributionMode>("alphabetical");
   const [distributeError, setDistributeError] = useState("");
   const [detailsSectionId, setDetailsSectionId] = useState<string | null>(null);
   const sensors = useSensors(
@@ -60,7 +57,7 @@ export default function StudentAssignmentWorkspace({
   useEffect(() => {
     if (state?.academicLevelId === setup.academicLevelId) return;
     let cancelled = false;
-    getUnassignedClassStudents(setup.academicLevelId)
+    getUnassignedClassStudents(setup.academicLevelId, undefined, setup.academicYear.academic_year_id)
       .then((data) => {
         if (cancelled) return;
         onChange({
@@ -181,11 +178,7 @@ export default function StudentAssignmentWorkspace({
     );
   }
   if (!state) return null;
-  const emptySections = setup.sections.filter(
-    (section) => !state.assignmentsBySection[section.localId]?.length,
-  );
-  const canContinueToReview =
-    state.unassignedStudents.length === 0 && emptySections.length === 0;
+  // A section can be prepared before enrollment starts. Assignments here are optional.
   const assignedCount = Object.values(state.assignmentsBySection).reduce(
     (count, students) => count + students.length,
     0,
@@ -197,8 +190,7 @@ export default function StudentAssignmentWorkspace({
   );
 
   function continueToReview() {
-    setReviewAttempted(true);
-    if (canContinueToReview) onReview();
+    onReview();
   }
 
   async function assignEvenly(mode: DistributionMode) {
@@ -207,26 +199,14 @@ export default function StudentAssignmentWorkspace({
 
     setShowAssignEvenlyConfirmation(false);
 
-    if (mode === "alphabetical") {
-      onChange({
-        ...state,
-        unassignedStudents: [],
-        assignmentsBySection: distributeUnassignedStudents(
-          state.unassignedStudents,
-          state.assignmentsBySection,
-          setup.sections,
-        ),
-        selectedStudentIds: new Set(),
-      });
-      return;
-    }
-
     setDistributing(true);
+    setDistributionMode(mode);
     setDistributeError("");
     try {
       const resp = await distributeClassStudents({
+        academic_year_id: setup.academicYear.academic_year_id,
         academic_level_id: setup.academicLevelId,
-        mode: "gwa",
+        mode,
         sections: setup.sections.map((s) => ({
           local_id: s.localId,
           section_name: s.sectionName,
@@ -266,7 +246,7 @@ export default function StudentAssignmentWorkspace({
       setDistributeError(
         err instanceof Error
           ? err.message
-          : "Failed to distribute students by GWA.",
+          : "Failed to distribute students evenly.",
       );
     } finally {
       setDistributing(false);
@@ -282,6 +262,9 @@ export default function StudentAssignmentWorkspace({
           </h2>
           <p className="text-sm">
             Academic Year: {setup.academicYear.year_label}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Student assignment is optional. You can add students after saving the class.
           </p>
         </div>
         {resetWarning && (
@@ -305,7 +288,7 @@ export default function StudentAssignmentWorkspace({
       {distributing && (
         <div className="flex items-center gap-2 rounded border-2 border-black bg-[#fff8d7] p-2.5 text-xs font-bold">
           <span className="inline-block size-3.5 animate-spin rounded-full border-2 border-black border-t-transparent" />
-          <span>Balancing students by academic performance (GWA)...</span>
+          <span>{distributionMode === "gwa" ? "Balancing students by academic performance (GWA)..." : "Balancing students alphabetically..."}</span>
         </div>
       )}
       <AssignmentToolbar
@@ -346,13 +329,7 @@ export default function StudentAssignmentWorkspace({
                   students={state.assignmentsBySection[section.localId] ?? []}
                   selectedIds={state.selectedStudentIds}
                   recommendedTarget={targets[section.localId]}
-                  showEmptyError={
-                    reviewAttempted &&
-                    emptySections.some(
-                      (emptySection) =>
-                        emptySection.localId === section.localId,
-                    )
-                  }
+                  showEmptyError={false}
                   onSelect={updateSelection}
                   onRemove={(studentId) =>
                     moveStudents([studentId], "unassigned")
@@ -365,27 +342,13 @@ export default function StudentAssignmentWorkspace({
         </div>
       </DndContext>
       <div className="-mx-4 -mb-4 flex w-[calc(100%+2rem)] shrink-0 flex-wrap items-center justify-between gap-3 border-t-2 px-4 py-4">
-        <div>
-          {reviewAttempted && !canContinueToReview && (
-            <div className="grid gap-0.5 text-xs font-semibold text-red-700">
-              {state.unassignedStudents.length > 0 && (
-                <p>Assign all students to a section before continuing.</p>
-              )}
-              {emptySections.length > 0 && (
-                <p>Each section must contain at least one student.</p>
-              )}
-            </div>
-          )}
-        </div>
+        <div />
         <div className="flex flex-1 flex-wrap items-center justify-between gap-2">
           <Button variant="outline" onClick={onClose}>Close</Button>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={onBack}>Back to Class Details</Button>
             <Button
-              aria-disabled={!canContinueToReview}
-              disabled={!canContinueToReview}
               onClick={continueToReview}
-              className={canContinueToReview ? "" : "opacity-60"}
             >
               Continue to Review
             </Button>

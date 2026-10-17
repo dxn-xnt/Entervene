@@ -3,7 +3,7 @@ import io
 import re
 from typing import Any
 
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.models.academic.AcademicLevel import AcademicLevel
@@ -20,6 +20,7 @@ from app.services.classes.ClassShared import (
     resolve_active_academic_year,
     student_sort_key,
 )
+from app.services.classes.OfficialSectionService import selected_official_section
 
 # CLASS CSV PREVIEW FLOW
 # read file -> validate every row against database records -> group students by
@@ -307,6 +308,15 @@ async def validate_class_import_file(
             errors.append(csv_validation_error("invalid_pathway", pathway_err, row_number, "pathway"))
 
         pathway_val = pathway_obj.code if pathway_obj else (raw_pathway.casefold() if raw_pathway else None)
+        if section_key:
+            try:
+                official = selected_official_section(db, academic_year.academic_year_id, academic_level.academic_level_id, section_name)
+                if official is not None:
+                    if (pathway_obj.id if pathway_obj else None) != official.pathway_id:
+                        errors.append(csv_validation_error("invalid_section_pathway", "Section and pathway do not match the official academic-year configuration.", row_number, "pathway"))
+                    section_name = official.section_name
+            except HTTPException:
+                errors.append(csv_validation_error("invalid_section", "Select an active official section for this grade and academic year.", row_number, "section_name"))
 
         adviser_id = readable_text(row["adviser_staff_id"])
         adviser = advisers.get(adviser_id)
