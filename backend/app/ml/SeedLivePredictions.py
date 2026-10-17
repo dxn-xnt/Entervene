@@ -19,7 +19,7 @@ Resolution strategy
 Phase 0 -- Auto-create missing subjects
   The script ensures all subjects referenced by the CSV exist in the subject
   table before any ai_prediction rows are inserted.  New subjects are created
-  with subject_group = 'LIVE_IMPORT' and academic_level_id = 1 (placeholder).
+  with a selected grading template and academic level.
 
 Phase 1 -- Upsert synthetic students
   Deterministic UUID (uuid5) + synthetic LRN derived from the STU-XXX-Y-N key.
@@ -241,17 +241,6 @@ def main() -> None:
         )
         sys.exit(1)
 
-    # Idempotency Check: Prevent duplicate additive seeding of LIVE_IMPORT subjects
-    if not args.replace and not args.dry_run:
-        existing_live_imports = db.query(Subject).filter(Subject.subject_group == "LIVE_IMPORT").count()
-        if existing_live_imports > 0:
-            print(
-                f"IDEMPOTENCY ABORT: Database already contains {existing_live_imports} LIVE_IMPORT subjects.\n"
-                f"Additive seeding is blocked. Use --replace to overwrite existing predictions.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-
     # ------------------------------------------------------------------ Phase 0: ensure subjects
     print("=== Phase 0: Ensure required subjects exist ===")
 
@@ -276,24 +265,10 @@ def main() -> None:
             subject_key_to_id[key] = sid
             print(f"  {key}: already in DB (id={sid})")
         else:
-            # Need to create
-            new_sub = Subject(
-                subject_name=name,
-                subject_codename=codename,
-                subject_group="LIVE_IMPORT",
-                status="active",
-                academic_level_id=1,  # Grade 7 placeholder — not used for display
+            raise RuntimeError(
+                f"Subject {name!r} ({codename}) does not exist. Create it with an approved "
+                "grading template in Admin > Subjects before seeding predictions."
             )
-            if not args.dry_run:
-                db.add(new_sub)
-                db.flush()
-                subject_key_to_id[key] = new_sub.subject_id
-                codename_to_id[codename.upper()] = new_sub.subject_id
-                name_to_id[name.lower()] = new_sub.subject_id
-                print(f"  {key}: CREATED '{name}' (id={new_sub.subject_id})")
-            else:
-                print(f"  {key}: [DRY-RUN] Would create '{name}' ({codename})")
-                subject_key_to_id[key] = -1  # placeholder for dry-run
 
     if not args.dry_run:
         db.commit()

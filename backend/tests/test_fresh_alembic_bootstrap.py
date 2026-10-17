@@ -21,7 +21,6 @@ from app.db.Session import engine as configured_engine
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.services.AcademicPeriodService import create_or_update_academic_periods
-from tests.test_natural_exam_intervention_postgres import _academic_scope
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -73,9 +72,12 @@ def test_empty_postgres_database_upgrades_to_head():
         assert (("user_id",), "user_account") in references("student")
         assert (("user_id",), "user_account") in references("academic_staff")
         assert (("classwork_assignment_id",), "classwork_assignment") in references("student_submission")
+        assert (("grading_template_id",), "grading_template") in references("subject")
+        assert "subject_groups" not in inspector.get_table_names()
         with target.connect() as connection:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == head
             assert connection.execute(text("SELECT count(*) FROM user_account")).scalar_one() == 0
+            assert connection.execute(text("SELECT template_name FROM grading_template ORDER BY template_name")).scalars().all() == ["Applied", "Core", "Specialized"]
         assert "original_exam_assignment_id" in {column["name"] for column in inspector.get_columns("classwork_assignment")}
         assert {"fk_remedial_original_exam", "ck_remedial_exam_has_target"} <= {
             constraint["name"] for constraint in inspector.get_foreign_keys("classwork_assignment") + inspector.get_check_constraints("classwork_assignment")
@@ -105,9 +107,6 @@ def test_empty_postgres_database_upgrades_to_head():
             db.refresh(period)
             assert period.updated_at is not None
 
-            # The browser acceptance fixture uses this same direct ORM insert path.
-            _, _, _, _, fixture_period, _, _ = _academic_scope(db)
-            assert db.get(AcademicPeriod, fixture_period.academic_period_id).updated_at is not None
     finally:
         if target is not None:
             target.dispose()

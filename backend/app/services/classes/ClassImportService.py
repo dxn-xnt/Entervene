@@ -1,3 +1,4 @@
+from collections import defaultdict
 import csv
 import io
 import re
@@ -27,7 +28,15 @@ from app.services.classes.OfficialSectionService import selected_official_sectio
 # section -> return preview. No Class or StudentClass record is created here.
 
 
-CLASS_IMPORT_HEADERS = [
+MODERN_CLASS_IMPORT_HEADERS = [
+    "section_name",
+    "grade_level",
+    "pathway",
+    "adviser",
+    "student_lrn",
+]
+
+LEGACY_CLASS_IMPORT_HEADERS = [
     "section_name",
     "grade_level",
     "pathway",
@@ -41,6 +50,8 @@ CLASS_IMPORT_HEADERS = [
     "student_last_name",
     "student_gender",
 ]
+
+CLASS_IMPORT_HEADERS = LEGACY_CLASS_IMPORT_HEADERS
 SCIENTIFIC_NOTATION_PATTERN = re.compile(r"^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$")
 
 
@@ -75,12 +86,13 @@ def normalize_import_pathway(
     return None, f'Unrecognized pathway "{raw}" for Grade {grade_level}. Must match an active pathway code or name.'
 
 
-def normalized_import_row(row: dict[str, Any]) -> tuple[str, ...]:
+def normalized_import_row(row: dict[str, Any], headers: list[str] | None = None) -> tuple[str, ...]:
+    active_headers = headers or CLASS_IMPORT_HEADERS
     return tuple(
         normalized_middle_name(row.get(header))
         if header in {"adviser_middle_name", "student_middle_name"}
         else normalized_text(row.get(header))
-        for header in CLASS_IMPORT_HEADERS
+        for header in active_headers
     )
 
 
@@ -107,7 +119,7 @@ def raise_csv_validation_errors(errors: list[dict[str, Any]]) -> None:
     )
 
 
-async def read_class_import_rows(file: UploadFile) -> list[tuple[int, dict[str, str]]]:
+async def read_class_import_rows(file: UploadFile) -> tuple[list[tuple[int, dict[str, str]]], str, list[str]]:
     filename = readable_text(file.filename)
     if not filename.casefold().endswith(".csv"):
         raise_csv_validation_errors(
@@ -134,12 +146,18 @@ async def read_class_import_rows(file: UploadFile) -> list[tuple[int, dict[str, 
     try:
         reader = csv.DictReader(io.StringIO(decoded, newline=""), strict=True)
         headers = reader.fieldnames
-        if headers != CLASS_IMPORT_HEADERS:
+        if headers == MODERN_CLASS_IMPORT_HEADERS:
+            file_format = "modern"
+            active_headers = MODERN_CLASS_IMPORT_HEADERS
+        elif headers == LEGACY_CLASS_IMPORT_HEADERS:
+            file_format = "legacy"
+            active_headers = LEGACY_CLASS_IMPORT_HEADERS
+        else:
             raise_csv_validation_errors(
                 [
                     csv_validation_error(
                         "invalid_headers",
-                        "CSV headers must exactly match the required ordered header list.",
+                        "CSV headers must match the modern format (section_name,grade_level,pathway,adviser,student_lrn) or legacy 12-column format.",
                     )
                 ]
             )
@@ -148,7 +166,7 @@ async def read_class_import_rows(file: UploadFile) -> list[tuple[int, dict[str, 
         for row_number, row in enumerate(reader, start=2):
             if None in row:
                 raise csv.Error("Row contains more values than the header.")
-            trimmed = {header: readable_text(row.get(header)) for header in CLASS_IMPORT_HEADERS}
+            trimmed = {header: readable_text(row.get(header)) for header in active_headers}
             if any(trimmed.values()):
                 rows.append((row_number, trimmed))
     except ClassManagementError:
@@ -163,7 +181,7 @@ async def read_class_import_rows(file: UploadFile) -> list[tuple[int, dict[str, 
             [csv_validation_error("file_empty", "The CSV file contains no data rows.")]
         )
 
-    return rows
+    return rows, file_format, active_headers
 
 
 def _academic_year_option(academic_year) -> dict:
@@ -205,31 +223,39 @@ async def validate_class_import_file(
 
     # Phase 1: parse the uploaded CSV and prepare containers for all validation
     # errors so the admin can fix the file in one pass.
-    rows = await read_class_import_rows(file)
+    rows, file_format, active_headers = await read_class_import_rows(file)
     errors: list[dict] = []
+    warnings: list[str] = []
     seen_rows: dict[tuple[str, ...], int] = {}
     seen_lrns: dict[str, int] = {}
 
+    if file_format == "legacy":
+        warnings.append("Legacy 12-column template detected. The simplified 5-column template (section_name,grade_level,pathway,adviser,student_lrn) is recommended.")
+
     # Phase 2: preload referenced records instead of querying once per CSV row.
-    adviser_ids = {row["adviser_staff_id"] for _, row in rows if row["adviser_staff_id"]}
-    student_lrns = {row["student_lrn"] for _, row in rows if row["student_lrn"]}
-    advisers = {
-        adviser.staff_id: adviser
-        for adviser in db.query(AcademicStaff).filter(AcademicStaff.staff_id.in_(adviser_ids)).all()
-    } if adviser_ids else {}
-    eligible_adviser_ids = {
-        adviser.staff_id
-        for adviser in eligible_advisers_query(db).filter(AcademicStaff.staff_id.in_(adviser_ids)).all()
-    } if adviser_ids else set()
+    all_eligible_advisers = eligible_advisers_query(db).all()
+    eligible_by_id = {adv.staff_id.casefold(): adv for adv in all_eligible_advisers}
+    all_staff = {staff.staff_id.casefold(): staff for staff in db.query(AcademicStaff).all()}
+
+    eligible_by_name = defaultdict(list)
+    for adv in all_eligible_advisers:
+        first_last = f"{normalized_text(adv.first_name)} {normalized_text(adv.last_name)}"
+        eligible_by_name[first_last].append(adv)
+        if adv.middle_name:
+            full = f"{normalized_text(adv.first_name)} {normalized_text(adv.middle_name)} {normalized_text(adv.last_name)}"
+            eligible_by_name[full].append(adv)
+
     assigned_adviser_ids = {
         adviser_id
         for adviser_id, in (
             db.query(Class.adviser_staff_id)
             .filter(Class.academic_year_id == academic_year.academic_year_id)
-            .filter(Class.adviser_staff_id.in_(adviser_ids))
             .all()
         )
-    } if adviser_ids else set()
+        if adviser_id
+    }
+
+    student_lrns = {row["student_lrn"] for _, row in rows if row.get("student_lrn")}
     students = {
         student.student_lrn: student
         for student in db.query(Student).filter(Student.student_lrn.in_(student_lrns)).all()
@@ -262,14 +288,14 @@ async def validate_class_import_file(
         pathway_map[p.code.strip().lower()] = p
         pathway_map[p.name.strip().lower()] = p
 
-    # A class import uses one row per student, so repeated section rows are
-    # grouped into the section payload expected by the batch-create endpoint.
+    # A class import groups rows by section. If student LRN is populated, the student
+    # is attached to that section. If student LRN is omitted, an empty section is created.
     grouped: dict[str, dict] = {}
     imported_adviser_sections: dict[str, str] = {}
     # Phase 3: validate each row and group valid students under their section.
     for row_number, row in rows:
         row_error_count = len(errors)
-        row_key = normalized_import_row(row)
+        row_key = normalized_import_row(row, active_headers)
         if row_key in seen_rows:
             errors.append(csv_validation_error("duplicate_row", f"Row duplicates CSV row {seen_rows[row_key]}.", row_number, None))
         else:
@@ -318,50 +344,110 @@ async def validate_class_import_file(
             except HTTPException:
                 errors.append(csv_validation_error("invalid_section", "Select an active official section for this grade and academic year.", row_number, "section_name"))
 
-        adviser_id = readable_text(row["adviser_staff_id"])
-        adviser = advisers.get(adviser_id)
-        if not adviser_id:
-            errors.append(csv_validation_error("adviser_staff_id_required", "Adviser staff ID is required.", row_number, "adviser_staff_id"))
-        elif not adviser:
-            errors.append(csv_validation_error("adviser_not_found", f'No adviser exists with staff ID "{adviser_id}".', row_number, "adviser_staff_id"))
-        elif adviser_id not in eligible_adviser_ids:
-            errors.append(csv_validation_error("adviser_not_eligible", f'Adviser "{adviser_id}" is not eligible.', row_number, "adviser_staff_id"))
-        elif adviser_id in assigned_adviser_ids:
-            errors.append(csv_validation_error(
-                "adviser_already_assigned",
-                f'Adviser "{adviser_id}" is already assigned during the active academic year.',
-                row_number,
-                "adviser_staff_id",
-            ))
-        elif (
-            normalized_text(row["adviser_first_name"]) != normalized_text(adviser.first_name)
-            or normalized_middle_name(row["adviser_middle_name"]) != normalized_middle_name(adviser.middle_name)
-            or normalized_text(row["adviser_last_name"]) != normalized_text(adviser.last_name)
-        ):
-            errors.append(csv_validation_error("adviser_name_mismatch", f'Adviser name does not match adviser staff ID "{adviser_id}".', row_number, "adviser_staff_id"))
+        adviser_obj = None
+        adviser_signature = ()
+        adviser_hint_text = None
 
-        adviser_signature = (
-            adviser_id.casefold(),
-            normalized_text(row["adviser_first_name"]),
-            normalized_middle_name(row["adviser_middle_name"]),
-            normalized_text(row["adviser_last_name"]),
-        )
-        if section_key:
-            previous_section = imported_adviser_sections.get(adviser_id)
-            if adviser_id and previous_section and previous_section != section_key:
+        if file_format == "legacy":
+            adviser_id = readable_text(row.get("adviser_staff_id"))
+            adviser_hint_text = adviser_id
+            staff_record = all_staff.get(adviser_id.casefold()) if adviser_id else None
+
+            if not adviser_id:
+                errors.append(csv_validation_error("adviser_staff_id_required", "Adviser staff ID is required.", row_number, "adviser_staff_id"))
+            elif not staff_record:
+                errors.append(csv_validation_error("adviser_not_found", f'No adviser exists with staff ID "{adviser_id}".', row_number, "adviser_staff_id"))
+            elif adviser_id.casefold() not in eligible_by_id:
+                errors.append(csv_validation_error("adviser_not_eligible", f'Adviser "{adviser_id}" is not eligible.', row_number, "adviser_staff_id"))
+            elif staff_record.staff_id in assigned_adviser_ids:
                 errors.append(csv_validation_error(
-                    "duplicate_adviser_assignment",
-                    f'Adviser "{adviser_id}" is assigned to multiple imported sections.',
+                    "adviser_already_assigned",
+                    f'Adviser "{adviser_id}" is already assigned during the active academic year.',
                     row_number,
                     "adviser_staff_id",
                 ))
-            elif adviser_id:
-                imported_adviser_sections[adviser_id] = section_key
+            elif (
+                normalized_text(row.get("adviser_first_name")) != normalized_text(staff_record.first_name)
+                or normalized_middle_name(row.get("adviser_middle_name")) != normalized_middle_name(staff_record.middle_name)
+                or normalized_text(row.get("adviser_last_name")) != normalized_text(staff_record.last_name)
+            ):
+                errors.append(csv_validation_error("adviser_name_mismatch", f'Adviser name does not match adviser staff ID "{adviser_id}".', row_number, "adviser_staff_id"))
+            else:
+                adviser_obj = staff_record
+
+            adviser_signature = (
+                adviser_id.casefold(),
+                normalized_text(row.get("adviser_first_name")),
+                normalized_middle_name(row.get("adviser_middle_name")),
+                normalized_text(row.get("adviser_last_name")),
+            )
+        else:
+            # Modern format
+            raw_adviser = readable_text(row.get("adviser"))
+            adviser_hint_text = raw_adviser or None
+            adviser_signature = (normalized_text(raw_adviser),)
+            if raw_adviser:
+                adv_key = normalized_text(raw_adviser)
+                if adv_key in eligible_by_id:
+                    matched = eligible_by_id[adv_key]
+                    if matched.staff_id in assigned_adviser_ids:
+                        errors.append(csv_validation_error(
+                            "adviser_already_assigned",
+                            f'Adviser "{matched.staff_id}" is already assigned during the active academic year.',
+                            row_number,
+                            "adviser",
+                        ))
+                    else:
+                        adviser_obj = matched
+                elif adv_key in all_staff:
+                    errors.append(csv_validation_error(
+                        "adviser_not_eligible",
+                        f'Adviser "{raw_adviser}" is not eligible.',
+                        row_number,
+                        "adviser",
+                    ))
+                else:
+                    candidates = eligible_by_name.get(adv_key, [])
+                    if len(candidates) == 1:
+                        matched = candidates[0]
+                        if matched.staff_id in assigned_adviser_ids:
+                            errors.append(csv_validation_error(
+                                "adviser_already_assigned",
+                                f'Adviser "{matched.first_name} {matched.last_name}" is already assigned during the active academic year.',
+                                row_number,
+                                "adviser",
+                            ))
+                        else:
+                            adviser_obj = matched
+                    elif len(candidates) > 1:
+                        warnings.append(
+                            f'Row {row_number}: Adviser hint "{raw_adviser}" is ambiguous (matches multiple eligible teachers). Please select the adviser in the review step.'
+                        )
+                    else:
+                        warnings.append(
+                            f'Row {row_number}: Adviser hint "{raw_adviser}" could not be automatically matched. Please select an adviser in the review step.'
+                        )
+
+        if section_key:
+            adv_id = adviser_obj.staff_id if adviser_obj else None
+            if adv_id:
+                previous_section = imported_adviser_sections.get(adv_id)
+                if previous_section and previous_section != section_key:
+                    errors.append(csv_validation_error(
+                        "duplicate_adviser_assignment",
+                        f'Adviser "{adv_id}" is assigned to multiple imported sections.',
+                        row_number,
+                        "adviser_staff_id" if file_format == "legacy" else "adviser",
+                    ))
+                else:
+                    imported_adviser_sections[adv_id] = section_key
+
             section = grouped.setdefault(section_key, {
                 "section_name": section_name,
                 "pathway": pathway_val or "general",
                 "adviser_signature": adviser_signature,
-                "adviser": adviser,
+                "adviser": adviser_obj,
+                "adviser_hint": adviser_hint_text,
                 "students": [],
             })
             if section["adviser_signature"] != adviser_signature:
@@ -369,7 +455,7 @@ async def validate_class_import_file(
                     "conflicting_section_adviser",
                     f'Section "{section["section_name"]}" uses conflicting adviser information.',
                     row_number,
-                    "adviser_staff_id",
+                    "adviser_staff_id" if file_format == "legacy" else "adviser",
                 ))
             if pathway_val and section.get("pathway") != pathway_val:
                 errors.append(csv_validation_error(
@@ -379,46 +465,52 @@ async def validate_class_import_file(
                     "pathway",
                 ))
 
-        student_lrn = readable_text(row["student_lrn"])
-        student = students.get(student_lrn)
+        student_lrn = readable_text(row.get("student_lrn"))
+        student = None
+        has_student_details = any(readable_text(row.get(f)) for f in ["student_first_name", "student_last_name", "student_gender"])
         if not student_lrn:
-            errors.append(csv_validation_error("student_lrn_required", "Student LRN is required.", row_number, "student_lrn"))
-        elif SCIENTIFIC_NOTATION_PATTERN.fullmatch(student_lrn):
-            errors.append(csv_validation_error(
-                "student_lrn_scientific_notation",
-                "Student LRN was converted to scientific notation by spreadsheet software. Use the complete 12-digit LRN and format the student_lrn column as Text before saving the CSV.",
-                row_number,
-                "student_lrn",
-            ))
-        elif not (len(student_lrn) == 12 and student_lrn.isdigit()):
-            errors.append(csv_validation_error("student_lrn_invalid_format", "Student LRN must contain exactly 12 numeric characters.", row_number, "student_lrn"))
-        elif student_lrn in seen_lrns:
-            errors.append(csv_validation_error("duplicate_student_lrn", f"Student LRN {student_lrn} already appears on CSV row {seen_lrns[student_lrn]}.", row_number, "student_lrn"))
+            if has_student_details:
+                errors.append(csv_validation_error("student_lrn_required", "Student LRN is required.", row_number, "student_lrn"))
         else:
-            seen_lrns[student_lrn] = row_number
-
-        if student_lrn and len(student_lrn) == 12 and student_lrn.isdigit():
-            if not student:
-                errors.append(csv_validation_error("student_not_found", f"No student exists with LRN {student_lrn}.", row_number, "student_lrn"))
-            elif student.academic_level_id != academic_level_id:
-                errors.append(csv_validation_error("student_level_mismatch", f"Student LRN {student_lrn} does not belong to the selected academic level.", row_number, "student_lrn"))
+            student = students.get(student_lrn)
+            if SCIENTIFIC_NOTATION_PATTERN.fullmatch(student_lrn):
+                errors.append(csv_validation_error(
+                    "student_lrn_scientific_notation",
+                    "Student LRN was converted to scientific notation by spreadsheet software. Use the complete 12-digit LRN and format the student_lrn column as Text before saving the CSV.",
+                    row_number,
+                    "student_lrn",
+                ))
+            elif not (len(student_lrn) == 12 and student_lrn.isdigit()):
+                errors.append(csv_validation_error("student_lrn_invalid_format", "Student LRN must contain exactly 12 numeric characters.", row_number, "student_lrn"))
+            elif student_lrn in seen_lrns:
+                errors.append(csv_validation_error("duplicate_student_lrn", f"Student LRN {student_lrn} already appears on CSV row {seen_lrns[student_lrn]}.", row_number, "student_lrn"))
             else:
-                if (
-                    normalized_text(row["student_first_name"]) != normalized_text(student.first_name)
-                    or normalized_middle_name(row["student_middle_name"]) != normalized_middle_name(student.middle_name)
-                    or normalized_text(row["student_last_name"]) != normalized_text(student.last_name)
-                ):
-                    errors.append(csv_validation_error("student_name_mismatch", f"Student name does not match student LRN {student_lrn}.", row_number, "student_lrn"))
-                
-                raw_gender = normalized_text(row["student_gender"])
-                if not raw_gender:
-                    errors.append(csv_validation_error("student_gender_required", "Student gender is required.", row_number, "student_gender"))
-                elif raw_gender != normalized_text(student.gender):
-                    errors.append(csv_validation_error("student_gender_mismatch", f"Student gender does not match student LRN {student_lrn}.", row_number, "student_gender"))
-                if student_lrn in assigned_lrns:
-                    errors.append(csv_validation_error("student_already_assigned", f"Student LRN {student_lrn} is already assigned during the active academic year.", row_number, "student_lrn"))
+                seen_lrns[student_lrn] = row_number
 
-        if len(errors) == row_error_count and section_key:
+            if len(student_lrn) == 12 and student_lrn.isdigit():
+                if not student:
+                    errors.append(csv_validation_error("student_not_found", f"No student exists with LRN {student_lrn}.", row_number, "student_lrn"))
+                elif student.academic_level_id != academic_level_id:
+                    errors.append(csv_validation_error("student_level_mismatch", f"Student LRN {student_lrn} does not belong to the selected academic level.", row_number, "student_lrn"))
+                else:
+                    if file_format == "legacy":
+                        if (
+                            normalized_text(row.get("student_first_name")) != normalized_text(student.first_name)
+                            or normalized_middle_name(row.get("student_middle_name")) != normalized_middle_name(student.middle_name)
+                            or normalized_text(row.get("student_last_name")) != normalized_text(student.last_name)
+                        ):
+                            errors.append(csv_validation_error("student_name_mismatch", f"Student name does not match student LRN {student_lrn}.", row_number, "student_lrn"))
+
+                        raw_gender = normalized_text(row.get("student_gender"))
+                        if not raw_gender:
+                            errors.append(csv_validation_error("student_gender_required", "Student gender is required.", row_number, "student_gender"))
+                        elif raw_gender != normalized_text(student.gender):
+                            errors.append(csv_validation_error("student_gender_mismatch", f"Student gender does not match student LRN {student_lrn}.", row_number, "student_gender"))
+
+                    if student_lrn in assigned_lrns:
+                        errors.append(csv_validation_error("student_already_assigned", f"Student LRN {student_lrn} is already assigned during the active academic year.", row_number, "student_lrn"))
+
+        if len(errors) == row_error_count and section_key and student:
             grouped[section_key]["students"].append(student)
 
     if errors:
@@ -438,7 +530,10 @@ async def validate_class_import_file(
                 "middle_name": adviser.middle_name,
                 "last_name": adviser.last_name,
                 "suffix": adviser.suffix,
-            },
+                "email": adviser.email,
+                "employment_status": adviser.employment_status,
+            } if adviser else None,
+            "adviser_hint": section.get("adviser_hint"),
             "students": [{
                 "student_id": student.student_id,
                 "student_lrn": student.student_lrn,
@@ -458,4 +553,20 @@ async def validate_class_import_file(
             "section_count": len(sections),
             "student_count": sum(len(section["students"]) for section in sections),
         },
+        "eligible_advisers": [
+            {
+                "staff_id": adv.staff_id,
+                "first_name": adv.first_name,
+                "middle_name": adv.middle_name,
+                "last_name": adv.last_name,
+                "suffix": adv.suffix,
+                "avatar": None,
+                "email": adv.email,
+                "employment_status": adv.employment_status,
+            }
+            for adv in all_eligible_advisers
+            if adv.staff_id not in assigned_adviser_ids
+        ],
+        "format": file_format,
+        "warnings": warnings,
     }

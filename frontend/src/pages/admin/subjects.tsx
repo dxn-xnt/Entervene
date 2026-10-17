@@ -19,7 +19,6 @@ import {
 import AppLayout from "@/layouts/app-layout";
 import {
   Archive,
-  Award,
   BookOpen,
   Calendar,
   Copy,
@@ -27,27 +26,28 @@ import {
   MoreHorizontal,
   Plus,
   Search,
+  SlidersHorizontal,
   Upload,
 } from "lucide-react";
 import AddSubjectModal from "./forms/add-subject";
-import AddGradingComponentModal from "./forms/add-grading-component";
 import {
   ALL_VALUE,
   CopyPreviousYearSetupModal,
   CurriculumFilters,
   CurriculumPlanTable,
+  GradingTemplateManager,
   EmptyStateCard,
-  GradingTemplateRow,
   LoadingCard,
   OfferingModal,
   OfferingRow,
   SubjectGradeSection,
   SubjectCatalogCard,
   defaultPathwayForGrade,
+  defaultOfferingFilters,
+  offeringQueryFromFilters,
   downloadBlob,
   friendlyErrorMessage,
   gradeLabel,
-  gradeValueForLevel,
   pathwayLabel,
   targetLevels,
   TARGET_GRADES,
@@ -60,7 +60,6 @@ import {
   type PendingAction,
 } from "./subjects/components";
 import {
-  archiveGradingTemplate,
   archiveSubject,
   archiveSubjectOffering,
   downloadSubjectImportTemplate,
@@ -68,14 +67,11 @@ import {
   getSubjectOfferingFormOptions,
   getSubjectOfferings,
   getSubjects,
-  getGradingTemplateFormOptions,
   getGradingTemplates,
-  restoreGradingTemplate,
   restoreSubject,
   restoreSubjectOffering,
   uploadSubjectImportCsv,
   uploadSubjectOfferingImportCsv,
-  type GradingTemplateFormOptions,
   type GradingTemplateListItem,
   type SubjectImportResult,
   type SubjectOfferingCopyAcademicYearResult,
@@ -88,7 +84,7 @@ import {
 const MODULE_TABS: Array<TabItem<AdminSubjectSection>> = [
   { id: "catalog", label: "Subject Catalog", icon: BookOpen },
   { id: "offerings", label: "Curriculum Plan", icon: Calendar },
-  { id: "grading", label: "Grading Templates", icon: Award },
+  { id: "grading", label: "Grading Templates", icon: SlidersHorizontal },
   { id: "archived", label: "Archived", icon: Archive },
 ];
 
@@ -100,18 +96,16 @@ export default function AdminSubjects() {
     ? tabParam
     : "catalog";
   const [activeSection, setActiveSection] = useState<AdminSubjectSection>(initialSection);
-  const editIdHandledRef = useRef<string | null>(null);
-
   const catalogImportInputRef = useRef<HTMLInputElement | null>(null);
   const offeringImportInputRef = useRef<HTMLInputElement | null>(null);
+  const offeringRequestIdRef = useRef(0);
   const [subjects, setSubjects] = useState<SubjectListItem[]>([]);
   const [archivedSubjects, setArchivedSubjects] = useState<SubjectListItem[]>([]);
   const [offerings, setOfferings] = useState<SubjectOfferingListItem[]>([]);
   const [archivedOfferings, setArchivedOfferings] = useState<SubjectOfferingListItem[]>([]);
   const [gradingTemplates, setGradingTemplates] = useState<GradingTemplateListItem[]>([]);
-  const [archivedGradingTemplates, setArchivedGradingTemplates] = useState<GradingTemplateListItem[]>([]);
+  const [gradingCreateRequest, setGradingCreateRequest] = useState(0);
   const [offeringOptions, setOfferingOptions] = useState<SubjectOfferingFormOptions | null>(null);
-  const [gradingOptions, setGradingOptions] = useState<GradingTemplateFormOptions | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogTemplateFilter, setCatalogTemplateFilter] = useState<string>("all");
   const [offeringFilters, setOfferingFilters] = useState<OfferingFilters>({
@@ -123,7 +117,6 @@ export default function AdminSubjects() {
   });
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
   const [isLoadingOfferings, setIsLoadingOfferings] = useState(true);
-  const [isLoadingGradingTemplates, setIsLoadingGradingTemplates] = useState(true);
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
   const [isImportingCatalog, setIsImportingCatalog] = useState(false);
   const [isImportingOfferings, setIsImportingOfferings] = useState(false);
@@ -144,8 +137,6 @@ export default function AdminSubjects() {
   const [editingOffering, setEditingOffering] = useState<SubjectOfferingListItem | null>(null);
   const [isSubjectModalOpen, setIsSubjectModalOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState<SubjectListItem | null>(null);
-  const [isGradingModalOpen, setIsGradingModalOpen] = useState(false);
-  const [editingGradingTemplate, setEditingGradingTemplate] = useState<GradingTemplateListItem | null>(null);
 
   const openCreateSubject = () => {
     setEditingSubject(null);
@@ -182,11 +173,6 @@ export default function AdminSubjects() {
         ...data,
         academic_levels: targetLevels(data.academic_levels),
       });
-      const gradingData = await getGradingTemplateFormOptions();
-      setGradingOptions({
-        ...gradingData,
-        academic_levels: targetLevels(gradingData.academic_levels),
-      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load subject options.");
     } finally {
@@ -195,47 +181,34 @@ export default function AdminSubjects() {
   };
 
   const loadOfferings = useCallback(async (overrideFilters?: Partial<OfferingFilters>) => {
+    const activeFilters = overrideFilters ? { ...offeringFilters, ...overrideFilters } : offeringFilters;
+    const params = offeringQueryFromFilters(activeFilters, offeringOptions);
+    if (!params) return;
+    const requestId = ++offeringRequestIdRef.current;
     setIsLoadingOfferings(true);
     setError(null);
     try {
-      const activeFilters = overrideFilters ? { ...offeringFilters, ...overrideFilters } : offeringFilters;
-      const selectedLevel = offeringOptions?.academic_levels.find(
-        (level) => String(level.grade_level) === activeFilters.grade
-      );
-      const params = {
-        academic_year_id: activeFilters.academic_year_id !== ALL_VALUE ? Number(activeFilters.academic_year_id) : undefined,
-        academic_level_id: selectedLevel?.academic_level_id,
-        pathway: activeFilters.pathway !== ALL_VALUE ? activeFilters.pathway : undefined,
-        status: activeFilters.status !== ALL_VALUE ? activeFilters.status : undefined,
-        search: activeFilters.search,
-      };
       const [listData, archivedData] = await Promise.all([
         getSubjectOfferings(params),
         getSubjectOfferings({ status: "archived" }),
       ]);
+      if (requestId !== offeringRequestIdRef.current) return;
       setOfferings(listData.subject_offerings);
       setArchivedOfferings(archivedData.subject_offerings);
     } catch (err) {
+      if (requestId !== offeringRequestIdRef.current) return;
       setError(err instanceof Error ? err.message : "Unable to load subject offerings.");
     } finally {
-      setIsLoadingOfferings(false);
+      if (requestId === offeringRequestIdRef.current) setIsLoadingOfferings(false);
     }
-  }, [offeringFilters, offeringOptions?.academic_levels]);
+  }, [offeringFilters, offeringOptions]);
 
   const loadGradingTemplates = useCallback(async () => {
-    setIsLoadingGradingTemplates(true);
-    setError(null);
     try {
-      const [activeData, archivedData] = await Promise.all([
-        getGradingTemplates({ status: "active" }),
-        getGradingTemplates({ status: "archived" }),
-      ]);
-      setGradingTemplates(activeData.grading_templates);
-      setArchivedGradingTemplates(archivedData.grading_templates);
+      const data = await getGradingTemplates();
+      setGradingTemplates(data.grading_templates);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load grading templates.");
-    } finally {
-      setIsLoadingGradingTemplates(false);
     }
   }, []);
 
@@ -257,40 +230,14 @@ export default function AdminSubjects() {
   }, [searchParams, activeSection]);
 
   useEffect(() => {
-    const editId = searchParams.get("editId");
-    if (!editId) {
-      editIdHandledRef.current = null;
-      return;
-    }
-    if (editIdHandledRef.current === editId) return;
-
-    if (gradingTemplates.length > 0) {
-      const match = gradingTemplates.find((t) => String(t.grading_template_id) === editId);
-      if (match) {
-        editIdHandledRef.current = editId;
-        setActiveSection("grading");
-        setEditingGradingTemplate(match);
-        setIsGradingModalOpen(true);
-      }
-    }
-  }, [searchParams, gradingTemplates]);
-
-  useEffect(() => {
     if (!offeringOptions) return;
     setOfferingFilters((current) => {
       if (current.academic_year_id !== ALL_VALUE && current.grade !== ALL_VALUE) return current;
-      const activeYear = offeringOptions.academic_years.find((year) => year.is_active)
-        ?? offeringOptions.academic_years[0];
-      const defaultLevel = targetLevels(offeringOptions.academic_levels)[0];
-      const defaultGrade = gradeValueForLevel(defaultLevel);
-      return {
-        ...current,
-        academic_year_id: current.academic_year_id !== ALL_VALUE
-          ? current.academic_year_id
-          : String(activeYear?.academic_year_id ?? ALL_VALUE),
-        grade: current.grade !== ALL_VALUE ? current.grade : defaultGrade,
-        pathway: current.pathway !== ALL_VALUE ? current.pathway : defaultPathwayForGrade(defaultGrade),
-      };
+      const defaults = defaultOfferingFilters(offeringOptions);
+      return { ...defaults, ...current,
+        academic_year_id: current.academic_year_id !== ALL_VALUE ? current.academic_year_id : defaults.academic_year_id,
+        grade: current.grade !== ALL_VALUE ? current.grade : defaults.grade,
+        pathway: current.pathway !== ALL_VALUE ? current.pathway : defaults.pathway };
     });
   }, [offeringOptions]);
 
@@ -302,44 +249,20 @@ export default function AdminSubjects() {
       }
     }
     for (const s of subjects) {
-      if (s.default_grading_template?.trim()) {
-        names.add(s.default_grading_template.trim());
-      }
+      names.add(s.grading_template.template_name);
     }
     for (const s of archivedSubjects) {
-      if (s.default_grading_template?.trim()) {
-        names.add(s.default_grading_template.trim());
-      }
+      names.add(s.grading_template.template_name);
     }
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [gradingTemplates, subjects, archivedSubjects]);
-
-  const gradingTemplatesByGrade = useMemo(() => {
-    const groups = new Map<number | null, GradingTemplateListItem[]>();
-    for (const template of gradingTemplates) {
-      const grade = template.academic_level?.grade_level ?? null;
-      const group = groups.get(grade) ?? [];
-      group.push(template);
-      groups.set(grade, group);
-    }
-    return Array.from(groups).sort(([first], [second]) =>
-      first == null ? 1 : second == null ? -1 : first - second
-    );
-  }, [gradingTemplates]);
 
   const filteredCatalogSubjects = useMemo(() => {
     let list = subjects;
 
     if (catalogTemplateFilter !== "all") {
-      if (catalogTemplateFilter === "none") {
-        list = list.filter((subject) => !subject.default_grading_template?.trim());
-      } else {
-        const filterLower = catalogTemplateFilter.trim().toLowerCase();
-        list = list.filter(
-          (subject) =>
-            subject.default_grading_template?.trim().toLowerCase() === filterLower
-        );
-      }
+      const filterLower = catalogTemplateFilter.trim().toLowerCase();
+      list = list.filter((subject) => subject.grading_template.template_name.toLowerCase() === filterLower);
     }
 
     const query = catalogSearch.trim().toLowerCase();
@@ -349,9 +272,9 @@ export default function AdminSubjects() {
       return [
         subject.subject_name,
         subject.subject_codename,
-        subject.subject_group?.name,
+        subject.grading_template.template_name,
         subject.academic_level.level_name,
-        subject.default_grading_template,
+        subject.grading_template.template_name,
       ].some((value) => value?.toLowerCase().includes(query));
     });
   }, [subjects, catalogTemplateFilter, catalogSearch]);
@@ -396,7 +319,7 @@ export default function AdminSubjects() {
   );
   const isViewingInactiveAcademicYear = selectedAcademicYear?.is_active === false;
   const readOnlyReason = isViewingInactiveAcademicYear
-    ? `Viewing previous academic year: ${selectedAcademicYear?.year_label}. Curriculum and grading setup are read-only to protect historical grades and prediction records.`
+    ? `Viewing previous academic year: ${selectedAcademicYear?.year_label}. Curriculum setup is read-only to protect historical grades and prediction records.`
     : undefined;
   const readOnlyHelper = activeAcademicYear
     ? `Create or copy a setup into the active academic year (${activeAcademicYear.year_label}) before making changes.`
@@ -458,27 +381,9 @@ export default function AdminSubjects() {
     setIsOfferingModalOpen(true);
   };
 
-  const openCreateGradingTemplate = () => {
-    if (isViewingInactiveAcademicYear) {
-      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
-      return;
-    }
-    setEditingGradingTemplate(null);
-    setIsGradingModalOpen(true);
-  };
-
-  const openEditGradingTemplate = (template: GradingTemplateListItem) => {
-    if (isViewingInactiveAcademicYear) {
-      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
-      return;
-    }
-    setEditingGradingTemplate(template);
-    setIsGradingModalOpen(true);
-  };
-
   const handlePendingAction = async () => {
     if (!pendingAction) return;
-    if (isViewingInactiveAcademicYear && (pendingAction.kind === "offering" || pendingAction.kind === "grading")) {
+    if (isViewingInactiveAcademicYear && pendingAction.kind === "offering") {
       setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
       setPendingAction(null);
       return;
@@ -500,15 +405,6 @@ export default function AdminSubjects() {
         } else {
           await restoreSubjectOffering(pendingAction.id);
           setNotice(`${pendingAction.label} offering was restored.`);
-        }
-        await Promise.all([loadSubjects(), loadOfferings(), loadGradingTemplates()]);
-      } else {
-        if (pendingAction.action === "archive") {
-          await archiveGradingTemplate(pendingAction.id);
-          setNotice(`${pendingAction.label} template was archived.`);
-        } else {
-          await restoreGradingTemplate(pendingAction.id);
-          setNotice(`${pendingAction.label} template was restored.`);
         }
         await Promise.all([loadSubjects(), loadOfferings(), loadGradingTemplates()]);
       }
@@ -573,17 +469,7 @@ export default function AdminSubjects() {
   };
 
   const resetOfferingFilters = () => {
-    const activeYear = offeringOptions?.academic_years.find((year) => year.is_active)
-      ?? offeringOptions?.academic_years[0];
-    const defaultLevel = targetLevels(offeringOptions?.academic_levels ?? [])[0];
-    const defaultGrade = gradeValueForLevel(defaultLevel);
-    setOfferingFilters({
-      academic_year_id: String(activeYear?.academic_year_id ?? ALL_VALUE),
-      grade: defaultGrade,
-      pathway: defaultPathwayForGrade(defaultGrade),
-      status: "active",
-      search: "",
-    });
+    setOfferingFilters(defaultOfferingFilters(offeringOptions));
   };
 
   const handleDownloadCatalogTemplate = async () => {
@@ -769,11 +655,11 @@ export default function AdminSubjects() {
             ) : null}
             {activeSection === "grading" ? (
               <Button
-                onClick={openCreateGradingTemplate}
-                disabled={isLoadingOptions || isViewingInactiveAcademicYear}
-                title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
+                size="header"
+                className="col-span-2 md:col-auto"
+                onClick={() => setGradingCreateRequest((request) => request + 1)}
               >
-                <Plus className="size-4 mr-2" /> New Grading Template
+                <Plus className="size-4" /> New Grading Template
               </Button>
             ) : null}
           </div>
@@ -786,9 +672,6 @@ export default function AdminSubjects() {
                   setActiveSection(tab);
                   const next = new URLSearchParams(searchParams);
                   next.set("tab", tab);
-                  if (tab !== "grading") {
-                    next.delete("editId");
-                  }
                   setSearchParams(next, { replace: true });
                 }}
               />
@@ -797,7 +680,7 @@ export default function AdminSubjects() {
             </div>
 
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 [&_table]:min-w-[720px] sm:px-4 sm:py-4 md:px-6">
-            {isViewingInactiveAcademicYear ? (
+            {isViewingInactiveAcademicYear && activeSection === "offerings" ? (
               <div className="rounded border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
                 <p className="font-bold">{readOnlyReason}</p>
                 <p className="text-black/70">
@@ -855,7 +738,7 @@ export default function AdminSubjects() {
                     <Input
                       value={catalogSearch}
                       onChange={(event) => setCatalogSearch(event.target.value)}
-                      placeholder="Search name, code, group"
+                      placeholder="Search name, code, template"
                       className="h-10 w-full border-black pl-9 pr-3"
                     />
                   </label>
@@ -874,7 +757,6 @@ export default function AdminSubjects() {
                             {templateName}
                           </Select.Item>
                         ))}
-                        <Select.Item value="none">No Template</Select.Item>
                       </Select.Group>
                     </Select.Content>
                   </Select>
@@ -1076,68 +958,15 @@ export default function AdminSubjects() {
             ) : null}
 
             {activeSection === "grading" ? (
-              <section className="flex flex-col gap-4">
-                <RetroCard className="p-4">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <h2 className="text-xl font-semibold">Grading Setup</h2>
-                      <p className="text-sm">Create reusable grading templates such as Written Works, Performance Tasks, and Exams.</p>
-                    </div>
-                  </div>
-                </RetroCard>
-
-                {isLoadingGradingTemplates ? (
-                  <LoadingCard label="Loading grading templates..." />
-                ) : gradingTemplates.length === 0 ? (
-                  <EmptyStateCard
-                    title="No grading templates yet."
-                    description="Templates define the grading component weights reused by subjects."
-                  >
-                    <Button
-                      size="sm"
-                      onClick={openCreateGradingTemplate}
-                      disabled={isLoadingOptions || isViewingInactiveAcademicYear}
-                      title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
-                    >
-                      Create Grading Template
-                    </Button>
-                  </EmptyStateCard>
-                ) : (
-                  <div className="flex flex-col gap-6">
-                    {gradingTemplatesByGrade.map(([grade, templates]) => (
-                      <section key={grade ?? "all-grades"} className="flex flex-col gap-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-bold">
-                            {grade == null ? "All Grade Levels" : `Grade ${grade}`}
-                          </h3>
-                          <Badge size="sm" variant="outline">
-                            {templates.length} template{templates.length !== 1 ? "s" : ""}
-                          </Badge>
-                        </div>
-                        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                          {templates.map((template) => (
-                            <GradingTemplateRow
-                              key={template.grading_template_id}
-                              template={template}
-                              onEdit={openEditGradingTemplate}
-                              readOnly={isViewingInactiveAcademicYear}
-                              readOnlyReason={readOnlyReason}
-                              onArchive={(itemToArchive) =>
-                                setPendingAction({
-                                  kind: "grading",
-                                  action: "archive",
-                                  id: itemToArchive.grading_template_id,
-                                  label: itemToArchive.template_name,
-                                })
-                              }
-                            />
-                          ))}
-                        </div>
-                      </section>
-                    ))}
-                  </div>
-                )}
-              </section>
+              <GradingTemplateManager
+                templates={gradingTemplates}
+                subjects={[...subjects, ...archivedSubjects]}
+                createRequest={gradingCreateRequest}
+                showCreateButton={false}
+                onReload={async () => {
+                  await Promise.all([loadGradingTemplates(), loadSubjects()]);
+                }}
+              />
             ) : null}
 
             {activeSection === "archived" ? (
@@ -1214,42 +1043,6 @@ export default function AdminSubjects() {
                   </div>
                 </RetroCard>
 
-                <RetroCard className="flex flex-col bg-primary">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-xl font-bold">Archived Grading Templates</h2>
-                      <p className="text-sm">Reusable grading setups hidden from active use.</p>
-                    </div>
-                    <Badge variant="outline" className="border-border">
-                      {archivedGradingTemplates.length} template
-                      {archivedGradingTemplates.length !== 1 ? "s" : ""}
-                    </Badge>
-                  </div>
-                  <div className="pt-3">
-                    {archivedGradingTemplates.length === 0 ? (
-                      <p className="text-sm">No archived grading templates.</p>
-                    ) : (
-                      <div className="flex flex-col gap-3">
-                        {archivedGradingTemplates.map((template) => (
-                          <GradingTemplateRow
-                            key={template.grading_template_id}
-                            template={template}
-                            readOnly={isViewingInactiveAcademicYear}
-                            readOnlyReason={readOnlyReason}
-                            onRestore={(itemToRestore) =>
-                              setPendingAction({
-                                kind: "grading",
-                                action: "restore",
-                                id: itemToRestore.grading_template_id,
-                                label: itemToRestore.template_name,
-                              })
-                            }
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </RetroCard>
               </section>
             ) : null}
             </div>
@@ -1306,42 +1099,6 @@ export default function AdminSubjects() {
         defaultSourceAcademicYearId={isViewingInactiveAcademicYear ? selectedAcademicYear?.academic_year_id : undefined}
         onCopied={handleCopySetupComplete}
       />
-
-      <Dialog
-        open={isGradingModalOpen}
-        onOpenChange={(open) => {
-          setIsGradingModalOpen(open);
-          if (!open && searchParams.get("editId")) {
-            const next = new URLSearchParams(searchParams);
-            next.delete("editId");
-            setSearchParams(next, { replace: true });
-          }
-        }}
-      >
-        <AddGradingComponentModal
-          options={gradingOptions}
-          template={editingGradingTemplate}
-          readOnly={isViewingInactiveAcademicYear}
-          readOnlyReason={readOnlyReason}
-          onClose={() => {
-            setIsGradingModalOpen(false);
-            if (searchParams.get("editId")) {
-              const next = new URLSearchParams(searchParams);
-              next.delete("editId");
-              setSearchParams(next, { replace: true });
-            }
-          }}
-          onSaved={async () => {
-            setNotice(editingGradingTemplate ? "Grading template updated." : "Grading template created.");
-            if (searchParams.get("editId")) {
-              const next = new URLSearchParams(searchParams);
-              next.delete("editId");
-              setSearchParams(next, { replace: true });
-            }
-            await Promise.all([loadGradingTemplates(), loadSubjects(), loadOfferings()]);
-          }}
-        />
-      </Dialog>
 
       {pendingAction ? (
         <ConfirmAlertDialog

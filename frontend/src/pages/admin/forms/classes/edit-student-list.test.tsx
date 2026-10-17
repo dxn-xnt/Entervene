@@ -58,3 +58,66 @@ it("groups unassigned students by gender and sorts surnames alphabetically withi
   expect(screen.getByText("Male (0)")).toBeTruthy();
   expect(screen.getByText("Female (1)")).toBeTruthy();
 });
+
+it("displays compact layout for empty enrolled roster and allows switching to unassigned tab", () => {
+  render(<EditStudentList
+    currentSectionId={19} currentSectionName="Campos" academicLevel="Grade 11" academicYear="2025-2026"
+    requiresPathway={false} students={[]} availableSections={[]}
+    availableStudents={[{
+      student_id: "s-1", student_lrn: "111111111111", first_name: "John", middle_name: null,
+      last_name: "Doe", gender: "Male", academic_level_id: 5,
+    }]}
+    onSaveChanges={vi.fn()} onDistributionCommitted={vi.fn()} onClose={vi.fn()}
+  />);
+
+  // Initial tab when class has 0 enrolled students defaults to Unassigned Students
+  expect(screen.getByText("Doe, John")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Add" })).toBeTruthy();
+
+  // Switch to Enrolled Students tab (displays compact empty state)
+  fireEvent.click(screen.getByRole("tab", { name: /Enrolled Students/i }));
+  expect(screen.getByText("No enrolled students in this section.")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Save Changes" })).toBeTruthy();
+
+  // Switch back to Unassigned Students tab
+  fireEvent.click(screen.getByRole("tab", { name: /Unassigned Students/i }));
+  expect(screen.getByText("Doe, John")).toBeTruthy();
+});
+
+it("displays small 2-student enrolled roster compactly and supports search and Select Multiple toggle", () => {
+  const enrolled = [
+    { student_id: "e-1", full_name: "Santos, Maria", gender: "Female", avatar_initial: "M", account_status: "active" },
+    { student_id: "e-2", full_name: "Cruz, Juan", gender: "Male", avatar_initial: "J", account_status: "active" },
+  ];
+
+  render(<EditStudentList
+    currentSectionId={19} currentSectionName="Campos" academicLevel="Grade 11" academicYear="2025-2026"
+    requiresPathway={false} students={enrolled} availableSections={[{ class_id: 20, section_name: "Reyes" }]}
+    availableStudents={[]}
+    onSaveChanges={vi.fn()} onDistributionCommitted={vi.fn()} onClose={vi.fn()}
+  />);
+
+  expect(screen.getByText("Santos, Maria")).toBeTruthy();
+  expect(screen.getByText("Cruz, Juan")).toBeTruthy();
+  expect(screen.getByText("Female (1)")).toBeTruthy();
+  expect(screen.getByText("Male (1)")).toBeTruthy();
+
+  // Search enrolled students
+  fireEvent.change(screen.getByPlaceholderText("Search enrolled students..."), { target: { value: "Maria" } });
+  expect(screen.getByText("Santos, Maria")).toBeTruthy();
+  expect(screen.queryByText("Cruz, Juan")).toBeNull();
+
+  // Clear search
+  fireEvent.change(screen.getByPlaceholderText("Search enrolled students..."), { target: { value: "" } });
+  expect(screen.getByText("Santos, Maria")).toBeTruthy();
+  expect(screen.getByText("Cruz, Juan")).toBeTruthy();
+
+  // Toggle Select Multiple
+  const selectMultiBtn = screen.getByRole("button", { name: "Select Multiple" });
+  fireEvent.click(selectMultiBtn);
+  expect(screen.getByRole("button", { name: "Cancel Selection" })).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "Cancel Selection" }));
+  expect(screen.getByRole("button", { name: "Select Multiple" })).toBeTruthy();
+});

@@ -95,7 +95,7 @@ def get_subject_offering_form_options_data(db: Session) -> dict:
                 "subject_id": subject.subject_id,
                 "subject_name": subject.subject_name,
                 "subject_codename": subject.subject_codename,
-                "subject_group": subject.subject_group,
+                "grading_template": subject.grading_template.template_name,
                 "academic_level_id": subject.academic_level_id,
                 "is_core": getattr(subject, "is_core", False),
             }

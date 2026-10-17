@@ -239,8 +239,8 @@ def offering_to_item(
             "subject_id": subject.subject_id,
             "subject_name": subject.subject_name,
             "subject_codename": subject.subject_codename,
-            "subject_group": subject.subject_group,
-            "default_grading_template": subject.default_grading_template,
+            "grading_template_id": subject.grading_template_id,
+            "grading_template": subject.grading_template.template_name,
             "is_core": getattr(subject, "is_core", False),
         },
         "academic_year": {

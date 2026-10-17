@@ -1,5 +1,7 @@
 # Entervene — Comprehensive Data Dictionary & Schema Specification
 
+> Historical snapshot from 2026-09-06. The 2026-10-18 development migration removed `subject_groups` and replaced `subject.subject_group_id` / `subject.default_grading_template` with required `subject.grading_template_id`. See [the current grading migration](THREE_GRADING_TEMPLATES_MIGRATION.md) for current schema and data.
+
 > **System**: Entervene — AI-Enhanced Learning Management System for Student Risk Management & Academic Success  
 > **Generated Date**: 2026-09-06  
 > **Database Dialect**: PostgreSQL 15+ (Production) | SQLite 3 (Development / Testing)  

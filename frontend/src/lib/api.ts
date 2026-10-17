@@ -227,17 +227,17 @@ export type SubjectAcademicLevel = {
   level_name: string;
   grade_level: number;
 };
-export type SubjectGroupInline = {
-  subject_group_id: number;
-  name: string;
-  passing_threshold: number;
-};
 export type SubjectListItem = {
   subject_id: number;
+  grading_template_id: number;
+  grading_template: {
+    grading_template_id: number;
+    template_name: string;
+    passing_threshold: number;
+    components: Array<{ component_name: string; weight: number }>;
+  };
   subject_name: string;
   subject_codename: string | null;
-  subject_group: SubjectGroupInline | null;
-  default_grading_template: string | null;
   description: string | null;
   status: SubjectStatus;
   academic_level: SubjectAcademicLevel;
@@ -256,10 +256,15 @@ export type SubjectListResponse = {
 };
 export type SubjectFormOptions = {
   academic_levels: SubjectAcademicLevel[];
-  subject_groups: SubjectGroupInline[];
   statuses: SubjectStatus[];
   default_status: SubjectStatus;
   grading_templates: string[];
+  grading_template_details: Array<{
+    grading_template_id: number;
+    template_name: string;
+    passing_threshold: number;
+    components: Array<{ component_name: string; weight: number }>;
+  }>;
 };
 export type SubjectImportResult = {
   total_rows: number;
@@ -272,8 +277,7 @@ export type SubjectImportResult = {
 export type SubjectCreatePayload = {
   subject_name: string;
   subject_codename?: string | null;
-  subject_group_id: number;
-  default_grading_template?: string | null;
+  grading_template_id: number;
   description?: string | null;
   academic_level_id: number;
   status?: SubjectStatus;
@@ -286,8 +290,7 @@ export type SubjectOfferingSubject = {
   subject_id: number;
   subject_name: string;
   subject_codename: string | null;
-  subject_group: SubjectGroupInline | null;
-  default_grading_template?: string | null;
+  grading_template: string | null;
 };
 export type SubjectOfferingAcademicYear = {
   academic_year_id: number;
@@ -395,19 +398,15 @@ export type GradingTemplateSubject = {
   academic_level_id?: number | null;
   grade_level?: number | null;
 };
-export type GradingTemplateSubjectOption = GradingTemplateSubject & {
-  academic_level_id: number;
-};
 export type GradingTemplateListItem = {
   grading_template_id: number;
   template_name: string;
   description: string | null;
-  academic_level: SubjectAcademicLevel | null;
-  subject: GradingTemplateSubject | null;
-  assigned_subjects?: GradingTemplateSubject[];
-  assigned_subject_count?: number;
-  is_locked?: boolean;
-  lock_reason?: string | null;
+  passing_threshold: number;
+  assigned_subjects: GradingTemplateSubject[];
+  assigned_subject_count: number;
+  is_locked: boolean;
+  lock_reason: string | null;
   status: SubjectStatus;
   total_weight: number;
   component_count: number;
@@ -425,22 +424,20 @@ export type GradingTemplateListResponse = {
   grading_templates: GradingTemplateListItem[];
 };
 export type GradingTemplateFormOptions = {
-  academic_levels: SubjectAcademicLevel[];
-  subjects: GradingTemplateSubjectOption[];
-  statuses: SubjectStatus[];
-  default_status: SubjectStatus;
   default_components: GradingTemplateComponentPayload[];
 };
 export type GradingTemplateCreatePayload = {
   template_name: string;
   description?: string | null;
-  academic_level_id?: number | null;
-  subject_id?: number | null;
-  subject_ids?: number[] | null;
-  status?: SubjectStatus;
+  passing_threshold: number;
+  status: SubjectStatus;
+  subject_ids: number[];
   components: GradingTemplateComponentPayload[];
 };
-export type GradingTemplateUpdatePayload = Partial<GradingTemplateCreatePayload>;
+export type GradingTemplateUpdatePayload = Partial<GradingTemplateCreatePayload> & {
+  updated_at: string;
+  replacement_template_id?: number;
+};
 
 function getCookie(name: string): string | null {
   const value = document.cookie
@@ -1183,13 +1180,13 @@ export async function getSubjectFormOptions(): Promise<SubjectFormOptions> {
 export async function getSubjects(params: {
   status?: SubjectStatus;
   academic_level_id?: number;
-  subject_group_id?: number;
+  grading_template_id?: number;
   search?: string;
 } = {}): Promise<SubjectListResponse> {
   const query = new URLSearchParams();
   if (params.status) query.set("status", params.status);
   if (params.academic_level_id) query.set("academic_level_id", String(params.academic_level_id));
-  if (params.subject_group_id) query.set("subject_group_id", String(params.subject_group_id));
+  if (params.grading_template_id) query.set("grading_template_id", String(params.grading_template_id));
   if (params.search?.trim()) query.set("search", params.search.trim());
   const response = await apiFetch(`/api/v1/subjects${query.toString() ? `?${query.toString()}` : ""}`);
   if (!response.ok) {
@@ -1443,7 +1440,9 @@ export async function getGradingTemplateDetail(gradingTemplateId: string | numbe
   return (await response.json()) as GradingTemplateResponse;
 }
 
-export async function createGradingTemplate(payload: GradingTemplateCreatePayload): Promise<GradingTemplateResponse> {
+export async function createGradingTemplate(
+  payload: GradingTemplateCreatePayload
+): Promise<GradingTemplateResponse> {
   const response = await apiFetch("/api/v1/grading-templates", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1468,28 +1467,6 @@ export async function updateGradingTemplate(
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null);
     throw new ApiRequestError(apiErrorMessage(data, "Unable to update grading template."), response.status, data);
-  }
-  return (await response.json()) as GradingTemplateResponse;
-}
-
-export async function archiveGradingTemplate(gradingTemplateId: string | number): Promise<GradingTemplateResponse> {
-  const response = await apiFetch(`/api/v1/grading-templates/${encodeURIComponent(String(gradingTemplateId))}/archive`, {
-    method: "PATCH",
-  });
-  if (!response.ok) {
-    const data: unknown = await response.json().catch(() => null);
-    throw new ApiRequestError(apiErrorMessage(data, "Unable to archive grading template."), response.status, data);
-  }
-  return (await response.json()) as GradingTemplateResponse;
-}
-
-export async function restoreGradingTemplate(gradingTemplateId: string | number): Promise<GradingTemplateResponse> {
-  const response = await apiFetch(`/api/v1/grading-templates/${encodeURIComponent(String(gradingTemplateId))}/restore`, {
-    method: "PATCH",
-  });
-  if (!response.ok) {
-    const data: unknown = await response.json().catch(() => null);
-    throw new ApiRequestError(apiErrorMessage(data, "Unable to restore grading template."), response.status, data);
   }
   return (await response.json()) as GradingTemplateResponse;
 }
@@ -2124,7 +2101,7 @@ export type SubjectLoadStudioData = {
   academic_periods: Array<{ academic_period_id: number; period_name: string; is_active: boolean }>;
   academic_levels: Array<{ academic_level_id: number; level_name: string; grade_level: number }>;
   classes: Array<{ class_id: number; section_name: string; academic_level_id: number; academic_year_id: number; pathway?: string; pathway_id?: number | null; pathway_name?: string | null; pathway_is_enabled?: boolean | null; requires_pathway?: boolean; paired_class_id?: number | null; period_template_group?: string | null }>;
-  subjects: Array<{ subject_id: number; subject_name: string; subject_codename: string; academic_level_id: number; subject_group: string; is_core?: boolean; is_math_or_science?: boolean }>;
+  subjects: Array<{ subject_id: number; subject_name: string; subject_codename: string; academic_level_id: number; grading_template: string; is_core?: boolean; is_math_or_science?: boolean }>;
   subject_offerings?: SubjectOfferingStudioItem[];
   teachers: Array<{ staff_id: string; name: string; department: string; specialization: string }>;
   existing_loads: SubjectLoadItem[];

@@ -5,7 +5,6 @@ from .AcademicLevelPathwayScope import AcademicLevelPathwayScope
 from .AcademicYear   import AcademicYear
 from .AcademicPeriod import AcademicPeriod
 from .AcademicLevel  import AcademicLevel
-from .SubjectGroup   import SubjectGroup
 from .Subject        import Subject
 from .SubjectOffering import SubjectOffering
 from .GradingTemplate import GradingTemplate

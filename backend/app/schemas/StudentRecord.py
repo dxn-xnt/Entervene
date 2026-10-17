@@ -105,7 +105,7 @@ class StudentRecordPeriodOptionsResponse(BaseModel):
 class StudentPeriodGradeFinalizeRequest(BaseModel):
     final_period_grade: Optional[float] = None
     # passing_grade is intentionally removed — resolved server-side from
-    # SubjectGroup.passing_threshold via the subject FK on StudentPeriodGrade.
+    # GradingTemplate.passing_threshold via the subject FK on StudentPeriodGrade.
 
 
 class StudentPeriodGradeFinalizeResponse(BaseModel):

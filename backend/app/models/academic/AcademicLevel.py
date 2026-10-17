@@ -20,4 +20,3 @@ class AcademicLevel(Base):
     subjects = relationship("Subject", back_populates="academic_level")
     classes  = relationship("Class", back_populates="academic_level")
     subject_offerings = relationship("SubjectOffering", back_populates="academic_level")
-    grading_templates = relationship("GradingTemplate", back_populates="academic_level")

@@ -50,7 +50,7 @@ class DashboardTrendPoint(BaseModel):
 
 class ThresholdResolution(BaseModel):
     subject_id: int
-    subject_group_id: int | None = None
+    grading_template_id: int | None = None
     passing_threshold: float | None = None
     warning: DashboardWarning | None = None
 

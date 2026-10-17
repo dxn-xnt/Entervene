@@ -103,7 +103,7 @@ def get_teacher_dashboard_health(
     - Section health matrix (side-by-side section comparison with graceful partial states)
     - Live action queue (submissions to review, upcoming deadlines)
     - Dashboard-only Phase 2 policies: class-record Current grade, strict runtime
-      subject-group passing thresholds, and Manila attendance/submission windows.
+      grading template passing thresholds, and Manila attendance/submission windows.
       Nullable metrics include coverage/configuration warnings; this is read-only.
     """
     user_role = current_user.get("role")

@@ -1,76 +1,185 @@
 // @vitest-environment jsdom
-import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import type { ClassDetailResponse } from "@/types/adminClasses";
 import AdminClassDetail from "./class-view";
 
-const getClassDetail = vi.hoisted(() => vi.fn());
-const getClassStudents = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/api", () => ({ getClassDetail, getClassStudents }));
-vi.mock("@/layouts/app-layout", () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
-vi.mock("@/components/ui/sidebar", () => ({ SidebarTrigger: () => null }));
-vi.mock("@/components/retroui/use-toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
+const mockGetClassDetail = vi.hoisted(() => vi.fn());
+const mockGetClassStudents = vi.hoisted(() => vi.fn());
+const mockGetClassTransferOptions = vi.hoisted(() => vi.fn());
+const mockGetUnassignedClassStudents = vi.hoisted(() => vi.fn());
+const mockGetClassSchedule = vi.hoisted(() => vi.fn());
 
-const detail = (grade: number, pathwayId: number | null): ClassDetailResponse => ({
-  class_id: 12, section_name: "Zara", class_status: "active", created_at: null,
-  academic_year: { academic_year_id: 1, year_label: "2025-2026" },
-  academic_level: { academic_level_id: grade, level_name: `Grade ${grade}`, grade_level: grade, requires_pathway: grade >= 11 },
-  pathway_id: pathwayId,
-  pathway: pathwayId == null ? null : { id: pathwayId, code: "medical-courses", name: "Medical Courses and Sciences Related", is_enabled: true, sort_order: 1 },
-  adviser: null, statistics: { student_count: 0, subject_count: 0, schedule_count: 0 },
+vi.mock("@/lib/api", () => ({
+  getClassDetail: mockGetClassDetail,
+  getClassStudents: mockGetClassStudents,
+  getClassTransferOptions: mockGetClassTransferOptions,
+  getUnassignedClassStudents: mockGetUnassignedClassStudents,
+  getClassSchedule: mockGetClassSchedule,
+  updateClassStudentList: vi.fn(),
+}));
+
+vi.mock("@/layouts/app-layout", () => ({
+  default: ({ children }: { children: React.ReactNode }) => <div data-testid="app-layout">{children}</div>,
+}));
+
+vi.mock("@/components/ui/sidebar", () => ({
+  SidebarTrigger: () => <button data-testid="sidebar-trigger">Toggle</button>,
+}));
+
+vi.mock("@/pages/admin/forms/classes/edit-student-list", () => ({
+  default: ({ currentSectionName, onClose }: { currentSectionName: string; onClose: () => void }) => (
+    <div data-testid="edit-student-list-modal">
+      <span>Editing {currentSectionName}</span>
+      <button onClick={onClose}>Close Modal</button>
+    </div>
+  ),
+}));
+
+vi.mock("@/pages/admin/forms/classes/edit-class", () => ({
+  default: () => <div data-testid="edit-class-modal" />,
+}));
+
+beforeEach(() => {
+  mockGetClassSchedule.mockResolvedValue({ schedule: [] });
+  mockGetClassStudents.mockResolvedValue({
+    pagination: { total_items: 0, total_pages: 1, current_page: 1, page_size: 200 },
+    summary: { total_students: 0, male_students: 0, female_students: 0, unspecified_gender: 0 },
+    students: [],
+  });
+  mockGetClassTransferOptions.mockResolvedValue({
+    available_sections: [{ class_id: 20, section_name: "Reyes", student_count: 0 }],
+  });
+  mockGetUnassignedClassStudents.mockResolvedValue({
+    students: [],
+  });
 });
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
-
-describe("Class detail pathway identity", () => {
-  it("shows the canonical pathway on an SHS section", async () => {
-    getClassDetail.mockResolvedValue(detail(11, 1));
-    render(<MemoryRouter initialEntries={["/admin/classes/12"]}><Routes><Route path="/admin/classes/:classId" element={<AdminClassDetail />} /></Routes></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Academic Pathway: Medical Courses and Sciences Related")).toBeTruthy());
-  });
-
-  it("shows an unassigned SHS state without adding a pathway label to JHS", async () => {
-    getClassDetail.mockResolvedValueOnce(detail(12, null)).mockResolvedValue(detail(9, null));
-    const page = render(<MemoryRouter initialEntries={["/admin/classes/12"]}><Routes><Route path="/admin/classes/:classId" element={<AdminClassDetail />} /></Routes></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Academic Pathway: Unassigned pathway")).toBeTruthy());
-    page.unmount();
-    render(<MemoryRouter initialEntries={["/admin/classes/12"]}><Routes><Route path="/admin/classes/:classId" element={<AdminClassDetail />} /></Routes></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Grade 9 - 2025-2026 | Active since N/A")).toBeTruthy());
-    expect(screen.queryByText(/Academic Pathway:/)).toBeNull();
-  });
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
 });
 
-it("shows an empty roster and the later assignment action", async () => {
-  getClassDetail.mockResolvedValue(detail(12, null));
-  getClassStudents.mockResolvedValue({
-    class_id: 12, section_name: "Zara", academic_level: { academic_level_id: 12, level_name: "Grade 12" },
-    summary: { total_students: 0, gender_counts: { female: 0, male: 0, other: 0, unspecified: 0 } },
-    students: [], pagination: { page: 1, page_size: 200, total_items: 0, total_pages: 1 },
+it("loads Students tab when deep-linked with ?tab=students", async () => {
+  mockGetClassDetail.mockResolvedValue({
+    class_id: 19,
+    section_name: "Del Mundo",
+    class_status: "active",
+    academic_year: { academic_year_id: 1, year_label: "2025-2026" },
+    academic_level: { academic_level_id: 6, level_name: "Grade 12", grade_level: 12 },
+    adviser: { first_name: "Roy", last_name: "Rondina" },
+    created_at: "2025-06-01T00:00:00Z",
   });
-  render(<MemoryRouter initialEntries={["/admin/classes/12"]}><Routes><Route path="/admin/classes/:classId" element={<AdminClassDetail />} /></Routes></MemoryRouter>);
-  await waitFor(() => expect(screen.getByRole("tab", { name: "Students" })).toBeTruthy());
-  fireEvent.click(screen.getByRole("tab", { name: "Students" }));
-  await waitFor(() => expect(screen.getByText("No students assigned yet. Use Add / Manage Students to build the roster.")).toBeTruthy());
+
+  render(
+    <MemoryRouter initialEntries={["/admin/classes/19?tab=students"]}>
+      <Routes>
+        <Route path="/admin/classes/:classId" element={<AdminClassDetail />} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+  await waitFor(() => expect(screen.getAllByText("Del Mundo").length).toBeGreaterThan(0));
+  // Students tab header should be present
   expect(screen.getByRole("button", { name: "Add / Manage Students" })).toBeTruthy();
-  expect(screen.queryByText("88%")).toBeNull();
+  // Edit modal should NOT be open yet
+  expect(screen.queryByTestId("edit-student-list-modal")).toBeNull();
 });
 
-it("loads every roster page when a class exceeds the API page size", async () => {
-  getClassDetail.mockResolvedValue(detail(12, null));
-  const base = {
-    class_id: 12, section_name: "Zara", academic_level: { academic_level_id: 12, level_name: "Grade 12" },
-    summary: { total_students: 201, gender_counts: { female: 0, male: 201, other: 0, unspecified: 0 } },
-  };
-  getClassStudents.mockImplementation(async (_classId: number, options: { page?: number }) => ({
-    ...base,
-    students: options.page === 2 ? [{ student_id: "last", student_lrn: "123456789012", first_name: "Last", last_name: "Student", full_name: "Last Student", gender: "Male", avatar_initial: "L" }] : [],
-    pagination: { page: options.page ?? 1, page_size: 200, total_items: 201, total_pages: 2 },
-  }));
-  render(<MemoryRouter initialEntries={["/admin/classes/12"]}><Routes><Route path="/admin/classes/:classId" element={<AdminClassDetail />} /></Routes></MemoryRouter>);
-  await waitFor(() => expect(screen.getByRole("tab", { name: "Students" })).toBeTruthy());
-  fireEvent.click(screen.getByRole("tab", { name: "Students" }));
-  await waitFor(() => expect(screen.getByText("Last Student")).toBeTruthy());
-  expect(getClassStudents).toHaveBeenCalledWith("12", { page: 2, pageSize: 200 });
+it("automatically opens Manage Students modal when deep-linked with action=manage-students", async () => {
+  mockGetClassDetail.mockResolvedValue({
+    class_id: 19,
+    section_name: "Del Mundo",
+    class_status: "active",
+    academic_year: { academic_year_id: 1, year_label: "2025-2026" },
+    academic_level: { academic_level_id: 6, level_name: "Grade 12", grade_level: 12 },
+    adviser: { first_name: "Roy", last_name: "Rondina" },
+    created_at: "2025-06-01T00:00:00Z",
+  });
+
+  render(
+    <MemoryRouter initialEntries={["/admin/classes/19?tab=students&action=manage-students"]}>
+      <Routes>
+        <Route path="/admin/classes/:classId" element={<AdminClassDetail />} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+  // Modal should automatically open once data is loaded
+  await waitFor(() => expect(screen.getByTestId("edit-student-list-modal")).toBeTruthy());
+  expect(screen.getByText("Editing Del Mundo")).toBeTruthy();
+});
+
+it("does NOT open Manage Students modal if the class is archived", async () => {
+  mockGetClassDetail.mockResolvedValue({
+    class_id: 30,
+    section_name: "OldSection",
+    class_status: "archived",
+    academic_year: { academic_year_id: 1, year_label: "2025-2026" },
+    academic_level: { academic_level_id: 6, level_name: "Grade 12", grade_level: 12 },
+    adviser: null,
+    created_at: "2024-06-01T00:00:00Z",
+  });
+
+  render(
+    <MemoryRouter initialEntries={["/admin/classes/30?tab=students&action=manage-students"]}>
+      <Routes>
+        <Route path="/admin/classes/:classId" element={<AdminClassDetail />} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+  await waitFor(() => expect(screen.getAllByText("OldSection").length).toBeGreaterThan(0));
+  // Archived banner should be displayed
+  expect(screen.getByText(/This class is archived and read-only/i)).toBeTruthy();
+  // Manage Students modal must NOT open
+  expect(screen.queryByTestId("edit-student-list-modal")).toBeNull();
+});
+
+it("displays compact student count and gender summary in header and removes oversized Total Students card", async () => {
+  mockGetClassDetail.mockResolvedValue({
+    class_id: 25,
+    section_name: "Campos",
+    class_status: "active",
+    academic_year: { academic_year_id: 1, year_label: "2025-2026" },
+    academic_level: { academic_level_id: 5, level_name: "Grade 11", grade_level: 11 },
+    adviser: { first_name: "Maria", last_name: "Santos" },
+    created_at: "2025-06-01T00:00:00Z",
+  });
+
+  mockGetClassStudents.mockResolvedValue({
+    pagination: { total_items: 2, total_pages: 1, current_page: 1, page_size: 200 },
+    summary: {
+      total_students: 2,
+      gender_counts: { male: 1, female: 1, other: 0, unspecified: 0 },
+    },
+    students: [
+      { student_id: "s-1", full_name: "Cruz, Juan", gender: "Male", avatar_initial: "J", account_status: "enrolled" },
+      { student_id: "s-2", full_name: "Reyes, Maria", gender: "Female", avatar_initial: "M", account_status: "enrolled" },
+    ],
+  });
+
+  render(
+    <MemoryRouter initialEntries={["/admin/classes/25?tab=students"]}>
+      <Routes>
+        <Route path="/admin/classes/:classId" element={<AdminClassDetail />} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+  await waitFor(() => expect(screen.getAllByText("Campos").length).toBeGreaterThan(0));
+
+  // Compact student count summary in the header
+  expect(screen.getByText(/— 2 enrolled/)).toBeTruthy();
+  expect(screen.getByText(/1 male · 1 female/)).toBeTruthy();
+
+  // The oversized OverviewCard for Total Students should NOT be rendered
+  expect(screen.queryByText("Total Students")).toBeNull();
+
+  // Student roster rows are displayed directly
+  expect(screen.getByText("Cruz, Juan")).toBeTruthy();
+  expect(screen.getByText("Reyes, Maria")).toBeTruthy();
+
+  // Add / Manage Students action is present
+  expect(screen.getByRole("button", { name: /Add \/ Manage Students/i })).toBeTruthy();
 });

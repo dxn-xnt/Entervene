@@ -11,11 +11,8 @@ import {
   ApiRequestError,
   archiveSubjectOffering,
   createSubjectOffering,
-  getGradingTemplates,
   getSubjectOfferings,
-  updateSubject,
   updateSubjectOffering,
-  type GradingTemplateListItem,
   type SubjectListItem,
   type SubjectOfferingFormOptions,
   type SubjectOfferingListItem,
@@ -57,7 +54,6 @@ export function OfferingModal({
     academicYearId?: number;
   }) => Promise<void>;
 }) {
-  const [gradingTemplates, setGradingTemplates] = useState<GradingTemplateListItem[]>([]);
   const [existingSubjectOfferings, setExistingSubjectOfferings] = useState<SubjectOfferingListItem[]>([]);
   const [alreadyOfferedSubjectIds, setAlreadyOfferedSubjectIds] = useState<Set<string>>(new Set());
   const [form, setForm] = useState<OfferingFormState>({
@@ -70,18 +66,10 @@ export function OfferingModal({
     pathway: "general",
     minutes: "",
     status: "active",
-    default_grading_template: "no-template",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAdvancedYear, setShowAdvancedYear] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    getGradingTemplates({ status: "active" })
-      .then((res) => setGradingTemplates(res.grading_templates))
-      .catch(() => setGradingTemplates([]));
-  }, [open]);
 
   const gradeLevels = useMemo(() => targetLevels(options?.academic_levels ?? []), [options]);
   const selectedYearId = Number(form.academic_year_id);
@@ -134,30 +122,6 @@ export function OfferingModal({
     ? `${selectedYear.year_label} - ${formatPeriodLabel(contextPeriod)}`
     : selectedYear?.year_label ?? "Current setup context unavailable";
 
-  const templateOptions = useMemo(() => {
-    const list = [...gradingTemplates];
-    if (
-      form.default_grading_template &&
-      form.default_grading_template !== "no-template" &&
-      !list.some((t) => t.template_name === form.default_grading_template)
-    ) {
-      list.push({
-        grading_template_id: -1,
-        template_name: form.default_grading_template,
-        description: null,
-        academic_level: null,
-        subject: null,
-        status: "active",
-        total_weight: 100,
-        component_count: 0,
-        components: [],
-        created_at: null,
-        updated_at: null,
-      });
-    }
-    return list;
-  }, [gradingTemplates, form.default_grading_template]);
-
   useEffect(() => {
     if (!open) {
       setAlreadyOfferedSubjectIds(new Set());
@@ -167,12 +131,6 @@ export function OfferingModal({
     setShowAdvancedYear(false);
     if (offering) {
       let isMounted = true;
-      const matchingCatalogSubject = catalogSubjects.find(
-        (s) => Number(s.subject_id) === Number(offering.subject.subject_id)
-      );
-      const existingTemplate =
-        offering.subject.default_grading_template || matchingCatalogSubject?.default_grading_template;
-
       getSubjectOfferings({
         academic_year_id: offering.academic_year.academic_year_id,
         academic_level_id: offering.academic_level.academic_level_id,
@@ -196,7 +154,6 @@ export function OfferingModal({
             pathway: offering.pathway,
             minutes: offering.minutes != null ? String(offering.minutes) : "",
             status: offering.status,
-            default_grading_template: existingTemplate || "no-template",
           });
         })
         .catch(() => {
@@ -212,7 +169,6 @@ export function OfferingModal({
             pathway: offering.pathway,
             minutes: offering.minutes != null ? String(offering.minutes) : "",
             status: offering.status,
-            default_grading_template: existingTemplate || "no-template",
           });
         });
 
@@ -248,8 +204,7 @@ export function OfferingModal({
       pathway: initialPathway,
       minutes: "",
       status: options?.default_status ?? "active",
-      default_grading_template: "no-template",
-    });
+      });
   }, [catalogSubjects, gradeLevels, offering, open, options]);
 
   // In create mode, fetch existing active offerings for the selected year+level so
@@ -444,13 +399,6 @@ export function OfferingModal({
           } else {
             await archiveSubjectOffering(existingItem.subject_offering_id);
           }
-        }
-
-        const selectedTemplate = form.default_grading_template === "no-template" ? null : form.default_grading_template;
-        if (selectedTemplate !== (offering.subject.default_grading_template ?? null)) {
-          await updateSubject(offering.subject.subject_id, {
-            default_grading_template: selectedTemplate,
-          });
         }
 
         const effectivePathway = requiresPathway ? form.pathway : "general";
@@ -708,26 +656,9 @@ export function OfferingModal({
                     />
                     <p className="text-xs text-black/70">Minutes per period. Required for publishing.</p>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-sm font-semibold" htmlFor="offering-grading-template">Grading Template</label>
-                    <Select
-                      value={form.default_grading_template}
-                      onValueChange={(value) => setField("default_grading_template", value)}
-                    >
-                      <Select.Trigger id="offering-grading-template" className="w-full">
-                        <Select.Value placeholder="Select grading template" />
-                      </Select.Trigger>
-                      <Select.Content>
-                        <Select.Group>
-                          <Select.Item value="no-template">No template (Unassigned)</Select.Item>
-                          {templateOptions.map((template) => (
-                            <Select.Item key={template.grading_template_id} value={template.template_name}>
-                              {template.template_name}
-                            </Select.Item>
-                          ))}
-                        </Select.Group>
-                      </Select.Content>
-                    </Select>
+                  <div className="text-sm">
+                    <strong>Grading Template:</strong> {offering?.subject.grading_template ?? "Set in Subject Catalog"}
+                    <p className="text-xs text-black/70">Change this in Add/Edit Subject.</p>
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-sm font-semibold" htmlFor="offering-status">Status</label>

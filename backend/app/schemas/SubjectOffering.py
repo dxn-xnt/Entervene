@@ -10,7 +10,7 @@ class SubjectOfferingSubject(BaseModel):
     subject_id: int
     subject_name: str
     subject_codename: str | None
-    subject_group: str | None
+    grading_template: str | None = None
     is_core: bool = False
 
 
@@ -111,7 +111,7 @@ class SubjectOfferingFormSubject(BaseModel):
     subject_id: int
     subject_name: str
     subject_codename: str | None
-    subject_group: str | None
+    grading_template: str | None = None
     academic_level_id: int
     is_core: bool = False
 

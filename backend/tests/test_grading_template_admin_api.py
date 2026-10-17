@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+from decimal import Decimal
 import uuid
 
 import pytest
@@ -15,15 +17,8 @@ from app.db.Session import get_db
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
-
-
-TABLES = [
-    AcademicLevel.__table__,
-    Subject.__table__,
-    GradingTemplate.__table__,
-    GradingTemplateComponent.__table__,
-]
 
 
 @pytest.fixture
@@ -36,6 +31,30 @@ def db():
     Base.metadata.create_all(bind=engine)
     session = sessionmaker(bind=engine)()
     try:
+        level = AcademicLevel(level_name="Grade 11", grade_level=11)
+        session.add(level)
+        templates_data = [
+            ("Core", 87.0, [( "Written Work", 20.0), ("Performance Tasks", 50.0), ("Exams", 30.0)]),
+            ("Applied", 85.0, [("Written Work", 20.0), ("Performance Tasks", 60.0), ("Exams", 20.0)]),
+            ("Specialized", 85.0, [("Written Work", 20.0), ("Performance Tasks", 50.0), ("Exams", 30.0)]),
+        ]
+        for name, threshold, components in templates_data:
+            tmpl = GradingTemplate(
+                template_name=name,
+                passing_threshold=Decimal(str(threshold)),
+                status="active",
+                updated_at=datetime.now(timezone.utc),
+            )
+            tmpl.components = [
+                GradingTemplateComponent(
+                    component_name=c_name,
+                    weight=Decimal(str(w)),
+                    display_order=i,
+                )
+                for i, (c_name, w) in enumerate(components, 1)
+            ]
+            session.add(tmpl)
+        session.commit()
         yield session
     finally:
         session.close()
@@ -57,256 +76,215 @@ def client(db):
     test_app.dependency_overrides.clear()
 
 
-def add_level(db, name: str = "Grade 11", grade: int = 11) -> AcademicLevel:
-    level = AcademicLevel(level_name=name, grade_level=grade)
-    db.add(level)
-    db.flush()
-    return level
-
-
-def add_subject(db, level: AcademicLevel) -> Subject:
-    subject = Subject(
-        subject_name="General Biology 1",
-        subject_codename="GENBIO1",
-        subject_group="Specialized",
-        default_grading_template="Default SHS",
-        description="STEM subject",
-        status="active",
-        academic_level_id=level.academic_level_id,
-    )
-    db.add(subject)
-    db.flush()
-    return subject
-
-
-def template_payload(level: AcademicLevel | None = None, subject: Subject | None = None, **overrides):
-    payload = {
-        "template_name": "Default SHS Grading",
-        "description": "Standard SHS grading weights",
-        "academic_level_id": level.academic_level_id if level else None,
-        "subject_id": subject.subject_id if subject else None,
-        "components": [
-            {"component_name": "Written Works", "weight": 25, "display_order": 1},
-            {"component_name": "Performance Tasks", "weight": 50, "display_order": 2},
-            {"component_name": "Exams", "weight": 25, "display_order": 3},
-        ],
-    }
-    payload.update(overrides)
-    return payload
-
-
-def create_template(db, level: AcademicLevel, name: str = "Default SHS Grading") -> GradingTemplate:
-    template = GradingTemplate(
-        template_name=name,
-        description="Standard SHS grading weights",
-        academic_level_id=level.academic_level_id,
-        status="active",
-    )
-    template.components = [
-        GradingTemplateComponent(component_name="Written Works", weight=25, display_order=1),
-        GradingTemplateComponent(component_name="Performance Tasks", weight=50, display_order=2),
-        GradingTemplateComponent(component_name="Exams", weight=25, display_order=3),
-    ]
-    db.add(template)
-    db.flush()
-    return template
-
-
-def test_form_options_returns_usable_data(client, db):
-    level = add_level(db)
-    subject = add_subject(db, level)
-    db.commit()
-
+def test_form_options_returns_default_components(client):
     response = client.get("/api/v1/grading-templates/form-options")
-
     assert response.status_code == 200
     body = response.json()
-    assert body["academic_levels"][0]["academic_level_id"] == level.academic_level_id
-    assert body["subjects"][0]["subject_id"] == subject.subject_id
-    assert body["subjects"][0]["academic_level_id"] == level.academic_level_id
-    assert body["statuses"] == ["active", "archived"]
-    assert body["default_status"] == "active"
-    assert sum(component["weight"] for component in body["default_components"]) == 100
+    assert "default_components" in body
+    assert sum(c["weight"] for c in body["default_components"]) == 100
 
 
-def test_create_template_with_components(client, db):
-    level = add_level(db)
-    subject = add_subject(db, level)
-    db.commit()
-
-    response = client.post("/api/v1/grading-templates", json=template_payload(level, subject))
-
-    assert response.status_code == 201
+def test_list_grading_templates_returns_three_templates(client):
+    response = client.get("/api/v1/grading-templates")
+    assert response.status_code == 200
     body = response.json()
-    assert body["template_name"] == "Default SHS Grading"
-    assert body["academic_level"]["academic_level_id"] == level.academic_level_id
-    assert body["subject"]["subject_id"] == subject.subject_id
+    assert body["summary"]["total_templates"] == 3
+    assert body["summary"]["active_templates"] == 3
+    assert body["summary"]["archived_templates"] == 0
+    templates = body["grading_templates"]
+    assert {t["template_name"] for t in templates} == {"Core", "Applied", "Specialized"}
+    for t in templates:
+        assert t["total_weight"] == 100
+        assert t["component_count"] == 3
+        assert t["is_locked"] is False
+
+
+def test_get_grading_template_detail(client, db):
+    core = db.query(GradingTemplate).filter(GradingTemplate.template_name == "Core").one()
+    response = client.get(f"/api/v1/grading-templates/{core.grading_template_id}")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["template_name"] == "Core"
+    assert body["passing_threshold"] == 87.0
     assert body["total_weight"] == 100
-    assert [component["component_name"] for component in body["components"]] == [
-        "Written Works",
-        "Performance Tasks",
-        "Exams",
-    ]
-    assert db.query(GradingTemplate).count() == 1
-    assert db.query(GradingTemplateComponent).count() == 3
+    assert len(body["components"]) == 3
 
 
-def test_reject_weights_not_totaling_100(client, db):
-    level = add_level(db)
-    db.commit()
-    payload = template_payload(
-        level,
-        components=[
-            {"component_name": "Written Works", "weight": 30, "display_order": 1},
-            {"component_name": "Performance Tasks", "weight": 50, "display_order": 2},
-            {"component_name": "Exams", "weight": 25, "display_order": 3},
+def test_patch_grading_template_success(client, db):
+    applied = db.query(GradingTemplate).filter(GradingTemplate.template_name == "Applied").one()
+    url = f"/api/v1/grading-templates/{applied.grading_template_id}"
+    payload = {
+        "updated_at": applied.updated_at.isoformat(),
+        "passing_threshold": 84.5,
+        "components": [
+            {"component_name": "Written Work", "weight": 25.0, "display_order": 1},
+            {"component_name": "Performance Tasks", "weight": 55.0, "display_order": 2},
+            {"component_name": "Exams", "weight": 20.0, "display_order": 3},
         ],
-    )
+    }
+    response = client.patch(url, json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["passing_threshold"] == 84.5
+    assert [c["weight"] for c in body["components"]] == [25.0, 55.0, 20.0]
 
-    response = client.post("/api/v1/grading-templates", json=payload)
 
+def test_patch_grading_template_rejects_weights_not_100(client, db):
+    applied = db.query(GradingTemplate).filter(GradingTemplate.template_name == "Applied").one()
+    url = f"/api/v1/grading-templates/{applied.grading_template_id}"
+    payload = {
+        "updated_at": applied.updated_at.isoformat(),
+        "passing_threshold": 85.0,
+        "components": [
+            {"component_name": "Written Work", "weight": 30.0, "display_order": 1},
+            {"component_name": "Performance Tasks", "weight": 60.0, "display_order": 2},
+            {"component_name": "Exams", "weight": 20.0, "display_order": 3},
+        ],
+    }
+    response = client.patch(url, json=payload)
     assert response.status_code == 422
     assert "total 100" in response.json()["detail"]
 
 
-def test_reject_duplicate_component_names(client, db):
-    level = add_level(db)
-    db.commit()
-    payload = template_payload(
-        level,
-        components=[
-            {"component_name": "Written Works", "weight": 25, "display_order": 1},
-            {"component_name": "written works", "weight": 50, "display_order": 2},
-            {"component_name": "Exams", "weight": 25, "display_order": 3},
+def test_patch_grading_template_rejects_invalid_or_duplicate_component_names(client, db):
+    applied = db.query(GradingTemplate).filter(GradingTemplate.template_name == "Applied").one()
+    url = f"/api/v1/grading-templates/{applied.grading_template_id}"
+
+    # Non-standard component name
+    invalid_name = {
+        "updated_at": applied.updated_at.isoformat(),
+        "components": [
+            {"component_name": "Homework", "weight": 20.0, "display_order": 1},
+            {"component_name": "Performance Tasks", "weight": 60.0, "display_order": 2},
+            {"component_name": "Exams", "weight": 20.0, "display_order": 3},
         ],
-    )
+    }
+    response = client.patch(url, json=invalid_name)
+    assert response.status_code == 422
+    assert "Written Work, Performance Tasks, and Exams" in response.json()["detail"]
 
-    response = client.post("/api/v1/grading-templates", json=payload)
-
+    # Duplicate component name
+    duplicate = {
+        "updated_at": applied.updated_at.isoformat(),
+        "components": [
+            {"component_name": "Written Work", "weight": 20.0, "display_order": 1},
+            {"component_name": "written work", "weight": 60.0, "display_order": 2},
+            {"component_name": "Exams", "weight": 20.0, "display_order": 3},
+        ],
+    }
+    response = client.patch(url, json=duplicate)
     assert response.status_code == 422
     assert "duplicated" in response.json()["detail"]
 
 
-def test_reject_duplicate_template_name_in_same_scope(client, db):
-    level = add_level(db)
-    create_template(db, level)
-    db.commit()
-
-    response = client.post("/api/v1/grading-templates", json=template_payload(level))
-
-    assert response.status_code == 409
-    assert "already exists" in response.json()["detail"]
-
-
-def test_list_and_detail_work(client, db):
-    level = add_level(db)
-    template = create_template(db, level)
-    db.commit()
-
-    list_response = client.get("/api/v1/grading-templates?search=default")
-    detail_response = client.get(f"/api/v1/grading-templates/{template.grading_template_id}")
-
-    assert list_response.status_code == 200
-    assert list_response.json()["summary"] == {
-        "total_templates": 1,
-        "active_templates": 1,
-        "archived_templates": 0,
+def test_patch_grading_template_allows_unique_name_change(client, db):
+    applied = db.query(GradingTemplate).filter(GradingTemplate.template_name == "Applied").one()
+    url = f"/api/v1/grading-templates/{applied.grading_template_id}"
+    payload = {
+        "updated_at": applied.updated_at.isoformat(),
+        "template_name": "Modified Name",
     }
-    assert list_response.json()["grading_templates"][0]["grading_template_id"] == template.grading_template_id
-    assert detail_response.status_code == 200
-    assert detail_response.json()["component_count"] == 3
-
-
-def test_update_template_works(client, db):
-    level = add_level(db)
-    template = create_template(db, level)
-    db.commit()
-
-    response = client.patch(
-        f"/api/v1/grading-templates/{template.grading_template_id}",
-        json={
-            "template_name": "STEM Lab Grading",
-            "components": [
-                {"component_name": "Written Works", "weight": 20, "display_order": 1},
-                {"component_name": "Performance Tasks", "weight": 60, "display_order": 2},
-                {"component_name": "Term Assessment", "weight": 20, "display_order": 3},
-            ],
-        },
-    )
-
+    response = client.patch(url, json=payload)
     assert response.status_code == 200
+    assert response.json()["template_name"] == "Modified Name"
+
+
+def test_create_template_and_assign_ungraded_subject(client, db):
+    level = db.query(AcademicLevel).first()
+    core = db.query(GradingTemplate).filter(GradingTemplate.template_name == "Core").one()
+    subject = Subject(subject_name="Media Literacy", subject_codename="MIL11",
+                      grading_template_id=core.grading_template_id,
+                      academic_level_id=level.academic_level_id, status="active")
+    db.add(subject)
+    db.commit()
+    response = client.post("/api/v1/grading-templates", json={
+        "template_name": "Creative Studies", "description": "Practice template",
+        "passing_threshold": 82, "status": "active", "subject_ids": [subject.subject_id],
+        "components": [
+            {"component_name": "Written Work", "weight": 30, "display_order": 1},
+            {"component_name": "Performance Tasks", "weight": 50, "display_order": 2},
+            {"component_name": "Exams", "weight": 20, "display_order": 3},
+        ],
+    })
+    assert response.status_code == 201, response.text
     body = response.json()
-    assert body["template_name"] == "STEM Lab Grading"
-    assert body["total_weight"] == 100
-    assert [component["weight"] for component in body["components"]] == [20, 60, 20]
+    assert body["template_name"] == "Creative Studies"
+    assert body["assigned_subject_count"] == 1
+    db.refresh(subject)
+    assert subject.grading_template_id == body["grading_template_id"]
 
 
-def test_archive_and_restore_work(client, db):
-    level = add_level(db)
-    template = create_template(db, level)
+def test_create_template_rejects_duplicate_name_and_invalid_weights(client):
+    base = {
+        "template_name": "core", "passing_threshold": 85, "status": "active", "subject_ids": [],
+        "components": [
+            {"component_name": "Written Work", "weight": 20, "display_order": 1},
+            {"component_name": "Performance Tasks", "weight": 60, "display_order": 2},
+            {"component_name": "Exams", "weight": 20, "display_order": 3},
+        ],
+    }
+    assert client.post("/api/v1/grading-templates", json=base).status_code == 409
+    base["template_name"] = "New Template"
+    base["components"][2]["weight"] = 30
+    assert client.post("/api/v1/grading-templates", json=base).status_code == 422
+
+
+def test_patch_grading_template_rejects_stale_timestamp(client, db):
+    applied = db.query(GradingTemplate).filter(GradingTemplate.template_name == "Applied").one()
+    url = f"/api/v1/grading-templates/{applied.grading_template_id}"
+    stale_payload = {
+        "updated_at": "2020-01-01T00:00:00Z",
+        "passing_threshold": 80.0,
+    }
+    response = client.patch(url, json=stale_payload)
+    assert response.status_code == 409
+    assert "Reload it before saving" in response.json()["detail"]
+
+
+def test_patch_grading_template_rejects_when_locked(client, db):
+    core = db.query(GradingTemplate).filter(GradingTemplate.template_name == "Core").one()
+    level = db.query(AcademicLevel).first()
+    subject = Subject(
+        subject_name="Mathematics 7",
+        subject_codename="MATH7",
+        grading_template_id=core.grading_template_id,
+        academic_level_id=level.academic_level_id,
+        status="active",
+    )
+    db.add(subject)
+    db.flush()
+
+    grade = StudentPeriodGrade(
+        student_id=uuid.uuid4(),
+        class_id=1,
+        subject_id=subject.subject_id,
+        academic_period_id=1,
+        transmuted_grade=Decimal("90.0"),
+        is_finalized=True,
+    )
+    db.add(grade)
     db.commit()
 
-    archived = client.patch(f"/api/v1/grading-templates/{template.grading_template_id}/archive")
-    assert archived.status_code == 200
-    assert archived.json()["status"] == "archived"
+    url = f"/api/v1/grading-templates/{core.grading_template_id}"
+    payload = {
+        "updated_at": core.updated_at.isoformat(),
+        "passing_threshold": 88.0,
+    }
+    response = client.patch(url, json=payload)
+    assert response.status_code == 409
+    assert "locked" in response.json()["detail"].lower()
 
-    restored = client.patch(f"/api/v1/grading-templates/{template.grading_template_id}/restore")
-    assert restored.status_code == 200
-    assert restored.json()["status"] == "active"
 
+def test_non_admin_cannot_access_or_patch(client, db):
+    core = db.query(GradingTemplate).filter(GradingTemplate.template_name == "Core").one()
+    url = f"/api/v1/grading-templates/{core.grading_template_id}"
 
-def test_non_admin_cannot_create_update_or_archive(client, db):
-    level = add_level(db)
-    template = create_template(db, level)
-    db.commit()
     client.app.dependency_overrides[get_current_user] = lambda: {
         "sub": str(uuid.uuid4()),
         "role": "teacher",
     }
-
-    assert client.post("/api/v1/grading-templates", json=template_payload(level)).status_code == 403
-    assert client.patch(
-        f"/api/v1/grading-templates/{template.grading_template_id}",
-        json={"template_name": "Blocked"},
-    ).status_code == 403
-    assert client.patch(f"/api/v1/grading-templates/{template.grading_template_id}/archive").status_code == 403
+    assert client.get("/api/v1/grading-templates").status_code == 403
+    assert client.patch(url, json={"updated_at": core.updated_at.isoformat()}).status_code == 403
 
     del client.app.dependency_overrides[get_current_user]
-    assert client.post("/api/v1/grading-templates", json=template_payload(level)).status_code == 401
-
-
-def test_multi_subject_assignment_and_locking(client, db):
-    level = add_level(db)
-    sub1 = add_subject(db, level)
-    sub2 = Subject(
-        subject_name="General Chemistry 1",
-        subject_codename="GENCHEM1",
-        subject_group="Specialized",
-        status="active",
-        academic_level_id=level.academic_level_id,
-    )
-    db.add(sub2)
-    db.commit()
-
-    # Create template assigned to sub1 and sub2
-    res = client.post(
-        "/api/v1/grading-templates",
-        json=template_payload(level, subject_ids=[sub1.subject_id, sub2.subject_id]),
-    )
-    assert res.status_code == 201
-    body = res.json()
-    assert body["assigned_subject_count"] == 2
-    assert len(body["assigned_subjects"]) == 2
-    assert {item["grade_level"] for item in body["assigned_subjects"]} == {level.grade_level}
-    assert {item["academic_level_id"] for item in body["assigned_subjects"]} == {level.academic_level_id}
-
-    template_id = body["grading_template_id"]
-
-    # Unassign sub2
-    update_res = client.patch(
-        f"/api/v1/grading-templates/{template_id}",
-        json={"subject_ids": [sub1.subject_id]},
-    )
-    assert update_res.status_code == 200
-    assert update_res.json()["assigned_subject_count"] == 1
-
+    assert client.get("/api/v1/grading-templates").status_code == 401

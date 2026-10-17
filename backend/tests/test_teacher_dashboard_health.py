@@ -26,7 +26,8 @@ from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
-from app.models.academic.SubjectGroup import SubjectGroup
+from app.models.academic.GradingTemplate import GradingTemplate
+from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.attendance.Attendance import AttendanceRecord
@@ -42,6 +43,11 @@ from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizAnswer import QuizAnswer
 from app.models.quiz.QuizQuestion import QuizQuestion
 from app.services.activity import AnalyticsService
+from app.services.activity.TeacherDashboardMetrics import (
+    DashboardWarning,
+    PASSING_CONFIGURATION_WARNING,
+    ThresholdResolution,
+)
 
 
 NOW = datetime(2026, 10, 8, 1, 0, tzinfo=timezone.utc)  # Thursday 09:00 Manila
@@ -129,12 +135,17 @@ def seed_dashboard_data(db):
         )
         for name in ["Newton", "Einstein", "Curie"]
     ]
-    group = SubjectGroup(name="Dashboard synthetic core", passing_threshold=Decimal("85"))
-    db.add(group)
+    template = GradingTemplate(grading_template_id=1, template_name="Core", passing_threshold=Decimal("85"), status="active")
+    template.components = [
+        GradingTemplateComponent(component_name="Written Work", weight=Decimal("20"), display_order=1),
+        GradingTemplateComponent(component_name="Performance Tasks", weight=Decimal("50"), display_order=2),
+        GradingTemplateComponent(component_name="Exams", weight=Decimal("30"), display_order=3),
+    ]
+    db.add(template)
     db.flush()
     subjects = [
         Subject(subject_name=name, academic_level_id=level.academic_level_id,
-                status="active", subject_group_id=group.subject_group_id)
+                status="active", grading_template_id=template.grading_template_id)
         for name in ["Mathematics", "History", "English"]
     ]
     db.add_all(classes + subjects)
@@ -336,7 +347,7 @@ def test_phase_six_excused_events_do_not_qualify_but_unexcused_absence_dates_do(
     assert dashboard(db, data)["engagement"]["expected_count"] == 8
 
 
-def test_phase_six_runtime_threshold_change_and_missing_configuration(db, data):
+def test_phase_six_runtime_threshold_change_and_missing_configuration(db, data, monkeypatch):
     """Mocked-behavior: candidate membership follows the current subject group."""
     from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
     rows = [StudentPeriodGrade(student_id=data["students"][key].student_id,
@@ -345,9 +356,20 @@ def test_phase_six_runtime_threshold_change_and_missing_configuration(db, data):
         transmuted_grade=Decimal("84.99"), is_finalized=True) for key in ("active_one", "active_two")]
     db.add_all(rows)
     assert dashboard(db, data)["details"]["students_to_check_in_with"]["qualifying_entry_count"] == 2
-    data["subject"].subject_group_rel.passing_threshold = Decimal("83.25")
+    data["subject"].grading_template.passing_threshold = Decimal("83.25")
     assert dashboard(db, data)["details"]["students_to_check_in_with"]["items"] == []
-    data["subject"].subject_group_rel = None
+    monkeypatch.setattr(
+        "app.services.activity.AnalyticsService.resolve_dashboard_passing_threshold",
+        lambda s: ThresholdResolution(
+            subject_id=s.subject_id,
+            grading_template_id=None,
+            warning=DashboardWarning(
+                code="invalid_passing_threshold",
+                message=PASSING_CONFIGURATION_WARNING,
+                subject_id=s.subject_id,
+            ),
+        ),
+    )
     support = dashboard(db, data)["details"]["students_to_check_in_with"]
     assert support["items"] == [] and support["warnings"][0]["code"] == "invalid_passing_threshold"
 
@@ -446,7 +468,7 @@ def test_exact_teacher_term_and_active_enrollment_scope(db, data):
     section = result["section_matrix"][0]
     assert (section["student_count"], section["published_classworks"]) == (2, 2)
     assert section["avg_score_percent"] == 71.0  # The trend's observed score is unchanged.
-    assert section["passing_threshold"] == float(data["subject"].subject_group_rel.passing_threshold)
+    assert section["passing_threshold"] == float(data["subject"].grading_template.passing_threshold)
     assert section["available_grade_count"] == section["total_grade_count"] == 2
     assert section["passing_rate_percent"] == 0.0
     assert (section["completion_rate_percent"], section["attendance_rate_percent"]) == (75.0, 50.0)
@@ -752,9 +774,20 @@ def test_month_boundaries_and_today_use_the_same_manila_clock(db, data, monkeypa
     assert result["phase_two"]["month_window"]["start_date"] == "2026-10-01"
 
 
-def test_missing_threshold_keeps_grade_but_marks_passing_unavailable(db, data):
+def test_missing_threshold_keeps_grade_but_marks_passing_unavailable(db, data, monkeypatch):
     """Mocked behavior: configuration gaps never create a partial passing rate."""
-    data["subject"].subject_group_rel = None
+    monkeypatch.setattr(
+        "app.services.activity.AnalyticsService.resolve_dashboard_passing_threshold",
+        lambda s: ThresholdResolution(
+            subject_id=s.subject_id,
+            grading_template_id=None,
+            warning=DashboardWarning(
+                code="invalid_passing_threshold",
+                message=PASSING_CONFIGURATION_WARNING,
+                subject_id=s.subject_id,
+            ),
+        ),
+    )
     result = dashboard(db, data)
     summary = result["phase_two"]["grades"]
     assert summary["current_grade"] is not None
@@ -771,7 +804,7 @@ def test_threshold_updates_are_used_by_the_next_dashboard_request(db, data):
     """Mocked behavior: runtime policy updates, no dashboard threshold cache."""
     before = dashboard(db, data)
     assert before["phase_two"]["grades"]["passing_rate_percent"] == 0.0
-    data["subject"].subject_group_rel.passing_threshold = Decimal("40.25")
+    data["subject"].grading_template.passing_threshold = Decimal("40.25")
     after = dashboard(db, data)
     assert after["phase_two"]["grades"]["passing_rate_percent"] == 100.0
     assert after["section_matrix"][0]["passing_threshold"] == 40.25

@@ -5,6 +5,7 @@ import { Download, UserPlus } from "lucide-react";
 import { ApiRequestError, createClassesBatch } from "@/lib/api";
 import type {
   BatchCreateClassesResponse,
+  ClassListItem,
   ManualAssignmentWorkspaceState,
   ManualClassSetup,
   WizardMode,
@@ -21,11 +22,12 @@ import { Card } from "@/components/retroui/Card";
 import { DialogueSelect } from "@/components/dialogue-select";
 
 type AddClassModalProps = {
+  classes?: ClassListItem[];
   onClose?: () => void;
   onClassesCreated?: () => void;
 };
 
-export default function AddClassModal({ onClose, onClassesCreated }: AddClassModalProps) {
+export default function AddClassModal({ classes, onClose, onClassesCreated }: AddClassModalProps) {
   const [mode, setMode] = useState<WizardMode>("choice");
   const [manualSetup, setManualSetup] = useState<ManualClassSetup | null>(null);
   const [manualStep, setManualStep] = useState<"details" | "assignment" | "review">("details");
@@ -99,17 +101,17 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
     setResetWarning("");
   }
 
-  function continueFromImport(setup: ManualClassSetup, hydratedAssignmentState: ManualAssignmentWorkspaceState) {
+  function continueFromImport(setup: ManualClassSetup, hydratedAssignmentState: ManualAssignmentWorkspaceState, skipToReview = false) {
     setSaveSuccess(null);
-    setSkippedStudents(false);
-    if (manualSetup && assignmentState && sameImportedSetup(manualSetup, setup)) {
+    setSkippedStudents(skipToReview);
+    if (!skipToReview && manualSetup && assignmentState && sameImportedSetup(manualSetup, setup)) {
       setManualStep("assignment");
       return;
     }
     setManualSetup(setup);
     setAssignmentState(hydratedAssignmentState);
     setResetWarning("");
-    setManualStep("assignment");
+    setManualStep(skipToReview ? "review" : "assignment");
   }
 
   function clearImportHydration() {
@@ -134,7 +136,7 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
           <DialogueSelect
             icon={Download}
             title="Import from File"
-            description="Upload a CSV file to add multiple classes and student assignments at once."
+            description="Import multiple class sections and optional student assignments for one selected grade level using a CSV file."
             onClick={() => setMode("import")}
           />
 
@@ -223,6 +225,7 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
           <div className={`grid gap-4 ${manualStep === "assignment" ? "h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" : ""}`}>
             <div className={manualStep === "details" ? "" : "hidden"}>
               <ImportClassWizard
+                existingClasses={classes}
                 onContinue={continueFromImport}
                 onValidationStale={clearImportHydration}
                 onBack={() => setMode("choice")}
@@ -243,7 +246,8 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
               <ManualReview
                 setup={manualSetup}
                 assignmentState={assignmentState}
-                onBack={() => setManualStep("assignment")}
+                skippedStudents={skippedStudents}
+                onBack={() => setManualStep(skippedStudents ? "details" : "assignment")}
                 onClose={handleClose}
                 onSaved={(result) => {
                   resetManualState();

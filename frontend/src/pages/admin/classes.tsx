@@ -200,6 +200,7 @@ export default function AdminClasses() {
                     </Button>
                   </Dialog.Trigger>
                   <AddClassModal
+                    classes={classes}
                     onClose={() => setShowNewClass(false)}
                     onClassesCreated={() => { toast.success({ title: "Classes created" }); void refreshClasses(); }}
                   />

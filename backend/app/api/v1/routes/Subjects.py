@@ -44,7 +44,7 @@ def get_subject_form_options(
 def list_subjects(
     status: str | None = Query(None),
     academic_level_id: int | None = Query(None),
-    subject_group_id: int | None = Query(None),
+    grading_template_id: int | None = Query(None),
     search: str = "",
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
@@ -53,7 +53,7 @@ def list_subjects(
         db=db,
         status=status,
         academic_level_id=academic_level_id,
-        subject_group_id=subject_group_id,
+        grading_template_id=grading_template_id,
         search=search,
     )
 

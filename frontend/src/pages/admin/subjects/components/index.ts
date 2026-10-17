@@ -6,10 +6,10 @@ export type {
 } from "./curriculum-filters";
 export { CurriculumPlanTable, groupOfferingsForCurriculumPlan } from "./curriculum-plan-table";
 export type { CurriculumPlanRow } from "./curriculum-plan-table";
+export { GradingTemplateManager } from "./grading-template-manager";
 export { EmptyStateCard } from "./empty-state-card";
 export { SubjectContextBanner } from "./subject-context-banner";
 export { SubjectPicker } from "./subject-picker";
-export { TemplateSubjectPicker } from "./template-subject-picker";
 
 // Extracted from subjects.tsx
 export {
@@ -25,13 +25,14 @@ export {
   targetLevels,
   gradeValueForLevel,
   defaultPathwayForGrade,
+  defaultOfferingFilters,
+  offeringQueryFromFilters,
   gradeLabel,
   pathwaysForGrade,
   isJuniorHighGrade,
   isSeniorHighGrade,
   downloadBlob,
   subjectRouteGrade,
-  scopeLabel,
 } from "./subject-utils";
 export type {
   AdminSubjectSection,
@@ -46,6 +47,5 @@ export { SubjectRow } from "./subject-row";
 export { SubjectCatalogCard } from "./subject-catalog-card";
 export { SubjectGradeSection } from "./subject-grade-section";
 export { OfferingRow } from "./offering-row";
-export { GradingTemplateRow } from "./grading-template-row";
 export { OfferingModal } from "./offering-modal";
 export { CopyPreviousYearSetupModal } from "./copy-previous-year-setup-modal";

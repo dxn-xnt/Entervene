@@ -54,7 +54,6 @@ export type CurriculumPlanRow = {
   subjectId: number;
   subjectName: string;
   subjectCode: string | null;
-  subjectGroup: string | null;
   minutes: number | null;
   gradingTemplate: string | null;
   status: SubjectStatus;
@@ -139,22 +138,17 @@ export function groupOfferingsForCurriculumPlan(
       }
 
       const canonPathway = canonicalizePathway(primaryOffering.pathway);
-      const groupName = typeof primaryOffering.subject.subject_group === "object"
-        ? (primaryOffering.subject.subject_group as any)?.name
-        : primaryOffering.subject.subject_group;
       const isShared =
         canonPathway === CANONICAL_PATHWAYS.BOTH ||
-        Boolean((catalogSubject as any)?.is_core) ||
-        groupName === "Core";
+        Boolean((catalogSubject as any)?.is_core);
 
       return {
         key,
         subjectId: primaryOffering.subject.subject_id,
         subjectName: primaryOffering.subject.subject_name,
         subjectCode: primaryOffering.subject.subject_codename,
-        subjectGroup: (typeof primaryOffering.subject.subject_group === "object" ? (primaryOffering.subject.subject_group as any)?.name : primaryOffering.subject.subject_group) ?? null,
         minutes: primaryOffering.minutes ?? null,
-        gradingTemplate: catalogSubject?.default_grading_template ?? null,
+        gradingTemplate: catalogSubject?.grading_template.template_name ?? null,
         status: rowStatus,
         primaryOffering,
         termOfferings,
@@ -180,7 +174,7 @@ export function CurriculumPlanTable({
 }: CurriculumPlanTableProps) {
   const terms = displayPeriods(periods);
   const rows = groupOfferingsForCurriculumPlan(offerings, terms, catalogSubjects);
-  const totalColumns = 7 + terms.length;
+  const totalColumns = 6 + terms.length;
 
   const gradeLevel = offerings[0]?.academic_level?.grade_level;
   const isShsGrade = gradeLevel != null ? gradeLevel >= 11 : (gradeLabel.includes("11") || gradeLabel.includes("12"));
@@ -267,7 +261,6 @@ export function CurriculumPlanTable({
           <Table.Row className="border-b-2 border-black hover:bg-transparent">
             <Table.Head className="font-bold text-sm text-black">Subject</Table.Head>
             <Table.Head className="font-bold text-sm text-black">Code</Table.Head>
-            <Table.Head className="font-bold text-sm text-black">Group</Table.Head>
             {terms.map((term) => (
               <Table.Head key={term.academic_period_id} className="text-center font-bold text-sm text-black">
                 {formatPeriodLabel(term)}
@@ -300,7 +293,6 @@ export function CurriculumPlanTable({
                 <Table.Row key={row.key} className="border-b border-border last:border-b-0">
                   <Table.Cell className="font-semibold">{row.subjectName}</Table.Cell>
                   <Table.Cell>{subjectCode(row.subjectCode)}</Table.Cell>
-                  <Table.Cell>{row.subjectGroup || "Ungrouped"}</Table.Cell>
                   {terms.map((term) => {
                     const termOffering = row.termOfferings.get(term.academic_period_id);
                     return (

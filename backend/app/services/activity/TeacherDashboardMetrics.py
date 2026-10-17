@@ -65,7 +65,7 @@ if TYPE_CHECKING:
 
 
 PASSING_CONFIGURATION_WARNING = (
-    "Passing rate unavailable: subject-group passing grade is missing or invalid."
+    "Passing rate unavailable: grading template passing grade is missing or invalid."
 )
 
 
@@ -90,24 +90,24 @@ def _finite_grade_number(value: object) -> Decimal | None:
 
 
 def resolve_dashboard_passing_threshold(subject: Subject) -> ThresholdResolution:
-    """Read the current subject-group relationship with no default or cache."""
+    """Read the current grading-template relationship with no default or cache."""
     subject_id = subject.subject_id
-    group = getattr(subject, "subject_group_rel", None)
-    group_id = getattr(subject, "subject_group_id", None)
-    linked_id = getattr(group, "subject_group_id", None)
+    template = getattr(subject, "grading_template", None)
+    template_id = getattr(subject, "grading_template_id", None)
+    linked_id = getattr(template, "grading_template_id", None)
     valid_identity = (
-        isinstance(group_id, int)
-        and not isinstance(group_id, bool)
-        and group_id > 0
+        isinstance(template_id, int)
+        and not isinstance(template_id, bool)
+        and template_id > 0
         and isinstance(linked_id, int)
         and not isinstance(linked_id, bool)
-        and group_id == linked_id
+        and template_id == linked_id
     )
-    value = _finite_grade_number(getattr(group, "passing_threshold", None))
+    value = _finite_grade_number(getattr(template, "passing_threshold", None))
     if not valid_identity or value is None:
         return ThresholdResolution(
             subject_id=subject_id,
-            subject_group_id=group_id if valid_identity else None,
+            grading_template_id=template_id if valid_identity else None,
             warning=DashboardWarning(
                 code="invalid_passing_threshold",
                 message=PASSING_CONFIGURATION_WARNING,
@@ -116,7 +116,7 @@ def resolve_dashboard_passing_threshold(subject: Subject) -> ThresholdResolution
         )
     return ThresholdResolution(
         subject_id=subject_id,
-        subject_group_id=group_id,
+        grading_template_id=template_id,
         passing_threshold=float(value),
     )
 
@@ -789,13 +789,13 @@ def summarize_dashboard_support(
         if threshold is None:
             warn(resolution.warning if resolution and resolution.warning else DashboardWarning(
                 code="invalid_passing_threshold",
-                message="Below-passing indicator unavailable: subject-group passing grade is missing or invalid.",
+                message="Below-passing indicator unavailable: grading template passing grade is missing or invalid.",
                 subject_id=grade.subject_id,
             ))
         reasons = []
         if value is not None and threshold is not None and value < threshold:
             reasons.append(DashboardSupportReason(
-                code="below_passing", message=f"Below subject-group passing grade ({threshold:g})",
+                code="below_passing", message=f"Below grading template passing grade ({threshold:g})",
                 passing_threshold=float(threshold),
             ))
         key = (grade.student_id, grade.class_id, grade.subject_id)

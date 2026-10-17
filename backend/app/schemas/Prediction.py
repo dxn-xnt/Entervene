@@ -146,7 +146,7 @@ class PredictionRecommendedActionRead(BaseModel):
 class PredictionOutcomeEvaluateRequest(BaseModel):
     actual_period_grade: float
     # passing_grade is intentionally removed — resolved server-side from
-    # SubjectGroup.passing_threshold via AIPrediction.subject_id.
+    # GradingTemplate.passing_threshold via AIPrediction.subject_id.
 
 
 class PredictionOutcomeResponse(BaseModel):

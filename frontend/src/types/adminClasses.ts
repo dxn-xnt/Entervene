@@ -48,6 +48,8 @@ export type AdviserOption = {
   last_name: string;
   suffix: string | null;
   avatar?: string | null;
+  email?: string | null;
+  employment_status?: string | null;
 };
 
 export type AcademicPathwayRead = {
@@ -80,6 +82,8 @@ export type OfficialSectionOption = {
   pathway_code: string | null;
   is_active: boolean;
   has_class: boolean;
+  class_id?: number | null;
+  class_status?: string | null;
 };
 
 export type ClassListAdviser = AdviserOption;
@@ -407,7 +411,8 @@ export type ValidatedImportStudent = {
 export type ValidatedImportSection = {
   section_name: string;
   pathway?: string;
-  adviser: ValidatedImportAdviser;
+  adviser: ValidatedImportAdviser | null;
+  adviser_hint?: string | null;
   students: ValidatedImportStudent[];
 };
 
@@ -419,6 +424,9 @@ export type ValidateClassImportResponse = {
     section_count: number;
     student_count: number;
   };
+  eligible_advisers?: AdviserOption[];
+  format?: string;
+  warnings?: string[];
 };
 
 export type ClassImportValidationErrorItem = {

@@ -42,7 +42,7 @@ export function SubjectPicker({
       [
         subject.subject_name,
         subject.subject_codename,
-        subject.subject_group?.name,
+        subject.grading_template.template_name,
       ].some((value) => value?.toLowerCase().includes(normalizedQuery))
     );
   }, [query, subjects]);
@@ -162,8 +162,8 @@ export function SubjectPicker({
                 <span className="grid min-w-0 flex-1 grid-cols-1 gap-1 text-sm md:grid-cols-[1.5fr_120px_140px_80px]">
                   <strong className="truncate">{subject.subject_name}</strong>
                   <span>{subjectCode(subject)}</span>
-                  <span>{subject.subject_group?.name || "Ungrouped"}</span>
-                  <span>Pass: {subject.subject_group?.passing_threshold ?? "—"}%</span>
+                  <span>{subject.grading_template.template_name}</span>
+                  <span>Pass: {subject.grading_template.passing_threshold}%</span>
                   {isAlreadyOffered ? (
                     <span className="col-span-full text-xs font-semibold text-black/50">
                       Already offered

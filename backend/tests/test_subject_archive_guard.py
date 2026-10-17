@@ -18,7 +18,8 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
-from app.models.academic.SubjectGroup import SubjectGroup
+from app.models.academic.GradingTemplate import GradingTemplate
+from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.SubjectOffering import SubjectOffering
 from app.services.subjects.SubjectService import archive_subject_record, update_subject_record
@@ -61,11 +62,16 @@ def client(db):
 
 def create_base_environment(db):
     level = AcademicLevel(level_name="Grade 11", grade_level=11)
-    group = SubjectGroup(name="Sciences")
-    db.add_all([level, group])
+    template = GradingTemplate(grading_template_id=1, template_name="Core", passing_threshold=87.0, status="active")
+    template.components = [
+        GradingTemplateComponent(component_name="Written Work", weight=20.0, display_order=1),
+        GradingTemplateComponent(component_name="Performance Tasks", weight=50.0, display_order=2),
+        GradingTemplateComponent(component_name="Exams", weight=30.0, display_order=3),
+    ]
+    db.add_all([level, template])
     db.commit()
     db.refresh(level)
-    db.refresh(group)
+    db.refresh(template)
 
     active_year = AcademicYear(
         year_label="2025-2026",
@@ -124,7 +130,7 @@ def create_base_environment(db):
 
     return {
         "level": level,
-        "group": group,
+        "template": template,
         "active_year": active_year,
         "past_year": past_year,
         "period": period,
@@ -138,7 +144,7 @@ def test_archive_catalog_subject_unassigned_succeeds(db, client):
     subj = Subject(
         subject_name="Astronomy Elective",
         subject_codename="ASTRO11",
-        subject_group_id=env["group"].subject_group_id,
+        grading_template_id=env["template"].grading_template_id,
         academic_level_id=env["level"].academic_level_id,
         status="active",
     )
@@ -156,7 +162,7 @@ def test_archive_catalog_subject_blocked_by_active_offering(db, client):
     subj = Subject(
         subject_name="General Chemistry 1",
         subject_codename="GENCHEM1",
-        subject_group_id=env["group"].subject_group_id,
+        grading_template_id=env["template"].grading_template_id,
         academic_level_id=env["level"].academic_level_id,
         status="active",
     )
@@ -194,7 +200,7 @@ def test_archive_catalog_subject_blocked_by_active_schedule(db, client):
     subj = Subject(
         subject_name="General Biology 1",
         subject_codename="GENBIO1",
-        subject_group_id=env["group"].subject_group_id,
+        grading_template_id=env["template"].grading_template_id,
         academic_level_id=env["level"].academic_level_id,
         status="active",
     )
@@ -227,7 +233,7 @@ def test_archive_catalog_subject_allowed_for_past_school_year(db, client):
     subj = Subject(
         subject_name="Old DepEd Curriculum Subject",
         subject_codename="OLDDEPED",
-        subject_group_id=env["group"].subject_group_id,
+        grading_template_id=env["template"].grading_template_id,
         academic_level_id=env["level"].academic_level_id,
         status="active",
     )
@@ -257,7 +263,7 @@ def test_archive_subject_offering_blocked_by_active_schedule(db, client):
     subj = Subject(
         subject_name="Pre-Calculus",
         subject_codename="PRECALC",
-        subject_group_id=env["group"].subject_group_id,
+        grading_template_id=env["template"].grading_template_id,
         academic_level_id=env["level"].academic_level_id,
         status="active",
     )
@@ -306,7 +312,7 @@ def test_archive_subject_offering_unscheduled_succeeds(db, client):
     subj = Subject(
         subject_name="Basic Calculus",
         subject_codename="BASICCALC",
-        subject_group_id=env["group"].subject_group_id,
+        grading_template_id=env["template"].grading_template_id,
         academic_level_id=env["level"].academic_level_id,
         status="active",
     )

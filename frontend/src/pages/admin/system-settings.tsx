@@ -12,14 +12,8 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Switch } from "@/components/retroui/Switch";
 import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/retroui/tooltip";
-import { Alert } from "@/components/retroui/Alert";
 import { useToast } from "@/components/retroui/use-toast";
-import { ArrowUpRight, Lock, Plus, Calendar, Save } from "lucide-react";
+import { ArrowUpRight, Lock, Calendar, Save } from "lucide-react";
 import AddAcademicPeriodModal from "./forms/add-academic-period";
 import AddPathwayModal from "./forms/add-pathway";
 import OfficialSectionsSettings from "./official-sections-settings";
@@ -46,24 +40,19 @@ import {
   type AcademicPathwayRead,
   type PathwayScopeRead,
 } from "@/lib/api";
-import {
-  getSubjectGroups,
-  createSubjectGroup,
-  updateSubjectGroup,
-  deactivateSubjectGroup,
-  type SubjectGroupRead,
-  type AffectedSubject,
-} from "@/lib/subject-groups-api";
-
 type Template = {
-  id?: number;
+  id: number;
   name: string;
+  description: string | null;
   ww: number;
   pt: number;
   qa: number;
-  scope: string;
-  is_locked?: boolean;
-  lock_reason?: string | null;
+  is_locked: boolean;
+  lock_reason: string | null;
+  assigned_subject_count: number;
+  status: string;
+  passing_threshold: number;
+  updated_at: string;
 };
 
 export default function AdminSystemSettings() {
@@ -121,20 +110,6 @@ export default function AdminSystemSettings() {
     toast[status]({ title: msg });
   };
 
-  // Subject Groups state
-  const [subjectGroups, setSubjectGroups] = React.useState<SubjectGroupRead[]>(
-    [],
-  );
-  const [isLoadingGroups, setIsLoadingGroups] = React.useState(false);
-  const [isAddGroupOpen, setIsAddGroupOpen] = React.useState(false);
-  const [newGroupName, setNewGroupName] = React.useState("");
-  const [newGroupThreshold, setNewGroupThreshold] = React.useState("83");
-  const [groupError, setGroupError] = React.useState<string | null>(null);
-  const [deactivateErrorDialog, setDeactivateErrorDialog] = React.useState<{
-    message: string;
-    affectedSubjects: AffectedSubject[];
-  } | null>(null);
-
   // Pathways state
   const [pathways, setPathways] = React.useState<AcademicPathwayRead[]>([]);
   const [isLoadingPathways, setIsLoadingPathways] = React.useState(false);
@@ -145,18 +120,6 @@ export default function AdminSystemSettings() {
     [],
   );
   const [isLoadingScopes, setIsLoadingScopes] = React.useState(false);
-
-  const loadSubjectGroups = React.useCallback(async () => {
-    setIsLoadingGroups(true);
-    try {
-      const res = await getSubjectGroups();
-      setSubjectGroups(res.groups || []);
-    } catch (err) {
-      console.error("Failed to load subject groups", err);
-    } finally {
-      setIsLoadingGroups(false);
-    }
-  }, []);
 
   const loadPathways = React.useCallback(async () => {
     setIsLoadingPathways(true);
@@ -221,7 +184,7 @@ export default function AdminSystemSettings() {
 
   const fetchGradingTemplatesList = React.useCallback(async () => {
     try {
-      const templatesRes = await getGradingTemplates({ status: "active" });
+      const templatesRes = await getGradingTemplates();
       const list = templatesRes.grading_templates || [];
       const mappedTemplates: Template[] = list.map((gt) => {
         const wwComp =
@@ -242,16 +205,16 @@ export default function AdminSystemSettings() {
         return {
           id: gt.grading_template_id,
           name: gt.template_name,
+          description: gt.description ?? null,
           ww: wwComp,
           pt: ptComp,
           qa: qaComp,
-          scope:
-            gt.description ||
-            (gt.academic_level?.level_name
-              ? `Level: ${gt.academic_level.level_name}`
-              : "General Template"),
-          is_locked: gt.is_locked,
-          lock_reason: gt.lock_reason,
+          is_locked: Boolean(gt.is_locked),
+          lock_reason: gt.lock_reason ?? null,
+          assigned_subject_count: gt.assigned_subject_count ?? gt.assigned_subjects?.length ?? 0,
+          status: gt.status,
+          passing_threshold: gt.passing_threshold ?? 0,
+          updated_at: gt.updated_at ?? "",
         };
       });
       setTemplates(mappedTemplates);
@@ -343,8 +306,7 @@ export default function AdminSystemSettings() {
 
   React.useEffect(() => {
     loadSettingsFromBackend();
-    loadSubjectGroups();
-  }, [loadSettingsFromBackend, loadSubjectGroups]);
+  }, [loadSettingsFromBackend]);
 
   const saveSingleSetting = async (key: string, value: string) => {
     try {
@@ -420,96 +382,6 @@ export default function AdminSystemSettings() {
       );
     } finally {
       setIsSavingSchoolHours(false);
-    }
-  };
-
-  const handleUpdateGroupThreshold = async (
-    groupId: number,
-    passingThreshold: number,
-  ) => {
-    try {
-      await updateSubjectGroup(groupId, {
-        passing_threshold: passingThreshold,
-      });
-      showToast("Subject group passing threshold updated");
-      await loadSubjectGroups();
-    } catch (err) {
-      showToast(
-        err instanceof Error ? err.message : "Failed to update threshold",
-        "error",
-      );
-    }
-  };
-
-  const handleToggleGroupActive = async (
-    groupId: number,
-    currentActive: boolean,
-  ) => {
-    if (currentActive) {
-      try {
-        await deactivateSubjectGroup(groupId);
-        showToast("Subject group deactivated");
-        await loadSubjectGroups();
-      } catch (err: unknown) {
-        if (err && typeof err === "object" && "affectedSubjects" in err) {
-          const customErr = err as Error & {
-            affectedSubjects: AffectedSubject[];
-          };
-          setDeactivateErrorDialog({
-            message: customErr.message,
-            affectedSubjects: customErr.affectedSubjects,
-          });
-        } else {
-          showToast(
-            err instanceof Error ? err.message : "Failed to deactivate group",
-            "error",
-          );
-        }
-      }
-    } else {
-      try {
-        await updateSubjectGroup(groupId, { is_active: true });
-        showToast("Subject group activated");
-        await loadSubjectGroups();
-      } catch (err) {
-        showToast(
-          err instanceof Error ? err.message : "Failed to activate group",
-          "error",
-        );
-      }
-    }
-  };
-
-  const handleCreateGroup = async () => {
-    setGroupError(null);
-    if (!newGroupName.trim()) {
-      setGroupError("Group name is required.");
-      return;
-    }
-    const val = Number(newGroupThreshold);
-    if (isNaN(val) || val < 0 || val > 100) {
-      setGroupError("Passing threshold must be between 0 and 100.");
-      return;
-    }
-
-    try {
-      await createSubjectGroup({
-        name: newGroupName.trim(),
-        passing_threshold: val,
-      });
-      showToast(`Group "${newGroupName.trim()}" created successfully`);
-      setNewGroupName("");
-      setNewGroupThreshold("83");
-      setIsAddGroupOpen(false);
-      await loadSubjectGroups();
-    } catch (err) {
-      setGroupError(
-        err instanceof Error ? err.message : "Failed to create group",
-      );
-      showToast(
-        err instanceof Error ? err.message : "Failed to create group",
-        "error",
-      );
     }
   };
 
@@ -737,310 +609,58 @@ export default function AdminSystemSettings() {
                 </Card.Content>
               </Card>
 
-              {/* Subject Groups & Passing Thresholds */}
-              <Card className="@container/card w-full">
-                <Card.Header className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <Card.Title className="flex min-w-0 w-full flex-col gap-1 leading-tight">
-                    Subject Groups & Passing Thresholds
-                    <Text
-                      as="p"
-                      className="text-sm font-normal text-muted-foreground"
-                    >
-                      Threshold changes apply to grades finalized from this
-                      point forward. Already-finalized period grades are not
-                      re-evaluated.
+              {/* Grading Templates */}
+              <section id="grading-templates" aria-labelledby="grading-templates-title" className="space-y-4 border-2 border-black bg-white p-4 shadow-[4px_4px_0_#000]">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <Text as="h2" id="grading-templates-title" className="text-2xl font-bold">Default Grading Templates</Text>
+                    <span className="sr-only">Grading Templates</span>
+                    <Text as="p" className="text-sm text-muted-foreground">
+                      Reusable grade weight templates stored in the database. Assign them to subjects during grading setup.
                     </Text>
-                  </Card.Title>
-                  <Button
-                    size="sm"
-                    className="w-full justify-center whitespace-nowrap sm:w-auto"
-                    onClick={() => setIsAddGroupOpen(true)}
-                  >
-                    <Plus className="size-3.5 mr-2" />
-                    Add Group
+                  </div>
+                  <Button size="sm" onClick={() => navigate("/admin/subjects?tab=grading") }>
+                    Manage in Subjects <ArrowUpRight className="ml-1 size-4" />
                   </Button>
-                </Card.Header>
-
-                <Card.Content className="flex flex-col gap-4">
-                  <div className="overflow-x-auto">
-                    <Table className="w-full">
-                      <Table.Header>
-                        <Table.Row>
-                          <Table.Head>Group Name</Table.Head>
-                          <Table.Head>Passing Threshold</Table.Head>
-                          <Table.Head>Subjects Assigned</Table.Head>
-                          <Table.Head>Status</Table.Head>
-                          <Table.Head className="text-right">
-                            Actions
-                          </Table.Head>
-                        </Table.Row>
-                      </Table.Header>
-                      <Table.Body>
-                        {isLoadingGroups ? (
-                          <Table.Row>
-                            <Table.Cell
-                              colSpan={5}
-                              className="text-center py-4 text-sm text-muted-foreground"
-                            >
-                              Loading subject groups...
-                            </Table.Cell>
-                          </Table.Row>
-                        ) : subjectGroups.length === 0 ? (
-                          <Table.Row>
-                            <Table.Cell
-                              colSpan={5}
-                              className="text-center py-4 text-sm text-muted-foreground"
-                            >
-                              No subject groups found.
-                            </Table.Cell>
-                          </Table.Row>
-                        ) : (
-                          subjectGroups.map((g) => (
-                            <Table.Row key={g.subject_group_id}>
-                              <Table.Cell className="font-medium">
-                                {g.name}
-                              </Table.Cell>
-                              <Table.Cell>
-                                <div className="flex items-center gap-2">
-                                  <Input
-                                    className="w-20 shadow-none text-center"
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    step="0.5"
-                                    defaultValue={g.passing_threshold}
-                                    onBlur={(
-                                      e: React.FocusEvent<HTMLInputElement>,
-                                    ) => {
-                                      const val = Number(e.target.value);
-                                      if (
-                                        !isNaN(val) &&
-                                        val !== g.passing_threshold &&
-                                        val >= 0 &&
-                                        val <= 100
-                                      ) {
-                                        handleUpdateGroupThreshold(
-                                          g.subject_group_id,
-                                          val,
-                                        );
-                                      }
-                                    }}
-                                    onKeyDown={(
-                                      e: React.KeyboardEvent<HTMLInputElement>,
-                                    ) => {
-                                      if (e.key === "Enter") {
-                                        const val = Number(
-                                          e.currentTarget.value,
-                                        );
-                                        if (
-                                          !isNaN(val) &&
-                                          val !== g.passing_threshold &&
-                                          val >= 0 &&
-                                          val <= 100
-                                        ) {
-                                          handleUpdateGroupThreshold(
-                                            g.subject_group_id,
-                                            val,
-                                          );
-                                        }
-                                      }
-                                    }}
-                                  />
-                                </div>
-                              </Table.Cell>
-                              <Table.Cell>{g.subject_count}</Table.Cell>
-                              <Table.Cell>
-                                <Badge
-                                  variant={
-                                    g.is_active ? "secondary" : "default"
-                                  }
-                                >
-                                  {g.is_active ? "Active" : "Inactive"}
-                                </Badge>
-                              </Table.Cell>
-                              <Table.Cell className="text-right flex flex-row justify-end items-center">
-                                <Button
-                                  size="sm"
-                                  variant={g.is_active ? "outline" : "default"}
-                                  onClick={() =>
-                                    handleToggleGroupActive(
-                                      g.subject_group_id,
-                                      g.is_active,
-                                    )
-                                  }
-                                >
-                                  {g.is_active ? "Deactivate" : "Activate"}
-                                </Button>
-                              </Table.Cell>
-                            </Table.Row>
-                          ))
-                        )}
-                      </Table.Body>
-                    </Table>
-                  </div>
-                </Card.Content>
-              </Card>
-
-              {/* Default Grading Templates */}
-              <Card className="@container/card w-full">
-                <Card.Header className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <Card.Title className="flex min-w-0 w-full flex-col gap-1 leading-tight">
-                    Default Grading Templates
-                    <Text
-                      as="p"
-                      className="text-sm font-normal text-muted-foreground"
-                    >
-                      Reusable grade-weight templates stored in database.
-                      Assigned to subjects during grading setup.
-                    </Text>
-                  </Card.Title>
-                  <div className="flex w-full items-center gap-4 sm:w-auto">
-                    <Button
-                      size="sm"
-                      className="w-full justify-center whitespace-nowrap sm:w-auto gap-1.5"
-                      onClick={() => navigate("/admin/subjects?tab=grading")}
-                    >
-                      Manage in Subjects <ArrowUpRight className="size-3.5" />
-                    </Button>
-                  </div>
-                </Card.Header>
-
-                <Card.Content className="flex flex-col gap-4">
-                  {templates.length === 0 ? (
-                    <div className="border-2 border-dashed border-black/30 rounded p-6 text-center text-sm text-muted-foreground bg-muted/10">
-                      No active grading templates found in database.{" "}
-                      <button
-                        type="button"
-                        onClick={() => navigate("/admin/subjects?tab=grading")}
-                        className="underline font-semibold hover:text-black"
-                      >
-                        Create one in Subjects →
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {templates.map((t, i) => (
-                        <Card
-                          key={t.id || i}
-                          className="shadow-none bg-primary p-3 flex flex-col gap-3 w-full cursor-pointer hover:border-black transition-colors"
-                          onClick={() => {
-                            if (t.id)
-                              navigate(
-                                `/admin/subjects?tab=grading&editId=${t.id}`,
-                              );
-                          }}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex flex-col gap-0.5 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <Text
-                                  as="h6"
-                                  className="font-sans font-bold truncate"
-                                >
-                                  {t.name}
-                                </Text>
-                                {t.is_locked && (
-                                  <Tooltip>
-                                    <TooltipTrigger
-                                      render={
-                                        <span
-                                          className="inline-flex"
-                                          tabIndex={0}
-                                        >
-                                          <Badge
-                                            variant="outline"
-                                            className="bg-amber-100 text-amber-950 border-black/40 text-[10px] py-0 px-1.5 flex items-center gap-1 font-semibold shrink-0"
-                                          >
-                                            <Lock className="size-2.5" /> Locked
-                                          </Badge>
-                                        </span>
-                                      }
-                                    />
-                                    <TooltipContent>
-                                      {t.lock_reason ||
-                                        "Weights locked after grades are recorded"}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                )}
+                </div>
+                <div className="grid grid-cols-1 items-stretch gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-3">
+                  {templates.map((template) => {
+                    return (
+                      <Card key={template.id} className="flex h-full min-w-0 flex-col overflow-hidden border-2 border-black bg-primary p-3 shadow-[4px_4px_0_#000]">
+                        <Card.Header className="mb-0! p-0">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Card.Title className="min-w-0 break-words text-lg font-bold leading-tight">{template.name}</Card.Title>
+                                {template.is_locked ? <Badge className="bg-white" variant="outline"><Lock className="mr-1 size-3" /> Locked</Badge>
+                                  : <Badge className="bg-white capitalize" variant="outline">{template.status}</Badge>}
                               </div>
-                              <Text
-                                as="p"
-                                className="font-sans text-xs text-foreground"
-                              >
-                                {t.scope}
-                              </Text>
+                              <Text as="p" className="mt-1 line-clamp-2 text-xs text-black/70">{template.description || "Custom grading template"}</Text>
                             </div>
-                            <Tooltip>
-                              <TooltipTrigger
-                                render={
-                                  <span className="inline-flex">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="bg-background shrink-0"
-                                      aria-label={`Edit ${t.name} in Subjects`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (t.id)
-                                          navigate(
-                                            `/admin/subjects?tab=grading&editId=${t.id}`,
-                                          );
-                                      }}
-                                    >
-                                      <ArrowUpRight className="w-3.5 h-3.5" />
-                                    </Button>
-                                  </span>
-                                }
-                              />
-                              <TooltipContent>Edit in Subjects</TooltipContent>
-                            </Tooltip>
+                            <Button aria-label={`Manage ${template.name}`} size="icon" variant="outline" className="size-8 shrink-0 bg-white p-1 shadow-[2px_2px_0_#000]" onClick={() => navigate("/admin/subjects?tab=grading") }>
+                              <ArrowUpRight className="size-4" />
+                            </Button>
+                          </div>
+                        </Card.Header>
+                        <Card.Content className="mt-auto p-0 pt-2">
+                          <div className="mb-2 flex items-center justify-between text-xs text-black/70">
+                            <span>Passing threshold: <strong>{template.passing_threshold}%</strong></span>
+                            <span>{template.assigned_subject_count} assigned subjects</span>
                           </div>
                           <div className="grid grid-cols-3 gap-2">
-                            <Card className="flex flex-col shadow-none p-2 items-center justify-center w-full">
-                              <Text as="p" className="font-bold text-lg">
-                                {t.ww}%
-                              </Text>
-                              <Text
-                                as="p"
-                                className="text-xs text-muted-foreground"
-                              >
-                                WW
-                              </Text>
-                            </Card>
-                            <Card className="flex flex-col shadow-none p-2 items-center justify-center w-full">
-                              <Text as="p" className="font-bold text-lg">
-                                {t.pt}%
-                              </Text>
-                              <Text
-                                as="p"
-                                className="text-xs text-muted-foreground"
-                              >
-                                PT
-                              </Text>
-                            </Card>
-                            <Card className="flex flex-col shadow-none p-2 items-center justify-center w-full">
-                              <Text as="p" className="font-bold text-lg">
-                                {t.qa}%
-                              </Text>
-                              <Text
-                                as="p"
-                                className="text-xs text-muted-foreground"
-                              >
-                                QA
-                              </Text>
-                            </Card>
+                            {[["WW", template.ww], ["PT", template.pt], ["Exams", template.qa]].map(([label, value]) => (
+                              <div key={label} className="border-2 border-black bg-white px-2 py-3 text-center">
+                                <strong className="block text-xl">{value}%</strong>
+                                <span className="text-xs text-black/60">{label}</span>
+                              </div>
+                            ))}
                           </div>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
-                  {/* <Alert status="warning" className="border-2 border-dashed border-black bg-yellow-50 text-foreground text-sm">
-                  <strong>Grading Architecture:</strong> Settings stores reusable
-                  grade-weight templates. Subject-specific weights and assessments are configured in{" "}
-                  <strong>Subjects → Grading Setup</strong>.
-                </Alert> */}
-                </Card.Content>
-              </Card>
+                        </Card.Content>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </section>
 
               {/* Academic Calendar */}
               <Card className="@container/card w-full">
@@ -1616,112 +1236,6 @@ export default function AdminSystemSettings() {
             <Button onClick={confirmPeriodChange}>Confirm</Button>
             <Button variant="outline" onClick={() => setPendingPeriodId(null)}>
               Cancel
-            </Button>
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog>
-
-      {/* Add Subject Group Dialog */}
-      <Dialog open={isAddGroupOpen} onOpenChange={setIsAddGroupOpen}>
-        <Dialog.Content size="md">
-          <Dialog.Header position="static">
-            <Text as="h5" className="font-sans text-xl font-bold">
-              Add Subject Group
-            </Text>
-          </Dialog.Header>
-          <section className="flex flex-col gap-4 p-4 text-sm">
-            {groupError && (
-              <Alert status="error" className="text-sm">
-                {groupError}
-              </Alert>
-            )}
-            <div className="flex flex-col gap-1">
-              <label htmlFor="new-group-name" className="font-medium text-xs">
-                Group Name
-              </label>
-              <Input
-                id="new-group-name"
-                placeholder="e.g. Elective, Practicum"
-                value={newGroupName}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setNewGroupName(e.target.value)
-                }
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label
-                htmlFor="new-group-threshold"
-                className="font-medium text-xs"
-              >
-                Passing Threshold (Grade)
-              </label>
-              <Input
-                id="new-group-threshold"
-                type="number"
-                min={0}
-                max={100}
-                step="0.5"
-                placeholder="83"
-                value={newGroupThreshold}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setNewGroupThreshold(e.target.value)
-                }
-              />
-            </div>
-          </section>
-          <Dialog.Footer position="static">
-            <Button onClick={handleCreateGroup}>Create Group</Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsAddGroupOpen(false);
-                setGroupError(null);
-              }}
-            >
-              Cancel
-            </Button>
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog>
-
-      {/* Deactivate Error Dialog (Lists affected subjects) */}
-      <Dialog
-        open={deactivateErrorDialog !== null}
-        onOpenChange={(open) => {
-          if (!open) setDeactivateErrorDialog(null);
-        }}
-      >
-        <Dialog.Content size="lg">
-          <Dialog.Header position="static">
-            <Text as="h5" className="font-sans text-xl font-bold text-red-600">
-              Cannot Deactivate Group
-            </Text>
-          </Dialog.Header>
-          <section className="flex flex-col gap-3 p-4 text-sm">
-            <p>{deactivateErrorDialog?.message}</p>
-            {deactivateErrorDialog?.affectedSubjects &&
-              deactivateErrorDialog.affectedSubjects.length > 0 && (
-                <div className="flex flex-col gap-2 max-h-48 overflow-y-auto border p-2 rounded bg-muted/20">
-                  <Text
-                    as="p"
-                    className="font-semibold text-xs text-muted-foreground"
-                  >
-                    Assigned Subjects:
-                  </Text>
-                  <ul className="list-disc list-inside space-y-1 text-xs">
-                    {deactivateErrorDialog.affectedSubjects.map((s) => (
-                      <li key={s.subject_id}>
-                        {s.subject_name}{" "}
-                        {s.subject_codename ? `(${s.subject_codename})` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-          </section>
-          <Dialog.Footer position="static">
-            <Button onClick={() => setDeactivateErrorDialog(null)}>
-              Close
             </Button>
           </Dialog.Footer>
         </Dialog.Content>

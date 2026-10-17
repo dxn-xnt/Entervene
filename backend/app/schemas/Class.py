@@ -26,6 +26,8 @@ class AdviserOption(BaseModel):
     last_name: str
     suffix: str | None
     avatar: str | None = None
+    email: str | None = None
+    employment_status: str | None = None
 
 
 class ClassFormOptionsResponse(BaseModel):
@@ -271,8 +273,9 @@ class ImportPreviewStudent(UnassignedStudentItem):
 class ImportPreviewSection(BaseModel):
     section_name: str
     pathway: str = "general"
-    adviser: ImportPreviewAdviser
-    students: list[ImportPreviewStudent]
+    adviser: ImportPreviewAdviser | None = None
+    adviser_hint: str | None = None
+    students: list[ImportPreviewStudent] = []
 
 
 class ImportPreviewSummary(BaseModel):
@@ -285,6 +288,9 @@ class ValidateClassImportResponse(BaseModel):
     academic_year: AcademicYearOption
     sections: list[ImportPreviewSection]
     summary: ImportPreviewSummary
+    eligible_advisers: list[AdviserOption] = []
+    format: str = "modern"
+    warnings: list[str] = []
 
 
 class BatchCreateSectionRequest(BaseModel):

@@ -135,7 +135,7 @@ export default function AdminSubjectView() {
                       </div>
                       <div className="flex flex-row gap-2">
                         <Badge variant="solid" className="capitalize">
-                          {subjectDetail.subject_group?.name ?? "Ungrouped"}
+                          {subjectDetail.grading_template.template_name}
                         </Badge>
                         <Badge variant={subjectDetail.status === "active" ? "secondary" : "default"} className="capitalize">
                           {subjectDetail.status.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())}
@@ -147,7 +147,7 @@ export default function AdminSubjectView() {
                         Created since {formatDate(subjectDetail.created_at)}
                       </Text>
                       <Text as="p" className="text-sm font-normal">
-                        Passing threshold: {subjectDetail.subject_group?.passing_threshold ?? "—"}%
+                        Passing threshold: {subjectDetail.grading_template.passing_threshold}%
                       </Text>
                     </div>
                   </div>

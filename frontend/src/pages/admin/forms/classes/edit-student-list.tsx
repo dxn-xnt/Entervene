@@ -238,8 +238,8 @@ export default function EditStudentList({
           </Text>
         </Dialog.Header>
 
-        <div className="grid h-[75vh] grid-rows-[auto_1fr] gap-3 p-4 min-h-0 overflow-hidden">
-          <header className="grid gap-2">
+        <div className="flex flex-col gap-3 p-4 min-h-0 max-h-[75vh] overflow-hidden">
+          <header className="grid gap-2 shrink-0">
             <Tabs<ModalTab>
               tabs={MODAL_TABS}
               activeTab={activeTab}
@@ -259,7 +259,7 @@ export default function EditStudentList({
             )}
           </header>
 
-          <main className="min-h-0 overflow-hidden">
+          <main className="min-h-0 flex-1 overflow-hidden flex flex-col">
             {activeTab === "enrolled" ? (
               <EnrolledStudentsPanel
                 search={enrolledSearch}
@@ -398,8 +398,8 @@ function EnrolledStudentsPanel({
   const totalCount = groups.reduce((acc, [, list]) => acc + list.length, 0);
 
   return (
-    <section className="grid h-full grid-rows-[auto_1fr] gap-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <section className="flex flex-col gap-2 min-h-0 overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
         <Input
           value={search}
           onChange={(event) => onSearch(event.target.value)}
@@ -415,7 +415,7 @@ function EnrolledStudentsPanel({
         </Button>
       </div>
 
-      <div className="min-h-0 overflow-y-auto rounded border-2 border-border bg-card">
+      <div className="min-h-0 max-h-[48vh] overflow-y-auto rounded border-2 border-border bg-card">
         {!totalCount ? (
           <Empty className="p-6 border-0 shadow-none bg-transparent">
             <Empty.Content>
@@ -495,8 +495,8 @@ function AvailableStudentsPanel({
 }) {
   const totalCount = groups.reduce((count, [, students]) => count + students.length, 0);
   return (
-    <section className="grid h-full grid-rows-[auto_1fr] gap-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <section className="flex flex-col gap-2 min-h-0 overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
         <Input
           value={search}
           onChange={(event) => onSearch(event.target.value)}
@@ -506,7 +506,7 @@ function AvailableStudentsPanel({
         <Button size="sm" variant="outline" disabled={!canDistribute} onClick={onDistribute}>Assign Evenly</Button>
         {!canDistribute && <p className="w-full text-xs text-muted-foreground">Save or discard pending manual changes before distributing students.</p>}
       </div>
-      <div className="min-h-0 overflow-y-auto rounded border-2 border-border bg-card">
+      <div className="min-h-0 max-h-[48vh] overflow-y-auto rounded border-2 border-border bg-card">
         {!totalCount ? (
           <Empty className="p-6 border-0 shadow-none bg-transparent">
             <Empty.Content>
