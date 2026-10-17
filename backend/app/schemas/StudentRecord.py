@@ -198,6 +198,13 @@ class SendStudentGradeRequest(BaseModel):
     remarks: Optional[str] = None
 
 
+class GradeSendMissingItem(BaseModel):
+    assignment_id: int
+    title: str
+    category: str
+    due_date: Optional[datetime] = None
+
+
 class SendGradeToAdviserItemResponse(BaseModel):
     student_id: str
     name: str
@@ -217,6 +224,9 @@ class SendGradeToAdviserItemResponse(BaseModel):
     status: str  # "newly_sent" | "updated" | "unchanged" | "conflict" | "skipped_incomplete"
     message: Optional[str] = None
     incomplete_components: list[str] = []
+    skip_reason: Optional[str] = None
+    missing_items: list[GradeSendMissingItem] = []
+    missing_item_count: int = 0
 
 
 class BulkSendGradesRequest(BaseModel):
@@ -233,11 +243,11 @@ class BulkSendGradesToAdviserResponse(BaseModel):
     newly_sent_count: int
     unchanged_skipped_count: int
     incomplete_skipped_count: int = 0
-    incomplete_warning_count: int = 0
-    finalized_at: datetime
+    finalized_at: Optional[datetime] = None
     finalized_by_staff_id: str
     finalized_by_name: str
     entries: list[SendGradeToAdviserItemResponse]
+    message: Optional[str] = None
 
 
 class TermGradeSummaryRow(BaseModel):

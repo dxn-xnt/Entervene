@@ -48,6 +48,7 @@ from app.schemas.StudentRecord import (
     ClassworkCategoryHeader,
     GradebookCategoryHeaderGroup,
     GradingWeightsInfo,
+    GradeSendMissingItem,
     SendGradeToAdviserItemResponse,
     SendStudentGradeRequest,
     StudentClassworkResult,
@@ -272,6 +273,11 @@ def teacher_student_record_detail(
     )
 
 
+def _assignment_applies_to_student(assignment: ClassworkAssignment, student: Student) -> bool:
+    """Shared class-record applicability predicate; no change to its policy."""
+    return assignment.recipient_student_id is None or assignment.recipient_student_id == student.student_id
+
+
 def teacher_student_gradebook(
     db: Session,
     staff_id: str,
@@ -351,33 +357,30 @@ def teacher_student_gradebook(
             [*quarterly_assignments, *remedial_exam_assignments],
             {assignment.classwork_assignment_id: _extract_score(student_subs, assignment.classwork_assignment_id)
              for assignment in [*quarterly_assignments, *remedial_exam_assignments]
-             if assignment.recipient_student_id in (None, student.student_id)},
+             if _assignment_applies_to_student(assignment, student)},
         )
 
-        def assigned(assignment: ClassworkAssignment) -> bool:
-            return assignment.recipient_student_id is None or assignment.recipient_student_id == student.student_id
-
         written_scores = [
-            _extract_score(student_subs, asgn.classwork_assignment_id) if assigned(asgn) else None
+            _extract_score(student_subs, asgn.classwork_assignment_id) if _assignment_applies_to_student(asgn, student) else None
             for asgn in written_assignments
         ]
         performance_scores = [
-            _extract_score(student_subs, asgn.classwork_assignment_id) if assigned(asgn) else None
+            _extract_score(student_subs, asgn.classwork_assignment_id) if _assignment_applies_to_student(asgn, student) else None
             for asgn in performance_assignments
         ]
         quarterly_scores = [
-            exam_scores.get(asgn.classwork_assignment_id) if assigned(asgn) else None
+            exam_scores.get(asgn.classwork_assignment_id) if _assignment_applies_to_student(asgn, student) else None
             for asgn in quarterly_assignments
         ]
 
         # DepEd K-12 grade computation using resolved template weights
         grade_res = _deped_grade(
-            [score for score, asgn in zip(written_scores, written_assignments) if assigned(asgn)],
-            [asgn for asgn in written_assignments if assigned(asgn)],
-            [score for score, asgn in zip(performance_scores, performance_assignments) if assigned(asgn)],
-            [asgn for asgn in performance_assignments if assigned(asgn)],
-            [score for score, asgn in zip(quarterly_scores, quarterly_assignments) if assigned(asgn)],
-            [asgn for asgn in quarterly_assignments if assigned(asgn)],
+            [score for score, asgn in zip(written_scores, written_assignments) if _assignment_applies_to_student(asgn, student)],
+            [asgn for asgn in written_assignments if _assignment_applies_to_student(asgn, student)],
+            [score for score, asgn in zip(performance_scores, performance_assignments) if _assignment_applies_to_student(asgn, student)],
+            [asgn for asgn in performance_assignments if _assignment_applies_to_student(asgn, student)],
+            [score for score, asgn in zip(quarterly_scores, quarterly_assignments) if _assignment_applies_to_student(asgn, student)],
+            [asgn for asgn in quarterly_assignments if _assignment_applies_to_student(asgn, student)],
             weights=weights,
         )
         ps_ww = grade_res.ps_ww
@@ -850,6 +853,11 @@ def _compute_student_period_components(
     weights: GradingWeights,
 ) -> dict[str, Any]:
     student_subs = submissions_by_student.get(student.student_id, {})
+    # Filter assignments, not just score values: an inapplicable maximum must
+    # never dilute this learner's WW/PT or Examination denominator.
+    written_assignments = [a for a in written_assignments if _assignment_applies_to_student(a, student)]
+    performance_assignments = [a for a in performance_assignments if _assignment_applies_to_student(a, student)]
+    quarterly_assignments = [a for a in quarterly_assignments if _assignment_applies_to_student(a, student)]
 
     def _extract_score(subs: dict, asgn_id: int) -> float | None:
         sub = subs.get(asgn_id)
@@ -868,7 +876,7 @@ def _compute_student_period_components(
     effective = effective_exam_scores(
         quarterly_assignments,
         {asgn.classwork_assignment_id: _extract_score(student_subs, asgn.classwork_assignment_id)
-         for asgn in quarterly_assignments if asgn.recipient_student_id in (None, student.student_id)},
+         for asgn in quarterly_assignments},
     )
     official_quarterly_assignments = [asgn for asgn in quarterly_assignments if asgn.original_exam_assignment_id is None]
     quarterly_scores = [effective.get(asgn.classwork_assignment_id) for asgn in official_quarterly_assignments]
@@ -883,6 +891,13 @@ def _compute_student_period_components(
         "written_scores": written_scores,
         "performance_scores": performance_scores,
         "quarterly_scores": quarterly_scores,
+        # Evidence follows the exact assignment/score pairs used above. Remedial
+        # exams contribute through their original's effective score, not twice.
+        "item_evidence": {
+            "written_work": list(zip(written_assignments, written_scores)),
+            "performance_task": list(zip(performance_assignments, performance_scores)),
+            "quarterly_assessment": list(zip(official_quarterly_assignments, quarterly_scores)),
+        },
         "ps_ww": grade_res.ps_ww,
         "ps_pt": grade_res.ps_pt,
         "ps_qa": grade_res.ps_qa,
@@ -892,6 +907,131 @@ def _compute_student_period_components(
         "initial_grade": grade_res.initial_grade,
         "transmuted_grade": grade_res.transmuted_grade,
     }
+
+
+GRADE_SEND_COMPONENTS = (
+    ("WW", "written_work", "ps_ww", "Written Work"),
+    ("PT", "performance_task", "ps_pt", "Performance Task"),
+    ("QA", "quarterly_assessment", "ps_qa", "Examination"),
+)
+GRADE_SEND_MISSING_ITEM_LIMIT = 5
+
+
+@dataclass(frozen=True)
+class GradeSendRequirements:
+    required_components: tuple[str, ...] = ()
+    configuration_error: str | None = None
+
+
+@dataclass(frozen=True)
+class GradeSendReadiness:
+    code: str | None = None
+    message: str = ""
+    missing_components: tuple[str, ...] = ()
+    missing_items: tuple[GradeSendMissingItem, ...] = ()
+    missing_item_count: int = 0
+
+
+def _grade_send_requirements(
+    db: Session, scope: TeacherRecordScope, weights: GradingWeights,
+) -> GradeSendRequirements:
+    """Validate actual subject configuration; never authorize a fallback send.
+
+    This does not change the class record's weight resolver or passing marks.
+    Called once per request, not once per learner.
+    """
+    missing = "Grade not sent. Configure an active grading template for this subject first."
+    invalid = "Grade not sent. The subject's grading template must have recognized, positive component weights totaling 100."
+    if weights.template_id is None:
+        return GradeSendRequirements(configuration_error=missing)
+    template = db.get(GradingTemplate, weights.template_id)
+    if template is None or template.status != "active" or not template.components:
+        return GradeSendRequirements(configuration_error=missing)
+    reference = (scope.subject.default_grading_template or "").strip()
+    if reference:
+        matches = (
+            int(reference) == template.grading_template_id if reference.isdigit()
+            else reference.casefold() == template.template_name.casefold()
+        )
+        if not matches:
+            return GradeSendRequirements(configuration_error=missing)
+    elif not (
+        template.subject_id == scope.subject.subject_id
+        or (template.subject_id is None and template.academic_level_id is not None
+            and template.academic_level_id == scope.class_.academic_level_id)
+    ):
+        # A generic Core Subjects safety fallback is not a subject assignment.
+        return GradeSendRequirements(configuration_error=missing)
+    categories: set[str] = set()
+    total = Decimal("0")
+    for component in template.components:
+        try:
+            weight = Decimal(str(component.weight))
+        except (InvalidOperation, ValueError):
+            return GradeSendRequirements(configuration_error=invalid)
+        category = _match_component_category(component.component_name)
+        if not weight.is_finite() or weight <= 0 or category is None:
+            return GradeSendRequirements(configuration_error=invalid)
+        total += weight
+        categories.add(category)
+    if total != Decimal("100"):
+        return GradeSendRequirements(configuration_error=invalid)
+    return GradeSendRequirements(required_components=tuple(
+        name for category, name, _, _ in GRADE_SEND_COMPONENTS if category in categories
+    ))
+
+
+def _grade_send_readiness(
+    components: dict[str, Any], requirements: GradeSendRequirements,
+) -> GradeSendReadiness:
+    """Every applicable calculation item must be scored; numeric zero counts.
+
+    Assignment eligibility and effective examination scores have already been
+    selected by the shared calculator. No due-date or excuse exemption is added.
+    """
+    if requirements.configuration_error:
+        return GradeSendReadiness(code="grading_configuration_invalid", message=requirements.configuration_error)
+    labels_by_category = {name: label for _, name, _, label in GRADE_SEND_COMPONENTS}
+    gaps = [
+        (name, assignment)
+        for name in requirements.required_components
+        for assignment, score in components["item_evidence"][name]
+        if score is None
+    ]
+    gaps.sort(key=lambda item: (
+        _as_aware(item[1].due_date) or datetime.max.replace(tzinfo=timezone.utc),
+        item[1].classwork_assignment_id,
+    ))
+    gap_categories = {name for name, _ in gaps}
+    missing = tuple(
+        name for _, name, field, _ in GRADE_SEND_COMPONENTS
+        if name in requirements.required_components
+        and (components[field] is None or name in gap_categories)
+    )
+    if missing:
+        labels = ", ".join(label for _, name, _, label in GRADE_SEND_COMPONENTS if name in missing)
+        return GradeSendReadiness(
+            code="grade_send_incomplete",
+            message=(
+                f"Grade not sent. {len(gaps)} required item(s) need a score. Enter a score for every applicable item; a scored zero counts."
+                if gaps else f"Grade not sent. No computable score in required categories: {labels}."
+            ),
+            missing_components=missing,
+            missing_items=tuple(
+                GradeSendMissingItem(
+                    assignment_id=assignment.classwork_assignment_id,
+                    title=assignment.classwork.title,
+                    category=labels_by_category[name],
+                    due_date=_as_aware(assignment.due_date),
+                )
+                for name, assignment in gaps[:GRADE_SEND_MISSING_ITEM_LIMIT]
+            ),
+            missing_item_count=len(gaps),
+        )
+    grade = components["transmuted_grade"]
+    if grade is None or not Decimal(str(grade)).is_finite():
+        return GradeSendReadiness(code="grade_not_computable", message="Grade not sent. No computable grade is available.")
+    return GradeSendReadiness()
 
 
 def send_student_grade_to_adviser(
@@ -957,16 +1097,21 @@ def send_student_grade_to_adviser(
     ig = comp_res["initial_grade"]
     tg = comp_res["transmuted_grade"]
 
-    # Identify missing/incomplete components for non-blocking warnings
-    incomplete_components: list[str] = []
-    if weights.ww_weight > 0 and (not written_assignments or all(s is None for s in comp_res["written_scores"])):
-        incomplete_components.append("written_work")
-    if weights.pt_weight > 0 and (not performance_assignments or all(s is None for s in comp_res["performance_scores"])):
-        incomplete_components.append("performance_task")
-    if weights.qa_weight > 0 and (not quarterly_assignments or all(s is None for s in comp_res["quarterly_scores"])):
-        incomplete_components.append("quarterly_assessment")
-
-    computed_tg = tg if tg is not None else (ig if ig is not None else 0.0)
+    if payload.final_period_grade is None:
+        readiness = _grade_send_readiness(comp_res, _grade_send_requirements(db, scope, weights))
+        if readiness.code is not None:
+            raise HTTPException(status_code=422, detail={
+                "code": readiness.code,
+                "message": readiness.message,
+                "missing_components": list(readiness.missing_components),
+                "missing_items": [item.model_dump(mode="json") for item in readiness.missing_items],
+                "missing_item_count": readiness.missing_item_count,
+            })
+        computed_tg = tg
+    else:
+        # Preserve the explicit manual override, including zero. Only this path
+        # retains the historical no-evidence value for optional display checks.
+        computed_tg = tg if tg is not None else (ig if ig is not None else 0.0)
 
     # 2. Recompute-vs-display conflict check
     if payload.expected_transmuted_grade is not None:
@@ -1097,8 +1242,8 @@ def send_student_grade_to_adviser(
         finalized_by_staff_id=period_grade.finalized_by_staff_id,
         finalized_by_name=acting_staff_name,
         status=status,
-        message="Grade sent to adviser with missing component warnings" if incomplete_components else ("Grade already up to date" if status == "unchanged" else "Grade transmitted to adviser"),
-        incomplete_components=incomplete_components,
+        message="Grade already up to date" if status == "unchanged" else "Grade transmitted to adviser",
+        incomplete_components=[],
     )
 
 
@@ -1150,6 +1295,7 @@ def bulk_send_grades_to_adviser(
         subject_id=scope.subject.subject_id,
         academic_level_id=getattr(scope.class_, "academic_level_id", None),
     )
+    requirements = _grade_send_requirements(db, scope, weights)
 
     existing_pgs = (
         db.query(StudentPeriodGrade)
@@ -1184,7 +1330,7 @@ def bulk_send_grades_to_adviser(
     entries: list[SendGradeToAdviserItemResponse] = []
     newly_sent_count = 0
     unchanged_skipped_count = 0
-    incomplete_warning_count = 0
+    incomplete_skipped_count = 0
     modified_pg_ids: list[int] = []
 
     for student in students:
@@ -1200,18 +1346,26 @@ def bulk_send_grades_to_adviser(
         ig = comp_res["initial_grade"]
         tg = comp_res["transmuted_grade"]
 
-        incomplete_components: list[str] = []
-        if weights.ww_weight > 0 and (not written_assignments or all(s is None for s in comp_res["written_scores"])):
-            incomplete_components.append("written_work")
-        if weights.pt_weight > 0 and (not performance_assignments or all(s is None for s in comp_res["performance_scores"])):
-            incomplete_components.append("performance_task")
-        if weights.qa_weight > 0 and (not quarterly_assignments or all(s is None for s in comp_res["quarterly_scores"])):
-            incomplete_components.append("quarterly_assessment")
+        readiness = _grade_send_readiness(comp_res, requirements)
+        if readiness.code is not None:
+            incomplete_skipped_count += 1
+            previous = pg_map.get(student.student_id)
+            entries.append(SendGradeToAdviserItemResponse(
+                student_id=sid_str,
+                name=sname,
+                period_grade_id=previous.period_grade_id if previous else None,
+                is_finalized=False,
+                finalized_at=None,
+                status="skipped_incomplete",
+                skip_reason=readiness.code,
+                message=f"{readiness.message} Any previously stored grade is unchanged.",
+                incomplete_components=list(readiness.missing_components),
+                missing_items=list(readiness.missing_items),
+                missing_item_count=readiness.missing_item_count,
+            ))
+            continue
 
-        if incomplete_components:
-            incomplete_warning_count += 1
-
-        computed_tg = tg if tg is not None else (ig if ig is not None else 0.0)
+        computed_tg = tg
 
         # Check stale-data conflict against expected_student_grades
         if payload.expected_student_grades and sid_str in payload.expected_student_grades:
@@ -1250,7 +1404,7 @@ def bulk_send_grades_to_adviser(
                         finalized_by_staff_id=latest_log.submitted_by_staff_id,
                         finalized_by_name=acting_staff_name,
                         status="unchanged",
-                        incomplete_components=incomplete_components,
+                        incomplete_components=[],
                     )
                 )
                 continue
@@ -1327,14 +1481,15 @@ def bulk_send_grades_to_adviser(
                 finalized_by_staff_id=staff_id,
                 finalized_by_name=acting_staff_name,
                 status="updated" if is_update else "newly_sent",
-                incomplete_components=incomplete_components,
+                incomplete_components=[],
             )
         )
 
     for pid in modified_pg_ids:
         evaluate_outcomes_for_finalized_period_grade(db, pid, commit=False)
 
-    db.commit()
+    if modified_pg_ids:
+        db.commit()
 
     return BulkSendGradesToAdviserResponse(
         class_id=class_id,
@@ -1343,12 +1498,12 @@ def bulk_send_grades_to_adviser(
         total_students=len(students),
         newly_sent_count=newly_sent_count,
         unchanged_skipped_count=unchanged_skipped_count,
-        incomplete_skipped_count=0,
-        incomplete_warning_count=incomplete_warning_count,
-        finalized_at=now,
+        incomplete_skipped_count=incomplete_skipped_count,
+        finalized_at=now if modified_pg_ids else None,
         finalized_by_staff_id=staff_id,
         finalized_by_name=acting_staff_name,
         entries=entries,
+        message="Eligible grades were sent or updated." if modified_pg_ids else "No grades were sent.",
     )
 
 

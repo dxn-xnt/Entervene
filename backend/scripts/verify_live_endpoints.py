@@ -143,7 +143,7 @@ def run_manual_verification():
     cw = Classwork(subject_id=subj.subject_id, title="Science Task 1", classwork_type="ACTIVITY", classwork_category="PERFORMANCE_TASK", created_by_staff_id=staff.staff_id, total_points=Decimal("20.00"), is_graded=True, is_archived=False)
     db.add(cw)
     db.flush()
-    assignment = ClassworkAssignment(classwork_id=cw.classwork_id, class_id=cls.class_id, assigned_by_staff_id=staff.staff_id, due_date=now + timedelta(days=2), is_published=True)
+    assignment = ClassworkAssignment(classwork_id=cw.classwork_id, class_id=cls.class_id, academic_period_id=q2.academic_period_id, assigned_by_staff_id=staff.staff_id, due_date=now + timedelta(days=2), is_published=True)
     db.add(assignment)
     db.flush()
 

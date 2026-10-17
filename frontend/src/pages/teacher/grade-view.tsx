@@ -32,6 +32,7 @@ import {
   type StudentGradebookResponse,
   type StudentGradebookRow,
   type GradebookCategoryHeader,
+  type GradeSendMissingItem,
   type TermGradeSummaryResponse,
   type TermPeriodInfo,
   type BulkSendGradesToAdviserResponse
@@ -45,6 +46,23 @@ function fmt(val: number | null | undefined, d = 1): string {
 function displayActivityScore(score: number | null | undefined, header: GradebookCategoryHeader | undefined, studentId: string): string | number {
   if (header?.recipientStudentId && header.recipientStudentId !== studentId) return "N/A";
   return score ?? "—";
+}
+
+function MissingGradeItems({ items, total }: { items: GradeSendMissingItem[]; total: number }) {
+  if (!total) return null;
+  return <div className="mt-1 text-xs">
+    <p className="font-semibold">Missing scored items: {total}</p>
+    <ul aria-label="Missing scored items" className="ml-4 list-disc space-y-1">
+      {items.map((item) => {
+        const due = item.due_date ? new Date(item.due_date) : null;
+        const dueText = due && !Number.isNaN(due.getTime())
+          ? `Due ${new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" }).format(due)} (Manila)`
+          : "No due date";
+        return <li key={item.assignment_id}>{item.title} · {item.category} · {dueText}</li>;
+      })}
+    </ul>
+    {total > items.length && <p>{total - items.length} more missing items. Only the first 5 are shown.</p>}
+  </div>;
 }
 
 /** Helper to get at most 2 latest items (or scores) arranged latest to oldest (newest first). */
@@ -170,6 +188,7 @@ const TeacherGradeView = () => {
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [forceResendAll, setForceResendAll] = useState(false);
   const [bulkSendSummary, setBulkSendSummary] = useState<BulkSendGradesToAdviserResponse | null>(null);
+  const [singleSendMissingItems, setSingleSendMissingItems] = useState<{ items: GradeSendMissingItem[]; total: number } | null>(null);
   const [conflictData, setConflictData] = useState<{
     studentId?: string;
     studentName?: string;
@@ -202,26 +221,20 @@ const TeacherGradeView = () => {
 
     try {
       setToastMessage(null);
+      setSingleSendMissingItems(null);
       const res = await sendStudentGradeToAdviser(section, subject, student.student_id, {
         academic_period_id: activePeriodId,
         expected_transmuted_grade: student.transmuted_grade,
         force_resend: force,
       });
       const gradeDisplay = student.transmuted_grade ?? student.initial_grade ?? res.transmuted_grade ?? res.final_period_grade;
-      if (res.incomplete_components && res.incomplete_components.length > 0) {
-        setToastMessage({
-          type: "info",
-          text: `Official grade (${gradeDisplay}) for ${student.name} sent to adviser (${res.incomplete_components.length} component(s) missing — sent anyway).`,
-        });
-      } else {
-        setToastMessage({
-          type: "success",
-          text: `Official grade (${gradeDisplay}) for ${student.name} sent to adviser.`,
-        });
-      }
+      setToastMessage({
+        type: "success",
+        text: `Official grade (${gradeDisplay}) for ${student.name} sent to adviser.`,
+      });
       fetchGradebook();
     } catch (error: unknown) {
-      const err = error as { status?: number; message?: string; data?: { conflict?: boolean; recomputed_transmuted_grade?: number; expected_transmuted_grade?: number; detail?: { recomputed_transmuted_grade?: number } } };
+      const err = error as { status?: number; message?: string; data?: { conflict?: boolean; recomputed_transmuted_grade?: number; expected_transmuted_grade?: number; detail?: { recomputed_transmuted_grade?: number; missing_items?: GradeSendMissingItem[]; missing_item_count?: number } } };
       if (err.status === 409 || err.data?.conflict) {
         setConflictData({
           studentId: student.student_id,
@@ -231,6 +244,9 @@ const TeacherGradeView = () => {
           isBulk: false,
         });
       } else {
+        if (err.status === 422 && err.data?.detail?.missing_item_count) {
+          setSingleSendMissingItems({ items: err.data.detail.missing_items ?? [], total: err.data.detail.missing_item_count });
+        }
         setToastMessage({
           type: "error",
           text: err.message || "Failed to send grade to adviser.",
@@ -263,6 +279,7 @@ const TeacherGradeView = () => {
     try {
       setSendingAll(true);
       setToastMessage(null);
+      setSingleSendMissingItems(null);
       const expectedGrades: Record<string, number> = {};
       raw.forEach((s) => {
         if (s.transmuted_grade != null) {
@@ -335,10 +352,16 @@ const TeacherGradeView = () => {
   const examItems = cg.exams && cg.exams.length > 0 ? cg.exams : (cg.quarterlyAssessment ?? []);
   const raw = gradebook?.studentGrades ?? [];
   const missingComponentsCount = raw.filter((s) => {
-    const hasWW = Array.isArray(s.writtenWork) && s.writtenWork.some((x) => x !== null);
-    const hasPT = Array.isArray(s.performanceTask) && s.performanceTask.some((x) => x !== null);
-    const hasQA = (Array.isArray(s.quarterlyAssessment) && s.quarterlyAssessment.some((x) => x !== null)) || (Array.isArray(s.exams) && s.exams.some((x) => x !== null));
-    return !hasWW || !hasPT || !hasQA;
+    const weights = gradebook?.grading_weights;
+    if (weights?.template_id == null) return true;
+    return [
+      { weight: weights.ww_weight, percent: s.ps_written, headers: cg.writtenWork, scores: s.writtenWork },
+      { weight: weights.pt_weight, percent: s.ps_performance, headers: cg.performanceTask, scores: s.performanceTask },
+      { weight: weights.exams_weight, percent: s.ps_exams ?? s.ps_quarterly, headers: examItems, scores: s.exams ?? s.quarterlyAssessment ?? [] },
+    ].some(({ weight, percent, headers, scores }) => weight > 0 && (
+      percent == null || headers.some((header, index) =>
+        (!header.recipientStudentId || header.recipientStudentId === s.student_id) && scores[index] == null)
+    ));
   }).length;
   const completeComponentsCount = raw.length - missingComponentsCount;
   const filtered = raw
@@ -1075,6 +1098,8 @@ const TeacherGradeView = () => {
                 </div>
               )}
 
+              {singleSendMissingItems && <MissingGradeItems items={singleSendMissingItems.items} total={singleSendMissingItems.total} />}
+
 
 
               {isViewOnly && (
@@ -1220,8 +1245,9 @@ const TeacherGradeView = () => {
           </Dialog.Header>
           <div className="flex flex-col gap-4 p-5 text-sm bg-white text-black">
             <p className="text-gray-800 text-sm leading-relaxed font-medium">
-              This will compute and transmit official term grades for all <strong className="text-black font-bold">{raw.length}</strong> enrolled student(s) in{" "}
-              <strong className="text-black font-bold">{displaySectionName}</strong> to the class adviser's record.
+              This will check <strong className="text-black font-bold">{raw.length}</strong> enrolled student(s) in{" "}
+              <strong className="text-black font-bold">{displaySectionName}</strong> before sending to the class adviser's record.
+              {" "}Only students with a computable percentage in every configured category will be sent. Others will be skipped.
             </p>
 
             {timingGate.isLocked ? (
@@ -1249,11 +1275,11 @@ const TeacherGradeView = () => {
                 <div className="grid grid-cols-2 gap-2 text-center text-xs">
                   <div className="bg-emerald-50 border-2 border-black rounded p-2.5 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                     <span className="block text-xl font-black text-emerald-950">{completeComponentsCount}</span>
-                    <span className="text-[10px] text-emerald-900 font-bold tracking-wider">All Components Complete</span>
+                    <span className="text-[10px] text-emerald-900 font-bold tracking-wider">All Required Items Scored</span>
                   </div>
                   <div className={`border-2 border-black rounded p-2.5 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${missingComponentsCount > 0 ? "bg-amber-50" : "bg-gray-50"}`}>
                     <span className={`block text-xl font-black ${missingComponentsCount > 0 ? "text-amber-950" : "text-gray-600"}`}>{missingComponentsCount}</span>
-                    <span className={`text-[10px] font-bold tracking-wider ${missingComponentsCount > 0 ? "text-amber-900" : "text-gray-600"}`}>Missing Components (Sending Anyway)</span>
+                    <span className={`text-[10px] font-bold tracking-wider ${missingComponentsCount > 0 ? "text-amber-900" : "text-gray-600"}`}>Missing Evidence (Will Skip)</span>
                   </div>
                 </div>
 
@@ -1261,11 +1287,14 @@ const TeacherGradeView = () => {
                   <div className="rounded border-2 border-black bg-amber-50 p-3 flex items-center gap-2.5 text-xs text-amber-950 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] font-medium">
                     <AlertTriangle className="size-4 shrink-0 text-amber-900" />
                     <span>
-                      <strong>{missingComponentsCount} student(s)</strong> have unassigned or unscored categories. Their grades will be finalized and sent based on available scores.
+                      <strong>{missingComponentsCount} student(s)</strong> have missing scores or uncomputable required categories. They will be skipped; existing adviser grades will stay unchanged.
                     </span>
                   </div>
                 )}
 
+                <p className="text-xs text-gray-700">
+                  Every applicable graded item in this period must have a score, including items not yet due. A scored zero counts. Classmates' targeted work does not block. Exams use the class record's effective original/remedial score. The server validates eligibility and grading configuration.
+                </p>
                 <div className="rounded border-2 border-black bg-yellow-50 p-3 flex flex-col gap-1 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                   <div className="font-black text-black flex items-center gap-2">
                     <CheckCircle2 className="size-4 text-black shrink-0" />
@@ -1283,7 +1312,7 @@ const TeacherGradeView = () => {
                     onChange={(e) => setForceResendAll(e.target.checked)}
                     className="size-4 rounded border-2 border-black accent-black cursor-pointer"
                   />
-                  <span>Force resend all students (even if scores are unchanged)</span>
+                  <span>Resend eligible students even if scores are unchanged. Missing-evidence checks still apply.</span>
                 </label>
               </>
             )}
@@ -1420,17 +1449,29 @@ const TeacherGradeView = () => {
                 <span className="text-[11px] text-gray-800 font-black tracking-wider">Unchanged</span>
               </div>
               <div className="bg-amber-100 border-2 border-black rounded p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                <span className="block text-2xl font-black text-amber-950">{(bulkSendSummary?.incomplete_warning_count ?? 0) || (bulkSendSummary?.incomplete_skipped_count ?? 0)}</span>
-                <span className="text-[11px] text-amber-900 font-black tracking-wider">With Warnings</span>
+                <span className="block text-2xl font-black text-amber-950">{bulkSendSummary?.incomplete_skipped_count ?? 0}</span>
+                <span className="text-[11px] text-amber-900 font-black tracking-wider">Skipped (Not Sent)</span>
               </div>
             </div>
             <p className="text-xs text-gray-700 leading-relaxed font-medium">
-              {bulkSendSummary && (bulkSendSummary.incomplete_warning_count ?? 0) > 0
-                ? `Official grades and append-only audit logs are now updated in the adviser's record (${bulkSendSummary.incomplete_warning_count} student(s) transmitted with missing classwork components).`
-                : bulkSendSummary && bulkSendSummary.newly_sent_count > 0
-                  ? "Official grades and append-only audit logs are now updated in the adviser's record."
-                  : "All student grades were already transmitted to the adviser with matching scores. No changes were necessary."}
+              {bulkSendSummary && bulkSendSummary.newly_sent_count > 0
+                ? "Eligible grades were sent or updated with audit logs. Skipped students' existing adviser grades were not changed."
+                : "No grades were sent."}
             </p>
+            <p className="text-xs text-gray-700">Unchanged and skipped students' existing adviser grades were not changed.</p>
+            {bulkSendSummary?.entries.some((entry) => entry.status === "skipped_incomplete") && (
+              <div>
+                <h4 className="font-bold text-sm">Students not sent</h4>
+                <ul aria-label="Students whose grades were not sent" className="mt-2 max-h-56 overflow-y-auto space-y-2 text-xs">
+                  {bulkSendSummary.entries.filter((entry) => entry.status === "skipped_incomplete").map((entry) => (
+                    <li key={entry.student_id}>
+                      <strong>{entry.name}: </strong>{entry.message || "Required scored evidence is missing. Existing adviser grade unchanged."}
+                      <MissingGradeItems items={entry.missing_items ?? []} total={entry.missing_item_count ?? 0} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
           <Dialog.Footer>
             <Button
