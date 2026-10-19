@@ -22,9 +22,7 @@ npx expo start
 
 Admin: demo-admin@example.com / DemoAdmin!2026
 Teacher: demo-teacher@example.com / DemoTeacher!2026
-
-Student	Email	Password
-Intervention target	demo-remediation-target@example.com	CH-xyemaZrMR63_u0KckBH3IB_7szNKLe8SY8sheqv4
+Student: demo-remediation-target@example.com / CH-xyemaZrMR63_u0KckBH3IB_7szNKLe8SY8sheqv4
 
 Another student 
 Email: demo-drew-balanced@example.com

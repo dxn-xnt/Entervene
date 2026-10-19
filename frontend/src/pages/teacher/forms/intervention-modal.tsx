@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Skeleton } from "@/components/retroui/Skeleton";
 import { Card } from "@/components/retroui/Card";
@@ -5,6 +6,8 @@ import { Button } from "@/components/retroui/Button";
 import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
 import { Accordion } from "@/components/retroui/Accordion";
+import { Avatar } from "@/components/retroui/Avatar";
+import { Empty } from "@/components/retroui/Empty";
 import InterventionSupportMaterials from "../intervention-support-materials";
 import type {
   DiagnosisSnapshot,
@@ -56,6 +59,79 @@ const strongestEvidence = (diagnosis: DiagnosisSnapshot) => {
   return "Component-level evidence only · no specific competency identified";
 };
 
+function AcademicDiagnosisCard({
+  diagnosis,
+}: {
+  diagnosis: DiagnosisSnapshot;
+}) {
+  const weakest = diagnosis.weakest_supported_components ?? [];
+  const primaryComp = weakest[0];
+  const focusName = weakest.length
+    ? weakest.map(label).join(", ")
+    : "Component unavailable";
+  const primaryCompInfo = primaryComp ? diagnosis.components?.[primaryComp] : null;
+  const focusPercent = primaryCompInfo?.percent;
+  const scoredCompetencies = diagnosis.lowest_supported_competencies ?? [];
+  const coverageItems = diagnosis.manual_assessment_coverage ?? [];
+  const strongestEvidenceText = strongestEvidence(diagnosis);
+
+  const questionScores = scoredCompetencies.flatMap((item) =>
+    item.supporting_scores
+      .filter(
+        (s) =>
+          s.source_type === "QUIZ_QUESTION" &&
+          s.score != null &&
+          s.possible_score != null
+      )
+      .map((s, idx) => ({
+        key: `${s.quiz_question_id ?? idx}-${idx}`,
+        id: s.quiz_question_id ?? "unknown",
+        score: s.score!,
+        possible: s.possible_score!,
+      }))
+  );
+
+  return (
+    <Card className="space-y-2 w-full">
+      <p className="text-base">
+        Support focus: <strong>{focusName}</strong>
+      </p>
+      <p className="text-base">
+        Strongest available evidence: <strong>{strongestEvidenceText}</strong>
+      </p>
+      {scoredCompetencies.length > 0 && (
+        <>
+          <p className="text-base">
+            Scored competency focus:{" "}
+            {scoredCompetencies
+              .map((item) => `${item.competency_code}: ${item.competency_statement}`)
+              .join("; ")}
+          </p>
+          {questionScores.slice(0, 3).map((item) => (
+            <p key={item.key} className="text-sm">
+              Question #{item.id}: {item.score}/{item.possible}
+            </p>
+          ))}
+        </>
+      )}
+      {focusPercent != null && (
+        <p className="text-base">
+          Weakest component: {primaryComp ? label(primaryComp) : focusName}{" "}
+          <strong>{focusPercent.toFixed(0)}%</strong>
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2 pt-1 text-xs">
+        <Badge variant="surface" size="sm">
+          {scoredCompetencies.length} scored competency targets
+        </Badge>
+        <Badge variant="outline" size="sm">
+          {coverageItems.length} assessment coverage items
+        </Badge>
+      </div>
+    </Card>
+  );
+}
+
 export interface InterventionModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -85,6 +161,15 @@ export default function InterventionModal({
   previousResolved,
   newerActive,
 }: InterventionModalProps) {
+  const [supportPage, setSupportPage] = useState<"overview" | "plan">("overview");
+  const interventionId = detail?.intervention_id;
+
+  useEffect(() => {
+    setSupportPage("overview");
+  }, [isOpen, interventionId]);
+
+  const isActive = selectedKind === "active" && detail?.status === "ACTIVE";
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Content
@@ -96,7 +181,9 @@ export default function InterventionModal({
             {selectedKind === "resolved"
               ? "Resolved Intervention"
               : selectedKind === "active"
-                ? "Active Intervention"
+                ? supportPage === "plan"
+                  ? "Adjust Support"
+                  : "Active Intervention"
                 : "Candidate Review"}
           </Dialog.Title>
         </Dialog.Header>
@@ -126,130 +213,157 @@ export default function InterventionModal({
                     const resolved = detail as TeacherResolvedInterventionDetail;
                     return (
                       <>
-                        <Card className="space-y-3 border-2 border-emerald-600 bg-emerald-50 dark:bg-emerald-950/20">
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
-                            <div>
-                              <h3 className="font-bold text-base">
-                                {newerActive
-                                  ? "Previous intervention cycle"
-                                  : "Resolved intervention cycle"}
-                              </h3>
-                              <p className="text-sm text-muted-foreground">
-                                {resolved.student_name} · {resolved.subject_name} ·{" "}
-                                {resolved.class_name}
-                              </p>
+                        <Card className="w-full space-y-2 border-2 border-black bg-primary">
+                          <div className="flex items-start gap-4">
+                            <div className="flex flex-col mt-3 items-center h-full">
+                              <Avatar variant="student" className="size-14 shrink-0">
+                                <Avatar.Image
+                                  src="/avatars/student-avatars/1.svg"
+                                  alt={resolved.student_name}
+                                />
+                                <Avatar.Fallback>
+                                  {(resolved.student_name || "?").charAt(0).toUpperCase()}
+                                </Avatar.Fallback>
+                              </Avatar>
                             </div>
-                            <Badge variant="success" size="sm">Resolved</Badge>
-                          </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                            <p>
-                              Resolved:{" "}
-                              <strong>
-                                {resolved.resolved_at
-                                  ? date(resolved.resolved_at)
-                                  : "Unavailable"}
-                              </strong>
-                            </p>
-                            <p>
-                              Reason:{" "}
-                              <strong>
-                                {label(resolved.resolution_reason || "Unavailable")}
-                              </strong>
-                            </p>
-                            <p>
-                              Trigger projection:{" "}
-                              <strong>
-                                {resolved.triggering_predicted_grade.toFixed(2)}
-                              </strong>
-                            </p>
-                            <p>
-                              Projection at resolution:{" "}
-                              <strong>
-                                {resolved.resolution_projection?.toFixed(2) ??
-                                  "Unavailable"}
-                              </strong>
-                            </p>
-                          </div>
-
-                          <p className="text-xs text-muted-foreground">
-                            This resolution describes this past cycle, not the
-                            student's current prediction.
-                          </p>
-                          {newerActive && (
-                            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                              A later below-threshold prediction opened a new
-                              active support cycle (trigger{" "}
-                              {newerActive.triggering_predicted_grade.toFixed(2)}).
-                            </p>
-                          )}
-                        </Card>
-
-                        <Card className="w-full space-y-3">
-                          <h3 className="font-bold text-base">Targeted support history</h3>
-                          {resolved.targeted_activities.length ? (
-                            <div className="space-y-2">
-                              {resolved.targeted_activities.map((activity) => (
-                                <div
-                                  key={activity.assignment_id}
-                                  className="rounded border-2 border-border p-3 text-sm space-y-1.5 bg-card"
-                                >
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <span className="font-semibold">{activity.title}</span>
-                                    <Badge
-                                      variant={activity.submission_status === "graded" ? "success" : "default"}
-                                      size="sm"
-                                    >
-                                      {activity.submission_status === "graded"
-                                        ? "Completed"
-                                        : label(
-                                          activity.submission_status ||
-                                          "Not submitted"
-                                        )}
-                                    </Badge>
-                                  </div>
-                                  {activity.grade != null && activity.total_points != null && (
-                                    <p className="text-xs text-muted-foreground">
-                                      Score: <strong>{activity.grade}/{activity.total_points}</strong>
-                                    </p>
-                                  )}
-                                  {activity.original_assignment_id && (
-                                    <div className="text-xs text-muted-foreground pt-1 border-t border-border flex flex-wrap gap-x-3 gap-y-0.5">
-                                      <span>
-                                        Original: {activity.original_title} ·{" "}
-                                        {label(activity.exam_subtype || "Examination")}
-                                      </span>
-                                      <span>
-                                        Original: {activity.original_grade ?? "—"}/{activity.total_points ?? "—"}
-                                      </span>
-                                      <span>
-                                        Remedial: {activity.grade ?? "Pending"}/{activity.total_points ?? "—"}
-                                      </span>
-                                      <span>
-                                        Effective: <strong>{activity.effective_grade ?? "—"}/{activity.total_points ?? "—"}</strong>
-                                      </span>
-                                    </div>
-                                  )}
+                            <div className="flex flex-col gap-1 w-full">
+                              <div className="flex flex-row justify-between w-full items-end">
+                                <h2 className="text-xl font-black -mb-1">{resolved.student_name}</h2>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <Badge variant="solid" size="md">
+                                    Resolved
+                                  </Badge>
+                                  <Badge variant="outline" size="md">
+                                    {label(resolved.resolution_reason || "Resolved")}
+                                  </Badge>
                                 </div>
-                              ))}
+                              </div>
+
+                              <div className="mt-2 grid grid-cols-2 gap-1 text-sm">
+                                <p className="text-sm">
+                                  Subject:{" "}
+                                  <span className="text-base font-semibold">{resolved.subject_name}</span>
+                                </p>
+                                <p className="text-sm">
+                                  Class:{" "}
+                                  <span className="text-base font-semibold">{resolved.class_name}</span>
+                                </p>
+                                <p>
+                                  Trigger: <strong>{resolved.triggering_predicted_grade.toFixed(2)}</strong>
+                                </p>
+                                <p>
+                                  Resolution:{" "}
+                                  <strong>
+                                    {resolved.resolution_projection != null
+                                      ? resolved.resolution_projection.toFixed(2)
+                                      : "Unavailable"}
+                                  </strong>
+                                </p>
+                              </div>
                             </div>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">No targeted activity was recorded.</p>
-                          )}
+                          </div>
                         </Card>
+
+                        <p className="text-sm text-muted-foreground">
+                          Resolved: {resolved.resolved_at ? date(resolved.resolved_at) : "Unavailable"}.
+                          This resolution describes this past cycle, not the student's current prediction.
+                        </p>
+
+                        {newerActive && (
+                          <Card className="space-y-2 w-full border-2 border-border">
+                            <div className="flex items-center justify-between">
+                              <h4 className="font-bold text-sm">
+                                Newer Active Cycle Exists
+                              </h4>
+                              <Badge variant="surface" size="sm">Active</Badge>
+                            </div>
+                            <p className="text-sm">
+                              A later below-threshold prediction opened a new active support cycle (trigger{" "}
+                              <strong>{newerActive.triggering_predicted_grade.toFixed(2)}</strong>).
+                            </p>
+                          </Card>
+                        )}
+
+                        <h3 className="font-black mb-2">Academic Diagnosis</h3>
+                        <AcademicDiagnosisCard diagnosis={resolved.diagnosis_snapshot} />
+
+                        <h3 className="font-black mb-2">Targeted Support History</h3>
+                        {resolved.targeted_activities.length ? (
+                          <div className="space-y-2">
+                            {resolved.targeted_activities.map((activity) => (
+                              <Card
+                                key={activity.assignment_id}
+                                className="p-3 text-sm space-y-1.5 w-full"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span className="font-semibold">{activity.title}</span>
+                                  <Badge
+                                    variant={activity.submission_status === "graded" ? "solid" : "outline"}
+                                    size="sm"
+                                  >
+                                    {activity.submission_status === "graded"
+                                      ? "Completed"
+                                      : label(
+                                        activity.submission_status ||
+                                        "Not submitted"
+                                      )}
+                                  </Badge>
+                                </div>
+                                {activity.grade != null && activity.total_points != null && (
+                                  <p className="text-xs text-muted-foreground">
+                                    Score: <strong>{activity.grade}/{activity.total_points}</strong>
+                                  </p>
+                                )}
+                                {activity.original_assignment_id && (
+                                  <div className="text-xs text-muted-foreground pt-1 border-t border-border flex flex-wrap gap-x-3 gap-y-0.5">
+                                    <span>
+                                      Original: {activity.original_title} ·{" "}
+                                      {label(activity.exam_subtype || "Examination")}
+                                    </span>
+                                    <span>
+                                      Original: {activity.original_grade ?? "—"}/{activity.total_points ?? "—"}
+                                    </span>
+                                    <span>
+                                      Remedial: {activity.grade ?? "Pending"}/{activity.total_points ?? "—"}
+                                    </span>
+                                    <span>
+                                      Effective:{" "}
+                                      <strong>
+                                        {activity.effective_grade ?? "—"}/{activity.total_points ?? "—"}
+                                      </strong>
+                                    </span>
+                                  </div>
+                                )}
+                              </Card>
+                            ))}
+                          </div>
+                        ) : (
+                          <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+                            <Empty.Content>
+                              <Empty.Description className="text-sm text-muted-foreground">
+                                No targeted activity was recorded for this resolved cycle.
+                              </Empty.Description>
+                            </Empty.Content>
+                          </Empty>
+                        )}
 
                         {resolved.sent_reviewer && (
-                          <Card className="w-full space-y-2">
-                            <div className="flex items-center justify-between border-b border-border pb-1.5">
-                              <h3 className="font-bold text-base">Sent Reviewer</h3>
-                              <Badge variant="outline" size="sm">Reviewer</Badge>
-                            </div>
-                            <p className="font-semibold text-sm">{resolved.sent_reviewer.title}</p>
-                            <p className="text-sm text-muted-foreground">{resolved.sent_reviewer.introduction}</p>
-                            <div className="rounded border-2 border-border bg-muted/50 p-3 text-xs font-mono whitespace-pre-wrap">
-                              {resolved.sent_reviewer.body}
-                            </div>
-                          </Card>
+                          <div className="space-y-2">
+                            <h3 className="font-black">Sent Reviewer</h3>
+                            <Card className="w-full space-y-2">
+                              <div className="flex items-center justify-between border-b border-border pb-1.5">
+                                <h4 className="font-bold text-base">{resolved.sent_reviewer.title}</h4>
+                                <Badge variant="outline" size="sm">Reviewer</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {resolved.sent_reviewer.introduction}
+                              </p>
+                              <div className="rounded border-2 border-border bg-muted/50 p-3 text-xs font-mono whitespace-pre-wrap">
+                                {resolved.sent_reviewer.body}
+                              </div>
+                            </Card>
+                          </div>
                         )}
                       </>
                     );
@@ -257,7 +371,7 @@ export default function InterventionModal({
                 ) : detail.status === "ACTIVE" ? (
                   <>
                     {previousResolved && (
-                      <Card className="space-y-2 border-2 border-border bg-yellow-50 dark:bg-yellow-950/20">
+                      <Card className="space-y-2 border-2 border-border">
                         <div className="flex items-center justify-between">
                           <h3 className="font-bold text-base">Current support cycle</h3>
                           <Badge variant="surface" size="sm">Active</Badge>
@@ -272,81 +386,84 @@ export default function InterventionModal({
                     )}
                     <InterventionSupportMaterials
                       key={detail.intervention_id}
+                      page={supportPage}
                       detail={detail}
                     />
                   </>
                 ) : (
                   <>
-                    <Card className="w-full space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
-                        <div>
-                          <h2 className="text-lg font-bold">
-                            {detail.student_name}
-                          </h2>
-                          <p className="text-sm text-muted-foreground">
-                            {detail.subject_name} · {detail.class_name} · {detail.academic_period_name}
-                          </p>
+                    <Card className="w-full space-y-2 border-2 border-black bg-primary">
+                      <div className="flex items-start gap-4">
+                        <div className="flex flex-col mt-3 items-center h-full">
+                          <Avatar variant="student" className="size-14 shrink-0">
+                            <Avatar.Image
+                              src="/avatars/student-avatars/1.svg"
+                              alt={detail.student_name}
+                            />
+                            <Avatar.Fallback>
+                              {(detail.student_name || "?").charAt(0).toUpperCase()}
+                            </Avatar.Fallback>
+                          </Avatar>
                         </div>
-                        <div className="flex items-center gap-1.5">
-                          <Badge variant="surface" size="sm">{label(detail.status)}</Badge>
-                          <Badge
-                            variant={detail.triggering_intervention_level === "HIGH_RISK" ? "destructive" : "secondary"}
-                            size="sm"
-                          >
-                            {label(detail.triggering_intervention_level)}
-                          </Badge>
-                        </div>
-                      </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                        <p>
-                          Triggering projected grade:{" "}
-                          <strong>{detail.triggering_predicted_grade.toFixed(2)}</strong>
-                        </p>
-                        <p>
-                          Candidate created: <strong>{date(detail.created_at)}</strong>
-                        </p>
-                        <p className="text-xs text-muted-foreground col-span-full">
-                          Original source prediction #{detail.source_prediction_id},
-                          revision {detail.source_prediction_revision}
-                        </p>
+                        <div className="flex flex-col gap-1 w-full">
+                          <div className="flex flex-row justify-between w-full items-end">
+                            <h2 className="text-xl font-black -mb-1">{detail.student_name}</h2>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Badge variant="solid" size="md">
+                                Candidate
+                              </Badge>
+                              <Badge
+                                variant={
+                                  detail.triggering_intervention_level === "HIGH_RISK"
+                                    ? "destructive"
+                                    : "outline"
+                                }
+                                size="md"
+                              >
+                                {label(detail.triggering_intervention_level)}
+                              </Badge>
+                            </div>
+                          </div>
+
+                          <div className="mt-2 grid grid-cols-2 gap-1 text-sm">
+                            <p className="text-sm">
+                              Subject:{" "}
+                              <span className="text-base font-semibold">{detail.subject_name}</span>
+                            </p>
+                            <p className="text-sm">
+                              Class:{" "}
+                              <span className="text-base font-semibold">{detail.class_name}</span>
+                            </p>
+                            <p>
+                              Trigger: <strong>{detail.triggering_predicted_grade.toFixed(2)}</strong>
+                            </p>
+                            <p>
+                              Created: <strong>{date(detail.created_at)}</strong>
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     </Card>
 
-                    <Card className="w-full space-y-3">
-                      <h3 className="text-base font-bold">Why support was started</h3>
-                      <div className="space-y-2 text-sm">
-                        <div>
-                          <span className="text-muted-foreground text-xs uppercase font-bold block mb-1">
-                            Weakest supported components
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {(detail.diagnosis_snapshot.weakest_supported_components ?? []).length ? (
-                              detail.diagnosis_snapshot.weakest_supported_components?.map((comp) => (
-                                <Badge key={comp} variant="outline" size="sm">
-                                  {label(comp)}
-                                </Badge>
-                              ))
-                            ) : (
-                              <span className="text-muted-foreground text-xs">Unavailable</span>
-                            )}
-                          </div>
-                        </div>
-                        <p className="pt-1">
-                          Strongest available evidence:{" "}
-                          <strong>
-                            {strongestEvidence(detail.diagnosis_snapshot)}
-                          </strong>
-                        </p>
-                        <div className="flex flex-wrap gap-2 pt-1 text-xs">
-                          <Badge variant="surface" size="sm">
-                            {(detail.diagnosis_snapshot.lowest_supported_competencies ?? []).length} scored competency targets
-                          </Badge>
-                          <Badge variant="outline" size="sm">
-                            {(detail.diagnosis_snapshot.manual_assessment_coverage ?? []).length} assessment coverage items
-                          </Badge>
-                        </div>
+                    <p className="text-sm text-muted-foreground">
+                      Original source prediction #{detail.source_prediction_id}, revision{" "}
+                      {detail.source_prediction_revision} · {detail.academic_period_name}
+                    </p>
+
+                    <h3 className="font-black">Academic Diagnosis</h3>
+                    <AcademicDiagnosisCard diagnosis={detail.diagnosis_snapshot} />
+
+                    <Card className="w-full space-y-2 border-2 border-primary/40 bg-primary/10">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="surface" size="sm">Action</Badge>
+                        <span className="font-semibold text-sm">Confirmation Required</span>
                       </div>
+                      <p className="text-sm">
+                        Approve an Intervention for <strong>{detail.student_name}</strong> in{" "}
+                        <strong>{detail.subject_name}</strong>? Current prediction
+                        evidence and teaching scope will be checked again.
+                      </p>
                     </Card>
                   </>
                 )}
@@ -475,9 +592,13 @@ export default function InterventionModal({
                             ))}
                           </div>
                         ) : (
-                          <Alert status="info">
-                            No specific competency could be identified from scored evidence.
-                          </Alert>
+                          <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+                            <Empty.Content>
+                              <Empty.Description className="text-sm text-muted-foreground">
+                                No specific competency could be identified from scored evidence.
+                              </Empty.Description>
+                            </Empty.Content>
+                          </Empty>
                         )}
                       </section>
 
@@ -526,21 +647,6 @@ export default function InterventionModal({
                 </Accordion>
 
                 {actionError && <Alert status="error">{actionError}</Alert>}
-
-                {selectedKind === "candidate" && detail.status === "CANDIDATE" && (
-                  <Card className="w-full space-y-2 border-2 border-primary/40 bg-primary/10">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="surface" size="sm">Action</Badge>
-                      <span className="font-semibold text-sm">Confirmation Required</span>
-                    </div>
-                    <p className="text-sm">
-                      Approve an Intervention for{" "}
-                      <strong>{detail.student_name}</strong> in{" "}
-                      <strong>{detail.subject_name}</strong>? Current prediction
-                      evidence and teaching scope will be checked again.
-                    </p>
-                  </Card>
-                )}
               </div>
             )
           )}
@@ -554,6 +660,16 @@ export default function InterventionModal({
           >
             Close
           </Button>
+          {isActive && (
+            <Button
+              variant={supportPage === "plan" ? "outline" : "default"}
+              onClick={() =>
+                setSupportPage(supportPage === "plan" ? "overview" : "plan")
+              }
+            >
+              {supportPage === "plan" ? "Back to Overview" : "Adjust Support"}
+            </Button>
+          )}
           {selectedKind === "candidate" && detail?.status === "CANDIDATE" && (
             <Button
               disabled={activating || reviewStale}
