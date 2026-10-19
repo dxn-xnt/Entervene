@@ -12,3 +12,4 @@ from . import notifications
 from . import attendance
 from . import tos
 
+from . import cloning
