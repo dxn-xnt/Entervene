@@ -1563,6 +1563,7 @@ def _classwork_assignments(db: Session, scope: TeacherRecordScope) -> list[Class
             ClassworkAssignment.class_id == scope.class_.class_id,
             ClassworkAssignment.academic_period_id == scope.period.academic_period_id,
             Classwork.subject_id == scope.subject.subject_id,
+            ClassworkAssignment.is_published.is_(True),
             Classwork.is_archived.is_(False),
             Classwork.is_graded.is_(True),
             Classwork.classwork_type != READING_TYPE,

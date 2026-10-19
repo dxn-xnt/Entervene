@@ -229,6 +229,20 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
         raise HTTPException(422, "Unsupported remediation format")
     if body.grade_treatment is not None and body.grade_treatment not in {"PRACTICE_ONLY", "WRITTEN_WORK", "PERFORMANCE_TASK", "EXAMINATION"}:
         raise HTTPException(422, "Unsupported remediation grade treatment")
+    requested_treatment = ((body.grade_treatment or "PRACTICE_ONLY")
+                           if body.teacher_choice in {"QUIZ", "CLASSWORK"} else None)
+    requested_exam_id = body.original_exam_assignment_id if requested_treatment == "EXAMINATION" else None
+    existing_activity = db.query(ClassworkAssignment.classwork_assignment_id).filter_by(
+        source_intervention_id=row.intervention_id,
+        recipient_student_id=row.student_id,
+    ).first()
+    current_plan = row.remediation_plan or {}
+    if existing_activity and (
+        body.teacher_choice != current_plan.get("teacher_choice")
+        or requested_treatment != current_plan.get("grade_treatment")
+        or requested_exam_id != current_plan.get("original_exam_assignment_id")
+    ):
+        raise HTTPException(409, "Remediation format and grade treatment cannot change after a targeted activity is created")
     if body.grade_treatment == "EXAMINATION" and body.original_exam_assignment_id not in {
         exam["assignment_id"] for exam in original_exams(db, row)
     }:
@@ -241,8 +255,8 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
         raise HTTPException(422, "Selected material is unavailable in this teaching scope")
     plan = dict(row.remediation_plan or {})
     plan.update({"teacher_choice": body.teacher_choice,
-                 "grade_treatment": (body.grade_treatment or "PRACTICE_ONLY") if body.teacher_choice in {"QUIZ", "CLASSWORK"} else None,
-                 "original_exam_assignment_id": body.original_exam_assignment_id if body.grade_treatment == "EXAMINATION" else None,
+                 "grade_treatment": requested_treatment,
+                 "original_exam_assignment_id": requested_exam_id,
                  "selected_resources": [ref.model_dump() for ref in body.selected_resources],
                  "evidence_basis": _basis(row)})
     row.remediation_plan = plan
