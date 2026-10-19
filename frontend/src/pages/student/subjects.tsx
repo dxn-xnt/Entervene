@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
-import { Link } from "react-router-dom";
 
 import { routes } from "@/../routes";
 import { apiFetch, getStudentTodos, type TodoItem } from "@/lib/api";
@@ -8,11 +7,7 @@ import { LoadingPanel } from "@/components/loading-panel";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Empty } from "@/components/retroui/Empty";
 import { Button } from "@/components/retroui/Button";
-import { Badge } from "@/components/retroui/Badge";
-import { Card } from "@/components/retroui/Card";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { StudentSubjectSectionCard } from "@/components/student/student-subject-section-card";
-import { ArrowUpRight } from "lucide-react";
 
 interface EnrolledSubject {
   subject_load_id: number;
@@ -64,19 +59,6 @@ const Subjects = () => {
       .replace(":classId", String(subject.class_id))
       .replace(":subjectId", String(subject.subject_id));
 
-  const subjectGroups = Array.from(
-    subjects.reduce((groups, subject) => {
-      const group = groups.get(subject.subject_id);
-      if (group) group.subjects.push(subject);
-      else groups.set(subject.subject_id, {
-        subjectId: subject.subject_id,
-        subjectName: subject.subject_name,
-        subjects: [subject],
-      });
-      return groups;
-    }, new Map<number, { subjectId: number; subjectName: string; subjects: EnrolledSubject[] }>()),
-  ).map(([, group]) => group);
-
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-clip">
@@ -112,49 +94,21 @@ const Subjects = () => {
                 </Empty>
               ) : (
                 <div className="grid min-w-0 grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {subjectGroups.map((group) => (
-                    <Card
-                      key={group.subjectId}
-                      className={`flex min-w-0 flex-col ${group.subjects.length > 1 ? "sm:col-span-2" : ""}`}
-                    >
-                      <div className="-mb-2 flex min-w-0 items-start justify-between gap-2">
-                        <Card.Title className="min-w-0 break-words text-xl font-bold">
-                          {group.subjectName}
-                        </Card.Title>
-                        <div className="flex shrink-0 items-center gap-3">
-                          <Badge variant="secondary" size="sm">
-                            {group.subjects.length} section{group.subjects.length === 1 ? "" : "s"}
-                          </Badge>
-                          <Tooltip>
-                            <TooltipTrigger render={<span className="inline-flex">
-                              <Button asChild variant="secondary" size="sm" className="px-1 shadow-none">
-                                <Link to={subjectHref(group.subjects[0])} aria-label={`View ${group.subjectName}`}>
-                                  <ArrowUpRight className="size-4" />
-                                </Link>
-                              </Button>
-                            </span>} />
-                            <TooltipContent side="right">View subject</TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </div>
-                      <div className={`pt-3 pb-2 ${group.subjects.length === 1 ? "flex flex-col" : "flex gap-3 overflow-auto"}`}>
-                        {group.subjects.map((subject) => (
-                          <StudentSubjectSectionCard
-                            key={subject.subject_load_id}
-                            to={subjectHref(subject)}
-                            sectionName={subject.section_name}
-                            teacherName={subject.teacher_name}
-                            teacherAvatar={subject.teacher_avatar}
-                            periodName={subject.period_name}
-                            yearLabel={subject.year_label}
-                            isCurrentPeriod={subject.is_current_period}
-                            classworks={classworks?.filter((item) =>
-                              item.class_id === subject.class_id && item.subject_id === subject.subject_id,
-                            ) ?? null}
-                          />
-                        ))}
-                      </div>
-                    </Card>
+                  {subjects.map((subject) => (
+                    <StudentSubjectSectionCard
+                      key={subject.subject_load_id}
+                      to={subjectHref(subject)}
+                      subjectName={subject.subject_name}
+                      sectionName={subject.section_name}
+                      teacherName={subject.teacher_name}
+                      teacherAvatar={subject.teacher_avatar}
+                      periodName={subject.period_name}
+                      yearLabel={subject.year_label}
+                      isCurrentPeriod={subject.is_current_period}
+                      classworks={classworks?.filter((item) =>
+                        item.class_id === subject.class_id && item.subject_id === subject.subject_id,
+                      ) ?? null}
+                    />
                   ))}
                 </div>
               )}

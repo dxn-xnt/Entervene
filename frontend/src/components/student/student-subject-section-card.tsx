@@ -8,6 +8,7 @@ import type { TodoItem } from "@/lib/api";
 
 type StudentSubjectSectionCardProps = {
   to: string;
+  subjectName: string;
   sectionName: string;
   teacherName: string;
   teacherAvatar?: string | null;
@@ -19,6 +20,7 @@ type StudentSubjectSectionCardProps = {
 
 export function StudentSubjectSectionCard({
   to,
+  subjectName,
   sectionName,
   teacherName,
   teacherAvatar,
@@ -47,23 +49,22 @@ export function StudentSubjectSectionCard({
     >
       <Card
         variant="retro"
-        className="relative flex h-full min-w-0 cursor-pointer flex-col justify-between gap-3 border-black p-3 shadow-none transition-all hover:-translate-y-1 hover:bg-retro hover:shadow-none group-focus-visible:-translate-y-1 group-focus-visible:bg-retro"
+        className="relative flex h-full min-w-0 cursor-pointer flex-col justify-between gap-3 border-black p-3 shadow-md shadow-black transition-all hover:bg-retro hover:shadow-none group-focus-visible:bg-retro"
       >
-        <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
-          <Card.Title className="min-w-0 flex-[1_1_12rem] break-words text-2xl font-bold leading-tight">
-            {sectionName}
-          </Card.Title>
-          {periodName && <Badge size="sm" variant="secondary" className="max-w-full break-words">{periodName}</Badge>}
-        </div>
-
-        <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-          <Avatar variant="teacher" className="size-8 shrink-0 rounded-full border-2 border-black">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-col items-start gap-1">
+            {periodName && <Badge size="sm" variant="secondary" className="max-w-full break-words">{periodName}</Badge>}
+            <Card.Title className="min-w-0 break-words text-2xl font-bold leading-tight">
+              {subjectName}
+            </Card.Title>
+            <span className="min-w-0 break-words text-sm text-muted-foreground">{teacherName}</span>
+          </div>
+          <Avatar variant="teacher" className="size-16 shrink-0 rounded-full border-2 border-black">
             <Avatar.Image src={teacherAvatar || "/avatars/teacher-avatars/12.svg"} alt="" />
             <Avatar.Fallback className="rounded-full bg-primary text-base font-bold text-primary-foreground">
-              <UserRound className="size-4" />
+              <UserRound className="size-7" />
             </Avatar.Fallback>
           </Avatar>
-          <span className="min-w-0 break-words">{teacherName}</span>
         </div>
 
         {completionRate !== null && (

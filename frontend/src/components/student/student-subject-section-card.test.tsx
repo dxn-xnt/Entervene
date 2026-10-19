@@ -41,6 +41,7 @@ const classworks = [
 
 const props = {
   to: "/student/subjects/7/5",
+  subjectName: "Mathematics",
   sectionName: "Demo Archimedes",
   teacherName: "Mara Santos",
   periodName: "Term 1 Demo",
@@ -49,12 +50,12 @@ const props = {
 };
 
 describe("StudentSubjectSectionCard", () => {
-  it("shows the student section, real completion rate, and next classwork", () => {
+  it("shows the subject name, real completion rate, and next classwork", () => {
     const html = renderToStaticMarkup(
       <MemoryRouter><StudentSubjectSectionCard {...props} classworks={classworks} /></MemoryRouter>,
     );
     expect(html).toContain('href="/student/subjects/7/5"');
-    expect(html).toContain("Demo Archimedes");
+    expect(html).toMatch(/<h3[^>]*>Mathematics<\/h3>/);
     expect(html).toContain("Mara Santos");
     expect(html).toContain("Your Classwork Completion");
     expect(html).toContain("50%");
