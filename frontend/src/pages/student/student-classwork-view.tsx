@@ -445,18 +445,6 @@ export default function StudentClassworkView() {
                         </p>
                       </Card>
                     </section>
-                    {detail.description && detail.instructions && (
-                      <section className="space-y-2">
-                        <h2 className="text-lg font-bold">
-                          About this classwork
-                        </h2>
-                        <Card className="block w-full p-3 shadow-none">
-                          <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
-                            {detail.description}
-                          </p>
-                        </Card>
-                      </section>
-                    )}
                     {detail.linked_lessons &&
                       detail.linked_lessons.length > 0 && (
                         <Card className="block w-full shadow-none">
