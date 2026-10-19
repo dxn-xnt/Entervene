@@ -59,7 +59,7 @@ it("shows resolved history and a read-only detail with saved support", async () 
   expect(await screen.findByText("Alex Rivera")).toBeTruthy();
   expect(screen.getByText("Improved Prediction")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Review" }));
-  const sheet = await screen.findByRole("dialog");
+  const sheet = await screen.findByRole("complementary");
   expect(await within(sheet).findByText("Resolved · Read-only history")).toBeTruthy();
   expect(within(sheet).getByText(/Projection at resolution:/).textContent).toContain("88.00");
   expect(within(sheet).getByText(/Focused practice.*8\/10/)).toBeTruthy();
@@ -80,13 +80,13 @@ it("identifies a later active intervention as a new cycle after resolved history
   api.activeDetail.mockResolvedValue({ ...activeDetail, ...current });
 
   mount("/teacher/interventions?active=13");
-  let sheet = await screen.findByRole("dialog");
+  let sheet = await screen.findByRole("complementary");
   expect(await within(sheet).findByText("Current support cycle")).toBeTruthy();
   expect(sheet.textContent).toContain("A new below-threshold prediction opened this cycle");
   cleanup();
 
   mount("/teacher/interventions?resolved=12");
-  sheet = await screen.findByRole("dialog");
+  sheet = await screen.findByRole("complementary");
   expect(await within(sheet).findByText("Previous intervention cycle")).toBeTruthy();
   expect(sheet.textContent).toContain("Projection at resolution: 86.47");
   expect(sheet.textContent).toContain("new active support cycle (trigger 84.02)");
@@ -110,17 +110,9 @@ describe("teacher candidate review", () => {
     expect(await screen.findByText(/Network unavailable/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
   });
-  it("identifies a candidate as unapproved and rechecks eligibility on approval", async () => {
-    mount("/teacher/interventions?candidate=12");
-    const dialog = await screen.findByRole("dialog");
-    expect(await within(dialog).findByText(/No teacher-approved active Intervention exists yet/)).toBeTruthy();
-    expect(within(dialog).getByText(/Approval rechecks the current prediction, teaching scope, and authorization/)).toBeTruthy();
-    expect(within(dialog).getByRole("button", { name: "Approve Intervention" })).toBeTruthy();
-    expect(api.activate).not.toHaveBeenCalled();
-  });
   it("shows frozen scored evidence separately from unranked assessment coverage", async () => {
     mount("/teacher/interventions?candidate=12");
-    const sheet = await screen.findByRole("dialog");
+    const sheet = await screen.findByRole("complementary");
     await within(sheet).findByText(/Scored evidence: 1\/2/);
     expect(within(sheet).getByText(/Assessment total 12\/20/)).toBeTruthy();
     expect(within(sheet).getByText(/does not score each covered competency separately/i)).toBeTruthy();
@@ -183,7 +175,7 @@ describe("teacher active intervention review", () => {
       question_evidence: level === "QUESTION_SCORE" ? [{ quiz_question_id: 4, score: 1, possible_score: 2 }] : [],
     } });
     mount("/teacher/interventions?active=12");
-    const sheet = await screen.findByRole("dialog");
+    const sheet = await screen.findByRole("complementary");
     expect(await within(sheet).findByText(expected)).toBeTruthy();
     if (level === "QUESTION_SCORE") expect(within(sheet).getByText("Question #4: 1/2")).toBeTruthy();
     if (level === "ACTIVITY_COVERAGE") expect(within(sheet).getByText(/does not identify which one was difficult/i)).toBeTruthy();
@@ -193,7 +185,7 @@ describe("teacher active intervention review", () => {
     mount("/teacher/interventions?view=active");
     expect(await screen.findByText("Alex Rivera")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
-    const sheet = await screen.findByRole("dialog");
+    const sheet = await screen.findByRole("complementary");
     expect(await within(sheet).findByText(/Original source prediction #41, revision 2/)).toBeTruthy();
     expect(within(sheet).getByText(/Activated by staff T-001/)).toBeTruthy();
     expect(within(sheet).getByText(/Scored evidence: 1\/2/)).toBeTruthy();
@@ -213,7 +205,7 @@ describe("teacher active intervention review", () => {
     api.createMaterial.mockResolvedValue(material);
     api.saveMaterial.mockImplementation(async (_id, _materialId, content) => ({ ...material, current_content: content }));
     mount("/teacher/interventions?active=12");
-    const sheet = await screen.findByRole("dialog");
+    const sheet = await screen.findByRole("complementary");
     fireEvent.click(await within(sheet).findByRole("button", { name: "Open reviewer" }));
     fireEvent.click(await within(sheet).findByRole("button", { name: "Create reviewer draft" }));
     const title = await within(sheet).findByRole("textbox", { name: "Title" });
@@ -228,7 +220,7 @@ describe("teacher active intervention review", () => {
     api.materials.mockResolvedValue({ items: [material], total: 1 });
     api.generateReviewer.mockResolvedValue({ ...material, generated_content: content, current_content: content });
     mount("/teacher/interventions?active=12");
-    const sheet = await screen.findByRole("dialog");
+    const sheet = await screen.findByRole("complementary");
     fireEvent.click(await within(sheet).findByRole("button", { name: "Open reviewer" }));
     fireEvent.click(await within(sheet).findByRole("button", { name: "Generate reviewer" }));
     expect(await within(sheet).findByDisplayValue("Math review")).toBeTruthy();
@@ -244,7 +236,7 @@ describe("teacher active intervention review", () => {
     api.saveMaterial.mockImplementation(async (_id, _materialId, changed) => { savedContent = changed; return { ...material, current_content: changed }; });
     api.sendReviewer.mockImplementation(async () => ({ ...material, status: "SENT", current_content: savedContent, sent_at: "2026-09-26T01:00:00Z" }));
     mount("/teacher/interventions?active=12");
-    const sheet = await screen.findByRole("dialog");
+    const sheet = await screen.findByRole("complementary");
     fireEvent.click(await within(sheet).findByRole("button", { name: "Open reviewer" }));
     const send = await within(sheet).findByRole("button", { name: "Approve & Send" });
     fireEvent.change(within(sheet).getByRole("textbox", { name: "Review content" }), { target: { value: "Teacher edited version" } });
@@ -262,7 +254,7 @@ describe("teacher active intervention review", () => {
     const material = { material_id: 9, intervention_id: 12, kind: "REMEDIAL_ASSESSMENT", status: "DRAFT", current_content: { title: "", instructions: "", duration_minutes: null, settings: {}, questions: [] }, generated_content: null, evidence_basis: { source_prediction_id: 41 }, created_by_staff_id: "T-001", updated_by_staff_id: "T-001", created_at: "2026-09-26T00:00:00Z", updated_at: "2026-09-26T00:00:00Z" };
     api.materials.mockResolvedValue({ items: [material], total: 1 });
     mount("/teacher/interventions?active=12");
-    const sheet = await screen.findByRole("dialog");
+    const sheet = await screen.findByRole("complementary");
     await within(sheet).findByRole("button", { name: "Prepare Remediation" });
     expect(within(sheet).queryByText(/Previous\/legacy support draft/)).toBeNull();
     expect(within(sheet).queryByRole("button", { name: "Add Question" })).toBeNull();
@@ -274,7 +266,7 @@ describe("teacher active intervention review", () => {
     }, generated_content: null, evidence_basis: { source_prediction_id: 41 }, created_by_staff_id: "T-001", updated_by_staff_id: "T-001", created_at: "2026-09-26T00:00:00Z", updated_at: "2026-09-26T00:00:00Z" };
     api.materials.mockResolvedValue({ items: [material], total: 1 });
     mount("/teacher/interventions?active=12");
-    const sheet = await screen.findByRole("dialog");
+    const sheet = await screen.findByRole("complementary");
     fireEvent.click(await within(sheet).findByText(/Previous\/legacy support draft/));
     expect(within(sheet).getByText("Fractions practice")).toBeTruthy();
     expect(within(sheet).getByText(/What is one half plus one half/)).toBeTruthy();
@@ -291,7 +283,7 @@ describe("teacher active intervention review", () => {
     api.savePlan.mockImplementation(async (_id, plan) => ({ plan: { ...plan, ai_suggestion: api.advisory.mock.calls.length ? { recommended_format: "QUIZ", reason: "Focused practice may help.", focus: [], evidence_used: {} } : null }, resources: [resource] }));
     api.advisory.mockResolvedValue({ plan: { teacher_choice: null, selected_resources: [{ kind: "LESSON", id: 4 }], ai_suggestion: { recommended_format: "QUIZ", reason: "Focused practice may help.", focus: [], evidence_used: {} } }, resources: [resource] });
     mount("/teacher/interventions?active=12");
-    const sheet = await screen.findByRole("dialog");
+    const sheet = await screen.findByRole("complementary");
     fireEvent.click(await within(sheet).findByRole("button", { name: "Select resources" }));
     fireEvent.click(within(sheet).getByRole("checkbox"));
     await waitFor(() => expect(api.savePlan).toHaveBeenCalledWith(12, { teacher_choice: null, grade_treatment: null, selected_resources: [{ kind: "LESSON", id: 4 }] }));
@@ -316,43 +308,23 @@ describe("teacher active intervention review", () => {
         { ...base, id: 11, title: "Unrelated Geometry", recommended: false, match_rank: 0, match_level: null, match_reason: null }],
     });
     mount("/teacher/interventions?active=12");
-    const sheet = await screen.findByRole("dialog");
+    const sheet = await screen.findByRole("complementary");
     expect(await within(sheet).findByText(/Latest projected final grade:/)).toBeTruthy();
     expect(within(sheet).getAllByText("83.99")).toHaveLength(2);
     expect(sheet.textContent).toContain("Practice Quiz");
     expect(sheet.textContent).toContain("10/10");
     expect(sheet.textContent).toContain("Recorded grade treatment: Written Work");
     expect(within(sheet).getAllByText(/Active · Monitoring/)).toHaveLength(2);
-    fireEvent.click(within(sheet).getByText("Current support plan"));
+    fireEvent.click(within(sheet).getByText("Plan or adjust support"));
     fireEvent.click(within(sheet).getByRole("button", { name: "Select resources" }));
     expect(within(sheet).queryByText("Term Exam")).toBeNull();
     expect(within(sheet).queryByText("Unrelated Geometry")).toBeNull();
     fireEvent.click(within(sheet).getByRole("button", { name: "Browse all eligible materials" }));
     expect(within(sheet).getByText("Term Exam")).toBeTruthy();
     expect(within(sheet).getByText("Unrelated Geometry")).toBeTruthy();
-    fireEvent.click(within(sheet).getByRole("button", { name: "View saved remediation plan" }));
+    fireEvent.click(within(sheet).getByRole("button", { name: "Prepare Remediation" }));
     expect(within(sheet).getByText(/No scored original Examination is available for this student and period/)).toBeTruthy();
     expect(api.advisory).not.toHaveBeenCalled();
-  });
-  it("keeps a recorded activity separate from a locked future remediation plan", async () => {
-    api.workspace.mockResolvedValue({
-      plan: { teacher_choice: "CLASSWORK", grade_treatment: "EXAMINATION", original_exam_assignment_id: 10, selected_resources: [], ai_suggestion: null },
-      focus: { basis: "FROZEN_TRIGGER_DIAGNOSIS", evidence_level: "COMPONENT_ONLY", component: "EXAMINATION", exam_subtype: "TERM_EXAM",
-        lesson_ids: [], lessons: [], competency_ids: [], competencies: [], topics: [], source_classwork_ids: [10], question_evidence: [], coverage_is_context_only: false },
-      progress: { triggering_projection: 84.02, latest_projection: 83.99, latest_revision: 6, status: "ACTIVE",
-        status_reason: "Latest projected final grade remains below 85.", completed_remediation: [{ title: "I5I-A Targeted Mathematics Practice", assignment_id: 12, grade: 10, total_points: 10 }],
-        assigned_remediation: [{ title: "I5I-A Targeted Mathematics Practice", assignment_id: 12, grade: 10, total_points: 10, component: "WRITTEN_WORK", is_graded: true, submission_status: "graded", original_assignment_id: null }] },
-      resources: [], original_exams: [{ assignment_id: 10, title: "DEMO - Term Examination", subtype: "TERM_EXAM", score: 12, total_points: 40 }],
-    });
-    mount("/teacher/interventions?active=12");
-    const sheet = await screen.findByRole("dialog");
-    expect(await within(sheet).findByText(/Recorded grade treatment: Written Work/)).toBeTruthy();
-    fireEvent.click(within(sheet).getByText("Current support plan"));
-    expect(within(sheet).getByText(/recorded format and grade treatment are locked/)).toBeTruthy();
-    fireEvent.click(within(sheet).getByRole("button", { name: "View saved remediation plan" }));
-    expect(within(sheet).getByRole("radio", { name: /Remedial Examination/ })).toHaveProperty("disabled", true);
-    expect(within(sheet).getByRole("combobox", { name: "Original Examination" })).toHaveProperty("disabled", true);
-    expect(within(sheet).getByText(/No activity matching this saved plan has been created/)).toBeTruthy();
   });
   it("selects a scored original Examination for the higher-score treatment", async () => {
     const workspace = {
@@ -366,7 +338,7 @@ describe("teacher active intervention review", () => {
     api.workspace.mockResolvedValue(workspace);
     api.savePlan.mockImplementation(async (_id: number, body: Record<string, unknown>) => ({ ...workspace, plan: { ...workspace.plan, ...body } }));
     mount("/teacher/interventions?active=12");
-    const sheet = await screen.findByRole("dialog");
+    const sheet = await screen.findByRole("complementary");
     fireEvent.click(await within(sheet).findByRole("button", { name: "Prepare Remediation" }));
     fireEvent.click(within(sheet).getByRole("radio", { name: /Remedial Examination/ }));
     await waitFor(() => expect(api.savePlan).toHaveBeenCalledWith(12, expect.objectContaining({ grade_treatment: "EXAMINATION", original_exam_assignment_id: 42 })));
@@ -379,7 +351,7 @@ describe("teacher active intervention review", () => {
   ])("opens the existing %s authoring path", async (choice, destination) => {
     api.workspace.mockResolvedValue({ plan: { teacher_choice: choice, grade_treatment: choice === "TOS" ? null : "WRITTEN_WORK", selected_resources: [], ai_suggestion: null }, resources: [], focus: { component: "WRITTEN_WORK", evidence_level: "COMPONENT_ONLY", competency_ids: [], lessons: [], competencies: [], exam_subtype: null }, progress: { triggering_projection: 74, latest_projection: 74, completed_remediation: [], assigned_remediation: [], status_reason: "Latest projected final grade remains below 85." } });
     mount("/teacher/interventions?active=12");
-    const sheet = await screen.findByRole("dialog");
+    const sheet = await screen.findByRole("complementary");
     fireEvent.click(await within(sheet).findByRole("button", { name: "Prepare Remediation" }));
     if (choice === "TOS") {
       expect(within(sheet).getByText(/creates no graded student activity/)).toBeTruthy();

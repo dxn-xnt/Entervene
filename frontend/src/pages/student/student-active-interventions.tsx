@@ -37,16 +37,16 @@ export default function StudentActiveInterventions() {
   const activityLink = (_item: StudentPersistentIntervention, assignmentId: number) =>
     `/student/classworks/${assignmentId}?from=${encodeURIComponent(window.location.pathname + window.location.search)}`;
 
-  return <section className="space-y-3" aria-label="Active Interventions">
+  return <section className="w-full space-y-4" aria-label="Active Interventions">
     <h2 className="text-xl font-bold">Active Interventions</h2>
     {loading ? <p>Loading your active support...</p> : error ? <Alert status="error">{error}</Alert>
       : items.length === 0 ? <p>No active interventions at this time.</p>
-      : <div className="grid gap-3 md:grid-cols-2">{items.map((item) => <Card key={item.intervention_id} className="space-y-3 p-4">
+      : <div className="grid w-full gap-4">{items.map((item) => <Card key={item.intervention_id} className="w-full space-y-4 p-5 md:p-6">
         <div><h3 className="text-lg font-bold">{item.subject_name} Support</h3><p className="text-sm">{item.activities.some((activity) => activity.submission_status === "graded") ? "Completed · Monitoring" : "Active Support"} · {item.class_name}</p></div>
         <p className="text-sm">Your teacher has prepared additional support for this subject.</p>
-        <Button size="sm" onClick={() => open(item.intervention_id)}>View Support</Button>
+        <Button size="sm" className="gap-2" onClick={() => open(item.intervention_id)}>View Support</Button>
       </Card>)}</div>}
-    {selectedId !== null && <div className="rounded border-2 border-black bg-white p-4 space-y-3" role="region" aria-label="Intervention support detail">
+    {selectedId !== null && <div className="w-full space-y-4 rounded border-2 border-black bg-white p-5 shadow-[4px_4px_0_0_#000] md:p-6" role="region" aria-label="Intervention support detail">
       {detailError ? <Alert status="error">{detailError}</Alert> : !detail ? <p>Loading support...</p> : <>
         <h3 className="text-lg font-bold">{detail.subject_name} · Active Support</h3>
         <p>{detail.class_name}{detail.teacher_name ? ` · ${detail.teacher_name}` : ""}</p>
@@ -54,9 +54,9 @@ export default function StudentActiveInterventions() {
         {detail.activities.length ? <div className="space-y-2"><h4 className="font-bold">Support Activities</h4>{detail.activities.map((activity) => <div key={activity.assignment_id} className="rounded border p-3 space-y-2">
           <p className="font-semibold">{activity.title}</p>
           <p className="text-sm">{activity.submission_status === "graded" ? "Completed" : activity.submission_status === "submitted" ? "Submitted" : "Ready to work on"}{activity.grade !== null && activity.total_points !== null ? ` · Score: ${activity.grade}/${activity.total_points}` : ""}</p>
-          <Button size="sm" onClick={() => navigate(activityLink(detail, activity.assignment_id))}>View Activity</Button>
+          <Button size="sm" className="gap-2" onClick={() => navigate(activityLink(detail, activity.assignment_id))}>View Activity</Button>
         </div>)}</div> : <p>No support activity has been published yet.</p>}
-        {detail.reviewer_id !== null && <Button size="sm" variant="outline" onClick={() => { const next = new URLSearchParams(params); next.set("reviewer", String(detail.reviewer_id)); setParams(next); }}>Read Reviewer</Button>}
+        {detail.reviewer_id !== null && <Button size="sm" variant="outline" className="gap-2" onClick={() => { const next = new URLSearchParams(params); next.set("reviewer", String(detail.reviewer_id)); setParams(next); }}>Read Reviewer</Button>}
       </>}
     </div>}
   </section>;
