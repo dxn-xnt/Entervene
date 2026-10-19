@@ -44,9 +44,6 @@ const props = {
   subjectName: "Mathematics",
   sectionName: "Demo Archimedes",
   teacherName: "Mara Santos",
-  periodName: "Term 1 Demo",
-  yearLabel: "2026-2027 DEMO",
-  isCurrentPeriod: true,
 };
 
 describe("StudentSubjectSectionCard", () => {

@@ -19,7 +19,6 @@ import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
-import { Avatar } from "@/components/retroui/Avatar";
 import IconContainer from "@/components/icon-container";
 import {
   Tooltip,
@@ -406,24 +405,6 @@ export default function StudentClassworkView() {
                             </span>
                           </p>
                         ) : null}
-                        <span className="flex items-center gap-2 text-sm">
-                          <Avatar
-                            variant="teacher"
-                            className="size-7 rounded-full border-2 border-black"
-                          >
-                            <Avatar.Image
-                              src={
-                                detail.teacher_avatar ||
-                                "/avatars/teacher-avatars/12.svg"
-                              }
-                              alt=""
-                            />
-                            <Avatar.Fallback className="rounded-full bg-primary text-xs font-bold">
-                              {detail.teacher_name?.slice(0, 1) || "T"}
-                            </Avatar.Fallback>
-                          </Avatar>
-                          {detail.teacher_name || "Teacher"}
-                        </span>
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -452,44 +433,6 @@ export default function StudentClassworkView() {
                         {closed && !submission ? "Closed" : statusLabel(status)}
                       </Badge>
                     </div>
-                  </div>
-                  <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
-                    <span>
-                      {dueDate
-                        ? `Due on ${dueDate.toLocaleString()}`
-                        : "No due date"}
-                    </span>
-                    {detail.section_name && (
-                      <span>
-                        Section:{" "}
-                        <strong className="text-foreground">
-                          {detail.section_name}
-                        </strong>
-                      </span>
-                    )}
-                    <span>
-                      Points:{" "}
-                      <strong className="text-foreground">
-                        {detail.total_points ?? "Not set"}
-                      </strong>
-                    </span>
-                    <span>
-                      Availability:{" "}
-                      <strong className="text-foreground">
-                        {detail.is_locked
-                          ? "Locked"
-                          : overdue
-                            ? detail.allow_late_submissions
-                              ? "Late submissions allowed"
-                              : "Closed"
-                            : "Available"}
-                      </strong>
-                    </span>
-                    {detail.lock_date && (
-                      <span>
-                        Locks {new Date(detail.lock_date).toLocaleString()}
-                      </span>
-                    )}
                   </div>
                   <div className="flex min-w-0 flex-col gap-4 px-2">
                     <section className="space-y-2">
@@ -589,6 +532,16 @@ export default function StudentClassworkView() {
                         </Card>
                       )}
                     </section>
+                    <div className="text-sm text-muted-foreground">
+                      <p>
+                        {dueDate
+                          ? `Due on ${dueDate.toLocaleString()}`
+                          : "No due date"}
+                      </p>
+                      {detail.lock_date && (
+                        <p>Locks {new Date(detail.lock_date).toLocaleString()}</p>
+                      )}
+                    </div>
                     {detail.rubric_levels &&
                       detail.rubric_levels.length > 0 && (
                         <RubricsScoreBoard

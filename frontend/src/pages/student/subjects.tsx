@@ -102,9 +102,6 @@ const Subjects = () => {
                       sectionName={subject.section_name}
                       teacherName={subject.teacher_name}
                       teacherAvatar={subject.teacher_avatar}
-                      periodName={subject.period_name}
-                      yearLabel={subject.year_label}
-                      isCurrentPeriod={subject.is_current_period}
                       classworks={classworks?.filter((item) =>
                         item.class_id === subject.class_id && item.subject_id === subject.subject_id,
                       ) ?? null}
