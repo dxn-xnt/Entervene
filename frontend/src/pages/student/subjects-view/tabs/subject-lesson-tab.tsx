@@ -191,7 +191,6 @@ export default function SubjectLessonTab({
     ClassworkDetail[]
   >([]);
   const [sortAsc, setSortAsc] = useState(false);
-  const [competencyFilter, setCompetencyFilter] = useState("all");
   const [selectedLessonDetail, setSelectedLessonDetail] =
     useState<Lesson | null>(null);
   const [collapsedCompetencies, setCollapsedCompetencies] = useState<
@@ -690,15 +689,6 @@ export default function SubjectLessonTab({
       const lessonCompetencyKey = String(
         lesson.competency_id || lesson.competency_statement,
       );
-      if (
-        competencyFilter !== "all" &&
-        competencyFilter !==
-          (lesson.competency_id || lesson.competency_statement
-            ? lessonCompetencyKey
-            : "unassigned")
-      ) {
-        return;
-      }
       if (lesson.competency_statement || lesson.competency_id) {
         const key = lessonCompetencyKey;
         if (!groupsMap.has(key)) {
@@ -721,23 +711,7 @@ export default function SubjectLessonTab({
       competencyGroups: Array.from(groupsMap.values()),
       unassignedLessons: unassigned,
     };
-  }, [sortedLessons, competencyFilter]);
-
-  const competencyOptions = Array.from(
-    new Map(
-      lessons
-        .filter((lesson) => lesson.competency_id || lesson.competency_statement)
-        .map((lesson) => [
-          String(lesson.competency_id || lesson.competency_statement),
-          lesson.competency_code
-            ? `${lesson.competency_code} - ${lesson.competency_statement || "Learning Competency"}`
-            : lesson.competency_statement || "Learning Competency",
-        ]),
-    ),
-  );
-  const hasUnassignedLessons = lessons.some(
-    (lesson) => !lesson.competency_id && !lesson.competency_statement,
-  );
+  }, [sortedLessons]);
 
   const classworkLessonCounts = allClassworks.reduce((counts, classwork) => {
     counts.set(
@@ -1029,27 +1003,7 @@ export default function SubjectLessonTab({
             <div className="flex min-w-0 flex-col items-start gap-4 lg:flex-row">
               {/* ════════════════ LEFT: Lessons list ════════════════ */}
               <div className="w-full min-w-0 lg:flex-[2]">
-                {/* Lessons header row */}
-                <div className="mb-4 flex w-full items-center justify-between gap-3">
-                  <Select
-                    value={competencyFilter}
-                    onValueChange={setCompetencyFilter}
-                  >
-                    <Select.Trigger className="h-10 w-full max-w-112 text-sm">
-                      <Select.Value placeholder="Filter by competency" />
-                    </Select.Trigger>
-                    <Select.Content className="overflow-y-auto border-2 border-black bg-white">
-                      <Select.Item value="all">All Competencies</Select.Item>
-                      {competencyOptions.map(([value, label]) => (
-                        <Select.Item key={value} value={value}>
-                          {label}
-                        </Select.Item>
-                      ))}
-                      {hasUnassignedLessons && (
-                        <Select.Item value="unassigned">Unassigned Lessons</Select.Item>
-                      )}
-                    </Select.Content>
-                  </Select>
+                <div className="mb-4 flex w-full items-center justify-end">
                   <Select
                     value={sortAsc ? "oldest" : "newest"}
                     onValueChange={(value) => setSortAsc(value === "oldest")}
@@ -1065,14 +1019,6 @@ export default function SubjectLessonTab({
                 </div>
 
                 <div className="space-y-3">
-                  {competencyGroups.length === 0 && unassignedLessons.length === 0 && (
-                    <Empty>
-                      <Empty.Content>
-                        <Empty.Icon><BookOpen size={24} /></Empty.Icon>
-                        <Empty.Title>No lessons match this competency.</Empty.Title>
-                      </Empty.Content>
-                    </Empty>
-                  )}
                   {competencyGroups.map((group) => {
                     const isCollapsed =
                       collapsedCompetencies[group.key] ?? false;

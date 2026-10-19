@@ -181,28 +181,8 @@ export default function AdminSubjectLevel() {
               </RetroCard>
             ) : null}
 
-            <section className="flex flex-col gap-2">
-              <Text as="h3" className="font-sans text-xl font-bold">
-                Overview
-              </Text>
-              <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
-                <OverviewCard
-                  title="Total Subjects"
-                  count={String(gradeSubjects.length)}
-                />
-                <OverviewCard
-                  title="Active Subjects"
-                  count={String(activeSubjects.length)}
-                />
-                <OverviewCard
-                  title="Archived Subjects"
-                  count={String(archivedSubjects.length)}
-                />
-                <OverviewCard title="Grading Templates" count={String(totalGroups)} />
-              </div>
-            </section>
-
-            <section className="flex flex-col gap-3">
+            <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <section className="flex min-w-0 flex-col gap-3">
               <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
                 <Text as="h3" className="font-sans text-xl font-bold">
                   Subjects
@@ -273,6 +253,22 @@ export default function AdminSubjectLevel() {
                 )}
               </div>
             </section>
+            <aside className="flex min-w-0 flex-col gap-3" aria-label="Subject summary">
+              <OverviewCard
+                title="Total Subjects"
+                count={String(gradeSubjects.length)}
+              />
+              <OverviewCard
+                title="Active Subjects"
+                count={String(activeSubjects.length)}
+              />
+              <OverviewCard
+                title="Archived Subjects"
+                count={String(archivedSubjects.length)}
+              />
+              <OverviewCard title="Grading Templates" count={String(totalGroups)} />
+            </aside>
+            </div>
             </div>
           </div>
         </div>

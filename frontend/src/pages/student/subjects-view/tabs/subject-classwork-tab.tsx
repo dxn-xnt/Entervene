@@ -12,13 +12,11 @@ import {
   FileText,
   GraduationCap,
   Paperclip,
-  Search,
   X,
 } from "lucide-react";
 import SubmissionForm from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
 import AttachmentDisplay from "@/components/attachment-display";
-import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
 import { Empty } from "@/components/retroui/Empty";
@@ -107,7 +105,7 @@ interface ClassworkAssignment {
   submission_status?: string;
 }
 
-interface ClassworkDetail extends ClassworkAssignment {}
+type ClassworkDetail = ClassworkAssignment;
 
 interface QuizAttemptOption {
   option_id: number;
@@ -284,7 +282,10 @@ export default function SubjectClassworkTab({
   const [detailLoadingId] = useState<number | null>(null);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [search, setSearch] = useState(searchParams.get("search") ?? "");
+  const [typeFilter, setTypeFilter] = useState(() => {
+    const type = searchParams.get("type");
+    return type && type.toLowerCase() !== "all" ? type.toUpperCase() : "all";
+  });
   const [sortMode, setSortMode] = useState<SortMode>((searchParams.get("sort") as SortMode) || "due");
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -573,7 +574,8 @@ export default function SubjectClassworkTab({
   const openClassworkDetail = (cw: ClassworkAssignment) => {
     const returnParams = new URLSearchParams(searchParams);
     returnParams.delete("classworkAssignmentId");
-    if (search) returnParams.set("search", search);
+    returnParams.delete("search");
+    if (typeFilter !== "all") returnParams.set("type", typeFilter);
     if (sortMode !== "due") returnParams.set("sort", sortMode);
     const from = `${location.pathname}${returnParams.toString() ? `?${returnParams}` : ""}`;
     navigate(studentClassworkPath(cw.classwork_assignment_id, from));
@@ -715,21 +717,16 @@ export default function SubjectClassworkTab({
     });
   };
 
+  const classworkTypes = useMemo(
+    () => Array.from(
+      new Set(classworks.map((cw) => cw.classwork_type?.toUpperCase() || "OTHER")),
+    ).sort(),
+    [classworks],
+  );
+
   const visibleClassworks = useMemo(() => {
-    const term = search.trim().toLowerCase();
     return classworks
-      .filter((cw) => {
-        if (!term) return true;
-        return [
-          cw.title,
-          cw.description,
-          cw.instructions,
-          cw.classwork_type,
-          cw.teacher_name,
-        ]
-          .filter(Boolean)
-          .some((value) => String(value).toLowerCase().includes(term));
-      })
+      .filter((cw) => typeFilter === "all" || (cw.classwork_type?.toUpperCase() || "OTHER") === typeFilter)
       .sort((a, b) => {
         if (sortMode === "title") return a.title.localeCompare(b.title);
         if (sortMode === "newest")
@@ -739,7 +736,7 @@ export default function SubjectClassworkTab({
           urgencyScore(b, submissions[b.classwork_assignment_id]);
         return urgent || a.title.localeCompare(b.title);
       });
-  }, [classworks, search, sortMode, submissions]);
+  }, [classworks, typeFilter, sortMode, submissions]);
 
   const renderFullscreenQuiz = () => {
     if (!selectedQuizAttempt || !selectedClasswork) return null;
@@ -1075,25 +1072,31 @@ export default function SubjectClassworkTab({
         </Alert>
       ) : null}
 
-      <div className="grid gap-3 py-2 md:grid-cols-[1fr_160px]">
-        <label className="relative">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search classwork..."
-            className="h-10 w-full border-black pl-9 pr-3"
-          />
-        </label>
-        <div>
+      <div className="ml-auto grid w-full max-w-[21rem] grid-cols-2 gap-3 py-2">
+        <div className="min-w-0">
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <Select.Trigger className="h-10 w-full border-2 border-black bg-white text-sm">
+              <Select.Value placeholder="Filter by type" />
+            </Select.Trigger>
+            <Select.Content className="border-2 border-black bg-white">
+              <Select.Item value="all">All Types</Select.Item>
+              {classworkTypes.map((type) => (
+                <Select.Item key={type} value={type}>
+                  {type.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())}
+                </Select.Item>
+              ))}
+            </Select.Content>
+          </Select>
+        </div>
+        <div className="min-w-0">
           <Select
             value={sortMode}
             onValueChange={(value) => setSortMode(value as SortMode)}
           >
-            <Select.Trigger className="w-full">
+            <Select.Trigger className="h-10 w-full border-2 border-black bg-white text-sm">
               <Select.Value placeholder="Sort By" />
             </Select.Trigger>
-            <Select.Content>
+            <Select.Content className="border-2 border-black bg-white">
               <Select.Group>
                 <Select.Item value="due">Nearest Due</Select.Item>
                 <Select.Item value="newest">Newest</Select.Item>
@@ -1110,7 +1113,7 @@ export default function SubjectClassworkTab({
             <Empty.Title>
               {classworks.length === 0
                 ? "No classworks assigned yet."
-                : "No classworks match your search."}
+                : "No classworks match this type."}
             </Empty.Title>
           </Empty.Content>
         </Empty>
