@@ -23,6 +23,7 @@ import {
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { formatDate } from "@/lib/formatters";
 import ClassworkItemLine from "@/components/item-line/classwork";
+import LessonStatisticalOverview from "@/components/teacher/lesson-statistical-overview";
 import type { Lesson, LinkedClasswork } from "./subject-details/types";
 import { useState } from "react";
 
@@ -201,6 +202,12 @@ export function TeacherLessonView({
                         </div>
                     </div>
                 </Card>
+
+                {/* ── Statistical Overviews ── */}
+                <LessonStatisticalOverview
+                    lessonId={lesson.lesson_id}
+                    linkedClassworks={linkedClassworks}
+                />
 
                 {/* ── Classwork Section ── */}
                 <section className="mt-2 flex flex-col gap-3 px-1">

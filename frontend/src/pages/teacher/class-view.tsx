@@ -47,7 +47,7 @@ import ClassworkCard from "./classworks/classwork-card";
 import ClassworkView from "./classwork-view";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
-import ClassworkDetailModal from "./forms/classwork-detail-modal";
+import ClassworkDetailModal from "./forms/classwork-preview-modal";
 import ManageLessonModal from "./forms/manage-lesson";
 import { isQuizType } from "@/lib/classwork-utils";
 import type {
@@ -218,12 +218,14 @@ export default function TeacherClassDetail() {
                         >
                           <Pencil className="size-4" /> Set Lesson Goal
                         </Button>
-                        {(detail.subject_loads[0]?.subject_id) && (
+                        {(currentSubject?.subject_id || initialSubjectId || detail.subject_loads[0]?.subject_id) && (
                           <Button
                             size="header"
                             variant="default"
                             onClick={() => {
                               const targetId =
+                                currentSubject?.subject_id ||
+                                initialSubjectId ||
                                 detail.subject_loads[0]?.subject_id;
                               if (targetId) {
                                 navigate(
@@ -325,31 +327,31 @@ const classworkCreateOptions: Array<{
   description: string;
   icon: LucideIcon;
 }> = [
-  {
-    type: "READING",
-    title: "Reading",
-    description: "Create and publish class topics or resources for learners",
-    icon: BookOpen,
-  },
-  {
-    type: "QUIZ",
-    title: "Quiz",
-    description: "Build and assign quizzes to assess learner understanding",
-    icon: ClipboardList,
-  },
-  {
-    type: "ASSIGNMENT",
-    title: "Assignment",
-    description: "Post tasks or projects for students to complete and submit",
-    icon: FileText,
-  },
-  {
-    type: "ACTIVITY",
-    title: "Activity",
-    description: "Design interactive tasks to enhance learner engagement",
-    icon: CheckSquare,
-  },
-];
+    {
+      type: "READING",
+      title: "Reading",
+      description: "Create and publish class topics or resources for learners",
+      icon: BookOpen,
+    },
+    {
+      type: "QUIZ",
+      title: "Quiz",
+      description: "Build and assign quizzes to assess learner understanding",
+      icon: ClipboardList,
+    },
+    {
+      type: "ASSIGNMENT",
+      title: "Assignment",
+      description: "Post tasks or projects for students to complete and submit",
+      icon: FileText,
+    },
+    {
+      type: "ACTIVITY",
+      title: "Activity",
+      description: "Design interactive tasks to enhance learner engagement",
+      icon: CheckSquare,
+    },
+  ];
 
 function LessonsTab({
   detail,

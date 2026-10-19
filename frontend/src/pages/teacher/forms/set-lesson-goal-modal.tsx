@@ -19,6 +19,8 @@ import {
   type LessonGoalItemResponse,
   type LessonGoalResponse,
 } from "@/lib/api";
+import { toTitleCase } from "@/lib/formatters";
+import { Empty } from "@/components/retroui/Empty";
 
 export interface SetGoalLessonItem {
   lesson_id: number;
@@ -281,173 +283,173 @@ export function SetLessonGoalModal({
 
         {/* Modal Body - stacked sections */}
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-5">
-          <Dialog.Description className="text-sm text-muted-foreground">
-            Choose and order the goals students will see.
-          </Dialog.Description>
+
           {/* Available source items */}
           <Card className="block w-full min-w-0 bg-card p-4 shadow-none hover:shadow-none">
             <Card.Header className="mb-4 gap-1">
               <Card.Title className="text-base font-bold">
-                Available Items
+                <div className="flex items-center gap-2">
+                  Available Lessons
+
+                  <Badge variant="secondary" size="sm">
+                    {lessons.length}
+                  </Badge>
+                </div>
               </Card.Title>
-              <Card.Description className="text-sm font-normal text-muted-foreground">
-                Select the lessons and classworks to include.
-              </Card.Description>
+
             </Card.Header>
             <Card.Content className="min-w-0">
 
-            {/* GROUP 1: Lessons & Linked Classworks */}
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-foreground">
-                  Lessons & Classworks
-                </span>
-                <Badge variant="secondary" size="sm">
-                  {lessons.length}
-                </Badge>
-              </div>
+              {/* GROUP 1: Lessons & Linked Classworks */}
+              <div className="flex flex-col gap-3">
 
-              {lessons.length === 0 ? (
-                <p className="text-xs text-muted-foreground italic pl-2 py-2">
-                  No lessons found in this subject.
-                </p>
-              ) : (
-                lessons.map((lesson) => {
-                  const isLessonSelected = selectedKeySet.has(`lesson-${lesson.lesson_id}`);
-                  const cws = linkedClassworks[lesson.lesson_id] || [];
-                  const isExpanded = expandedLessons[lesson.lesson_id] ?? true;
 
-                  return (
-                    <div
-                      key={lesson.lesson_id}
-                      className="w-full overflow-hidden rounded border-2 border-border bg-background"
-                    >
-                      {/* Lesson Row */}
-                      <div className="flex items-center justify-between bg-muted/50 p-2.5">
-                        <label className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer select-none">
-                          <Checkbox
-                            size="sm"
-                            checked={isLessonSelected}
-                            onCheckedChange={() => toggleLesson(lesson)}
-                            aria-label={`Add ${lesson.title} to lesson goals`}
-                            className="shrink-0 cursor-pointer"
-                          />
-                          <span className="truncate text-xs font-bold text-foreground">
-                            {lesson.title}
-                          </span>
-                        </label>
-                        {cws.length > 0 && (
-                          <Tooltip>
-                            <TooltipTrigger render={<Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() =>
-                              setExpandedLessons((prev) => ({
-                                ...prev,
-                                [lesson.lesson_id]: !prev[lesson.lesson_id],
-                              }))
-                            }
-                            className="size-7 p-1 text-muted-foreground"
-                            aria-label={isExpanded ? "Hide classworks" : "Show classworks"}
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="size-3.5" />
-                            ) : (
-                              <ChevronRight className="size-3.5" />
-                            )}
-                          </Button>} />
-                            <TooltipContent>{isExpanded ? "Hide classworks" : "Show classworks"}</TooltipContent>
-                          </Tooltip>
-                        )}
-                      </div>
+                {lessons.length === 0 ? (
+                  <Empty className="border-2 border-dashed border-border bg-background px-4 py-6 shadow-none hover:shadow-none">
+                    <Empty.Content>
+                      <Empty.Title className="text-sm font-bold">No lessons found</Empty.Title>
+                      <Empty.Description className="text-xs text-muted-foreground">
+                        No lessons found in this subject.
+                      </Empty.Description>
+                    </Empty.Content>
+                  </Empty>
+                ) : (
+                  lessons.map((lesson) => {
+                    const isLessonSelected = selectedKeySet.has(`lesson-${lesson.lesson_id}`);
+                    const cws = linkedClassworks[lesson.lesson_id] || [];
+                    const isExpanded = expandedLessons[lesson.lesson_id] ?? true;
 
-                      {/* Linked Classworks (Indented under parent lesson) */}
-                      {isExpanded && cws.length > 0 && (
-                        <div className="flex flex-col gap-1.5 border-t border-border bg-background py-2 pl-6 pr-2">
-                          {cws.map((cw) => {
-                            const isCwSelected = selectedKeySet.has(`cw-${cw.classwork_id}`);
-                            return (
-                              <label
-                                key={cw.classwork_id}
-                                className="flex cursor-pointer select-none items-center justify-between gap-2 p-1.5 text-xs hover:bg-muted/50"
+                    return (
+                      <div
+                        key={lesson.lesson_id}
+                        className="w-full overflow-hidden rounded border-2 border-border bg-background"
+                      >
+                        {/* Lesson Row */}
+                        <div className="flex items-center justify-between bg-muted/50 p-2.5">
+                          <label className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer select-none">
+                            <Checkbox
+                              size="sm"
+                              checked={isLessonSelected}
+                              onCheckedChange={() => toggleLesson(lesson)}
+                              aria-label={`Add ${lesson.title} to lesson goals`}
+                              className="shrink-0 cursor-pointer"
+                            />
+                            <span className="truncate text-xs font-bold text-foreground">
+                              {lesson.title}
+                            </span>
+                          </label>
+                          {cws.length > 0 && (
+                            <Tooltip>
+                              <TooltipTrigger render={<Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() =>
+                                  setExpandedLessons((prev) => ({
+                                    ...prev,
+                                    [lesson.lesson_id]: !prev[lesson.lesson_id],
+                                  }))
+                                }
+                                className="size-7 p-1 text-muted-foreground"
+                                aria-label={isExpanded ? "Hide classworks" : "Show classworks"}
                               >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <Checkbox
-                                    size="sm"
-                                    checked={isCwSelected}
-                                    onCheckedChange={() => toggleClasswork(cw, false)}
-                                    aria-label={`Add ${cw.title} to lesson goals`}
-                                    className="shrink-0 cursor-pointer"
-                                  />
-                                  <span className="truncate font-medium text-foreground">
-                                    {cw.title}
-                                  </span>
-                                </div>
-                                <Badge variant="outline" size="sm" className="shrink-0">
-                                  {cw.classwork_type || "Task"}
-                                </Badge>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-
-              {/* GROUP 2: Clearly-labeled Exams / Term Assessments */}
-              <div className="mt-4 flex items-center gap-2">
-                <span className="text-sm font-bold text-foreground">
-                  Exams / Term Assessments
-                </span>
-                <Badge variant="secondary" size="sm">
-                  {subjectLevelExams.length}
-                </Badge>
-              </div>
-
-              {isLoadingExams ? (
-                <p className="text-xs text-muted-foreground animate-pulse pl-2 py-2">
-                  Loading assessments...
-                </p>
-              ) : subjectLevelExams.length === 0 ? (
-                <p className="text-xs text-muted-foreground italic pl-2 py-1">
-                  No subject-level exams found.
-                </p>
-              ) : (
-                subjectLevelExams.map((exam) => {
-                  const isExamSelected = selectedKeySet.has(`cw-${exam.classwork_id}`);
-                  return (
-                    <label
-                      key={exam.classwork_id}
-                      className="flex cursor-pointer select-none items-center justify-between gap-2 rounded border-2 border-border bg-background p-3"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <Checkbox
-                          size="sm"
-                          checked={isExamSelected}
-                          onCheckedChange={() => toggleClasswork(exam, true)}
-                          aria-label={`Add ${exam.title} to lesson goals`}
-                          className="shrink-0 cursor-pointer"
-                        />
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-bold text-foreground">{exam.title}</p>
-                          {exam.due_date && (
-                            <p className="text-[10px] text-muted-foreground">
-                              Due {new Date(exam.due_date).toLocaleDateString()}
-                            </p>
+                                {isExpanded ? (
+                                  <ChevronDown className="size-3.5" />
+                                ) : (
+                                  <ChevronRight className="size-3.5" />
+                                )}
+                              </Button>} />
+                              <TooltipContent>{isExpanded ? "Hide classworks" : "Show classworks"}</TooltipContent>
+                            </Tooltip>
                           )}
                         </div>
+
+                        {/* Linked Classworks (Indented under parent lesson) */}
+                        {isExpanded && cws.length > 0 && (
+                          <div className="flex flex-col gap-1.5 border-t border-border bg-background py-2 pl-6 pr-2">
+                            {cws.map((cw) => {
+                              const isCwSelected = selectedKeySet.has(`cw-${cw.classwork_id}`);
+                              return (
+                                <label
+                                  key={cw.classwork_id}
+                                  className="flex cursor-pointer select-none items-center justify-between gap-2 p-1.5 text-xs hover:bg-muted/50"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <Checkbox
+                                      size="sm"
+                                      checked={isCwSelected}
+                                      onCheckedChange={() => toggleClasswork(cw, false)}
+                                      aria-label={`Add ${cw.title} to lesson goals`}
+                                      className="shrink-0 cursor-pointer"
+                                    />
+                                    <span className="truncate font-medium text-foreground">
+                                      {cw.title}
+                                    </span>
+                                  </div>
+                                  <Badge variant="outline" size="sm" className="shrink-0">
+                                    {toTitleCase(cw.classwork_type) || "Task"}
+                                  </Badge>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                      <Badge variant="outline" size="sm" className="shrink-0">
-                        Exam
-                      </Badge>
-                    </label>
-                  );
-                })
-              )}
-            </div>
+                    );
+                  })
+                )}
+
+                {/* GROUP 2: Clearly-labeled Exams / Term Assessments */}
+                <div className="mt-4 flex items-center gap-2">
+                  <span className="text-sm font-bold text-foreground">
+                    Exams / Term Assessments
+                  </span>
+                  <Badge variant="secondary" size="sm">
+                    {subjectLevelExams.length}
+                  </Badge>
+                </div>
+
+                {isLoadingExams ? (
+                  <p className="text-xs text-muted-foreground animate-pulse pl-2 py-2">
+                    Loading assessments...
+                  </p>
+                ) : subjectLevelExams.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic pl-2 py-1">
+                    No subject-level exams found.
+                  </p>
+                ) : (
+                  subjectLevelExams.map((exam) => {
+                    const isExamSelected = selectedKeySet.has(`cw-${exam.classwork_id}`);
+                    return (
+                      <label
+                        key={exam.classwork_id}
+                        className="flex cursor-pointer select-none items-center justify-between gap-2 rounded border-2 border-border bg-background p-3"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <Checkbox
+                            size="sm"
+                            checked={isExamSelected}
+                            onCheckedChange={() => toggleClasswork(exam, true)}
+                            aria-label={`Add ${exam.title} to lesson goals`}
+                            className="shrink-0 cursor-pointer"
+                          />
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-bold text-foreground">{exam.title}</p>
+                            {exam.due_date && (
+                              <p className="text-[10px] text-muted-foreground">
+                                Due {new Date(exam.due_date).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <Badge variant="outline" size="sm" className="shrink-0">
+                          Exam
+                        </Badge>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
             </Card.Content>
           </Card>
 
@@ -475,96 +477,95 @@ export function SetLessonGoalModal({
             </Card.Header>
             <Card.Content className="min-w-0">
 
-            {selectedItems.length === 0 ? (
-              <div className="rounded border-2 border-dashed border-border bg-background px-4 py-8 text-center">
-                <p className="text-sm font-bold text-foreground">No goals selected yet</p>
-                <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-                  Check items above to add them. You can reorder them to dictate the exact order shown to students.
-                </p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {selectedItems.map((item, index) => (
-                  <div
-                    key={item.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded border-2 border-border bg-background p-3 text-card-foreground"
-                  >
-                    {/* Index & Title */}
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <Badge variant="solid" size="sm" className="shrink-0">
-                        {index + 1}
-                      </Badge>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <p className="truncate text-xs font-bold text-foreground">{item.title}</p>
-                          <Badge variant="outline" size="sm" className="shrink-0">
-                            {item.typeBadge}
-                          </Badge>
+              {selectedItems.length === 0 ? (
+                <div className="rounded border-2 border-dashed border-border bg-background px-4 py-8 text-center">
+                  <p className="text-sm font-bold text-foreground">No goals selected yet</p>
+                  <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+                    Check items above to add them. You can reorder them to dictate the exact order shown to students.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {selectedItems.map((item, index) => (
+                    <div
+                      key={item.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded border-2 border-border bg-background p-3 text-card-foreground"
+                    >
+                      {/* Index & Title */}
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <Badge variant="solid" size="sm" className="shrink-0">
+                          {index + 1}
+                        </Badge>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <p className="truncate text-xs font-bold text-foreground">{item.title}</p>
+                            <Badge variant="outline" size="sm" className="shrink-0">
+                              {item.typeBadge}
+                            </Badge>
+                          </div>
+                          {item.subtitle && (
+                            <p className="text-[10px] text-muted-foreground">{item.subtitle}</p>
+                          )}
                         </div>
-                        {item.subtitle && (
-                          <p className="text-[10px] text-muted-foreground">{item.subtitle}</p>
-                        )}
+                      </div>
+
+                      {/*Reorder & Remove Controls*/}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Tooltip>
+                          <TooltipTrigger render={<span className="inline-flex"><Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            disabled={index === 0}
+                            onClick={() => moveItem(index, "up")}
+                            className="size-7 p-1 text-foreground disabled:opacity-30"
+                            aria-label="Move up"
+                          >
+                            <ArrowUp className="size-3.5" />
+                          </Button></span>} />
+                          <TooltipContent>{index === 0 ? "Already first" : "Move up"}</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger render={<span className="inline-flex"><Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            disabled={index === selectedItems.length - 1}
+                            onClick={() => moveItem(index, "down")}
+                            className="size-7 p-1 text-foreground disabled:opacity-30"
+                            aria-label="Move down"
+                          >
+                            <ArrowDown className="size-3.5" />
+                          </Button></span>} />
+                          <TooltipContent>{index === selectedItems.length - 1 ? "Already last" : "Move down"}</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger render={<Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeItem(item.id)}
+                            className="size-7 p-1 text-destructive hover:bg-destructive/10"
+                            aria-label="Remove goal item"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>} />
+                          <TooltipContent>Remove item</TooltipContent>
+                        </Tooltip>
                       </div>
                     </div>
-
-                    {/* Reorder & Remove Controls */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Tooltip>
-                        <TooltipTrigger render={<span className="inline-flex"><Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        disabled={index === 0}
-                        onClick={() => moveItem(index, "up")}
-                        className="size-7 p-1 text-foreground disabled:opacity-30"
-                        aria-label="Move up"
-                      >
-                        <ArrowUp className="size-3.5" />
-                      </Button></span>} />
-                        <TooltipContent>{index === 0 ? "Already first" : "Move up"}</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger render={<span className="inline-flex"><Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        disabled={index === selectedItems.length - 1}
-                        onClick={() => moveItem(index, "down")}
-                        className="size-7 p-1 text-foreground disabled:opacity-30"
-                        aria-label="Move down"
-                      >
-                        <ArrowDown className="size-3.5" />
-                      </Button></span>} />
-                        <TooltipContent>{index === selectedItems.length - 1 ? "Already last" : "Move down"}</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger render={<Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeItem(item.id)}
-                        className="size-7 p-1 text-destructive hover:bg-destructive/10"
-                        aria-label="Remove goal item"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>} />
-                        <TooltipContent>Remove item</TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
             </Card.Content>
           </Card>
+
+          <Dialog.Description className="text-sm text-muted-foreground">
+            Choose and order the goals students will see.
+          </Dialog.Description>
         </div>
 
-        <Dialog.Footer className="mt-0 justify-between">
-          <p className="text-xs text-muted-foreground">
-            {selectedItems.length === 0
-              ? "Saving will clear goals (leaving panel blank for this term)."
-              : `${selectedItems.length} item(s) will be displayed in this order.`}
-          </p>
+        <Dialog.Footer className="mt-0 justify-end">
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
             <Button
               type="button"
@@ -579,7 +580,7 @@ export function SetLessonGoalModal({
               onClick={handleSave}
               disabled={isSaving}
             >
-              {isSaving ? "Saving..." : "Save Lesson Goals"}
+              Save Lesson Goals
             </Button>
           </div>
         </Dialog.Footer>

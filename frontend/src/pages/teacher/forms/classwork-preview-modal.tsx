@@ -174,9 +174,8 @@ export default function ClassworkDetailModal({
               <div className="space-y-3">
                 <Card className="p-0 border-0! w-full shadow-none">
                   <Card.Header className="flex flex-row justify-between">
-                    <div className="flex flex-col w-full gap-3 md:flex-row items-center md:justify-between">
+                    <div className="flex flex-col w-full gap-3 md:flex-row items-start md:justify-between">
                       <Card.Title className="flex flex-row items-center gap-3 mb-0 text-3xl font-bold">
-
                         <IconContainer variant="primary" size="xl" className="rounded!">
                           <ClassworkTypeIcon type={selectedClasswork.classwork_type} size={48} />
                         </IconContainer>
@@ -193,7 +192,7 @@ export default function ClassworkDetailModal({
                             {selectedClasswork.due_date && (
                               <div>
                                 <p className="font-normal text-sm">
-                                  Due on {new Date(selectedClasswork.due_date).toLocaleString()}
+                                  Due on {formatDate(selectedClasswork.due_date)}
                                 </p>
                               </div>
                             )}
@@ -220,7 +219,7 @@ export default function ClassworkDetailModal({
                         </div>
 
                       </Card.Title>
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
                         {!isReadingType(selectedClasswork.classwork_type) && selectedClasswork.classwork_category && (
                           <Badge
                             variant="outline"
@@ -257,30 +256,30 @@ export default function ClassworkDetailModal({
                         } gap-3`}
                     >
                       {selectedClasswork.instructions && (
-                          <div
-                            className={
-                              selectedClasswork.attachments &&
-                                selectedClasswork.attachments.length > 0
-                                ? "md:col-span-2"
-                                : ""
-                            }
-                          >
-                            <Card className="w-full h-full shadow-none">
-                              <Card.Content className="space-y-3">
-                                {selectedClasswork.instructions && (
-                                  <div>
-                                    <Card.Title className="mb-1 font-bold text-sm">
-                                      Instructions
-                                    </Card.Title>
-                                    <p className="whitespace-pre-wrap text-sm text-gray-800 bg-gray-50 p-3 border border-gray-200 rounded">
-                                      {selectedClasswork.instructions}
-                                    </p>
-                                  </div>
-                                )}
-                              </Card.Content>
-                            </Card>
-                          </div>
-                        )}
+                        <div
+                          className={
+                            selectedClasswork.attachments &&
+                              selectedClasswork.attachments.length > 0
+                              ? "md:col-span-2"
+                              : ""
+                          }
+                        >
+                          <Card className="w-full h-full shadow-none">
+                            <Card.Content className="space-y-3">
+                              {selectedClasswork.instructions && (
+                                <div>
+                                  <Card.Title className="mb-1 font-bold text-sm">
+                                    Instructions
+                                  </Card.Title>
+                                  <p className="whitespace-pre-wrap text-sm text-gray-800 bg-gray-50 p-3 border border-gray-200 rounded">
+                                    {selectedClasswork.instructions}
+                                  </p>
+                                </div>
+                              )}
+                            </Card.Content>
+                          </Card>
+                        </div>
+                      )}
 
                       {/* Reference Materials / Attachments */}
                       {selectedClasswork.attachments &&

@@ -5,7 +5,6 @@ import { Empty } from "@/components/retroui/Empty";
 import { Badge } from "@/components/retroui/Badge";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
-import { BookOpen, Calendar, Clock, GraduationCap, Users } from "lucide-react";
 import type { DynamicScheduleRow } from "@/lib/api";
 
 // Fixed day order matching DepEd school week

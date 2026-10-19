@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 import { Link } from "react-router-dom";
 import { Avatar } from "@/components/retroui/Avatar";
 import { cn } from "@/lib/utils";
@@ -133,48 +131,43 @@ export function SubjectCard({
   const isTeacher = variant === "teacher";
   const defaultCardVariant = cardVariant || (isTeacher ? "retro" : "squares");
 
-  // Build carousel items from activeClassworks (array) or fall back to single activeClasswork,
+  // Resolve the most recent and active classwork,
   // excluding reading classworks, completed classworks, and classworks where all students have submitted
-  const carouselItems = (() => {
+  const currentCw = (() => {
     const raw = activeClassworks && activeClassworks.length > 0
       ? activeClassworks
       : activeClasswork
         ? [activeClasswork]
         : [];
-    return raw
-      .filter((cw) => {
-        // Exclude reading classworks
-        const type = (cw.classwork_type || cw.classworkType || "").toUpperCase();
-        if (type === "READING") return false;
+    const valid = raw.filter((cw) => {
+      // Exclude reading classworks
+      const type = (cw.classwork_type || cw.classworkType || "").toUpperCase();
+      if (type === "READING") return false;
 
-        // Exclude completed classworks
-        const status = (cw.status || "").toLowerCase();
-        if (status === "completed") return false;
+      // Exclude completed classworks
+      const status = (cw.status || "").toLowerCase();
+      if (status === "completed") return false;
 
-        // Exclude classworks where all students have submitted already
-        const total = cw.totalStudents ?? cw.total_students ?? 0;
-        const submitted = cw.submittedCount ?? cw.submitted_count ?? 0;
-        if (total > 0 && submitted >= total) return false;
+      // Exclude classworks where all students have submitted already
+      const total = cw.totalStudents ?? cw.total_students ?? 0;
+      const submitted = cw.submittedCount ?? cw.submitted_count ?? 0;
+      if (total > 0 && submitted >= total) return false;
 
-        return true;
-      })
-      .map((cw) => ({
-        classworkId: cw.classwork_id ?? cw.id,
-        title: cw.title,
-        status: cw.status || "ongoing",
-        dueLabel: cw.dueLabel || cw.due_label || "",
-        submittedCount: cw.submittedCount ?? cw.submitted_count ?? 0,
-        totalStudents: cw.totalStudents ?? cw.total_students ?? 0,
-        classworkType: cw.classwork_type || cw.classworkType,
-      }));
+      return true;
+    });
+
+    if (valid.length === 0) return null;
+    const cw = valid[0];
+    return {
+      classworkId: cw.classwork_id ?? cw.id,
+      title: cw.title,
+      status: cw.status || "ongoing",
+      dueLabel: cw.dueLabel || cw.due_label || "",
+      submittedCount: cw.submittedCount ?? cw.submitted_count ?? 0,
+      totalStudents: cw.totalStudents ?? cw.total_students ?? 0,
+      classworkType: cw.classwork_type || cw.classworkType,
+    };
   })();
-
-  const [carouselIdx, setCarouselIdx] = useState(0);
-  const activeIdx = carouselItems.length > 0
-    ? Math.min(carouselIdx, carouselItems.length - 1)
-    : 0;
-  const currentCw = carouselItems.length > 0 ? carouselItems[activeIdx] : null;
-  const hasMultiple = carouselItems.length > 1;
 
   const noClasswork = isTeacher ? !currentCw : !latestActivityTitle && !hasPending;
   const displayProgressLabel = progressLabel || (isTeacher ? "Classwork Completion" : "Completion");
@@ -322,31 +315,6 @@ export function SubjectCard({
             </Card>
           )}
         </div>
-        {hasMultiple && (
-          <div className="flex w-full items-start justify-start gap-0.5 shrink-0 -my-2 -mb-1">
-            {carouselItems.map((_, i) => (
-              <button
-                key={i}
-                type="button"
-                aria-label={`Go to classwork ${i + 1}`}
-                className="p-1 cursor-pointer focus:outline-none group"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setCarouselIdx(i);
-                }}
-              >
-                <span
-                  className={cn(
-                    "block rounded-full transition-all duration-200",
-                    i === activeIdx
-                      ? "w-8 h-2 border bg-primary"
-                      : "w-3 h-2 bg-muted border hover:bg-accent hover:w-8 "
-                  )}
-                />
-              </button>
-            ))}
-          </div>
-        )}
       </div>
     </Card>
   );

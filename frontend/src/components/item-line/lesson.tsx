@@ -195,6 +195,7 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
                 item={cw}
                 onOpen={onOpenClassworkDetail}
                 className="shadow-none!"
+                showCategoryBadge={false}
                 showPublicationStatus={false}
               />
             ))
