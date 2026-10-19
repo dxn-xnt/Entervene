@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Award, BookOpen, BookOpenCheck, CheckSquare, ClipboardList, FileText, Paperclip, Plus, Users, X, type LucideIcon } from "lucide-react";
+import { Award, BookOpen, CheckSquare, ClipboardList, FileText, Paperclip, Plus, Users, X, type LucideIcon } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import AppLayout from "@/layouts/app-layout";

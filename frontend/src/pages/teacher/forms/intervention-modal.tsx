@@ -429,6 +429,9 @@ export default function InterventionModal({
                           </div>
                         </div>
                       </div>
+                      <p className="text-sm rounded border border-amber-400 bg-amber-50 p-2">
+                        This is a saved review candidate. No teacher-approved active Intervention exists yet. Approval rechecks the current prediction, teaching scope, and authorization before support can begin.
+                      </p>
                     </Card>
 
                     <p className="text-sm text-muted-foreground">

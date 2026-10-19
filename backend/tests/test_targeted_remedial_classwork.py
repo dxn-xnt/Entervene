@@ -97,6 +97,15 @@ def test_intervention_publication_scope_and_retry(candidate_context):
     assert db.query(Classwork).count() == before + 1
     assert asyncio.run(create_classwork_wizard_record(**kwargs)).classwork_id == created.classwork_id
     assert db.query(Classwork).count() == before + 1
+    with pytest.raises(HTTPException) as locked_plan:
+        save_plan(db, _staff(c), _id(c), PlanUpdate(
+            teacher_choice="CLASSWORK", grade_treatment="PERFORMANCE_TASK",
+        ))
+    assert locked_plan.value.status_code == 409
+    unchanged = save_plan(db, _staff(c), _id(c), PlanUpdate(
+        teacher_choice="CLASSWORK", grade_treatment="WRITTEN_WORK",
+    ))
+    assert unchanged["plan"]["grade_treatment"] == "WRITTEN_WORK"
     kwargs["class_ids"] = json.dumps([c["class"].class_id + 1])
     with pytest.raises(HTTPException):
         asyncio.run(create_classwork_wizard_record(**kwargs))
