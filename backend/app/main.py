@@ -41,10 +41,15 @@ from app.api.v1.routes.TOS import router as tos_router
 from app.api.v1.routes.TeacherSubstitutions import router as teacher_substitutions_router
 from app.api.v1.routes.Analytics import router as analytics_router
 from app.api.v1.routes.LessonGoals import router as lesson_goals_router
+from app.api.v1.routes.ContentCloning import router as content_cloning_router
 from contextlib import asynccontextmanager
 from starlette.concurrency import run_in_threadpool
 from app.services.ai.UsageGuard import reconcile_expired_holds
 from app.services.ai.tos_generation_session import check_telemetry_logging, validate_heartbeat_settings
+from app.services.cloning.ContentCloningErrors import (
+    ContentCloningError,
+    content_cloning_error_handler,
+)
 
 
 
@@ -67,6 +72,7 @@ app = FastAPI(
 app.add_middleware(CSRFMiddleware)
 app.add_middleware(RequestLimitsMiddleware)
 app.add_exception_handler(ClassManagementError, class_management_error_handler)
+app.add_exception_handler(ContentCloningError, content_cloning_error_handler)
 
 # Cannot use allow_origins=["*"] with allow_credentials=True (browser rejects).
 # List common dev origins + regex for LAN (Expo) so preflight/login always get CORS headers.
@@ -130,6 +136,11 @@ app.include_router(tos_router,            prefix="/api/v1/tos",             tags
 app.include_router(teacher_substitutions_router, prefix="/api/v1/substitutions", tags=["Teacher Substitutions"])
 app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["Analytics"])
 app.include_router(lesson_goals_router, prefix="/api/v1/lesson-goals", tags=["Lesson Goals"])
+app.include_router(
+    content_cloning_router,
+    prefix="/api/v1/content-cloning",
+    tags=["Content Cloning"],
+)
 
 
 @app.get("/health")
