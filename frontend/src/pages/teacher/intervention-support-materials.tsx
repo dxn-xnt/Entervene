@@ -390,6 +390,21 @@ export default function InterventionSupportMaterials({
         {progress?.status_reason ?? "Loading current progress."}
       </p>
 
+      {previousResolved && (
+        <Card className="space-y-2 w-full border-2 border-border">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-base">Current support cycle</h3>
+            <Badge variant="surface" size="sm">Active</Badge>
+          </div>
+          <p className="text-sm">
+            A new below-threshold prediction opened this cycle after
+            the previous Intervention resolved on{" "}
+            <strong>{previousResolved.resolved_at ? date(previousResolved.resolved_at) : "a previous date"}</strong>. That resolution
+            is past history.
+          </p>
+        </Card>
+      )}
+
       {error && (
         <Alert status="error">
           {error}{" "}

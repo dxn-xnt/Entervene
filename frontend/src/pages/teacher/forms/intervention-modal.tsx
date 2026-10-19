@@ -369,27 +369,12 @@ export default function InterventionModal({
                     );
                   })()
                 ) : detail.status === "ACTIVE" ? (
-                  <>
-                    {previousResolved && (
-                      <Card className="space-y-2 border-2 border-border">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-bold text-base">Current support cycle</h3>
-                          <Badge variant="surface" size="sm">Active</Badge>
-                        </div>
-                        <p className="text-sm">
-                          A new below-threshold prediction opened this cycle after
-                          the previous Intervention resolved on{" "}
-                          <strong>{date(previousResolved.resolved_at!)}</strong>. That resolution
-                          is past history.
-                        </p>
-                      </Card>
-                    )}
-                    <InterventionSupportMaterials
-                      key={detail.intervention_id}
-                      page={supportPage}
-                      detail={detail}
-                    />
-                  </>
+                  <InterventionSupportMaterials
+                    key={detail.intervention_id}
+                    page={supportPage}
+                    detail={detail}
+                    previousResolved={previousResolved}
+                  />
                 ) : (
                   <>
                     <Card className="w-full space-y-2 border-2 border-black bg-primary">
