@@ -40,6 +40,8 @@ import {
   studentClassworkSourceLabel,
 } from "@/lib/student-classwork-navigation";
 import { quizPathWithContext } from "@/lib/student-quiz-navigation";
+import { isDisplayableSubmission } from "@/lib/student-submission";
+import { formatDateTime } from "@/lib/formatters";
 import { routes } from "@/../routes";
 import type { ClassworkDetail, Submission } from "./subjects-view/types";
 import type { ActivityRubricLevel } from "@/types/classwork";
@@ -142,7 +144,9 @@ export default function StudentClassworkView() {
               (await submissionsResponse.json()) as Submission[];
             setSubmission(
               submissions.find(
-                (item) => item.classwork_assignment_id === assignmentId,
+                (item) =>
+                  item.classwork_assignment_id === assignmentId &&
+                  isDisplayableSubmission(item),
               ) ?? null,
             );
           }
@@ -267,12 +271,14 @@ export default function StudentClassworkView() {
         title: "Submission deleted",
         description: "You can now resubmit your work.",
       });
+      return true;
     } catch (cause) {
       toast.error({
         title: "Delete failed",
         description:
           cause instanceof Error ? cause.message : "Please try again.",
       });
+      return false;
     } finally {
       setActionLoading(false);
     }
@@ -523,11 +529,11 @@ export default function StudentClassworkView() {
                     <div className="text-sm text-muted-foreground">
                       <p>
                         {dueDate
-                          ? `Due on ${dueDate.toLocaleString()}`
+                          ? `Due on ${formatDateTime(dueDate)}`
                           : "No due date"}
                       </p>
                       {detail.lock_date && (
-                        <p>Locks {new Date(detail.lock_date).toLocaleString()}</p>
+                        <p>Locks {formatDateTime(detail.lock_date)}</p>
                       )}
                     </div>
                     {detail.rubric_levels &&
@@ -541,16 +547,27 @@ export default function StudentClassworkView() {
                 </Card>
 
                 <Card className="block w-full">
-                  <h2 className="mb-3 flex items-center gap-2 font-bold">
-                    <FileText size={18} />
-                    {isQuiz
-                      ? "Quiz"
-                      : isReading
-                        ? "Reading Material"
-                        : submission
-                          ? "Your Submission"
-                          : "Submit Your Work"}
-                  </h2>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="flex items-center gap-2 font-bold">
+                      <IconContainer variant="primary" size="sm" className="size-9 p-0">
+                        <FileText size={18} />
+                      </IconContainer>
+                      {isQuiz
+                        ? "Quiz"
+                        : isReading
+                          ? "Reading Material"
+                          : submission
+                            ? "Your Submission"
+                            : "Submit Your Work"}
+                    </h2>
+                    {!isQuiz && !isReading && submission?.grade != null && (
+                      <Badge variant="success" size="md">
+                        {detail.show_scores
+                          ? `Score: ${submission.grade}${detail.total_points != null ? `/${detail.total_points}` : ""}`
+                          : "Score hidden"}
+                      </Badge>
+                    )}
+                  </div>
                   {isReading ? (
                     submission ||
                     status === "completed" ||
@@ -658,22 +675,9 @@ export default function StudentClassworkView() {
                       allowLateSubmissions={detail.allow_late_submissions}
                       maxAttempts={detail.max_attempts}
                       showScores={detail.show_scores}
+                      hideGrade
                       isDeleting={actionLoading}
                       onDeleteSubmission={deleteSubmission}
-                      onResubmit={async () => {
-                        const response = await apiFetch(
-                          "/api/v1/submissions/my-submissions",
-                        );
-                        if (response.ok) {
-                          const items = (await response.json()) as Submission[];
-                          setSubmission(
-                            items.find(
-                              (item) =>
-                                item.classwork_assignment_id === assignmentId,
-                            ) ?? null,
-                          );
-                        }
-                      }}
                     />
                   ) : closed ? (
                     <p className="flex items-center gap-2 text-sm text-muted-foreground">
