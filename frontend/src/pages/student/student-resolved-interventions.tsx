@@ -37,23 +37,23 @@ export default function StudentResolvedInterventions() {
   const open = (id: number) => { const next = new URLSearchParams(params); next.set("previous", String(id)); setParams(next); };
   const openReviewer = (id: number) => { const next = new URLSearchParams(params); next.set("reviewer", String(id)); setParams(next); };
 
-  return <section className="space-y-3" aria-label="Previous Support">
+  return <section className="w-full space-y-4" aria-label="Previous Support">
     <h2 className="text-xl font-bold">Previous Support</h2>
     {loading ? <p>Loading previous support...</p> : error ? <Alert status="error">{error}</Alert>
       : items.length === 0 ? <p>No previous support yet.</p>
-      : <div className="grid gap-3 md:grid-cols-2">{items.map((item) => <Card key={item.intervention_id} className="space-y-2 border-green-700 bg-green-50 p-4">
+      : <div className="grid w-full gap-4">{items.map((item) => <Card key={item.intervention_id} className="w-full space-y-4 border-green-700 bg-green-50 p-5 md:p-6">
         <h3 className="font-bold">{item.subject_name} · Resolved</h3>
         <p className="text-sm">{item.resolved_at ? date(item.resolved_at) : "Previous support"} · {item.resolution_message}</p>
-        <Button size="sm" variant="outline" onClick={() => open(item.intervention_id)}>View Previous Support</Button>
+        <Button size="sm" variant="outline" className="gap-2" onClick={() => open(item.intervention_id)}>View Previous Support</Button>
       </Card>)}</div>}
-    {selectedId !== null && <Card className="space-y-3 border-green-700 bg-green-50 p-4" role="region" aria-label="Previous support detail">
+    {selectedId !== null && <Card className="w-full space-y-4 border-green-700 bg-green-50 p-5 md:p-6" role="region" aria-label="Previous support detail">
       {detailError ? <Alert status="error">{detailError}</Alert> : !detail ? <p>Loading previous support...</p> : <>
         <h3 className="text-lg font-bold">{detail.subject_name} · Resolved</h3>
         <p>{detail.resolution_message}</p>
         <p>Resolved: {detail.resolved_at ? date(detail.resolved_at) : "Unavailable"}</p>
         <h4 className="font-bold">Completed support</h4>
         {detail.activities.filter((activity) => activity.submission_status === "graded").length ? detail.activities.filter((activity) => activity.submission_status === "graded").map((activity) => <p key={activity.assignment_id}>{activity.title} · Completed{activity.grade != null && activity.total_points != null ? ` · Score: ${activity.grade}/${activity.total_points}` : ""}</p>) : <p>No completed activity was recorded.</p>}
-        {detail.reviewer_id !== null && <Button size="sm" variant="outline" onClick={() => openReviewer(detail.reviewer_id!)}>Read Reviewer</Button>}
+        {detail.reviewer_id !== null && <Button size="sm" variant="outline" className="gap-2" onClick={() => openReviewer(detail.reviewer_id!)}>Read Reviewer</Button>}
       </>}
     </Card>}
   </section>;
