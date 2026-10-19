@@ -12,7 +12,7 @@ import {
   type TodoItem as ApiTodoItem,
 } from "@/lib/api";
 import { LoadingPanel } from "@/components/loading-panel";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 
 const todoTabs = [
   { id: "pending", label: "Pending", icon: Clock },
@@ -153,10 +153,12 @@ export default function ToDo() {
                       <section className="flex flex-col gap-4">
                         {regularUpcomingItems.length === 0 &&
                         interventionItems.length === 0 ? (
-                          <EmptyStateCard
-                            title="All caught up!"
-                            description="You have no pending assignments or tasks."
-                          />
+                          <Empty>
+                            <Empty.Content>
+                              <Empty.Title>All caught up!</Empty.Title>
+                              <Empty.Description>You have no pending assignments or tasks.</Empty.Description>
+                            </Empty.Content>
+                          </Empty>
                         ) : regularUpcomingItems.length === 0 ? (
                           <p className="text-sm text-gray-500">No upcoming tasks.</p>
                         ) : (
@@ -179,10 +181,12 @@ export default function ToDo() {
                   {activeTab === "pastdue" && (
                     <section className="flex flex-col gap-4">
                       {pastDueItems.length === 0 ? (
-                        <EmptyStateCard
-                          title="No past due items!"
-                          description="Great job keeping up with your deadlines."
-                        />
+                        <Empty>
+                          <Empty.Content>
+                            <Empty.Title>No past due items!</Empty.Title>
+                            <Empty.Description>Great job keeping up with your deadlines.</Empty.Description>
+                          </Empty.Content>
+                        </Empty>
                       ) : (
                         pastDueItems.map((item) => (
                           <ToDoItem
@@ -202,10 +206,12 @@ export default function ToDo() {
                   {activeTab === "completed" && (
                     <section className="flex flex-col gap-4">
                       {completedItems.length === 0 ? (
-                        <EmptyStateCard
-                          title="No completed tasks yet."
-                          description="Your submitted assignments and quizzes will appear here."
-                        />
+                        <Empty>
+                          <Empty.Content>
+                            <Empty.Title>No completed tasks yet.</Empty.Title>
+                            <Empty.Description>Your submitted assignments and quizzes will appear here.</Empty.Description>
+                          </Empty.Content>
+                        </Empty>
                       ) : (
                         completedItems.map((item) => (
                           <ToDoItem

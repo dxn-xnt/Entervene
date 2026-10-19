@@ -31,7 +31,7 @@ import { Text } from "@/components/retroui/Text";
 import { Badge } from "@/components/retroui/Badge";
 import { Progress } from "@/components/retroui/Progress";
 import { LoadingPanel } from "@/components/loading-panel";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { GradeOverviewCards } from "@/components/student/grade-overview-cards";
 import { SubjectCard } from "@/components/subject-card";
@@ -85,12 +85,6 @@ function MetricCard({
         {children}
       </Card.Content>
     </Card>
-  );
-}
-
-function Empty({ children }: { children: ReactNode }) {
-  return (
-    <p className="my-auto py-7 text-sm text-muted-foreground">{children}</p>
   );
 }
 
@@ -318,17 +312,19 @@ const StoryBoard = () => {
                     {isLoading ? (
                       <LoadingPanel label="Loading subjects..." />
                     ) : error ? (
-                      <EmptyStateCard
-                        title="Unable to load subjects"
-                        description={error}
-                        className="border-none bg-card shadow-none hover:shadow-none"
-                      />
+                      <Empty className="border-none bg-card shadow-none hover:shadow-none">
+                        <Empty.Content>
+                          <Empty.Title>Unable to load subjects</Empty.Title>
+                          <Empty.Description>{error}</Empty.Description>
+                        </Empty.Content>
+                      </Empty>
                     ) : subjects.length === 0 ? (
-                      <EmptyStateCard
-                        title="No enrolled subjects found"
-                        description="You are not enrolled in any subjects for this period."
-                        className="border-none bg-white shadow-none hover:shadow-none"
-                      />
+                      <Empty className="border-none bg-white shadow-none hover:shadow-none">
+                        <Empty.Content>
+                          <Empty.Title>No enrolled subjects found</Empty.Title>
+                          <Empty.Description>You are not enrolled in any subjects for this period.</Empty.Description>
+                        </Empty.Content>
+                      </Empty>
                     ) : (
                       <>
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -703,7 +699,9 @@ const StoryBoard = () => {
                       className="sm:col-span-2 xl:col-span-12"
                     >
                       {overview.subjects.length === 0 ? (
-                        <Empty>No released subject scores yet.</Empty>
+                        <p className="my-auto py-7 text-sm text-muted-foreground">
+                          No released subject scores yet.
+                        </p>
                       ) : (
                         <>
                           <p className="mb-4 text-xs text-muted-foreground">
@@ -851,17 +849,19 @@ const StoryBoard = () => {
                       {isLoading ? (
                         <LoadingPanel label="Loading to-do items..." />
                       ) : error ? (
-                        <EmptyStateCard
-                          title="Unable to load to-do items"
-                          description={error}
-                          className="border-none bg-card shadow-none hover:shadow-none"
-                        />
+                        <Empty className="border-none bg-card shadow-none hover:shadow-none">
+                          <Empty.Content>
+                            <Empty.Title>Unable to load to-do items</Empty.Title>
+                            <Empty.Description>{error}</Empty.Description>
+                          </Empty.Content>
+                        </Empty>
                       ) : urgentTodos.length === 0 ? (
-                        <EmptyStateCard
-                          title="All caught up!"
-                          description="No pending tasks"
-                          className="border-none bg-white shadow-none hover:shadow-none"
-                        />
+                        <Empty className="border-none bg-white shadow-none hover:shadow-none">
+                          <Empty.Content>
+                            <Empty.Title>All caught up!</Empty.Title>
+                            <Empty.Description>No pending tasks</Empty.Description>
+                          </Empty.Content>
+                        </Empty>
                       ) : (
                         <div className="flex flex-col gap-2.5">
                           {urgentTodos.map((item) => {

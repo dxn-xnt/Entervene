@@ -1,7 +1,11 @@
+import { useState } from "react";
 import { Table } from "@/components/retroui/Table";
 import { LoadingPanel } from "@/components/loading-panel";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import { Badge } from "@/components/retroui/Badge";
+import { Dialog } from "@/components/retroui/Dialog";
+import { Button } from "@/components/retroui/Button";
+import { BookOpen, Calendar, Clock, GraduationCap, Users } from "lucide-react";
 import type { DynamicScheduleRow } from "@/lib/api";
 
 // Fixed day order matching DepEd school week
@@ -15,6 +19,14 @@ const DAY_LABELS: Record<string, string> = {
   Th: "Thursday",
   F: "Friday",
 };
+
+function formatScheduleDays(days?: string[]): string {
+  if (!days || days.length === 0) return "Monday – Friday";
+  if (days.length === 5 && DAY_ORDER.every((d) => days.includes(d))) {
+    return "Monday – Friday";
+  }
+  return days.map((d) => DAY_LABELS[d] || d).join(", ");
+}
 
 interface ColDef {
   /** Column key — the raw start_time string from the payload (e.g. "07:30") */
@@ -33,6 +45,26 @@ interface DynamicScheduleTableProps {
   isLoading?: boolean;
   emptyMessage?: string;
   showTeacher?: boolean;
+  showSection?: boolean;
+  onSubjectClick?: (entry: DynamicScheduleRow) => void;
+}
+
+function getEntryKey(entry: DynamicScheduleRow, showSection = true): string {
+  return [
+    entry.subject_load_id ?? "",
+    entry.subject ?? "",
+    showSection ? (entry.section_name ?? "") : "",
+    entry.teacher ?? "",
+    entry.is_substitution ? "sub" : "",
+    entry.original_teacher_name ?? "",
+    entry.is_covered ? "cov" : "",
+    entry.substitute_name ?? "",
+  ].join("::");
+}
+
+function getEntriesKey(entries: DynamicScheduleRow[], showSection = true): string {
+  if (!entries || entries.length === 0) return "";
+  return entries.map((e) => getEntryKey(e, showSection)).sort().join("||");
 }
 
 export function DynamicScheduleTable({
@@ -41,13 +73,22 @@ export function DynamicScheduleTable({
   isLoading = false,
   emptyMessage = "No published schedule available yet.",
   showTeacher = true,
+  showSection = true,
+  onSubjectClick,
 }: DynamicScheduleTableProps) {
+  const [selectedEntry, setSelectedEntry] = useState<DynamicScheduleRow | null>(null);
   if (isLoading) {
     return <LoadingPanel label="Loading schedule..." />;
   }
 
   if (!isPublished || !schedule || schedule.length === 0) {
-    return <EmptyStateCard title={emptyMessage} />;
+    return (
+      <Empty>
+        <Empty.Content>
+          <Empty.Title>{emptyMessage}</Empty.Title>
+        </Empty.Content>
+      </Empty>
+    );
   }
 
   // ── 1. Build unique time-columns sorted chronologically ──────────────────
@@ -100,14 +141,14 @@ export function DynamicScheduleTable({
         <Table.Header>
           <Table.Row>
             {/* Sticky time-label corner */}
-            <Table.Head className="sticky left-0 z-20 w-28 border-b-2 border-r-2 border-black bg-primary px-3 py-2.5 text-left text-xs font-bold text-black">
+            <Table.Head className="sticky left-0 z-20 w-28 border-b-2 border-r-2 border-black bg-primary px-3 py-2.5 text-left text-base font-bold text-black">
               Time
             </Table.Head>
 
             {DAY_ORDER.map((day) => (
               <Table.Head
                 key={day}
-                className="border-b-2 border-r border-black bg-primary px-3 py-2.5 text-center text-xs font-bold text-black whitespace-nowrap min-w-[120px]"
+                className="border-b-2 border-r-none border-black bg-primary px-3 py-2.5 text-center text-base font-bold text-black whitespace-nowrap min-w-[120px]"
               >
                 <div>{DAY_LABELS[day]}</div>
               </Table.Head>
@@ -117,50 +158,72 @@ export function DynamicScheduleTable({
 
         {/* ── Body: one row per time slot ── */}
         <Table.Body>
-          {columns.map((slot, slotIdx) => {
+          {columns.map((slot) => {
             // Break slot → full-width separator row
             if (slot.isBreak) {
               return (
-                <Table.Row key={slot.start_time} className="bg-amber-50/60">
-                  <Table.Cell className="sticky left-0 z-10 border-r-2 border-t border-black bg-amber-100/70 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground whitespace-nowrap">
+                <Table.Row key={slot.start_time} className="bg-background border-none">
+                  <Table.Cell className="sticky left-0 z-10 border-r-2 border-t-2 border-black bg-background px-3 py-1 text-xs font-semibold text-foreground whitespace-nowrap">
+                    {slot.time}
+                  </Table.Cell>
+                  <Table.Cell
+                    colSpan={DAY_ORDER.length}
+                    className="border-none bg-background px-3 py-1.5 text-center text-xs font-medium text-muted-foreground"
+                  >
                     {slot.label}
                   </Table.Cell>
-                  {DAY_ORDER.map((day) => (
-                    <Table.Cell
-                      key={day}
-                      className="border-r border-t border-black/20 bg-amber-50/50 px-1 py-1.5 text-center text-[10px] text-muted-foreground"
-                    >
-                      —
-                    </Table.Cell>
-                  ))}
                 </Table.Row>
               );
             }
 
-            // Class slot row
+            // Class slot row — group contiguous identical days into merged cards
+            const groups: {
+              startDay: SchoolDay;
+              span: number;
+              entries: DynamicScheduleRow[];
+            }[] = [];
+
+            for (const day of DAY_ORDER) {
+              const entries = cellMap[day]?.[slot.start_time] ?? [];
+              const currentKey = getEntriesKey(entries, showSection);
+              const lastGroup = groups[groups.length - 1];
+              const lastKey = lastGroup ? getEntriesKey(lastGroup.entries, showSection) : null;
+
+              if (lastGroup && lastKey === currentKey) {
+                lastGroup.span += 1;
+              } else {
+                groups.push({
+                  startDay: day,
+                  span: 1,
+                  entries,
+                });
+              }
+            }
+
             return (
               <Table.Row
                 key={slot.start_time}
-                className={slotIdx % 2 === 0 ? "bg-background" : "bg-gray-50/40"}
+                className="bg-background border-none hover:bg-background"
               >
                 {/* Sticky time label */}
-                <Table.Cell className="sticky left-0 z-10 border-r-2 border-t border-black bg-[#F6E9B2] px-3 py-2.5 align-middle whitespace-nowrap">
+                <Table.Cell className="sticky left-0 z-10 border-r-2 border-y-2 border-black px-3 py-2.5 align-middle whitespace-nowrap">
                   <div className="text-xs font-bold text-black">{slot.time}</div>
                 </Table.Cell>
 
-                {/* One cell per day */}
-                {DAY_ORDER.map((day) => {
-                  const entries = cellMap[day]?.[slot.start_time] ?? [];
+                {/* Grouped day cells */}
+                {groups.map((group) => {
+                  const entries = group.entries;
 
                   return (
                     <Table.Cell
-                      key={day}
-                      className="border-r border-t border-black/20 px-1.5 py-1.5 align-top"
+                      key={group.startDay}
+                      colSpan={group.span}
+                      className="border-none px-1.5 py-1 align-top"
                     >
                       {entries.length === 0 ? (
                         <div className="h-full min-h-[2rem]" />
                       ) : (
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1 w-full">
                           {/* Overlap warning — data integrity signal */}
                           {entries.length > 1 && (
                             <Badge
@@ -175,31 +238,49 @@ export function DynamicScheduleTable({
                             <div
                               key={
                                 entry.subject_load_id ??
-                                `${day}-${slot.start_time}-${i}`
+                                `${group.startDay}-${slot.start_time}-${i}`
                               }
-                              className={`rounded border border-black px-2 py-1.5 text-[11px] leading-snug shadow-[1px_1px_0_rgba(0,0,0,1)] ${
-                                entry.is_covered
-                                  ? "bg-amber-50"
-                                  : entry.is_substitution
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => {
+                                if (onSubjectClick) {
+                                  onSubjectClick(entry);
+                                } else {
+                                  setSelectedEntry(entry);
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  if (onSubjectClick) {
+                                    onSubjectClick(entry);
+                                  } else {
+                                    setSelectedEntry(entry);
+                                  }
+                                }
+                              }}
+                              className={`w-full rounded border-2 border-black px-2 py-1.5 text-xs hover:bg-retro leading-snug shadow-sm cursor-pointer transition-all hover:-translate-y-0.5 active:translate-y-0 focus:outline-none focus:ring-2 focus:ring-primary ${entry.is_covered
+                                ? "bg-amber-50"
+                                : entry.is_substitution
                                   ? "bg-emerald-50"
                                   : "bg-white"
-                              }`}
+                                }`}
                             >
                               {/* Subject */}
-                              <div className="font-bold text-black truncate">
+                              <div className="text-sm font-bold text-black truncate">
                                 {entry.subject}
                               </div>
 
                               {/* Section */}
-                              {entry.section_name && (
-                                <div className="mt-0.5 text-[10px] font-semibold text-gray-600 truncate">
+                              {showSection && entry.section_name && (
+                                <div className="mt-0.5 font-semibold text-foreground">
                                   {entry.section_name}
                                 </div>
                               )}
 
                               {/* Teacher (admin / student views) */}
                               {showTeacher && entry.teacher && (
-                                <div className="text-[10px] text-gray-500 truncate">
+                                <div className="text-muted-foreground">
                                   {entry.teacher}
                                 </div>
                               )}
@@ -239,6 +320,128 @@ export function DynamicScheduleTable({
           })}
         </Table.Body>
       </Table>
+
+      {/* Subject Detail Modal */}
+      <Dialog
+        open={selectedEntry !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedEntry(null);
+        }}
+      >
+        <Dialog.Content size="md" className="overflow-hidden p-0 max-w-lg">
+          <Dialog.Header className="bg-primary text-black border-b-2 border-black px-5 py-4">
+            <Dialog.Title className="font-bold font-head text-black">
+              Subject Details
+            </Dialog.Title>
+          </Dialog.Header>
+
+          <div className="flex flex-col gap-4 p-5 bg-background text-sm">
+            {/* Subject Header */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xl font-black text-foreground">
+                  {selectedEntry?.subject}
+                </h3>
+                {selectedEntry?.subject_codename && (
+                  <Badge variant="surface" size="sm" className="font-mono">
+                    {selectedEntry.subject_codename}
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            {/* Grid of details */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Section */}
+              {selectedEntry?.section_name && (
+                <div className="flex flex-col gap-0.5 rounded border-2 border-black bg-card p-2.5 shadow-[2px_2px_0px_#000]">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    Section
+                  </span>
+                  <span className="text-sm font-bold text-foreground">
+                    {selectedEntry.section_name}
+                  </span>
+                </div>
+              )}
+
+              {/* Assigned Teacher */}
+              {selectedEntry?.teacher && (
+                <div className="flex flex-col gap-0.5 rounded border-2 border-black bg-card p-2.5 shadow-[2px_2px_0px_#000]">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    Teacher
+                  </span>
+                  <span className="text-sm font-bold text-foreground">
+                    {selectedEntry.teacher}
+                  </span>
+                </div>
+              )}
+
+              {/* Time Slot */}
+              <div className="flex flex-col gap-0.5 rounded border-2 border-black bg-card p-2.5 shadow-[2px_2px_0px_#000]">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  Time Schedule
+                </span>
+                <span className="text-sm font-bold text-foreground">
+                  {selectedEntry?.time}
+                </span>
+              </div>
+
+              {/* Scheduled Days */}
+              <div className="flex flex-col gap-0.5 rounded border-2 border-black bg-card p-2.5 shadow-[2px_2px_0px_#000]">
+                <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1.5">
+                  Days
+                </span>
+                <span className="text-sm font-bold text-foreground">
+                  {formatScheduleDays(selectedEntry?.days)}
+                </span>
+              </div>
+            </div>
+
+            {/* Status Notes (Substitution or On-leave) */}
+            {(selectedEntry?.is_substitution || selectedEntry?.is_covered) && (
+              <div className="flex flex-col gap-2 rounded border-2 border-black p-3 bg-muted/40">
+                <span className="text-xs font-bold text-foreground">
+                  Schedule Status
+                </span>
+                {selectedEntry.is_substitution && (
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-500 font-bold">
+                      Covering Substitution
+                    </Badge>
+                    {selectedEntry.original_teacher_name && (
+                      <span className="text-xs text-muted-foreground">
+                        Original Teacher: {selectedEntry.original_teacher_name}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {selectedEntry.is_covered && (
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-500 font-bold">
+                      Teacher On Leave
+                    </Badge>
+                    {selectedEntry.substitute_name && (
+                      <span className="text-xs text-muted-foreground">
+                        Covered by: {selectedEntry.substitute_name}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <Dialog.Footer className="bg-card border-t-2 border-black px-5 py-3 flex justify-end">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setSelectedEntry(null)}
+            >
+              Close
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
     </div>
   );
 }

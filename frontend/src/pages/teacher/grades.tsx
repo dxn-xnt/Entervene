@@ -5,7 +5,7 @@ import AppLayout from "@/layouts/app-layout";
 import { useNavigate } from "react-router-dom";
 import { getTeacherClasses, type TeacherClassItem } from "@/lib/api";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import { LoadingPanel } from "@/components/loading-panel";
 
 const Grades = () => {
@@ -46,7 +46,11 @@ const Grades = () => {
               {loading ? (
               <LoadingPanel label="Loading grades..." />
             ) : classes.length === 0 ? (
-              <EmptyStateCard title="No classes assigned." />
+              <Empty>
+                <Empty.Content>
+                  <Empty.Title>No classes assigned.</Empty.Title>
+                </Empty.Content>
+              </Empty>
             ) : (
               <div className="flex flex-col gap-3">
                 {classes.map((item) => (

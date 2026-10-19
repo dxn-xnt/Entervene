@@ -6,7 +6,7 @@ import { Card as RetroCard } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Loader } from "@/components/retroui/Loader";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import { Select } from "@/components/retroui/Select";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
@@ -244,7 +244,11 @@ export default function AdminSubjectLevel() {
                     Loading subjects...
                   </div>
                 ) : visibleSubjects.length === 0 ? (
-                  <EmptyStateCard title={<>No subjects found for {decodedGrade}.</>} />
+                  <Empty>
+                    <Empty.Content>
+                      <Empty.Title>No subjects found for {decodedGrade}.</Empty.Title>
+                    </Empty.Content>
+                  </Empty>
                 ) : (
                   visibleSubjects.map((subject) => (
                     <SubjectItemLine

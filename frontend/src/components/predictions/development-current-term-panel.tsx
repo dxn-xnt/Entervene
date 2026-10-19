@@ -20,7 +20,7 @@ import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/retroui/Skeleton";
 import { BLOCKED_MESSAGES, INTERVENTION_LABELS } from "./development-current-term-contract";
@@ -281,7 +281,13 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
           <Skeleton className="h-12 w-full" />
         </div>
       ) : readError ? null : visibleRows.length === 0 ? (
-        <EmptyStateCard icon={<Eye className="size-7" />} title="No current-term projections available" description="No current-term projections available for this scope." />
+        <Empty>
+          <Empty.Content>
+            <Empty.Icon><Eye className="size-7" /></Empty.Icon>
+            <Empty.Title>No current-term projections available</Empty.Title>
+            <Empty.Description>No current-term projections available for this scope.</Empty.Description>
+          </Empty.Content>
+        </Empty>
       ) : (
         <Table wrapperClassName="rounded-none shadow-[3px_3px_0px_#000]" className="min-w-[620px]">
           <Table.Header><Table.Row className="bg-yellow-400 hover:bg-yellow-400"><Table.Head>Student</Table.Head><Table.Head>Projected Final Term Grade</Table.Head><Table.Head>Intervention Level</Table.Head><Table.Head>Action</Table.Head></Table.Row></Table.Header>

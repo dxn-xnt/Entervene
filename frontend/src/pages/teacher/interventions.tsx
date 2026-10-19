@@ -16,7 +16,7 @@ import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
 import { Tabs } from "@/components/retroui/Tabs";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import InterventionSupportMaterials from "./intervention-support-materials";
 import {
   activateTeacherCandidate,
@@ -431,22 +431,24 @@ export default function TeacherInterventions() {
                   <Skeleton className="h-20 w-full" />
                 </div>
               ) : !showingError && sorted.length === 0 ? (
-                <EmptyStateCard
-                  title={
-                    resolvedView
-                      ? "No resolved interventions"
-                      : activeView
-                        ? "No active interventions"
-                        : "No candidates to review"
-                  }
-                  description={
-                    resolvedView
-                      ? "Resolved support will appear here."
-                      : activeView
-                        ? "Approved interventions will appear here."
-                        : "New candidates will appear when a current corrected prediction qualifies."
-                  }
-                />
+                <Empty>
+                  <Empty.Content>
+                    <Empty.Title>
+                      {resolvedView
+                        ? "No resolved interventions"
+                        : activeView
+                          ? "No active interventions"
+                          : "No candidates to review"}
+                    </Empty.Title>
+                    <Empty.Description>
+                      {resolvedView
+                        ? "Resolved support will appear here."
+                        : activeView
+                          ? "Approved interventions will appear here."
+                          : "New candidates will appear when a current corrected prediction qualifies."}
+                    </Empty.Description>
+                  </Empty.Content>
+                </Empty>
               ) : (
                 !showingError && (
                   <Table wrapperClassName="h-auto">

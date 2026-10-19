@@ -11,7 +11,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/use-toast";
 import { Card as RetroCard } from "@/components/retroui/Card";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import { Input } from "@/components/retroui/Input";
 import { Loader } from "@/components/retroui/Loader";
 import { Tabs } from "@/components/retroui/Tabs";
@@ -669,7 +669,11 @@ function OverviewTab({
                 </RetroCard>
               ))
             ) : (
-              <EmptyStateCard title="No published subjects for this section yet." />
+              <Empty>
+                <Empty.Content>
+                  <Empty.Title>No published subjects for this section yet.</Empty.Title>
+                </Empty.Content>
+              </Empty>
             )}
           </div>
         </section>

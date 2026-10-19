@@ -6,7 +6,7 @@ import { routes } from "@/../routes";
 import { apiFetch } from "@/lib/api";
 import { LoadingPanel } from "@/components/loading-panel";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import { Button } from "@/components/retroui/Button";
 
 interface EnrolledSubject {
@@ -82,10 +82,11 @@ const Subjects = () => {
                   </Button>
                 </div>
               ) : subjects.length === 0 ? (
-                <EmptyStateCard
-                  title="No enrolled subjects found."
-                  className="px-4 py-10 sm:px-6 sm:py-12"
-                />
+                <Empty className="px-4 py-10 sm:px-6 sm:py-12">
+                  <Empty.Content>
+                    <Empty.Title>No enrolled subjects found.</Empty.Title>
+                  </Empty.Content>
+                </Empty>
               ) : (
                 <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
                   {subjects.map((subject) => (

@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/to
 import { Select } from "@/components/retroui/Select";
 import { Progress } from "@/components/retroui/Progress";
 import { OverviewCard } from "@/components/overview-cards";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { routes } from "@/../routes";
@@ -777,15 +777,16 @@ export default function Dashboard() {
                       <Card.Content className="flex flex-col justify-between gap-2.5 p-0 justify-between h-full">
                         <div className="flex flex-col gap-2.5 ">
                           {!lessonSubject?.items.length && (
-                            <EmptyStateCard
-                              icon={<BookOpen className="size-6 text-muted-foreground" />}
-                              title={emptyMessage(!lessonSubject
-                                ? "No subjects assigned for this academic period."
-                                : lessonSubject.coverage.scored_mapped_response_count === 0
-                                  ? "No scored quiz answers linked to lessons for this subject."
-                                  : `Not enough evidence yet. Each lesson needs scores from at least ${lessonPerformance?.policy.min_learners ?? 3} learners across ${lessonPerformance?.policy.min_questions ?? 3} questions.`)}
-                              className="border-none bg-transparent shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground"
-                            />
+                            <Empty className="border-none bg-transparent shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground">
+                              <Empty.Content>
+                                <Empty.Icon><BookOpen className="size-6 text-muted-foreground" /></Empty.Icon>
+                                <Empty.Title>{emptyMessage(!lessonSubject
+                                  ? "No subjects assigned for this academic period."
+                                  : lessonSubject.coverage.scored_mapped_response_count === 0
+                                    ? "No scored quiz answers linked to lessons for this subject."
+                                    : `Not enough evidence yet. Each lesson needs scores from at least ${lessonPerformance?.policy.min_learners ?? 3} learners across ${lessonPerformance?.policy.min_questions ?? 3} questions.`)}</Empty.Title>
+                              </Empty.Content>
+                            </Empty>
                           )}
                           {lessonSubject?.items.slice(0, 5).map((item) => (
                             <div

@@ -3,7 +3,7 @@ import { Card } from "@/components/retroui/Card";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { LoadingPanel } from "@/components/loading-panel";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import { useStudentOverviewData } from "@/hooks/use-student-overview-data";
 import SubjectGrade from "./subject-grade";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
@@ -33,8 +33,19 @@ const Grades = () => {
             </header>
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {isLoading ? <LoadingPanel label="Loading subjects..." /> : error ? (
-                <EmptyStateCard title="Unable to load subjects" description={error} />
-              ) : subjects.length === 0 ? <EmptyStateCard title="No subjects enrolled." /> : subjects.map((subject) => (
+                <Empty>
+                  <Empty.Content>
+                    <Empty.Title>Unable to load subjects</Empty.Title>
+                    <Empty.Description>{error}</Empty.Description>
+                  </Empty.Content>
+                </Empty>
+              ) : subjects.length === 0 ? (
+                <Empty>
+                  <Empty.Content>
+                    <Empty.Title>No subjects enrolled.</Empty.Title>
+                  </Empty.Content>
+                </Empty>
+              ) : subjects.map((subject) => (
                 <Tooltip key={subject.subject_load_id}>
                 <TooltipTrigger render={<Card className="block w-full cursor-pointer transition-colors hover:border-border"
                   role="button" tabIndex={0} aria-label={`View grades for ${subject.subject_name}`}

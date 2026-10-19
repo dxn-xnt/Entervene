@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Card } from "@/components/retroui/Card";
 import { Progress } from "@/components/retroui/Progress";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import { LoadingPanel } from "@/components/loading-panel";
 import type { TodoItem } from "@/lib/api";
 
@@ -41,7 +41,16 @@ export function GradeOverviewCards({ todos, isLoading, error }: {
   const subjectPerformance = useMemo(() => computeSubjectPerformance(todos), [todos]);
   const weakestSubject = subjectPerformance.at(-1);
   if (isLoading) return <LoadingPanel label="Loading grade overview..." />;
-  if (error) return <EmptyStateCard title="Unable to load grade overview" description={error} />;
+  if (error) {
+    return (
+      <Empty>
+        <Empty.Content>
+          <Empty.Title>Unable to load grade overview</Empty.Title>
+          <Empty.Description>{error}</Empty.Description>
+        </Empty.Content>
+      </Empty>
+    );
+  }
 
   return (
     <section aria-labelledby="grade-overview-heading" className="flex flex-col gap-3">

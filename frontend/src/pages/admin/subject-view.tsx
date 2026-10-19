@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Badge } from "@/components/retroui/Badge";
 import { Card as RetroCard } from "@/components/retroui/Card";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { Text } from "@/components/retroui/Text";
@@ -171,9 +171,11 @@ export default function AdminSubjectView() {
                   </Text>
                   <div className="flex flex-col gap-3">
                     {classesList.length === 0 ? (
-                      <EmptyStateCard
-                        title={<>No active classes currently assigned to this subject level ({decodedGrade}).</>}
-                      />
+                      <Empty>
+                        <Empty.Content>
+                          <Empty.Title>No active classes currently assigned to this subject level ({decodedGrade}).</Empty.Title>
+                        </Empty.Content>
+                      </Empty>
                     ) : (
                       classesList.map((cls) => (
                         <ClassItemLine

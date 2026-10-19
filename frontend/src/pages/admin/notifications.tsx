@@ -6,7 +6,7 @@ import { NotificationCard } from "@/components/notification-card";
 import { Button } from "@/components/retroui/Button";
 import { AlertTriangle, Bell, FileCheck, Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import {
   getNotifications,
   markAllNotificationsAsRead,
@@ -110,10 +110,12 @@ export default function AdminNotifications() {
               {loading ? (
                 <LoadingPanel label="Loading notifications..." />
               ) : filteredNotifications.length === 0 ? (
-                <EmptyStateCard
-                  title="No notifications"
-                  description="You are all caught up!"
-                />
+                <Empty>
+                  <Empty.Content>
+                    <Empty.Title>No notifications</Empty.Title>
+                    <Empty.Description>You are all caught up!</Empty.Description>
+                  </Empty.Content>
+                </Empty>
               ) : (
                 <div className="flex flex-col gap-3 w-full">
                   {filteredNotifications.map((notification) => (
