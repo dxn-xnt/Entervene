@@ -322,7 +322,7 @@ export default function AdminUsers() {
               <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
                 <div className="flex min-w-0 items-center gap-3">
                   <SidebarTrigger className="shrink-0 md:hidden" />
-                  <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">User Management</h1>
+                  <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">Users</h1>
                 </div>
                 <Button
                   size="header"
@@ -800,17 +800,17 @@ function StatusBadge({
       {isPending && emailStatus === "failed" && (
         <Tooltip>
           <TooltipTrigger render={<span className="inline-flex"><Badge
-          size="sm"
-          variant="solid"
-          className="bg-red-600 hover:bg-red-700 text-white text-[10px] px-1.5 py-0 font-bold cursor-pointer transition-colors shadow-none"
-          onClick={(e) => {
-            e.stopPropagation();
-            onResend?.();
-          }}
-          aria-label="Resend failed invitation email"
-        >
-          {isResending ? "Resending..." : "Email Failed ↺"}
-        </Badge></span>} />
+            size="sm"
+            variant="solid"
+            className="bg-red-600 hover:bg-red-700 text-white text-[10px] px-1.5 py-0 font-bold cursor-pointer transition-colors shadow-none"
+            onClick={(e) => {
+              e.stopPropagation();
+              onResend?.();
+            }}
+            aria-label="Resend failed invitation email"
+          >
+            {isResending ? "Resending..." : "Email Failed ↺"}
+          </Badge></span>} />
           <TooltipContent>Resend invitation</TooltipContent>
         </Tooltip>
       )}

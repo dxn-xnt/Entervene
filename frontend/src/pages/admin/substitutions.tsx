@@ -31,7 +31,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import { toast } from "sonner";
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -240,16 +240,17 @@ export default function AdminSubstitutions() {
                     </Button>
                   </div>
                 ) : filteredSubstitutions.length === 0 ? (
-                  <EmptyStateCard
-                    icon={<UserCheck size={24} />}
-                    title="No substitutions found"
-                    description={
-                      searchQuery
-                        ? "Try adjusting your search terms or filters."
-                        : "Assign a substitute when a teacher goes on maternity leave or extended leave."
-                    }
-                    className="border-0 shadow-none"
-                  />
+                  <Empty className="border-0 shadow-none">
+                    <Empty.Content>
+                      <Empty.Icon><UserCheck size={24} /></Empty.Icon>
+                      <Empty.Title>No substitutions found</Empty.Title>
+                      <Empty.Description>
+                        {searchQuery
+                          ? "Try adjusting your search terms or filters."
+                          : "Assign a substitute when a teacher goes on maternity leave or extended leave."}
+                      </Empty.Description>
+                    </Empty.Content>
+                  </Empty>
                 ) : (
                   <div className="overflow-x-auto">
                     <Table className="w-full border-collapse text-sm">

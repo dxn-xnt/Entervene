@@ -48,8 +48,10 @@ def upgrade() -> None:
     # The following data migration applies only to the reviewed existing
     # installation; the successor revision creates the three canonical
     # templates for an empty installation.
-    if (conn.execute(text("SELECT count(*) FROM grading_template")).scalar_one() == 0
-            and conn.execute(text("SELECT count(*) FROM subject")).scalar_one() == 0):
+    expected_legacy = {1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14}
+    current_gt_ids = set(conn.execute(text("SELECT grading_template_id FROM grading_template")).scalars().all())
+    sg_count = conn.execute(text("SELECT count(*) FROM subject_groups")).scalar_one()
+    if sg_count == 0 or current_gt_ids != expected_legacy:
         return
 
     # The presentation database predates the subject-group seed data. It has

@@ -6,7 +6,7 @@ import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Progress } from "@/components/retroui/Progress";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { OverviewCard } from "@/components/overview-cards";
 import { ClassworkItemLine } from "@/components/item-line/classwork";
@@ -214,11 +214,12 @@ export function StudentRecordDetail({
             <Card.Content className="flex flex-col justify-between gap-2.5 p-0 h-full mt-3">
               <div className="flex flex-col gap-2.5">
                 {!performanceItems.length ? (
-                  <EmptyStateCard
-                    icon={<BookOpen className="size-6 text-muted-foreground" />}
-                    title="No classwork performance records found for this filter."
-                    className="border-none bg-transparent shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground"
-                  />
+                  <Empty className="border-none bg-transparent shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground">
+                    <Empty.Content>
+                      <Empty.Icon><BookOpen className="size-6 text-muted-foreground" /></Empty.Icon>
+                      <Empty.Title>No classwork performance records found for this filter.</Empty.Title>
+                    </Empty.Content>
+                  </Empty>
                 ) : (
                   displayedPerformanceItems.map((item) => (
                     <div

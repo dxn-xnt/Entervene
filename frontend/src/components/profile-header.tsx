@@ -101,7 +101,7 @@ export function UserProfileHeader({
             {name.charAt(0).toUpperCase()}
           </Avatar.Fallback>
         </Avatar>
-        <div className="flex flex-col min-w-0">
+        <div className="flex flex-col items-start min-w-0">
           <div className="flex flex-wrap items-center justify-center gap-2">
             <div className="truncate text-xl font-bold">{name}</div>
             <RoleBadge role={role} className="my-auto text-xs px-2 py-0.5" />

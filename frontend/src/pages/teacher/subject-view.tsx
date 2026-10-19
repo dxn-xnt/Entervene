@@ -50,31 +50,31 @@ const createOptions: Array<{
   description: string;
   icon: LucideIcon;
 }> = [
-  {
-    type: "READING",
-    title: "Reading",
-    description: "Create and publish class topics or resources for learners",
-    icon: BookOpen,
-  },
-  {
-    type: "QUIZ",
-    title: "Quiz",
-    description: "Build and assign quizzes to assess learner understanding",
-    icon: ClipboardList,
-  },
-  {
-    type: "ASSIGNMENT",
-    title: "Assignment",
-    description: "Post tasks or projects for students to complete and submit",
-    icon: FileText,
-  },
-  {
-    type: "ACTIVITY",
-    title: "Activity",
-    description: "Design interactive tasks to enhance learner engagement",
-    icon: CheckSquare,
-  },
-];
+    {
+      type: "READING",
+      title: "Reading",
+      description: "Create and publish class topics or resources for learners",
+      icon: BookOpen,
+    },
+    {
+      type: "QUIZ",
+      title: "Quiz",
+      description: "Build and assign quizzes to assess learner understanding",
+      icon: ClipboardList,
+    },
+    {
+      type: "ASSIGNMENT",
+      title: "Assignment",
+      description: "Post tasks or projects for students to complete and submit",
+      icon: FileText,
+    },
+    {
+      type: "ACTIVITY",
+      title: "Activity",
+      description: "Design interactive tasks to enhance learner engagement",
+      icon: CheckSquare,
+    },
+  ];
 
 const tabs: Array<TabItem<"lessons" | "classwork">> = [
   { id: "lessons", label: "Lessons", icon: BookOpen },
@@ -859,7 +859,7 @@ export default function SubjectDetails() {
                     </div>
 
                     <div className="flex flex-wrap w-full gap-2 md:flex md:w-auto md:flex-nowrap md:items-center">
-                      <Button
+                      {/* <Button
                         type="button"
                         size="header"
                         variant="outline"
@@ -872,7 +872,7 @@ export default function SubjectDetails() {
                       >
                         <BookOpenCheck size={16} />
                         Lesson Planner
-                      </Button>
+                      </Button> */}
                       {activeTab === "lessons" && (
                         <>
                           <Button

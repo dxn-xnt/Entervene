@@ -2,22 +2,15 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { Skeleton } from "@/components/retroui/Skeleton";
-import { Card } from "@/components/retroui/Card";
-import { Table } from "@/components/retroui/Table";
-import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
-import { Alert } from "@/components/retroui/Alert";
+import { Button } from "@/components/retroui/Button";
+import { Empty } from "@/components/retroui/Empty";
+import { Skeleton } from "@/components/retroui/Skeleton";
+import { Table } from "@/components/retroui/Table";
 import { Tabs } from "@/components/retroui/Tabs";
-import { EmptyStateCard } from "@/components/empty-state-card";
-import InterventionSupportMaterials from "./intervention-support-materials";
+import { useToast } from "@/components/retroui/use-toast";
+import { Activity, CheckCircle2, UserCheck } from "lucide-react";
+import InterventionModal from "./forms/intervention-modal";
 import {
   activateTeacherCandidate,
   getTeacherActive,
@@ -27,7 +20,6 @@ import {
   listTeacherActive,
   listTeacherCandidates,
   listTeacherResolved,
-  type DiagnosisSnapshot,
   type TeacherInterventionDetail,
   type TeacherInterventionSummary,
   type TeacherResolvedInterventionDetail,
@@ -39,12 +31,6 @@ const label = (value: string) =>
     .toLowerCase()
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
-const date = (value: string) =>
-  new Date(value).toLocaleString("en-PH", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-
 const formatDate = (value: string) =>
   new Date(value).toLocaleDateString("en-PH", {
     dateStyle: "medium",
@@ -54,9 +40,6 @@ const formatTime = (value: string) =>
   new Date(value).toLocaleTimeString("en-PH", {
     timeStyle: "short",
   });
-
-const percent = (value: number | null | undefined) =>
-  value == null ? "Unavailable" : `${value.toFixed(1)}%`;
 
 const sameScope = (
   left: TeacherInterventionSummary,
@@ -74,35 +57,8 @@ const reason = (candidate: TeacherInterventionSummary) => {
     : "Component detail unavailable in saved diagnosis";
 };
 
-const strongestEvidence = (diagnosis: DiagnosisSnapshot) => {
-  const scored = diagnosis.lowest_supported_competencies ?? [];
-  if (
-    scored.some((item) =>
-      item.supporting_scores.some(
-        (score) =>
-          score.source_type === "QUIZ_QUESTION" &&
-          score.score != null &&
-          score.possible_score != null &&
-          score.score < score.possible_score
-      )
-    )
-  ) {
-    return "Scored question-level competency evidence";
-  }
-  if (scored.some((item) => item.percent < 100)) {
-    return "Scored whole-activity competency evidence";
-  }
-  if (
-    (diagnosis.manual_assessment_coverage ?? []).some(
-      (item) => item.in_weakest_supported_component && item.percent < 100
-    )
-  ) {
-    return "Assessment coverage only · competencies are unranked";
-  }
-  return "Component-level evidence only · no specific competency identified";
-};
-
 export default function TeacherInterventions() {
+  const toast = useToast();
   const [params, setParams] = useSearchParams();
   const candidateParam = params.get("candidate");
   const activeParam = params.get("active");
@@ -148,7 +104,6 @@ export default function TeacherInterventions() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [activating, setActivating] = useState(false);
   const [reviewStale, setReviewStale] = useState(false);
 
@@ -159,9 +114,13 @@ export default function TeacherInterventions() {
       const res = await listTeacherCandidates();
       setItems(res.items);
     } catch (error) {
-      setListError(
-        error instanceof Error ? error.message : "Unable to load candidates."
-      );
+      const message =
+        error instanceof Error ? error.message : "Unable to load candidates.";
+      setListError(message);
+      toast.error({
+        title: "Failed to load candidates",
+        description: message,
+      });
     } finally {
       setLoading(false);
     }
@@ -174,11 +133,15 @@ export default function TeacherInterventions() {
       const res = await listTeacherActive();
       setActiveItems(res.items);
     } catch (error) {
-      setActiveError(
+      const message =
         error instanceof Error
           ? error.message
-          : "Unable to load active interventions."
-      );
+          : "Unable to load active interventions.";
+      setActiveError(message);
+      toast.error({
+        title: "Failed to load active interventions",
+        description: message,
+      });
     } finally {
       setActiveLoading(false);
     }
@@ -191,11 +154,15 @@ export default function TeacherInterventions() {
       const res = await listTeacherResolved();
       setResolvedItems(res.items);
     } catch (error) {
-      setResolvedError(
+      const message =
         error instanceof Error
           ? error.message
-          : "Unable to load resolved interventions."
-      );
+          : "Unable to load resolved interventions.";
+      setResolvedError(message);
+      toast.error({
+        title: "Failed to load resolved interventions",
+        description: message,
+      });
     } finally {
       setResolvedLoading(false);
     }
@@ -286,9 +253,10 @@ export default function TeacherInterventions() {
     setActionError(null);
     try {
       const active = await activateTeacherCandidate(detail.intervention_id);
-      setNotice(
-        `Intervention approved for ${active.student_name} in ${active.subject_name}.`
-      );
+      toast.success({
+        title: "Intervention approved",
+        description: `Intervention approved for ${active.student_name} in ${active.subject_name}.`,
+      });
       close();
       await refresh();
       await refreshActive();
@@ -297,25 +265,31 @@ export default function TeacherInterventions() {
         error instanceof Error
           ? error.message
           : "Unable to approve intervention. Please try again.";
+      let alertMsg = message;
       if (error instanceof InterventionApiError && error.status === 409) {
         setReviewStale(true);
-        setActionError(
+        alertMsg =
           /improved|at least 85/i.test(message)
             ? "The current prediction improved. This candidate can no longer be approved. Refresh the list to see its current state."
             : /evidence|ready|unavailable|invalid/i.test(message)
               ? "Current prediction evidence is insufficient or unavailable. Approval was not completed."
-              : `Candidate state changed: ${message}`
-        );
+              : `Candidate state changed: ${message}`;
+        setActionError(alertMsg);
         void refresh();
         void refreshActive();
       } else if (
         error instanceof InterventionApiError &&
         (error.status === 401 || error.status === 403)
       ) {
-        setActionError("You no longer have teaching access to this candidate.");
+        alertMsg = "You no longer have teaching access to this candidate.";
+        setActionError(alertMsg);
       } else {
         setActionError(message);
       }
+      toast.error({
+        title: "Unable to approve intervention",
+        description: alertMsg,
+      });
     } finally {
       setActivating(false);
     }
@@ -383,9 +357,9 @@ export default function TeacherInterventions() {
               <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
                 <Tabs
                   tabs={[
-                    { id: "candidate", label: "Candidates" },
-                    { id: "active", label: "Active" },
-                    { id: "resolved", label: "Resolved" },
+                    { id: "candidate", label: "Candidates", icon: UserCheck },
+                    { id: "active", label: "Active", icon: Activity },
+                    { id: "resolved", label: "Resolved", icon: CheckCircle2 },
                   ]}
                   activeTab={view}
                   onTabChange={(nextView) =>
@@ -396,25 +370,6 @@ export default function TeacherInterventions() {
             </div>
 
             <main className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-4 sm:px-4 md:px-6">
-              {notice && <Alert status="success">{notice}</Alert>}
-              {showingError && (
-                <Alert status="error">
-                  {showingError}{" "}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      void (resolvedView
-                        ? refreshResolved()
-                        : activeView
-                          ? refreshActive()
-                          : refresh())
-                    }
-                  >
-                    Retry
-                  </Button>
-                </Alert>
-              )}
               {showingLoading ? (
                 <div
                   aria-label={
@@ -430,26 +385,47 @@ export default function TeacherInterventions() {
                   <Skeleton className="h-20 w-full" />
                   <Skeleton className="h-20 w-full" />
                 </div>
-              ) : !showingError && sorted.length === 0 ? (
-                <EmptyStateCard
-                  title={
-                    resolvedView
-                      ? "No resolved interventions"
-                      : activeView
-                        ? "No active interventions"
-                        : "No candidates to review"
-                  }
-                  description={
-                    resolvedView
-                      ? "Resolved support will appear here."
-                      : activeView
-                        ? "Approved interventions will appear here."
-                        : "New candidates will appear when a current corrected prediction qualifies."
-                  }
-                />
+              ) : showingError ? (
+                <Empty>
+                  <Empty.Content>
+                    <Empty.Title>Unable to load interventions</Empty.Title>
+                    <Empty.Description>{showingError}</Empty.Description>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        void (resolvedView
+                          ? refreshResolved()
+                          : activeView
+                            ? refreshActive()
+                            : refresh())
+                      }
+                    >
+                      Retry
+                    </Button>
+                  </Empty.Content>
+                </Empty>
+              ) : sorted.length === 0 ? (
+                <Empty>
+                  <Empty.Content>
+                    <Empty.Title>
+                      {resolvedView
+                        ? "No resolved interventions"
+                        : activeView
+                          ? "No active interventions"
+                          : "No candidates to review"}
+                    </Empty.Title>
+                    <Empty.Description>
+                      {resolvedView
+                        ? "Resolved support will appear here."
+                        : activeView
+                          ? "Approved interventions will appear here."
+                          : "New candidates will appear when a current corrected prediction qualifies."}
+                    </Empty.Description>
+                  </Empty.Content>
+                </Empty>
               ) : (
-                !showingError && (
-                  <Table wrapperClassName="h-auto">
+                <Table wrapperClassName="h-auto">
                     <Table.Header>
                       <Table.Row>
                         <Table.Head>Student</Table.Head>
@@ -532,443 +508,26 @@ export default function TeacherInterventions() {
                       ))}
                     </Table.Body>
                   </Table>
-                )
               )}
             </main>
           </div>
         </div>
       </div>
 
-      <Sheet
-        open={selectedId !== null}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) close();
-        }}
-      >
-        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-          <SheetHeader>
-            <SheetTitle>
-              {selectedKind === "resolved"
-                ? "Resolved Intervention · Read-only"
-                : selectedKind === "active"
-                  ? "Active Intervention"
-                  : "Candidate Review"}
-            </SheetTitle>
-            <SheetDescription>
-              Frozen evidence from the triggering corrected prediction.
-            </SheetDescription>
-          </SheetHeader>
-
-          {detailLoading ? (
-            <div
-              aria-label={
-                selectedKind === "resolved"
-                  ? "Loading resolved detail"
-                  : selectedKind === "active"
-                    ? "Loading active detail"
-                    : "Loading candidate detail"
-              }
-              className="space-y-3 p-4"
-            >
-              <Skeleton className="h-28 w-full" />
-              <Skeleton className="h-40 w-full" />
-            </div>
-          ) : detailError ? (
-            <Alert status="error">{detailError}</Alert>
-          ) : (
-            detail && (
-              <div className="space-y-5 p-4 pb-10">
-                {detail.status === "RESOLVED" ? (
-                  (() => {
-                    const resolved = detail as TeacherResolvedInterventionDetail;
-                    return (
-                      <>
-                        <Card className="space-y-2 border-2 border-green-700 bg-green-50">
-                          <h3 className="font-bold">Resolved · Read-only history</h3>
-                          <p className="font-semibold">
-                            {newerActive
-                              ? "Previous intervention cycle"
-                              : "Resolved intervention cycle"}
-                          </p>
-                          <p>
-                            {resolved.student_name} · {resolved.subject_name} ·{" "}
-                            {resolved.class_name}
-                          </p>
-                          <p>
-                            Resolved:{" "}
-                            <strong>
-                              {resolved.resolved_at
-                                ? date(resolved.resolved_at)
-                                : "Unavailable"}
-                            </strong>
-                          </p>
-                          <p>
-                            Reason:{" "}
-                            <strong>
-                              {label(
-                                resolved.resolution_reason || "Unavailable"
-                              )}
-                            </strong>
-                          </p>
-                          <p>
-                            Trigger projection:{" "}
-                            <strong>
-                              {resolved.triggering_predicted_grade.toFixed(2)}
-                            </strong>
-                          </p>
-                          <p>
-                            Projection at resolution:{" "}
-                            <strong>
-                              {resolved.resolution_projection?.toFixed(2) ??
-                                "Unavailable"}
-                            </strong>
-                          </p>
-                          <p className="text-sm">
-                            This resolution describes this past cycle, not the
-                            student's current prediction.
-                          </p>
-                          {newerActive && (
-                            <p className="text-sm font-semibold">
-                              A later below-threshold prediction opened a new active
-                              support cycle (trigger{" "}
-                              {newerActive.triggering_predicted_grade.toFixed(2)}).
-                            </p>
-                          )}
-                        </Card>
-
-                        <Card className="space-y-2">
-                          <h3 className="font-bold">Targeted support history</h3>
-                          {resolved.targeted_activities.length ? (
-                            resolved.targeted_activities.map((activity) => (
-                              <p key={activity.assignment_id}>
-                                {activity.title} ·{" "}
-                                {activity.submission_status === "graded"
-                                  ? "Completed"
-                                  : label(
-                                    activity.submission_status || "Not submitted"
-                                  )}
-                                {activity.grade != null &&
-                                  activity.total_points != null
-                                  ? ` · ${activity.grade}/${activity.total_points}`
-                                  : ""}
-                                {activity.original_assignment_id && (
-                                  <span className="block text-sm">
-                                    {activity.original_title} ·{" "}
-                                    {label(
-                                      activity.exam_subtype || "Examination"
-                                    )}{" "}
-                                    · Original:{" "}
-                                    {activity.original_grade ?? "—"}/
-                                    {activity.total_points ?? "—"} · Remedial:{" "}
-                                    {activity.grade ?? "Pending"}/
-                                    {activity.total_points ?? "—"} · Effective:{" "}
-                                    {activity.effective_grade ?? "—"}/
-                                    {activity.total_points ?? "—"}
-                                  </span>
-                                )}
-                              </p>
-                            ))
-                          ) : (
-                            <p>No targeted activity was recorded.</p>
-                          )}
-                        </Card>
-
-                        {resolved.sent_reviewer && (
-                          <Card className="space-y-2">
-                            <h3 className="font-bold">Sent Reviewer</h3>
-                            <strong>{resolved.sent_reviewer.title}</strong>
-                            <p>{resolved.sent_reviewer.introduction}</p>
-                            <p className="whitespace-pre-wrap">
-                              {resolved.sent_reviewer.body}
-                            </p>
-                          </Card>
-                        )}
-                      </>
-                    );
-                  })()
-                ) : detail.status === "ACTIVE" ? (
-                  <>
-                    {previousResolved && (
-                      <Card className="space-y-1 border-2 border-black bg-yellow-50">
-                        <h3 className="font-bold">Current support cycle</h3>
-                        <p>
-                          A new below-threshold prediction opened this cycle after
-                          the previous Intervention resolved on{" "}
-                          {date(previousResolved.resolved_at!)}. That resolution is
-                          past history.
-                        </p>
-                      </Card>
-                    )}
-                    <InterventionSupportMaterials
-                      key={detail.intervention_id}
-                      detail={detail}
-                    />
-                  </>
-                ) : (
-                  <>
-                    <h3 className="text-lg font-bold">
-                      Original trigger and activation
-                    </h3>
-                    <Card className="w-full space-y-2">
-                      <h2 className="text-lg font-bold">
-                        {detail.student_name} · {detail.subject_name}
-                      </h2>
-                      <p>
-                        {detail.class_name} · {detail.academic_period_name}
-                      </p>
-                      <p>
-                        Status: <strong>{label(detail.status)}</strong>
-                      </p>
-                      <p>
-                        Triggering projected grade:{" "}
-                        <strong>
-                          {detail.triggering_predicted_grade.toFixed(2)}
-                        </strong>{" "}
-                        · {label(detail.triggering_intervention_level)}
-                      </p>
-                      <p>
-                        Original source prediction #{detail.source_prediction_id},
-                        revision {detail.source_prediction_revision} · Candidate
-                        created {date(detail.created_at)}
-                      </p>
-                    </Card>
-
-                    <Card className="w-full space-y-2">
-                      <h3 className="text-lg font-bold">Why support was started</h3>
-                      <p>
-                        Weakest supported components:{" "}
-                        {(
-                          detail.diagnosis_snapshot
-                            .weakest_supported_components ?? []
-                        )
-                          .map(label)
-                          .join(", ") || "Unavailable"}
-                      </p>
-                      <p>
-                        Strongest available evidence:{" "}
-                        <strong>
-                          {strongestEvidence(detail.diagnosis_snapshot)}
-                        </strong>
-                      </p>
-                      <p className="text-sm">
-                        {(
-                          detail.diagnosis_snapshot
-                            .lowest_supported_competencies ?? []
-                        ).length}{" "}
-                        scored competency targets ·{" "}
-                        {(
-                          detail.diagnosis_snapshot
-                            .manual_assessment_coverage ?? []
-                        ).length}{" "}
-                        assessments with coverage for teacher review
-                      </p>
-                    </Card>
-                  </>
-                )}
-
-                <details className="rounded border p-3">
-                  <summary className="cursor-pointer font-bold">
-                    View full frozen evidence
-                  </summary>
-                  <div className="space-y-4 pt-4">
-                    <section className="space-y-2">
-                      <h3 className="text-lg font-bold">
-                        Frozen academic diagnosis
-                      </h3>
-                      <p>
-                        Original source prediction #{detail.source_prediction_id},
-                        revision {detail.source_prediction_revision}
-                      </p>
-                      {detail.activated_by_staff_id && (
-                        <p>Activated by staff {detail.activated_by_staff_id}</p>
-                      )}
-                      <p>
-                        Evidence cutoff:{" "}
-                        {detail.diagnosis_snapshot.evidence_cutoff_at
-                          ? date(detail.diagnosis_snapshot.evidence_cutoff_at)
-                          : "Unavailable"}
-                      </p>
-                      <p>
-                        Weakest supported components:{" "}
-                        {(
-                          detail.diagnosis_snapshot
-                            .weakest_supported_components ?? []
-                        )
-                          .map(label)
-                          .join(", ") || "Unavailable"}
-                      </p>
-                      {Object.entries(
-                        detail.diagnosis_snapshot.components ?? {}
-                      ).map(([name, component]) => (
-                        <Card key={name} className="w-full">
-                          <strong>{label(name)}</strong>:{" "}
-                          {component.evidence_state === "AVAILABLE"
-                            ? percent(component.percent)
-                            : "Evidence unavailable"}
-                        </Card>
-                      ))}
-                      <h4 className="font-bold">Supporting activities</h4>
-                      {(
-                        detail.diagnosis_snapshot.supporting_activities ?? []
-                      ).length ? (
-                        detail.diagnosis_snapshot.supporting_activities?.map(
-                          (activity) => (
-                            <Card key={activity.classwork_id} className="w-full">
-                              <strong>{activity.title}</strong> ·{" "}
-                              {label(activity.component)} · {activity.score}/
-                              {activity.possible_score} (
-                              {percent(activity.percent)})
-                            </Card>
-                          )
-                        )
-                      ) : (
-                        <p>No scored activity detail in the saved diagnosis.</p>
-                      )}
-                    </section>
-
-                    <section className="space-y-2">
-                      <h3 className="text-lg font-bold">
-                        Scored competency evidence
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Ranked only when a competency has its own traceable scored
-                        evidence.
-                      </p>
-                      {(
-                        detail.diagnosis_snapshot
-                          .lowest_supported_competencies ?? []
-                      ).length ? (
-                        detail.diagnosis_snapshot.lowest_supported_competencies?.map(
-                          (item) => (
-                            <Card key={item.competency_id} className="w-full">
-                              <strong>
-                                {item.competency_code}: {item.competency_statement}
-                              </strong>
-                              <p>
-                                Scored evidence: {item.score}/
-                                {item.possible_score} ({percent(item.percent)})
-                              </p>
-                              {item.supporting_scores.map((score, index) => (
-                                <p
-                                  key={`${score.quiz_question_id ?? score.source_type}-${index}`}
-                                  className="text-xs"
-                                >
-                                  {score.source_type === "QUIZ_QUESTION"
-                                    ? `Scored question #${score.quiz_question_id ?? "unknown"}`
-                                    : "Whole-activity score"}{" "}
-                                  · {score.activity_title}
-                                  {score.lesson_title
-                                    ? ` · ${score.lesson_title}`
-                                    : ""}{" "}
-                                  · {score.score != null &&
-                                    score.possible_score != null
-                                    ? `${score.score}/${score.possible_score}`
-                                    : ""}
-                                </p>
-                              ))}
-                            </Card>
-                          )
-                        )
-                      ) : (
-                        <Alert status="info">
-                          No specific competency could be identified from scored
-                          evidence.
-                        </Alert>
-                      )}
-                    </section>
-
-                    <section className="space-y-2">
-                      <h3 className="text-lg font-bold">
-                        Manual assessment coverage for teacher review
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        A total assessment score shows performance on the
-                        assessment. It does not score each covered competency
-                        separately or rank them against one another.
-                      </p>
-                      {(
-                        detail.diagnosis_snapshot
-                          .manual_assessment_coverage ?? []
-                      ).length ? (
-                        detail.diagnosis_snapshot.manual_assessment_coverage?.map(
-                          (assessment) => (
-                            <Card
-                              key={assessment.classwork_id}
-                              className="w-full space-y-1"
-                            >
-                              <strong>{assessment.title}</strong>
-                              <p>
-                                {label(assessment.component)} · Assessment total{" "}
-                                {assessment.score}/{assessment.possible_score} (
-                                {percent(assessment.percent)})
-                              </p>
-                              <p>
-                                Covered lessons:{" "}
-                                {assessment.covered_lessons
-                                  .map((lesson) => lesson.title)
-                                  .join(", ") || "None linked"}
-                              </p>
-                              <p>
-                                Covered competencies:{" "}
-                                {assessment.covered_competencies
-                                  .map(
-                                    (item) =>
-                                      `${item.competency_code}: ${item.competency_statement}`
-                                  )
-                                  .join("; ") || "None linked"}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                Teacher asserted assessment-level coverage; shared
-                                total score only.
-                              </p>
-                            </Card>
-                          )
-                        )
-                      ) : (
-                        <p>
-                          No dated manual assessment coverage was available at the
-                          evidence cutoff.
-                        </p>
-                      )}
-                      {(
-                        detail.diagnosis_snapshot
-                          .covered_competencies_for_teacher_review ?? []
-                      ).length > 0 && (
-                          <p className="text-sm">
-                            Covered competencies in weak components require teacher
-                            review; they are unranked because the assessment has one
-                            shared total score.
-                          </p>
-                        )}
-                    </section>
-                  </div>
-                </details>
-
-                {actionError && <Alert status="error">{actionError}</Alert>}
-
-                {selectedKind === "candidate" && detail.status === "CANDIDATE" && (
-                  <Card className="w-full space-y-3">
-                    <p>
-                      Approve an Intervention for{" "}
-                      <strong>{detail.student_name}</strong> in{" "}
-                      <strong>{detail.subject_name}</strong>? Current prediction
-                      evidence and teaching scope will be checked again.
-                    </p>
-                    <Button
-                      disabled={activating || reviewStale}
-                      onClick={() => void activate()}
-                    >
-                      {activating
-                        ? "Checking and approving..."
-                        : "Approve Intervention"}
-                    </Button>
-                  </Card>
-                )}
-              </div>
-            )
-          )}
-        </SheetContent>
-      </Sheet>
+      <InterventionModal
+        isOpen={selectedId !== null}
+        onClose={close}
+        selectedKind={selectedKind}
+        detail={detail}
+        detailLoading={detailLoading}
+        detailError={detailError}
+        actionError={actionError}
+        activating={activating}
+        reviewStale={reviewStale}
+        onActivate={activate}
+        previousResolved={previousResolved}
+        newerActive={newerActive}
+      />
     </AppLayout>
   );
 }

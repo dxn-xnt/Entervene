@@ -12,6 +12,7 @@ import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { Alert } from "@/components/retroui/Alert";
 import { Switch } from "@/components/retroui/Switch";
+import { Checkbox } from "@/components/retroui/Checkbox";
 import Field from "@/components/admin/classes/fields/Field";
 import { apiFetch } from "@/lib/api";
 import {
@@ -920,20 +921,6 @@ export default function CreateClassworkQuizModal({
                                     />
                                 </Field>
 
-                                <Field label="Description">
-                                    <Input
-                                        value={draft.description}
-                                        onChange={(event) =>
-                                            setDraft((current) => ({
-                                                ...current,
-                                                description: event.target.value,
-                                            }))
-                                        }
-                                        disabled={isCreating}
-                                        placeholder="Short context for students"
-                                        className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
-                                    />
-                                </Field>
 
                                 <Field label="Instructions">
                                     <textarea
@@ -946,7 +933,7 @@ export default function CreateClassworkQuizModal({
                                         }
                                         disabled={isCreating}
                                         placeholder="What students need to read, answer, or submit"
-                                        className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-none transition focus:outline-hidden focus:shadow-none min-h-20 text-sm"
+                                        className="px-4 py-2 w-full rounded! border-2 border-black bg-white shadow-none transition focus:outline-hidden focus:shadow-none min-h-20 text-sm"
                                     />
                                 </Field>
 
@@ -1039,28 +1026,6 @@ export default function CreateClassworkQuizModal({
                                             className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
                                         />
                                     </Field>
-
-                                    <Field label="Attempts">
-                                        <Input
-                                            type="number"
-                                            min="1"
-                                            step="1"
-                                            value={draft.max_attempts}
-                                            onFocus={(event) => event.target.select()}
-                                            onChange={(event) => {
-                                                setDraft((current) => ({
-                                                    ...current,
-                                                    max_attempts: event.target.value,
-                                                }));
-                                                setQuizSettings((current) => ({
-                                                    ...current,
-                                                    max_attempts: event.target.value,
-                                                }));
-                                            }}
-                                            disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
-                                            className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
-                                        />
-                                    </Field>
                                 </div>
                                 {remediationFocus && (
                                     <p className="rounded border p-3 text-sm">
@@ -1114,6 +1079,7 @@ export default function CreateClassworkQuizModal({
                                         )}
                                     </div>
                                 )}
+
                                 <div className="rounded border-2 border-black bg-[#F8F6ED] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                                     <div className="flex flex-wrap items-start justify-between gap-3">
                                         <div>
@@ -1127,193 +1093,7 @@ export default function CreateClassworkQuizModal({
                                         </span>
                                     </div>
 
-                                    {quizImportWarnings.length > 0 && (
-                                        <div className="mt-3 rounded border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs font-semibold text-yellow-800">
-                                            <p className="font-bold">Import notes</p>
-                                            <ul className="mt-1 list-disc pl-4">
-                                                {quizImportWarnings.map((warning) => (
-                                                    <li key={warning}>{warning}</li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
 
-                                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                                        <div className="flex flex-col gap-1 w-full">
-                                            <label className="text-xs font-bold text-gray-700">
-                                                Duration
-                                            </label>
-                                            <div className="flex items-center gap-2">
-                                                <Input
-                                                    type="number"
-                                                    min="1"
-                                                    step="1"
-                                                    value={quizSettings.duration_minutes}
-                                                    onFocus={(event) => event.target.select()}
-                                                    onChange={(event) =>
-                                                        setQuizSettings((current) => ({
-                                                            ...current,
-                                                            duration_minutes: event.target.value,
-                                                        }))
-                                                    }
-                                                    disabled={isCreating}
-                                                    placeholder="No time limit"
-                                                    className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
-                                                />
-                                                <span className="text-xs font-bold">minutes</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex flex-col gap-1 w-full">
-                                            <label className="text-xs font-bold text-gray-700">
-                                                Attempts
-                                            </label>
-                                            <Input
-                                                type="number"
-                                                min="1"
-                                                step="1"
-                                                value={quizSettings.max_attempts}
-                                                onFocus={(event) => event.target.select()}
-                                                onChange={(event) => {
-                                                    setQuizSettings((current) => ({
-                                                        ...current,
-                                                        max_attempts: event.target.value,
-                                                    }));
-                                                    setDraft((current) => ({
-                                                        ...current,
-                                                        max_attempts: event.target.value,
-                                                    }));
-                                                }}
-                                                disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
-                                                className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                                        <div className="flex flex-col gap-1 w-full">
-                                            <label className="text-xs font-bold text-gray-700">
-                                                Quiz Summary Availability
-                                            </label>
-                                            <Select
-                                                value={quizSettings.summary_release_mode}
-                                                onValueChange={(val) =>
-                                                    setQuizSettings((current) => ({
-                                                        ...current,
-                                                        summary_release_mode:
-                                                            val as QuizSettingsDraft["summary_release_mode"],
-                                                        summary_release_at:
-                                                            val === "SCHEDULED" ? current.summary_release_at : "",
-                                                    }))
-                                                }
-                                                disabled={isCreating}
-                                            >
-                                                <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
-                                                    <Select.Value placeholder="Select Release Mode" />
-                                                </Select.Trigger>
-                                                <Select.Content className="border-2 border-black rounded bg-white">
-                                                    <Select.Group>
-                                                        <Select.Item value="IMMEDIATE">
-                                                            Immediately after submission
-                                                        </Select.Item>
-                                                        <Select.Item value="SCHEDULED">
-                                                            At a specific date & time
-                                                        </Select.Item>
-                                                        <Select.Item value="AFTER_DUE_DATE">
-                                                            After the quiz due date
-                                                        </Select.Item>
-                                                        <Select.Item value="NEVER">Never</Select.Item>
-                                                    </Select.Group>
-                                                </Select.Content>
-                                            </Select>
-                                        </div>
-
-                                        {quizSettings.summary_release_mode === "SCHEDULED" ? (
-                                            <div className="flex flex-col gap-1 w-full">
-                                                <label className="text-xs font-bold text-gray-700">
-                                                    Release Date & Time
-                                                </label>
-                                                <Input
-                                                    type="datetime-local"
-                                                    value={quizSettings.summary_release_at}
-                                                    onChange={(event) =>
-                                                        setQuizSettings((current) => ({
-                                                            ...current,
-                                                            summary_release_at: event.target.value,
-                                                        }))
-                                                    }
-                                                    disabled={isCreating}
-                                                    className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
-                                                />
-                                            </div>
-                                        ) : (
-                                            <div className="rounded border-2 border-dashed border-gray-300 bg-[#FFFBEE] px-3 py-2 text-xs text-gray-600 flex items-center">
-                                                {quizSettings.summary_release_mode === "AFTER_DUE_DATE"
-                                                    ? "Summary unlocks automatically after the due date."
-                                                    : quizSettings.summary_release_mode === "NEVER"
-                                                        ? "Students can see their score, but not the answer summary."
-                                                        : "Students can view the summary right after submitting."}
-                                            </div>
-                                        )}
-                                        {quizSettings.summary_release_mode === "AFTER_DUE_DATE" && !draft.due_date && (
-                                            <p className="text-xs text-amber-600 font-medium mt-1">
-                                                ⚠ Remember to set a due date in the next step so this release mode takes effect.
-                                            </p>
-                                        )}
-
-                                    </div>
-
-                                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                        {[
-                                            {
-                                                key: "is_shuffle_questions",
-                                                label: "Shuffle questions",
-                                            },
-                                            {
-                                                key: "enable_per_question_scoring",
-                                                label: "Enable per-question scoring",
-                                            },
-                                            {
-                                                key: "enable_per_question_time_limits",
-                                                label: "Enable individual question time limits",
-                                            },
-                                            {
-                                                key: "show_correct_answers",
-                                                label: "Show correct answers after submission",
-                                            },
-                                        ].map((setting) => {
-                                            const key = setting.key as keyof Pick<
-                                                QuizSettingsDraft,
-                                                | "is_shuffle_questions"
-                                                | "enable_per_question_scoring"
-                                                | "enable_per_question_time_limits"
-                                                | "show_correct_answers"
-                                            >;
-                                            const enabled = quizSettings[key];
-                                            return (
-                                                <button
-                                                    key={setting.key}
-                                                    type="button"
-                                                    onClick={() =>
-                                                        setQuizSettings((current) => ({
-                                                            ...current,
-                                                            [key]: !current[key],
-                                                        }))
-                                                    }
-                                                    disabled={isCreating}
-                                                    className="flex items-center justify-between rounded border-2 border-black bg-white px-3 py-2 text-left text-xs font-bold shadow-md cursor-pointer transition active:translate-y-0.5"
-                                                >
-                                                    <span>{setting.label}</span>
-                                                    <span
-                                                        className={`rounded border border-black px-2 py-0.5 text-[10px] ${enabled ? "bg-[#7ABA78]" : "bg-gray-100"
-                                                            }`}
-                                                    >
-                                                        {enabled ? "On" : "Off"}
-                                                    </span>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
                                 </div>
 
                                 <div className="space-y-4">
@@ -1360,27 +1140,23 @@ export default function CreateClassworkQuizModal({
                                                 </div>
 
                                                 <div className="grid gap-4 sm:grid-cols-3">
-                                                    <div className="flex flex-col gap-1 sm:col-span-2">
-                                                        <label className="text-xs font-bold text-gray-700">
-                                                            Question text
-                                                        </label>
-                                                        <textarea
-                                                            value={question.question_text}
-                                                            onChange={(event) =>
-                                                                updateQuizQuestion(question.id, {
-                                                                    question_text: event.target.value,
-                                                                })
-                                                            }
-                                                            disabled={isCreating}
-                                                            placeholder="Which of the following is the primary function of a CPU?"
-                                                            className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-md transition focus:outline-hidden focus:shadow-xs min-h-20 text-sm"
-                                                        />
+                                                    <div className="sm:col-span-2">
+                                                        <Field label="Question text" isRequired={true}>
+                                                            <textarea
+                                                                value={question.question_text}
+                                                                onChange={(event) =>
+                                                                    updateQuizQuestion(question.id, {
+                                                                        question_text: event.target.value,
+                                                                    })
+                                                                }
+                                                                disabled={isCreating}
+                                                                placeholder="Which of the following is the primary function of a CPU?"
+                                                                className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-none transition focus:outline-hidden focus:shadow-none min-h-20 text-sm"
+                                                            />
+                                                        </Field>
                                                     </div>
                                                     <div className="grid gap-3">
-                                                        <div className="flex flex-col gap-1 w-full">
-                                                            <label className="text-xs font-bold text-gray-700">
-                                                                Type
-                                                            </label>
+                                                        <Field label="Type">
                                                             <Select
                                                                 value={question.question_type}
                                                                 onValueChange={(val) => {
@@ -1397,7 +1173,7 @@ export default function CreateClassworkQuizModal({
                                                                 }}
                                                                 disabled={isCreating}
                                                             >
-                                                                <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
+                                                                <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-none text-sm">
                                                                     <Select.Value />
                                                                 </Select.Trigger>
                                                                 <Select.Content className="border-2 border-black rounded bg-white">
@@ -1414,12 +1190,9 @@ export default function CreateClassworkQuizModal({
                                                                     </Select.Group>
                                                                 </Select.Content>
                                                             </Select>
-                                                        </div>
+                                                        </Field>
 
-                                                        <div className="flex flex-col gap-1 w-full">
-                                                            <label className="text-xs font-bold text-gray-700">
-                                                                Points
-                                                            </label>
+                                                        <Field label="Points" isRequired={true}>
                                                             <Input
                                                                 type="number"
                                                                 min="0.01"
@@ -1433,9 +1206,9 @@ export default function CreateClassworkQuizModal({
                                                                     })
                                                                 }
                                                                 disabled={isCreating}
-                                                                className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
+                                                                className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
                                                             />
-                                                        </div>
+                                                        </Field>
                                                     </div>
                                                 </div>
 
@@ -1585,45 +1358,41 @@ export default function CreateClassworkQuizModal({
                                                     </div>
                                                 ) : (
                                                     /* SHORT_ANSWER (Essay) */
-                                                    <div className="mt-4 space-y-2">
-                                                        <div className="flex flex-col gap-0.5">
-                                                            <p className="text-xs font-bold text-gray-700">
-                                                                Sample answer / rubric (optional)
-                                                            </p>
-                                                            <p className="text-[11px] text-gray-500 font-medium">
+                                                    <div className="mt-4">
+                                                        <Field label="Sample answer / rubric (optional)">
+                                                            <p className="text-[11px] text-gray-500 font-medium -mt-0.5 mb-1">
                                                                 Graded manually. Visible to teachers only during grading; not shown to students.
                                                             </p>
-                                                        </div>
-                                                        <textarea
-                                                            value={question.explanation}
-                                                            onChange={(event) =>
-                                                                updateQuizQuestion(question.id, {
-                                                                    explanation: event.target.value,
-                                                                })
-                                                            }
-                                                            disabled={isCreating}
-                                                            placeholder="Optional sample answer, scoring criteria, or rubric for grading student responses..."
-                                                            className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-md transition focus:outline-hidden focus:shadow-xs min-h-20 text-sm"
-                                                        />
+                                                            <textarea
+                                                                value={question.explanation}
+                                                                onChange={(event) =>
+                                                                    updateQuizQuestion(question.id, {
+                                                                        explanation: event.target.value,
+                                                                    })
+                                                                }
+                                                                disabled={isCreating}
+                                                                placeholder="Optional sample answer, scoring criteria, or rubric for grading student responses..."
+                                                                className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-none transition focus:outline-hidden focus:shadow-none min-h-20 text-sm"
+                                                            />
+                                                        </Field>
                                                     </div>
                                                 )}
 
                                                 {question.question_type !== "SHORT_ANSWER" && (
-                                                    <div className="mt-3 flex flex-col gap-1 w-full">
-                                                        <label className="text-xs font-bold text-gray-700">
-                                                            Explanation or answer guide (optional)
-                                                        </label>
-                                                        <textarea
-                                                            value={question.explanation}
-                                                            onChange={(event) =>
-                                                                updateQuizQuestion(question.id, {
-                                                                    explanation: event.target.value,
-                                                                })
-                                                            }
-                                                            disabled={isCreating}
-                                                            placeholder="Optional guidance for review or grading"
-                                                            className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-md transition focus:outline-hidden focus:shadow-xs min-h-16 text-sm"
-                                                        />
+                                                    <div className="mt-3">
+                                                        <Field label="Explanation or answer guide (optional)">
+                                                            <textarea
+                                                                value={question.explanation}
+                                                                onChange={(event) =>
+                                                                    updateQuizQuestion(question.id, {
+                                                                        explanation: event.target.value,
+                                                                    })
+                                                                }
+                                                                disabled={isCreating}
+                                                                placeholder="Optional guidance for review or grading"
+                                                                className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-none transition focus:outline-hidden focus:shadow-none min-h-16 text-sm"
+                                                            />
+                                                        </Field>
                                                     </div>
                                                 )}
                                             </div>
@@ -1671,12 +1440,11 @@ export default function CreateClassworkQuizModal({
                                     </div>
 
                                     <div className="flex items-center gap-3 flex-wrap">
-                                        <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-semibold">
-                                            <input
-                                                type="checkbox"
+                                        <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold">
+                                            <Checkbox
+                                                size="sm"
                                                 checked={includeExportAnswerKey}
-                                                onChange={(e) => setIncludeExportAnswerKey(e.target.checked)}
-                                                className="w-4 h-4 border-2 border-black accent-black cursor-pointer"
+                                                onCheckedChange={(checked) => setIncludeExportAnswerKey(Boolean(checked))}
                                             />
                                             <span>Include Answer Key</span>
                                         </label>
@@ -1721,6 +1489,172 @@ export default function CreateClassworkQuizModal({
 
                         {createStep === "assign" && (
                             <div className="space-y-4">
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                    <Field label="Duration (minutes)">
+                                        <div className="flex items-center gap-2">
+                                            <Input
+                                                type="number"
+                                                min="1"
+                                                step="1"
+                                                value={quizSettings.duration_minutes}
+                                                onFocus={(event) => event.target.select()}
+                                                onChange={(event) =>
+                                                    setQuizSettings((current) => ({
+                                                        ...current,
+                                                        duration_minutes: event.target.value,
+                                                    }))
+                                                }
+                                                disabled={isCreating}
+                                                placeholder="No time limit"
+                                                className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
+                                            />
+                                        </div>
+                                    </Field>
+
+                                    <Field label="Attempts">
+                                        <Input
+                                            type="number"
+                                            min="1"
+                                            step="1"
+                                            value={quizSettings.max_attempts}
+                                            onFocus={(event) => event.target.select()}
+                                            onChange={(event) => {
+                                                setQuizSettings((current) => ({
+                                                    ...current,
+                                                    max_attempts: event.target.value,
+                                                }));
+                                                setDraft((current) => ({
+                                                    ...current,
+                                                    max_attempts: event.target.value,
+                                                }));
+                                            }}
+                                            disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
+                                            className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
+                                        />
+                                    </Field>
+                                </div>
+
+                                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                                    <Field label="Quiz Summary Availability">
+                                        <Select
+                                            value={quizSettings.summary_release_mode}
+                                            onValueChange={(val) =>
+                                                setQuizSettings((current) => ({
+                                                    ...current,
+                                                    summary_release_mode:
+                                                        val as QuizSettingsDraft["summary_release_mode"],
+                                                    summary_release_at:
+                                                        val === "SCHEDULED" ? current.summary_release_at : "",
+                                                }))
+                                            }
+                                            disabled={isCreating}
+                                        >
+                                            <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-none text-sm">
+                                                <Select.Value placeholder="Select Release Mode" />
+                                            </Select.Trigger>
+                                            <Select.Content className="border-2 border-black rounded bg-white">
+                                                <Select.Group>
+                                                    <Select.Item value="IMMEDIATE">
+                                                        Immediately after submission
+                                                    </Select.Item>
+                                                    <Select.Item value="SCHEDULED">
+                                                        At a specific date & time
+                                                    </Select.Item>
+                                                    <Select.Item value="AFTER_DUE_DATE">
+                                                        After the quiz due date
+                                                    </Select.Item>
+                                                    <Select.Item value="NEVER">Never</Select.Item>
+                                                </Select.Group>
+                                            </Select.Content>
+                                        </Select>
+                                    </Field>
+
+                                    {quizSettings.summary_release_mode === "SCHEDULED" ? (
+                                        <Field label="Release Date & Time">
+                                            <Input
+                                                type="datetime-local"
+                                                value={quizSettings.summary_release_at}
+                                                onChange={(event) =>
+                                                    setQuizSettings((current) => ({
+                                                        ...current,
+                                                        summary_release_at: event.target.value,
+                                                    }))
+                                                }
+                                                disabled={isCreating}
+                                                className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
+                                            />
+                                        </Field>
+                                    ) : (
+                                        <div className="flex flex-col justify-end">
+                                            <div className="rounded border-2 border-dashed border-gray-300 bg-[#FFFBEE] px-3 py-2 text-xs text-gray-600 flex items-center min-h-[42px]">
+                                                {quizSettings.summary_release_mode === "AFTER_DUE_DATE"
+                                                    ? "Summary unlocks automatically after the due date."
+                                                    : quizSettings.summary_release_mode === "NEVER"
+                                                        ? "Students can see their score, but not the answer summary."
+                                                        : "Students can view the summary right after submitting."}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {quizSettings.summary_release_mode === "AFTER_DUE_DATE" && !draft.due_date && (
+                                        <p className="text-xs text-amber-600 font-medium sm:col-span-2">
+                                            ⚠ Remember to set a due date in the next step so this release mode takes effect.
+                                        </p>
+                                    )}
+
+                                </div>
+
+                                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                    {[
+                                        {
+                                            key: "is_shuffle_questions",
+                                            label: "Shuffle questions",
+                                        },
+                                        {
+                                            key: "enable_per_question_scoring",
+                                            label: "Enable per-question scoring",
+                                        },
+                                        {
+                                            key: "enable_per_question_time_limits",
+                                            label: "Enable individual question time limits",
+                                        },
+                                        {
+                                            key: "show_correct_answers",
+                                            label: "Show correct answers after submission",
+                                        },
+                                    ].map((setting) => {
+                                        const key = setting.key as keyof Pick<
+                                            QuizSettingsDraft,
+                                            | "is_shuffle_questions"
+                                            | "enable_per_question_scoring"
+                                            | "enable_per_question_time_limits"
+                                            | "show_correct_answers"
+                                        >;
+                                        const enabled = quizSettings[key];
+                                        return (
+                                            <button
+                                                key={setting.key}
+                                                type="button"
+                                                onClick={() =>
+                                                    setQuizSettings((current) => ({
+                                                        ...current,
+                                                        [key]: !current[key],
+                                                    }))
+                                                }
+                                                disabled={isCreating}
+                                                className="flex items-center justify-between rounded border-2 border-black bg-white px-3 py-2 text-left text-xs font-bold shadow-md cursor-pointer transition active:translate-y-0.5"
+                                            >
+                                                <span>{setting.label}</span>
+                                                <span
+                                                    className={`rounded border border-black px-2 py-0.5 text-[10px] ${enabled ? "bg-[#7ABA78]" : "bg-gray-100"
+                                                        }`}
+                                                >
+                                                    {enabled ? "On" : "Off"}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <Field label="Due Date">
                                         <Input
@@ -1802,18 +1736,18 @@ export default function CreateClassworkQuizModal({
 
                                     {draft.due_date && (
                                         <div className="flex items-center pt-5">
-                                            <label className="flex items-start gap-3 rounded border-2 border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold shadow-md cursor-pointer">
-                                                <input
-                                                    type="checkbox"
+                                            <label className="flex items-start gap-3 rounded border-2 border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold shadow-md cursor-pointer select-none">
+                                                <Checkbox
+                                                    size="sm"
                                                     checked={draft.allow_late_submissions}
-                                                    onChange={(event) =>
+                                                    onCheckedChange={(checked) =>
                                                         setDraft((current) => ({
                                                             ...current,
-                                                            allow_late_submissions: event.target.checked,
+                                                            allow_late_submissions: Boolean(checked),
                                                         }))
                                                     }
                                                     disabled={isCreating}
-                                                    className="mt-0.5 cursor-pointer"
+                                                    className="mt-0.5"
                                                 />
                                                 <span>
                                                     Allow late submissions
@@ -1871,15 +1805,10 @@ export default function CreateClassworkQuizModal({
                                     )}
                                 </Field>
 
-                                <div>
-                                    <div className="mb-2">
-                                        <p className="text-xs font-bold text-gray-700">
-                                            Link under lesson (Coverage)
-                                        </p>
-                                        <p className="text-[10px] text-gray-500">
-                                            Links this quiz to the lesson and its associated reading materials for student coverage. Only lessons assigned to every selected section are shown.
-                                        </p>
-                                    </div>
+                                <Field label="Link under lesson (Coverage)">
+                                    <p className="text-[10px] text-gray-500 -mt-0.5 mb-2 font-normal">
+                                        Links this quiz to the lesson and its associated reading materials for student coverage. Only lessons assigned to every selected section are shown.
+                                    </p>
 
                                     {selectedClassIds.length === 0 ? (
                                         <p className="rounded border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
@@ -1919,7 +1848,7 @@ export default function CreateClassworkQuizModal({
                                             No shared lesson is assigned to all selected sections.
                                         </p>
                                     )}
-                                </div>
+                                </Field>
 
                                 {selectedLessonIds.length > 0 && (() => {
                                     const linkedLessons = availableLessons.filter((l) => selectedLessonIds.includes(l.lesson_id));
@@ -1969,14 +1898,13 @@ export default function CreateClassworkQuizModal({
                                             <div className="flex flex-wrap items-center gap-2 rounded border border-gray-300 bg-gray-50 px-3 py-2">
                                                 {/* Select-all checkbox */}
                                                 <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-semibold text-gray-700">
-                                                    <input
-                                                        type="checkbox"
+                                                    <Checkbox
                                                         id="question-mapping-select-all"
-                                                        checked={allChecked}
-                                                        ref={(el) => { if (el) el.indeterminate = someChecked; }}
-                                                        onChange={toggleSelectAll}
+                                                        size="sm"
+                                                        checked={someChecked ? "indeterminate" : allChecked}
+                                                        onCheckedChange={toggleSelectAll}
                                                         disabled={isCreating}
-                                                        className="w-4 h-4 border-2 border-black accent-black cursor-pointer"
+                                                        className="cursor-pointer"
                                                     />
                                                     {selectedQuestionIds.size === 0
                                                         ? "Select all"
@@ -1986,21 +1914,30 @@ export default function CreateClassworkQuizModal({
                                                 {selectedQuestionIds.size > 0 && (
                                                     <>
                                                         <span className="text-gray-400 text-xs">—</span>
-                                                        <select
-                                                            id="bulk-lesson-select"
-                                                            value={bulkLessonId}
-                                                            onChange={(e) => setBulkLessonId(e.target.value)}
-                                                            disabled={isCreating}
-                                                            className="rounded border-2 border-black bg-white px-2 py-1 text-xs"
-                                                        >
-                                                            <option value="">Assign lesson…</option>
-                                                            {linkedLessons.map((lesson) => (
-                                                                <option key={lesson.lesson_id} value={lesson.lesson_id}>{lesson.title}</option>
-                                                            ))}
-                                                            <option value="__clear__">— Remove mapping</option>
-                                                        </select>
-                                                        <button
+                                                        <div className="w-56">
+                                                            <Select
+                                                                value={bulkLessonId}
+                                                                onValueChange={(val) => setBulkLessonId(val)}
+                                                                disabled={isCreating}
+                                                            >
+                                                                <Select.Trigger className="w-full bg-white border-2 border-black rounded px-2 py-1 text-xs h-8">
+                                                                    <Select.Value placeholder="Assign lesson…" />
+                                                                </Select.Trigger>
+                                                                <Select.Content className="border-2 border-black rounded bg-white">
+                                                                    <Select.Group>
+                                                                        {linkedLessons.map((lesson) => (
+                                                                            <Select.Item key={lesson.lesson_id} value={String(lesson.lesson_id)}>
+                                                                                {lesson.title}
+                                                                            </Select.Item>
+                                                                        ))}
+                                                                        <Select.Item value="__clear__">— Remove mapping</Select.Item>
+                                                                    </Select.Group>
+                                                                </Select.Content>
+                                                            </Select>
+                                                        </div>
+                                                        <Button
                                                             type="button"
+                                                            size="sm"
                                                             onClick={() => {
                                                                 if (bulkLessonId === "__clear__") {
                                                                     setQuizQuestions((qs) =>
@@ -2015,10 +1952,10 @@ export default function CreateClassworkQuizModal({
                                                                 }
                                                             }}
                                                             disabled={isCreating || !bulkLessonId}
-                                                            className="rounded border-2 border-black bg-black px-3 py-1 text-xs font-bold text-white cursor-pointer disabled:opacity-50"
+                                                            className="h-8 rounded border-2 border-black bg-black px-3 py-1 text-xs font-bold text-white hover:bg-neutral-800 disabled:opacity-50"
                                                         >
                                                             Apply
-                                                        </button>
+                                                        </Button>
                                                     </>
                                                 )}
                                             </div>
@@ -2028,7 +1965,7 @@ export default function CreateClassworkQuizModal({
                                                 {quizQuestions.map((question, index) => {
                                                     const isChecked = selectedQuestionIds.has(question.id);
                                                     const currentVal = question.lesson_id && selectedLessonIds.includes(question.lesson_id)
-                                                        ? question.lesson_id
+                                                        ? String(question.lesson_id)
                                                         : "";
                                                     return (
                                                         <div
@@ -2036,11 +1973,11 @@ export default function CreateClassworkQuizModal({
                                                             className={`flex items-start gap-2 rounded border px-3 py-2 transition ${isChecked ? "border-black bg-gray-100" : "border-gray-200 bg-white"
                                                                 }`}
                                                         >
-                                                            <input
-                                                                type="checkbox"
+                                                            <Checkbox
                                                                 aria-label={`Select Question ${index + 1}`}
+                                                                size="sm"
                                                                 checked={isChecked}
-                                                                onChange={() => {
+                                                                onCheckedChange={() => {
                                                                     setSelectedQuestionIds((prev) => {
                                                                         const next = new Set(prev);
                                                                         if (next.has(question.id)) next.delete(question.id);
@@ -2049,33 +1986,34 @@ export default function CreateClassworkQuizModal({
                                                                     });
                                                                 }}
                                                                 disabled={isCreating}
-                                                                className="mt-1 w-4 h-4 shrink-0 border-2 border-black accent-black cursor-pointer"
+                                                                className="mt-1 shrink-0 cursor-pointer"
                                                             />
                                                             <div className="flex-1 min-w-0">
-                                                                <label
-                                                                    className="block text-xs font-bold text-gray-700 truncate"
-                                                                    htmlFor={`question-lesson-${question.id}`}
-                                                                >
-                                                                    Q{index + 1}: {question.question_text}
-                                                                </label>
-                                                                <select
-                                                                    id={`question-lesson-${question.id}`}
-                                                                    value={currentVal}
-                                                                    onChange={(event) =>
-                                                                        updateQuizQuestion(question.id, {
-                                                                            lesson_id: event.target.value ? Number(event.target.value) : null,
-                                                                        })
-                                                                    }
-                                                                    disabled={isCreating}
-                                                                    className="mt-1 w-full rounded border-2 border-black bg-white px-2 py-1 text-xs"
-                                                                >
-                                                                    <option value="">Not mapped</option>
-                                                                    {linkedLessons.map((lesson) => (
-                                                                        <option key={lesson.lesson_id} value={lesson.lesson_id}>
-                                                                            {lesson.title}
-                                                                        </option>
-                                                                    ))}
-                                                                </select>
+                                                                <Field label={`Q${index + 1}: ${question.question_text}`}>
+                                                                    <Select
+                                                                        value={currentVal || "__none__"}
+                                                                        onValueChange={(val) =>
+                                                                            updateQuizQuestion(question.id, {
+                                                                                lesson_id: val && val !== "__none__" ? Number(val) : null,
+                                                                            })
+                                                                        }
+                                                                        disabled={isCreating}
+                                                                    >
+                                                                        <Select.Trigger className="w-full bg-white border-2 border-black rounded px-2 py-1 text-xs mt-1">
+                                                                            <Select.Value placeholder="Not mapped" />
+                                                                        </Select.Trigger>
+                                                                        <Select.Content className="border-2 border-black rounded bg-white">
+                                                                            <Select.Group>
+                                                                                <Select.Item value="__none__">Not mapped</Select.Item>
+                                                                                {linkedLessons.map((lesson) => (
+                                                                                    <Select.Item key={lesson.lesson_id} value={String(lesson.lesson_id)}>
+                                                                                        {lesson.title}
+                                                                                    </Select.Item>
+                                                                                ))}
+                                                                            </Select.Group>
+                                                                        </Select.Content>
+                                                                    </Select>
+                                                                </Field>
                                                             </div>
                                                         </div>
                                                     );
@@ -2098,12 +2036,11 @@ export default function CreateClassworkQuizModal({
                                     </div>
 
                                     <div className="flex items-center gap-3 flex-wrap">
-                                        <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-semibold">
-                                            <input
-                                                type="checkbox"
+                                        <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold">
+                                            <Checkbox
+                                                size="sm"
                                                 checked={includeExportAnswerKey}
-                                                onChange={(e) => setIncludeExportAnswerKey(e.target.checked)}
-                                                className="w-4 h-4 border-2 border-black accent-black cursor-pointer"
+                                                onCheckedChange={(checked) => setIncludeExportAnswerKey(Boolean(checked))}
                                             />
                                             <span>Include Answer Key</span>
                                         </label>

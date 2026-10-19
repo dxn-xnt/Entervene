@@ -172,8 +172,8 @@ const DialogContent = (inputProps: IDialogContentProps & { ref?: React.Ref<HTMLD
         {...props}
       >
         <DialogSurfaceContext.Provider value>
-          <BaseDialog.Title className="sr-only" />
-          <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+          <BaseDialog.Title className="sr-only text-xl" />
+          <div className="text-xl flex min-h-0 w-full flex-1 flex-col overflow-hidden">
             {children}
           </div>
         </DialogSurfaceContext.Provider>

@@ -8,7 +8,6 @@ import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
-import { EmptyStateCard } from "@/components/empty-state-card";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -207,28 +206,6 @@ function OverviewTab({
   return (
     <div className="grid gap-4 min-w-0">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px] xl:grid-rows-[auto_1fr] items-stretch min-w-0">
-        <div className="flex flex-col gap-2 min-w-0">
-          <h3 className="text-lg font-bold">Overview</h3>
-          <div className="grid gap-4 md:grid-cols-2 min-w-0">
-            <OverviewCard
-              title="Total Students"
-              count={String(detail.student_count ?? 0)}
-              statDescription="Real assigned students"
-            />
-            <OverviewCard
-              title="Total Subjects"
-              count={String(detail.subject_count ?? 0)}
-              statDescription="Active and historical subject loads"
-            />
-          </div>
-        </div>
-        <aside className="flex flex-col gap-2 min-w-0 xl:row-span-2">
-          <h3 className="text-lg font-bold">Recent Activity</h3>
-          <EmptyStateCard
-            title="No recent activity available yet."
-            className="h-full flex-1"
-          />
-        </aside>
         <section className="min-w-0">
           <h3 className="text-lg font-bold">Subjects</h3>
           <div className="grid gap-2 min-w-0">
@@ -255,6 +232,25 @@ function OverviewTab({
             )}
           </div>
         </section>
+        <aside className="flex flex-col gap-2 min-w-0 xl:row-span-2">
+          <div className="flex flex-col gap-2 min-w-0">
+            <h3 className="text-lg font-bold">Overview</h3>
+            <div className="flex flex-col gap-3 min-w-0">
+              <OverviewCard
+                title="Total Students"
+                count={String(detail.student_count ?? 0)}
+                statDescription="Real assigned students"
+              />
+              <OverviewCard
+                title="Total Subjects"
+                count={String(detail.subject_count ?? 0)}
+                statDescription="Active and historical subject loads"
+              />
+            </div>
+          </div>
+        </aside>
+
+
       </div>
     </div>
   );
@@ -391,6 +387,7 @@ function SubjectLoadTab({
         isPublished={scheduleData?.is_published}
         isLoading={isLoading}
         showTeacher={true}
+        showSection={false}
         emptyMessage="No published schedule assigned yet for this section."
       />
     </section>

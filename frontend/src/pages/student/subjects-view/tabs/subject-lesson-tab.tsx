@@ -15,7 +15,7 @@ import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { Card } from "@/components/retroui/Card";
 import IconContainer from "@/components/icon-container";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import { Empty } from "@/components/retroui/Empty";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
@@ -1019,10 +1019,12 @@ export default function SubjectLessonTab({
 
           {/* ── Empty state ── */}
           {lessons.length === 0 ? (
-            <EmptyStateCard
-              icon={<BookOpen size={24} />}
-              title="No lessons available for this subject."
-            />
+            <Empty>
+              <Empty.Content>
+                <Empty.Icon><BookOpen size={24} /></Empty.Icon>
+                <Empty.Title>No lessons available for this subject.</Empty.Title>
+              </Empty.Content>
+            </Empty>
           ) : (
             <div className="flex min-w-0 flex-col items-start gap-4 lg:flex-row">
               {/* ════════════════ LEFT: Lessons list ════════════════ */}
@@ -1064,10 +1066,12 @@ export default function SubjectLessonTab({
 
                 <div className="space-y-3">
                   {competencyGroups.length === 0 && unassignedLessons.length === 0 && (
-                    <EmptyStateCard
-                      icon={<BookOpen size={24} />}
-                      title="No lessons match this competency."
-                    />
+                    <Empty>
+                      <Empty.Content>
+                        <Empty.Icon><BookOpen size={24} /></Empty.Icon>
+                        <Empty.Title>No lessons match this competency.</Empty.Title>
+                      </Empty.Content>
+                    </Empty>
                   )}
                   {competencyGroups.map((group) => {
                     const isCollapsed =

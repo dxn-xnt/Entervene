@@ -3,7 +3,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
 import { Card } from "@/components/retroui/Card";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, BookOpen } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
@@ -11,7 +11,13 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { apiFetch, getTeacherAdvisoryClasses } from "@/lib/api";
 import type { TeacherAdvisoryClassListItem } from "@/types/adminClasses";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
-import { EmptyStateCard } from "@/components/empty-state-card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
 import { SubjectCard, type ActiveClassworkInfo } from "@/components/subject-card";
 
@@ -217,7 +223,19 @@ const TeacherClasses = () => {
                   >
                     {groupedSubjectLoads.length === 0 ? (
                       <div className="col-span-full">
-                        <EmptyStateCard title="No subject teaching sections assigned." />
+                        <Empty className="hover:shadow-none transition-shadow">
+                          <EmptyHeader>
+                            <EmptyMedia>
+                              <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
+                                <BookOpen className="size-5 text-black" />
+                              </div>
+                            </EmptyMedia>
+                            <EmptyTitle>No subject teaching sections assigned.</EmptyTitle>
+                            <EmptyDescription className="text-center">
+                              No active teaching sections are currently assigned to your account.
+                            </EmptyDescription>
+                          </EmptyHeader>
+                        </Empty>
                       </div>
                     ) : (
                       groupedSubjectLoads.map((group) => (
@@ -307,10 +325,6 @@ const TeacherClasses = () => {
                       <div className="flex items-center justify-between">
                         <h2 className="text-xl font-bold">Advisory Class</h2>
                         <div className="flex flex-row gap-3">
-                          <Badge variant="outline">
-                            {advisoryClasses.length} section
-                            {advisoryClasses.length !== 1 ? "s" : ""}
-                          </Badge>
                         </div>
                       </div>
                       <div className="flex flex-col gap-3">

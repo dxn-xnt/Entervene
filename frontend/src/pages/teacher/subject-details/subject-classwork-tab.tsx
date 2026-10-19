@@ -29,7 +29,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
 import CreateClassworkModal from "@/pages/teacher/forms/create-classwork";
 import CreateClassworkQuizModal from "@/pages/teacher/forms/create-classwork-quiz";
-import ClassworkDetailModal from "@/pages/teacher/forms/classwork-detail-modal";
+import ClassworkDetailModal from "@/pages/teacher/forms/classwork-preview-modal";
 import type { ClassworkDetail } from "./types";
 
 
@@ -550,7 +550,7 @@ export default function SubjectClassworkTab({
                 item={item}
                 tracking={
                   trackingByClasswork[
-                    `${item.classwork_id}:${effectiveClassId}`
+                  `${item.classwork_id}:${effectiveClassId}`
                   ]
                 }
                 showClassworkType={true}

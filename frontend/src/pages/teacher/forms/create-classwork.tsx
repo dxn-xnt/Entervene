@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, ArrowRight, Check, CheckCheck, FileText, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, FileText, Plus, Trash2, X } from "lucide-react";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
@@ -32,7 +32,6 @@ import { activityRubricMaximum, defaultActivityRubric, validateActivityRubric } 
 import type { ActivityRubricLevel } from "@/types/classwork";
 import type { TeacherInterventionDetail, RemediationFocus, OriginalExamination } from "@/lib/teacher-interventions-api";
 import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
-import { Card } from "@/components/retroui/Card";
 
 interface CreateClassworkModalProps {
   selectedType: ClassworkKind;
@@ -843,89 +842,47 @@ export default function CreateClassworkModal({
 
               <div className="mt-4">
                 <Field label="Assign to sections">
-                  {remediationTarget && <p className="mb-3 rounded border p-3 text-sm">Remedial assignment for <strong>{remediationTarget.student_name}</strong> in {remediationTarget.class_name}. Only this student will receive this activity.</p>}
-                  {remediationFocus && <p className="mb-3 rounded border p-3 text-sm">Evidence focus: {focusGuidance(remediationFocus)}{remediationFocus.component === "EXAMINATION" ? " Remedial Examination publication is blocked; choose another grading component for a graded activity." : ""}</p>}
-                  {selectedSubjectLoads.length > 0 && (
-                    <div className="flex items-center justify-end -mt-8 mb-2">
-                      <Button
-                        size="sm"
-                        className="shadow-none -mt-1"
-                        autoIcon={false}
-                        onClick={() =>
-                          setSelectedClassIds(
-                            selectedSubjectLoads.map((load) => load.class_id),
-                          )
-                        }
-                        disabled={isCreating || Boolean(remediationTarget)}
-                      >
-                        <CheckCheck className="size-4 mr-2" />
-                        Select All
-                      </Button>
-                    </div>
-                  )}
+                  <div className="mb-2 flex items-center justify-between">
+                    {remediationTarget && <p className="rounded border p-2 text-xs">Remedial assignment for <strong>{remediationTarget.student_name}</strong> in {remediationTarget.class_name}. Only this student will receive this activity.</p>}
+                    {remediationFocus && <p className="rounded border p-2 text-xs">Evidence focus: {focusGuidance(remediationFocus)}{remediationFocus.component === "EXAMINATION" ? " Remedial Examination publication is blocked; choose another grading component for a graded activity." : ""}</p>}
+                    <div className="flex-1" />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setSelectedClassIds(
+                          selectedSubjectLoads.map((load) => load.class_id),
+                        )
+                      }
+                      disabled={isCreating || Boolean(remediationTarget) || selectedSubjectLoads.length === 0}
+                      className="px-2 py-1 text-xs border border-black rounded shadow-xs"
+                    >
+                      Select all
+                    </Button>
+                  </div>
 
-                  {selectedSubjectLoads.length > 0 ? (
-                    <Card className="-mt-1 grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                      {selectedSubjectLoads.map((load) => {
-                        const isSelected = selectedClassIds.includes(load.class_id);
-                        return (
-                          <button
-                            key={load.subject_load_id}
-                            type="button"
-                            onClick={() => toggleClass(load.class_id)}
-                            disabled={isCreating || Boolean(remediationTarget)}
-                            className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isSelected
-                              ? "bg-primary text-black"
-                              : "bg-white text-black hover:bg-accent"
-                              }`}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between">
-                                <p className="font-bold text-base truncate">
-                                  {load.section_name}
-                                </p>
-                                <div
-                                  className={`flex size-5 shrink-0 items-center justify-center rounded border-2 border-black transition-colors ${isSelected ? "bg-black text-white" : "bg-white text-transparent"
-                                    }`}
-                                >
-                                  <Check className="size-3.5 stroke-[3]" />
-                                </div>
-                              </div>
-
-                              <div className="mt-1 flex items-center justify-between w-full">
-                                <p
-                                  className={`text-xs font-medium ${isSelected
-                                    ? "text-foreground"
-                                    : "text-muted-foreground"
-                                    }`}
-                                >
-                                  {load.grade_level || "Active Section"}
-                                </p>
-                                {typeof load.student_count === "number" && (
-                                  <p
-                                    className={`text-xs font-medium ${isSelected
-                                      ? "text-foreground"
-                                      : "text-muted-foreground"
-                                      }`}
-                                  >
-                                    {load.student_count} {load.student_count === 1 ? "student" : "students"}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </Card>
-                  ) : (
-                    <Empty className="shadow-md hover:shadow-none transition-shadow">
-                      <EmptyHeader>
-                        <EmptyTitle>No Sections Found</EmptyTitle>
-                        <EmptyDescription className="text-center">
-                          No active sections are assigned to this subject.
-                        </EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
+                  <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
+                    {selectedSubjectLoads.map((load) => {
+                      const isSelected = selectedClassIds.includes(load.class_id);
+                      return (
+                        <button
+                          key={load.subject_load_id}
+                          type="button"
+                          onClick={() => toggleClass(load.class_id)}
+                          disabled={isCreating || Boolean(remediationTarget)}
+                          className={`rounded border-2 border-black px-3 py-2 text-xs font-bold text-center cursor-pointer transition shadow-md hover:translate-y-0.5 active:translate-y-1 ${isSelected ? "bg-[#7ABA78]" : "bg-white"
+                            }`}
+                        >
+                          {load.section_name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selectedSubjectLoads.length === 0 && (
+                    <p className="rounded border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
+                      No active sections are assigned to this subject.
+                    </p>
                   )}
                 </Field>
               </div>
