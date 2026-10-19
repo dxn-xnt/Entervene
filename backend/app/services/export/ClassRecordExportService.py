@@ -19,8 +19,11 @@ from app.models.academic.Class_ import Class
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.StudentCLass import StudentClass
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.classwork.Classwork import Classwork
+from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.settings.Setting import Setting
@@ -36,7 +39,9 @@ from app.schemas.StudentRecord import (
     TermPeriodInfo,
 )
 from app.services.academic.SubstitutionService import _staff_full_name
+from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 from app.services.classes.ClassQueryService import _student_gender_group
+from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.services.student_record.StudentRecordService import (
     _deped_transmuted,
     _match_component_category,
@@ -216,6 +221,55 @@ def generate_class_record_sheet(
     staff_id: str | None = None,
     sheet_title: str | None = None,
 ) -> Worksheet:
+    """Generate one class-record sheet without flushing caller-owned changes."""
+    with db.no_autoflush:
+        return _generate_class_record_sheet(
+            wb=wb,
+            db=db,
+            class_id=class_id,
+            subject_id=subject_id,
+            academic_period_id=academic_period_id,
+            staff_id=staff_id,
+            sheet_title=sheet_title,
+        )
+
+
+def _target_term_has_academic_data(
+    db: Session, *, class_id: int, subject_id: int, academic_period_id: int,
+) -> bool:
+    """Existence-only check; never expose another teacher's records or counts."""
+    load_exists = db.query(SubjectLoad.subject_load_id).filter(
+        SubjectLoad.class_id == class_id,
+        SubjectLoad.subject_id == subject_id,
+        SubjectLoad.academic_period_id == academic_period_id,
+    ).first()
+    grade_exists = db.query(StudentPeriodGrade.period_grade_id).filter(
+        StudentPeriodGrade.class_id == class_id,
+        StudentPeriodGrade.subject_id == subject_id,
+        StudentPeriodGrade.academic_period_id == academic_period_id,
+    ).first()
+    assignment_exists = (
+        db.query(ClassworkAssignment.classwork_assignment_id)
+        .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
+        .filter(
+            ClassworkAssignment.class_id == class_id,
+            ClassworkAssignment.academic_period_id == academic_period_id,
+            Classwork.subject_id == subject_id,
+        )
+        .first()
+    )
+    return any(item is not None for item in (load_exists, grade_exists, assignment_exists))
+
+
+def _generate_class_record_sheet(
+    wb: openpyxl.Workbook,
+    db: Session,
+    class_id: int,
+    subject_id: int,
+    academic_period_id: int,
+    staff_id: str | None = None,
+    sheet_title: str | None = None,
+) -> Worksheet:
     """
     Generate an official DepEd single-term Class Record worksheet.
     
@@ -250,9 +304,9 @@ def generate_class_record_sheet(
             effective_staff_id = load.staff_id
 
     # 2. Fetch gradebook data from StudentRecordService
-    class_obj = db.get(Class, class_id)
-    subj_obj = db.get(Subject, subject_id)
-    period_obj = db.get(AcademicPeriod, academic_period_id)
+    class_obj = None
+    subj_obj = None
+    period_obj = None
 
     try:
         gradebook = teacher_student_gradebook(
@@ -262,7 +316,22 @@ def generate_class_record_sheet(
             subject_id=subject_id,
             academic_period_id=academic_period_id,
         )
-    except HTTPException:
+    except HTTPException as error:
+        # Preserve every denial. A 404 may use the blank-layout compatibility
+        # path only after exact target-period authorization succeeds.
+        if error.status_code != 404:
+            raise
+        SubjectLoadAuthorizationService.assert_can_view(
+            db, effective_staff_id or "", class_id, subject_id, academic_period_id)
+        class_obj = db.get(Class, class_id)
+        subj_obj = db.get(Subject, subject_id)
+        period_obj = db.get(AcademicPeriod, academic_period_id)
+        if (class_obj is None or period_obj is None
+                or class_obj.academic_year_id != period_obj.academic_year_id
+                or _target_term_has_academic_data(
+                    db, class_id=class_id, subject_id=subject_id,
+                    academic_period_id=academic_period_id)):
+            raise
         # Pre-built unstarted term safeguard:
         # If SubjectLoad or gradebook is not found for this academic period,
         # construct an empty gradebook layout using the enrolled class roster.
@@ -328,7 +397,16 @@ def generate_class_record_sheet(
             studentGrades=student_rows,
         )
 
+    if class_obj is None:
+        class_obj = db.get(Class, class_id)
+    if subj_obj is None:
+        subj_obj = db.get(Subject, subject_id)
+    if period_obj is None:
+        period_obj = db.get(AcademicPeriod, academic_period_id)
+
     scope = gradebook.scope
+    require_subject_passing_threshold(
+        db, academic_year_id=scope.academic_year_id, subject_id=subject_id)
     meta = _get_school_metadata(db, scope, staff_id=effective_staff_id, class_obj=class_obj)
 
     # 3. Create or reuse worksheet
@@ -794,6 +872,28 @@ def generate_summary_of_grades_sheet(
     staff_id: str | None = None,
     sheet_title: str = "Summary of Grades",
 ) -> Worksheet:
+    """Generate the summary sheet without flushing caller-owned changes."""
+    with db.no_autoflush:
+        return _generate_summary_of_grades_sheet(
+            wb=wb,
+            db=db,
+            class_id=class_id,
+            subject_id=subject_id,
+            academic_year_id=academic_year_id,
+            staff_id=staff_id,
+            sheet_title=sheet_title,
+        )
+
+
+def _generate_summary_of_grades_sheet(
+    wb: openpyxl.Workbook,
+    db: Session,
+    class_id: int,
+    subject_id: int,
+    academic_year_id: int | None = None,
+    staff_id: str | None = None,
+    sheet_title: str = "Summary of Grades",
+) -> Worksheet:
     """
     Generate an official DepEd Summary of Grades worksheet.
     Writes static computed values from teacher_term_grade_summary() for each
@@ -801,7 +901,7 @@ def generate_summary_of_grades_sheet(
     """
     class_obj = db.get(Class, class_id)
     subj_obj = db.get(Subject, subject_id)
-    ay_id = academic_year_id or getattr(class_obj, "academic_year_id", None)
+    ay_id = academic_year_id if academic_year_id is not None else getattr(class_obj, "academic_year_id", None)
 
     # 1. Resolve teacher staff_id
     effective_staff_id = staff_id
@@ -818,64 +918,11 @@ def generate_summary_of_grades_sheet(
         if load and load.staff_id:
             effective_staff_id = load.staff_id
 
-    # 2. Fetch summary data from StudentRecordService
-    try:
-        summary = teacher_term_grade_summary(
-            db=db,
-            staff_id=effective_staff_id or "",
-            class_id=class_id,
-            subject_id=subject_id,
-        )
-    except HTTPException:
-        # Fallback if no periods or loads: construct empty summary from periods and roster
-        periods_in_year = (
-            db.query(AcademicPeriod)
-            .filter(AcademicPeriod.academic_year_id == ay_id)
-            .order_by(AcademicPeriod.period_sequence.asc(), AcademicPeriod.start_date.asc())
-            .all()
-        )
-        year_obj = db.get(AcademicYear, ay_id) if ay_id else None
-        enrolled_students = (
-            db.query(Student)
-            .join(StudentClass, StudentClass.student_id == Student.student_id)
-            .filter(
-                StudentClass.class_id == class_id,
-                StudentClass.enrollment_status == "enrolled",
-            )
-            .order_by(Student.last_name.asc(), Student.first_name.asc())
-            .all()
-        )
-        summary = TermGradeSummaryResponse(
-            scope=TermGradeSummaryScope(
-                class_id=class_id,
-                subject_id=subject_id,
-                academic_year_id=ay_id or 0,
-                section_name=getattr(class_obj, "section_name", "") or "Section",
-                subject_name=getattr(subj_obj, "subject_name", "") or "Subject",
-                year_label=getattr(year_obj, "year_label", "") or "SY",
-            ),
-            periods=[
-                TermPeriodInfo(
-                    academic_period_id=p.academic_period_id,
-                    period_name=p.period_name,
-                    period_sequence=p.period_sequence,
-                )
-                for p in periods_in_year
-            ],
-            students=[
-                TermGradeSummaryRow(
-                    student_id=str(s.student_id),
-                    name=_student_name(s),
-                    gender=s.gender,
-                    term_grades={},
-                    final_grade=None,
-                    remark=None,
-                    performance_descriptor=None,
-                )
-                for s in enrolled_students
-            ],
-            passing_threshold=float(subj_obj.grading_template.passing_threshold),
-        )
+    # Configuration/auth failures are not evidence of an empty class.
+    summary = teacher_term_grade_summary(
+        db=db, staff_id=effective_staff_id or "", class_id=class_id,
+        subject_id=subject_id, academic_year_id=ay_id,
+    )
 
     # Ensure all configured periods for the academic year are included in summary.periods
     configured_periods = (
@@ -1101,6 +1148,24 @@ def export_class_record_full_workbook(
     academic_year_id: int | None = None,
     staff_id: str | None = None,
 ) -> tuple[io.BytesIO, str]:
+    """Generate a full workbook without flushing caller-owned changes."""
+    with db.no_autoflush:
+        return _export_class_record_full_workbook(
+            db=db,
+            class_id=class_id,
+            subject_id=subject_id,
+            academic_year_id=academic_year_id,
+            staff_id=staff_id,
+        )
+
+
+def _export_class_record_full_workbook(
+    db: Session,
+    class_id: int,
+    subject_id: int,
+    academic_year_id: int | None = None,
+    staff_id: str | None = None,
+) -> tuple[io.BytesIO, str]:
     """
     Generate an in-memory .xlsx multi-tab workbook for all configured terms
     plus a Summary of Grades sheet.
@@ -1108,7 +1173,7 @@ def export_class_record_full_workbook(
     """
     class_obj = db.get(Class, class_id)
     subj_obj = db.get(Subject, subject_id)
-    ay_id = academic_year_id or getattr(class_obj, "academic_year_id", None)
+    ay_id = academic_year_id if academic_year_id is not None else getattr(class_obj, "academic_year_id", None)
 
     periods = (
         db.query(AcademicPeriod)

@@ -15,6 +15,8 @@ from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
+from app.models.academic.GradingTemplate import GradingTemplate
+from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.PredictionOutcome import PredictionOutcome
@@ -112,7 +114,16 @@ def grade_outcome_context():
         academic_year_id=year.academic_year_id,
         academic_level_id=level.academic_level_id,
     )
-    subject = Subject(subject_name="Science", academic_level_id=level.academic_level_id)
+    template = GradingTemplate(template_name="Outcome fixture", passing_threshold=75, status="active")
+    template.components = [
+        GradingTemplateComponent(component_name=name, weight=weight, display_order=index)
+        for index, (name, weight) in enumerate(
+            [("Written Work", 20), ("Performance Tasks", 50), ("Exams", 30)], 1)
+    ]
+    db.add(template)
+    db.flush()
+    subject = Subject(subject_name="Science", academic_level_id=level.academic_level_id,
+                      grading_template_id=template.grading_template_id)
     model_version = AIModelVersion(
         model_version_id=1,
         model_name="entervene_next_period_grade_rf",

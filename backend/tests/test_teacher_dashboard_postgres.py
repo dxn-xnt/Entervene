@@ -35,6 +35,24 @@ from app.models.attendance.Attendance import AttendanceRecord
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.activity import AnalyticsService
+from app.schemas.TeacherDashboard import ThresholdResolution, DashboardWarning
+from app.services.activity.TeacherDashboardMetrics import PASSING_CONFIGURATION_WARNING
+
+
+@contextmanager
+def _missing_policy_adapter():
+    """Mock corrupted policy output only; current DB constraints forbid a null FK.
+
+    Valid-policy parity still executes the actual bulk reader and ORM queries.
+    This scenario tests warning propagation, not PostgreSQL constraint behavior.
+    """
+    def missing(subject, **_policy):
+        return ThresholdResolution(subject_id=subject.subject_id,
+            warning=DashboardWarning(code="invalid_passing_threshold",
+                message=PASSING_CONFIGURATION_WARNING, subject_id=subject.subject_id))
+    with patch.object(AnalyticsService, "resolve_dashboard_passing_threshold", side_effect=missing):
+        yield
+
 
 
 _TEST_DATABASE = "activity_test"
@@ -642,7 +660,7 @@ def _collect_phase_two_scenarios(db, data):
 
     try:
         samples = {}
-        group = data["subject"].subject_group_rel
+        group = data["subject"].grading_template
         period_grades = []
         for key in ("active_one", "active_two"):
             row = StudentPeriodGrade(
@@ -670,13 +688,11 @@ def _collect_phase_two_scenarios(db, data):
             _expect_equal(summary["current_grade"], round(float(threshold - Decimal("0.005")), 1), "Term Grade not separate saved final")
             _expect_equal(summary["current_grade_meets_threshold"], False, "threshold comparison before rounding")
 
-        data["subject"].subject_group_rel = None
-        db.commit()
-        samples["missing_group"] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
-        _expect_equal(samples["missing_group"]["grade_summary"]["passing_rate_percent"], None, "missing-group passing availability")
-        _expect_equal(samples["missing_group"]["grade_summary"]["available_grade_count"], 2, "missing-group current-grade coverage")
-        _expect_equal(samples["missing_group"]["grade_warnings"], ["invalid_passing_threshold"], "missing-group configuration warning")
-        data["subject"].subject_group_rel = group
+        with _missing_policy_adapter():
+            samples["missing_template"] = _numeric_snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]), data)
+        _expect_equal(samples["missing_template"]["grade_summary"]["passing_rate_percent"], None, "missing-template passing availability")
+        _expect_equal(samples["missing_template"]["grade_summary"]["available_grade_count"], 2, "missing-template current-grade coverage")
+        _expect_equal(samples["missing_template"]["grade_warnings"], ["invalid_passing_threshold"], "missing-template configuration warning")
 
         # Every recorded row counts, including another subject in the same class.
         rows = [
@@ -773,7 +789,7 @@ def test_teacher_dashboard_queries_compile_for_postgres_without_connecting(dashb
     compiled = [str(statement.compile(dialect=postgresql.dialect())) for statement in statements]
     for table in (
         "academic_period", "academic_staff", "subject_load", "student_class", "classwork_assignment",
-        "student_submission", "attendance_record", "subject_groups", "student_period_grade",
+        "student_submission", "attendance_record", "student_period_grade",
         "grading_template",
     ):
         assert any(table in sql for sql in compiled), f"Missing actual dashboard SELECT for {table}"
@@ -895,14 +911,14 @@ def _collect_phase_three_scenarios(db, data):
         samples[value] = snapshot(result)
         _expect_equal(result["details"]["grade_details"]["available_grade_count"], 2, "Phase 3 grade coverage")
         _expect_equal(sum(band["count"] for band in result["details"]["grade_distribution"]), 2, "Phase 3 band total")
-    data["subject"].subject_group_rel = None
-    db.commit()
-    samples["missing_threshold"] = snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]))
+    with _missing_policy_adapter():
+        samples["missing_threshold"] = snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]))
     _expect_equal(samples["missing_threshold"]["warnings"], ["invalid_passing_threshold"], "Phase 3 threshold warnings retained")
     learner = data["students"]["active_one"]
     learner.first_name = learner.last_name = ""
     db.commit()
-    samples["missing_name"] = snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]))
+    with _missing_policy_adapter():
+        samples["missing_name"] = snapshot(_dashboard(db, data["teacher"].staff_id, data["period"]))
     _expect_equal(samples["missing_name"]["performers"][0][1], "Name unavailable", "Phase 3 missing name retained")
     assert "student_name_unavailable" in samples["missing_name"]["warnings"]
     samples["empty"] = snapshot(_dashboard(db, data["teacher"].staff_id, data["empty_period"]))
@@ -1366,7 +1382,7 @@ def _phase_six_support_snapshot(db):
             "warning_codes": sorted(warning["code"] for warning in summary["warnings"]),
         }
     samples = {"initial": capture()}
-    data["subject"].subject_group_rel.passing_threshold = Decimal("83.25")
+    data["subject"].grading_template.passing_threshold = Decimal("83.25")
     db.commit()
     samples["changed_threshold"] = capture()
     # UTC Oct 7 16:00 is Manila Oct 8: an unrelated-subject excuse suppresses

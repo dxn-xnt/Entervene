@@ -41,6 +41,9 @@ from app.services.grading.ExaminationCalculator import (
     categorize_exam_subtype,
     compute_examination_component,
 )
+from app.services.grading.PassingThresholdReader import (
+    read_passing_threshold_context_or_422, require_subject_passing_threshold,
+)
 from app.services.grading.RemedialExamination import effective_exam_scores
 from app.schemas.StudentRecord import (
     BulkSendGradesRequest,
@@ -732,15 +735,18 @@ def finalize_student_period_grade(
             period_grade.academic_period_id,
         )
 
+    # Validate policy before touching the stored grade, including implicit autoflush.
+    period = db.get(AcademicPeriod, period_grade.academic_period_id)
+    year_id = period.academic_year_id if period else None
+    policy_context = read_passing_threshold_context_or_422(
+        db, academic_year_id=year_id, subject_ids=[period_grade.subject_id])
+    require_subject_passing_threshold(
+        db, academic_year_id=year_id, subject_id=period_grade.subject_id, context=policy_context)
+
     if final_period_grade is not None:
         period_grade.final_period_grade = _to_decimal(final_period_grade, "final_period_grade")
     if period_grade.final_period_grade is None:
         raise HTTPException(status_code=400, detail="final_period_grade is required to finalize a period grade")
-
-    subject = db.get(Subject, period_grade.subject_id)
-    if subject is None or subject.grading_template is None:
-        raise HTTPException(status_code=422, detail="Subject has no grading template.")
-    passing_grade = float(subject.grading_template.passing_threshold)
 
     period_grade.is_finalized = True
     period_grade.finalized_at = datetime.now(timezone.utc)
@@ -752,6 +758,7 @@ def finalize_student_period_grade(
         db,
         period_grade.period_grade_id,
         commit=False,
+        policy_context=policy_context,
     )
     db.commit()
     db.refresh(period_grade)
@@ -1071,6 +1078,13 @@ def send_student_grade_to_adviser(
         else:
             status = "updated"
 
+    # Validate the target-year policy before any grade/log writes.
+    policy_context = read_passing_threshold_context_or_422(
+        db, academic_year_id=scope.year.academic_year_id, subject_ids=[subject_id])
+    require_subject_passing_threshold(
+        db, academic_year_id=scope.year.academic_year_id,
+        subject_id=subject_id, context=policy_context)
+
     # 3. Idempotent Upsert into StudentPeriodGrade
     period_grade = (
         db.query(StudentPeriodGrade)
@@ -1136,7 +1150,8 @@ def send_student_grade_to_adviser(
     db.flush()
 
     # 5. Trigger ML outcome evaluation
-    evaluate_outcomes_for_finalized_period_grade(db, period_grade.period_grade_id, commit=False)
+    evaluate_outcomes_for_finalized_period_grade(
+        db, period_grade.period_grade_id, commit=False, policy_context=policy_context)
     db.commit()
     db.refresh(period_grade)
     db.refresh(sub_log)
@@ -1249,6 +1264,7 @@ def bulk_send_grades_to_adviser(
     unchanged_skipped_count = 0
     incomplete_skipped_count = 0
     modified_pg_ids: list[int] = []
+    policy_context = None
 
     for student in students:
         sname = _student_name(student)
@@ -1327,6 +1343,14 @@ def bulk_send_grades_to_adviser(
                 continue
 
         # Transmit/update student
+        # All entries share this authorized year/subject. Resolve once, before
+        # the first write; skips never create policy or grade/log records.
+        if policy_context is None:
+            policy_context = read_passing_threshold_context_or_422(
+                db, academic_year_id=scope.year.academic_year_id, subject_ids=[subject_id])
+            require_subject_passing_threshold(
+                db, academic_year_id=scope.year.academic_year_id,
+                subject_id=subject_id, context=policy_context)
         pg = pg_map.get(student.student_id)
         is_update = pg is not None
         if pg is None:
@@ -1403,7 +1427,8 @@ def bulk_send_grades_to_adviser(
         )
 
     for pid in modified_pg_ids:
-        evaluate_outcomes_for_finalized_period_grade(db, pid, commit=False)
+        evaluate_outcomes_for_finalized_period_grade(
+            db, pid, commit=False, policy_context=policy_context)
 
     if modified_pg_ids:
         db.commit()
@@ -1801,12 +1826,26 @@ def teacher_term_grade_summary(
     staff_id: str,
     class_id: int,
     subject_id: int,
+    *,
+    academic_year_id: int | None = None,
 ) -> TermGradeSummaryResponse:
     options = teacher_period_options(db, staff_id, class_id, subject_id)
     if not options.periods:
         raise HTTPException(status_code=403, detail="Student records are outside your teaching scope")
         
-    base_scope = _teacher_scope(db, staff_id, class_id, subject_id, options.default_academic_period_id)
+    class_ = db.get(Class, class_id)
+    if class_ is None:
+        raise HTTPException(status_code=404, detail="Class section not found.")
+    year_id = academic_year_id if academic_year_id is not None else class_.academic_year_id
+    if type(year_id) is not int or year_id != class_.academic_year_id:
+        raise HTTPException(status_code=422, detail="Academic year does not match the requested class.")
+    options.periods = [p for p in options.periods if p.academic_year_id == year_id]
+    if not options.periods:
+        raise HTTPException(status_code=403, detail="Student records are outside your teaching scope")
+    default_id = next((p.academic_period_id for p in options.periods
+                       if p.academic_period_id == options.default_academic_period_id),
+                      options.periods[0].academic_period_id)
+    base_scope = _teacher_scope(db, staff_id, class_id, subject_id, default_id)
     
     # Sort periods by start_date to assign sequence
     sorted_periods = sorted(options.periods, key=lambda p: p.start_date)
@@ -1823,9 +1862,8 @@ def teacher_term_grade_summary(
     
     students = _roster(db, base_scope)
     
-    if base_scope.subject is None or base_scope.subject.grading_template is None:
-        raise HTTPException(status_code=422, detail="Subject has no grading template.")
-    passing_grade = float(base_scope.subject.grading_template.passing_threshold)
+    passing_grade = require_subject_passing_threshold(
+        db, academic_year_id=year_id, subject_id=subject_id).threshold
 
     student_rows = {}
     for student in students:
@@ -1863,7 +1901,7 @@ def teacher_term_grade_summary(
         if missing_any:
             row.remark = "INCOMPLETE"
         elif row.final_grade is not None:
-            row.remark = "PASSED" if row.final_grade >= passing_grade else "FAILED"
+            row.remark = "PASSED" if Decimal(str(row.final_grade)) >= passing_grade else "FAILED"
             
     return TermGradeSummaryResponse(
         scope=TermGradeSummaryScope(

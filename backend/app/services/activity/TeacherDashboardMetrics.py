@@ -45,6 +45,10 @@ from app.schemas.TeacherDashboard import (
     WeekdayCount,
     WeekdaySummary,
 )
+from app.services.grading.PassingThresholdResolver import (
+    PassingThresholdConfigurationError, PassingThresholdContext,
+    resolve_passing_threshold, validate_subject_template_threshold,
+)
 from app.services.student_record.StudentRecordService import teacher_student_gradebook
 from app.services.classes.ClassQueryService import _student_full_name
 from app.models.people.Student import Student
@@ -89,37 +93,34 @@ def _finite_grade_number(value: object) -> Decimal | None:
     return number if number.is_finite() and Decimal(0) <= number <= Decimal(100) else None
 
 
-def resolve_dashboard_passing_threshold(subject: Subject) -> ThresholdResolution:
-    """Read the current grading-template relationship with no default or cache."""
+def resolve_dashboard_passing_threshold(
+    subject: Subject, *, context: PassingThresholdContext | None = None,
+) -> ThresholdResolution:
+    """Shared pure policy; production callers supply the explicit-year bulk context."""
     subject_id = subject.subject_id
-    template = getattr(subject, "grading_template", None)
     template_id = getattr(subject, "grading_template_id", None)
-    linked_id = getattr(template, "grading_template_id", None)
-    valid_identity = (
-        isinstance(template_id, int)
-        and not isinstance(template_id, bool)
-        and template_id > 0
-        and isinstance(linked_id, int)
-        and not isinstance(linked_id, bool)
-        and template_id == linked_id
-    )
-    value = _finite_grade_number(getattr(template, "passing_threshold", None))
-    if not valid_identity or value is None:
+    resolved_template_id = template_id
+    try:
+        if context is None:
+            # Compatibility for pure adapters, not a database/year-selection path.
+            template = getattr(subject, "grading_template", None)
+            value = validate_subject_template_threshold(
+                subject_id, template_id, getattr(template, "grading_template_id", None),
+                getattr(template, "passing_threshold", None))
+        else:
+            resolution = resolve_passing_threshold(
+                context, academic_year_id=context.academic_year_id,
+                scope="subject", subject_id=subject_id)
+            value = resolution.threshold
+            resolved_template_id = resolution.grading_template_id
+    except PassingThresholdConfigurationError:
         return ThresholdResolution(
             subject_id=subject_id,
-            grading_template_id=template_id if valid_identity else None,
-            warning=DashboardWarning(
-                code="invalid_passing_threshold",
-                message=PASSING_CONFIGURATION_WARNING,
-                subject_id=subject_id,
-            ),
-        )
-    return ThresholdResolution(
-        subject_id=subject_id,
-        grading_template_id=template_id,
-        passing_threshold=float(value),
-    )
-
+            grading_template_id=None,
+            warning=DashboardWarning(code="invalid_passing_threshold",
+                message=PASSING_CONFIGURATION_WARNING, subject_id=subject_id))
+    return ThresholdResolution(subject_id=subject_id, grading_template_id=resolved_template_id,
+                               passing_threshold=float(value))
 
 def read_dashboard_current_grades(
     db: Session, staff_id: str, scopes: Sequence[DashboardScope]
