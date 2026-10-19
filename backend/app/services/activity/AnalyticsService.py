@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from app.services.grading.PassingThresholdReader import read_passing_threshold_context_or_422
 from functools import wraps
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -720,8 +721,13 @@ def build_teacher_dashboard_health(
     lesson_performance = summarize_dashboard_lesson_performance(
         read_dashboard_lesson_evidence(db, engagement, subjects=lesson_subjects),
     )
+    # One explicit-year policy context for every authorized subject; never active-year inference.
+    policy_context = read_passing_threshold_context_or_422(
+        db, academic_year_id=target_period.academic_year_id,
+        subject_ids=scoped_subject_ids,
+    ) if target_period and scoped_subject_ids else None
     thresholds = {
-        subject.subject_id: resolve_dashboard_passing_threshold(subject)
+        subject.subject_id: resolve_dashboard_passing_threshold(subject, context=policy_context)
         for subject in threshold_subjects
     }
     current_grades = read_dashboard_current_grades(db, staff_id, [

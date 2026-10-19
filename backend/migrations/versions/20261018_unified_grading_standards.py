@@ -19,6 +19,17 @@ depends_on = None
 def upgrade() -> None:
     conn = op.get_bind()
 
+    # Alembic creates version_num as VARCHAR(32) by default, but this and the
+    # successor revision identifiers are longer. Widen it before Alembic
+    # records this revision.
+    op.alter_column(
+        "alembic_version",
+        "version_num",
+        existing_type=sa.String(length=32),
+        type_=sa.String(length=64),
+        existing_nullable=False,
+    )
+
     # 1. Add subject_group_id FK to grading_template
     op.add_column(
         "grading_template",
@@ -41,6 +52,40 @@ def upgrade() -> None:
     current_gt_ids = set(conn.execute(text("SELECT grading_template_id FROM grading_template")).scalars().all())
     sg_count = conn.execute(text("SELECT count(*) FROM subject_groups")).scalar_one()
     if sg_count == 0 or current_gt_ids != expected_legacy:
+        return
+
+    # The presentation database predates the subject-group seed data. It has
+    # one reviewed Grade 9 Mathematics subject and one 20/50/30 template. The
+    # successor migration maps this exact legacy shape directly to Core and
+    # creates the other two canonical templates. Keep failing closed for every
+    # other partial installation.
+    demo_subjects = conn.execute(text("""
+        SELECT subject_id, subject_name, subject_codename,
+               subject_group_id, default_grading_template
+        FROM subject ORDER BY subject_id
+    """)).all()
+    demo_templates = conn.execute(text("""
+        SELECT grading_template_id FROM grading_template
+        ORDER BY grading_template_id
+    """)).scalars().all()
+    demo_components = conn.execute(text("""
+        SELECT component_name, weight, display_order
+        FROM grading_template_component
+        WHERE grading_template_id = 1
+        ORDER BY display_order
+    """)).all()
+    reviewed_demo = (
+        demo_templates == [1]
+        and len(demo_subjects) == 1
+        and tuple(demo_subjects[0]) == (1, "Mathematics", "MATHEMATICS", None, "1")
+        and [(row.component_name, float(row.weight), row.display_order) for row in demo_components] == [
+            ("Written Works", 20.0, 1),
+            ("Performance Tasks", 50.0, 2),
+            ("Examination", 30.0, 3),
+        ]
+        and conn.execute(text("SELECT count(*) FROM subject_groups")).scalar_one() == 0
+    )
+    if reviewed_demo:
         return
 
     # 2. Fix the typo "Elective Susbjects" -> "Elective Subjects"

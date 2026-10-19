@@ -6,7 +6,10 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
+from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
+from app.services.grading.PassingThresholdResolver import PassingThresholdContext, PassingThresholdResolution
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.PredictionOutcome import PredictionOutcome
 
@@ -60,7 +63,7 @@ def _existing_outcome(db: Session, prediction_id: int) -> PredictionOutcome | No
 def evaluate_prediction_outcome(
     db: Session,
     prediction_id: int,
-    actual_period_grade: float,
+    actual_period_grade: float | Decimal,
     commit: bool = True,
 ) -> dict[str, Any]:
     prediction = db.get(AIPrediction, prediction_id)
@@ -69,22 +72,33 @@ def evaluate_prediction_outcome(
     if prediction.predicted_period_grade is None:
         raise ValueError("Prediction does not have a predicted_period_grade to evaluate.")
 
-    # Resolve passing threshold from the subject's grading template.
-    from app.models.academic.Subject import Subject
-    subject = db.get(Subject, prediction.subject_id)
-    if subject is None or subject.grading_template is None:
-        raise ValueError("Prediction subject has no grading template.")
-    passing_grade_float = float(subject.grading_template.passing_threshold)
+    period = db.get(AcademicPeriod, prediction.target_period_id)
+    resolution = require_subject_passing_threshold(
+        db, academic_year_id=period.academic_year_id if period else None,
+        subject_id=prediction.subject_id)
+    return _evaluate_with_policy(
+        db, prediction, actual_period_grade, resolution,
+        existing_outcome=_existing_outcome(db, prediction_id), commit=commit)
 
+
+def _evaluate_with_policy(
+    db: Session, prediction: AIPrediction, actual_period_grade: float | Decimal,
+    resolution: PassingThresholdResolution, *,
+    existing_outcome: PredictionOutcome | None, commit: bool,
+) -> dict[str, Any]:
+    """Reuse one resolved policy across matching predictions; no per-row policy SQL."""
+    if prediction.predicted_period_grade is None:
+        raise ValueError("Prediction does not have a predicted_period_grade to evaluate.")
     actual_grade = _to_decimal(actual_period_grade, "actual_period_grade")
-    threshold = _to_decimal(passing_grade_float, "passing_grade")
+    threshold = resolution.threshold
     predicted_grade = _to_decimal(prediction.predicted_period_grade, "predicted_period_grade")
     prediction_error = actual_grade - predicted_grade
     absolute_error = abs(prediction_error)
     actual_passed = actual_grade >= threshold
     risk_label = _actual_risk_label(actual_grade, threshold)
+    prediction_id = prediction.prediction_id
 
-    outcome = _existing_outcome(db, prediction_id)
+    outcome = existing_outcome
     if outcome is None:
         outcome = PredictionOutcome(prediction_id=prediction_id)
         db.add(outcome)
@@ -133,6 +147,8 @@ def evaluate_outcomes_for_finalized_period_grade(
     db: Session,
     student_period_grade_id: int,
     commit: bool = True,
+    *,
+    policy_context: PassingThresholdContext | None = None,
 ) -> dict[str, Any]:
     period_grade = db.get(StudentPeriodGrade, student_period_grade_id)
     if period_grade is None:
@@ -154,12 +170,10 @@ def evaluate_outcomes_for_finalized_period_grade(
             "outcomes": [],
         }
 
-    # Resolve passing threshold from the subject's grading template.
-    from app.models.academic.Subject import Subject
-    subject = db.get(Subject, period_grade.subject_id)
-    if subject is None or subject.grading_template is None:
-        raise ValueError("Grade subject has no grading template.")
-    passing_grade = float(subject.grading_template.passing_threshold)
+    period = db.get(AcademicPeriod, period_grade.academic_period_id)
+    resolution = require_subject_passing_threshold(
+        db, academic_year_id=period.academic_year_id if period else None,
+        subject_id=period_grade.subject_id, context=policy_context)
 
     predictions = _matching_predictions_for_period_grade(db, period_grade)
     if not predictions:
@@ -171,16 +185,22 @@ def evaluate_outcomes_for_finalized_period_grade(
             "outcomes": [],
         }
 
+    # One lookup for the batch, retaining the original first-outcome ordering.
+    existing = db.query(PredictionOutcome).filter(
+        PredictionOutcome.prediction_id.in_([p.prediction_id for p in predictions])
+    ).order_by(PredictionOutcome.outcome_id.asc()).all()
+    existing_by_prediction = {}
+    for outcome in existing:
+        existing_by_prediction.setdefault(outcome.prediction_id, outcome)
+
     outcomes: list[dict[str, Any]] = []
     skipped_count = 0
     for prediction in predictions:
         try:
             outcomes.append(
-                evaluate_prediction_outcome(
-                    db,
-                    prediction.prediction_id,
-                    actual_period_grade=float(period_grade.final_period_grade),
-                    commit=False,
+                _evaluate_with_policy(
+                    db, prediction, period_grade.final_period_grade, resolution,
+                    existing_outcome=existing_by_prediction.get(prediction.prediction_id), commit=False,
                 )
             )
         except ValueError:
