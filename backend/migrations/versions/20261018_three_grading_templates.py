@@ -22,7 +22,29 @@ def upgrade() -> None:
     rows = conn.execute(text("SELECT grading_template_id FROM grading_template")).scalars().all()
     old_ids = set(rows)
     expected = {1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14}
-    if old_ids not in (expected, set()):
+    demo_subjects = conn.execute(text("""
+        SELECT subject_id, subject_name, subject_codename,
+               subject_group_id, default_grading_template
+        FROM subject ORDER BY subject_id
+    """)).all()
+    demo_components = conn.execute(text("""
+        SELECT component_name, weight, display_order
+        FROM grading_template_component
+        WHERE grading_template_id = 1
+        ORDER BY display_order
+    """)).all()
+    reviewed_demo = (
+        old_ids == {1}
+        and len(demo_subjects) == 1
+        and tuple(demo_subjects[0]) == (1, "Mathematics", "MATHEMATICS", None, "1")
+        and [(row.component_name, float(row.weight), row.display_order) for row in demo_components] == [
+            ("Written Works", 20.0, 1),
+            ("Performance Tasks", 50.0, 2),
+            ("Examination", 30.0, 3),
+        ]
+        and conn.execute(text("SELECT count(*) FROM subject_groups")).scalar_one() == 0
+    )
+    if old_ids not in (expected, set()) and not reviewed_demo:
         raise RuntimeError(f"Unexpected grading template IDs: {sorted(old_ids)}")
     subject_count = conn.execute(text("SELECT count(*) FROM subject")).scalar_one()
     if old_ids == expected and subject_count != 40:
@@ -35,7 +57,7 @@ def upgrade() -> None:
         ["grading_template_id"], ["grading_template_id"], ondelete="RESTRICT",
     )
 
-    if old_ids:
+    if old_ids == expected:
         # All reviewed subjects are mapped by existing template ID, except
         # the four explicitly approved exceptions from Enhanced and Other.
         conn.execute(text("""
@@ -55,6 +77,17 @@ def upgrade() -> None:
         if counts != {1: 28, 8: 11, 10: 1}:
             raise RuntimeError(f"Subject assignment counts differ from approved 28/1/11: {counts}")
         conn.execute(text("DELETE FROM grading_template WHERE grading_template_id NOT IN (1,8,10)"))
+    elif reviewed_demo:
+        conn.execute(text("UPDATE subject SET grading_template_id = 1 WHERE subject_id = 1"))
+        for template_id, name in ((8, names[2]), (10, names[1])):
+            conn.execute(text("""
+                INSERT INTO grading_template (grading_template_id, template_name, status)
+                VALUES (:id, :name, 'active')
+            """), {"id": template_id, "name": name})
+        conn.execute(text("""
+            SELECT setval(pg_get_serial_sequence('grading_template','grading_template_id'),
+                          (SELECT max(grading_template_id) FROM grading_template))
+        """))
     else:
         for template_id, name in ((1, names[0]), (10, names[1]), (8, names[2])):
             conn.execute(text("""
@@ -102,7 +135,10 @@ def upgrade() -> None:
     op.drop_constraint("grading_template_subject_id_fkey", "grading_template", type_="foreignkey")
     op.drop_column("grading_template", "academic_level_id")
     op.drop_column("grading_template", "subject_id")
-    op.drop_constraint("fk_subject_subject_group_id", "subject", type_="foreignkey")
+    if reviewed_demo:
+        op.drop_constraint("subject_subject_group_id_fkey", "subject", type_="foreignkey")
+    else:
+        op.drop_constraint("fk_subject_subject_group_id", "subject", type_="foreignkey")
     op.drop_column("subject", "subject_group_id")
     op.drop_column("subject", "subject_group")
     op.drop_column("subject", "default_grading_template")
