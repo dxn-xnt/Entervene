@@ -12,14 +12,19 @@ from fastapi import HTTPException
 
 from app.schemas.TeacherDashboard import DashboardGrade, DashboardSupportPolicy
 from app.services.activity import TeacherDashboardMetrics as metrics
+from app.services.grading.PassingThresholdResolver import (
+    PassingThresholdContext,
+    SubjectThresholdConfig,
+    TemplateThresholdConfig,
+)
 
 
-def subject(threshold, *, subject_id=1, group_id=2):
+def subject(threshold, *, subject_id=1, template_id=2):
     return SimpleNamespace(
         subject_id=subject_id,
-        subject_group_id=group_id,
-        subject_group_rel=SimpleNamespace(
-            subject_group_id=group_id, passing_threshold=threshold,
+        grading_template_id=template_id,
+        grading_template=SimpleNamespace(
+            grading_template_id=template_id, passing_threshold=threshold,
         ),
     )
 
@@ -285,21 +290,64 @@ def test_invalid_threshold_is_unavailable_with_configuration_warning(value):
     assert result.warning.message == metrics.PASSING_CONFIGURATION_WARNING
 
 
-@pytest.mark.parametrize("kind", ["no_group", "no_foreign_key", "different_group", "boolean_id"])
-def test_missing_or_mismatched_group_is_unavailable(kind):
+@pytest.mark.parametrize("kind", ["no_template", "no_foreign_key", "different_template", "boolean_id"])
+def test_missing_or_mismatched_template_is_unavailable(kind):
     """Unit: relationship identity is required, not just a plausible number."""
     item = subject(Decimal("83"))
-    if kind == "no_group":
-        item.subject_group_rel = None
+    if kind == "no_template":
+        item.grading_template = None
     elif kind == "no_foreign_key":
-        item.subject_group_id = None
-    elif kind == "different_group":
-        item.subject_group_rel.subject_group_id = 3
+        item.grading_template_id = None
+    elif kind == "different_template":
+        item.grading_template.grading_template_id = 3
     else:
-        item.subject_group_id = item.subject_group_rel.subject_group_id = True
+        item.grading_template_id = item.grading_template.grading_template_id = True
     result = metrics.resolve_dashboard_passing_threshold(item)
     assert result.passing_threshold is None
     assert result.warning is not None
+
+
+@pytest.mark.parametrize(
+    "orm_template_id,related_template_id",
+    [(2, 2), (7, 8)],
+    ids=["stale-orm-relationship", "pending-mismatched-relationship"],
+)
+def test_bulk_context_owns_dashboard_threshold_and_template_provenance(
+    orm_template_id, related_template_id,
+):
+    """Never pair a bulk-context threshold with stale ORM provenance."""
+    item = subject(Decimal("99"), template_id=orm_template_id)
+    item.grading_template.grading_template_id = related_template_id
+    context = PassingThresholdContext(
+        academic_year_id=41,
+        policy_mode="live",
+        subjects={1: SubjectThresholdConfig(1, 9)},
+        grading_templates={9: TemplateThresholdConfig(9, Decimal("83"))},
+        general_average_raw="80",
+    )
+
+    result = metrics.resolve_dashboard_passing_threshold(item, context=context)
+
+    assert result.passing_threshold == 83.0
+    assert result.grading_template_id == 9
+    assert result.warning is None
+
+
+def test_bulk_context_configuration_error_does_not_report_stale_template_provenance():
+    item = subject(Decimal("87"), template_id=2)
+    context = PassingThresholdContext(
+        academic_year_id=41,
+        policy_mode="live",
+        subjects={1: SubjectThresholdConfig(1, 9)},
+        grading_templates={},
+        general_average_raw="80",
+    )
+
+    result = metrics.resolve_dashboard_passing_threshold(item, context=context)
+
+    assert result.passing_threshold is None
+    assert result.grading_template_id is None
+    assert result.warning.code == "invalid_passing_threshold"
 
 
 @pytest.mark.parametrize("threshold", [Decimal("75"), Decimal("83"), Decimal("85"), Decimal("83.25")])
@@ -319,7 +367,7 @@ def test_threshold_changes_are_picked_up_on_the_next_resolution():
     """Unit: no process-global threshold cache."""
     item = subject(Decimal("85"))
     before = metrics.resolve_dashboard_passing_threshold(item)
-    item.subject_group_rel.passing_threshold = Decimal("75")
+    item.grading_template.passing_threshold = Decimal("75")
     after = metrics.resolve_dashboard_passing_threshold(item)
     assert before.passing_threshold == 85.0
     assert after.passing_threshold == 75.0

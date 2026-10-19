@@ -360,7 +360,7 @@ def test_phase_six_runtime_threshold_change_and_missing_configuration(db, data, 
     assert dashboard(db, data)["details"]["students_to_check_in_with"]["items"] == []
     monkeypatch.setattr(
         "app.services.activity.AnalyticsService.resolve_dashboard_passing_threshold",
-        lambda s: ThresholdResolution(
+        lambda s, **_policy: ThresholdResolution(
             subject_id=s.subject_id,
             grading_template_id=None,
             warning=DashboardWarning(
@@ -778,7 +778,7 @@ def test_missing_threshold_keeps_grade_but_marks_passing_unavailable(db, data, m
     """Mocked behavior: configuration gaps never create a partial passing rate."""
     monkeypatch.setattr(
         "app.services.activity.AnalyticsService.resolve_dashboard_passing_threshold",
-        lambda s: ThresholdResolution(
+        lambda s, **_policy: ThresholdResolution(
             subject_id=s.subject_id,
             grading_template_id=None,
             warning=DashboardWarning(

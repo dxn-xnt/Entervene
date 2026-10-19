@@ -6,9 +6,9 @@ from typing import cast
 
 import openpyxl
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import CheckConstraint, Table, create_engine
+from sqlalchemy import CheckConstraint, Table, create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -40,6 +40,7 @@ from app.services.export.ClassRecordExportService import (
     generate_class_record_sheet,
     generate_summary_of_grades_sheet,
 )
+from app.services.export import ClassRecordExportService as export_service
 
 
 @pytest.fixture
@@ -126,13 +127,15 @@ def export_context():
         status="active",
         academic_level_id=level.academic_level_id,
     )
-    db.add_all([cls, subj])
+    # Persist the template before adding its dependent subject; do not rely on
+    # Subject's model-level template ID default or SQLite's relaxed FK checks.
+    db.add(cls)
     db.flush()
 
     # Grading Template: 40% Written Works, 40% Performance Tasks, 20% Quarterly Assessment
     tpl = GradingTemplate(
         template_name="Junior High Math",
-        subject_id=subj.subject_id,
+        passing_threshold=Decimal("75"),
         status="active",
     )
     db.add(tpl)
@@ -144,7 +147,8 @@ def export_context():
     db.add_all([c1, c2, c3])
     db.flush()
 
-    subj.default_grading_template = str(tpl.grading_template_id)
+    subj.grading_template_id = tpl.grading_template_id
+    db.add(subj)
     db.flush()
 
     # Subject Load
@@ -201,10 +205,11 @@ def export_context():
     db.add_all([cw_ww1, cw_ww2, cw_pt1, cw_qa1])
     db.flush()
 
-    asgn_ww1 = ClassworkAssignment(classwork_id=cw_ww1.classwork_id, class_id=cls.class_id, assigned_by_staff_id=teacher.staff_id, is_published=True)
-    asgn_ww2 = ClassworkAssignment(classwork_id=cw_ww2.classwork_id, class_id=cls.class_id, assigned_by_staff_id=teacher.staff_id, is_published=True)
-    asgn_pt1 = ClassworkAssignment(classwork_id=cw_pt1.classwork_id, class_id=cls.class_id, assigned_by_staff_id=teacher.staff_id, is_published=True)
-    asgn_qa1 = ClassworkAssignment(classwork_id=cw_qa1.classwork_id, class_id=cls.class_id, assigned_by_staff_id=teacher.staff_id, is_published=True)
+    # A current-period export intentionally excludes period-less legacy work.
+    asgn_ww1 = ClassworkAssignment(classwork_id=cw_ww1.classwork_id, class_id=cls.class_id, academic_period_id=period.academic_period_id, assigned_by_staff_id=teacher.staff_id, is_published=True)
+    asgn_ww2 = ClassworkAssignment(classwork_id=cw_ww2.classwork_id, class_id=cls.class_id, academic_period_id=period.academic_period_id, assigned_by_staff_id=teacher.staff_id, is_published=True)
+    asgn_pt1 = ClassworkAssignment(classwork_id=cw_pt1.classwork_id, class_id=cls.class_id, academic_period_id=period.academic_period_id, assigned_by_staff_id=teacher.staff_id, is_published=True)
+    asgn_qa1 = ClassworkAssignment(classwork_id=cw_qa1.classwork_id, class_id=cls.class_id, academic_period_id=period.academic_period_id, assigned_by_staff_id=teacher.staff_id, is_published=True)
     db.add_all([asgn_ww1, asgn_ww2, asgn_pt1, asgn_qa1])
     db.flush()
 
@@ -212,7 +217,7 @@ def export_context():
     # Stu1: 18/20, 27/30 (WW total: 45/50 = 90% PS, 36.0 WS)
     #       45/50 (PT total: 45/50 = 90% PS, 36.0 WS)
     #       40/50 (QA total: 40/50 = 80% PS, 16.0 WS)
-    # Initial Grade: 36 + 36 + 16 = 88.0 -> Transmuted: 92 (Advancing)
+    # Current ECR lookup: 87.70 <= 88.0 < 88.88 -> Term Grade 90.
     sub1 = StudentSubmission(classwork_assignment_id=asgn_ww1.classwork_assignment_id, student_id=stu1.student_id, grade=Decimal("18.00"), status="GRADED")
     sub2 = StudentSubmission(classwork_assignment_id=asgn_ww2.classwork_assignment_id, student_id=stu1.student_id, grade=Decimal("27.00"), status="GRADED")
     sub3 = StudentSubmission(classwork_assignment_id=asgn_pt1.classwork_assignment_id, student_id=stu1.student_id, grade=Decimal("45.00"), status="GRADED")
@@ -221,7 +226,7 @@ def export_context():
     # Stu2: 20/20, 30/30 (WW total: 50/50 = 100% PS, 40.0 WS)
     #       50/50 (PT total: 50/50 = 100% PS, 40.0 WS)
     #       48/50 (QA total: 48/50 = 96% PS, 19.2 WS)
-    # Initial Grade: 40 + 40 + 19.2 = 99.2 -> Transmuted: 100 (Advancing)
+    # Current ECR lookup: 98.32 <= 99.2 < 99.50 -> Term Grade 99.
     sub5 = StudentSubmission(classwork_assignment_id=asgn_ww1.classwork_assignment_id, student_id=stu2.student_id, grade=Decimal("20.00"), status="GRADED")
     sub6 = StudentSubmission(classwork_assignment_id=asgn_ww2.classwork_assignment_id, student_id=stu2.student_id, grade=Decimal("30.00"), status="GRADED")
     sub7 = StudentSubmission(classwork_assignment_id=asgn_pt1.classwork_assignment_id, student_id=stu2.student_id, grade=Decimal("50.00"), status="GRADED")
@@ -282,6 +287,7 @@ def test_generate_class_record_sheet(export_context):
     # Initial Grade = col 16, Quarterly Grade = col 17, Descriptor = col 18
     assert "WRITTEN WORKS (40%)" in str(ws.cell(10, 3).value)
     assert "PERFORMANCE TASKS (40%)" in str(ws.cell(10, 8).value)
+    assert "H10:K10" in {str(merged) for merged in ws.merged_cells.ranges}
     assert "QUARTERLY ASSESSMENT (20%)" in str(ws.cell(10, 12).value)
     assert "INITIAL" in str(ws.cell(10, 16).value)
     assert "TERM" in str(ws.cell(10, 17).value)
@@ -306,9 +312,10 @@ def test_generate_class_record_sheet(export_context):
     assert ws.cell(14, 5).value == 45.0
     assert ws.cell(14, 6).value == 90.0
     assert ws.cell(14, 7).value == 36.0
-    # Initial Grade: 88.0, Term Grade: 93.4, Descriptor: Advancing
+    # Independently stated ECR bounds above, not the production function as oracle.
+    # Initial Grade: 88.0, Term Grade: 90, Descriptor: Advancing
     assert ws.cell(14, 16).value == 88.0
-    assert ws.cell(14, 17).value == 93.4
+    assert ws.cell(14, 17).value == 90.0
     assert ws.cell(14, 18).value == "Advancing"
 
     # Row 15 is FEMALE header
@@ -321,7 +328,7 @@ def test_generate_class_record_sheet(export_context):
     assert ws.cell(16, 6).value == 100.0
     assert ws.cell(16, 7).value == 40.0
     assert ws.cell(16, 16).value == 99.2
-    assert ws.cell(16, 17).value == 99.68
+    assert ws.cell(16, 17).value == 99.0
     assert ws.cell(16, 18).value == "Advancing"
 
 
@@ -389,16 +396,13 @@ def test_dynamic_grading_template_with_zero_assignment_component(export_context)
     period_id = export_context["academic_period_id"]
     staff_id = export_context["teacher_staff_id"]
 
-    # Create a new subject with 4 components, one of which has NO assignments
+    # Create a subject-linked template with three components and no assignments.
     new_subj = Subject(
         subject_name="Science",
         subject_codename="SCI8",
         status="active",
     )
-    db.add(new_subj)
-    db.flush()
-
-    new_tpl = GradingTemplate(template_name="Science Template", subject_id=new_subj.subject_id, status="active")
+    new_tpl = GradingTemplate(template_name="Science Template", passing_threshold=Decimal("75"), status="active")
     db.add(new_tpl)
     db.flush()
 
@@ -407,7 +411,8 @@ def test_dynamic_grading_template_with_zero_assignment_component(export_context)
         GradingTemplateComponent(grading_template_id=new_tpl.grading_template_id, component_name="Performance Tasks", weight=Decimal("50.00"), display_order=2),
         GradingTemplateComponent(grading_template_id=new_tpl.grading_template_id, component_name="Summative Assessment", weight=Decimal("20.00"), display_order=3),
     ])
-    new_subj.default_grading_template = str(new_tpl.grading_template_id)
+    new_subj.grading_template_id = new_tpl.grading_template_id
+    db.add(new_subj)
     db.flush()
 
     # SubjectLoad with NO assignments
@@ -461,6 +466,15 @@ def test_unstarted_term_safeguard_writes_blank_cells(export_context):
         end_date=date(2025, 11, 30),
     )
     db.add(period_q2)
+    db.flush()
+    db.add(SubjectLoad(
+        class_id=class_id,
+        subject_id=subject_id,
+        staff_id=staff_id,
+        academic_period_id=period_q2.academic_period_id,
+        status="active",
+        is_active_version=True,
+    ))
     db.commit()
 
     wb = openpyxl.Workbook()
@@ -531,7 +545,16 @@ def test_export_class_record_full_workbook_all_tabs(export_context):
             end_date=date(2025, 11, 30),
         )
         db.add(q2)
-        db.commit()
+        db.flush()
+    db.add(SubjectLoad(
+        class_id=class_id,
+        subject_id=subject_id,
+        staff_id=staff_id,
+        academic_period_id=q2.academic_period_id,
+        status="active",
+        is_active_version=True,
+    ))
+    db.commit()
 
     stream, filename = export_class_record_full_workbook(
         db=db,
@@ -612,5 +635,169 @@ def test_export_class_record_workbook_endpoint(export_context):
     # Verify content stream can be parsed as valid openpyxl workbook
     wb = openpyxl.load_workbook(io.BytesIO(response.content))
     assert "Summary of Grades" in wb.sheetnames
+
+
+def _new_staff(db, staff_id: str) -> AcademicStaff:
+    user = UserAccount(
+        user_id=uuid.uuid4(),
+        email=f"{staff_id.lower()}@entervene.test",
+        password_hash="hash",
+    )
+    staff = AcademicStaff(
+        staff_id=staff_id,
+        first_name="Export",
+        last_name="Reviewer",
+        email=user.email,
+        user_id=user.user_id,
+    )
+    db.add_all([user, staff])
+    db.flush()
+    return staff
+
+
+def _new_term(db, year_id: int, sequence: int, name: str) -> AcademicPeriod:
+    period = AcademicPeriod(
+        period_name=name,
+        period_type="TERM",
+        period_sequence=sequence,
+        academic_year_id=year_id,
+        is_active=False,
+        start_date=date(2025, 6 + sequence, 1),
+        end_date=date(2025, 6 + sequence, 28),
+    )
+    db.add(period)
+    db.flush()
+    return period
+
+
+def test_unauthorized_empty_and_populated_terms_return_same_denial(export_context):
+    db = export_context["db"]
+    class_id = export_context["class_id"]
+    subject_id = export_context["subject_id"]
+    teacher_id = export_context["teacher_staff_id"]
+    other = _new_staff(db, "STF-OTHER")
+    empty = _new_term(db, export_context["academic_year_id"], 2, "Empty Term")
+    populated = _new_term(db, export_context["academic_year_id"], 3, "Populated Term")
+    db.add_all([
+        SubjectLoad(class_id=class_id, subject_id=subject_id, staff_id=other.staff_id,
+                    academic_period_id=empty.academic_period_id, status="active", is_active_version=True),
+        SubjectLoad(class_id=class_id, subject_id=subject_id, staff_id=other.staff_id,
+                    academic_period_id=populated.academic_period_id, status="active", is_active_version=True),
+    ])
+    student = db.query(Student).first()
+    db.add(StudentPeriodGrade(
+        student_id=student.student_id,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=populated.academic_period_id,
+        final_period_grade=Decimal("90"),
+        is_finalized=True,
+    ))
+    db.commit()
+
+    failures = []
+    for period in (empty, populated):
+        with pytest.raises(HTTPException) as caught:
+            generate_class_record_sheet(
+                openpyxl.Workbook(), db, class_id, subject_id,
+                period.academic_period_id, staff_id=teacher_id)
+        failures.append((caught.value.status_code, caught.value.detail))
+
+    assert failures == [
+        (403, "You do not have access to view records for this class and subject."),
+        (403, "You do not have access to view records for this class and subject."),
+    ]
+
+
+def test_fully_unassigned_teacher_cannot_export_existing_term(export_context):
+    db = export_context["db"]
+    unassigned = _new_staff(db, "STF-UNASSIGNED")
+    db.commit()
+
+    with pytest.raises(HTTPException) as caught:
+        generate_class_record_sheet(
+            openpyxl.Workbook(), db, export_context["class_id"],
+            export_context["subject_id"], export_context["academic_period_id"],
+            staff_id=unassigned.staff_id)
+
+    assert caught.value.status_code == 403
+
+
+def test_authorized_admin_gets_blank_fallback_only_when_term_has_no_data(export_context):
+    db = export_context["db"]
+    period = _new_term(db, export_context["academic_year_id"], 2, "Unstarted Term")
+    db.commit()
+
+    ws = generate_class_record_sheet(
+        openpyxl.Workbook(), db, export_context["class_id"],
+        export_context["subject_id"], period.academic_period_id,
+        staff_id="ADM-EXPORT")
+
+    assert ws.title == "Unstarted Term"
+    assert ws.cell(14, 3).value == ""
+
+
+def test_authorized_admin_does_not_treat_existing_grade_as_unstarted(export_context):
+    db = export_context["db"]
+    period = _new_term(db, export_context["academic_year_id"], 2, "Data Term")
+    student = db.query(Student).first()
+    db.add(StudentPeriodGrade(
+        student_id=student.student_id,
+        class_id=export_context["class_id"],
+        subject_id=export_context["subject_id"],
+        academic_period_id=period.academic_period_id,
+        final_period_grade=Decimal("90"),
+        is_finalized=True,
+    ))
+    db.commit()
+
+    with pytest.raises(HTTPException) as caught:
+        generate_class_record_sheet(
+            openpyxl.Workbook(), db, export_context["class_id"],
+            export_context["subject_id"], period.academic_period_id,
+            staff_id="ADM-EXPORT")
+
+    assert caught.value.status_code == 404
+
+
+@pytest.mark.parametrize("autoflush", [False, True])
+@pytest.mark.parametrize("configuration_error", [False, True])
+def test_class_record_export_never_flushes_pending_changes(
+    export_context, monkeypatch, autoflush, configuration_error,
+):
+    db = export_context["db"]
+    submission = db.query(StudentSubmission).first()
+    submission.grade = Decimal("17")
+    db.autoflush = autoflush
+    statements = []
+
+    def record(connection, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    if configuration_error:
+        def fail_policy(*args, **kwargs):
+            raise HTTPException(status_code=422, detail={"code": "passing_threshold_invalid"})
+        monkeypatch.setattr(export_service, "require_subject_passing_threshold", fail_policy)
+
+    event.listen(db.get_bind(), "before_cursor_execute", record)
+    try:
+        if configuration_error:
+            with pytest.raises(HTTPException) as caught:
+                generate_class_record_sheet(
+                    openpyxl.Workbook(), db, export_context["class_id"],
+                    export_context["subject_id"], export_context["academic_period_id"],
+                    staff_id=export_context["teacher_staff_id"])
+            assert caught.value.status_code == 422
+        else:
+            generate_class_record_sheet(
+                openpyxl.Workbook(), db, export_context["class_id"],
+                export_context["subject_id"], export_context["academic_period_id"],
+                staff_id=export_context["teacher_staff_id"])
+    finally:
+        event.remove(db.get_bind(), "before_cursor_execute", record)
+
+    assert submission in db.dirty
+    assert statements
+    assert all(statement.lstrip().upper().startswith("SELECT") for statement in statements)
 
 
