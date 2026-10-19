@@ -543,7 +543,6 @@ function TeacherCurrentTermDashboard() {
               />
             ) : (
               <div className="flex flex-col gap-3">
-                <h2 className="text-xl font-black">Subject Summaries</h2>
                 {subjectSummaries.length ? (
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     {subjectSummaries.map((group) => (

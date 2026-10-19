@@ -13,25 +13,21 @@ export function PredictionSubjectSection({ group }: PredictionSubjectSectionProp
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h2 className="text-xl font-bold">{group.display_name}</h2>
-          {group.grade_level !== null && (
-            <span className="text-xs font-semibold text-muted-foreground">
-              (Grade {group.grade_level})
-            </span>
-          )}
+
         </div>
         <div className="flex flex-row flex-wrap gap-2 items-center">
           {group.high_risk_count > 0 && (
-            <Badge size="sm" variant="surface" className="bg-destructive text-black font-bold">
+            <Badge size="sm" variant="destructive" className="">
               {group.high_risk_count} {group.high_risk_count === 1 ? "High Risk" : "High Risks"}
             </Badge>
           )}
           {group.moderate_risk_count > 0 && (
-            <Badge size="sm" variant="surface" className="bg-amber-300 text-black font-bold">
+            <Badge size="sm" variant="solid" className="">
               {group.moderate_risk_count} Moderate Risk
             </Badge>
           )}
           {group.needs_monitoring_count > 0 && (
-            <Badge size="sm" variant="outline" className="border-border font-bold">
+            <Badge size="sm" variant="outline" className="">
               {group.needs_monitoring_count} Monitoring
             </Badge>
           )}

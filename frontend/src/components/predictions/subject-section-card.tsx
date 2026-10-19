@@ -107,7 +107,7 @@ export function SubjectSectionCard({
               {topRisks.map((risk) => (
                 <Card
                   key={risk.key}
-                  className="p-2 px-2 shadow-none gap-2 flex-1 flex flex-row items-center border border-black bg-white min-w-0"
+                  className="p-2 px-2 shadow-none gap-2 flex-1 flex flex-row items-center bg-white min-w-0"
                 >
                   <Progress
                     variant="circular"
