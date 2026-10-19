@@ -19,7 +19,6 @@ import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
-import { Avatar } from "@/components/retroui/Avatar";
 import IconContainer from "@/components/icon-container";
 import {
   Tooltip,
@@ -41,6 +40,8 @@ import {
   studentClassworkSourceLabel,
 } from "@/lib/student-classwork-navigation";
 import { quizPathWithContext } from "@/lib/student-quiz-navigation";
+import { isDisplayableSubmission } from "@/lib/student-submission";
+import { formatDateTime } from "@/lib/formatters";
 import { routes } from "@/../routes";
 import type { ClassworkDetail, Submission } from "./subjects-view/types";
 import type { ActivityRubricLevel } from "@/types/classwork";
@@ -143,7 +144,9 @@ export default function StudentClassworkView() {
               (await submissionsResponse.json()) as Submission[];
             setSubmission(
               submissions.find(
-                (item) => item.classwork_assignment_id === assignmentId,
+                (item) =>
+                  item.classwork_assignment_id === assignmentId &&
+                  isDisplayableSubmission(item),
               ) ?? null,
             );
           }
@@ -268,12 +271,14 @@ export default function StudentClassworkView() {
         title: "Submission deleted",
         description: "You can now resubmit your work.",
       });
+      return true;
     } catch (cause) {
       toast.error({
         title: "Delete failed",
         description:
           cause instanceof Error ? cause.message : "Please try again.",
       });
+      return false;
     } finally {
       setActionLoading(false);
     }
@@ -406,24 +411,6 @@ export default function StudentClassworkView() {
                             </span>
                           </p>
                         ) : null}
-                        <span className="flex items-center gap-2 text-sm">
-                          <Avatar
-                            variant="teacher"
-                            className="size-7 rounded-full border-2 border-black"
-                          >
-                            <Avatar.Image
-                              src={
-                                detail.teacher_avatar ||
-                                "/avatars/teacher-avatars/12.svg"
-                              }
-                              alt=""
-                            />
-                            <Avatar.Fallback className="rounded-full bg-primary text-xs font-bold">
-                              {detail.teacher_name?.slice(0, 1) || "T"}
-                            </Avatar.Fallback>
-                          </Avatar>
-                          {detail.teacher_name || "Teacher"}
-                        </span>
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -453,44 +440,6 @@ export default function StudentClassworkView() {
                       </Badge>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
-                    <span>
-                      {dueDate
-                        ? `Due on ${dueDate.toLocaleString()}`
-                        : "No due date"}
-                    </span>
-                    {detail.section_name && (
-                      <span>
-                        Section:{" "}
-                        <strong className="text-foreground">
-                          {detail.section_name}
-                        </strong>
-                      </span>
-                    )}
-                    <span>
-                      Points:{" "}
-                      <strong className="text-foreground">
-                        {detail.total_points ?? "Not set"}
-                      </strong>
-                    </span>
-                    <span>
-                      Availability:{" "}
-                      <strong className="text-foreground">
-                        {detail.is_locked
-                          ? "Locked"
-                          : overdue
-                            ? detail.allow_late_submissions
-                              ? "Late submissions allowed"
-                              : "Closed"
-                            : "Available"}
-                      </strong>
-                    </span>
-                    {detail.lock_date && (
-                      <span>
-                        Locks {new Date(detail.lock_date).toLocaleString()}
-                      </span>
-                    )}
-                  </div>
                   <div className="flex min-w-0 flex-col gap-4 px-2">
                     <section className="space-y-2">
                       <h2 className="text-lg font-bold">Instructions</h2>
@@ -502,18 +451,6 @@ export default function StudentClassworkView() {
                         </p>
                       </Card>
                     </section>
-                    {detail.description && detail.instructions && (
-                      <section className="space-y-2">
-                        <h2 className="text-lg font-bold">
-                          About this classwork
-                        </h2>
-                        <Card className="block w-full p-3 shadow-none">
-                          <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
-                            {detail.description}
-                          </p>
-                        </Card>
-                      </section>
-                    )}
                     {detail.linked_lessons &&
                       detail.linked_lessons.length > 0 && (
                         <Card className="block w-full shadow-none">
@@ -589,6 +526,16 @@ export default function StudentClassworkView() {
                         </Card>
                       )}
                     </section>
+                    <div className="text-sm text-muted-foreground">
+                      <p>
+                        {dueDate
+                          ? `Due on ${formatDateTime(dueDate)}`
+                          : "No due date"}
+                      </p>
+                      {detail.lock_date && (
+                        <p>Locks {formatDateTime(detail.lock_date)}</p>
+                      )}
+                    </div>
                     {detail.rubric_levels &&
                       detail.rubric_levels.length > 0 && (
                         <RubricsScoreBoard
@@ -600,16 +547,27 @@ export default function StudentClassworkView() {
                 </Card>
 
                 <Card className="block w-full">
-                  <h2 className="mb-3 flex items-center gap-2 font-bold">
-                    <FileText size={18} />
-                    {isQuiz
-                      ? "Quiz"
-                      : isReading
-                        ? "Reading Material"
-                        : submission
-                          ? "Your Submission"
-                          : "Submit Your Work"}
-                  </h2>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="flex items-center gap-2 font-bold">
+                      <IconContainer variant="primary" size="sm" className="size-9 p-0">
+                        <FileText size={18} />
+                      </IconContainer>
+                      {isQuiz
+                        ? "Quiz"
+                        : isReading
+                          ? "Reading Material"
+                          : submission
+                            ? "Your Submission"
+                            : "Submit Your Work"}
+                    </h2>
+                    {!isQuiz && !isReading && submission?.grade != null && (
+                      <Badge variant="success" size="md">
+                        {detail.show_scores
+                          ? `Score: ${submission.grade}${detail.total_points != null ? `/${detail.total_points}` : ""}`
+                          : "Score hidden"}
+                      </Badge>
+                    )}
+                  </div>
                   {isReading ? (
                     submission ||
                     status === "completed" ||
@@ -717,22 +675,9 @@ export default function StudentClassworkView() {
                       allowLateSubmissions={detail.allow_late_submissions}
                       maxAttempts={detail.max_attempts}
                       showScores={detail.show_scores}
+                      hideGrade
                       isDeleting={actionLoading}
                       onDeleteSubmission={deleteSubmission}
-                      onResubmit={async () => {
-                        const response = await apiFetch(
-                          "/api/v1/submissions/my-submissions",
-                        );
-                        if (response.ok) {
-                          const items = (await response.json()) as Submission[];
-                          setSubmission(
-                            items.find(
-                              (item) =>
-                                item.classwork_assignment_id === assignmentId,
-                            ) ?? null,
-                          );
-                        }
-                      }}
                     />
                   ) : closed ? (
                     <p className="flex items-center gap-2 text-sm text-muted-foreground">

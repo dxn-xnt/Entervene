@@ -153,40 +153,37 @@ export default function AdminSubjectView() {
                   </div>
                 </RetroCard>
 
-                <section className="flex flex-col gap-2">
-                  <Text as="h3" className="font-sans text-xl font-bold">
-                    Overview
-                  </Text>
-                  <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
-                    <OverviewCard title="Total Subjects" count={String("12")} />
-                    <OverviewCard title="Active Subjects" count={String("8")} />
-                    <OverviewCard title="Archived Subjects" count={String("4")} />
-                    <OverviewCard title="Total Hours" count={String("135")} />
-                  </div>
-                </section>
+                <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                  <section className="flex min-w-0 flex-col gap-2">
+                    <Text as="h3" className="font-sans text-xl font-bold">
+                      Classes
+                    </Text>
+                    <div className="flex flex-col gap-3">
+                      {classesList.length === 0 ? (
+                        <Empty>
+                          <Empty.Content>
+                            <Empty.Title>No active classes currently assigned to this subject level ({decodedGrade}).</Empty.Title>
+                          </Empty.Content>
+                        </Empty>
+                      ) : (
+                        classesList.map((cls) => (
+                          <ClassItemLine
+                            key={cls.class_id}
+                            subject={cls.section_name}
+                            date={`${cls.class_status === "Active" || cls.class_status === "active" ? "Active" : "Archived"} since ${formatDate(subjectDetail.created_at)}`}
+                            time="10:00 - 11:00 AM"
+                          />
+                        ))
+                      )}
+                    </div>
+                  </section>
 
-                <div className="flex flex-col gap-1 px-0">
-                  <Text as="h3" className="font-sans text-xl font-bold">
-                    Classes
-                  </Text>
-                  <div className="flex flex-col gap-3">
-                    {classesList.length === 0 ? (
-                      <Empty>
-                        <Empty.Content>
-                          <Empty.Title>No active classes currently assigned to this subject level ({decodedGrade}).</Empty.Title>
-                        </Empty.Content>
-                      </Empty>
-                    ) : (
-                      classesList.map((cls) => (
-                        <ClassItemLine
-                          key={cls.class_id}
-                          subject={cls.section_name}
-                          date={`${cls.class_status === "Active" || cls.class_status === "active" ? "Active" : "Archived"} since ${formatDate(subjectDetail.created_at)}`}
-                          time="10:00 - 11:00 AM"
-                        />
-                      ))
-                    )}
-                  </div>
+                  <aside className="flex min-w-0 flex-col gap-3" aria-label="Subject summary">
+                    <OverviewCard title="Total Subjects" count="12" />
+                    <OverviewCard title="Active Subjects" count="8" />
+                    <OverviewCard title="Archived Subjects" count="4" />
+                    <OverviewCard title="Total Hours" count="135" />
+                  </aside>
                 </div>
               </>
             ) : null}

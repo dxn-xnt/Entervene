@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
-import { SubjectCard } from "../../components/subject-card";
 
 import { routes } from "@/../routes";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getStudentTodos, type TodoItem } from "@/lib/api";
 import { LoadingPanel } from "@/components/loading-panel";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Empty } from "@/components/retroui/Empty";
 import { Button } from "@/components/retroui/Button";
+import { StudentSubjectSectionCard } from "@/components/student/student-subject-section-card";
 
 interface EnrolledSubject {
   subject_load_id: number;
@@ -27,6 +27,7 @@ interface EnrolledSubject {
 const Subjects = () => {
 
   const [subjects, setSubjects] = useState<EnrolledSubject[]>([]);
+  const [classworks, setClassworks] = useState<TodoItem[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -38,10 +39,14 @@ const Subjects = () => {
     setIsLoading(true);
     setError("");
     try {
-      const res = await apiFetch("/api/v1/students/me/subjects");
+      const [res, todos] = await Promise.all([
+        apiFetch("/api/v1/students/me/subjects"),
+        getStudentTodos().catch(() => null),
+      ]);
       if (!res.ok) throw new Error("Failed to load subjects");
-      const data = await res.json();
+      const data = (await res.json()) as EnrolledSubject[];
       setSubjects(data);
+      setClassworks(todos?.all ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load subjects");
     } finally {
@@ -88,18 +93,18 @@ const Subjects = () => {
                   </Empty.Content>
                 </Empty>
               ) : (
-                <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+                <div className="grid min-w-0 grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {subjects.map((subject) => (
-                    <SubjectCard
+                    <StudentSubjectSectionCard
                       key={subject.subject_load_id}
-                      title={subject.subject_name}
                       to={subjectHref(subject)}
-                      teacher={subject.teacher_name}
-                      teacherAvatar={subject.teacher_avatar ?? undefined}
-                      subjectCode={subject.subject_codename}
-                      periodName={subject.period_name}
-                      yearLabel={subject.year_label}
-                      isCurrentPeriod={subject.is_current_period}
+                      subjectName={subject.subject_name}
+                      sectionName={subject.section_name}
+                      teacherName={subject.teacher_name}
+                      teacherAvatar={subject.teacher_avatar}
+                      classworks={classworks?.filter((item) =>
+                        item.class_id === subject.class_id && item.subject_id === subject.subject_id,
+                      ) ?? null}
                     />
                   ))}
                 </div>

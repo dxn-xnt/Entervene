@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { studentClassworkPath } from "@/lib/student-classwork-navigation";
 import {
-  Award,
   BookOpen,
   ClipboardList,
   ChevronRight,
@@ -191,36 +190,9 @@ export default function SubjectLessonTab({
     ClassworkDetail[]
   >([]);
   const [sortAsc, setSortAsc] = useState(false);
-  const [competencyFilter, setCompetencyFilter] = useState("all");
+  const [lessonFilter, setLessonFilter] = useState("all");
   const [selectedLessonDetail, setSelectedLessonDetail] =
     useState<Lesson | null>(null);
-  const [collapsedCompetencies, setCollapsedCompetencies] = useState<
-    Record<string, boolean>
-  >({});
-  const [isUnassignedExpanded, setIsUnassignedExpanded] = useState(false);
-
-  useEffect(() => {
-    if (lessons.length > 0) {
-      setCollapsedCompetencies((prev) => {
-        const next: Record<string, boolean> = { ...prev };
-        let firstFound = false;
-        lessons.forEach((l) => {
-          if (l.competency_id || l.competency_statement) {
-            const key = String(l.competency_id || l.competency_statement);
-            if (next[key] === undefined) {
-              next[key] = firstFound;
-              firstFound = true;
-            }
-          }
-        });
-        return next;
-      });
-      const hasAnyCompetency = lessons.some(
-        (l) => l.competency_id || l.competency_statement,
-      );
-      setIsUnassignedExpanded(!hasAnyCompetency);
-    }
-  }, [lessons]);
 
   useEffect(() => {
     if (classId && subjectId) {
@@ -667,77 +639,13 @@ export default function SubjectLessonTab({
         !["submitted", "graded"].includes(cw.submission_status ?? "")),
   );
 
-  const sortedLessons = [...lessons].sort((a, b) => {
+  const sortedLessons = lessons.filter((lesson) =>
+    lessonFilter === "all" || String(lesson.lesson_id) === lessonFilter,
+  ).sort((a, b) => {
     const da = new Date(a.created_at ?? 0).getTime();
     const db = new Date(b.created_at ?? 0).getTime();
     return sortAsc ? da - db : db - da;
   });
-
-  const { competencyGroups, unassignedLessons } = useMemo(() => {
-    const groupsMap = new Map<
-      string,
-      {
-        key: string;
-        competency_id?: number | null;
-        competency_code?: string | null;
-        competency_statement: string;
-        lessons: Lesson[];
-      }
-    >();
-    const unassigned: Lesson[] = [];
-
-    sortedLessons.forEach((lesson) => {
-      const lessonCompetencyKey = String(
-        lesson.competency_id || lesson.competency_statement,
-      );
-      if (
-        competencyFilter !== "all" &&
-        competencyFilter !==
-          (lesson.competency_id || lesson.competency_statement
-            ? lessonCompetencyKey
-            : "unassigned")
-      ) {
-        return;
-      }
-      if (lesson.competency_statement || lesson.competency_id) {
-        const key = lessonCompetencyKey;
-        if (!groupsMap.has(key)) {
-          groupsMap.set(key, {
-            key,
-            competency_id: lesson.competency_id,
-            competency_code: lesson.competency_code,
-            competency_statement:
-              lesson.competency_statement || "Learning Competency",
-            lessons: [],
-          });
-        }
-        groupsMap.get(key)!.lessons.push(lesson);
-      } else {
-        unassigned.push(lesson);
-      }
-    });
-
-    return {
-      competencyGroups: Array.from(groupsMap.values()),
-      unassignedLessons: unassigned,
-    };
-  }, [sortedLessons, competencyFilter]);
-
-  const competencyOptions = Array.from(
-    new Map(
-      lessons
-        .filter((lesson) => lesson.competency_id || lesson.competency_statement)
-        .map((lesson) => [
-          String(lesson.competency_id || lesson.competency_statement),
-          lesson.competency_code
-            ? `${lesson.competency_code} - ${lesson.competency_statement || "Learning Competency"}`
-            : lesson.competency_statement || "Learning Competency",
-        ]),
-    ),
-  );
-  const hasUnassignedLessons = lessons.some(
-    (lesson) => !lesson.competency_id && !lesson.competency_statement,
-  );
 
   const classworkLessonCounts = allClassworks.reduce((counts, classwork) => {
     counts.set(
@@ -766,13 +674,6 @@ export default function SubjectLessonTab({
   const quarterlyAssignmentIds = new Set(
     quarterlyAssessments.map((qa) => qa.classwork_assignment_id),
   );
-
-  const toggleStudentCompCollapse = (key: string) => {
-    setCollapsedCompetencies((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  };
 
   const renderStudentLessonItem = (lesson: Lesson) => {
     return (
@@ -1029,32 +930,25 @@ export default function SubjectLessonTab({
             <div className="flex min-w-0 flex-col items-start gap-4 lg:flex-row">
               {/* ════════════════ LEFT: Lessons list ════════════════ */}
               <div className="w-full min-w-0 lg:flex-[2]">
-                {/* Lessons header row */}
-                <div className="mb-4 flex w-full items-center justify-between gap-3">
-                  <Select
-                    value={competencyFilter}
-                    onValueChange={setCompetencyFilter}
-                  >
-                    <Select.Trigger className="h-10 w-full max-w-112 text-sm">
-                      <Select.Value placeholder="Filter by competency" />
+                <div className="mb-4 flex w-full flex-wrap items-center justify-end gap-3">
+                  <Select value={lessonFilter} onValueChange={setLessonFilter}>
+                    <Select.Trigger aria-label="Filter lessons" className="h-10 w-44 text-sm sm:w-48">
+                      <Select.Value placeholder="All lessons" />
                     </Select.Trigger>
-                    <Select.Content className="overflow-y-auto border-2 border-black bg-white">
-                      <Select.Item value="all">All Competencies</Select.Item>
-                      {competencyOptions.map(([value, label]) => (
-                        <Select.Item key={value} value={value}>
-                          {label}
+                    <Select.Content className="max-h-72 overflow-y-auto border-2 border-black">
+                      <Select.Item value="all">All lessons</Select.Item>
+                      {lessons.map((lesson) => (
+                        <Select.Item key={lesson.lesson_id} value={String(lesson.lesson_id)}>
+                          {lesson.title}
                         </Select.Item>
                       ))}
-                      {hasUnassignedLessons && (
-                        <Select.Item value="unassigned">Unassigned Lessons</Select.Item>
-                      )}
                     </Select.Content>
                   </Select>
                   <Select
                     value={sortAsc ? "oldest" : "newest"}
                     onValueChange={(value) => setSortAsc(value === "oldest")}
                   >
-                    <Select.Trigger className="h-10 text-sm">
+                    <Select.Trigger className="h-10 w-44 text-sm sm:w-48">
                       <Select.Value placeholder="Sort by" />
                     </Select.Trigger>
                     <Select.Content className="border-2 border-black">
@@ -1065,127 +959,7 @@ export default function SubjectLessonTab({
                 </div>
 
                 <div className="space-y-3">
-                  {competencyGroups.length === 0 && unassignedLessons.length === 0 && (
-                    <Empty>
-                      <Empty.Content>
-                        <Empty.Icon><BookOpen size={24} /></Empty.Icon>
-                        <Empty.Title>No lessons match this competency.</Empty.Title>
-                      </Empty.Content>
-                    </Empty>
-                  )}
-                  {competencyGroups.map((group) => {
-                    const isCollapsed =
-                      collapsedCompetencies[group.key] ?? false;
-
-                    return (
-                      <Card
-                        key={group.key}
-                        className="flex w-full flex-col overflow-hidden bg-white p-0 shadow-md hover:shadow-md"
-                      >
-                        {/* ── Competency Header Accordion Bar ── */}
-                        <Card.Header
-                          role="button"
-                          tabIndex={0}
-                          aria-expanded={!isCollapsed}
-                          onClick={() => toggleStudentCompCollapse(group.key)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              toggleStudentCompCollapse(group.key);
-                            }
-                          }}
-                          className="mb-0 flex-row items-center justify-between bg-white px-4 py-3.5 text-left cursor-pointer"
-                        >
-                          <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                            <div className="min-w-0 flex-1">
-                              <div className="mb-0.5 flex flex-wrap justify-between items-center gap-2">
-                                <div className="flex items-center gap-1">
-                                  <Award
-                                    size={18}
-                                    className="text-black shrink-0"
-                                  />
-                                  <Card.Title className="truncate text-base font-bold text-gray-950 md:text-lg">
-                                    {group.competency_code ||
-                                      group.competency_statement}
-                                  </Card.Title>
-                                </div>
-
-                                <Badge
-                                  variant="secondary"
-                                  size="sm"
-                                  className="rounded border border-black bg-white text-xs font-bold text-black"
-                                >
-                                  {group.lessons.length} lesson
-                                  {group.lessons.length === 1 ? "" : "s"}
-                                </Badge>
-                              </div>
-                              {group.competency_code && (
-                                <p className="truncate text-xs font-medium text-gray-700">
-                                  {group.competency_statement}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </Card.Header>
-                        {!isCollapsed && (
-                          <Card.Content className="flex flex-col gap-3 px-4 pb-4 pt-0">
-                            {group.lessons.map(renderStudentLessonItem)}
-                          </Card.Content>
-                        )}
-                      </Card>
-                    );
-                  })}
-
-                  {/* ── Standalone / Unassigned Lessons Section ── */}
-                  {unassignedLessons.length > 0 && (
-                    <div className="flex w-full flex-col overflow-hidden pr-1 pb-1">
-                      {competencyGroups.length > 0 ? (
-                        <>
-                          <Card.Header
-                            role="button"
-                            tabIndex={0}
-                            aria-expanded={isUnassignedExpanded}
-                            onClick={() =>
-                              setIsUnassignedExpanded((prev) => !prev)
-                            }
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                setIsUnassignedExpanded((prev) => !prev);
-                              }
-                            }}
-                            className="mb-0 flex-row items-center justify-between border-b-2 border-black bg-primary px-4 py-3.5 text-left cursor-pointer"
-                          >
-                            <div className="flex items-center gap-2">
-                              <BookOpen
-                                size={16}
-                                className="text-black shrink-0"
-                              />
-                              <Card.Title className="text-sm font-bold text-black">
-                                Unassigned Lessons
-                              </Card.Title>
-                              <Badge
-                                variant="secondary"
-                                size="sm"
-                                className="rounded border border-black bg-white text-xs font-bold text-black"
-                              >
-                                {unassignedLessons.length}
-                              </Badge>
-                            </div>
-                          </Card.Header>
-                          {isUnassignedExpanded && (
-                            <Card.Content className="flex flex-col gap-3 p-3">
-                              {unassignedLessons.map(renderStudentLessonItem)}
-                            </Card.Content>
-                          )}
-                        </>
-                      ) : (
-                        <Card.Content className="flex flex-col gap-3">
-                          {unassignedLessons.map(renderStudentLessonItem)}
-                        </Card.Content>
-                      )}
-                    </div>
-                  )}
+                  {sortedLessons.map(renderStudentLessonItem)}
                 </div>
               </div>
 

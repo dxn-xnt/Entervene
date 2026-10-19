@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Trash2, AlertCircle } from "lucide-react";
 import AttachmentDisplay from "./attachment-display";
+import ConfirmDialog from "./confirm-dialog";
 import { API_URL } from "@/lib/api";
+import { formatDateTime } from "@/lib/formatters";
 
 interface SubmissionAttachment {
   submission_attachment_id: number;
@@ -25,10 +27,11 @@ interface SubmissionViewerProps {
   dueDate?: string;
   isLocked?: boolean;
   allowLateSubmissions?: boolean;
-  onResubmit?: () => void;
-  onDeleteSubmission?: (submissionId: number) => Promise<void>;
+  onResubmit?: () => void | Promise<void>;
+  onDeleteSubmission?: (submissionId: number) => Promise<void | boolean>;
   isDeleting?: boolean;
   showScores?: boolean;
+  hideGrade?: boolean;
 }
 
 function getStatusColor(status: string): string {
@@ -62,13 +65,14 @@ export default function SubmissionViewer({
   onDeleteSubmission,
   isDeleting = false,
   showScores = true,
+  hideGrade = false,
 }: SubmissionViewerProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const allowResubmit = canResubmit(dueDate, isLocked, allowLateSubmissions);
   const statusColor = getStatusColor(submission.status);
   const submittedDate = submission.submitted_at
-    ? new Date(submission.submitted_at).toLocaleString()
+    ? formatDateTime(submission.submitted_at)
     : "N/A";
 
   return (
@@ -83,7 +87,7 @@ export default function SubmissionViewer({
                 submission.status.slice(1)}
             </div>
           </div>
-          {submission.grade !== undefined && submission.grade !== null && (
+          {!hideGrade && submission.grade !== undefined && submission.grade !== null && (
             <div className="text-right">
               <p className="text-sm text-gray-600 mb-1">Grade</p>
               <p className="text-2xl font-bold text-green-600">
@@ -158,47 +162,33 @@ export default function SubmissionViewer({
                   : "You can delete your current submission and resubmit before the due date."}
               </p>
             </div>
-            {!showDeleteConfirm ? (
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                className="flex items-center gap-2 px-3 py-2 text-red-600 border border-red-300 rounded hover:bg-red-50 transition-colors text-sm font-medium"
-                disabled={isDeleting}
-              >
-                <Trash2 size={16} />
-                Delete & Resubmit
-              </button>
-            ) : (
-              <div className="space-y-2 min-w-[200px]">
-                <p className="text-sm font-medium text-gray-900">
-                  Delete submission?
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={async () => {
-                      if (onDeleteSubmission) {
-                        await onDeleteSubmission(submission.submission_id);
-                        setShowDeleteConfirm(false);
-                        onResubmit?.();
-                      }
-                    }}
-                    disabled={isDeleting}
-                    className="flex-1 px-3 py-1 bg-red-600 text-white rounded text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
-                  >
-                    {isDeleting ? "Deleting..." : "Delete"}
-                  </button>
-                  <button
-                    onClick={() => setShowDeleteConfirm(false)}
-                    disabled={isDeleting}
-                    className="flex-1 px-3 py-1 bg-gray-200 text-gray-900 rounded text-sm font-medium hover:bg-gray-300 disabled:opacity-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="flex items-center gap-2 px-3 py-2 text-red-600 border border-red-300 rounded hover:bg-red-50 transition-colors text-sm font-medium"
+              disabled={isDeleting}
+            >
+              <Trash2 size={16} />
+              Delete & Resubmit
+            </button>
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Delete submission?"
+        description="This will remove your current submission and its attached files so you can submit again."
+        confirmLabel={isDeleting ? "Deleting..." : "Delete & Resubmit"}
+        confirmVariant="destructive"
+        isLoading={isDeleting}
+        onConfirm={async () => {
+          if (!onDeleteSubmission) return;
+          const deleted = await onDeleteSubmission(submission.submission_id);
+          if (deleted === false) return;
+          setShowDeleteConfirm(false);
+          await onResubmit?.();
+        }}
+      />
     </div>
   );
 }

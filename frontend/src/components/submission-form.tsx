@@ -187,8 +187,8 @@ export default function SubmissionForm({
       <Button
         type="submit"
         variant="default"
-        size="lg"
-        className="w-full"
+        size="md"
+        className="w-full gap-2"
         disabled={isLoading || !canSubmitMore || files.length === 0}
       >
         {isLoading ? "Submitting..." : "Submit Assignment"}

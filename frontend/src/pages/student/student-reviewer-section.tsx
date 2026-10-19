@@ -37,14 +37,13 @@ export default function StudentReviewerSection() {
   const close = () => { const next = new URLSearchParams(params); next.delete("reviewer"); setParams(next); };
   const open = (id: number) => { const next = new URLSearchParams(params); next.set("reviewer", String(id)); setParams(next); };
 
-  return <section className="space-y-3"><h2 className="text-xl font-bold">Reviewers from your teacher</h2>
-    <p className="text-sm text-muted-foreground">Your teacher prepared these materials to support your study.</p>
-    {error && <Alert status="error">{error} <Button size="sm" variant="outline" onClick={() => void load()}>Retry</Button></Alert>}
-    {loading ? <p>Loading your reviewers...</p> : !error && items.length === 0 ? <p>No teacher reviewers have been shared with you yet.</p>
-      : !error && <div className="grid gap-3 md:grid-cols-2">{items.map((item) => <Card key={item.material_id} className="w-full space-y-2">
+  return <section className="w-full space-y-4" aria-label="Reviewers from your teacher"><h2 className="text-xl font-bold">Reviewers from your teacher</h2>
+    {error && <Alert status="error">{error} <Button size="sm" variant="outline" className="gap-2" onClick={() => void load()}>Retry</Button></Alert>}
+    {loading ? <p>Loading your reviewers...</p> : !error && items.length === 0 ? <Card className="w-full p-5 md:p-6"><p className="font-semibold">No teacher reviewers have been shared with you yet.</p><p className="mt-1 text-sm text-muted-foreground">Reviewers sent by your teacher will appear here.</p></Card>
+      : !error && <div className="grid w-full gap-4">{items.map((item) => <Card key={item.material_id} className="w-full space-y-4 p-5 md:p-6">
         <h3 className="font-bold">{item.title}</h3><p>{item.subject_name}</p>
         <p className="text-xs text-muted-foreground">Shared {new Date(item.sent_at).toLocaleDateString("en-PH")}</p>
-        <Button size="sm" onClick={() => open(item.material_id)}>Read Reviewer</Button>
+        <Button size="sm" className="gap-2" onClick={() => open(item.material_id)}>Read Reviewer</Button>
       </Card>)}</div>}
     <Sheet open={selectedId !== null} onOpenChange={(isOpen) => { if (!isOpen) close(); }}><SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
       <SheetHeader><SheetTitle>{detail?.title || "Teacher reviewer"}</SheetTitle><SheetDescription>{detail?.subject_name || "Study support from your teacher"}</SheetDescription></SheetHeader>
