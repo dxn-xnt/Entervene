@@ -217,28 +217,30 @@ Owner explicitly declines an incoming pending request.
 
 ---
 
-## 6. Reconciled Contract for Backend PR B & PR C (Planned - Not Routed in PR A)
+## 6. Reconciled Contract for Backend PR C (Planned - Not Routed in PR B)
 
-*Note: The following endpoints represent the agreed contract for subsequent pull requests. They are NOT available or routed in PR A.*
+*Note: The following endpoints represent the agreed contract for Backend PR C. They are NOT routed in PR B.*
 
 ### Endpoint Classification Table
 | Endpoint | Stage | Purpose |
 |---|---|---|
-| `GET /requests/{request_id}/eligible-materials` | Planned for PR B | Owner material picker with revision tokens |
-| `POST /requests/{request_id}/package` | Planned for PR B | Owner package creation & immutable snapshot |
-| `GET /requests/{request_id}/package` | Planned for PR B | Requester preview (safe titles & counts only) |
-| `POST /requests/{request_id}/package-decision` | Planned for PR B | Unified requester accept/decline action |
-| `POST /requests/{request_id}/accept` | Planned for PR B | (Alias) Direct accept action |
-| `POST /requests/{request_id}/decline-by-requester` | Planned for PR B | (Alias) Direct decline action |
+| `GET /scopes` | Implemented in PR A | Supported source filter modes |
+| `GET /source-teachers` | Implemented in PR A | Eligible source teachers listing |
+| `POST /requests` | Implemented in PR A | Content share request submission |
+| `GET /requests` | Implemented in PR A | Incoming/outgoing share requests |
+| `POST /requests/{request_id}/decline` | Implemented in PR A | Source owner decline action |
+| `GET /requests/{request_id}/eligible-materials` | Implemented in PR B | Owner material picker with revision tokens |
+| `POST /requests/{request_id}/package` | Implemented in PR B | Owner package creation & immutable snapshot |
+| `GET /requests/{request_id}/package` | Implemented in PR B | Requester preview (safe titles & counts only) |
+| `POST /requests/{request_id}/package-decision` | Implemented in PR B | Unified requester decision (`DECLINE` supported; `ACCEPT` returns HTTP 501 for PR C) |
 | `POST /clone-operations/self` | Planned for PR C | Teacher self-clone execution |
-| `POST /my-content/clones` | Planned for PR C | (Alias) Self-clone convenience route |
 | `GET /clone-operations/{operation_id}` | Planned for PR C | Clone operation polling & status |
 
 ---
 
 ### Detailed Planned Specifications
 
-#### `GET /requests/{request_id}/eligible-materials` (Planned for PR B)
+### `GET /requests/{request_id}/eligible-materials` (Implemented in PR B)
 Owner picker endpoint. Returns owned materials matching request subject and scope.
 - **Response `200 OK`:**
   ```json
@@ -275,7 +277,7 @@ Owner picker endpoint. Returns owned materials matching request subject and scop
   ```
   *Each item provides `source_revision_token` for optimistic concurrency verification during packaging.*
 
-#### `POST /requests/{request_id}/package` (Planned for PR B)
+### `POST /requests/{request_id}/package` (Implemented in PR B)
 Owner submits selected items to freeze one immutable package.
 - **Headers:** `Idempotency-Key: <string>`
 - **Body:**
@@ -302,7 +304,7 @@ Owner submits selected items to freeze one immutable package.
   - Creates immutable snapshot and stages assets.
   - Starts fresh 7-day decision window for requester.
 
-#### `GET /requests/{request_id}/package` (Planned for PR B)
+### `GET /requests/{request_id}/package` (Implemented in PR B)
 Requester package preview.
 - **Response `200 OK`:**
   ```json
@@ -334,7 +336,7 @@ Requester package preview.
   ```
   *CRITICAL PRIVACY RULE: Exposes ONLY safe titles, item types, and counts. NEVER exposes private lesson body texts, quiz questions, options, answer keys, source database IDs, or file paths.*
 
-#### `POST /requests/{request_id}/package-decision` (Planned for PR B)
+### `POST /requests/{request_id}/package-decision` (Implemented in PR B)
 Requester accepts or declines the received package. (Aliases `POST /requests/{request_id}/accept` and `POST /requests/{request_id}/decline-by-requester` are planned for PR B).
 - **Headers:** `Idempotency-Key: <string>`
 - **Body (Accept):**
@@ -344,7 +346,7 @@ Requester accepts or declines the received package. (Aliases `POST /requests/{re
     "expected_version": 2
   }
   ```
-  *Triggers independent cloning into destination. Returns `200 OK` with `ContentCloneOperationResponse`.*
+  *Scheduled for Backend PR C. In PR B, attempting ACCEPT returns HTTP 501 `CLONING_ENGINE_UNAVAILABLE` without mutating the request state.*
 - **Body (Decline):**
   ```json
   {

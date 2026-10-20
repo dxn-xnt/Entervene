@@ -29,6 +29,8 @@ def effective_request_status(
     now: datetime | None = None,
 ) -> str:
     current = now or utc_now()
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
     expires_at = request.expires_at
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
@@ -90,6 +92,8 @@ def expire_request(
     now: datetime | None = None,
 ) -> ContentShareEvent:
     current = now or utc_now()
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
     if effective_request_status(request, now=current) != "EXPIRED":
         raise ContentCloningError(
             status_code=409,

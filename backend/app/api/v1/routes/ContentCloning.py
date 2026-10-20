@@ -18,10 +18,17 @@ from app.schemas.ContentCloning import (
     ContentShareRequestListResponse,
     ContentShareRequestResponse,
     DestinationScopeResponse,
+    OwnerEligibleMaterialsResponse,
+    PackageCreateRequest,
+    PackageDecisionRequest,
+    RequesterVisiblePackageSummary,
     SourceTeacherResponse,
 )
 from app.services.cloning.ContentCloningAuthorizationService import (
     ContentCloningAuthorizationService,
+)
+from app.services.cloning.ContentCloningPackageService import (
+    ContentCloningPackageService,
 )
 from app.services.cloning.ContentCloningRequestService import (
     ContentCloningRequestService,
@@ -212,3 +219,91 @@ def decline_content_request(
         expected_version=payload.expected_version,
     )
     return _request_response(db, request)
+
+
+# ── PR B Routes ─────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/requests/{request_id}/eligible-materials",
+    response_model=OwnerEligibleMaterialsResponse,
+)
+def list_eligible_materials(
+    request_id: uuid.UUID,
+    item_type: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    items, total = ContentCloningPackageService.get_eligible_materials(
+        db,
+        request_id=request_id,
+        staff_id=staff_id,
+        item_type_filter=item_type,
+        page=page,
+        page_size=page_size,
+    )
+    return OwnerEligibleMaterialsResponse(
+        request_id=request_id,
+        items=items,
+        total=total,
+    )
+
+
+@router.post(
+    "/requests/{request_id}/package",
+    response_model=RequesterVisiblePackageSummary,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_package(
+    request_id: uuid.UUID,
+    payload: PackageCreateRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return ContentCloningPackageService.create_package(
+        db,
+        request_id=request_id,
+        staff_id=staff_id,
+        payload=payload,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.get(
+    "/requests/{request_id}/package",
+    response_model=RequesterVisiblePackageSummary,
+)
+def get_package_preview(
+    request_id: uuid.UUID,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return ContentCloningPackageService.get_package_preview(
+        db,
+        request_id=request_id,
+        staff_id=staff_id,
+    )
+
+
+@router.post(
+    "/requests/{request_id}/package-decision",
+    response_model=ContentShareRequestResponse,
+)
+def decide_package(
+    request_id: uuid.UUID,
+    payload: PackageDecisionRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    req = ContentCloningPackageService.decide_package(
+        db,
+        request_id=request_id,
+        staff_id=staff_id,
+        payload=payload,
+        idempotency_key=idempotency_key,
+    )
+    return _request_response(db, req)

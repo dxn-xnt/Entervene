@@ -168,17 +168,27 @@ class PackageDecision(str, Enum):
     DECLINE = "DECLINE"
 
 
+class PackageCreateRequest(BaseModel):
+    expected_version: int = Field(ge=1)
+    items: list[ContentSelectionItem] = Field(min_length=1)
+
+
 class PackageDecisionRequest(BaseModel):
     decision: PackageDecision
     expected_version: int = Field(ge=1)
 
 
 class RequesterVisiblePackageSummary(BaseModel):
-    """Future PR B response: includes safe item titles and counts; intentionally excludes source IDs and snapshots."""
+    """PR B response: includes safe item titles and counts; intentionally excludes source IDs and snapshots."""
 
     package_id: uuid.UUID
     request_id: uuid.UUID
     status: ContentShareRequestStatus
+    source_owner_staff_id: str | None = None
+    source_owner_name: str | None = None
+    subject_id: int | None = None
+    subject_name: str | None = None
+    source_scope_mode: ContentSourceScopeMode | None = None
     sent_at: datetime
     expires_at: datetime
     summary: ContentSelectionSummary
