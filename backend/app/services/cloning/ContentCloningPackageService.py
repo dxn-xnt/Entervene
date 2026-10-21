@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shutil
 import uuid
 from datetime import datetime
@@ -24,6 +23,7 @@ from app.models.classwork.ActivityRubricLevel import ActivityRubricLevel
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
+from app.models.classwork.ClassworkCoverage import ClassworkCoverage
 from app.models.cloning.ContentCloning import (
     ContentShareEvent,
     ContentSharePackage,
@@ -35,6 +35,9 @@ from app.models.quiz.Question import Question
 from app.models.quiz.QuestionOption import QuestionOption
 from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizQuestion import QuizQuestion
+from app.models.quiz.QuizSetting import QuizSetting
+from app.core.FileUpload import UPLOAD_BASE_DIR
+from app.services.classwork.ClassworkResponseService import resolve_classwork_file_path
 from app.schemas.ContentCloning import (
     ContentSelectionItem,
     ContentSelectionSummary,
@@ -50,6 +53,7 @@ from app.schemas.ContentCloning import (
     RequesterVisiblePackageSummary,
 )
 from app.services.cloning.ContentCloningErrors import ContentCloningError
+from app.services.cloning.ContentCloningAuthorizationService import ContentCloningAuthorizationService
 from app.services.cloning.ContentCloningLifecycleService import (
     effective_request_status,
     expire_request,
@@ -72,11 +76,16 @@ def _format_staff_name(staff: AcademicStaff | None) -> str | None:
 
 MAX_SINGLE_FILE_BYTES = 50 * 1024 * 1024  # 50 MB
 MAX_PACKAGE_ATTACHMENTS_BYTES = 250 * 1024 * 1024  # 250 MB
-DEFAULT_STAGING_DIR = Path("uploads/cloning_staging")
+DEFAULT_STAGING_DIR = UPLOAD_BASE_DIR / "cloning_staging"
+DEFAULT_ATTACHMENT_ROOT = UPLOAD_BASE_DIR / "classworks"
 
 
 def _canonical_json(data: Any) -> str:
     return json.dumps(data, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _has_symlink_ancestor(path: Path) -> bool:
+    return any(part.is_symlink() for part in (path, *path.parents))
 
 
 def compute_competency_revision_token(comp: Competency) -> str:
@@ -105,6 +114,10 @@ def compute_lesson_revision_token(lesson: Lesson) -> str:
         "competency_id": lesson.competency_id,
         "is_archived": lesson.is_archived,
         "updated_at": lesson.updated_at.isoformat() if lesson.updated_at else "",
+        "assignment_periods": sorted(
+            (a.class_.academic_period_id, a.class_id)
+            for a in lesson.assignments if a.class_ and a.class_.academic_period_id
+        ),
     }
     digest = hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
     return f"rev_les_{lesson.lesson_id}_{digest[:16]}"
@@ -180,6 +193,7 @@ def compute_classwork_revision_token(cw: Classwork) -> str:
         "rubrics": rubrics,
         "attachments": attachments,
         "quiz": quiz_payload,
+        "clone_snapshot": build_classwork_snapshot(cw),
         "updated_at": cw.updated_at.isoformat() if cw.updated_at else "",
     }
     digest = hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
@@ -208,6 +222,9 @@ def build_lesson_snapshot(lesson: Lesson) -> dict[str, Any]:
         "description": lesson.description,
         "content": lesson.content,
         "order_index": lesson.order_index,
+        "academic_period_id": (
+            lesson.competency.academic_period_id if lesson.competency else None
+        ),
         "dependency_metadata": {
             "source_competency_id": lesson.competency_id,
         },
@@ -236,6 +253,7 @@ def build_classwork_snapshot(cw: Classwork) -> dict[str, Any]:
                 continue
             options_data = [
                 {
+                    "source_option_id": o.option_id,
                     "option_text": o.option_text,
                     "is_correct": o.is_correct,
                     "option_order": o.option_order,
@@ -244,9 +262,15 @@ def build_classwork_snapshot(cw: Classwork) -> dict[str, Any]:
             ]
             options_data.sort(key=lambda x: x["option_order"])
             questions_data.append({
+                "source_question_id": q.question_id,
                 "question_text": q.question_text,
                 "question_type": q.question_type,
                 "points": float(q.points) if q.points is not None else 1.0,
+                "difficulty_level": q.difficulty_level,
+                "explanation": q.explanation,
+                "expected_answer_type": q.expected_answer_type,
+                "max_file_size_mb": q.max_file_size_mb,
+                "source_lesson_id": q.lesson_id,
                 "display_order": qq.display_order,
                 "options": options_data,
             })
@@ -256,6 +280,18 @@ def build_classwork_snapshot(cw: Classwork) -> dict[str, Any]:
             "total_items": quiz.total_items,
             "status": quiz.status,
             "questions": questions_data,
+        }
+
+    setting = getattr(cw, "quiz_setting", None)
+    setting_payload = None
+    if setting is not None:
+        setting_payload = {
+            "is_shuffle_questions": setting.is_shuffle_questions,
+            "enable_per_question_scoring": setting.enable_per_question_scoring,
+            "enable_per_question_time_limits": setting.enable_per_question_time_limits,
+            "max_attempts": setting.max_attempts,
+            "show_correct_answers": setting.show_correct_answers,
+            "summary_release_mode": setting.summary_release_mode,
         }
 
     linked_lessons = [
@@ -275,10 +311,33 @@ def build_classwork_snapshot(cw: Classwork) -> dict[str, Any]:
         "is_graded": cw.is_graded,
         "total_points": float(cw.total_points) if cw.total_points is not None else None,
         "show_scores": cw.show_scores,
+        "academic_period_ids": sorted({
+            a.academic_period_id for a in cw.assignments
+            if a.academic_period_id is not None
+            and a.recipient_student_id is None
+            and a.source_intervention_id is None
+            and a.remediation_request_id is None
+            and a.original_exam_assignment_id is None
+        }),
         "rubric_levels": rubrics,
         "quiz": quiz_payload,
+        "quiz_setting": setting_payload,
         "dependency_metadata": {
             "linked_lesson_ids": sorted(linked_lessons),
+            "active_coverage": sorted(
+                [
+                    {
+                        "source_lesson_id": item.lesson_id,
+                        "source_competency_id": item.competency_id,
+                    }
+                    for item in getattr(cw, "coverage_history", [])
+                    if item.valid_until is None
+                ],
+                key=lambda item: (
+                    item["source_lesson_id"] or 0,
+                    item["source_competency_id"] or 0,
+                ),
+            ),
         },
     }
 
@@ -289,43 +348,58 @@ class ContentCloningPackageService:
         cls,
         db: Session,
         *,
-        request_id: uuid.UUID,
+        request_id: uuid.UUID | None,
         staff_id: str,
         item_type_filter: str | None = None,
         page: int = 1,
         page_size: int = 50,
         now: datetime | None = None,
+        self_destination_subject_id: int | None = None,
+        self_destination_period_id: int | None = None,
     ) -> tuple[list[OwnerEligibleMaterialItem], int]:
         current = now or utc_now()
-        request = (
-            db.query(ContentShareRequest)
-            .filter(ContentShareRequest.request_id == request_id)
-            .first()
-        )
-        if request is None or request.source_owner_staff_id != staff_id:
-            raise ContentCloningError(
-                status_code=404,
-                code="REQUEST_NOT_FOUND",
-                message="Content request not found.",
+        if request_id is None:
+            if self_destination_subject_id is None or self_destination_period_id is None:
+                raise ValueError("self material selection requires a destination")
+            subject_id = self_destination_subject_id
+            destination_period_id = self_destination_period_id
+            scope_mode, scope_year_id, scope_period_id = "ANY", None, None
+        else:
+            request = (
+                db.query(ContentShareRequest)
+                .filter(ContentShareRequest.request_id == request_id)
+                .first()
             )
+            if request is None or request.source_owner_staff_id != staff_id:
+                raise ContentCloningError(
+                    status_code=404,
+                    code="REQUEST_NOT_FOUND",
+                    message="Content request not found.",
+                )
 
-        if effective_request_status(request, now=current) == "EXPIRED":
-            event = expire_request(request, now=current)
-            db.add(event)
-            db.commit()
-            raise ContentCloningError(
-                status_code=409,
-                code="REQUEST_EXPIRED",
-                message="This content request has expired.",
-            )
+            if effective_request_status(request, now=current) == "EXPIRED":
+                event = expire_request(request, now=current)
+                db.add(event)
+                db.commit()
+                raise ContentCloningError(
+                    status_code=409,
+                    code="REQUEST_EXPIRED",
+                    message="This content request has expired.",
+                )
 
-        subject_id = request.destination_subject_id
-        scope_mode = request.source_scope_mode
-        scope_year_id = request.source_academic_year_id
-        scope_period_id = request.source_academic_period_id
+            subject_id = request.destination_subject_id
+            destination_period_id = request.destination_academic_period_id
+            scope_mode = request.source_scope_mode
+            scope_year_id = request.source_academic_year_id
+            scope_period_id = request.source_academic_period_id
 
         # Pre-load academic period map for speedy metadata formatting & boundary checks
         periods = {p.academic_period_id: p for p in db.query(AcademicPeriod).all()}
+        verified_periods = ContentCloningAuthorizationService.verified_source_period_ids(
+            db, owner_staff_id=staff_id, subject_id=subject_id,
+            destination_period_id=destination_period_id,
+            previous_year_only=request_id is None,
+        )
 
         eligible_items: list[OwnerEligibleMaterialItem] = []
 
@@ -344,7 +418,7 @@ class ContentCloningPackageService:
                 if comp.academic_period_id is None:
                     continue  # Exclude ambiguously scoped materials
                 period = periods.get(comp.academic_period_id)
-                if not period:
+                if not period or comp.academic_period_id not in verified_periods:
                     continue
 
                 if scope_mode == "PERIOD" and comp.academic_period_id != scope_period_id:
@@ -378,20 +452,17 @@ class ContentCloningPackageService:
                 )
             )
             for lesson in lessons_query.all():
-                resolved_period_id: int | None = None
-                if lesson.competency and lesson.competency.academic_period_id:
-                    resolved_period_id = lesson.competency.academic_period_id
-                elif lesson.assignments:
-                    for asgn in lesson.assignments:
-                        if asgn.class_ and asgn.class_.academic_period_id:
-                            resolved_period_id = asgn.class_.academic_period_id
-                            break
-
-                if resolved_period_id is None:
+                lesson_periods = {
+                    a.class_.academic_period_id for a in lesson.assignments
+                    if a.class_ and a.class_.academic_period_id is not None
+                }
+                if lesson.competency and lesson.competency.academic_period_id is not None:
+                    lesson_periods.add(lesson.competency.academic_period_id)
+                if len(lesson_periods) != 1:
                     continue  # Exclude ambiguously scoped content
-
+                resolved_period_id = next(iter(lesson_periods))
                 period = periods.get(resolved_period_id)
-                if not period:
+                if not period or resolved_period_id not in verified_periods:
                     continue
 
                 if scope_mode == "PERIOD" and resolved_period_id != scope_period_id:
@@ -423,6 +494,9 @@ class ContentCloningPackageService:
                     joinedload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
                     joinedload(Classwork.rubric_levels),
                     joinedload(Classwork.attachments),
+                    joinedload(Classwork.lessons),
+                    joinedload(Classwork.coverage_history),
+                    joinedload(Classwork.quiz_setting),
                     joinedload(Classwork.quiz)
                     .joinedload(Quiz.questions)
                     .joinedload(QuizQuestion.question)
@@ -445,20 +519,17 @@ class ContentCloningPackageService:
                 if not standard_assignments:
                     continue  # Exclude learner-targeted/remedial-only content
 
-                resolved_period_id = None
+                classwork_periods = set()
                 for asgn in standard_assignments:
                     if asgn.academic_period_id:
-                        resolved_period_id = asgn.academic_period_id
-                        break
-                    if asgn.class_ and asgn.class_.academic_period_id:
-                        resolved_period_id = asgn.class_.academic_period_id
-                        break
-
-                if resolved_period_id is None:
+                        classwork_periods.add(asgn.academic_period_id)
+                    elif asgn.class_ and asgn.class_.academic_period_id:
+                        classwork_periods.add(asgn.class_.academic_period_id)
+                if len(classwork_periods) != 1:
                     continue
-
+                resolved_period_id = next(iter(classwork_periods))
                 period = periods.get(resolved_period_id)
-                if not period:
+                if not period or resolved_period_id not in verified_periods:
                     continue
 
                 if scope_mode == "PERIOD" and resolved_period_id != scope_period_id:
@@ -582,6 +653,14 @@ class ContentCloningPackageService:
             seen_items.add(key)
 
         # Resolve items, verify ownership, verify revision tokens
+        eligible_items, _ = cls.get_eligible_materials(
+            db, request_id=request_id, staff_id=staff_id,
+            page=1, page_size=1_000_000, now=current,
+        )
+        eligible_periods = {
+            (item.item_type, item.source_entity_id): item.academic_period_id
+            for item in eligible_items
+        }
         resolved_items_data: list[dict[str, Any]] = []
         counts = {
             "competency_count": 0,
@@ -591,6 +670,11 @@ class ContentCloningPackageService:
         }
 
         staging_base = staging_dir or DEFAULT_STAGING_DIR
+        if _has_symlink_ancestor(staging_base):
+            raise ContentCloningError(
+                status_code=409, code="CLONE_ASSET_INVALID",
+                message="Package storage cannot contain a symbolic link.",
+            )
         package_uuid = uuid.uuid4()
         pkg_staging_path = staging_base / str(package_uuid)
         staged_files: list[Path] = []
@@ -600,6 +684,15 @@ class ContentCloningPackageService:
             total_attachment_bytes = 0
 
             for display_order, item_sel in enumerate(payload.items, start=1):
+                selected_period_id = eligible_periods.get(
+                    (item_sel.item_type, item_sel.source_entity_id)
+                )
+                if selected_period_id is None:
+                    raise ContentCloningError(
+                        status_code=404, code="ITEM_NOT_FOUND",
+                        message="The selected material is not eligible for this request.",
+                        field="items",
+                    )
                 if item_sel.item_type == "COMPETENCY":
                     comp = (
                         db.query(Competency)
@@ -649,6 +742,10 @@ class ContentCloningPackageService:
                             Lesson.created_by_staff_id == staff_id,
                             Lesson.subject_id == request.destination_subject_id,
                         )
+                        .options(
+                            joinedload(Lesson.competency),
+                            joinedload(Lesson.assignments).joinedload(LessonAssignment.class_),
+                        )
                         .first()
                     )
                     if not lesson:
@@ -668,6 +765,7 @@ class ContentCloningPackageService:
                             retryable=True,
                         )
                     snapshot = build_lesson_snapshot(lesson)
+                    snapshot["academic_period_id"] = selected_period_id
                     snap_hash = hashlib.sha256(_canonical_json(snapshot).encode("utf-8")).hexdigest()
                     counts["lesson_count"] += 1
                     resolved_items_data.append({
@@ -694,6 +792,9 @@ class ContentCloningPackageService:
                             joinedload(Classwork.attachments),
                             joinedload(Classwork.rubric_levels),
                             joinedload(Classwork.lessons),
+                            joinedload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
+                            joinedload(Classwork.coverage_history),
+                            joinedload(Classwork.quiz_setting),
                             joinedload(Classwork.quiz)
                             .joinedload(Quiz.questions)
                             .joinedload(QuizQuestion.question)
@@ -718,6 +819,7 @@ class ContentCloningPackageService:
                             retryable=True,
                         )
                     snapshot = build_classwork_snapshot(cw)
+                    snapshot["academic_period_id"] = selected_period_id
                     snap_hash = hashlib.sha256(_canonical_json(snapshot).encode("utf-8")).hexdigest()
                     counts["classwork_count"] += 1
 
@@ -741,23 +843,32 @@ class ContentCloningPackageService:
 
                         # Stage the file copy safely
                         pkg_staging_path.mkdir(parents=True, exist_ok=True)
-                        safe_name = os.path.basename(att.file_path)
+                        safe_name = Path(att.file_name.replace("\\", "/")).name
                         asset_id = uuid.uuid4()
                         dest_file_path = pkg_staging_path / f"{asset_id}_{safe_name}"
 
-                        # Read & checksum
-                        src_path = Path(att.file_path)
-                        if src_path.exists() and src_path.is_file():
-                            with open(src_path, "rb") as src_f, open(dest_file_path, "wb") as dst_f:
-                                content_bytes = src_f.read()
-                                dst_f.write(content_bytes)
-                                checksum = hashlib.sha256(content_bytes).hexdigest()
-                        else:
-                            # In testing / simulated environment where path is mock
-                            mock_content = f"mock-content-for-{att.file_name}".encode("utf-8")
-                            with open(dest_file_path, "wb") as dst_f:
-                                dst_f.write(mock_content)
-                            checksum = hashlib.sha256(mock_content).hexdigest()
+                        src_path = resolve_classwork_file_path(att.file_path)
+                        try:
+                            real_source = src_path.resolve(strict=True)
+                            real_root = DEFAULT_ATTACHMENT_ROOT.resolve(strict=True)
+                            if (
+                                not real_source.is_relative_to(real_root)
+                                or _has_symlink_ancestor(src_path)
+                                or not real_source.is_file()
+                                or real_source.stat().st_size != att.file_size
+                            ):
+                                raise ValueError("invalid attachment")
+                        except (OSError, ValueError) as exc:
+                            raise ContentCloningError(
+                                status_code=409, code="SOURCE_ATTACHMENT_UNAVAILABLE",
+                                message="A selected attachment is unavailable or has changed.",
+                            ) from exc
+                        digest = hashlib.sha256()
+                        with open(real_source, "rb") as src_f, open(dest_file_path, "xb") as dst_f:
+                            while block := src_f.read(1024 * 1024):
+                                digest.update(block)
+                                dst_f.write(block)
+                        checksum = digest.hexdigest()
 
                         staged_files.append(dest_file_path)
                         item_attachments.append({
@@ -765,7 +876,7 @@ class ContentCloningPackageService:
                             "private_staged_path": str(dest_file_path),
                             "original_filename": att.file_name,
                             "media_type": att.file_type,
-                            "byte_size": att.file_size or len(mock_content),
+                            "byte_size": att.file_size,
                             "checksum_sha256": checksum,
                         })
 
@@ -872,7 +983,7 @@ class ContentCloningPackageService:
             raise ContentCloningError(
                 status_code=500,
                 code="PACKAGE_CREATION_FAILED",
-                message=f"Failed to create package: {exc}",
+                message="Could not create the package; no changes were saved.",
             ) from exc
 
         return cls._package_summary(db, package, request)

@@ -142,7 +142,7 @@ def authorize_lesson_access(
         return
     if lesson.is_archived:
         raise HTTPException(status_code=404, detail="Lesson not found")
-    if role == "student" and lesson.is_published:
+    if role == "student" and lesson.is_published and not lesson.is_locked:
         student = db.query(Student).filter(Student.user_id == user_uuid).first()
         if student and db.query(LessonAssignment).join(
             StudentClass,

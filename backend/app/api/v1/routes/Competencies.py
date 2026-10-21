@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.Dependencies import get_optional_staff_id, require_role
+from app.core.Dependencies import get_optional_staff_id, get_student_record, require_role
 from app.db.Session import get_db
 from app.schemas.Competency import (
     CompetencyCreate,
@@ -17,6 +17,7 @@ from app.services.academic.CompetencyService import (
     create_competency_record,
     get_competency_detail,
     get_subject_hierarchy_tree,
+    list_student_published_competencies,
     list_subject_competencies,
     update_competency_record,
 )
@@ -44,6 +45,12 @@ def get_subject_competencies(
     db: Session = Depends(get_db),
 ):
     role = current_user.get("role")
+    if role == "student":
+        student = get_student_record(current_user=current_user, db=db)
+        return list_student_published_competencies(
+            subject_id=subject_id, student_id=student.student_id,
+            period_id=period_id, db=db,
+        )
     is_admin = role == "admin"
     
     if role == "teacher":
@@ -73,6 +80,10 @@ def get_hierarchy_tree(
     db: Session = Depends(get_db),
 ):
     role = current_user.get("role")
+    student_id = None
+    if role == "student":
+        student_id = get_student_record(current_user=current_user, db=db).student_id
+        staff_id = None
     is_admin = role == "admin"
 
     if role == "teacher":
@@ -89,6 +100,7 @@ def get_hierarchy_tree(
         is_admin=is_admin,
         class_id=class_id,
         period_id=period_id,
+        student_id=student_id,
     )
 
 

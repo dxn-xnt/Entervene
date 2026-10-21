@@ -1,8 +1,10 @@
 from __future__ import annotations
 import json
+import importlib
 
 import os
 import uuid
+from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
 
 # Project fail-safe isolation:
@@ -29,6 +31,7 @@ import app.models  # noqa: F401
 import app.db.Session as db_session
 from app.api.v1.routes.Auth import get_current_user
 from app.api.v1.routes.ContentCloning import router as content_cloning_router
+from app.api.v1.routes.Competencies import router as competency_router
 from app.core.Config import settings
 from app.core.Dependencies import get_staff_id
 from app.db.Base import Base
@@ -39,12 +42,14 @@ from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.Competency import Competency
 from app.models.academic.GradingTemplate import GradingTemplate
+from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAssignment import LessonAssignment
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.SubjectOffering import SubjectOffering
 from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
+from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.auth.Role import Role
 from app.models.auth.UserAccount import UserAccount
@@ -53,11 +58,13 @@ from app.models.classwork.ActivityRubricLevel import ActivityRubricLevel
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
+from app.models.classwork.ClassworkCoverage import ClassworkCoverage
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.quiz.Question import Question
 from app.models.quiz.QuestionOption import QuestionOption
 from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizQuestion import QuizQuestion
+from app.models.quiz.QuizSetting import QuizSetting
 from app.models.cloning.ContentCloning import (
     ContentCloneItemMap,
     ContentCloneOperation,
@@ -68,6 +75,7 @@ from app.models.cloning.ContentCloning import (
     ContentShareRequest,
 )
 from app.models.people.AcademicStaff import AcademicStaff
+from app.models.people.Student import Student
 from app.schemas.ContentCloning import (
     ContentSelectionItem,
     OwnerEligibleMaterialItem,
@@ -100,6 +108,10 @@ from app.services.cloning.ContentCloningPackageService import (
 from app.services.cloning.ContentCloningRequestService import (
     ContentCloningRequestService,
 )
+from app.services.classwork.ClassworkAccessService import authorize_classwork_access
+from app.services.lesson.LessonShared import authorize_lesson_access
+from app.services.lesson.LessonService import publish_lesson_record
+from fastapi import HTTPException
 
 FORBIDDEN_DATABASES = frozenset({"entervene_preview", "activity_db", "entervene_db"})
 
@@ -128,13 +140,16 @@ TABLES = [
     AcademicYear.__table__,
     AcademicLevel.__table__,
     GradingTemplate.__table__,
+    GradingTemplateComponent.__table__,
     Role.__table__,
     UserAccount.__table__,
     UserRoles.__table__,
     AcademicStaff.__table__,
+    Student.__table__,
     Subject.__table__,
     AcademicPeriod.__table__,
     Class.__table__,
+    StudentClass.__table__,
     SubjectLoad.__table__,
     SubjectOffering.__table__,
     SubjectOfferingPathway.__table__,
@@ -145,12 +160,14 @@ TABLES = [
     Classwork.__table__,
     ClassworkAssignment.__table__,
     ClassworkAttachment.__table__,
+    ClassworkCoverage.__table__,
     ClassworkLesson.__table__,
     ActivityRubricLevel.__table__,
     Question.__table__,
     QuestionOption.__table__,
     Quiz.__table__,
     QuizQuestion.__table__,
+    QuizSetting.__table__,
     ContentShareRequest.__table__,
     ContentSharePackage.__table__,
     ContentSharePackageItem.__table__,
@@ -200,7 +217,22 @@ def _add_teacher(db: Session, staff_id: str, first: str, last: str) -> AcademicS
 
 
 @pytest.fixture
-def scenario(db: Session) -> dict:
+def scenario(db: Session, tmp_path, monkeypatch) -> dict:
+    attachment_root = tmp_path / "classworks"
+    attachment_root.mkdir()
+    attachment_file = attachment_root / "factoring_ref.pdf"
+    attachment_file.write_bytes(b"x" * 1024)
+    package_module = importlib.import_module(
+        "app.services.cloning.ContentCloningPackageService"
+    )
+    engine_module = importlib.import_module(
+        "app.services.cloning.ContentCloningEngine"
+    )
+    monkeypatch.setattr(package_module, "DEFAULT_ATTACHMENT_ROOT", attachment_root)
+    monkeypatch.setattr(package_module, "DEFAULT_STAGING_DIR", tmp_path / "cloning_staging")
+    monkeypatch.setattr(engine_module, "DEFAULT_STAGING_ROOT", tmp_path / "cloning_staging")
+    monkeypatch.setattr(engine_module, "DEFAULT_SOURCE_ROOT", attachment_root)
+    monkeypatch.setattr(engine_module, "DEFAULT_CLONE_ROOT", tmp_path / "cloned")
     db.add(Role(role_id=1, role_name="Teacher"))
     db.add(
         GradingTemplate(
@@ -210,6 +242,16 @@ def scenario(db: Session) -> dict:
             status="active",
         )
     )
+    db.add_all([
+        GradingTemplateComponent(
+            grading_template_id=1, component_name=name,
+            weight=weight, display_order=order,
+        )
+        for order, name, weight in (
+            (1, "Written Work", 20), (2, "Performance Tasks", 50),
+            (3, "Term Exam", 30),
+        )
+    ])
     level = AcademicLevel(
         academic_level_id=1, level_name="Grade 8", grade_level=8
     )
@@ -498,16 +540,22 @@ def scenario(db: Session) -> dict:
         "active_destination": (20, 5, 22),
         "future_destination": (30, 5, 31),
         "historical_destination": (10, 5, 11),
+        "attachment_path": str(attachment_file),
+        "clone_root": tmp_path / "cloned",
     }
 
 
-def _client(db: Session, *, staff_id: str, role: str = "teacher") -> TestClient:
+def _client(
+    db: Session, *, staff_id: str, role: str = "teacher",
+    user_id: uuid.UUID | None = None,
+) -> TestClient:
     test_app = FastAPI()
     test_app.add_exception_handler(ContentCloningError, content_cloning_error_handler)
     test_app.include_router(content_cloning_router, prefix="/api/v1/content-cloning")
+    test_app.include_router(competency_router, prefix="/api/v1/competencies")
     test_app.dependency_overrides[get_db] = lambda: db
     test_app.dependency_overrides[get_current_user] = lambda: {
-        "sub": str(uuid.uuid4()),
+        "sub": str(user_id or uuid.uuid4()),
         "role": role,
     }
     test_app.dependency_overrides[get_staff_id] = lambda: staff_id
@@ -913,7 +961,7 @@ def test_version_conflict_is_typed_and_does_not_mutate_request():
     assert request.version == 3
 
 
-def test_pr_b_publishes_package_routes_and_excludes_clone_routes(db, scenario):
+def test_pr_c_publishes_clone_routes(db, scenario):
     client = _client(db, staff_id="REQ")
     paths = {route.path for route in client.app.routes}
     assert "/api/v1/content-cloning/scopes" in paths
@@ -924,7 +972,8 @@ def test_pr_b_publishes_package_routes_and_excludes_clone_routes(db, scenario):
     assert "/api/v1/content-cloning/requests/{request_id}/package" in paths
     assert "/api/v1/content-cloning/requests/{request_id}/package-decision" in paths
     # PR C routes must remain unpublished in PR B
-    assert not any("/clone-operations" in path for path in paths)
+    assert "/api/v1/content-cloning/clone-operations/self" in paths
+    assert "/api/v1/content-cloning/clone-operations/{operation_id}" in paths
     assert not any("/my-content/clones" in path for path in paths)
 
 
@@ -1028,7 +1077,7 @@ def _create_pr_b_fixture(db: Session, scenario: dict):
     db.add(ClassworkAttachment(
         classwork_id=cw.classwork_id,
         file_name="Factoring_Reference.pdf",
-        file_path="uploads/factoring_ref.pdf",
+        file_path=scenario["attachment_path"],
         file_size=1024,
         file_type="application/pdf",
     ))
@@ -1315,7 +1364,7 @@ def test_package_preview_privacy_and_authorization(db, scenario):
 
 
 def test_package_decision_decline_and_accept_boundary(db, scenario):
-    """Verify accept returns 501 for PR C boundary, while decline safely moves status to DECLINED_BY_REQUESTER."""
+    """A missing acceptance idempotency key is rejected; decline remains available."""
     req = _create_pr_b_fixture(db, scenario)
     client_owner = _client(db, staff_id="OWNER")
     client_req = _client(db, staff_id="REQ")
@@ -1327,13 +1376,13 @@ def test_package_decision_decline_and_accept_boundary(db, scenario):
         json={"expected_version": 1, "items": [{"item_type": it["item_type"], "source_entity_id": it["source_entity_id"], "source_revision_token": it["source_revision_token"]} for it in picker["items"]]},
     )
 
-    # 1. ACCEPT decision returns 501 CLONING_ENGINE_UNAVAILABLE
+    # 1. ACCEPT requires an idempotency key, without changing the request.
     resp_accept = client_req.post(
         f"/api/v1/content-cloning/requests/{req.request_id}/package-decision",
         json={"decision": "ACCEPT", "expected_version": 2},
     )
-    assert resp_accept.status_code == 501
-    assert resp_accept.json()["detail"]["code"] == "CLONING_ENGINE_UNAVAILABLE"
+    assert resp_accept.status_code == 422
+    assert resp_accept.json()["detail"]["code"] == "IDEMPOTENCY_KEY_INVALID"
     # Verify request status was NOT altered
     db.refresh(req)
     assert req.status == "PACKAGE_SENT"
@@ -1726,3 +1775,603 @@ def test_staged_attachments_and_snapshots_cannot_be_accessed_publicly_or_leaked(
     assert "uploads/cloning_packages" not in serialized_str
     assert "options" not in serialized_str
     assert "answers" not in serialized_str
+
+
+def _send_full_clone_package(db: Session, scenario: dict):
+    request = _create_pr_b_fixture(db, scenario)
+    source_lesson = db.get(Lesson, 10)
+    source_lesson.competency_id = 1
+    source_work = db.get(Classwork, 20)
+    source_work.lessons.append(source_lesson)
+    db.add(ClassworkCoverage(
+        classwork_id=20, lesson_id=10, competency_id=1,
+        linked_by_staff_id="OWNER",
+    ))
+    db.add(QuizSetting(
+        classwork_id=20, is_shuffle_questions=True,
+        summary_release_mode="SCHEDULED",
+        summary_release_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+    ))
+    source_question = db.get(Question, 100)
+    source_question.lesson_id = 10
+    source_question.explanation = "Original private explanation"
+    db.commit()
+    owner = _client(db, staff_id="OWNER")
+    picker = owner.get(
+        f"/api/v1/content-cloning/requests/{request.request_id}/eligible-materials"
+    )
+    assert picker.status_code == 200
+    items = picker.json()["items"]
+    assert {item["item_type"] for item in items} == {
+        "COMPETENCY", "LESSON", "CLASSWORK"
+    }
+    sent = owner.post(
+        f"/api/v1/content-cloning/requests/{request.request_id}/package",
+        json={
+            "expected_version": 1,
+            "items": [
+                {
+                    "item_type": item["item_type"],
+                    "source_entity_id": item["source_entity_id"],
+                    "source_revision_token": item["source_revision_token"],
+                }
+                for item in items
+            ],
+        },
+        headers={"Idempotency-Key": f"package-{request.request_id}"},
+    )
+    assert sent.status_code == 201, sent.text
+    return request
+
+
+def test_package_acceptance_creates_independent_locked_graph_and_replays(db, scenario):
+    request = _send_full_clone_package(db, scenario)
+    original_title = db.get(Classwork, 20).title
+    db.get(Classwork, 20).title = "Source edited after packaging"
+    db.commit()
+    requester = _client(db, staff_id="REQ")
+    body = {"decision": "ACCEPT", "expected_version": 2}
+    accepted = requester.post(
+        f"/api/v1/content-cloning/requests/{request.request_id}/package-decision",
+        json=body, headers={"Idempotency-Key": "accept-once"},
+    )
+    assert accepted.status_code == 200, accepted.text
+    result = accepted.json()
+    assert result["mode"] == "SHARED_PACKAGE"
+    assert result["status"] == "SUCCEEDED"
+    assert result["summary"] == {
+        "competency_count": 1, "lesson_count": 1,
+        "classwork_count": 1, "attachment_count": 1,
+    }
+    assert "source_entity_id" not in json.dumps(result)
+    assert "private_snapshot" not in json.dumps(result)
+    db.refresh(request)
+    assert (request.status, request.version, request.open_request_key) == (
+        "ACCEPTED", 3, None
+    )
+    operation_id = uuid.UUID(result["operation_id"])
+    maps = db.query(ContentCloneItemMap).filter(
+        ContentCloneItemMap.operation_id == operation_id
+    ).all()
+    by_type = {item.entity_type: int(item.destination_entity_ref) for item in maps
+               if item.entity_type in {"COMPETENCY", "LESSON", "CLASSWORK"}}
+    competency = db.get(Competency, by_type["COMPETENCY"])
+    lesson = db.get(Lesson, by_type["LESSON"])
+    work = db.get(Classwork, by_type["CLASSWORK"])
+    assert competency.competency_id != 1
+    assert lesson.lesson_id != 10
+    assert work.classwork_id != 20
+    assert competency.created_by_staff_id == lesson.created_by_staff_id == work.created_by_staff_id == "REQ"
+    assert competency.academic_period_id == 22
+    assert lesson.competency_id == competency.competency_id
+    assert lesson.is_locked and lesson.is_draft and not lesson.is_published
+    assert work.is_locked and not work.is_published and work.title == original_title
+    assert work.assignments[0].class_id == 20
+    assert work.assignments[0].academic_period_id == 22
+    assert work.assignments[0].is_locked and not work.assignments[0].is_published
+    assert work.assignments[0].recipient_student_id is None
+    assert {linked.lesson_id for linked in work.lessons} == {lesson.lesson_id}
+    assert len(work.coverage_history) == 1
+    assert work.coverage_history[0].lesson_id == lesson.lesson_id
+    assert work.coverage_history[0].competency_id == competency.competency_id
+    assert len(work.rubric_levels) == 1 and work.rubric_levels[0].classwork_id == work.classwork_id
+    assert work.quiz.status == "DRAFT" and work.quiz.accessible_at is None
+    assert work.quiz_setting.summary_release_mode == "NEVER"
+    assert work.quiz_setting.summary_release_at is None
+    cloned_question = work.quiz.questions[0].question
+    assert cloned_question.question_id != 100
+    assert cloned_question.lesson_id == lesson.lesson_id
+    assert cloned_question.explanation == "Original private explanation"
+    assert all(option.question_id == cloned_question.question_id
+               for option in cloned_question.options)
+    assert len(work.attachments) == 1
+    assert work.attachments[0].file_path != scenario["attachment_path"]
+    assert Path(work.attachments[0].file_path).read_bytes() == b"x" * 1024
+    student_user_id = uuid.uuid4()
+    student_id = uuid.uuid4()
+    db.add(UserAccount(
+        user_id=student_user_id, email="clone.student@example.test",
+        password_hash="hash", account_status="active",
+    ))
+    db.add(Student(
+        student_id=student_id, student_lrn="123456789012",
+        first_name="Clone", last_name="Learner",
+        user_id=student_user_id, academic_level_id=1,
+    ))
+    db.flush()
+    db.add(StudentClass(
+        student_id=student_id, class_id=20, academic_year_id=2,
+        enrollment_status="enrolled",
+    ))
+    db.commit()
+    student_claims = {"role": "student", "sub": str(student_user_id)}
+    student_client = _client(
+        db, staff_id="REQ", role="student", user_id=student_user_id
+    )
+    subject_url = "/api/v1/competencies/subject/5?staff_id=REQ"
+    tree_url = "/api/v1/competencies/tree/subject/5?class_id=20&staff_id=REQ"
+    assert student_client.get(subject_url).json() == []
+    hidden_tree = student_client.get(tree_url)
+    assert hidden_tree.status_code == 200
+    assert hidden_tree.json()["competencies"] == []
+    assert hidden_tree.json()["unassigned_lessons"] == []
+    with pytest.raises(HTTPException):
+        authorize_lesson_access(db, lesson, student_claims)
+    with pytest.raises(HTTPException):
+        authorize_classwork_access(work, student_claims, db)
+    lesson.is_published = True
+    lesson.assignments[0].is_published = True
+    db.commit()
+    with pytest.raises(HTTPException):
+        authorize_lesson_access(db, lesson, student_claims)
+    assert student_client.get(subject_url).json() == []
+    publish_lesson_record(lesson.lesson_id, "REQ", db)
+    work.is_published = True
+    work.is_locked = False
+    work.assignments[0].is_published = True
+    work.assignments[0].is_locked = False
+    hidden_sibling = Lesson(
+        title="Private follow-up", subject_id=5,
+        competency_id=competency.competency_id,
+        created_by_staff_id="REQ", is_published=True, is_locked=True,
+    )
+    db.add(hidden_sibling)
+    db.flush()
+    db.add(LessonAssignment(
+        lesson_id=hidden_sibling.lesson_id, class_id=20,
+        assigned_by_staff_id="REQ", is_published=True,
+    ))
+    db.commit()
+    authorize_lesson_access(db, lesson, student_claims)
+    authorize_classwork_access(work, student_claims, db)
+    visible_competencies = student_client.get(subject_url)
+    assert visible_competencies.status_code == 200
+    assert [item["competency_id"] for item in visible_competencies.json()] == [
+        competency.competency_id
+    ]
+    assert visible_competencies.json()[0]["lesson_count"] == 1
+    visible_tree = student_client.get(tree_url)
+    assert visible_tree.status_code == 200
+    assert visible_tree.json()["total_lessons"] == 1
+    assert visible_tree.json()["competencies"][0]["lesson_count"] == 1
+    replay = requester.post(
+        f"/api/v1/content-cloning/requests/{request.request_id}/package-decision",
+        json=body, headers={"Idempotency-Key": "accept-once"},
+    )
+    assert replay.status_code == 200
+    assert replay.headers["X-Idempotent-Replay"] == "true"
+    assert replay.json()["operation_id"] == result["operation_id"]
+    assert db.query(ContentCloneOperation).count() == 1
+    owner = _client(db, staff_id="OWNER")
+    assert owner.get(f"/api/v1/content-cloning/clone-operations/{operation_id}").status_code == 404
+    assert requester.get(f"/api/v1/content-cloning/clone-operations/{operation_id}").status_code == 200
+
+
+def test_package_acceptance_failures_leave_request_and_copies_untouched(db, scenario):
+    request = _send_full_clone_package(db, scenario)
+    requester = _client(db, staff_id="REQ")
+    owner = _client(db, staff_id="OWNER")
+    endpoint = f"/api/v1/content-cloning/requests/{request.request_id}/package-decision"
+    assert owner.post(
+        endpoint, json={"decision": "ACCEPT", "expected_version": 2},
+        headers={"Idempotency-Key": "wrong-user"},
+    ).status_code == 404
+    stale = requester.post(
+        endpoint, json={"decision": "ACCEPT", "expected_version": 1},
+        headers={"Idempotency-Key": "stale"},
+    )
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["code"] == "REQUEST_VERSION_CONFLICT"
+    package = db.query(ContentSharePackage).filter(
+        ContentSharePackage.request_id == request.request_id
+    ).one()
+    asset = db.query(ContentSharePackageAsset).join(
+        ContentSharePackageItem,
+        ContentSharePackageItem.package_item_id == ContentSharePackageAsset.package_item_id
+    ).filter(ContentSharePackageItem.package_id == package.package_id).one()
+    Path(asset.private_staged_path).write_bytes(b"corrupted")
+    corrupted = requester.post(
+        endpoint, json={"decision": "ACCEPT", "expected_version": 2},
+        headers={"Idempotency-Key": "corrupted"},
+    )
+    assert corrupted.status_code == 409
+    assert corrupted.json()["detail"]["code"] == "CLONE_ASSET_INVALID"
+    db.refresh(request)
+    assert request.status == "PACKAGE_SENT"
+    assert db.query(ContentCloneOperation).count() == 0
+    assert db.query(Classwork).filter(Classwork.created_by_staff_id == "REQ").count() == 0
+
+
+def test_clone_rejects_incompatible_destination_grading_template(db, scenario):
+    request = _send_full_clone_package(db, scenario)
+    written_component = db.query(GradingTemplateComponent).filter(
+        GradingTemplateComponent.component_name == "Written Work"
+    ).one()
+    written_component.component_name = "Independent Study"
+    db.commit()
+    response = _client(db, staff_id="REQ").post(
+        f"/api/v1/content-cloning/requests/{request.request_id}/package-decision",
+        json={"decision": "ACCEPT", "expected_version": 2},
+        headers={"Idempotency-Key": "incompatible-template"},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "GRADING_CATEGORY_INCOMPATIBLE"
+    db.refresh(request)
+    assert request.status == "PACKAGE_SENT"
+    assert db.query(ContentCloneOperation).count() == 0
+
+
+def test_self_clone_uses_same_engine_and_requires_owned_prior_year(db, scenario):
+    _create_pr_b_fixture(db, scenario)
+    db.add(SubjectLoad(
+        subject_load_id=99, staff_id="OWNER", subject_id=5, class_id=20,
+        academic_period_id=22, status="published", is_active_version=True,
+    ))
+    db.commit()
+    requester = _client(db, staff_id="OWNER")
+    picker = requester.get(
+        "/api/v1/content-cloning/clone-operations/self/eligible-materials",
+        params={
+            "destination_class_id": 20, "destination_subject_id": 5,
+            "destination_academic_period_id": 22,
+        },
+    )
+    assert picker.status_code == 200, picker.text
+    assert picker.json()["total"] == 3
+    assert {item["item_type"] for item in picker.json()["items"]} == {
+        "COMPETENCY", "LESSON", "CLASSWORK",
+    }
+    assert all(item["source_revision_token"] for item in picker.json()["items"])
+    assert "question_text" not in picker.text
+    assert "file_path" not in picker.text
+    assert requester.get(
+        "/api/v1/content-cloning/clone-operations/self/eligible-materials",
+        params={
+            "destination_class_id": 30, "destination_subject_id": 5,
+            "destination_academic_period_id": 31,
+        },
+    ).status_code == 404
+    selections = [
+        {"item_type": "COMPETENCY", "source_entity_id": 1,
+         "source_revision_token": compute_competency_revision_token(db.get(Competency, 1))},
+        {"item_type": "LESSON", "source_entity_id": 10,
+         "source_revision_token": compute_lesson_revision_token(db.get(Lesson, 10))},
+        {"item_type": "CLASSWORK", "source_entity_id": 20,
+         "source_revision_token": compute_classwork_revision_token(db.get(Classwork, 20))},
+    ]
+    body = {
+        "destination_class_id": 20, "destination_subject_id": 5,
+        "destination_academic_period_id": 22, "items": selections,
+    }
+    response = requester.post(
+        "/api/v1/content-cloning/clone-operations/self",
+        json=body, headers={"Idempotency-Key": "self-one"},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["status"] == "SUCCEEDED"
+    assert response.json()["mode"] == "SELF"
+    assert response.json()["summary"]["classwork_count"] == 1
+    replay = requester.post(
+        "/api/v1/content-cloning/clone-operations/self",
+        json=body, headers={"Idempotency-Key": "self-one"},
+    )
+    assert replay.status_code == 201
+    assert replay.headers["X-Idempotent-Replay"] == "true"
+    assert replay.json()["operation_id"] == response.json()["operation_id"]
+    wrong_owner = _client(db, staff_id="REQ").post(
+        "/api/v1/content-cloning/clone-operations/self",
+        json=body, headers={"Idempotency-Key": "self-wrong"},
+    )
+    assert wrong_owner.status_code == 404
+
+
+def test_self_clone_uses_unambiguous_class_period_for_legacy_assignment(db, scenario):
+    _create_pr_b_fixture(db, scenario)
+    db.add(SubjectLoad(
+        subject_load_id=99, staff_id="OWNER", subject_id=5, class_id=20,
+        academic_period_id=22, status="published", is_active_version=True,
+    ))
+    source = db.get(Classwork, 20)
+    source.assignments[0].academic_period_id = None
+    db.commit()
+    response = _client(db, staff_id="OWNER").post(
+        "/api/v1/content-cloning/clone-operations/self",
+        json={
+            "destination_class_id": 20,
+            "destination_subject_id": 5,
+            "destination_academic_period_id": 22,
+            "items": [{
+                "item_type": "CLASSWORK",
+                "source_entity_id": 20,
+                "source_revision_token": compute_classwork_revision_token(source),
+            }],
+        },
+        headers={"Idempotency-Key": "legacy-class-period"},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["summary"]["classwork_count"] == 1
+
+
+def test_package_acceptance_requires_current_window_and_destination(db, scenario):
+    request = _send_full_clone_package(db, scenario)
+    requester = _client(db, staff_id="REQ")
+    endpoint = f"/api/v1/content-cloning/requests/{request.request_id}/package-decision"
+    package = db.query(ContentSharePackage).filter(
+        ContentSharePackage.request_id == request.request_id
+    ).one()
+    package.expires_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    db.commit()
+    expired = requester.post(
+        endpoint, json={"decision": "ACCEPT", "expected_version": 2},
+        headers={"Idempotency-Key": "expired"},
+    )
+    assert expired.status_code == 409
+    assert expired.json()["detail"]["code"] == "REQUEST_EXPIRED"
+    package.expires_at = request.expires_at
+    load = db.get(SubjectLoad, 1)
+    load.status = "draft"
+    db.commit()
+    denied = requester.post(
+        endpoint, json={"decision": "ACCEPT", "expected_version": 2},
+        headers={"Idempotency-Key": "lost-load"},
+    )
+    assert denied.status_code == 404
+    assert denied.json()["detail"]["code"] == "DESTINATION_SCOPE_FORBIDDEN"
+    db.refresh(request)
+    assert request.status == "PACKAGE_SENT"
+    assert db.query(ContentCloneOperation).count() == 0
+
+
+def test_unselected_private_dependencies_are_not_linked(db, scenario):
+    request = _create_pr_b_fixture(db, scenario)
+    source_work = db.get(Classwork, 20)
+    source_lesson = db.get(Lesson, 10)
+    source_work.lessons.append(source_lesson)
+    db.get(Question, 100).lesson_id = 10
+    db.add(ClassworkCoverage(
+        classwork_id=20, lesson_id=10, competency_id=1,
+        linked_by_staff_id="OWNER",
+    ))
+    db.commit()
+    owner = _client(db, staff_id="OWNER")
+    picker = owner.get(
+        f"/api/v1/content-cloning/requests/{request.request_id}/eligible-materials"
+    ).json()
+    classwork = next(item for item in picker["items"] if item["item_type"] == "CLASSWORK")
+    sent = owner.post(
+        f"/api/v1/content-cloning/requests/{request.request_id}/package",
+        json={"expected_version": 1, "items": [{
+            "item_type": classwork["item_type"],
+            "source_entity_id": classwork["source_entity_id"],
+            "source_revision_token": classwork["source_revision_token"],
+        }]},
+    )
+    assert sent.status_code == 201, sent.text
+    accepted = _client(db, staff_id="REQ").post(
+        f"/api/v1/content-cloning/requests/{request.request_id}/package-decision",
+        json={"decision": "ACCEPT", "expected_version": 2},
+        headers={"Idempotency-Key": "work-only"},
+    )
+    assert accepted.status_code == 200, accepted.text
+    copied = db.query(Classwork).filter(Classwork.created_by_staff_id == "REQ").one()
+    assert copied.lessons == []
+    assert copied.coverage_history == []
+    assert copied.quiz.questions[0].question.lesson_id is None
+    assert db.query(Lesson).filter(Lesson.created_by_staff_id == "REQ").count() == 0
+    assert db.query(Competency).filter(Competency.created_by_staff_id == "REQ").count() == 0
+
+
+def test_acceptance_rolls_back_database_and_file_failure(db, scenario, monkeypatch):
+    request = _send_full_clone_package(db, scenario)
+    requester = _client(db, staff_id="REQ")
+    endpoint = f"/api/v1/content-cloning/requests/{request.request_id}/package-decision"
+    engine_module = importlib.import_module(
+        "app.services.cloning.ContentCloningEngine"
+    )
+    original_copy = engine_module._copy_asset
+
+    def fail_after_copy(*args, **kwargs):
+        original_copy(*args, **kwargs)
+        raise OSError("simulated file failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(engine_module, "_copy_asset", fail_after_copy)
+        failed = requester.post(
+            endpoint, json={"decision": "ACCEPT", "expected_version": 2},
+            headers={"Idempotency-Key": "file-failure"},
+        )
+    assert failed.status_code == 500
+    assert failed.json()["detail"]["code"] == "CLONE_FAILED"
+    db.refresh(request)
+    assert request.status == "PACKAGE_SENT"
+    assert db.query(ContentCloneOperation).count() == 0
+    assert db.query(Classwork).filter(Classwork.created_by_staff_id == "REQ").count() == 0
+    assert not list(scenario["clone_root"].glob("*"))
+
+    with monkeypatch.context() as patch:
+        patch.setattr(db, "commit", lambda: (_ for _ in ()).throw(
+            RuntimeError("simulated commit failure")
+        ))
+        failed_commit = requester.post(
+            endpoint, json={"decision": "ACCEPT", "expected_version": 2},
+            headers={"Idempotency-Key": "db-failure"},
+        )
+    assert failed_commit.status_code == 500
+    assert failed_commit.json()["detail"]["code"] == "CLONE_FAILED"
+    db.refresh(request)
+    assert request.status == "PACKAGE_SENT"
+    assert db.query(ContentCloneOperation).count() == 0
+    assert not list(scenario["clone_root"].glob("*"))
+
+
+def test_self_clone_policy_reads_do_not_grow_with_selection_count(db, scenario):
+    db.add(SubjectLoad(
+        subject_load_id=99, staff_id="OWNER", subject_id=5, class_id=20,
+        academic_period_id=22, status="published", is_active_version=True,
+    ))
+    db.add_all([
+        Competency(
+            competency_id=100 + index, statement=f"Historical item {index}",
+            subject_id=5, academic_period_id=11,
+            created_by_staff_id="OWNER",
+        )
+        for index in range(12)
+    ])
+    db.commit()
+    client = _client(db, staff_id="OWNER")
+    all_items = [
+        {
+            "item_type": "COMPETENCY", "source_entity_id": item.competency_id,
+            "source_revision_token": compute_competency_revision_token(item),
+        }
+        for item in db.query(Competency).filter(
+            Competency.competency_id.between(100, 111)
+        ).order_by(Competency.competency_id).all()
+    ]
+    query_counts = []
+    for index, selected in enumerate((all_items[:1], all_items)):
+        db.expire_all()
+        statements = []
+        def record(_conn, _cursor, statement, _params, _context, _many):
+            if statement.lstrip().lower().startswith("select"):
+                statements.append(statement)
+        event.listen(db.get_bind(), "before_cursor_execute", record)
+        try:
+            response = client.post(
+                "/api/v1/content-cloning/clone-operations/self",
+                json={
+                    "destination_class_id": 20, "destination_subject_id": 5,
+                    "destination_academic_period_id": 22, "items": selected,
+                },
+                headers={"Idempotency-Key": f"count-{index}"},
+            )
+        finally:
+            event.remove(db.get_bind(), "before_cursor_execute", record)
+        assert response.status_code == 201, response.text
+        query_counts.append(len(statements))
+    assert query_counts[1] <= query_counts[0] + 1, query_counts
+
+
+def test_multiple_source_terms_require_explicit_mapping(db, scenario):
+    request = _create_pr_b_fixture(db, scenario)
+    db.add(SubjectLoad(
+        subject_load_id=99, staff_id="OWNER", subject_id=5, class_id=12,
+        academic_period_id=12, status="published", is_active_version=True,
+    ))
+    db.add(Competency(
+        competency_id=120, statement="Prior Term 2 material",
+        subject_id=5, academic_period_id=12,
+        created_by_staff_id="OWNER",
+    ))
+    db.commit()
+    owner = _client(db, staff_id="OWNER")
+    picker = owner.get(
+        f"/api/v1/content-cloning/requests/{request.request_id}/eligible-materials"
+    )
+    assert picker.status_code == 200
+    competencies = [
+        item for item in picker.json()["items"]
+        if item["item_type"] == "COMPETENCY"
+    ]
+    assert len(competencies) == 2
+    sent = owner.post(
+        f"/api/v1/content-cloning/requests/{request.request_id}/package",
+        json={"expected_version": 1, "items": [{
+            "item_type": item["item_type"],
+            "source_entity_id": item["source_entity_id"],
+            "source_revision_token": item["source_revision_token"],
+        } for item in competencies]},
+    )
+    assert sent.status_code == 201, sent.text
+    requester = _client(db, staff_id="REQ")
+    endpoint = f"/api/v1/content-cloning/requests/{request.request_id}/package-decision"
+    missing_map = requester.post(
+        endpoint, json={"decision": "ACCEPT", "expected_version": 2},
+        headers={"Idempotency-Key": "no-term-map"},
+    )
+    assert missing_map.status_code == 409
+    assert missing_map.json()["detail"]["code"] == "PERIOD_MAPPING_REQUIRED"
+    accepted = requester.post(
+        endpoint,
+        json={
+            "decision": "ACCEPT", "expected_version": 2,
+            "period_mappings": [
+                {"source_academic_period_id": 11, "destination_academic_period_id": 22},
+                {"source_academic_period_id": 12, "destination_academic_period_id": 22},
+            ],
+        },
+        headers={"Idempotency-Key": "mapped-terms"},
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["summary"]["competency_count"] == 2
+    assert db.query(Competency).filter(
+        Competency.created_by_staff_id == "REQ",
+        Competency.academic_period_id == 22,
+    ).count() == 2
+
+
+def test_self_clone_cannot_target_inactive_historical_year(db, scenario):
+    _create_pr_b_fixture(db, scenario)
+    source = db.get(Competency, 1)
+    response = _client(db, staff_id="REQ").post(
+        "/api/v1/content-cloning/clone-operations/self",
+        json={
+            "destination_class_id": 10, "destination_subject_id": 5,
+            "destination_academic_period_id": 11,
+            "items": [{
+                "item_type": "COMPETENCY",
+                "source_entity_id": 1,
+                "source_revision_token": compute_competency_revision_token(source),
+            }],
+        },
+        headers={"Idempotency-Key": "historical-destination"},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "DESTINATION_YEAR_INACTIVE"
+
+
+def test_orphan_storage_maintenance_preserves_committed_packages(db, scenario):
+    request = _send_full_clone_package(db, scenario)
+    package = db.query(ContentSharePackage).filter(
+        ContentSharePackage.request_id == request.request_id
+    ).one()
+    engine_module = importlib.import_module(
+        "app.services.cloning.ContentCloningEngine"
+    )
+    staging_root = scenario["clone_root"].parent / "cloning_staging"
+    committed_staging = staging_root / str(package.package_id)
+    assert committed_staging.exists()
+    orphan_clone = scenario["clone_root"] / str(uuid.uuid4())
+    orphan_staging = staging_root / str(uuid.uuid4())
+    orphan_clone.mkdir(parents=True)
+    orphan_staging.mkdir(parents=True)
+    (orphan_clone / "orphan.pdf").write_bytes(b"orphan")
+    (orphan_staging / "orphan.pdf").write_bytes(b"orphan")
+    current = datetime.now(timezone.utc) + timedelta(days=2)
+    removed = engine_module.cleanup_orphan_storage(
+        db, clone_root=scenario["clone_root"],
+        staging_root=staging_root, now=current,
+    )
+    assert removed == {"clone_directories": 1, "staging_directories": 1}
+    assert not orphan_clone.exists() and not orphan_staging.exists()
+    assert committed_staging.exists()
