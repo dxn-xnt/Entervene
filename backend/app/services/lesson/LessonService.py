@@ -183,6 +183,7 @@ def student_lessons_for_class_subject(
         .filter(
             Lesson.subject_id == subject_id,
             Lesson.is_published == True,
+            Lesson.is_locked == False,
             Lesson.is_archived == False,
             or_(
                 Lesson.lesson_id.in_(assigned_subquery),
@@ -227,6 +228,7 @@ def archive_lesson_record(lesson_id: int, staff_id: str, db: Session) -> dict:
 def publish_lesson_record(lesson_id: int, staff_id: str, db: Session) -> dict:
     lesson = get_owned_lesson(db, staff_id, lesson_id)
     lesson.is_published = True
+    lesson.is_locked = False
     lesson.is_draft = False
     assignments = db.query(LessonAssignment).filter(LessonAssignment.lesson_id == lesson_id).all()
     for assignment in assignments:

@@ -163,6 +163,11 @@ class OwnerEligibleMaterialsResponse(BaseModel):
     total: int
 
 
+class SelfEligibleMaterialsResponse(BaseModel):
+    items: list[OwnerEligibleMaterialItem]
+    total: int
+
+
 class PackageDecision(str, Enum):
     ACCEPT = "ACCEPT"
     DECLINE = "DECLINE"
@@ -173,9 +178,23 @@ class PackageCreateRequest(BaseModel):
     items: list[ContentSelectionItem] = Field(min_length=1)
 
 
+class ContentPeriodMapping(BaseModel):
+    source_academic_period_id: int = Field(gt=0)
+    destination_academic_period_id: int = Field(gt=0)
+
+
 class PackageDecisionRequest(BaseModel):
     decision: PackageDecision
     expected_version: int = Field(ge=1)
+    period_mappings: list[ContentPeriodMapping] = Field(default_factory=list)
+
+
+class SelfCloneRequest(BaseModel):
+    destination_class_id: int
+    destination_subject_id: int
+    destination_academic_period_id: int
+    items: list[ContentSelectionItem] = Field(min_length=1, max_length=100)
+    period_mappings: list[ContentPeriodMapping] = Field(default_factory=list)
 
 
 class RequesterVisiblePackageSummary(BaseModel):
