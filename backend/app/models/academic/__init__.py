@@ -9,6 +9,7 @@ from .Subject        import Subject
 from .SubjectOffering import SubjectOffering
 from .GradingTemplate import GradingTemplate
 from .GradingTemplateComponent import GradingTemplateComponent
+from .AcademicYearPassingPolicy import AcademicYearPassingPolicy, PassingPolicyAudit
 from .Class_         import Class
 from .OfficialSection import OfficialSection
 from .SubjectLoad    import SubjectLoad

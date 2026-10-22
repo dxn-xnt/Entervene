@@ -20,6 +20,10 @@ from app.schemas.Settings import (
     SettingsGroupedResponse,
     SettingsPublicResponse,
 )
+from app.schemas.PassingPolicyAdmin import YearGeneralAverageSave
+from app.services.grading.PassingPolicyAdminService import (
+    read_year_general_average_policy, save_year_general_average_policy,
+)
 from app.services.settings.SettingsService import (
     get_all_settings_grouped,
     get_public_settings,
@@ -243,3 +247,28 @@ def update_single_setting(
     """Admin only — update a setting value with strict type validation."""
     user_id = UUID(str(current_user.get("sub") or current_user.get("user_id")))
     return update_setting(db=db, key=key, value=payload.value, user_id=user_id)
+
+
+@router.get("/academic-years/{academic_year_id}/general-average-policy")
+def get_academic_year_general_average_policy(
+    academic_year_id: int,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return read_year_general_average_policy(db, academic_year_id)
+
+
+@router.put("/academic-years/{academic_year_id}/general-average-policy")
+def put_academic_year_general_average_policy(
+    academic_year_id: int,
+    payload: YearGeneralAverageSave,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return save_year_general_average_policy(
+        db, year_id=academic_year_id, raw_threshold=payload.threshold,
+        expected_version=payload.expected_version, reason=payload.reason,
+        action=payload.action, confirmed=payload.confirmed,
+        source_year_id=payload.source_year_id,
+        actor=UUID(str(current_user.get("sub") or current_user.get("user_id"))),
+    )

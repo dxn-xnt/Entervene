@@ -6,7 +6,7 @@ import inspect
 
 import pytest
 from sqlalchemy import Boolean, Column, Integer, MetaData, Numeric, String, Table, Text
-from sqlalchemy import create_engine, event, insert, update
+from sqlalchemy import create_engine, delete, event, insert, update
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -34,6 +34,9 @@ def threshold_metadata():
         Column("passing_threshold", Numeric(5, 2)), Column("status", String(20)))
     Table("subject", metadata,
         Column("subject_id", Integer, primary_key=True), Column("grading_template_id", Integer))
+    Table("academic_year_passing_policy", metadata,
+        Column("academic_year_id", Integer, primary_key=True),
+        Column("general_average_threshold", Numeric(5, 2), nullable=True))
     Table("setting", metadata,
         Column("key", String(100), primary_key=True), Column("value", Text))
     return metadata
@@ -63,6 +66,10 @@ def seed_context(db, metadata, *, size=2):
     db.execute(insert(metadata.tables["setting"]), [
         {"key": "general_average_passing_grade", "value": " 80.25 "},
         {"key": "unrelated_private_configuration", "value": "not selected"}])
+    db.execute(insert(metadata.tables["academic_year_passing_policy"]), [
+        {"academic_year_id": 1, "general_average_threshold": Decimal("80.25")},
+        {"academic_year_id": 2, "general_average_threshold": Decimal("83.00")},
+    ])
     db.commit()
 
 
@@ -75,7 +82,7 @@ def expect_code(code, callback):
 def exercise_reader_case(db, metadata, case):
     """Identical expected-value implementation on SQLite and guarded PostgreSQL."""
     seed_context(db, metadata, size=200 if case == "query_count_and_no_writes" else 2)
-    subjects, settings = metadata.tables["subject"], metadata.tables["setting"]
+    subjects, policies = metadata.tables["subject"], metadata.tables["academic_year_passing_policy"]
     if case in {"null_template", "missing_template"}:
         db.execute(update(subjects).where(subjects.c.subject_id == 10).values(
             grading_template_id=None if case == "null_template" else 999))
@@ -88,8 +95,10 @@ def exercise_reader_case(db, metadata, case):
             db, academic_year_id=999, subject_ids=[10]))
         return
     if case in {"invalid_general_average", "missing_general_average"}:
-        values = {"value": "NaN"} if case == "invalid_general_average" else {"key": "renamed_setting"}
-        db.execute(update(settings).where(settings.c.key == "general_average_passing_grade").values(**values))
+        if case == "invalid_general_average":
+            db.execute(update(policies).where(policies.c.academic_year_id == 1).values(general_average_threshold=Decimal("-1")))
+        else:
+            db.execute(delete(policies).where(policies.c.academic_year_id == 1))
         db.commit()
     year = 2 if case == "inactive_open_year" else 1
     ids = range(10, 210) if case == "query_count_and_no_writes" else [10, 11, 999]
@@ -114,7 +123,7 @@ def exercise_reader_case(db, metadata, case):
             assert (core.threshold, applied.threshold) == (Decimal("85"), Decimal("83"))
             assert compare_stored_final_grade(Decimal("84"), core) is False
             assert compare_stored_final_grade(Decimal("84"), applied) is True
-            assert resolve_passing_threshold(ctx, academic_year_id=year, scope="general_average").threshold == Decimal("80.25")
+            assert resolve_passing_threshold(ctx, academic_year_id=year, scope="general_average").threshold == (Decimal("83") if year == 2 else Decimal("80.25"))
         if case == "query_count_and_no_writes":
             for sid in range(10, 210):
                 resolve_passing_threshold(ctx, academic_year_id=year, scope="subject", subject_id=sid)
@@ -163,32 +172,31 @@ def test_pending_orm_state_is_not_flushed_committed_or_rolled_back(sqlite_config
     db.expunge(pending)
 
 
-def test_raw_setting_and_template_are_reloaded_without_global_cache(sqlite_config_session):
+def test_year_policy_and_template_are_reloaded_without_global_cache(sqlite_config_session):
     db, metadata = sqlite_config_session
     seed_context(db, metadata)
     before = read_passing_threshold_context(db, academic_year_id=1, subject_ids=[10])
-    db.execute(update(metadata.tables["setting"]).where(
-        metadata.tables["setting"].c.key == "general_average_passing_grade").values(value="83.00"))
+    db.execute(update(metadata.tables["academic_year_passing_policy"]).where(
+        metadata.tables["academic_year_passing_policy"].c.academic_year_id == 1).values(general_average_threshold=Decimal("83")))
     db.execute(update(metadata.tables["grading_template"]).where(
         metadata.tables["grading_template"].c.grading_template_id == 20).values(passing_threshold=Decimal("86")))
     db.commit()
     after = read_passing_threshold_context(db, academic_year_id=1, subject_ids=[10])
-    assert before.general_average_raw == " 80.25 " and after.general_average_raw == "83.00"
+    assert before.general_average_year_threshold == Decimal("80.25") and after.general_average_year_threshold == Decimal("83")
     assert before.grading_templates[20].passing_threshold == Decimal("85")
     assert after.grading_templates[20].passing_threshold == Decimal("86")
 
 
 @pytest.mark.parametrize("raw", ["", "true", "NaN", "Infinity", "-1", "100.01", "1_0", "80%", "8e1"])
-def test_invalid_raw_legacy_setting_never_gets_a_fallback(sqlite_config_session, raw):
+def test_legacy_setting_is_ignored_after_year_configuration(sqlite_config_session, raw):
     db, metadata = sqlite_config_session
     seed_context(db, metadata)
     settings = metadata.tables["setting"]
     db.execute(update(settings).where(settings.c.key == "general_average_passing_grade").values(value=raw))
     db.commit()
     ctx = read_passing_threshold_context(db, academic_year_id=1)
-    assert ctx.general_average_raw == raw
-    expect_code("general_average_threshold_invalid", lambda: resolve_passing_threshold(
-        ctx, academic_year_id=1, scope="general_average"))
+    assert ctx.general_average_raw is None
+    assert resolve_passing_threshold(ctx, academic_year_id=1, scope="general_average").threshold == Decimal("80.25")
 
 
 @pytest.mark.parametrize("value", [None, Decimal("-0.01"), Decimal("100.01")])
@@ -219,7 +227,7 @@ def test_general_average_only_requires_two_selects(sqlite_config_session):
     with recorded_statements(db) as statements:
         ctx = read_passing_threshold_context(db, academic_year_id=2)
         result = resolve_passing_threshold(ctx, academic_year_id=2, scope="general_average")
-    assert len(statements) == 2 and result.source == "legacy_general_average_setting"
+    assert len(statements) == 2 and result.source == "academic_year_general_average_policy"
 
 
 def test_activation_flags_are_irrelevant_to_requested_year(sqlite_config_session):

@@ -21,7 +21,7 @@ def context(**changes):
         subjects={10: SubjectThresholdConfig(10, 20), 11: SubjectThresholdConfig(11, 21)},
         grading_templates={20: TemplateThresholdConfig(20, Decimal("85.00")),
                            21: TemplateThresholdConfig(21, Decimal("83.00"))},
-        general_average_raw="80")
+        general_average_raw="80", general_average_year_threshold=Decimal("80"))
     values.update(changes)
     return PassingThresholdContext(**values)
 
@@ -124,11 +124,17 @@ def test_year_mismatch_and_unknown_mode_fail_explicitly(ctx, year):
         ctx, academic_year_id=year, scope="subject", subject_id=10))
 
 
-def test_legacy_general_average_is_explicitly_transitional_and_not_year_initialization():
-    result = resolve_passing_threshold(context(general_average_raw="80.25"),
+def test_confirmed_year_general_average_ignores_legacy_setting():
+    result = resolve_passing_threshold(context(general_average_raw="90", general_average_year_threshold=Decimal("80.25")),
                                       academic_year_id=1, scope="general_average")
     assert result.threshold == Decimal("80.25")
-    assert result.source == "legacy_general_average_setting"
+    assert result.source == "academic_year_general_average_policy"
+
+
+def test_unconfigured_year_never_uses_legacy_setting():
+    assert_code("general_average_threshold_missing", lambda: resolve_passing_threshold(
+        context(general_average_raw="80", general_average_year_threshold=None),
+        academic_year_id=1, scope="general_average"))
 
 
 def test_live_resolution_does_not_apply_an_old_snapshot():
@@ -182,7 +188,7 @@ def test_comparison_requires_exact_stored_decimal(grade):
 
 
 def test_missing_grade_and_scored_zero_are_distinct():
-    mark = resolve_passing_threshold(context(general_average_raw="0"), academic_year_id=1, scope="general_average")
+    mark = resolve_passing_threshold(context(general_average_year_threshold=Decimal("0")), academic_year_id=1, scope="general_average")
     assert compare_stored_final_grade(None, mark) is None
     assert compare_stored_final_grade(Decimal("0.00"), mark) is True
 

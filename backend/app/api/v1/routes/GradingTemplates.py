@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.Dependencies import require_role
@@ -10,6 +11,8 @@ from app.schemas.GradingTemplate import (
     GradingTemplateResponse,
     GradingTemplateUpdate,
 )
+from app.schemas.PassingPolicyAdmin import TemplateThresholdEdit
+from app.services.grading.PassingPolicyAdminService import edit_template_threshold
 from app.services.grading_templates.GradingTemplateQueryService import (
     get_grading_template_detail_data,
     get_grading_template_form_options_data,
@@ -76,3 +79,17 @@ def update_grading_template(
     db: Session = Depends(get_db),
 ):
     return update_grading_template_record(db=db, grading_template_id=grading_template_id, payload=payload)
+
+
+@router.patch("/{grading_template_id}/passing-threshold", response_model=GradingTemplateResponse)
+def update_template_passing_threshold(
+    grading_template_id: int,
+    payload: TemplateThresholdEdit,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return edit_template_threshold(
+        db, template_id=grading_template_id, year_id=payload.academic_year_id,
+        raw_threshold=payload.threshold, expected_updated_at=payload.expected_updated_at,
+        reason=payload.reason, actor=UUID(str(current_user.get("sub") or current_user.get("user_id"))),
+    )

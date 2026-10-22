@@ -6,20 +6,23 @@ import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
-import { createGradingTemplate, updateGradingTemplate, type GradingTemplateListItem, type SubjectListItem, type SubjectStatus } from "@/lib/api";
+import { createGradingTemplate, editGradingTemplateThreshold, updateGradingTemplate, type GradingTemplateListItem, type SubjectListItem, type SubjectStatus } from "@/lib/api";
 
-type Props = { templates: GradingTemplateListItem[]; subjects: SubjectListItem[]; onReload: () => Promise<void>; createRequest?: number; showCreateButton?: boolean };
+type Props = { templates: GradingTemplateListItem[]; subjects: SubjectListItem[]; academicYears?: Array<{ academic_year_id: number; year_label: string; is_active: boolean }>; onReload: () => Promise<void>; createRequest?: number; showCreateButton?: boolean };
 type EditorState = { name: string; description: string; status: SubjectStatus; threshold: string; ww: string; pt: string; exams: string; subjectIds: Set<number>; replacementTemplateId: string };
 const weight = (template: GradingTemplateListItem, name: string) => template.components.find((item) => item.component_name === name)?.weight ?? 0;
 const blank = (): EditorState => ({ name: "", description: "", status: "active", threshold: "85", ww: "20", pt: "50", exams: "30", subjectIds: new Set(), replacementTemplateId: "" });
 
-export function GradingTemplateManager({ templates, subjects, onReload, createRequest = 0, showCreateButton = true }: Props) {
+export function GradingTemplateManager({ templates, subjects, academicYears = [], onReload, createRequest = 0, showCreateButton = true }: Props) {
   const [editing, setEditing] = useState<GradingTemplateListItem | null | undefined>();
   const [form, setForm] = useState<EditorState>(blank);
   const [search, setSearch] = useState("");
   const [grade, setGrade] = useState("all");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [thresholdReason, setThresholdReason] = useState("");
+  const [thresholdYearId, setThresholdYearId] = useState("");
+  const [thresholdSaving, setThresholdSaving] = useState(false);
   const handledCreateRequest = useRef(createRequest);
   const grades = useMemo(() => [...new Set(subjects.map((subject) => subject.academic_level.grade_level))].sort((a, b) => a - b), [subjects]);
   const visibleSubjects = useMemo(() => {
@@ -41,6 +44,8 @@ export function GradingTemplateManager({ templates, subjects, onReload, createRe
     setEditing(template);
     setForm({ name: template.template_name, description: template.description ?? "", status: template.status, threshold: String(template.passing_threshold), ww: String(weight(template, "Written Work")), pt: String(weight(template, "Performance Tasks")), exams: String(weight(template, "Exams")), subjectIds: new Set(template.assigned_subjects.map((subject) => subject.subject_id)), replacementTemplateId: "" });
     setSearch(""); setGrade("all"); setError(null);
+    setThresholdReason("");
+    setThresholdYearId(String((academicYears.find((year) => year.is_active) ?? academicYears[0])?.academic_year_id ?? ""));
   };
   const toggleSubject = (id: number) => setForm((current) => { const subjectIds = new Set(current.subjectIds); if (subjectIds.has(id)) subjectIds.delete(id); else subjectIds.add(id); return { ...current, subjectIds }; });
   const save = async () => {
@@ -52,11 +57,23 @@ export function GradingTemplateManager({ templates, subjects, onReload, createRe
     const components = [{ component_name: "Written Work", weight: ww, display_order: 1 }, { component_name: "Performance Tasks", weight: pt, display_order: 2 }, { component_name: "Exams", weight: exams, display_order: 3 }];
     setSaving(true); setError(null);
     try {
-      if (editing) await updateGradingTemplate(editing.grading_template_id, { updated_at: editing.updated_at ?? "", subject_ids: [...form.subjectIds], ...(removedIds.length ? { replacement_template_id: Number(form.replacementTemplateId) } : {}), ...(!editing.is_locked ? { template_name: form.name.trim(), description: form.description.trim() || null, status: form.status, passing_threshold: threshold, components } : {}) });
+      if (editing) await updateGradingTemplate(editing.grading_template_id, { updated_at: editing.updated_at ?? "", subject_ids: [...form.subjectIds], ...(removedIds.length ? { replacement_template_id: Number(form.replacementTemplateId) } : {}), ...(!editing.is_locked ? { template_name: form.name.trim(), description: form.description.trim() || null, status: form.status, components } : {}) });
       else await createGradingTemplate({ template_name: form.name.trim(), description: form.description.trim() || null, status: form.status, passing_threshold: threshold, subject_ids: [...form.subjectIds], components });
       await onReload(); setEditing(undefined);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Unable to save grading template."); }
     finally { setSaving(false); }
+  };
+  const saveThreshold = async () => {
+    if (!editing || !thresholdYearId || !thresholdReason.trim()) return setError("Select a year and enter an audit reason.");
+    setThresholdSaving(true); setError(null);
+    try {
+      await editGradingTemplateThreshold(editing.grading_template_id, {
+        academic_year_id: Number(thresholdYearId), threshold: form.threshold,
+        expected_updated_at: editing.updated_at ?? "", reason: thresholdReason.trim(),
+      });
+      await onReload(); setEditing(undefined);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Unable to update passing threshold."); }
+    finally { setThresholdSaving(false); }
   };
   const total = Number(form.ww || 0) + Number(form.pt || 0) + Number(form.exams || 0);
 
@@ -72,8 +89,17 @@ export function GradingTemplateManager({ templates, subjects, onReload, createRe
           <section className="grid gap-3 lg:grid-cols-3">
             <Field label="Template Name"><Input value={form.name} disabled={Boolean(editing?.is_locked)} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
             <Field label="Status"><Select value={form.status} disabled={Boolean(editing?.is_locked)} onValueChange={(value) => setForm({ ...form, status: value as SubjectStatus })}><Select.Trigger className="w-full"><Select.Value /></Select.Trigger><Select.Content><Select.Group><Select.Item value="active">Active</Select.Item><Select.Item value="archived">Archived</Select.Item></Select.Group></Select.Content></Select></Field>
-            <Field label="Passing Threshold"><PercentInput value={form.threshold} disabled={Boolean(editing?.is_locked)} onChange={(value) => setForm({ ...form, threshold: value })} /></Field>
+            <Field label="Passing Threshold"><PercentInput value={form.threshold} disabled={Boolean(editing)} onChange={(value) => setForm({ ...form, threshold: value })} /></Field>
           </section>
+
+          {editing ? <section className="space-y-3 border-2 border-black bg-primary/20 p-3">
+            <h4 className="font-bold">Audited passing-threshold edit</h4>
+            <p className="text-xs">This changes the shared template for every assigned subject. Finalized grades anywhere on this template block the edit. Weights and subject assignments remain separate.</p>
+            <Field label="Academic year context"><Select value={thresholdYearId} onValueChange={setThresholdYearId}><Select.Trigger className="w-full"><Select.Value placeholder="Select year" /></Select.Trigger><Select.Content><Select.Group>{academicYears.map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}</Select.Item>)}</Select.Group></Select.Content></Select></Field>
+            <Field label="New passing threshold"><Input aria-label="Audited passing threshold" type="number" min="0" max="100" step="0.01" value={form.threshold} onChange={(event) => setForm({ ...form, threshold: event.target.value })} /></Field>
+            <Field label="Reason for threshold edit"><Input value={thresholdReason} onChange={(event) => setThresholdReason(event.target.value)} /></Field>
+            <Button onClick={() => void saveThreshold()} disabled={thresholdSaving || !thresholdYearId}>{thresholdSaving ? "Saving..." : "Save Threshold with Audit"}</Button>
+          </section> : null}
 
           <section><h4 className="mb-2 font-bold">Subject Scope / Assigned Subjects</h4>
             <div className="border-2 border-black p-3"><div className="mb-3 flex items-center justify-between gap-3"><strong>Assigned Subjects ({selectedSubjects.length})</strong>{selectedSubjects.length ? <Button size="sm" className="bg-black text-white" onClick={() => setForm({ ...form, subjectIds: new Set() })}>Clear All</Button> : null}</div>
