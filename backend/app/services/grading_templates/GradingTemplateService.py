@@ -97,6 +97,11 @@ def create_grading_template_record(db: Session, payload: GradingTemplateCreate) 
 def update_grading_template_record(db: Session, grading_template_id: int, payload: GradingTemplateUpdate) -> dict:
     template = get_template_or_404(db, grading_template_id, for_update=True)
     data = payload.model_dump(exclude_unset=True)
+    if "passing_threshold" in data:
+        raise HTTPException(status_code=422, detail={
+            "code": "THRESHOLD_AUDIT_REQUIRED",
+            "message": "Use the audited passing-threshold action to edit this value.",
+        })
     expected = data.get("updated_at")
     if expected is None:
         raise HTTPException(status_code=428, detail="Reload the template before saving changes.")

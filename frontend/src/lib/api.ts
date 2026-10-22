@@ -434,7 +434,7 @@ export type GradingTemplateCreatePayload = {
   subject_ids: number[];
   components: GradingTemplateComponentPayload[];
 };
-export type GradingTemplateUpdatePayload = Partial<GradingTemplateCreatePayload> & {
+export type GradingTemplateUpdatePayload = Partial<Omit<GradingTemplateCreatePayload, "passing_threshold">> & {
   updated_at: string;
   replacement_template_id?: number;
 };
@@ -1141,6 +1141,8 @@ function apiErrorMessage(data: unknown, fallback: string): string {
   if (!data || typeof data !== "object") return fallback;
   if ("message" in data && typeof data.message === "string") return data.message;
   if ("detail" in data && typeof data.detail === "string") return data.detail;
+  if ("detail" in data && data.detail && typeof data.detail === "object"
+      && "message" in data.detail && typeof data.detail.message === "string") return data.detail.message;
   return fallback;
 }
 
@@ -1467,6 +1469,20 @@ export async function updateGradingTemplate(
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null);
     throw new ApiRequestError(apiErrorMessage(data, "Unable to update grading template."), response.status, data);
+  }
+  return (await response.json()) as GradingTemplateResponse;
+}
+
+export async function editGradingTemplateThreshold(
+  gradingTemplateId: number,
+  payload: { academic_year_id: number; threshold: string; expected_updated_at: string; reason: string },
+): Promise<GradingTemplateResponse> {
+  const response = await apiFetch(`/api/v1/grading-templates/${gradingTemplateId}/passing-threshold`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(apiErrorMessage(data, "Unable to update passing threshold."), response.status, data);
   }
   return (await response.json()) as GradingTemplateResponse;
 }

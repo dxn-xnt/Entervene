@@ -115,7 +115,6 @@ def test_patch_grading_template_success(client, db):
     url = f"/api/v1/grading-templates/{applied.grading_template_id}"
     payload = {
         "updated_at": applied.updated_at.isoformat(),
-        "passing_threshold": 84.5,
         "components": [
             {"component_name": "Written Work", "weight": 25.0, "display_order": 1},
             {"component_name": "Performance Tasks", "weight": 55.0, "display_order": 2},
@@ -125,7 +124,7 @@ def test_patch_grading_template_success(client, db):
     response = client.patch(url, json=payload)
     assert response.status_code == 200
     body = response.json()
-    assert body["passing_threshold"] == 84.5
+    assert body["passing_threshold"] == 85.0
     assert [c["weight"] for c in body["components"]] == [25.0, 55.0, 20.0]
 
 
@@ -134,7 +133,6 @@ def test_patch_grading_template_rejects_weights_not_100(client, db):
     url = f"/api/v1/grading-templates/{applied.grading_template_id}"
     payload = {
         "updated_at": applied.updated_at.isoformat(),
-        "passing_threshold": 85.0,
         "components": [
             {"component_name": "Written Work", "weight": 30.0, "display_order": 1},
             {"component_name": "Performance Tasks", "weight": 60.0, "display_order": 2},
@@ -234,7 +232,7 @@ def test_patch_grading_template_rejects_stale_timestamp(client, db):
     url = f"/api/v1/grading-templates/{applied.grading_template_id}"
     stale_payload = {
         "updated_at": "2020-01-01T00:00:00Z",
-        "passing_threshold": 80.0,
+        "template_name": "Stale edit",
     }
     response = client.patch(url, json=stale_payload)
     assert response.status_code == 409
@@ -268,7 +266,7 @@ def test_patch_grading_template_rejects_when_locked(client, db):
     url = f"/api/v1/grading-templates/{core.grading_template_id}"
     payload = {
         "updated_at": core.updated_at.isoformat(),
-        "passing_threshold": 88.0,
+        "template_name": "Protected edit",
     }
     response = client.patch(url, json=payload)
     assert response.status_code == 409

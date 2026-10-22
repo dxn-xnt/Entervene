@@ -168,3 +168,41 @@ export async function updateSetting(
   }
   return res.json();
 }
+
+export type YearGeneralAveragePolicy = {
+  academic_year_id: number;
+  year_label: string;
+  is_active: boolean;
+  configured: boolean;
+  threshold: string | null;
+  version: number;
+  legacy_proposal?: string | null;
+  legacy_error?: string;
+  previous_academic_year_id?: number | null;
+};
+
+function yearPolicyError(data: unknown, fallback: string): string {
+  if (data && typeof data === "object" && "detail" in data) {
+    const detail = data.detail;
+    if (typeof detail === "string") return detail;
+    if (detail && typeof detail === "object" && "message" in detail && typeof detail.message === "string") return detail.message;
+  }
+  return fallback;
+}
+
+export async function getYearGeneralAveragePolicy(yearId: number): Promise<YearGeneralAveragePolicy> {
+  const response = await apiFetch(`/api/v1/settings/academic-years/${yearId}/general-average-policy`);
+  if (!response.ok) throw new Error(yearPolicyError(await response.json().catch(() => null), "Unable to load year policy."));
+  return response.json();
+}
+
+export async function saveYearGeneralAveragePolicy(
+  yearId: number,
+  payload: { threshold: string; expected_version: number; reason: string; action: "confirm_legacy" | "initialize_manual" | "copy_previous" | "edit"; confirmed: boolean; source_year_id?: number },
+): Promise<YearGeneralAveragePolicy> {
+  const response = await apiFetch(`/api/v1/settings/academic-years/${yearId}/general-average-policy`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(yearPolicyError(await response.json().catch(() => null), "Unable to save year policy."));
+  return response.json();
+}

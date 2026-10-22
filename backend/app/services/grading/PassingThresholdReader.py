@@ -14,9 +14,9 @@ from sqlalchemy.orm import Session
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Subject import Subject
 from app.models.academic.GradingTemplate import GradingTemplate
-from app.models.settings.Setting import Setting
+from app.models.academic.AcademicYearPassingPolicy import AcademicYearPassingPolicy
 from app.services.grading.PassingThresholdResolver import (
-    GENERAL_AVERAGE_SETTING_KEY, PassingThresholdConfigurationError,
+    PassingThresholdConfigurationError,
     PassingThresholdContext, PassingThresholdResolution, SubjectThresholdConfig,
     TemplateThresholdConfig, resolve_passing_threshold,
 )
@@ -36,9 +36,8 @@ def read_passing_threshold_context(
 ) -> PassingThresholdContext:
     """At most three SELECTs, independent of subject/learner count; no autoflush.
 
-    Raw global general-average text is transitional legacy configuration only.
-    Its presence never initializes a year-specific policy. Missing/invalid subject
-    configuration stays unresolved for an explicit per-subject error.
+    General-average policy is read only from the explicitly requested year.
+    Missing/invalid configuration stays unresolved for a typed error.
     """
     if type(academic_year_id) is not int or academic_year_id <= 0:
         raise PassingThresholdConfigurationError("academic_year_missing")
@@ -61,13 +60,14 @@ def read_passing_threshold_context(
                 if row.linked_template_id is not None:
                     templates[row.linked_template_id] = TemplateThresholdConfig(
                         row.linked_template_id, row.passing_threshold)
-        raw = db.execute(select(Setting.value).where(Setting.key == GENERAL_AVERAGE_SETTING_KEY)).all()
-        if len(raw) > 1:
-            raise PassingThresholdConfigurationError("general_average_threshold_invalid")
+        year_policy = db.execute(select(AcademicYearPassingPolicy.general_average_threshold).where(
+            AcademicYearPassingPolicy.academic_year_id == academic_year_id,
+        )).scalar_one_or_none()
     return PassingThresholdContext(
         academic_year_id=academic_year_id, policy_mode="live",
         subjects=subjects, grading_templates=templates,
-        general_average_raw=raw[0].value if raw else None,
+        general_average_raw=None,
+        general_average_year_threshold=year_policy,
     )
 
 

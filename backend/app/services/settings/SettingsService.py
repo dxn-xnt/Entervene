@@ -52,6 +52,11 @@ def update_setting(db: Session, key: str, value: str, user_id: str) -> dict:
     Raises 404 if the key does not exist.
     Raises 422 if the value does not match the setting's declared type.
     """
+    if key == "general_average_passing_grade":
+        raise HTTPException(status_code=422, detail={
+            "code": "YEAR_POLICY_REQUIRED",
+            "message": "Use the audited academic-year general-average policy action.",
+        })
     row = db.query(Setting).filter(Setting.key == key).first()
     if row is None:
         if key in ("school_day_start", "school_day_end"):
