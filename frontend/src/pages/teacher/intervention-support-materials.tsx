@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useImperativeHandle, useMemo, useState, forwardRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
@@ -12,6 +12,7 @@ import { Label } from "@/components/retroui/Label";
 import { Select } from "@/components/retroui/Select";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Accordion } from "@/components/retroui/Accordion";
+import { Empty } from "@/components/retroui/Empty";
 import {
   createSupportMaterial,
   generateStudentReviewer,
@@ -47,6 +48,12 @@ const methods: Array<{ value: RemediationFormat; label: string; detail: string }
   { value: "EXISTING_MATERIAL_ONLY", label: "Materials only", detail: "Planning references; no new graded assessment" },
 ];
 
+const label = (value: string) =>
+  value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
 const componentLabel = (value: string | null | undefined) =>
   value
     ? value
@@ -58,15 +65,23 @@ const componentLabel = (value: string | null | undefined) =>
 const isGraded = (choice: RemediationFormat | null) =>
   choice === "QUIZ" || choice === "CLASSWORK";
 
-export default function InterventionSupportMaterials({
-  detail,
-  page = "overview",
-  previousResolved,
-}: {
+export interface InterventionSupportMaterialsHandle {
+  saveAdjustments: () => Promise<boolean>;
+}
+
+export interface InterventionSupportMaterialsProps {
   detail: TeacherInterventionDetail;
   page?: "overview" | "plan";
   previousResolved?: TeacherInterventionSummary;
-}) {
+}
+
+const InterventionSupportMaterials = forwardRef<
+  InterventionSupportMaterialsHandle,
+  InterventionSupportMaterialsProps
+>(function InterventionSupportMaterials(
+  { detail, page = "overview", previousResolved },
+  ref
+) {
   const toast = useToast();
   const {
     intervention_id: interventionId,
@@ -94,10 +109,8 @@ export default function InterventionSupportMaterials({
   const [working, setWorking] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [notice, setNoticeState] = useState("");
 
   const setNotice = (message: string) => {
-    setNoticeState(message);
     if (message) toast.success({ title: message });
   };
 
@@ -206,7 +219,6 @@ export default function InterventionSupportMaterials({
   const action = async (run: () => Promise<void>) => {
     setWorking(true);
     setError("");
-    setNotice("");
     try {
       await run();
     } catch (cause) {
@@ -220,22 +232,52 @@ export default function InterventionSupportMaterials({
     }
   };
 
-  const updatePlan = async (next: RemediationPlan, message: string) =>
-    action(async () => {
+  const saveAdjustments = async (): Promise<boolean> => {
+    if (
+      isGraded(plan.teacher_choice) &&
+      (!plan.grade_treatment ||
+        (plan.grade_treatment === "EXAMINATION" && !plan.original_exam_assignment_id))
+    ) {
+      const msg = "Choose a grade treatment and original Examination before continuing.";
+      setError(msg);
+      toast.error({ title: "Incomplete adjustment", description: msg });
+      return false;
+    }
+
+    setWorking(true);
+    setError("");
+    try {
       const result = await saveRemediationPlan(interventionId, {
-        teacher_choice: next.teacher_choice,
-        grade_treatment: next.grade_treatment ?? null,
-        ...(next.grade_treatment === "EXAMINATION"
-          ? { original_exam_assignment_id: next.original_exam_assignment_id ?? null }
+        teacher_choice: plan.teacher_choice,
+        grade_treatment: plan.grade_treatment ?? null,
+        ...(plan.grade_treatment === "EXAMINATION"
+          ? { original_exam_assignment_id: plan.original_exam_assignment_id ?? null }
           : {}),
-        selected_resources: next.selected_resources,
+        selected_resources: plan.selected_resources,
       });
       setPlan(result.plan);
       setResources(result.resources);
-      setNotice(message);
-    });
+      toast.success({ title: "Adjustments saved successfully." });
+      return true;
+    } catch (cause) {
+      const msg = cause instanceof Error ? cause.message : "Unable to save adjustments.";
+      setError(msg);
+      toast.error({ title: "Unable to save adjustments", description: msg });
+      return false;
+    } finally {
+      setWorking(false);
+    }
+  };
 
-  const openTool = () => {
+  useImperativeHandle(
+    ref,
+    () => ({
+      saveAdjustments,
+    }),
+    [plan, interventionId]
+  );
+
+  const openTool = async () => {
     if (!plan.teacher_choice || plan.teacher_choice === "EXISTING_MATERIAL_ONLY") return;
     if (
       isGraded(plan.teacher_choice) &&
@@ -245,6 +287,8 @@ export default function InterventionSupportMaterials({
       setError("Choose a grade treatment and original Examination before continuing.");
       return;
     }
+    const saved = await saveAdjustments();
+    if (!saved) return;
     const params = new URLSearchParams({
       remediation: plan.teacher_choice,
       subject_id: String(subjectId),
@@ -328,7 +372,7 @@ export default function InterventionSupportMaterials({
         (ref) => !(ref.kind === item.kind && ref.id === item.id)
       )
       : [...plan.selected_resources, { kind: item.kind, id: item.id }];
-    void updatePlan({ ...plan, selected_resources: next }, "Support materials saved.");
+    setPlan((current) => ({ ...current, selected_resources: next }));
   };
 
   const continueDisabled =
@@ -390,6 +434,25 @@ export default function InterventionSupportMaterials({
         {progress?.status_reason ?? "Loading current progress."}
       </p>
 
+      {previousResolved && (
+        <Card className="space-y-2 w-full border-2 border-border">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-base">Current support cycle</h3>
+            <Badge variant="surface" size="sm">Active</Badge>
+          </div>
+          <p className="text-sm">
+            A new below-threshold prediction opened this cycle after
+            the previous Intervention resolved on{" "}
+            <strong>
+              {previousResolved.resolved_at
+                ? date(previousResolved.resolved_at)
+                : "a previous date"}
+            </strong>
+            . That resolution is past history.
+          </p>
+        </Card>
+      )}
+
       {error && (
         <Alert status="error">
           {error}{" "}
@@ -398,7 +461,6 @@ export default function InterventionSupportMaterials({
           </Button>
         </Alert>
       )}
-      {notice && <Alert status="success">{notice}</Alert>}
 
       {loading ? (
         <p>Loading Intervention workflow...</p>
@@ -459,122 +521,162 @@ export default function InterventionSupportMaterials({
                 </p>
               )}
 
-              {assigned.length > 0 && (
-                <Card className="space-y-2 border-2 border-green-700 bg-green-50">
-                  <h3 className="font-black">Intervention progress</h3>
-                  <p>
-                    Trigger projection:{" "}
-                    <strong>{progress?.triggering_projection.toFixed(2)}</strong>
-                  </p>
-                  <p className="font-semibold">Support activity</p>
+              {assigned.length > 0 ? (
+                <div className="space-y-2">
+                  <h3 className="font-black mb-2">Current Support</h3>
                   {assigned.map((item) => (
-                    <p key={item.assignment_id}>
-                      <strong>{item.title}</strong> ·{" "}
-                      {item.submission_status === "graded"
-                        ? "Completed"
-                        : (item.submission_status ?? "Awaiting submission")}
-                      {item.grade !== null && item.total_points !== null
-                        ? ` · ${item.grade}/${item.total_points}`
-                        : ""}{" "}
-                      ·{" "}
-                      {item.is_graded
-                        ? `${plan.teacher_choice === "EXISTING_MATERIAL_ONLY"
-                          ? "Historical grade treatment"
-                          : "Recorded grade treatment"
-                        }: ${componentLabel(item.component)}`
-                        : "Practice only · No official grade impact"}
-                      {item.original_assignment_id && (
-                        <span className="block">
-                          {item.original_title} · {componentLabel(item.exam_subtype)} ·
-                          Original: {item.original_grade ?? "—"}/
-                          {item.total_points ?? "—"} · Remedial: {item.grade ?? "Pending"}/
-                          {item.total_points ?? "—"} · Effective:{" "}
-                          {item.effective_grade ?? "—"}/{item.total_points ?? "—"}
-                        </span>
-                      )}
-                    </p>
-                  ))}
-                  <p className="font-semibold">Official academic outcome</p>
-                  <p>
-                    Latest projected final grade:{" "}
-                    <strong>
-                      {progress?.latest_projection?.toFixed(2) ?? "Unavailable"}
-                    </strong>
-                  </p>
-                  <p>
-                    Status: <strong>Active</strong> · <strong>{phase}</strong>
-                  </p>
-                  <p>
-                    {progress?.completed_remediation.length
-                      ? "The student completed the support activity. "
-                      : ""}
-                    {progress?.status_reason} Completion alone does not resolve the
-                    Intervention.
-                  </p>
-                </Card>
-              )}
-            </>
-          )}
-
-          {page === "overview" && (
-            <>
-              <h3 className="font-black">Current support</h3>
-
-              <Card className="w-full space-y-3">
-                {plan.teacher_choice ? (
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold">Method:</span>
-                      <Badge variant="solid" size="sm">
-                        {methods.find((item) => item.value === plan.teacher_choice)?.label}
-                      </Badge>
-                    </div>
-                    {isGraded(plan.teacher_choice) && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-semibold">Grade treatment:</span>
+                    <Card
+                      key={item.assignment_id}
+                      className="p-3 text-sm space-y-1.5 w-full"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-semibold">{item.title}</span>
                         <Badge
-                          variant={plan.grade_treatment ? "secondary" : "destructive"}
+                          variant={item.submission_status === "graded" ? "solid" : "outline"}
                           size="sm"
                         >
-                          {plan.grade_treatment === "PRACTICE_ONLY"
-                            ? "Practice only · No official grade impact"
-                            : plan.grade_treatment
-                              ? componentLabel(plan.grade_treatment)
-                              : "Selection required"}
+                          {item.submission_status === "graded"
+                            ? "Completed"
+                            : label(item.submission_status || "Awaiting submission")}
                         </Badge>
                       </div>
-                    )}
-                    {plan.grade_treatment === "EXAMINATION" && (
-                      <p className="text-sm">
-                        Original:{" "}
+                      {item.grade != null && item.total_points != null && (
+                        <p className="text-xs text-muted-foreground">
+                          Score: <strong>{item.grade}/{item.total_points}</strong>
+                        </p>
+                      )}
+                      <div className="text-xs text-muted-foreground pt-1 border-t border-border flex flex-wrap gap-x-3 gap-y-0.5">
+                        <span>
+                          Treatment:{" "}
+                          <strong>
+                            {item.is_graded
+                              ? plan.teacher_choice === "EXISTING_MATERIAL_ONLY"
+                                ? "Historical grade treatment"
+                                : `Count as ${componentLabel(item.component)}`
+                              : "Practice only · No official grade impact"}
+                          </strong>
+                        </span>
+                        {item.original_assignment_id && (
+                          <>
+                            <span>
+                              Original: {item.original_title} ·{" "}
+                              {componentLabel(item.exam_subtype || "Examination")}
+                            </span>
+                            <span>
+                              Original: {item.original_grade ?? "—"}/{item.total_points ?? "—"}
+                            </span>
+                            <span>
+                              Remedial: {item.grade ?? "Pending"}/{item.total_points ?? "—"}
+                            </span>
+                            <span>
+                              Effective:{" "}
+                              <strong>
+                                {item.effective_grade ?? "—"}/{item.total_points ?? "—"}
+                              </strong>
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </Card>
+                  ))}
+
+                  <Card className="w-full space-y-1.5 p-3 text-sm border-2 border-border">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-sm">Official Academic Outcome</h4>
+                      <Badge variant="outline" size="sm">{phase}</Badge>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-sm pt-1">
+                      <p>
+                        Trigger projection: <strong>{progress?.triggering_projection.toFixed(2)}</strong>
+                      </p>
+                      <p>
+                        Latest projected grade:{" "}
+                        <strong>{progress?.latest_projection?.toFixed(2) ?? "Unavailable"}</strong>
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground pt-1 border-t border-border">
+                      {progress?.completed_remediation.length
+                        ? "The student completed the support activity. "
+                        : ""}
+                      {progress?.status_reason} Completion alone does not resolve the Intervention.
+                    </p>
+                  </Card>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <h3 className="font-black mb-2">Current Support</h3>
+                  <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+                    <Empty.Content>
+                      <Empty.Description className="text-sm text-muted-foreground">
+                        No support activity has been recorded yet. Click Adjust Support below to configure learning resources and prepare remediation.
+                      </Empty.Description>
+                    </Empty.Content>
+                  </Empty>
+                </div>
+              )}
+
+              <Card className="w-full space-y-3">
+                <div className="flex items-center justify-between border-b border-border pb-2">
+                  <h4 className="font-bold text-sm">Prepared Support Plan</h4>
+                  {plan.teacher_choice ? (
+                    <Badge variant="solid" size="sm">Configured</Badge>
+                  ) : (
+                    <Badge variant="outline" size="sm">Needs Setup</Badge>
+                  )}
+                </div>
+                {plan.teacher_choice ? (
+                  <div className="space-y-2 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <p>
+                        Method:{" "}
                         <strong>
-                          {originalExams.find(
-                            (exam) =>
-                              exam.assignment_id === plan.original_exam_assignment_id
-                          )?.title ?? "Selection required"}
+                          {methods.find((item) => item.value === plan.teacher_choice)?.label}
                         </strong>
                       </p>
-                    )}
-                    {isGraded(plan.teacher_choice) && (
-                      <p className="text-xs text-muted-foreground">
-                        Recipient: <strong>This student only</strong>
-                      </p>
-                    )}
-                    {plan.teacher_choice === "TOS" && (
-                      <p className="text-xs text-muted-foreground">
-                        TOS is a blueprint/export. It creates no graded student activity.
-                      </p>
-                    )}
-                    {plan.teacher_choice === "EXISTING_MATERIAL_ONLY" && (
-                      <p className="text-xs text-muted-foreground">
-                        Selected materials remain planning references; they are not
-                        privately delivered.
-                      </p>
-                    )}
+                      {isGraded(plan.teacher_choice) && (
+                        <p>
+                          Grade treatment:{" "}
+                          <strong>
+                            {plan.grade_treatment === "PRACTICE_ONLY"
+                              ? "Practice only · No official grade impact"
+                              : plan.grade_treatment
+                                ? componentLabel(plan.grade_treatment)
+                                : "Selection required"}
+                          </strong>
+                        </p>
+                      )}
+                      {plan.grade_treatment === "EXAMINATION" && (
+                        <p className="col-span-full">
+                          Original Exam:{" "}
+                          <strong>
+                            {originalExams.find(
+                              (exam) =>
+                                exam.assignment_id === plan.original_exam_assignment_id
+                            )?.title ?? "Selection required"}
+                          </strong>
+                        </p>
+                      )}
+                      {isGraded(plan.teacher_choice) && (
+                        <p className="col-span-full text-xs text-muted-foreground">
+                          Recipient: <strong>This student only</strong>
+                        </p>
+                      )}
+                      {plan.teacher_choice === "TOS" && (
+                        <p className="text-xs text-muted-foreground">
+                          TOS is a blueprint/export. It creates no graded student activity.
+                        </p>
+                      )}
+                      {plan.teacher_choice === "EXISTING_MATERIAL_ONLY" && (
+                        <p className="text-xs text-muted-foreground">
+                          Selected materials remain planning references; they are not
+                          privately delivered.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    No support method has been chosen yet. Use Adjust Support to plan one.
+                    No support method has been chosen yet. Click Adjust Support below to plan one.
                   </p>
                 )}
                 <div className="border-t border-border pt-2 space-y-1.5 text-sm">
@@ -583,7 +685,7 @@ export default function InterventionSupportMaterials({
                     <Badge
                       variant={
                         reviewer?.status === "SENT"
-                          ? "success"
+                          ? "solid"
                           : reviewer
                             ? "secondary"
                             : "outline"
@@ -599,7 +701,7 @@ export default function InterventionSupportMaterials({
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Planning references:</span>
-                    <Badge variant="surface" size="sm">
+                    <Badge variant="outline" size="sm">
                       {plan.selected_resources.length} selected
                     </Badge>
                   </div>
@@ -902,11 +1004,10 @@ export default function InterventionSupportMaterials({
                           return (
                             <Card
                               key={`${item.kind}:${item.id}`}
-                              className={`flex items-start gap-3 p-3 transition-colors cursor-pointer border-2 ${
-                                isChecked
-                                  ? "border-primary bg-primary/5"
-                                  : "border-border hover:bg-muted/30"
-                              }`}
+                              className={`flex items-start gap-3 p-3 transition-colors cursor-pointer border-2 ${isChecked
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:bg-muted/30"
+                                }`}
                               onClick={() => !working && toggleResource(item)}
                             >
                               <Checkbox
@@ -976,23 +1077,19 @@ export default function InterventionSupportMaterials({
                         return (
                           <Card
                             key={method.value}
-                            className={`p-3 cursor-pointer border-2 transition-all ${
-                              isSelected
-                                ? "border-primary bg-primary/10 shadow-sm"
-                                : "border-border hover:bg-muted/40"
-                            }`}
+                            className={`p-3 cursor-pointer border-2 transition-all ${isSelected
+                              ? "border-primary bg-primary/10 shadow-sm"
+                              : "border-border hover:bg-muted/40"
+                              }`}
                             onClick={() => {
                               if (working) return;
-                              void updatePlan(
-                                {
-                                  ...plan,
-                                  teacher_choice: method.value,
-                                  grade_treatment: isGraded(method.value)
-                                    ? (plan.grade_treatment ?? "PRACTICE_ONLY")
-                                    : null,
-                                },
-                                "Support method saved."
-                              );
+                              setPlan((current) => ({
+                                ...current,
+                                teacher_choice: method.value,
+                                grade_treatment: isGraded(method.value)
+                                  ? (current.grade_treatment ?? "PRACTICE_ONLY")
+                                  : null,
+                              }));
                             }}
                           >
                             <div className="flex items-center justify-between">
@@ -1047,21 +1144,17 @@ export default function InterventionSupportMaterials({
                           return (
                             <Card
                               key={choice}
-                              className={`p-2.5 cursor-pointer border-2 transition-all text-xs font-semibold flex items-center justify-between ${
-                                isSelected
-                                  ? "border-primary bg-primary/10"
-                                  : "border-border hover:bg-muted/40"
-                              }`}
+                              className={`p-2.5 cursor-pointer border-2 transition-all text-xs font-semibold flex items-center justify-between ${isSelected
+                                ? "border-primary bg-primary/10"
+                                : "border-border hover:bg-muted/40"
+                                }`}
                               onClick={() => {
                                 if (working) return;
-                                void updatePlan(
-                                  {
-                                    ...plan,
-                                    grade_treatment: choice,
-                                    original_exam_assignment_id: null,
-                                  },
-                                  "Grade treatment saved."
-                                );
+                                setPlan((current) => ({
+                                  ...current,
+                                  grade_treatment: choice,
+                                  original_exam_assignment_id: null,
+                                }));
                               }}
                             >
                               <span>
@@ -1077,26 +1170,22 @@ export default function InterventionSupportMaterials({
                     </div>
                     {focus?.component === "EXAMINATION" && (
                       <Card
-                        className={`p-2.5 cursor-pointer border-2 transition-all text-xs font-semibold flex items-center justify-between ${
-                          plan.grade_treatment === "EXAMINATION"
-                            ? "border-primary bg-primary/10"
-                            : "border-border hover:bg-muted/40"
-                        } ${originalExams.length === 0 ? "opacity-50 pointer-events-none" : ""}`}
+                        className={`p-2.5 cursor-pointer border-2 transition-all text-xs font-semibold flex items-center justify-between ${plan.grade_treatment === "EXAMINATION"
+                          ? "border-primary bg-primary/10"
+                          : "border-border hover:bg-muted/40"
+                          } ${originalExams.length === 0 ? "opacity-50 pointer-events-none" : ""}`}
                         onClick={() => {
                           if (working || originalExams.length === 0) return;
-                          void updatePlan(
-                            {
-                              ...plan,
-                              grade_treatment: "EXAMINATION",
-                              original_exam_assignment_id:
-                                (
-                                  originalExams.find(
-                                    (exam) => exam.subtype === focus.exam_subtype
-                                  ) ?? originalExams[0]
-                                )?.assignment_id ?? null,
-                            },
-                            "Original Examination selected."
-                          );
+                          setPlan((current) => ({
+                            ...current,
+                            grade_treatment: "EXAMINATION",
+                            original_exam_assignment_id:
+                              (
+                                originalExams.find(
+                                  (exam) => exam.subtype === focus.exam_subtype
+                                ) ?? originalExams[0]
+                              )?.assignment_id ?? null,
+                          }));
                         }}
                       >
                         <span>Remedial Examination · Higher score counts</span>
@@ -1119,13 +1208,10 @@ export default function InterventionSupportMaterials({
                         value={plan.original_exam_assignment_id != null ? String(plan.original_exam_assignment_id) : ""}
                         onValueChange={(val) => {
                           if (val) {
-                            void updatePlan(
-                              {
-                                ...plan,
-                                original_exam_assignment_id: Number(val),
-                              },
-                              "Original Examination selected."
-                            );
+                            setPlan((current) => ({
+                              ...current,
+                              original_exam_assignment_id: Number(val),
+                            }));
                           }
                         }}
                         disabled={working}
@@ -1285,4 +1371,6 @@ export default function InterventionSupportMaterials({
       )}
     </section>
   );
-}
+});
+
+export default InterventionSupportMaterials;
