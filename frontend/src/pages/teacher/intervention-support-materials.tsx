@@ -6,6 +6,12 @@ import { useToast } from "@/components/retroui/use-toast";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Avatar } from "@/components/retroui/Avatar";
+import { Dialog } from "@/components/retroui/Dialog";
+import { Input } from "@/components/retroui/Input";
+import { Label } from "@/components/retroui/Label";
+import { Select } from "@/components/retroui/Select";
+import { Checkbox } from "@/components/retroui/Checkbox";
+import { Accordion } from "@/components/retroui/Accordion";
 import {
   createSupportMaterial,
   generateStudentReviewer,
@@ -28,6 +34,12 @@ import {
   type OriginalExamination,
 } from "@/lib/teacher-interventions-api";
 
+const date = (value: string) =>
+  new Date(value).toLocaleString("en-PH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+
 const methods: Array<{ value: RemediationFormat; label: string; detail: string }> = [
   { value: "QUIZ", label: "Quiz", detail: "Focused practice in the existing Quiz builder" },
   { value: "CLASSWORK", label: "Classwork", detail: "Targeted activity in the existing Classwork creator" },
@@ -48,7 +60,8 @@ const isGraded = (choice: RemediationFormat | null) =>
 
 export default function InterventionSupportMaterials({
   detail,
-  previousResolved: _previousResolved,
+  page = "overview",
+  previousResolved,
 }: {
   detail: TeacherInterventionDetail;
   page?: "overview" | "plan";
@@ -135,20 +148,60 @@ export default function InterventionSupportMaterials({
     [plan]
   );
   const precise = resources.filter((item) => item.recommended);
-  const evidenceSources = resources.filter((item) => item.match_level === "SOURCE_ACTIVITY");
-  const manuallySelected = resources.filter((item) => selected.has(`${item.kind}:${item.id}`) && !item.recommended);
-  const visible = resources.filter((item) => (browseAll || item.recommended) && (kindFilter === "ALL" || item.kind === kindFilter)
-    && `${item.title} ${item.description} ${item.lesson}`.toLowerCase().includes(search.toLowerCase()));
-  const assigned: NonNullable<RemediationProgress["assigned_remediation"]> = progress?.assigned_remediation ?? progress?.completed_remediation.map((item) => ({ ...item, component: null, is_graded: true, submission_status: "graded" })) ?? [];
-  const treatmentLocked = assigned.length > 0;
-  const planMatchesRecordedActivity = assigned.some((item) => plan.grade_treatment === "EXAMINATION"
-    ? Boolean(item.original_assignment_id)
-    : plan.grade_treatment === "PRACTICE_ONLY"
-      ? !item.is_graded
-      : Boolean(plan.grade_treatment && item.is_graded && item.component === plan.grade_treatment));
-  const phase = progress?.completed_remediation.length ? "Active · Monitoring" : assigned.length ? "Active · Assigned" : plan.teacher_choice ? "Active · Preparing Support" : "Active · Needs Support";
-  const focusName = focus?.component ? componentLabel(focus.component) : "Component unavailable";
-  const sourceName = focus?.component === "EXAMINATION" ? (focus.exam_subtype ? componentLabel(focus.exam_subtype) : "Subtype requires teacher confirmation") : null;
+  const evidenceSources = resources.filter(
+    (item) => item.match_level === "SOURCE_ACTIVITY"
+  );
+  const manuallySelected = resources.filter(
+    (item) => selected.has(`${item.kind}:${item.id}`) && !item.recommended
+  );
+  const visible = resources.filter(
+    (item) =>
+      (browseAll || item.recommended) &&
+      (kindFilter === "ALL" || item.kind === kindFilter) &&
+      `${item.title} ${item.description} ${item.lesson}`
+        .toLowerCase()
+        .includes(search.toLowerCase())
+  );
+  const assigned: NonNullable<RemediationProgress["assigned_remediation"]> =
+    progress?.assigned_remediation ??
+    progress?.completed_remediation.map((item) => ({
+      ...item,
+      component: null,
+      is_graded: true,
+      submission_status: "graded",
+    })) ??
+    [];
+  const phase = progress?.completed_remediation.length
+    ? "Monitoring"
+    : assigned.length
+      ? "Assigned"
+      : plan.teacher_choice
+        ? "Preparing Support"
+        : "Needs Support";
+  const focusName = focus?.component
+    ? componentLabel(focus.component)
+    : "Component unavailable";
+  const sourceName =
+    focus?.component === "EXAMINATION"
+      ? focus.exam_subtype
+        ? componentLabel(focus.exam_subtype)
+        : "Subtype requires teacher confirmation"
+      : null;
+  const focusPercent = focus?.component
+    ? detail.diagnosis_snapshot.components?.[focus.component]?.percent
+    : null;
+  const sourceBadge = sourceName ? (
+    <em className="ml-1.5 text-muted-foreground text-sm">({sourceName})</em>
+  ) : null;
+
+  const strongestEvidenceText =
+    focus?.evidence_level === "QUESTION_SCORE"
+      ? "Scored question-level competency evidence"
+      : focus?.evidence_level === "SCORED_COMPETENCY"
+        ? "Scored whole-activity competency evidence"
+        : focus?.evidence_level === "ACTIVITY_COVERAGE"
+          ? "Assessment coverage only · competencies are unranked"
+          : "Component-level evidence only";
 
   const action = async (run: () => Promise<void>) => {
     setWorking(true);
@@ -222,12 +275,74 @@ export default function InterventionSupportMaterials({
     );
   };
 
+  const requestAdvisory = () =>
+    void action(async () => {
+      const result = await generateRemediationAdvisory(interventionId);
+      setPlan(result.plan);
+      setNotice("AI advisory ready. Teacher choice remains final.");
+    });
+
+  const createReviewer = () =>
+    void action(async () => {
+      const made = await createSupportMaterial(interventionId, "STUDENT_REVIEWER");
+      setMaterials((items) => [...items, made]);
+      setReviewerDraft(made.current_content as ReviewerDraft);
+      setNotice("Reviewer draft created.");
+    });
+
+  const generateReviewer = (materialId: SupportMaterial["material_id"]) =>
+    void action(async () => {
+      const made = await generateStudentReviewer(interventionId, materialId);
+      setMaterials((items) =>
+        items.map((item) => (item.material_id === made.material_id ? made : item))
+      );
+      setReviewerDraft(made.current_content as ReviewerDraft);
+      setNotice("Reviewer generated.");
+    });
+
+  const saveReviewer = (
+    materialId: SupportMaterial["material_id"],
+    draft: ReviewerDraft
+  ) =>
+    void action(async () => {
+      const saved = await saveSupportMaterial(interventionId, materialId, draft);
+      setMaterials((items) =>
+        items.map((item) => (item.material_id === saved.material_id ? saved : item))
+      );
+      setNotice("Reviewer draft saved.");
+    });
+
+  const sendReviewer = (materialId: SupportMaterial["material_id"]) =>
+    void action(async () => {
+      const sent = await sendStudentReviewer(interventionId, materialId);
+      setMaterials((items) =>
+        items.map((item) => (item.material_id === sent.material_id ? sent : item))
+      );
+      setNotice("Reviewer sent to this student.");
+    });
+
+  const toggleResource = (item: RemediationResource) => {
+    const key = `${item.kind}:${item.id}`;
+    const next = selected.has(key)
+      ? plan.selected_resources.filter(
+        (ref) => !(ref.kind === item.kind && ref.id === item.id)
+      )
+      : [...plan.selected_resources, { kind: item.kind, id: item.id }];
+    void updatePlan({ ...plan, selected_resources: next }, "Support materials saved.");
+  };
+
+  const continueDisabled =
+    working ||
+    (isGraded(plan.teacher_choice) &&
+      (!plan.grade_treatment ||
+        (plan.grade_treatment === "EXAMINATION" && !plan.original_exam_assignment_id)));
+
   return (
     <section className="space-y-3" aria-label="Intervention workflow">
       <Card className="w-full space-y-2 border-2 border-black bg-primary">
         <div className="flex items-start gap-4">
           <div className="flex flex-col mt-3 items-center h-full">
-            <Avatar variant="student" className="size-14 shrink-0">
+            <Avatar variant="student" className="size-14  shrink-0">
               <Avatar.Image
                 src="/avatars/student-avatars/1.svg"
                 alt={detail.student_name}
@@ -237,6 +352,7 @@ export default function InterventionSupportMaterials({
               </Avatar.Fallback>
             </Avatar>
           </div>
+
 
           <div className="flex flex-col gap-1 w-full">
             <div className="flex flex-row justify-between w-full items-end">
@@ -270,229 +386,901 @@ export default function InterventionSupportMaterials({
         </div>
       </Card>
 
-      {error && <Alert status="error">{error}</Alert>}
+      <p className="text-sm text-muted-foreground">
+        {progress?.status_reason ?? "Loading current progress."}
+      </p>
+
+      {error && (
+        <Alert status="error">
+          {error}{" "}
+          <Button size="sm" variant="outline" onClick={() => void load()}>
+            Retry
+          </Button>
+        </Alert>
+      )}
       {notice && <Alert status="success">{notice}</Alert>}
 
       {loading ? (
-        <p className="py-4 text-center text-sm text-gray-500">Loading Intervention workflow...</p>
+        <p>Loading Intervention workflow...</p>
       ) : (
         <>
-          {assigned.length > 0 && (
-            <Card className="space-y-2 border-2 border-green-700 bg-green-50">
-              <h3 className="font-black">Intervention progress</h3>
-              <p>Trigger projection: <strong>{progress?.triggering_projection.toFixed(2)}</strong></p>
-              <p className="font-semibold">Recorded support activity</p>
-              {assigned.map((item) => (
-                <p key={item.assignment_id}>
-                  <strong>{item.title}</strong> · {item.submission_status === "graded" ? "Completed" : item.submission_status ?? "Awaiting submission"}
-                  {item.grade !== null && item.total_points !== null ? ` · ${item.grade}/${item.total_points}` : ""} · {item.is_graded ? `${plan.teacher_choice === "EXISTING_MATERIAL_ONLY" ? "Historical grade treatment" : "Recorded grade treatment"}: ${componentLabel(item.component)}` : "Practice only · No official grade impact"}
-                  {item.original_assignment_id && (
-                    <span className="block">
-                      {item.original_title} · {componentLabel(item.exam_subtype)} · Original: {item.original_grade ?? "—"}/{item.total_points ?? "—"} · Remedial: {item.grade ?? "Pending"}/{item.total_points ?? "—"} · Effective: {item.effective_grade ?? "—"}/{item.total_points ?? "—"}
-                    </span>
-                  )}
+          {page === "overview" && (
+            <>
+              <h3 className="font-black">Academic Diagnosis</h3>
+
+              <Card className="space-y-2 w-full">
+                <p className="text-base">
+                  Support focus: <strong>{focusName}</strong>
+                  {sourceBadge}
                 </p>
-              ))}
-              <p className="font-semibold">Official academic outcome</p>
-              <p>Latest projected final grade: <strong>{progress?.latest_projection?.toFixed(2) ?? "Unavailable"}</strong></p>
-              <p>Status: <strong>{phase}</strong></p>
-              <p>{progress?.completed_remediation.length ? "The student completed the support activity. " : ""}{progress?.status_reason} Completion alone does not resolve the Intervention.</p>
-            </Card>
+                <p className="text-base">
+                  Strongest available evidence: <strong>{strongestEvidenceText}</strong>
+                </p>
+                {focus?.evidence_level === "QUESTION_SCORE" && (
+                  <>
+                    <p className="text-base">
+                      Scored competency focus:{" "}
+                      {focus.competencies.map((item) => item.label).join("; ")}
+                    </p>
+                    {focus.question_evidence.map((item, index) => (
+                      <p
+                        key={`${item.quiz_question_id ?? "unknown"}-${index}`}
+                        className="text-sm"
+                      >
+                        Question #{item.quiz_question_id ?? "unknown"}: {item.score}/
+                        {item.possible_score}
+                      </p>
+                    ))}
+                  </>
+                )}
+                {focus?.evidence_level === "SCORED_COMPETENCY" && (
+                  <p className="text-base">
+                    Scored competency focus:{" "}
+                    {focus.competencies.map((item) => item.label).join("; ")}
+                  </p>
+                )}
+                {focus?.evidence_level === "ACTIVITY_COVERAGE" && (
+                  <p className="text-sm text-gray-600">
+                    Covered competencies are study context. The assessment total does not
+                    identify which one was difficult.
+                  </p>
+                )}
+                {focusPercent != null && (
+                  <p className="text-base">
+                    Weakest component: {focusName}{" "}
+                    <strong>{focusPercent.toFixed(0)}%</strong>
+                  </p>
+                )}
+              </Card>
+              {focus?.evidence_level === "COMPONENT_ONLY" && (
+                <p className="text-sm text-muted-foreground">
+                  No specific lesson or competency weakness can be identified from the
+                  available scored evidence.
+                </p>
+              )}
+
+              {assigned.length > 0 && (
+                <Card className="space-y-2 border-2 border-green-700 bg-green-50">
+                  <h3 className="font-black">Intervention progress</h3>
+                  <p>
+                    Trigger projection:{" "}
+                    <strong>{progress?.triggering_projection.toFixed(2)}</strong>
+                  </p>
+                  <p className="font-semibold">Support activity</p>
+                  {assigned.map((item) => (
+                    <p key={item.assignment_id}>
+                      <strong>{item.title}</strong> ·{" "}
+                      {item.submission_status === "graded"
+                        ? "Completed"
+                        : (item.submission_status ?? "Awaiting submission")}
+                      {item.grade !== null && item.total_points !== null
+                        ? ` · ${item.grade}/${item.total_points}`
+                        : ""}{" "}
+                      ·{" "}
+                      {item.is_graded
+                        ? `${plan.teacher_choice === "EXISTING_MATERIAL_ONLY"
+                          ? "Historical grade treatment"
+                          : "Recorded grade treatment"
+                        }: ${componentLabel(item.component)}`
+                        : "Practice only · No official grade impact"}
+                      {item.original_assignment_id && (
+                        <span className="block">
+                          {item.original_title} · {componentLabel(item.exam_subtype)} ·
+                          Original: {item.original_grade ?? "—"}/
+                          {item.total_points ?? "—"} · Remedial: {item.grade ?? "Pending"}/
+                          {item.total_points ?? "—"} · Effective:{" "}
+                          {item.effective_grade ?? "—"}/{item.total_points ?? "—"}
+                        </span>
+                      )}
+                    </p>
+                  ))}
+                  <p className="font-semibold">Official academic outcome</p>
+                  <p>
+                    Latest projected final grade:{" "}
+                    <strong>
+                      {progress?.latest_projection?.toFixed(2) ?? "Unavailable"}
+                    </strong>
+                  </p>
+                  <p>
+                    Status: <strong>Active</strong> · <strong>{phase}</strong>
+                  </p>
+                  <p>
+                    {progress?.completed_remediation.length
+                      ? "The student completed the support activity. "
+                      : ""}
+                    {progress?.status_reason} Completion alone does not resolve the
+                    Intervention.
+                  </p>
+                </Card>
+              )}
+            </>
           )}
 
-          <details open={assigned.length === 0} className="rounded border-2 border-black bg-white p-3">
-            <summary className="cursor-pointer font-black">Current support plan</summary>
-            <div className="space-y-3 pt-3">
-              {treatmentLocked && (
-                <Alert status="info">A support activity already exists in this cycle. Its recorded format and grade treatment are locked. The saved plan below may describe that activity or a future activity.</Alert>
-              )}
-              <Card className="space-y-2">
-                <h3 className="font-black">Step 2 · Recommended support</h3>
-                <p className="text-sm">Evidence-based focus: {focusName}{sourceName ? ` · ${sourceName}` : ""}. {focus?.evidence_level === "COMPONENT_ONLY" ? "General practice and teacher review are appropriate; no specific topic is established." : "Use only the traceable scored or coverage context shown above."}</p>
-                <Button size="sm" variant="outline" disabled={working} onClick={() => void action(async () => { const result = await generateRemediationAdvisory(interventionId); setPlan(result.plan); setNotice("AI advisory ready. Teacher choice remains final."); })}>{plan.ai_suggestion ? "Refresh AI advisory" : "Get AI advisory"}</Button>
-                {plan.ai_suggestion && (
-                  <div className="rounded border border-blue-400 bg-blue-50 p-3 text-sm">
-                    <strong>AI ADVISORY · {methods.find((item) => item.value === plan.ai_suggestion?.recommended_format)?.label}</strong>
-                    <p>{plan.ai_suggestion.reason}</p>
-                    <p className="text-xs">Format advice only. Diagnosis and grade treatment come from saved evidence and teacher choice.</p>
+          {page === "overview" && (
+            <>
+              <h3 className="font-black">Current support</h3>
+
+              <Card className="w-full space-y-3">
+                {plan.teacher_choice ? (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold">Method:</span>
+                      <Badge variant="solid" size="sm">
+                        {methods.find((item) => item.value === plan.teacher_choice)?.label}
+                      </Badge>
+                    </div>
+                    {isGraded(plan.teacher_choice) && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold">Grade treatment:</span>
+                        <Badge
+                          variant={plan.grade_treatment ? "secondary" : "destructive"}
+                          size="sm"
+                        >
+                          {plan.grade_treatment === "PRACTICE_ONLY"
+                            ? "Practice only · No official grade impact"
+                            : plan.grade_treatment
+                              ? componentLabel(plan.grade_treatment)
+                              : "Selection required"}
+                        </Badge>
+                      </div>
+                    )}
+                    {plan.grade_treatment === "EXAMINATION" && (
+                      <p className="text-sm">
+                        Original:{" "}
+                        <strong>
+                          {originalExams.find(
+                            (exam) =>
+                              exam.assignment_id === plan.original_exam_assignment_id
+                          )?.title ?? "Selection required"}
+                        </strong>
+                      </p>
+                    )}
+                    {isGraded(plan.teacher_choice) && (
+                      <p className="text-xs text-muted-foreground">
+                        Recipient: <strong>This student only</strong>
+                      </p>
+                    )}
+                    {plan.teacher_choice === "TOS" && (
+                      <p className="text-xs text-muted-foreground">
+                        TOS is a blueprint/export. It creates no graded student activity.
+                      </p>
+                    )}
+                    {plan.teacher_choice === "EXISTING_MATERIAL_ONLY" && (
+                      <p className="text-xs text-muted-foreground">
+                        Selected materials remain planning references; they are not
+                        privately delivered.
+                      </p>
+                    )}
                   </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No support method has been chosen yet. Use Adjust Support to plan one.
+                  </p>
+                )}
+                <div className="border-t border-border pt-2 space-y-1.5 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span>Student Reviewer:</span>
+                    <Badge
+                      variant={
+                        reviewer?.status === "SENT"
+                          ? "success"
+                          : reviewer
+                            ? "secondary"
+                            : "outline"
+                      }
+                      size="sm"
+                    >
+                      {reviewer?.status === "SENT"
+                        ? "Sent to student"
+                        : reviewer
+                          ? "Private draft"
+                          : "Not prepared"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Planning references:</span>
+                    <Badge variant="surface" size="sm">
+                      {plan.selected_resources.length} selected
+                    </Badge>
+                  </div>
+                </div>
+              </Card>
+            </>
+          )}
+
+          {page === "plan" && (
+            <div className="flex flex-col w-full gap-2">
+              <h3 className="font-black">Recommended Support</h3>
+              <Card className="w-full">
+                <p className="text-base">
+                  Evidence-based focus: <strong>{focusName}</strong>
+                  {sourceBadge}.{" "}
+
+                </p>
+                <p className="text-base">
+                  {focus?.evidence_level === "COMPONENT_ONLY"
+                    ? "General practice and teacher review are appropriate; no specific topic is established."
+                    : "Use only the traceable scored or coverage context shown above."}
+                </p>
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={working}
+                    onClick={requestAdvisory}
+                  >
+                    {plan.ai_suggestion ? "Refresh AI advisory" : "Get AI advisory"}
+                  </Button>
+                </div>
+
+                {plan.ai_suggestion && (
+                  <Card className="border-2 border-primary/40 bg-primary/10 p-3 space-y-1.5 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="solid" size="sm">AI Advisory</Badge>
+                      <strong className="font-bold">
+                        {
+                          methods.find(
+                            (item) => item.value === plan.ai_suggestion?.recommended_format
+                          )?.label
+                        }
+                      </strong>
+                    </div>
+                    <p>{plan.ai_suggestion.reason}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Format advice only. Diagnosis and grade treatment come from saved
+                      evidence and teacher choice.
+                    </p>
+                  </Card>
                 )}
               </Card>
 
-              <Card className="space-y-2">
-                <h3 className="font-black">Step 3 · Support materials</h3>
-                <p><strong>Student Reviewer</strong> · Optional study support · {reviewer?.status === "SENT" ? "Sent to student" : reviewer ? "Private draft" : "Not prepared"}</p>
-                <p className="text-xs text-gray-600">Grounded from: {focusName} component evidence. Specific competency evidence: {focus?.competency_ids.length ? "Available" : "Unavailable"}. The reviewer is not a grade or proof of improvement.</p>
-                <Button size="sm" variant="outline" onClick={() => setPanel(panel === "reviewer" ? "" : "reviewer")}>Open reviewer</Button>
+              <h3 className="font-black">Support Materials</h3>
+              <Card className="w-full">
+                <p>
+                  <strong>Student Reviewer</strong> · Optional study support ·{" "}
+                  {reviewer?.status === "SENT"
+                    ? "Sent to student"
+                    : reviewer
+                      ? "Private draft"
+                      : "Not prepared"}
+                </p>
+                <p className="text-xs text-gray-600">
+                  Grounded from: {focusName} component evidence. Specific competency
+                  evidence: {focus?.competency_ids.length ? "Available" : "Unavailable"}.
+                  The reviewer is not a grade or proof of improvement.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPanel("reviewer")}
+                >
+                  Open reviewer
+                </Button>
                 <p className="font-semibold">Recommended Materials</p>
-                {precise.length ? <p className="text-sm">{precise.length} evidence-matched learning {precise.length === 1 ? "resource" : "resources"} available.</p> : <p className="text-sm text-gray-600">No precise lesson/material recommendation can be made from the current component-level evidence.</p>}
-                {evidenceSources.length > 0 && <p className="text-sm text-gray-600">Related evidence source: {evidenceSources.map((item) => item.title).join("; ")}. This assessment is not a recommended learning material.</p>}
-                {manuallySelected.length > 0 && <p className="text-sm">Teacher selected manually: {manuallySelected.map((item) => item.title).join("; ")}</p>}
-                <Button size="sm" variant="outline" onClick={() => setPanel(panel === "materials" ? "" : "materials")}>Select resources</Button>
+                {precise.length ? (
+                  <p className="text-sm">
+                    {precise.length} evidence-matched learning{" "}
+                    {precise.length === 1 ? "resource" : "resources"} available.
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-600">
+                    No precise lesson/material recommendation can be made from the
+                    current component-level evidence.
+                  </p>
+                )}
+                {evidenceSources.length > 0 && (
+                  <p className="text-sm text-gray-600">
+                    Related evidence source:{" "}
+                    {evidenceSources.map((item) => item.title).join("; ")}. This
+                    assessment is not a recommended learning material.
+                  </p>
+                )}
+                {manuallySelected.length > 0 && (
+                  <p className="text-sm">
+                    Teacher selected manually:{" "}
+                    {manuallySelected.map((item) => item.title).join("; ")}
+                  </p>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPanel("materials")}
+                >
+                  Select resources
+                </Button>
               </Card>
 
-              {panel === "reviewer" && (
-                <Card className="space-y-3">
-                  <h4 className="font-bold">Student Reviewer · Optional study support</h4>
-                  {!reviewer ? (
-                    <Button disabled={working} onClick={() => void action(async () => { const made = await createSupportMaterial(interventionId, "STUDENT_REVIEWER"); setMaterials((items) => [...items, made]); setReviewerDraft(made.current_content as ReviewerDraft); setNotice("Reviewer draft created."); })}>Create reviewer draft</Button>
-                  ) : reviewerDraft && (
-                    <>
-                      {reviewer.status === "DRAFT" && !reviewer.generated_content && (
-                        <Button disabled={working} variant="outline" onClick={() => void action(async () => { const made = await generateStudentReviewer(interventionId, reviewer.material_id); setMaterials((items) => items.map((item) => item.material_id === made.material_id ? made : item)); setReviewerDraft(made.current_content as ReviewerDraft); setNotice("Reviewer generated."); })}>Generate reviewer</Button>
+              <Dialog
+                open={panel === "reviewer"}
+                onOpenChange={(open) => setPanel(open ? "reviewer" : "")}
+              >
+                <Dialog.Content size="md" className="max-h-[85vh]">
+                  <Dialog.Header>
+                    <div className="flex items-center gap-2">
+                      <Dialog.Title className="text-lg font-bold">
+                        Student Reviewer
+                      </Dialog.Title>
+                      {reviewer && (
+                        <Badge
+                          variant={reviewer.status === "SENT" ? "success" : "secondary"}
+                          size="sm"
+                        >
+                          {reviewer.status === "SENT" ? "Sent" : "Draft"}
+                        </Badge>
                       )}
-                      {reviewer.status === "SENT" ? (
-                        <div className="space-y-2">
-                          <strong>{reviewerDraft.title}</strong>
-                          <p>{reviewerDraft.introduction}</p>
-                          <p className="whitespace-pre-wrap">{reviewerDraft.body}</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <label className="block text-sm font-semibold">Title<input className="mt-1 w-full rounded border p-2" value={reviewerDraft.title} onChange={(event) => setReviewerDraft({ ...reviewerDraft, title: event.target.value })} /></label>
-                          <label className="block text-sm font-semibold">Introduction<textarea className="mt-1 w-full rounded border p-2" value={reviewerDraft.introduction} onChange={(event) => setReviewerDraft({ ...reviewerDraft, introduction: event.target.value })} /></label>
-                          <label className="block text-sm font-semibold">Review content<textarea rows={7} className="mt-1 w-full rounded border p-2" value={reviewerDraft.body} onChange={(event) => setReviewerDraft({ ...reviewerDraft, body: event.target.value })} /></label>
-                          <div className="flex flex-wrap gap-2">
-                            <Button disabled={working} onClick={() => void action(async () => { const saved = await saveSupportMaterial(interventionId, reviewer.material_id, reviewerDraft); setMaterials((items) => items.map((item) => item.material_id === saved.material_id ? saved : item)); setNotice("Reviewer draft saved."); })}>Save draft</Button>
-                            <Button variant="outline" disabled={working || JSON.stringify(reviewerDraft) !== JSON.stringify(reviewer.current_content) || !reviewerDraft.title.trim() || !reviewerDraft.introduction.trim() || !reviewerDraft.body.trim()} onClick={() => void action(async () => { const sent = await sendStudentReviewer(interventionId, reviewer.material_id); setMaterials((items) => items.map((item) => item.material_id === sent.material_id ? sent : item)); setNotice("Reviewer sent to this student."); })}>Approve &amp; Send</Button>
+                    </div>
+                  </Dialog.Header>
+                  <div className="flex-1 space-y-3 overflow-y-auto p-5">
+                    {!reviewer && (
+                      <p className="text-sm text-muted-foreground">
+                        No reviewer draft has been created yet.
+                      </p>
+                    )}
+                    {reviewer && reviewerDraft && (
+                      <>
+                        {reviewer.status === "SENT" ? (
+                          <div className="space-y-2">
+                            <strong className="text-base font-bold">{reviewerDraft.title}</strong>
+                            <p className="text-sm">{reviewerDraft.introduction}</p>
+                            <div className="rounded border-2 border-border bg-muted/50 p-3 text-xs font-mono whitespace-pre-wrap">
+                              {reviewerDraft.body}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </Card>
-              )}
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="space-y-1.5">
+                              <Label className="text-sm font-bold">Title</Label>
+                              <Input
+                                className="w-full font-normal"
+                                value={reviewerDraft.title}
+                                onChange={(event) =>
+                                  setReviewerDraft({
+                                    ...reviewerDraft,
+                                    title: event.target.value,
+                                  })
+                                }
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-sm font-bold">Introduction</Label>
+                              <textarea
+                                className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2.5 text-sm font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none"
+                                value={reviewerDraft.introduction}
+                                onChange={(event) =>
+                                  setReviewerDraft({
+                                    ...reviewerDraft,
+                                    introduction: event.target.value,
+                                  })
+                                }
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-sm font-bold">Review content</Label>
+                              <textarea
+                                rows={7}
+                                className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2.5 text-sm font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none"
+                                value={reviewerDraft.body}
+                                onChange={(event) =>
+                                  setReviewerDraft({
+                                    ...reviewerDraft,
+                                    body: event.target.value,
+                                  })
+                                }
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Optional study support. The reviewer is not a grade or proof of
+                                improvement.
+                              </p>
+                            </div>
+                          </div>
+                        )}
 
-              {panel === "materials" && (
-                <Card className="space-y-3">
-                  <h4 className="font-bold">{browseAll ? "All eligible materials" : "Recommended Materials"}</h4>
-                  <p className="text-sm text-gray-600">Selected items are planning references. Access follows existing publication rules. File contents were not analyzed.</p>
-                  <Button size="sm" variant="outline" onClick={() => setBrowseAll((current) => !current)}>{browseAll ? "Show recommended materials" : "Browse all eligible materials"}</Button>
-                  <div className="flex gap-2">
-                    <input aria-label="Search materials" placeholder="Search materials" className="min-w-0 flex-1 rounded border p-2" value={search} onChange={(event) => setSearch(event.target.value)} />
-                    <select aria-label="Material type" className="rounded border p-2" value={kindFilter} onChange={(event) => setKindFilter(event.target.value)}>
-                      <option value="ALL">All</option>
-                      <option value="LESSON">Lessons</option>
-                      <option value="CLASSWORK">Classwork and files</option>
-                    </select>
+                        {reviewer.status === "DRAFT" && !reviewer.generated_content && (
+                          <div className="flex justify-end w-full pt-2">
+                            <Button
+                              size="sm"
+                              disabled={working}
+                              variant="outline"
+                              autoIcon={false}
+                              onClick={() => generateReviewer(reviewer.material_id)}
+                            >
+                              Generate Reviewer
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
-                  {visible.length ? (
-                    visible.map((item) => (
-                      <label key={`${item.kind}:${item.id}`} className="flex gap-3 rounded border p-3">
-                        <input type="checkbox" checked={selected.has(`${item.kind}:${item.id}`)} disabled={working} onChange={() => { const next = selected.has(`${item.kind}:${item.id}`) ? plan.selected_resources.filter((ref) => !(ref.kind === item.kind && ref.id === item.id)) : [...plan.selected_resources, { kind: item.kind, id: item.id }]; void updatePlan({ ...plan, selected_resources: next }, "Support materials saved."); }} />
-                        <span>
-                          <strong>{item.title}</strong>
-                          <span className="block text-xs">{item.recommended ? "Recommended by evidence" : item.match_level === "SOURCE_ACTIVITY" ? "Related evidence source" : "Teacher selection"} · {item.access === "ALREADY_ACCESSIBLE" ? "Accessible to class" : "Planning reference only"}</span>
-                          {item.match_reason && <span className="block text-xs">{item.match_reason}</span>}
-                        </span>
-                      </label>
-                    ))
-                  ) : (
-                    <p className="text-sm">{browseAll ? "No eligible materials match this search." : "No precise learning resources match this evidence. Browse all eligible materials for a teacher-selected reference."}</p>
-                  )}
-                </Card>
-              )}
+                  <Dialog.Footer className="mt-0">
+                    <Button variant="outline" onClick={() => setPanel("")}>
+                      Close
+                    </Button>
+                    {!reviewer && (
+                      <Button disabled={working} onClick={createReviewer}>
+                        Create reviewer draft
+                      </Button>
+                    )}
+                    {reviewer && reviewerDraft && reviewer.status !== "SENT" && (
+                      <>
+                        <Button
+                          variant="outline"
+                          disabled={working}
+                          onClick={() =>
+                            saveReviewer(reviewer.material_id, reviewerDraft)
+                          }
+                        >
+                          Save draft
+                        </Button>
+                        <Button
+                          disabled={
+                            working ||
+                            JSON.stringify(reviewerDraft) !==
+                            JSON.stringify(reviewer.current_content) ||
+                            !reviewerDraft.title.trim() ||
+                            !reviewerDraft.introduction.trim() ||
+                            !reviewerDraft.body.trim()
+                          }
+                          onClick={() => sendReviewer(reviewer.material_id)}
+                        >
+                          Approve &amp; Send
+                        </Button>
+                      </>
+                    )}
+                  </Dialog.Footer>
+                </Dialog.Content>
+              </Dialog>
+
+              <Dialog
+                open={panel === "materials"}
+                onOpenChange={(open) => setPanel(open ? "materials" : "")}
+              >
+                <Dialog.Content size="md" className="max-h-[85vh]">
+                  <Dialog.Header>
+                    <Dialog.Title className="text-lg font-bold">
+                      {browseAll ? "All eligible materials" : "Recommended Materials"}
+                    </Dialog.Title>
+                  </Dialog.Header>
+                  <div className="flex-1 space-y-3 overflow-y-auto p-5">
+                    <p className="text-sm text-muted-foreground">
+                      Selected items are planning references. Access follows existing
+                      publication rules. File contents were not analyzed.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setBrowseAll((current) => !current)}
+                      >
+                        {browseAll
+                          ? "Show recommended materials"
+                          : "Browse all eligible materials"}
+                      </Button>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        aria-label="Search materials"
+                        placeholder="Search materials..."
+                        className="min-w-0 flex-1"
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                      />
+                      <Select value={kindFilter} onValueChange={(val) => setKindFilter(val)}>
+                        <Select.Trigger className="w-full sm:w-48 h-10">
+                          <Select.Value placeholder="Filter type" />
+                        </Select.Trigger>
+                        <Select.Content>
+                          <Select.Item value="ALL">All Materials</Select.Item>
+                          <Select.Item value="LESSON">Lessons</Select.Item>
+                          <Select.Item value="CLASSWORK">Classwork & Files</Select.Item>
+                        </Select.Content>
+                      </Select>
+                    </div>
+                    {visible.length ? (
+                      <div className="space-y-2">
+                        {visible.map((item) => {
+                          const isChecked = selected.has(`${item.kind}:${item.id}`);
+                          return (
+                            <Card
+                              key={`${item.kind}:${item.id}`}
+                              className={`flex items-start gap-3 p-3 transition-colors cursor-pointer border-2 ${
+                                isChecked
+                                  ? "border-primary bg-primary/5"
+                                  : "border-border hover:bg-muted/30"
+                              }`}
+                              onClick={() => !working && toggleResource(item)}
+                            >
+                              <Checkbox
+                                checked={isChecked}
+                                disabled={working}
+                                className="mt-0.5"
+                                onCheckedChange={() => toggleResource(item)}
+                              />
+                              <div className="space-y-1 min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <strong className="text-sm font-bold">{item.title}</strong>
+                                  <Badge
+                                    variant={item.recommended ? "secondary" : "outline"}
+                                    size="sm"
+                                  >
+                                    {item.recommended
+                                      ? "Recommended"
+                                      : item.match_level === "SOURCE_ACTIVITY"
+                                        ? "Related source"
+                                        : "Teacher selected"}
+                                  </Badge>
+                                  <Badge variant="surface" size="sm">
+                                    {item.access === "ALREADY_ACCESSIBLE"
+                                      ? "Accessible to class"
+                                      : "Planning reference only"}
+                                  </Badge>
+                                </div>
+                                {item.match_reason && (
+                                  <p className="text-xs text-muted-foreground">{item.match_reason}</p>
+                                )}
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        {browseAll
+                          ? "No eligible materials match this search."
+                          : "No precise learning resources match this evidence. Browse all eligible materials for a teacher-selected reference."}
+                      </p>
+                    )}
+                  </div>
+                  <Dialog.Footer className="mt-0">
+                    <Button onClick={() => setPanel("")}>Done</Button>
+                  </Dialog.Footer>
+                </Dialog.Content>
+              </Dialog>
 
               <Card className="space-y-3">
-                <h3 className="font-black">Step 4 · Remediation activity plan</h3>
-                <Button size="sm" variant="outline" onClick={() => setShowPreparation((current) => !current)}>{treatmentLocked ? "View saved remediation plan" : "Prepare Remediation"}</Button>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-black text-base">Step 4 · Remediation activity</h3>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowPreparation((current) => !current)}
+                  >
+                    {showPreparation ? "Hide options" : "Prepare Remediation"}
+                  </Button>
+                </div>
                 {showPreparation && (
-                  <fieldset className="space-y-2">
-                    <legend className="font-semibold">Support method</legend>
-                    {methods.map((method) => (
-                      <label key={method.value} className="flex gap-2 rounded border p-2">
-                        <input type="radio" name="remediation-method" checked={plan.teacher_choice === method.value} disabled={working || treatmentLocked} onChange={() => void updatePlan({ ...plan, teacher_choice: method.value, grade_treatment: isGraded(method.value) ? (plan.grade_treatment ?? "PRACTICE_ONLY") : null }, "Support method saved.")} />
-                        <span>
-                          <strong>{method.label}</strong>
-                          <span className="block text-xs">{method.detail}</span>
-                        </span>
-                      </label>
-                    ))}
-                  </fieldset>
+                  <div className="space-y-2 pt-2">
+                    <Label className="font-bold text-sm">Choose support method</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {methods.map((method) => {
+                        const isSelected = plan.teacher_choice === method.value;
+                        return (
+                          <Card
+                            key={method.value}
+                            className={`p-3 cursor-pointer border-2 transition-all ${
+                              isSelected
+                                ? "border-primary bg-primary/10 shadow-sm"
+                                : "border-border hover:bg-muted/40"
+                            }`}
+                            onClick={() => {
+                              if (working) return;
+                              void updatePlan(
+                                {
+                                  ...plan,
+                                  teacher_choice: method.value,
+                                  grade_treatment: isGraded(method.value)
+                                    ? (plan.grade_treatment ?? "PRACTICE_ONLY")
+                                    : null,
+                                },
+                                "Support method saved."
+                              );
+                            }}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-sm">{method.label}</span>
+                              {isSelected && (
+                                <Badge variant="solid" size="sm">
+                                  Selected
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {method.detail}
+                            </p>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </Card>
 
               {isGraded(plan.teacher_choice) && (
-                <Card className="space-y-3 border-2 border-amber-500 bg-amber-50">
-                  <h3 className="font-black">Step 5 · Grade treatment</h3>
-                  <p>Support focus: <strong>{focusName}{sourceName ? ` · ${sourceName}` : ""}</strong></p>
-                  {focus?.component === "EXAMINATION" && <p className="text-sm">Select the student's scored original Examination. Its subtype and maximum points will be fixed for the remedial assessment.</p>}
-                  <p className="text-sm">Practice only stores completion without changing grades. Written Work and Performance Task add a new activity in that component. Remedial Examination replaces the original assessment's effective score only when higher.</p>
-                  {treatmentLocked && <p className="text-sm font-semibold">Read-only after the first support activity was created.</p>}
-                  <fieldset className="space-y-1">
-                    <legend className="font-semibold">How should the planned activity be treated?</legend>
-                    {(["PRACTICE_ONLY", "WRITTEN_WORK", "PERFORMANCE_TASK"] as const).map((choice) => (
-                      <label key={choice} className="flex gap-2">
-                        <input type="radio" name="grade-treatment" checked={plan.grade_treatment === choice} disabled={working || treatmentLocked} onChange={() => void updatePlan({ ...plan, grade_treatment: choice, original_exam_assignment_id: null }, "Grade treatment saved.")} />
-                        {choice === "PRACTICE_ONLY" ? "Practice only · No official grade impact" : `Count as ${componentLabel(choice)}`}
-                      </label>
-                    ))}
-                    {focus?.component === "EXAMINATION" && (
-                      <label className="flex gap-2">
-                        <input type="radio" name="grade-treatment" checked={plan.grade_treatment === "EXAMINATION"} disabled={working || treatmentLocked || originalExams.length === 0} onChange={() => void updatePlan({ ...plan, grade_treatment: "EXAMINATION", original_exam_assignment_id: (originalExams.find((exam) => exam.subtype === focus.exam_subtype) ?? originalExams[0])?.assignment_id ?? null }, "Original Examination selected.")} />
-                        Remedial Examination · Higher score counts
-                      </label>
-                    )}
-                  </fieldset>
-                  {focus?.component === "EXAMINATION" && originalExams.length === 0 && <p className="text-sm">No scored original Examination is available for this student and period.</p>}
-                  {plan.grade_treatment === "EXAMINATION" && (
-                    <label className="block text-sm font-semibold">Original Examination
-                      <select className="mt-1 w-full rounded border p-2" value={plan.original_exam_assignment_id ?? ""} disabled={working || treatmentLocked} onChange={(event) => void updatePlan({ ...plan, original_exam_assignment_id: Number(event.target.value) }, "Original Examination selected.")}>
-                        {originalExams.map((exam) => <option key={exam.assignment_id} value={exam.assignment_id}>{exam.title} · {componentLabel(exam.subtype)} · {exam.score}/{exam.total_points}</option>)}
-                      </select>
-                    </label>
+                <Card className="space-y-3 border-2 border-primary/50 bg-card">
+                  <div className="flex items-center justify-between border-b border-border pb-2">
+                    <h3 className="font-black text-base">Step 5 · Grade treatment</h3>
+                    <Badge variant="outline" size="sm">Graded</Badge>
+                  </div>
+                  <p className="text-sm">
+                    Support focus: <strong>{focusName}</strong>
+                    {sourceBadge}
+                  </p>
+                  {focus?.component === "EXAMINATION" && (
+                    <p className="text-xs text-muted-foreground">
+                      Select the student's scored original Examination. Its subtype and
+                      maximum points will be fixed for the remedial assessment.
+                    </p>
                   )}
-                  {!plan.grade_treatment && <p className="text-sm font-semibold">Choose practice only or an official grade component before continuing.</p>}
+                  <p className="text-xs text-muted-foreground">
+                    Practice only stores completion without changing grades. Written
+                    Work and Performance Task add a new activity in that component.
+                    Remedial Examination replaces the original assessment's effective
+                    score only when higher.
+                  </p>
+                  <div className="space-y-2">
+                    <Label className="font-bold text-sm">
+                      How should this activity be treated?
+                    </Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {(["PRACTICE_ONLY", "WRITTEN_WORK", "PERFORMANCE_TASK"] as const).map(
+                        (choice) => {
+                          const isSelected = plan.grade_treatment === choice;
+                          return (
+                            <Card
+                              key={choice}
+                              className={`p-2.5 cursor-pointer border-2 transition-all text-xs font-semibold flex items-center justify-between ${
+                                isSelected
+                                  ? "border-primary bg-primary/10"
+                                  : "border-border hover:bg-muted/40"
+                              }`}
+                              onClick={() => {
+                                if (working) return;
+                                void updatePlan(
+                                  {
+                                    ...plan,
+                                    grade_treatment: choice,
+                                    original_exam_assignment_id: null,
+                                  },
+                                  "Grade treatment saved."
+                                );
+                              }}
+                            >
+                              <span>
+                                {choice === "PRACTICE_ONLY"
+                                  ? "Practice only"
+                                  : componentLabel(choice)}
+                              </span>
+                              {isSelected && <Badge variant="solid" size="sm">✓</Badge>}
+                            </Card>
+                          );
+                        }
+                      )}
+                    </div>
+                    {focus?.component === "EXAMINATION" && (
+                      <Card
+                        className={`p-2.5 cursor-pointer border-2 transition-all text-xs font-semibold flex items-center justify-between ${
+                          plan.grade_treatment === "EXAMINATION"
+                            ? "border-primary bg-primary/10"
+                            : "border-border hover:bg-muted/40"
+                        } ${originalExams.length === 0 ? "opacity-50 pointer-events-none" : ""}`}
+                        onClick={() => {
+                          if (working || originalExams.length === 0) return;
+                          void updatePlan(
+                            {
+                              ...plan,
+                              grade_treatment: "EXAMINATION",
+                              original_exam_assignment_id:
+                                (
+                                  originalExams.find(
+                                    (exam) => exam.subtype === focus.exam_subtype
+                                  ) ?? originalExams[0]
+                                )?.assignment_id ?? null,
+                            },
+                            "Original Examination selected."
+                          );
+                        }}
+                      >
+                        <span>Remedial Examination · Higher score counts</span>
+                        {plan.grade_treatment === "EXAMINATION" && <Badge variant="solid" size="sm">✓</Badge>}
+                      </Card>
+                    )}
+                  </div>
+
+                  {focus?.component === "EXAMINATION" && originalExams.length === 0 && (
+                    <Alert status="warning">
+                      No scored original Examination is available for this student and
+                      period.
+                    </Alert>
+                  )}
+
+                  {plan.grade_treatment === "EXAMINATION" && (
+                    <div className="space-y-1.5 pt-1">
+                      <Label className="text-sm font-bold">Original Examination</Label>
+                      <Select
+                        value={plan.original_exam_assignment_id != null ? String(plan.original_exam_assignment_id) : ""}
+                        onValueChange={(val) => {
+                          if (val) {
+                            void updatePlan(
+                              {
+                                ...plan,
+                                original_exam_assignment_id: Number(val),
+                              },
+                              "Original Examination selected."
+                            );
+                          }
+                        }}
+                        disabled={working}
+                      >
+                        <Select.Trigger className="w-full h-10">
+                          <Select.Value placeholder="Select original examination..." />
+                        </Select.Trigger>
+                        <Select.Content>
+                          {originalExams.map((exam) => (
+                            <Select.Item key={exam.assignment_id} value={String(exam.assignment_id)}>
+                              {exam.title} · {componentLabel(exam.subtype)} · {exam.score}/{exam.total_points}
+                            </Select.Item>
+                          ))}
+                        </Select.Content>
+                      </Select>
+                    </div>
+                  )}
+
+                  {!plan.grade_treatment && (
+                    <Alert status="warning">
+                      Choose practice only or an official grade component before
+                      continuing.
+                    </Alert>
+                  )}
                 </Card>
               )}
 
               {plan.teacher_choice && (
-                <Card className="space-y-2 border-2 border-black bg-yellow-50">
-                  <h3 className="font-black">Saved plan</h3>
-                  <p>Target: <strong>{detail.student_name}</strong></p>
-                  <p>Support focus: <strong>{focusName}{sourceName ? ` · ${sourceName}` : ""}</strong></p>
-                  <p>Method: <strong>{methods.find((item) => item.value === plan.teacher_choice)?.label}</strong></p>
-                  {isGraded(plan.teacher_choice) && (
-                    <>
-                      <p>Grade treatment: <strong>{plan.grade_treatment === "PRACTICE_ONLY" ? "Practice only · No official grade impact" : plan.grade_treatment ? componentLabel(plan.grade_treatment) : "Selection required"}</strong></p>
-                      {plan.grade_treatment === "EXAMINATION" && <p>Original: <strong>{originalExams.find((exam) => exam.assignment_id === plan.original_exam_assignment_id)?.title ?? "Selection required"}</strong></p>}
-                      <p>Recipient: <strong>This student only</strong></p>
-                    </>
+                <Card className="space-y-3 border-2 border-primary/50 bg-primary/5">
+                  <div className="flex items-center justify-between border-b border-border pb-2">
+                    <h3 className="font-black text-base">Prepared support</h3>
+                    <Badge variant="surface" size="sm">Ready</Badge>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                    <p>Target: <strong>{detail.student_name}</strong></p>
+                    <p>
+                      Support focus: <strong>{focusName}</strong>
+                      {sourceBadge}
+                    </p>
+                    <p>
+                      Method:{" "}
+                      <Badge variant="outline" size="sm">
+                        {methods.find((item) => item.value === plan.teacher_choice)?.label}
+                      </Badge>
+                    </p>
+                    {isGraded(plan.teacher_choice) && (
+                      <p>
+                        Grade treatment:{" "}
+                        <Badge variant="secondary" size="sm">
+                          {plan.grade_treatment === "PRACTICE_ONLY"
+                            ? "Practice only"
+                            : plan.grade_treatment
+                              ? componentLabel(plan.grade_treatment)
+                              : "Selection required"}
+                        </Badge>
+                      </p>
+                    )}
+                    {plan.grade_treatment === "EXAMINATION" && (
+                      <p className="col-span-full">
+                        Original Exam:{" "}
+                        <strong>
+                          {originalExams.find(
+                            (exam) =>
+                              exam.assignment_id === plan.original_exam_assignment_id
+                          )?.title ?? "Selection required"}
+                        </strong>
+                      </p>
+                    )}
+                    {isGraded(plan.teacher_choice) && (
+                      <p className="col-span-full text-xs text-muted-foreground">
+                        Recipient: <strong>This student only</strong>
+                      </p>
+                    )}
+                  </div>
+                  {plan.teacher_choice === "TOS" && (
+                    <p className="text-xs text-muted-foreground">
+                      TOS is a blueprint/export. It creates no graded student activity.
+                    </p>
                   )}
-                  {plan.teacher_choice === "TOS" && <p>TOS is a blueprint/export. It creates no graded student activity.</p>}
-                  {plan.teacher_choice === "EXISTING_MATERIAL_ONLY" && <p>Selected materials remain planning references; they are not privately delivered.</p>}
-                  {treatmentLocked && !planMatchesRecordedActivity && <Alert status="info">No activity matching this saved plan has been created. The completed activity above keeps its original recorded grade treatment.</Alert>}
-                  {treatmentLocked && planMatchesRecordedActivity && <p className="text-sm">This saved plan matches an activity already recorded above.</p>}
+                  {plan.teacher_choice === "EXISTING_MATERIAL_ONLY" && (
+                    <p className="text-xs text-muted-foreground">
+                      Selected materials remain planning references; they are not
+                      privately delivered.
+                    </p>
+                  )}
                   {plan.teacher_choice !== "EXISTING_MATERIAL_ONLY" && (
-                    <Button disabled={working || (isGraded(plan.teacher_choice) && (!plan.grade_treatment || (plan.grade_treatment === "EXAMINATION" && !plan.original_exam_assignment_id)))} onClick={openTool}>
-                      Continue to {plan.teacher_choice === "QUIZ" ? "Quiz Builder" : plan.teacher_choice === "CLASSWORK" ? "Classwork Creator" : "TOS Generator"}
-                    </Button>
+                    <div className="pt-2">
+                      <Button disabled={continueDisabled} onClick={openTool}>
+                        Continue to{" "}
+                        {plan.teacher_choice === "QUIZ"
+                          ? "Quiz Builder"
+                          : plan.teacher_choice === "CLASSWORK"
+                            ? "Classwork Creator"
+                            : "TOS Generator"}
+                      </Button>
+                    </div>
                   )}
                 </Card>
               )}
 
               {hasOldDraft && oldDraft && (
-                <details className="rounded border p-3 text-sm">
-                  <summary className="cursor-pointer font-semibold">Previous/legacy support draft</summary>
-                  <div className="space-y-2 pt-2">
-                    <p>Preserved for reference. Use the existing authoring tool for new support.</p>
-                    {oldDraft.title.trim() && <strong>{oldDraft.title}</strong>}
-                    {oldDraft.instructions.trim() && <p>{oldDraft.instructions}</p>}
-                    <p>{oldDraft.questions.length} saved questions</p>
-                    {oldDraft.questions.map((question, index) => (
-                      <div key={index} className="rounded border p-2">
-                        <strong>{question.question_text || `Question ${index + 1}`}</strong>
-                        {question.options.map((option, optionIndex) => (
-                          <p key={optionIndex}>{option.option_text}{option.is_correct ? " (correct answer)" : ""}</p>
+                <Accordion className="w-full">
+                  <Accordion.Item
+                    value="legacy-draft"
+                    className="overflow-hidden rounded border-2 border-border bg-card shadow-sm"
+                  >
+                    <Accordion.Header className="items-center px-4 py-3 bg-card font-bold text-sm">
+                      Previous / legacy support draft
+                    </Accordion.Header>
+                    <Accordion.Content className="space-y-3 p-4 border-t-2 border-border bg-background">
+                      <p className="text-xs text-muted-foreground">
+                        Preserved for reference. Use the existing authoring tool for new
+                        support.
+                      </p>
+                      {oldDraft.title.trim() && (
+                        <p className="font-bold text-sm">{oldDraft.title}</p>
+                      )}
+                      {oldDraft.instructions.trim() && (
+                        <p className="text-sm">{oldDraft.instructions}</p>
+                      )}
+                      <Badge variant="outline" size="sm">
+                        {oldDraft.questions.length} saved questions
+                      </Badge>
+                      <div className="space-y-2 pt-1">
+                        {oldDraft.questions.map((question, index) => (
+                          <Card key={index} className="space-y-1.5 p-3 text-sm">
+                            <strong className="block text-sm">
+                              {question.question_text || `Question ${index + 1}`}
+                            </strong>
+                            <div className="space-y-1 pl-2">
+                              {question.options.map((option, optionIndex) => (
+                                <div key={optionIndex} className="flex items-center gap-1.5 text-xs">
+                                  <span>{option.option_text}</span>
+                                  {option.is_correct && (
+                                    <Badge variant="success" size="sm">
+                                      Correct
+                                    </Badge>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            {question.explanation && (
+                              <p className="text-xs text-muted-foreground pt-1 border-t border-border">
+                                Explanation: {question.explanation}
+                              </p>
+                            )}
+                          </Card>
                         ))}
-                        {question.explanation && <p>Explanation: {question.explanation}</p>}
                       </div>
-                    ))}
-                  </div>
-                </details>
+                    </Accordion.Content>
+                  </Accordion.Item>
+                </Accordion>
               )}
             </div>
-          </details>
+          )}
         </>
       )}
     </section>
