@@ -12,7 +12,7 @@ import {
   type TodoItem as ApiTodoItem,
 } from "@/lib/api";
 import { LoadingPanel } from "@/components/loading-panel";
-import { Empty } from "@/components/retroui/Empty";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
 
 const todoTabs = [
   { id: "pending", label: "Pending", icon: Clock },
@@ -153,14 +153,9 @@ export default function ToDo() {
                       <section className="flex flex-col gap-4">
                         {regularUpcomingItems.length === 0 &&
                         interventionItems.length === 0 ? (
-                          <Empty>
-                            <Empty.Content>
-                              <Empty.Title>All caught up!</Empty.Title>
-                              <Empty.Description>You have no pending assignments or tasks.</Empty.Description>
-                            </Empty.Content>
-                          </Empty>
+                          <StudentEmptyState icon={<CheckCircle2 />} title="You're all caught up!" description="You have no pending classwork right now." />
                         ) : regularUpcomingItems.length === 0 ? (
-                          <p className="text-sm text-gray-500">No upcoming tasks.</p>
+                          null
                         ) : (
                           regularUpcomingItems.map((item) => (
                             <ToDoItem
@@ -181,12 +176,7 @@ export default function ToDo() {
                   {activeTab === "pastdue" && (
                     <section className="flex flex-col gap-4">
                       {pastDueItems.length === 0 ? (
-                        <Empty>
-                          <Empty.Content>
-                            <Empty.Title>No past due items!</Empty.Title>
-                            <Empty.Description>Great job keeping up with your deadlines.</Empty.Description>
-                          </Empty.Content>
-                        </Empty>
+                        <StudentEmptyState icon={<Clock />} title="No past-due classwork" description="Great job keeping up with your deadlines." />
                       ) : (
                         pastDueItems.map((item) => (
                           <ToDoItem
@@ -206,12 +196,7 @@ export default function ToDo() {
                   {activeTab === "completed" && (
                     <section className="flex flex-col gap-4">
                       {completedItems.length === 0 ? (
-                        <Empty>
-                          <Empty.Content>
-                            <Empty.Title>No completed tasks yet.</Empty.Title>
-                            <Empty.Description>Your submitted assignments and quizzes will appear here.</Empty.Description>
-                          </Empty.Content>
-                        </Empty>
+                        <StudentEmptyState icon={<CheckCircle2 />} title="No completed classwork yet" description="Completed activities will appear here." />
                       ) : (
                         completedItems.map((item) => (
                           <ToDoItem

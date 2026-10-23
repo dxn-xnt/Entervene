@@ -4,6 +4,8 @@ import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Empty } from "@/components/retroui/Empty";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
+import { BookOpen } from "lucide-react";
 import { useStudentOverviewData } from "@/hooks/use-student-overview-data";
 import SubjectGrade from "./subject-grade";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
@@ -40,11 +42,7 @@ const Grades = () => {
                   </Empty.Content>
                 </Empty>
               ) : subjects.length === 0 ? (
-                <Empty>
-                  <Empty.Content>
-                    <Empty.Title>No subjects enrolled.</Empty.Title>
-                  </Empty.Content>
-                </Empty>
+                <StudentEmptyState icon={<BookOpen />} title="No subjects to grade yet" description="Your subjects and their released grades will appear here once enrollment is available." />
               ) : subjects.map((subject) => (
                 <Tooltip key={subject.subject_load_id}>
                   <TooltipTrigger render={<Card className="block w-full cursor-pointer transition-colors hover:border-border"

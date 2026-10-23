@@ -14,10 +14,9 @@ import {
   Loader2,
   Clock,
   ArrowRight,
-  PartyPopper,
 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
-import { Empty } from "@/components/retroui/Empty";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
 import {
@@ -40,12 +39,13 @@ export default function StudentInterventions() {
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE");
+  const [subjectFilter, setSubjectFilter] = useState<string>("ALL");
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchMyInterventions(statusFilter === "All" ? undefined : statusFilter);
+      const res = await fetchMyInterventions();
       setItems(res.suggestions || []);
     } catch (err: unknown) {
       console.error(err);
@@ -57,7 +57,7 @@ export default function StudentInterventions() {
 
   useEffect(() => {
     loadData();
-  }, [statusFilter]);
+  }, []);
 
   const handleComplete = async (id: number) => {
     setCompletingId(id);
@@ -81,6 +81,21 @@ export default function StudentInterventions() {
     navigate(routes.student.subjects);
   };
 
+  // KPIs
+  const activeCount = useMemo(() => items.filter((s) => s.status === "ACTIVE").length, [items]);
+  const highPriorityCount = useMemo(
+    () => items.filter((s) => s.priority === "HIGH" || s.priority === "URGENT").length,
+    [items]
+  );
+  const completedCount = useMemo(() => items.filter((s) => s.status === "COMPLETED").length, [items]);
+  const subjects = useMemo(() => Array.from(
+    new Map(items.map((item) => [item.subject_id, item.subject_name || `Subject #${item.subject_id}`])).entries(),
+  ).sort((a, b) => a[1].localeCompare(b[1])), [items]);
+  const filteredItems = useMemo(() => items.filter((item) =>
+    (statusFilter === "All" || item.status === statusFilter) &&
+    (subjectFilter === "ALL" || String(item.subject_id) === subjectFilter),
+  ), [items, statusFilter, subjectFilter]);
+
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
@@ -96,6 +111,51 @@ export default function StudentInterventions() {
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:gap-6 sm:px-4 sm:py-4 md:px-6">
+              {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEVELOPMENT_PREDICTIONS === "true" && <><StudentActiveInterventions /><StudentResolvedInterventions /><StudentReviewerSection /></>}
+              <h2 className="text-xl font-bold">Study Recommendations</h2>
+              {/* KPI Header Cards */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <OverviewCard
+                  title="Active Study Tasks"
+                  count={activeCount.toString()}
+                  stat="Pending Action"
+                />
+                <OverviewCard
+                  title="Urgent / High Priority"
+                  count={highPriorityCount.toString()}
+                  stat="Recommended First"
+                />
+                <OverviewCard
+                  title="Completed Tasks"
+                  count={completedCount.toString()}
+                  stat="Finished"
+                />
+              </div>
+
+              {/* Filter Toolbar */}
+              <div className="flex items-center justify-end gap-3 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <Select value={subjectFilter} onValueChange={setSubjectFilter}>
+                    <Select.Trigger aria-label="Filter by subject" className="h-10 w-44 text-sm sm:w-48">
+                      <Select.Value placeholder="All subjects" />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="ALL">All subjects</Select.Item>
+                      {subjects.map(([id, name]) => <Select.Item key={id} value={String(id)}>{name}</Select.Item>)}
+                    </Select.Content>
+                  </Select>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <Select.Trigger aria-label="Filter by task status" className="h-10 w-44 text-sm sm:w-48">
+                      <Select.Value placeholder="Select Status" />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="ACTIVE">Active Tasks</Select.Item>
+                      <Select.Item value="COMPLETED">Completed Tasks</Select.Item>
+                      <Select.Item value="All">All Interventions</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </div>
+              </div>
               {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEVELOPMENT_PREDICTIONS === "true" &&
                 <>
                   <StudentActiveInterventions />
@@ -111,9 +171,9 @@ export default function StudentInterventions() {
                 <div className="p-6 border-2 border-black bg-rose-50 text-rose-700 font-bold text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                   {error}
                 </div>
-              ) : items.length > 0 ? (
+              ) : filteredItems.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {items.map((item) => (
+                  {filteredItems.map((item) => (
                     <Card
                       key={item.suggestion_id}
                       className="p-5 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between gap-4 rounded hover:translate-y-[-2px] transition-transform"
@@ -210,22 +270,11 @@ export default function StudentInterventions() {
                   ))}
                 </div>
               ) : (
-                /* Clean RetroUI Empty State */
-                <Empty>
-                  <Empty.Content>
-                    <Empty.Icon><PartyPopper size={24} /></Empty.Icon>
-                    <Empty.Title>No Study Recommendations</Empty.Title>
-                    <Empty.Description>You currently have no study recommendations for this view.</Empty.Description>
-                    <Button
-                      size="sm"
-                      onClick={() => navigate(routes.student.subjects)}
-                      className="bg-yellow-300 hover:bg-yellow-400 text-black border-2 border-black font-extrabold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] mt-2"
-                    >
-                      <BookOpen className="size-4 mr-1.5" />
-                      Browse Subjects & Lessons
-                    </Button>
-                  </Empty.Content>
-                </Empty>
+                <StudentEmptyState
+                  icon={<BookOpen />}
+                  title={subjectFilter !== "ALL" && items.length > 0 ? "No recommendations for this subject" : statusFilter === "COMPLETED" ? "No completed recommendations yet" : "No study recommendations yet"}
+                  description={subjectFilter !== "ALL" && items.length > 0 ? "Try another subject or task status." : statusFilter === "COMPLETED" ? "Recommendations you finish will appear here." : "Relevant study recommendations will appear here when available."}
+                />
               )}
             </div>
           </div>

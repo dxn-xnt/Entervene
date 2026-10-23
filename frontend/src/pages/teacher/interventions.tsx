@@ -4,12 +4,12 @@ import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
-import { Empty } from "@/components/retroui/Empty";
 import { Skeleton } from "@/components/retroui/Skeleton";
 import { Table } from "@/components/retroui/Table";
 import { Tabs } from "@/components/retroui/Tabs";
 import { useToast } from "@/components/retroui/Toast";
-import { Activity, CheckCircle2, UserCheck } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, HeartHandshake, UserCheck } from "lucide-react";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import InterventionModal from "./forms/intervention-modal";
 import {
   activateTeacherCandidate,
@@ -388,72 +388,29 @@ export default function TeacherInterventions() {
                   <Skeleton className="h-20 w-full" />
                 </div>
               ) : showingError ? (
-                <Empty>
-                  <Empty.Content>
-                    <Empty.Title>Unable to load interventions</Empty.Title>
-                    <Empty.Description>{showingError}</Empty.Description>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        void (resolvedView
-                          ? refreshResolved()
-                          : activeView
-                            ? refreshActive()
-                            : refresh())
-                      }
-                    >
-                      Retry
-                    </Button>
-                  </Empty.Content>
-                </Empty>
+                <TeacherEmptyState
+                  icon={<AlertTriangle />}
+                  title="Unable to load interventions"
+                  description={showingError}
+                  action={{
+                    label: "Retry",
+                    onClick: () => void (resolvedView
+                      ? refreshResolved()
+                      : activeView
+                        ? refreshActive()
+                        : refresh()),
+                  }}
+                />
               ) : sorted.length === 0 ? (
-                <Empty className="rounded">
-                  <EmptyHeader>
-                    <EmptyMedia>
-                      <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background *:data-[slot=avatar]:grayscale">
-                        <Avatar variant="student" >
-                          <Avatar.Image
-                            src="/avatars/student-avatars/3.svg"
-                            alt="@shadcn" />
-                          <Avatar.Fallback>CN</Avatar.Fallback>
-                        </Avatar>
-                        <Avatar variant="student" >
-                          <Avatar.Image
-                            src="/avatars/student-avatars/2.svg"
-                            alt="@maxleiter"
-                          />
-                          <Avatar.Fallback>LR</Avatar.Fallback>
-                        </Avatar>
-                        <Avatar variant="student" >
-                          <Avatar.Image
-                            src="/avatars/student-avatars/1.svg"
-                            alt="@evilrabbit"
-                          />
-                          <Avatar.Fallback>ER</Avatar.Fallback>
-                        </Avatar>
-                      </div>
-                    </EmptyMedia>
-                    <Empty.Content>
-                      <Empty.Title className="text-lg!">
-                        {resolvedView
-                          ? "No resolved interventions"
-                          : activeView
-                            ? "No active interventions"
-                            : "No candidates to review"}
-                      </Empty.Title>
-                      <Empty.Description className="text-sm!">
-                        {resolvedView
-                          ? "Resolved support will appear here."
-                          : activeView
-                            ? "Approved interventions will appear here."
-                            : "New candidates will appear when a current corrected prediction qualifies."}
-                      </Empty.Description>
-                    </Empty.Content>
-                  </EmptyHeader>
-                </Empty>
-
-
+                <TeacherEmptyState
+                  icon={<HeartHandshake />}
+                  title={resolvedView ? "No resolved interventions" : activeView ? "No active interventions" : "No candidates to review"}
+                  description={resolvedView
+                    ? "Resolved support will appear here."
+                    : activeView
+                      ? "Approved interventions will appear here."
+                      : "New candidates will appear when a current corrected prediction qualifies."}
+                />
               ) : (
                 <Table wrapperClassName="h-auto">
                   <Table.Header>
