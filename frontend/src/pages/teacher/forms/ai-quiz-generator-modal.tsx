@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
@@ -421,8 +421,8 @@ export default function AIQuizGeneratorModal({
             difficulty_breakdown: isDefaultBreakdown(p)
               ? { EASY: p.count }
               : Object.fromEntries(
-                  Object.entries(p.difficulty_breakdown).filter(([, v]) => v > 0)
-                ),
+                Object.entries(p.difficulty_breakdown).filter(([, v]) => v > 0)
+              ),
           })),
         }),
       });
@@ -433,8 +433,8 @@ export default function AIQuizGeneratorModal({
         const msg = Array.isArray(detail)
           ? detail.map((e: { loc?: string[]; msg?: string }) => e.msg).join("; ")
           : typeof detail === "string"
-          ? detail
-          : `AI generation failed (${response.status})`;
+            ? detail
+            : `AI generation failed (${response.status})`;
         throw new Error(msg);
       }
 
@@ -533,14 +533,14 @@ export default function AIQuizGeneratorModal({
             </div>
             <Tooltip>
               <TooltipTrigger render={<span className="inline-flex"><button
-              type="button"
-              onClick={onClose}
-              disabled={isGenerating}
-              className="cursor-pointer p-1 border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-neutral-100 disabled:opacity-50 text-black"
-              aria-label="Close generator"
-            >
-              <X size={16} />
-            </button></span>} />
+                type="button"
+                onClick={onClose}
+                disabled={isGenerating}
+                className="cursor-pointer p-1 border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-neutral-100 disabled:opacity-50 text-black"
+                aria-label="Close generator"
+              >
+                <X size={16} />
+              </button></span>} />
               <TooltipContent>{isGenerating ? "Generating quiz" : "Close generator"}</TooltipContent>
             </Tooltip>
           </div>
@@ -613,11 +613,10 @@ export default function AIQuizGeneratorModal({
                   key={mode}
                   type="button"
                   onClick={() => handleSourceModeChange(mode)}
-                  className={`flex items-center justify-center gap-2 py-2 px-3 border-2 border-black text-xs font-extrabold transition-all cursor-pointer ${
-                    sourceMode === mode
+                  className={`flex items-center justify-center gap-2 py-2 px-3 border-2 border-black text-xs font-extrabold transition-all cursor-pointer ${sourceMode === mode
                       ? "bg-black text-white shadow-none"
                       : "bg-white text-black hover:bg-neutral-100 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                  }`}
+                    }`}
                 >
                   {icon}
                   {label}
@@ -666,9 +665,8 @@ export default function AIQuizGeneratorModal({
                       return (
                         <label
                           key={lesson.lesson_id}
-                          className={`flex items-center gap-2 p-2 border border-black/20 text-xs font-medium cursor-pointer transition-colors ${
-                            sel ? "bg-amber-50 border-black font-bold" : "hover:bg-neutral-50"
-                          }`}
+                          className={`flex items-center gap-2 p-2 border border-black/20 text-xs font-medium cursor-pointer transition-colors ${sel ? "bg-amber-50 border-black font-bold" : "hover:bg-neutral-50"
+                            }`}
                         >
                           <input
                             type="checkbox"
@@ -743,11 +741,10 @@ export default function AIQuizGeneratorModal({
                             return (
                               <label
                                 key={cw.classwork_id}
-                                className={`flex items-center gap-2 p-1.5 border border-black/20 text-xs font-medium cursor-pointer transition-colors ${
-                                  sel
+                                className={`flex items-center gap-2 p-1.5 border border-black/20 text-xs font-medium cursor-pointer transition-colors ${sel
                                     ? "bg-amber-50 border-black font-bold"
                                     : "hover:bg-neutral-50"
-                                }`}
+                                  }`}
                               >
                                 <input
                                   type="checkbox"
@@ -837,21 +834,21 @@ export default function AIQuizGeneratorModal({
                       <div className="flex items-center gap-1 shrink-0">
                         <Tooltip>
                           <TooltipTrigger render={<Input
-                          type="number"
-                          min={1}
-                          max={50}
-                          value={part.count}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => {
-                            const raw = e.target.value;
-                            const parsed = raw === "" ? 1 : parseInt(raw, 10);
-                            const clamped = isNaN(parsed) ? 1 : Math.max(1, Math.min(50, parsed));
-                            e.target.value = String(clamped);
-                            updateTestPart(part.id, { count: clamped });
-                          }}
-                          className="w-14 h-8 text-center text-xs font-bold border-2 border-black rounded shadow-none"
-                          aria-label="Number of questions"
-                        />} />
+                            type="number"
+                            min={1}
+                            max={50}
+                            value={part.count}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const parsed = raw === "" ? 1 : parseInt(raw, 10);
+                              const clamped = isNaN(parsed) ? 1 : Math.max(1, Math.min(50, parsed));
+                              e.target.value = String(clamped);
+                              updateTestPart(part.id, { count: clamped });
+                            }}
+                            className="w-14 h-8 text-center text-xs font-bold border-2 border-black rounded shadow-none"
+                            aria-label="Number of questions"
+                          />} />
                           <TooltipContent>Questions</TooltipContent>
                         </Tooltip>
                         <span className="text-[11px] font-semibold text-muted-foreground">items</span>
@@ -861,22 +858,22 @@ export default function AIQuizGeneratorModal({
                         <span className="text-xs font-black text-black">@</span>
                         <Tooltip>
                           <TooltipTrigger render={<Input
-                          type="number"
-                          min={0.5}
-                          max={100}
-                          step={0.5}
-                          value={part.points_per_item}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => {
-                            const raw = e.target.value;
-                            const parsed = raw === "" ? 1 : parseFloat(raw);
-                            const clamped = isNaN(parsed) ? 1 : Math.max(0.5, Math.min(100, parsed));
-                            e.target.value = String(clamped);
-                            updateTestPart(part.id, { points_per_item: clamped });
-                          }}
-                          className="w-14 h-8 text-center text-xs font-bold border-2 border-black rounded shadow-none bg-amber-50"
-                          aria-label="Points per question"
-                        />} />
+                            type="number"
+                            min={0.5}
+                            max={100}
+                            step={0.5}
+                            value={part.points_per_item}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const parsed = raw === "" ? 1 : parseFloat(raw);
+                              const clamped = isNaN(parsed) ? 1 : Math.max(0.5, Math.min(100, parsed));
+                              e.target.value = String(clamped);
+                              updateTestPart(part.id, { points_per_item: clamped });
+                            }}
+                            className="w-14 h-8 text-center text-xs font-bold border-2 border-black rounded shadow-none bg-amber-50"
+                            aria-label="Points per question"
+                          />} />
                           <TooltipContent>Points per question</TooltipContent>
                         </Tooltip>
                         <span className="text-[11px] font-semibold text-muted-foreground">pt(s)</span>
@@ -888,16 +885,16 @@ export default function AIQuizGeneratorModal({
 
                       <Tooltip>
                         <TooltipTrigger render={<span className="inline-flex"><Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={testParts.length <= 1}
-                        onClick={() => removeTestPart(part.id)}
-                        className="h-8 w-8 p-0 border-2 border-black text-red-600 hover:bg-red-50 disabled:opacity-30 cursor-pointer ml-auto shrink-0"
-                        aria-label="Remove test part"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button></span>} />
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={testParts.length <= 1}
+                          onClick={() => removeTestPart(part.id)}
+                          className="h-8 w-8 p-0 border-2 border-black text-red-600 hover:bg-red-50 disabled:opacity-30 cursor-pointer ml-auto shrink-0"
+                          aria-label="Remove test part"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button></span>} />
                         <TooltipContent>{testParts.length <= 1 ? "Keep one part" : "Remove part"}</TooltipContent>
                       </Tooltip>
                     </div>
@@ -907,26 +904,24 @@ export default function AIQuizGeneratorModal({
                       <button
                         type="button"
                         onClick={() => togglePartExpanded(part.id)}
-                        className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold border-2 border-black transition-all cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-                          isExpanded
+                        className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold border-2 border-black transition-all cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${isExpanded
                             ? "bg-black text-white"
                             : isDefaultBreakdown(part)
-                            ? "bg-white text-black hover:bg-neutral-100"
-                            : "bg-[#F6E9B2] text-black hover:bg-[#ebdca0]"
-                        }`}
+                              ? "bg-white text-black hover:bg-neutral-100"
+                              : "bg-[#F6E9B2] text-black hover:bg-[#ebdca0]"
+                          }`}
                       >
                         <Settings2 className="w-3.5 h-3.5" />
                         <span>Customize Difficulty</span>
                         <span
-                          className={`px-1.5 py-0.5 text-[10px] font-extrabold uppercase ${
-                            isExpanded
+                          className={`px-1.5 py-0.5 text-[10px] font-extrabold uppercase ${isExpanded
                               ? "bg-white/20 text-white"
                               : bError
-                              ? "bg-red-500 text-white"
-                              : isDefaultBreakdown(part)
-                              ? "bg-neutral-200 text-black/80"
-                              : "bg-black text-white"
-                          }`}
+                                ? "bg-red-500 text-white"
+                                : isDefaultBreakdown(part)
+                                  ? "bg-neutral-200 text-black/80"
+                                  : "bg-black text-white"
+                            }`}
                         >
                           {bError
                             ? `⚠ ${breakdownSum(part)}/${part.count}`
@@ -951,13 +946,12 @@ export default function AIQuizGeneratorModal({
                         {(["EASY", "MEDIUM", "HARD"] as const).map((diff) => (
                           <div key={diff} className="flex items-center gap-1">
                             <span
-                              className={`text-[10px] font-black ${
-                                diff === "EASY"
+                              className={`text-[10px] font-black ${diff === "EASY"
                                   ? "text-green-700"
                                   : diff === "MEDIUM"
-                                  ? "text-amber-600"
-                                  : "text-red-600"
-                              }`}
+                                    ? "text-amber-600"
+                                    : "text-red-600"
+                                }`}
                             >
                               {diff[0] + diff.slice(1).toLowerCase()}
                             </span>

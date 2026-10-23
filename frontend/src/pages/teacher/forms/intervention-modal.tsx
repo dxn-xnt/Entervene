@@ -33,6 +33,15 @@ const date = (value: string) =>
 const percent = (value: number | null | undefined) =>
   value == null ? "Unavailable" : `${value.toFixed(1)}%`;
 
+const percentVariant = (
+  value: number | null | undefined
+): "success" | "surface" | "destructive" => {
+  if (value == null) return "surface";
+  if (value >= 80) return "success";
+  if (value >= 75) return "surface";
+  return "destructive";
+};
+
 const strongestEvidence = (diagnosis: DiagnosisSnapshot) => {
   const scored = diagnosis.lowest_supported_competencies ?? [];
   if (
@@ -94,35 +103,56 @@ function AcademicDiagnosisCard({
   );
 
   return (
-    <Card className="space-y-2 w-full">
-      <p className="text-base">
-        Support focus: <strong>{focusName}</strong>
-      </p>
-      <p className="text-base">
-        Strongest available evidence: <strong>{strongestEvidenceText}</strong>
-      </p>
+    <Card className="space-y-3 w-full">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground uppercase font-bold">Support focus:</span>
+          <span className="text-base font-bold">{focusName}</span>
+        </div>
+        <Badge variant="outline" size="sm">
+          {strongestEvidenceText}
+        </Badge>
+      </div>
+
       {scoredCompetencies.length > 0 && (
-        <>
-          <p className="text-base">
-            Scored competency focus:{" "}
-            {scoredCompetencies
-              .map((item) => `${item.competency_code}: ${item.competency_statement}`)
-              .join("; ")}
-          </p>
-          {questionScores.slice(0, 3).map((item) => (
-            <p key={item.key} className="text-sm">
-              Question #{item.id}: {item.score}/{item.possible}
-            </p>
-          ))}
-        </>
+        <div className="space-y-2">
+          <span className="text-xs font-bold uppercase text-muted-foreground block">
+            Scored competency focus
+          </span>
+          <div className="space-y-1.5">
+            {scoredCompetencies.map((item) => (
+              <div key={item.competency_id} className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" size="sm">
+                  {item.competency_code}
+                </Badge>
+                <span className="text-sm font-medium">{item.competency_statement}</span>
+              </div>
+            ))}
+          </div>
+          {questionScores.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              {questionScores.slice(0, 3).map((item) => (
+                <Badge key={item.key} variant="outline" size="sm">
+                  Question #{item.id}: {item.score}/{item.possible}
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
       )}
+
       {focusPercent != null && (
-        <p className="text-base">
-          Weakest component: {primaryComp ? label(primaryComp) : focusName}{" "}
-          <strong>{focusPercent.toFixed(0)}%</strong>
-        </p>
+        <div className="flex items-center justify-between border-t border-border pt-2">
+          <span className="text-sm font-semibold">
+            Weakest component: {primaryComp ? label(primaryComp) : focusName}
+          </span>
+          <Badge variant={percentVariant(focusPercent)} size="sm">
+            {focusPercent.toFixed(0)}%
+          </Badge>
+        </div>
       )}
-      <div className="flex flex-wrap gap-2 pt-1 text-xs">
+
+      <div className="flex flex-wrap gap-2 pt-2 border-t border-border text-xs">
         <Badge variant="surface" size="sm">
           {scoredCompetencies.length} scored competency targets
         </Badge>
@@ -434,9 +464,9 @@ export default function InterventionModal({
                           </div>
                         </div>
                       </div>
-                      <p className="text-sm rounded border border-amber-400 bg-amber-50 p-2">
+                      <Alert status="warning">
                         This is a saved review candidate. No teacher-approved active Intervention exists yet. Approval rechecks the current prediction, teaching scope, and authorization before support can begin.
-                      </p>
+                      </Alert>
                     </Card>
 
                     <p className="text-sm text-muted-foreground">
@@ -503,7 +533,11 @@ export default function InterventionModal({
                                 <Card key={name} className="flex items-center justify-between p-2.5">
                                   <span className="font-semibold text-sm">{label(name)}</span>
                                   <Badge
-                                    variant={component.evidence_state === "AVAILABLE" ? "surface" : "default"}
+                                    variant={
+                                      component.evidence_state === "AVAILABLE"
+                                        ? percentVariant(component.percent)
+                                        : "default"
+                                    }
                                     size="sm"
                                   >
                                     {component.evidence_state === "AVAILABLE"
@@ -529,14 +563,28 @@ export default function InterventionModal({
                                         </Badge>
                                       </span>
                                     </div>
-                                    <Badge variant="surface" size="sm">
-                                      {activity.score}/{activity.possible_score} ({percent(activity.percent)})
-                                    </Badge>
+                                    <div className="flex items-center gap-1.5">
+                                      <Badge variant="surface" size="sm">
+                                        {activity.score}/{activity.possible_score}
+                                      </Badge>
+                                      <Badge
+                                        variant={percentVariant(activity.percent)}
+                                        size="sm"
+                                      >
+                                        ({percent(activity.percent)})
+                                      </Badge>
+                                    </div>
                                   </Card>
                                 ))}
                               </div>
                             ) : (
-                              <p className="text-xs text-muted-foreground">No scored activity detail in the saved diagnosis.</p>
+                              <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+                                <Empty.Content>
+                                  <Empty.Description className="text-sm text-muted-foreground">
+                                    No scored activity detail in the saved diagnosis.
+                                  </Empty.Description>
+                                </Empty.Content>
+                              </Empty>
                             )}
                           </div>
                         </section>
@@ -557,9 +605,17 @@ export default function InterventionModal({
                                       <Badge variant="secondary" size="sm">{item.competency_code}</Badge>
                                       <span className="font-semibold text-sm">{item.competency_statement}</span>
                                     </div>
-                                    <Badge variant="surface" size="sm">
-                                      {item.score}/{item.possible_score} ({percent(item.percent)})
-                                    </Badge>
+                                    <div className="flex items-center gap-1.5">
+                                      <Badge variant="surface" size="sm">
+                                        {item.score}/{item.possible_score}
+                                      </Badge>
+                                      <Badge
+                                        variant={percentVariant(item.percent)}
+                                        size="sm"
+                                      >
+                                        ({percent(item.percent)})
+                                      </Badge>
+                                    </div>
                                   </div>
                                   {item.supporting_scores.map((score, index) => (
                                     <div
@@ -612,9 +668,17 @@ export default function InterventionModal({
                                       <span className="font-semibold text-sm">{assessment.title}</span>
                                       <Badge variant="outline" size="sm">{label(assessment.component)}</Badge>
                                     </div>
-                                    <Badge variant="surface" size="sm">
-                                      {assessment.score}/{assessment.possible_score} ({percent(assessment.percent)})
-                                    </Badge>
+                                    <div className="flex items-center gap-1.5">
+                                      <Badge variant="surface" size="sm">
+                                        {assessment.score}/{assessment.possible_score}
+                                      </Badge>
+                                      <Badge
+                                        variant={percentVariant(assessment.percent)}
+                                        size="sm"
+                                      >
+                                        ({percent(assessment.percent)})
+                                      </Badge>
+                                    </div>
                                   </div>
                                   <p className="text-xs text-muted-foreground">
                                     Covered lessons: {assessment.covered_lessons.map((lesson) => lesson.title).join(", ") || "None linked"}
@@ -626,9 +690,13 @@ export default function InterventionModal({
                               ))}
                             </div>
                           ) : (
-                            <p className="text-xs text-muted-foreground">
-                              No dated manual assessment coverage was available at the evidence cutoff.
-                            </p>
+                            <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+                              <Empty.Content>
+                                <Empty.Description className="text-sm text-muted-foreground">
+                                  No dated manual assessment coverage was available at the evidence cutoff.
+                                </Empty.Description>
+                              </Empty.Content>
+                            </Empty>
                           )}
                           {(detail.diagnosis_snapshot.covered_competencies_for_teacher_review ?? []).length > 0 && (
                             <p className="text-xs text-muted-foreground">

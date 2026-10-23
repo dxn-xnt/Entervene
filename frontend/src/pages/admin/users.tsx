@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import AssignSubstituteModal from "./forms/assign-substitute-modal";
 import { useToast } from "@/components/retroui/use-toast";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────

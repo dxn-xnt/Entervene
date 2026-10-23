@@ -2,7 +2,7 @@ import { ProfileHeader } from "@/components/profile-header";
 import { useMemo, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { Button } from "@/components/retroui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { useToast } from "@/components/retroui/use-toast";
 import { Card } from "@/components/retroui/Card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -231,13 +231,13 @@ export default function AdminProfile() {
               <h2 className="font-bold text-lg">Edit Profile Avatar</h2>
               <Tooltip>
                 <TooltipTrigger render={<button
-                type="button"
-                aria-label="Close modal"
-                className="rounded p-1 hover:bg-white/30 transition-colors cursor-pointer"
-                onClick={() => setIsModalOpen(false)}
-              >
-                <X className="size-5" />
-              </button>} />
+                  type="button"
+                  aria-label="Close modal"
+                  className="rounded p-1 hover:bg-white/30 transition-colors cursor-pointer"
+                  onClick={() => setIsModalOpen(false)}
+                >
+                  <X className="size-5" />
+                </button>} />
                 <TooltipContent>Close modal</TooltipContent>
               </Tooltip>
             </div>

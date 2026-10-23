@@ -102,13 +102,11 @@ const InterventionSupportMaterials = forwardRef<
   });
   const [reviewerDraft, setReviewerDraft] = useState<ReviewerDraft | null>(null);
   const [browseAll, setBrowseAll] = useState(false);
-  const [panel, setPanel] = useState<"" | "reviewer" | "materials">("");
-  const [showPreparation, setShowPreparation] = useState(false);
+  const [panel, setPanel] = useState<"" | "reviewer" | "materials" | "remediation">("");
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState("ALL");
   const [working, setWorking] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   const setNotice = (message: string) => {
     if (message) toast.success({ title: message });
@@ -116,7 +114,6 @@ const InterventionSupportMaterials = forwardRef<
 
   const load = async () => {
     setLoading(true);
-    setError("");
     try {
       const [support, workspace] = await Promise.all([
         listSupportMaterials(interventionId),
@@ -135,9 +132,11 @@ const InterventionSupportMaterials = forwardRef<
         existingReviewer ? (existingReviewer.current_content as ReviewerDraft) : null
       );
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Unable to load support workspace."
-      );
+      toast.error({
+        title: "Unable to load support workspace",
+        description:
+          cause instanceof Error ? cause.message : "Unable to load support workspace.",
+      });
     } finally {
       setLoading(false);
     }
@@ -191,6 +190,9 @@ const InterventionSupportMaterials = forwardRef<
       : plan.teacher_choice
         ? "Preparing Support"
         : "Needs Support";
+  const selectedMethod = methods.find(
+    (item) => item.value === plan.teacher_choice
+  );
   const focusName = focus?.component
     ? componentLabel(focus.component)
     : "Component unavailable";
@@ -218,11 +220,9 @@ const InterventionSupportMaterials = forwardRef<
 
   const action = async (run: () => Promise<void>) => {
     setWorking(true);
-    setError("");
     try {
       await run();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to save changes.");
       toast.error({
         title: "Unable to save changes",
         description: cause instanceof Error ? cause.message : undefined,
@@ -239,13 +239,11 @@ const InterventionSupportMaterials = forwardRef<
         (plan.grade_treatment === "EXAMINATION" && !plan.original_exam_assignment_id))
     ) {
       const msg = "Choose a grade treatment and original Examination before continuing.";
-      setError(msg);
       toast.error({ title: "Incomplete adjustment", description: msg });
       return false;
     }
 
     setWorking(true);
-    setError("");
     try {
       const result = await saveRemediationPlan(interventionId, {
         teacher_choice: plan.teacher_choice,
@@ -261,7 +259,6 @@ const InterventionSupportMaterials = forwardRef<
       return true;
     } catch (cause) {
       const msg = cause instanceof Error ? cause.message : "Unable to save adjustments.";
-      setError(msg);
       toast.error({ title: "Unable to save adjustments", description: msg });
       return false;
     } finally {
@@ -284,7 +281,10 @@ const InterventionSupportMaterials = forwardRef<
       (!plan.grade_treatment ||
         (plan.grade_treatment === "EXAMINATION" && !plan.original_exam_assignment_id))
     ) {
-      setError("Choose a grade treatment and original Examination before continuing.");
+      toast.error({
+        title: "Incomplete adjustment",
+        description: "Choose a grade treatment and original Examination before continuing.",
+      });
       return;
     }
     const saved = await saveAdjustments();
@@ -451,15 +451,6 @@ const InterventionSupportMaterials = forwardRef<
             . That resolution is past history.
           </p>
         </Card>
-      )}
-
-      {error && (
-        <Alert status="error">
-          {error}{" "}
-          <Button size="sm" variant="outline" onClick={() => void load()}>
-            Retry
-          </Button>
-        </Alert>
       )}
 
       {loading ? (
@@ -811,7 +802,7 @@ const InterventionSupportMaterials = forwardRef<
                   Select resources
                 </Button>
               </Card>
-
+                
               <Dialog
                 open={panel === "reviewer"}
                 onOpenChange={(open) => setPanel(open ? "reviewer" : "")}
@@ -1057,21 +1048,62 @@ const InterventionSupportMaterials = forwardRef<
                 </Dialog.Content>
               </Dialog>
 
+              <h3 className="font-black text-base">Remediation Activity</h3>
               <Card className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-black text-base">Step 4 · Remediation activity</h3>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold">Chosen method:</span>
+                    {selectedMethod ? (
+                      <Badge variant="surface" size="sm">
+                        {selectedMethod.label}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" size="sm">
+                        Not chosen
+                      </Badge>
+                    )}
+                  </div>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setShowPreparation((current) => !current)}
+                    onClick={() => setPanel("remediation")}
                   >
-                    {showPreparation ? "Hide options" : "Prepare Remediation"}
+                    {selectedMethod ? "Change method" : "Choose method"}
                   </Button>
                 </div>
-                {showPreparation && (
-                  <div className="space-y-2 pt-2">
-                    <Label className="font-bold text-sm">Choose support method</Label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {selectedMethod ? (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedMethod.detail}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Choose how you want to prepare remedial practice for this student.
+                  </p>
+                )}
+              </Card>
+
+              <Dialog
+                open={panel === "remediation"}
+                onOpenChange={(open) => setPanel(open ? "remediation" : "")}
+              >
+                <Dialog.Content size="md" className="max-h-[85vh]">
+                  <Dialog.Header>
+                    <div className="flex items-center gap-2">
+                      <Dialog.Title className="text-lg font-bold">
+                        Choose Support Method
+                      </Dialog.Title>
+                      {selectedMethod && (
+                        <Badge variant="surface" size="sm">
+                          {selectedMethod.label}
+                        </Badge>
+                      )}
+                    </div>
+                  </Dialog.Header>
+                  <div className="flex-1 space-y-3 overflow-y-auto p-5">
+                    <p className="text-sm text-muted-foreground">
+                      Select how you want to deliver remediation. Graded methods allow grade treatment configuration in the next step.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       {methods.map((method) => {
                         const isSelected = plan.teacher_choice === method.value;
                         return (
@@ -1108,8 +1140,11 @@ const InterventionSupportMaterials = forwardRef<
                       })}
                     </div>
                   </div>
-                )}
-              </Card>
+                  <Dialog.Footer className="mt-0">
+                    <Button onClick={() => setPanel("")}>Done</Button>
+                  </Dialog.Footer>
+                </Dialog.Content>
+              </Dialog>
 
               {isGraded(plan.teacher_choice) && (
                 <Card className="space-y-3 border-2 border-primary/50 bg-card">

@@ -7,7 +7,7 @@ import { Progress } from "@/components/retroui/Progress";
 import { Card, type cardVariants } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { ArrowUpRight, UserRound } from "lucide-react";
 import type { VariantProps } from "class-variance-authority";
 

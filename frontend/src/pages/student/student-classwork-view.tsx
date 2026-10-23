@@ -24,7 +24,7 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/retroui/tooltip";
+} from "@/components/retroui/Tooltip";
 import { LoadingPanel } from "@/components/loading-panel";
 import AttachmentDisplay from "@/components/attachment-display";
 import SubmissionForm from "@/components/submission-form";
@@ -382,7 +382,7 @@ export default function StudentClassworkView() {
                           </Badge>
                         </div>
                         {detail.linked_lessons &&
-                        detail.linked_lessons.length > 0 ? (
+                          detail.linked_lessons.length > 0 ? (
                           <p className="text-sm text-muted-foreground">
                             Linked under{" "}
                             {detail.linked_lessons.length === 1
@@ -426,8 +426,8 @@ export default function StudentClassworkView() {
                       <Badge
                         variant={
                           status === "graded" ||
-                          status === "submitted" ||
-                          status === "completed"
+                            status === "submitted" ||
+                            status === "completed"
                             ? "success"
                             : closed
                               ? "destructive"
@@ -570,9 +570,9 @@ export default function StudentClassworkView() {
                   </div>
                   {isReading ? (
                     submission ||
-                    status === "completed" ||
-                    status === "submitted" ||
-                    status === "graded" ? (
+                      status === "completed" ||
+                      status === "submitted" ||
+                      status === "graded" ? (
                       <p className="text-sm font-semibold text-success">
                         You have completed this reading material.
                       </p>
@@ -711,11 +711,11 @@ export default function StudentClassworkView() {
           setQuizReviewMode={setQuizReviewMode}
           quizRemainingSeconds={null}
           flaggedQuizQuestionIds={new Set()}
-          toggleQuizFlag={() => {}}
+          toggleQuizFlag={() => { }}
           quizError=""
           isQuizSubmitting={false}
           onExit={() => setShowQuizSummary(false)}
-          onSubmit={() => {}}
+          onSubmit={() => { }}
         />
       )}
     </>

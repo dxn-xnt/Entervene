@@ -8,7 +8,7 @@ import { Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Empty } from "@/components/retroui/Empty";
 import { routes } from "@/../routes";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import {
   getNotifications,
   markAllNotificationsAsRead,

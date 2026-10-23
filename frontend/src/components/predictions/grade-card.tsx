@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Badge } from "@/components/retroui/Badge";
 import { Progress } from "../retroui/Progress";
 import { useAuth } from "@/context/AuthContext";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 
 export interface GradeCardProps {
   name: string;

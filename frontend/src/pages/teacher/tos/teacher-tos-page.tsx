@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/retroui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";

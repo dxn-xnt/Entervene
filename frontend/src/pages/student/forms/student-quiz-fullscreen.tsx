@@ -1,7 +1,7 @@
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { QuizTextAnswerInput, QuizTextAnswerSummary } from "@/components/quiz/student-quiz-answer";
 import type {
@@ -170,13 +170,12 @@ export default function StudentQuizFullscreen({
                       setQuizCurrentIndex(index);
                       setQuizReviewMode(false);
                     }}
-                    className={`relative h-8 min-w-8 rounded border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${
-                      index === quizCurrentIndex
+                    className={`relative h-8 min-w-8 rounded border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${index === quizCurrentIndex
                         ? "bg-white"
                         : hasQuizAnswer(question)
                           ? "bg-[#F6E9B2]"
                           : "bg-white"
-                    }`}
+                      }`}
                   >
                     {flaggedQuizQuestionIds.has(question.quiz_question_id) ? (
                       <span className="absolute -top-2 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-red-500" />
@@ -212,7 +211,7 @@ export default function StudentQuizFullscreen({
                       <Badge
                         variant={
                           selectedClasswork.show_scores &&
-                          question.points_awarded != null
+                            question.points_awarded != null
                             ? question.points_awarded >= question.points
                               ? "success"
                               : question.points_awarded <= 0
@@ -229,7 +228,7 @@ export default function StudentQuizFullscreen({
                       </Badge>
                     </div>
                     {question.question_type === "MULTIPLE_CHOICE" ||
-                    question.question_type === "TRUE_FALSE" ? (
+                      question.question_type === "TRUE_FALSE" ? (
                       <div className="mt-3 grid gap-2">
                         {question.options.map((option) => {
                           const isSelected =
@@ -238,13 +237,12 @@ export default function StudentQuizFullscreen({
                           return (
                             <div
                               key={option.option_id}
-                              className={`border border-foreground px-3 py-2 text-sm ${
-                                isSelected
+                              className={`border border-foreground px-3 py-2 text-sm ${isSelected
                                   ? "bg-primary text-primary-foreground"
                                   : isCorrect
                                     ? "bg-success/10"
                                     : "bg-background"
-                              }`}
+                                }`}
                             >
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <span className="min-w-0 break-words">
@@ -350,11 +348,10 @@ export default function StudentQuizFullscreen({
                   onClick={() =>
                     toggleQuizFlag(currentQuestion.quiz_question_id)
                   }
-                  className={`rounded border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${
-                    flaggedQuizQuestionIds.has(currentQuestion.quiz_question_id)
+                  className={`rounded border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${flaggedQuizQuestionIds.has(currentQuestion.quiz_question_id)
                       ? "bg-[#F6E9B2]"
                       : "bg-white"
-                  }`}
+                    }`}
                 >
                   Flag Question
                 </Button>
@@ -391,7 +388,7 @@ export default function StudentQuizFullscreen({
               </Card>
 
               {currentQuestion.question_type === "MULTIPLE_CHOICE" ||
-              currentQuestion.question_type === "TRUE_FALSE" ? (
+                currentQuestion.question_type === "TRUE_FALSE" ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   {currentQuestion.options.map((option) => (
                     <Button
@@ -409,12 +406,11 @@ export default function StudentQuizFullscreen({
                       }
                       disabled={isQuizSubmitting}
                       style={{ borderWidth: 1 }}
-                      className={`w-full min-w-0 h-full min-h-24 rounded border-black p-4 text-base sm:text-lg font-bold shadow-md hover:shadow-none whitespace-normal break-words [overflow-wrap:anywhere] ${
-                        quizAnswers[currentQuestion.quiz_question_id]
+                      className={`w-full min-w-0 h-full min-h-24 rounded border-black p-4 text-base sm:text-lg font-bold shadow-md hover:shadow-none whitespace-normal break-words [overflow-wrap:anywhere] ${quizAnswers[currentQuestion.quiz_question_id]
                           ?.selected_option_id === option.option_id
                           ? "bg-success hover:bg-success"
                           : "bg-white hover:bg-white"
-                      }`}
+                        }`}
                     >
                       <span className="w-full max-w-full min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] text-center leading-snug">
                         {option.option_text}

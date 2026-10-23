@@ -6,7 +6,7 @@ import type { SubjectListItem } from "@/lib/api";
 import { subjectCode, subjectRouteGrade } from "./subject-utils";
 import { Badge } from "@/components/retroui/Badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 
 export function SubjectCatalogCard({
   subject,
@@ -41,17 +41,17 @@ export function SubjectCatalogCard({
             <DropdownMenu>
               <Tooltip>
                 <TooltipTrigger render={<span className="inline-flex">
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="p-1 shadow-none"
-                  aria-label="More options"
-                  onClick={(e) => e.preventDefault()}
-                >
-                  <EllipsisIcon className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="p-1 shadow-none"
+                      aria-label="More options"
+                      onClick={(e) => e.preventDefault()}
+                    >
+                      <EllipsisIcon className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
                 </span>} />
                 <TooltipContent>Subject actions</TooltipContent>
               </Tooltip>

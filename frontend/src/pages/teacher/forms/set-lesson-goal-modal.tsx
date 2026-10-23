@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { Checkbox } from "@/components/retroui/Checkbox";

@@ -5,7 +5,7 @@ import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Progress } from "@/components/retroui/Progress";
 import { OverviewCard } from "@/components/overview-cards";
 import { SidebarTrigger } from "@/components/ui/sidebar";
