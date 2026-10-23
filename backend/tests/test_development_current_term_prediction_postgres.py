@@ -8,7 +8,7 @@ and drop it after the module finishes.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from hashlib import sha256
 import json
@@ -44,8 +44,12 @@ from app.models.intervention.Intervention import Intervention
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.main import app
+from app.schemas.Submission import GradeRequest
 from app.services.prediction import DevelopmentCurrentTermPredictionPersistenceService as persistence
+from app.services.prediction import DevelopmentGradeRefreshService as grade_refresh
 from app.services.prediction import DevelopmentCurrentTermScoringService as scorer
+from app.services.submission import SubmissionService as submission_service
 from app.services.prediction.DevelopmentCurrentTermModelSelection import (
     CORRECTED_MODEL_NAME,
     LEGACY_MODEL_NAME,
@@ -55,6 +59,7 @@ from app.services.prediction.DevelopmentCurrentTermPredictionReadService import 
     list_latest_development_current_term_predictions,
 )
 from tests.test_current_period_live_feature_builder import add_activity
+from tests.test_development_current_term_api import _client, _read_params
 from tests.test_development_current_term_prediction_service import _make_ready, _set_weights
 
 
@@ -726,3 +731,206 @@ def test_latest_reader_is_model_specific_after_revisions(postgres_prediction_con
     assert legacy["revision"] == 1
     assert legacy_read["total"] == 1
     assert legacy_read["items"][0]["prediction_id"] == legacy["prediction_id"]
+
+
+def test_committed_grades_drive_complete_automatic_prediction_workflow(
+    postgres_prediction_context,
+    monkeypatch,
+):
+    ctx = postgres_prediction_context
+    db = ctx["db"]
+    student = Student(
+        student_id=uuid4(),
+        student_lrn="300000009902",
+        first_name="Automatic",
+        last_name="Workflow",
+        academic_level_id=ctx["level"].academic_level_id,
+    )
+    db.add(student)
+    db.flush()
+    db.add(StudentClass(
+        student_id=student.student_id,
+        class_id=ctx["class"].class_id,
+        academic_year_id=ctx["year"].academic_year_id,
+        enrollment_status="enrolled",
+    ))
+    db.commit()
+
+    # The fixture's four class-wide assignments are the exact readiness set:
+    # two Written Works and two Performance Tasks. Add one more initially
+    # ungraded activity so a later committed grade materially changes evidence.
+    add_activity(ctx, "WRITTEN_WORK", None, 10, status=None, title="Workflow revision evidence")
+    assignments = db.query(ClassworkAssignment).order_by(
+        ClassworkAssignment.classwork_assignment_id
+    ).all()
+    assert len(assignments) == 5
+    submissions = []
+    for assignment in assignments:
+        submission = StudentSubmission(
+            student_id=student.student_id,
+            classwork_assignment_id=assignment.classwork_assignment_id,
+            status="submitted",
+            submitted_at=datetime.now(timezone.utc),
+        )
+        db.add(submission)
+        submissions.append(submission)
+    db.commit()
+
+    score_calls = []
+
+    def deterministic_score(features, **kwargs):
+        score_calls.append({"features": dict(features), "kwargs": dict(kwargs)})
+        return 74.25 if len(score_calls) == 1 else 90.0
+
+    monkeypatch.setattr(scorer, "score_development_current_term", deterministic_score)
+    committed_refreshes = []
+    real_refresh = submission_service.refresh_after_committed_grade_change
+
+    def observe_committed_refresh(bind, **scope):
+        with Session(bind) as check:
+            committed_count = check.query(StudentSubmission).filter(
+                StudentSubmission.student_id == student.student_id,
+                StudentSubmission.status == "graded",
+                StudentSubmission.grade.isnot(None),
+            ).count()
+        committed_refreshes.append({"committed_count": committed_count, "scope": scope})
+        return real_refresh(bind, **scope)
+
+    monkeypatch.setattr(
+        submission_service,
+        "refresh_after_committed_grade_change",
+        observe_committed_refresh,
+    )
+
+    def prediction_rows():
+        db.expire_all()
+        return db.query(DevelopmentCurrentTermPrediction).filter_by(
+            student_id=student.student_id,
+            class_id=ctx["class"].class_id,
+            subject_id=ctx["subject"].subject_id,
+            source_period_id=ctx["period"].academic_period_id,
+            target_period_id=ctx["period"].academic_period_id,
+            model_version_id=ctx["model_version_id"],
+        ).order_by(DevelopmentCurrentTermPrediction.revision).all()
+
+    assert prediction_rows() == []
+    for index, submission in enumerate(submissions[:3], start=1):
+        submission_service.grade_student_submission(
+            submission.submission_id,
+            GradeRequest(grade=7),
+            ctx["staff"].staff_id,
+            db,
+        )
+        assert committed_refreshes[-1]["committed_count"] == index
+        assert prediction_rows() == []
+        assert score_calls == []
+
+    submission_service.grade_student_submission(
+        submissions[3].submission_id,
+        GradeRequest(grade=7),
+        ctx["staff"].staff_id,
+        db,
+    )
+    first_rows = prediction_rows()
+    assert committed_refreshes[-1]["committed_count"] == 4
+    assert len(first_rows) == 1
+    assert first_rows[0].revision == 1
+    assert len(score_calls) == 1
+    first_prediction_id = first_rows[0].prediction_id
+    first_snapshot = first_rows[0].evidence_snapshot
+
+    # An unchanged grade does not enqueue redundant refresh work. A duplicate
+    # delivery of the real refresh service also reuses Revision 1 without ML.
+    refresh_count = len(committed_refreshes)
+    submission_service.grade_student_submission(
+        submissions[3].submission_id,
+        GradeRequest(grade=7),
+        ctx["staff"].staff_id,
+        db,
+    )
+    assert len(committed_refreshes) == refresh_count
+    grade_refresh.refresh_after_committed_grade_change(
+        ctx["engine"],
+        student_ids=[student.student_id],
+        class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        period_id=ctx["period"].academic_period_id,
+    )
+    unchanged_rows = prediction_rows()
+    assert [(row.prediction_id, row.revision) for row in unchanged_rows] == [
+        (first_prediction_id, 1),
+    ]
+    assert len(score_calls) == 1
+
+    submission_service.grade_student_submission(
+        submissions[4].submission_id,
+        GradeRequest(grade=9),
+        ctx["staff"].staff_id,
+        db,
+    )
+    changed_rows = prediction_rows()
+    assert committed_refreshes[-1]["committed_count"] == 5
+    assert [row.revision for row in changed_rows] == [1, 2]
+    assert changed_rows[0].prediction_id == first_prediction_id
+    assert changed_rows[0].evidence_snapshot == first_snapshot
+    assert changed_rows[1].prediction_id != first_prediction_id
+    assert len(score_calls) == 2
+
+    interventions = db.query(Intervention).filter_by(
+        student_id=student.student_id,
+        class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        academic_period_id=ctx["period"].academic_period_id,
+    ).all()
+    assert len(interventions) == 1
+    assert interventions[0].status == "RESOLVED"
+    assert interventions[0].resolution_reason == "IMPROVED_PREDICTION"
+    assert interventions[0].source_prediction_id == first_prediction_id
+
+    # Promote only the isolated test registry row so the stable production GET
+    # can expose the generated history. The request must execute no SQL writes.
+    model = db.get(AIModelVersion, ctx["model_version_id"])
+    model.lifecycle_status = "PRODUCTION"
+    model.production_validated = True
+    model.independent_three_term_validation = True
+    model.is_active = True
+    db.commit()
+    writes = []
+
+    def capture_writes(_conn, _cursor, statement, _parameters, _context, _executemany):
+        verb = statement.lstrip().split(None, 1)[0].upper()
+        if verb in {"INSERT", "UPDATE", "DELETE", "MERGE", "TRUNCATE"}:
+            writes.append(statement)
+
+    event.listen(ctx["engine"], "before_cursor_execute", capture_writes)
+    before_counts = (
+        db.query(DevelopmentCurrentTermPrediction).count(),
+        db.query(Intervention).count(),
+        len(score_calls),
+    )
+    try:
+        with _client(
+            monkeypatch,
+            db,
+            role="admin",
+            environment="production",
+            enabled=False,
+        ) as client:
+            response = client.get(
+                "/api/v1/current-term-predictions",
+                params=_read_params(ctx),
+            )
+    finally:
+        event.remove(ctx["engine"], "before_cursor_execute", capture_writes)
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200, response.text
+    assert response.json()["total"] == 1
+    assert response.json()["items"][0]["prediction_id"] == changed_rows[1].prediction_id
+    assert response.json()["items"][0]["revision"] == 2
+    assert writes == []
+    assert (
+        db.query(DevelopmentCurrentTermPrediction).count(),
+        db.query(Intervention).count(),
+        len(score_calls),
+    ) == before_counts
