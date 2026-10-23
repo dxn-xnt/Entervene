@@ -65,6 +65,7 @@ export const routes = {
     subjectDetail: "/student/subjects/:classId/:subjectId",
     classworkDetail: "/student/classworks/:assignmentId",
     interventions: "/student/interventions",
+    interventionView: "/student/interventions/view",
     grades: "/student/grades",
     todo: "/student/todo",
     todoView: "/student/todo/:subject/:quizTitle",
