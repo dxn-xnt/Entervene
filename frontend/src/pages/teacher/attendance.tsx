@@ -851,7 +851,7 @@ export default function TeacherAttendancePage() {
                           onValueChange={handleTargetChange}
                           disabled={loadingClasses || targets.length === 0}
                         >
-                          <Select.Trigger className="w-full min-w-0">
+                          <Select.Trigger className="h-10 w-full min-w-0 text-sm">
                             <Select.Value
                               placeholder={
                                 loadingClasses
@@ -1173,7 +1173,7 @@ export default function TeacherAttendancePage() {
                       value={selectedTargetKey}
                       onValueChange={(val) => setSelectedTargetKey(val)}
                     >
-                      <Select.Trigger aria-label="Scanner class or subject" className="w-full">
+                      <Select.Trigger aria-label="Scanner class or subject" className="h-10 w-full text-sm">
                         <Select.Value placeholder="Select class / subject" />
                       </Select.Trigger>
                       <Select.Content className="attendance-select-options">
@@ -1382,7 +1382,7 @@ export default function TeacherAttendancePage() {
                         value={selectedTargetKey}
                         onValueChange={(val) => setSelectedTargetKey(val)}
                       >
-                        <Select.Trigger className="w-full min-w-0">
+                        <Select.Trigger className="h-10 w-full min-w-0 text-sm">
                           <Select.Value placeholder="Select class / subject" />
                         </Select.Trigger>
                         <Select.Content className="attendance-select-options">

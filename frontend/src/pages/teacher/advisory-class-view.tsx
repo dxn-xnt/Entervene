@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
-import { Award, BookOpen, ChevronDown, FileSpreadsheet, FileText, Loader2, Users } from "lucide-react";
+import { Award, BookOpen, ChevronDown, FileSpreadsheet, FileText, Loader2, Search, Users } from "lucide-react";
 import { TeacherEmptyAvatarGroup, TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -294,11 +294,15 @@ function StudentsTab({
       <section>
         <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <h3 className="text-xl font-bold">Students</h3>
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search students..."
-          />
+          <label className="relative w-full md:w-72">
+            <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-black/50" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search students..."
+              className="h-10 w-full border-black pl-9 pr-3"
+            />
+          </label>
         </div>
         <Card className="block w-full border-black">
           <Card.Content className="max-h-[560px] overflow-y-auto p-4">
@@ -538,12 +542,15 @@ function GradesTab({ classId }: { classId: number }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search students..."
-              className="w-full sm:w-52"
-            />
+            <label className="relative w-full sm:w-64">
+              <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-black/50" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search students..."
+                className="h-10 w-full border-black pl-9 pr-3"
+              />
+            </label>
             <Button
               variant="default"
               size="sm"

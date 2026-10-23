@@ -515,7 +515,7 @@ export function TeacherStudentView({
                 value={selectedPeriodId}
                 onValueChange={onPeriodChange}
               >
-                <Select.Trigger className="h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold min-w-[180px] w-full sm:w-auto">
+                <Select.Trigger className="h-10 w-full min-w-[180px] border-2 border-black bg-white text-sm font-normal shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] sm:w-auto">
                   <Select.Value placeholder="Select period" />
                 </Select.Trigger>
                 <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">

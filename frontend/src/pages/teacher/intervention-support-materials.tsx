@@ -978,7 +978,7 @@ const InterventionSupportMaterials = forwardRef<
                         onChange={(event) => setSearch(event.target.value)}
                       />
                       <Select value={kindFilter} onValueChange={(val) => setKindFilter(val)}>
-                        <Select.Trigger className="w-full sm:w-48 h-10">
+                        <Select.Trigger className="h-10 w-full text-sm sm:w-48">
                           <Select.Value placeholder="Filter type" />
                         </Select.Trigger>
                         <Select.Content>

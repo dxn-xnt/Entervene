@@ -456,7 +456,7 @@ export default function SubjectClassworkTab({
               value={sectionFilter}
               onValueChange={setSectionFilter}
             >
-              <Select.Trigger className="w-full sm:w-44 border-black">
+              <Select.Trigger className="h-10 w-full border-black text-sm sm:w-44">
                 <Select.Value placeholder="All sections" />
               </Select.Trigger>
               <Select.Content className="max-h-72 overflow-y-auto">
@@ -475,7 +475,7 @@ export default function SubjectClassworkTab({
               value={statusFilter}
               onValueChange={setStatusFilter}
             >
-              <Select.Trigger className="w-full sm:w-44 border-black">
+              <Select.Trigger className="h-10 w-full border-black text-sm sm:w-44">
                 <Select.Value placeholder="All statuses" />
               </Select.Trigger>
               <Select.Content>
