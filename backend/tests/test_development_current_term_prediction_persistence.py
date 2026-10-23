@@ -72,7 +72,13 @@ def test_append_only_revisions_snapshot_and_dashboard_isolation(current_period_c
     _make_ready(ctx)
     model_version_id = _register_test_model(ctx)
     grades = iter([90.1234, 78.5678])
-    monkeypatch.setattr(scorer, "score_development_current_term", lambda _features: next(grades))
+    scored_features = []
+
+    def capture_score(features):
+        scored_features.append(dict(features))
+        return next(grades)
+
+    monkeypatch.setattr(scorer, "score_development_current_term", capture_score)
 
     first = _run(ctx, model_version_id, supporting_context={
         "attendance_rate": 20,
@@ -106,6 +112,8 @@ def test_append_only_revisions_snapshot_and_dashboard_isolation(current_period_c
     assert original_snapshot["source_period_id"] == original_snapshot["target_period_id"]
     assert [x["name"] for x in original_snapshot["model_features"]] == scorer.required_feature_columns(scorer.load_development_current_term_schema())
     assert len(original_snapshot["model_features"]) == 31
+    assert {item["name"]: item["value"] for item in original_snapshot["model_features"]} == scored_features[0]
+    assert {item["name"]: item["value"] for item in second_row.evidence_snapshot["model_features"]} == scored_features[1]
     assert not any(term in json.dumps(original_snapshot).lower() for term in ("learner", "lrn", "email", "uploaded_file"))
     assert ctx["db"].query(AIPrediction).count() == 0
     assert get_dashboard_at_risk_predictions(ctx["db"])["items"] == []
@@ -133,6 +141,34 @@ def test_identical_academic_evidence_reuses_latest_revision(current_period_conte
     assert third["persisted"] is True
     assert third["revision"] == 2
     assert ctx["db"].get(DevelopmentCurrentTermPrediction, first["prediction_id"]).evidence_snapshot == original_snapshot
+
+
+def test_changed_feature_between_scoring_and_persistence_is_rejected(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    model_version_id = _register_test_model(ctx)
+    scored_features = {}
+
+    def capture_score(features):
+        scored_features.update(features)
+        return 84.6
+
+    original_build = service.build_current_period_features_from_records
+
+    def changed_persistence_build(*args, **kwargs):
+        built = original_build(*args, **kwargs)
+        built["features"]["ww_points_earned_so_far"] += 1.0
+        return built
+
+    monkeypatch.setattr(scorer, "score_development_current_term", capture_score)
+    monkeypatch.setattr(service, "build_current_period_features_from_records", changed_persistence_build)
+
+    with pytest.raises(ValueError, match="features changed between scoring and persistence"):
+        _run(ctx, model_version_id)
+
+    assert scored_features
+    assert ctx["db"].query(DevelopmentCurrentTermPrediction).count() == 0
 
 
 def test_partial_exam_change_creates_revision_without_changing_model_features(current_period_context, monkeypatch):

@@ -110,6 +110,7 @@ def _persist_successful_result(
     cutoff_at: datetime,
     prediction: dict[str, Any],
     intervention: dict[str, Any],
+    scored_features: dict[str, Any],
 ) -> dict[str, Any]:
     if prediction["status"] != prediction_service.STATUS_DEVELOPMENT_PREDICTION_AVAILABLE:
         raise ValueError("Only successful development predictions may be persisted.")
@@ -164,6 +165,9 @@ def _persist_successful_result(
         or prediction_service._weight_pattern(features) != prediction["domain_result"]["weight_pattern"]
     ):
         raise ValueError("Current-term domain changed during prediction generation.")
+    if features != scored_features:
+        raise ValueError("Current-term model features changed between scoring and persistence.")
+    features = scored_features
 
     columns = scorer.required_feature_columns(model_version.feature_schema_json)
     if len(columns) != 31:
@@ -318,9 +322,11 @@ def generate_and_persist_development_current_term(
 
     def operation(db: Session) -> dict[str, Any]:
         version = _require_development_model(db, model_version_id)
+        scored_features: dict[str, Any] = {}
         prediction = prediction_service.predict_development_current_term(
             db, student_id, class_id, subject_id, period_id, cutoff_at=cutoff,
             model_name=version.model_name,
+            scored_features_out=scored_features,
         )
         intervention = intervention_service.assess_development_current_term_intervention(
             prediction, supporting_context=supporting_context,
@@ -352,6 +358,7 @@ def generate_and_persist_development_current_term(
             cutoff_at=cutoff,
             prediction=prediction,
             intervention=intervention,
+            scored_features=scored_features,
         )
 
     def operation_with_followup(db: Session) -> dict[str, Any]:

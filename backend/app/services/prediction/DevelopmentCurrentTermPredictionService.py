@@ -120,6 +120,7 @@ def predict_development_current_term(
     *,
     cutoff_at: datetime | None = None,
     model_name: str | None = None,
+    scored_features_out: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     model_name = require_development_model_name(model_name or selected_development_model_name())
     result = partial(_base_result, model_name=model_name)
@@ -233,6 +234,8 @@ def predict_development_current_term(
         projected = v3_scorer.score_development_current_term(built["features"])
     else:
         projected = v3_scorer.score_development_current_term(built["features"], model_name=model_name)
+    if scored_features_out is not None:
+        scored_features_out.update(built["features"])
     return result(
         status=STATUS_DEVELOPMENT_PREDICTION_AVAILABLE,
         source_period_id=source_period_id,
