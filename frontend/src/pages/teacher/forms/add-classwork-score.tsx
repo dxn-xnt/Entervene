@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/retroui/Button";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
@@ -143,22 +143,20 @@ export default function AddClassworkScoreModal({
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                className={`py-2 px-3 text-sm font-bold border-2 rounded transition-colors ${
-                  activityMode === "MANUAL"
+                className={`py-2 px-3 text-sm font-bold border-2 rounded transition-colors ${activityMode === "MANUAL"
                     ? "bg-primary text-primary-foreground border-black shadow-sm"
                     : "bg-muted text-muted-foreground border-gray-300 hover:bg-gray-100"
-                }`}
+                  }`}
                 onClick={() => setActivityMode("MANUAL")}
               >
                 Manual Activity
               </button>
               <button
                 type="button"
-                className={`py-2 px-3 text-sm font-bold border-2 rounded transition-colors ${
-                  activityMode === "ONLINE"
+                className={`py-2 px-3 text-sm font-bold border-2 rounded transition-colors ${activityMode === "ONLINE"
                     ? "bg-primary text-primary-foreground border-black shadow-sm"
                     : "bg-muted text-muted-foreground border-gray-300 hover:bg-gray-100"
-                }`}
+                  }`}
                 onClick={() => setActivityMode("ONLINE")}
               >
                 Online Activity
@@ -226,11 +224,10 @@ export default function AddClassworkScoreModal({
                   return (
                     <label
                       key={l.lesson_id}
-                      className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded cursor-pointer text-sm font-medium transition-colors ${
-                        isChecked
+                      className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded cursor-pointer text-sm font-medium transition-colors ${isChecked
                           ? "bg-primary/10 text-foreground font-semibold"
                           : "hover:bg-muted/40 text-muted-foreground"
-                      }`}
+                        }`}
                     >
                       <input
                         type="checkbox"

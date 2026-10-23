@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Card as RetroCard } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
@@ -160,115 +160,115 @@ export default function AdminSubjectLevel() {
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               <RetroCard className="bg-accent py-3">
-              <div className="flex flex-col gap-1">
-                <div className="flex flex-wrap items-end gap-2">
-                  <Text as="h2" className="font-sansm font-bold">
-                    {decodedGrade}
-                  </Text>
-                  {activeYearLabel ? (
-                    <p className="pb-1 text-lg font-semibold">
-                      ({activeYearLabel})
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            </RetroCard>
-
-            {error ? (
-              <RetroCard className="bg-[#fff7d6] px-4 py-3">
-                <p className="font-semibold">Unable to load subjects</p>
-                <p className="text-sm">{error}</p>
-              </RetroCard>
-            ) : null}
-
-            <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <section className="flex min-w-0 flex-col gap-3">
-              <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-                <Text as="h3" className="font-sans text-xl font-bold">
-                  Subjects
-                </Text>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <label className="relative min-w-0">
-                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
-                    <Input
-                      className="h-10 w-full pl-9 sm:w-72"
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                      placeholder="Search name, code, group"
-                    />
-                  </label>
-                  <Select
-                    value={status}
-                    onValueChange={(value) =>
-                      setStatus(value as SubjectStatus | "all")
-                    }
-                  >
-                    <Select.Trigger className="h-10 w-full sm:w-40">
-                      <Select.Value />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Group>
-                        <Select.Item value="active">Active</Select.Item>
-                        <Select.Item value="archived">Archived</Select.Item>
-                        <Select.Item value="all">All</Select.Item>
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                {isLoading ? (
-                  <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
-                    <Loader size="sm" />
-                    Loading subjects...
+                <div className="flex flex-col gap-1">
+                  <div className="flex flex-wrap items-end gap-2">
+                    <Text as="h2" className="font-sansm font-bold">
+                      {decodedGrade}
+                    </Text>
+                    {activeYearLabel ? (
+                      <p className="pb-1 text-lg font-semibold">
+                        ({activeYearLabel})
+                      </p>
+                    ) : null}
                   </div>
-                ) : visibleSubjects.length === 0 ? (
-                  <Empty>
-                    <Empty.Content>
-                      <Empty.Title>No subjects found for {decodedGrade}.</Empty.Title>
-                    </Empty.Content>
-                  </Empty>
-                ) : (
-                  visibleSubjects.map((subject) => (
-                    <SubjectItemLine
-                      key={subject.subject_id}
-                      subjectName={subject.subject_name}
-                      status={subject.status}
-                      isArchived={subject.status === "archived"}
-                      subjectCode={subject.subject_codename || "No code"}
-                      subjectGroup={subject.grading_template.template_name}
-                      gradingTemplate={
-                        subject.grading_template.template_name
-                      }
-                      onView={() =>
-                        navigate(
-                          `/admin/subjects/${encodeURIComponent(decodedGrade)}/${subject.subject_id}`,
-                        )
-                      }
-                      onEdit={() => openEditSubject(subject)}
-                      onArchive={() => setPendingArchive(subject)}
-                    />
-                  ))
-                )}
+                </div>
+              </RetroCard>
+
+              {error ? (
+                <RetroCard className="bg-[#fff7d6] px-4 py-3">
+                  <p className="font-semibold">Unable to load subjects</p>
+                  <p className="text-sm">{error}</p>
+                </RetroCard>
+              ) : null}
+
+              <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <section className="flex min-w-0 flex-col gap-3">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+                    <Text as="h3" className="font-sans text-xl font-bold">
+                      Subjects
+                    </Text>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <label className="relative min-w-0">
+                        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+                        <Input
+                          className="h-10 w-full pl-9 sm:w-72"
+                          value={search}
+                          onChange={(event) => setSearch(event.target.value)}
+                          placeholder="Search name, code, group"
+                        />
+                      </label>
+                      <Select
+                        value={status}
+                        onValueChange={(value) =>
+                          setStatus(value as SubjectStatus | "all")
+                        }
+                      >
+                        <Select.Trigger className="h-10 w-full sm:w-40">
+                          <Select.Value />
+                        </Select.Trigger>
+                        <Select.Content>
+                          <Select.Group>
+                            <Select.Item value="active">Active</Select.Item>
+                            <Select.Item value="archived">Archived</Select.Item>
+                            <Select.Item value="all">All</Select.Item>
+                          </Select.Group>
+                        </Select.Content>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    {isLoading ? (
+                      <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+                        <Loader size="sm" />
+                        Loading subjects...
+                      </div>
+                    ) : visibleSubjects.length === 0 ? (
+                      <Empty>
+                        <Empty.Content>
+                          <Empty.Title>No subjects found for {decodedGrade}.</Empty.Title>
+                        </Empty.Content>
+                      </Empty>
+                    ) : (
+                      visibleSubjects.map((subject) => (
+                        <SubjectItemLine
+                          key={subject.subject_id}
+                          subjectName={subject.subject_name}
+                          status={subject.status}
+                          isArchived={subject.status === "archived"}
+                          subjectCode={subject.subject_codename || "No code"}
+                          subjectGroup={subject.grading_template.template_name}
+                          gradingTemplate={
+                            subject.grading_template.template_name
+                          }
+                          onView={() =>
+                            navigate(
+                              `/admin/subjects/${encodeURIComponent(decodedGrade)}/${subject.subject_id}`,
+                            )
+                          }
+                          onEdit={() => openEditSubject(subject)}
+                          onArchive={() => setPendingArchive(subject)}
+                        />
+                      ))
+                    )}
+                  </div>
+                </section>
+                <aside className="flex min-w-0 flex-col gap-3" aria-label="Subject summary">
+                  <OverviewCard
+                    title="Total Subjects"
+                    count={String(gradeSubjects.length)}
+                  />
+                  <OverviewCard
+                    title="Active Subjects"
+                    count={String(activeSubjects.length)}
+                  />
+                  <OverviewCard
+                    title="Archived Subjects"
+                    count={String(archivedSubjects.length)}
+                  />
+                  <OverviewCard title="Grading Templates" count={String(totalGroups)} />
+                </aside>
               </div>
-            </section>
-            <aside className="flex min-w-0 flex-col gap-3" aria-label="Subject summary">
-              <OverviewCard
-                title="Total Subjects"
-                count={String(gradeSubjects.length)}
-              />
-              <OverviewCard
-                title="Active Subjects"
-                count={String(activeSubjects.length)}
-              />
-              <OverviewCard
-                title="Archived Subjects"
-                count={String(archivedSubjects.length)}
-              />
-              <OverviewCard title="Grading Templates" count={String(totalGroups)} />
-            </aside>
-            </div>
             </div>
           </div>
         </div>

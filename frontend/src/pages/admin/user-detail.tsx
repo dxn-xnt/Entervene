@@ -13,7 +13,7 @@ import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
 import { ToggleSwitch } from "@/components/retroui/ToggleSwitch";
 import { OverviewCard } from "@/components/overview-cards";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { UserProfileHeader } from "@/components/profile-header";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import {

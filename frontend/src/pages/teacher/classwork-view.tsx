@@ -26,7 +26,7 @@ import type {
   TrackingStudent,
 } from "@/types/classwork";
 import { Button } from "@/components/retroui/Button";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Table } from "@/components/retroui/Table";
 import { Card } from "@/components/retroui/Card";
 import { Progress } from "@/components/retroui/Progress";

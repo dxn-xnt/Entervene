@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { CalendarDays } from "lucide-react";
 import { Popover } from "@base-ui/react/popover";
 import { Button } from "@/components/retroui/Button";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
@@ -109,38 +109,38 @@ function PeriodCard({
 }: PeriodCardProps) {
     return (
         <div className="flex flex-col gap-5 py-3">
-                    <div className="flex items-center justify-between border-b pb-3 border-border/40">
-                        <Text className="font-bold text-md">
-                            {formatPeriodLabel({ period_type: periodType, period_sequence: index + 1 })}
-                        </Text>
-                        <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-mono">
-                            {index + 1} of {total}
-                        </span>
-                    </div>
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <div className="flex flex-col gap-1">
-                            <label className="text-xs font-medium text-muted-foreground" htmlFor={`start-date-${index}`}>Start Date</label>
-                            <DatePicker
-                                id={`start-date-${index}`}
-                                selected={startDate}
-                                onSelect={onStartDateChange}
-                                minDate={minStartDate}
-                                maxDate={maxStartDate}
-                                placeholder="Select start date"
-                            />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <label className="text-xs font-medium text-muted-foreground" htmlFor={`end-date-${index}`}>End Date</label>
-                            <DatePicker
-                                id={`end-date-${index}`}
-                                selected={endDate}
-                                onSelect={onEndDateChange}
-                                minDate={minEndDate}
-                                maxDate={maxEndDate}
-                                placeholder="Select end date"
-                            />
-                        </div>
-                    </div>
+            <div className="flex items-center justify-between border-b pb-3 border-border/40">
+                <Text className="font-bold text-md">
+                    {formatPeriodLabel({ period_type: periodType, period_sequence: index + 1 })}
+                </Text>
+                <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-mono">
+                    {index + 1} of {total}
+                </span>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-muted-foreground" htmlFor={`start-date-${index}`}>Start Date</label>
+                    <DatePicker
+                        id={`start-date-${index}`}
+                        selected={startDate}
+                        onSelect={onStartDateChange}
+                        minDate={minStartDate}
+                        maxDate={maxStartDate}
+                        placeholder="Select start date"
+                    />
+                </div>
+                <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-muted-foreground" htmlFor={`end-date-${index}`}>End Date</label>
+                    <DatePicker
+                        id={`end-date-${index}`}
+                        selected={endDate}
+                        onSelect={onEndDateChange}
+                        minDate={minEndDate}
+                        maxDate={maxEndDate}
+                        placeholder="Select end date"
+                    />
+                </div>
+            </div>
         </div>
     );
 }
@@ -375,25 +375,25 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
                         </div>
                         <Carousel className="relative mt-4 w-full">
                             <div className="mx-14 min-w-0 sm:mx-16">
-                            <Carousel.Content>
-                                {dates.map((period, index) => (
-                                    <Carousel.Item key={index}>
-                                        <PeriodCard
-                                            index={index}
-                                            total={totalPeriods}
-                                            startDate={period.startDate}
-                                            endDate={period.endDate}
-                                            onStartDateChange={(date) => handleDateChange(index, "startDate", date)}
-                                            onEndDateChange={(date) => handleDateChange(index, "endDate", date)}
-                                            minStartDate={getMinStartDate(index)}
-                                            maxStartDate={getMaxStartDate(index)}
-                                            minEndDate={getMinEndDate(index)}
-                                            maxEndDate={getMaxEndDate(index)}
-                                            periodType={periodType}
-                                        />
-                                    </Carousel.Item>
-                                ))}
-                            </Carousel.Content>
+                                <Carousel.Content>
+                                    {dates.map((period, index) => (
+                                        <Carousel.Item key={index}>
+                                            <PeriodCard
+                                                index={index}
+                                                total={totalPeriods}
+                                                startDate={period.startDate}
+                                                endDate={period.endDate}
+                                                onStartDateChange={(date) => handleDateChange(index, "startDate", date)}
+                                                onEndDateChange={(date) => handleDateChange(index, "endDate", date)}
+                                                minStartDate={getMinStartDate(index)}
+                                                maxStartDate={getMaxStartDate(index)}
+                                                minEndDate={getMinEndDate(index)}
+                                                maxEndDate={getMaxEndDate(index)}
+                                                periodType={periodType}
+                                            />
+                                        </Carousel.Item>
+                                    ))}
+                                </Carousel.Content>
                             </div>
                             <Carousel.Previous className="left-0 top-1/2 size-10" />
                             <Carousel.Next className="right-0 top-1/2 size-10" />

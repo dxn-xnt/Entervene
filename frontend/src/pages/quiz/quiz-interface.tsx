@@ -5,7 +5,7 @@ import { LoadingPanel } from "@/components/loading-panel";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { QuizTextAnswerInput } from "@/components/quiz/student-quiz-answer";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { routes } from "@/../routes";
 import { quizPathWithContext } from "@/lib/student-quiz-navigation";
 import {

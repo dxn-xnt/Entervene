@@ -11,7 +11,7 @@ import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
 import { Switch } from "@/components/retroui/Switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { apiFetch } from "@/lib/api";
 import {

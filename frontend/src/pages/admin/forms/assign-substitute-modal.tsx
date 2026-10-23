@@ -12,7 +12,7 @@ import { Input } from "@/components/retroui/Input";
 import { Loader } from "@/components/retroui/Loader";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import {
   getUsers,
   getTeacherSubjectLoads,
@@ -317,13 +317,12 @@ export default function AssignSubstituteModal({
                           onClick={() => {
                             if (!isCovered) handleToggleLoad(load.subject_load_id);
                           }}
-                          className={`p-3 transition-all flex items-start justify-between ${
-                            isCovered
+                          className={`p-3 transition-all flex items-start justify-between ${isCovered
                               ? "opacity-60 bg-muted/30 border-dashed cursor-not-allowed"
                               : isSelected
-                              ? "border-primary bg-primary/10 shadow-sm cursor-pointer"
-                              : "hover:bg-muted/40 cursor-pointer"
-                          }`}
+                                ? "border-primary bg-primary/10 shadow-sm cursor-pointer"
+                                : "hover:bg-muted/40 cursor-pointer"
+                            }`}
                         >
                           <div className="flex items-start gap-3">
                             <Checkbox

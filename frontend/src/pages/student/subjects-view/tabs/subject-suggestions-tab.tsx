@@ -14,7 +14,7 @@ import {
 import type { SuggestionResponse } from "@/types/suggestion";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 
 type Notice = {
   status: "success" | "error" | "info";
