@@ -122,3 +122,34 @@ class PeriodTemplateSlotSchema(BaseModel):
     is_locked_break: bool = False
     display_order: int = 0
 
+
+class TeacherScopeGradeOption(BaseModel):
+    grade_level: int
+    level_name: str
+
+
+class TeacherScopeClassOption(BaseModel):
+    class_id: int
+    section_name: str
+    grade_level: int | None = None
+
+
+class TeacherScopeSubjectOption(BaseModel):
+    subject_id: int
+    subject_name: str
+    subject_codename: str | None = None
+    period_index: int | None = None
+
+
+class TeacherScopeTermOption(BaseModel):
+    term_number: int
+    term_label: str
+    academic_period_id: int
+
+
+class TeacherAcademicScopeResponse(BaseModel):
+    grades: list[TeacherScopeGradeOption] = Field(default_factory=list)
+    classes: list[TeacherScopeClassOption] = Field(default_factory=list)
+    subjects: list[TeacherScopeSubjectOption] = Field(default_factory=list)
+    terms: list[TeacherScopeTermOption] = Field(default_factory=list)
+
