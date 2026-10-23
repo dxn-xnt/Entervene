@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import StudentResolvedInterventions from "./student-resolved-interventions";
+import StudentResolvedInterventions from ".//student-resolved-interventions";
 
 const api = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn() }));
 vi.mock("@/lib/student-persistent-interventions-api", () => ({

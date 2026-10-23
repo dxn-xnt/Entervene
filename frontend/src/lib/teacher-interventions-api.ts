@@ -142,7 +142,7 @@ export interface RemediationFocus {
 export interface RemediationProgress {
   triggering_projection: number; latest_projection: number | null; latest_revision: number | null;
   completed_remediation: Array<{ title: string; assignment_id: number; grade: number | null; total_points: number | null }>;
-  assigned_remediation?: Array<{ title: string; assignment_id: number; component: string | null; is_graded: boolean; submission_status: string | null; grade: number | null; total_points: number | null; original_assignment_id?: number | null; original_title?: string | null; original_grade?: number | null; effective_grade?: number | null; exam_subtype?: string | null }>;
+  assigned_remediation?: Array<{ title: string; assignment_id: number; classwork_id?: number; classwork_type?: string; is_published?: boolean; component: string | null; is_graded: boolean; submission_status: string | null; grade: number | null; total_points: number | null; original_assignment_id?: number | null; original_title?: string | null; original_grade?: number | null; effective_grade?: number | null; exam_subtype?: string | null }>;
   status: string; status_reason: string;
 }
 export interface RemediationPlan {
