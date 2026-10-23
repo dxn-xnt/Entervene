@@ -31,7 +31,9 @@ from app.schemas.SubjectLoad import (
     UnlockSectionRequest,
     DiscardDraftRequest,
     SectionDraftResponse,
+    TeacherAcademicScopeResponse,
 )
+from app.services.academic.TeacherAcademicScopeService import get_teacher_academic_scope
 from pydantic import BaseModel
 from sqlalchemy import text
 from app.services.academic.ConflictDetectorService import ConflictDetectorService
@@ -253,6 +255,23 @@ def _serialize_load_item(sl: SubjectLoad, period_deps: dict[tuple[int, int], dic
         "has_live_data": bool(deps.get("educational_total", 0) > 0),
         "has_admin_records": bool(deps.get("administrative_total", 0) > 0),
     }
+
+
+@router.get("/teacher/scope", response_model=TeacherAcademicScopeResponse)
+def get_teacher_academic_scope_endpoint(
+    class_id: int | None = Query(None, description="Optional class ID to scope subjects"),
+    academic_period_id: int | None = Query(None, description="Optional academic period ID to scope subjects"),
+    _teacher: dict = Depends(require_role("teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
+    db: Session = Depends(get_db),
+):
+    return get_teacher_academic_scope(
+        db,
+        staff_id=staff_id,
+        class_id=class_id,
+        academic_period_id=academic_period_id,
+        reject_unassigned_class=True,
+    )
 
 
 @router.get("/studio-data")

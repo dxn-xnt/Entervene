@@ -401,7 +401,7 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     expect(mocks.navigate).toHaveBeenCalledWith("/teacher/classes/17/25");
   });
 
-  it("maps pending submissions to real names and a Needs grading badge and navigates only real classwork IDs", async () => {
+  it("maps pending submissions to real names and an ungraded count badge and navigates only real classwork IDs", async () => {
     mocks.load.mockResolvedValue(response({ action_queue: { upcoming_deadlines: [], pending_grading: [
       { submission_id: 41, student_id: "s-2", student_name: "Real Student", classwork_id: 712,
         classwork_title: "Actual review task", section_name: "Real Section", submitted_at: null },
@@ -411,7 +411,7 @@ describe("teacher dashboard Phase 1 mocked component behavior", () => {
     render(<Dashboard />);
     await waitFor(() => expect(screen.getByText("Actual review task")).toBeTruthy());
     expect(screen.getByText("Real Student · Real Section")).toBeTruthy();
-    expect(within(cardFor("Submissions to Review")).getAllByText("Needs grading")).toHaveLength(2);
+    expect(within(cardFor("Submissions to Review")).getAllByText("1 ungraded")).toHaveLength(2);
     fireEvent.click(screen.getByText("No classwork link"));
     expect(mocks.navigate).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText("Actual review task"));

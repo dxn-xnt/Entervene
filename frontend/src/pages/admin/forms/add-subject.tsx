@@ -7,7 +7,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import {
   createSubjectOffering,
   createSubject,

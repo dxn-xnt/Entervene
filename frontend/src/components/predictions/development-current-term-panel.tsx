@@ -6,7 +6,7 @@ import type { SubjectListItem } from "@/lib/api";
 import {
   generateDevelopmentCurrentTermPrediction,
   fetchDevelopmentCurrentTermPredictions,
-  fetchDashboardFilters,
+  fetchTeacherAcademicScope,
   type DashboardClassOption,
   type DashboardSubjectOption,
   type DashboardTermOption,
@@ -73,7 +73,7 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
           setSubjects(subjectData.subjects);
         }
       })
-      : fetchDashboardFilters().then((scope) => {
+      : fetchTeacherAcademicScope().then((scope) => {
         if (!cancelled) {
           setTeacherClasses(scope.classes);
           setTeacherTerms(scope.terms);
@@ -104,7 +104,7 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
     }
     let cancelled = false;
     setLoadingSubjects(true);
-    fetchDashboardFilters({ class_id: classId, academic_period_id: activePeriodId })
+    fetchTeacherAcademicScope({ class_id: classId, academic_period_id: activePeriodId })
       .then((scope) => { if (!cancelled) setTeacherSubjects(scope.subjects); })
       .catch((cause: unknown) => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Unable to load assigned subjects."); })
       .finally(() => { if (!cancelled) setLoadingSubjects(false); });

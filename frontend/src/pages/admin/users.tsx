@@ -28,7 +28,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import { cn } from "@/lib/utils";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import AssignSubstituteModal from "./forms/assign-substitute-modal";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 
 

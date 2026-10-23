@@ -32,6 +32,7 @@ vi.mock("@/lib/prediction-api", async (importOriginal) => {
   return {
     ...original,
     fetchDashboardFilters: vi.fn().mockResolvedValue({ grades: [], classes: [], subjects: [], terms: [] }),
+    fetchTeacherAcademicScope: vi.fn().mockResolvedValue({ grades: [], classes: [], subjects: [], terms: [] }),
     fetchDashboardGradeSummaries: vi.fn().mockResolvedValue([]),
     fetchDashboardAtRisk: vi.fn().mockResolvedValue({ items: [], total: 0, risk_summary: { total: 0 } }),
   };

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Save, X } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Dialog } from "@/components/retroui/Dialog";
 import { apiFetch } from "@/lib/api";
 import type { TeacherQuizSubmissionDetail } from "@/pages/teacher/classworks/quiz-builder-types";

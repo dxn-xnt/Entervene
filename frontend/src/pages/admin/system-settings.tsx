@@ -12,7 +12,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Switch } from "@/components/retroui/Switch";
 import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { ArrowUpRight, Lock, Calendar, Save } from "lucide-react";
 import AddAcademicPeriodModal from "./forms/add-academic-period";
 import AddPathwayModal from "./forms/add-pathway";
@@ -319,6 +319,8 @@ export default function AdminSystemSettings() {
     if (!averageYearId) return;
     let cancelled = false;
     setAverageError("");
+    setAveragePolicy(null);
+    setAveragePassing("");
     getYearGeneralAveragePolicy(Number(averageYearId)).then((policy) => {
       if (cancelled) return;
       setAveragePolicy(policy);
@@ -512,12 +514,12 @@ export default function AdminSystemSettings() {
     ) || academicPeriods[0];
   const progressRatio = activePeriod
     ? Math.min(
-        1,
-        Math.max(
-          0,
-          activePeriod.period_sequence / (activePeriod.total_periods || 3),
-        ),
-      )
+      1,
+      Math.max(
+        0,
+        activePeriod.period_sequence / (activePeriod.total_periods || 3),
+      ),
+    )
     : 0.33;
   const progressPercent = Math.round(progressRatio * 100);
 
@@ -633,7 +635,7 @@ export default function AdminSystemSettings() {
                   <label className="flex flex-col gap-1 text-sm font-semibold">Academic year
                     <Select value={averageYearId} onValueChange={(value) => { setAveragePolicy(null); setAverageYearId(value); }}><Select.Trigger className="w-full"><Select.Value placeholder="Select academic year" /></Select.Trigger><Select.Content><Select.Group>{academicYears.map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}{year.is_active ? " (active)" : ""}</Select.Item>)}</Select.Group></Select.Content></Select>
                   </label>
-                  <p className="text-sm font-semibold">{averagePolicy?.configured ? `Confirmed for ${averagePolicy.year_label}: ${averagePolicy.threshold}%` : "Unconfigured for this academic year"}</p>
+                  <p className="text-sm font-semibold">{averagePolicy?.configured ? `Confirmed for ${averagePolicy.year_label}: ${averagePolicy.threshold}%` : averagePolicy ? "Unconfigured for this academic year" : averageError ? "Passing grade status unavailable" : "Loading passing grade status..."}</p>
                   {!averagePolicy?.configured && averagePolicy?.legacy_proposal ? <Button variant="outline" disabled={isSavingThresholds} onClick={() => void handleSaveThresholds("confirm_legacy")}>Confirm legacy proposal ({averagePolicy.legacy_proposal}%)</Button> : null}
                   {averagePolicy && !averagePolicy.configured && !averagePolicy.legacy_proposal ? <Button variant="outline" disabled={isSavingThresholds} onClick={() => void handleSaveThresholds("initialize_manual")}>Set initial passing grade manually</Button> : null}
                   {!averagePolicy?.configured && averagePolicy?.previous_academic_year_id ? <Button variant="outline" disabled={isSavingThresholds} onClick={() => void handleSaveThresholds("copy_previous")}>Copy from Previous Academic Year</Button> : null}
@@ -644,8 +646,9 @@ export default function AdminSystemSettings() {
                       <span className="hidden sm:block" />
                       <Input
                         aria-label="General Average Passing Grade"
-                        className="w-full min-w-0 shadow-none transition-all hover:shadow-md focus:shadow-md focus-visible:shadow-md sm:w-20"
+                        className="w-full min-w-0 shadow-none transition-all hover:shadow-md focus:shadow-md focus-visible:shadow-md sm:w-32"
                         type="number"
+                        placeholder="0-100"
                         min={0}
                         max={100}
                         step="0.01"
@@ -672,7 +675,7 @@ export default function AdminSystemSettings() {
                       Reusable grade weight templates stored in the database. Assign them to subjects during grading setup.
                     </Text>
                   </div>
-                  <Button size="sm" onClick={() => navigate("/admin/subjects?tab=grading") }>
+                  <Button size="sm" onClick={() => navigate("/admin/subjects?tab=grading")}>
                     Manage in Subjects <ArrowUpRight className="ml-1 size-4" />
                   </Button>
                 </div>
@@ -690,7 +693,7 @@ export default function AdminSystemSettings() {
                               </div>
                               <Text as="p" className="mt-1 line-clamp-2 text-xs text-black/70">{template.description || "Custom grading template"}</Text>
                             </div>
-                            <Button aria-label={`Manage ${template.name}`} size="icon" variant="outline" className="size-8 shrink-0 bg-white p-1 shadow-[2px_2px_0_#000]" onClick={() => navigate("/admin/subjects?tab=grading") }>
+                            <Button aria-label={`Manage ${template.name}`} size="icon" variant="outline" className="size-8 shrink-0 bg-white p-1 shadow-[2px_2px_0_#000]" onClick={() => navigate("/admin/subjects?tab=grading")}>
                               <ArrowUpRight className="size-4" />
                             </Button>
                           </div>
@@ -793,7 +796,7 @@ export default function AdminSystemSettings() {
                       <Text as="h6" className="font-sans font-medium">
                         Period Type
                       </Text>
-                      <div className="h-10 border-2 border-black flex items-center gap-2 px-3 text-md font-medium">
+                      <div className="h-10 border-2 border-black rounded flex items-center gap-2 px-3 text-md font-medium">
                         <Lock className="w-3.5 h-3.5" />
                         Three-Term Academic Calendar
                       </div>

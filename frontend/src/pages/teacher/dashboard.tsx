@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Calendar, AlertCircle, ArrowUpRight, BookOpen } from "lucide-react";
+import { Calendar, AlertCircle, ArrowUpRight, BookOpen, CheckCircle } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
@@ -29,7 +29,7 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
 } from "recharts";
-import { cn } from "@/lib/utils";
+import IconContainer from "@/components/icon-container";
 
 // Dashboard metrics stay unavailable until loaded; later-phase detail widgets retain their mockups.
 const defaultTeacherCards: OverviewCardData[] = [
@@ -90,17 +90,21 @@ function formatGrade(value: number | null | undefined): string {
   return value != null && Number.isFinite(value) ? String(value) : "—";
 }
 
-function formatDeadline(dueDate: string | null): string {
-  if (!dueDate) return "—";
-  const date = new Date(dueDate);
-  if (Number.isNaN(date.getTime())) return "—";
-  const dateKey = (value: Date) => value.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
-  if (dateKey(date) === dateKey(new Date())) return "Today";
-  if (dateKey(date) === dateKey(new Date(Date.now() + 24 * 60 * 60 * 1000))) return "Tomorrow";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "Asia/Manila" });
-}
-
 type SupportReason = TeacherDashboardSupportSummary["items"][number]["reasons"][number];
+
+const REASON_DEPTH_ORDER: Record<string, number> = {
+  below_passing: 0,
+  overdue_work: 1,
+  unexcused_absences: 2,
+  late_submissions: 3,
+};
+
+function getMostDepthReason(reasons: SupportReason[]): SupportReason | undefined {
+  if (!reasons || reasons.length === 0) return undefined;
+  return [...reasons].sort(
+    (a, b) => (REASON_DEPTH_ORDER[a.code] ?? 99) - (REASON_DEPTH_ORDER[b.code] ?? 99)
+  )[0];
+}
 
 // Short, badge-sized labels; the full backend message stays available as a tooltip.
 function reasonBadgeLabel(reason: SupportReason): string {
@@ -339,7 +343,6 @@ export default function Dashboard() {
   const support = visibleGradeData?.students_to_check_in_with;
   const gradeDetails = visibleGradeData?.grade_details;
   const topPerformers = gradeDetails ? visibleGradeData?.top_performers ?? [] : [];
-  const dueWeek = data?.action_queue?.upcoming_deadlines ?? [];
   const trendPoints = isLoading || isPeriodLoading || error ? [] : data?.trend_chart.points ?? [];
   const visiblePhaseTwo = isLoading || isPeriodLoading || error ? undefined : data?.phase_two;
   const visibleEngagement = isLoading || isPeriodLoading || error ? undefined : data?.engagement;
@@ -348,13 +351,27 @@ export default function Dashboard() {
     day,
     count: visiblePhaseTwo?.weekdays.days.find((item) => item.day_index === dayIndex)?.count ?? null,
   }));
-  const reviewSubmissions = (data?.action_queue?.pending_grading ?? []).map((item) => ({
-    ...item,
-    title: item.classwork_title,
-    section: [item.student_name, item.section_name].filter(Boolean).join(" · "),
-    badge: "Needs grading",
-    variant: "destructive",
-  }));
+  const pendingGrading = data?.action_queue?.pending_grading ?? [];
+  const classworkUngradedCounts = useMemo(() => {
+    const counts = new Map<number | string, number>();
+    for (const item of pendingGrading) {
+      const key = item.classwork_id != null ? item.classwork_id : (item.classwork_title || item.submission_id);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [pendingGrading]);
+
+  const reviewSubmissions = pendingGrading.map((item) => {
+    const key = item.classwork_id != null ? item.classwork_id : (item.classwork_title || item.submission_id);
+    const count = classworkUngradedCounts.get(key) ?? 1;
+    return {
+      ...item,
+      title: item.classwork_title,
+      section: [item.student_name, item.section_name].filter(Boolean).join(" · "),
+      badge: `${count} ungraded`,
+      variant: "destructive",
+    };
+  });
   const gradeDistribution = gradeDetails ? visibleGradeData?.grade_distribution ?? [] : [];
   const attendanceSections = isLoading || isPeriodLoading || error ? [] : data?.details?.attendance_by_section ?? [];
 
@@ -461,39 +478,37 @@ export default function Dashboard() {
                               : "No students meet the check-in criteria.")}
                           </Card.Description>
                         )}
-                        {support?.items.map((s) => (
-                          <Card
-                            key={`${s.student_id}-${s.class_id}-${s.subject_id}`}
-                            className="flex items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm"
-                          >
-                            <div className="flex flex-col min-w-0 pr-2">
-                              <span className="font-semibold text-foreground truncate">
-                                {s.name}
-                              </span>
-                              <span className="text-xs text-muted-foreground truncate">
-                                {s.section_name ?? "Section unavailable"} · {s.subject_name ?? "Subject unavailable"}
-                              </span>
-                            </div>
-                            <div className="flex shrink-0 flex-wrap justify-end gap-1 max-w-[50%]">
-                              {s.reasons.map((reason) => (
-                                <Badge
-                                  key={reason.code}
-                                  size="sm"
-                                  variant="default"
-                                  title={reason.message}
-                                  className="whitespace-nowrap"
-                                >
-                                  {reasonBadgeLabel(reason)}
-                                </Badge>
-                              ))}
-                            </div>
-                          </Card>
-                        ))}
-                        {support?.warnings.map((warning, index) => (
-                          <Card.Description key={`${warning.code}-${index}`} className="text-[11px] text-muted-foreground">
-                            {warning.message}
-                          </Card.Description>
-                        ))}
+                        {support?.items.map((s) => {
+                          const depthReason = getMostDepthReason(s.reasons);
+                          return (
+                            <Card
+                              key={`${s.student_id}-${s.class_id}-${s.subject_id}`}
+                              className="flex items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm"
+                            >
+                              <div className="flex flex-col min-w-0 pr-2">
+                                <span className="font-semibold text-foreground truncate">
+                                  {s.name}
+                                </span>
+                                <span className="text-xs text-muted-foreground truncate">
+                                  {s.subject_name}
+                                </span>
+                              </div>
+                              <div className="flex shrink-0 flex-wrap justify-end gap-1 max-w-[50%]">
+                                {depthReason && (
+                                  <Badge
+                                    key={depthReason.code}
+                                    size="sm"
+                                    variant="default"
+                                    title={depthReason.message}
+                                    className="whitespace-nowrap"
+                                  >
+                                    {reasonBadgeLabel(depthReason)}
+                                  </Badge>
+                                )}
+                              </div>
+                            </Card>
+                          );
+                        })}
                         {support && (
                           <Card.Description className="text-[11px] text-muted-foreground">
                             {support.qualifying_entry_count} of {support.total_entry_count} student-class-subject entries meet the criteria.
@@ -503,14 +518,13 @@ export default function Dashboard() {
                       </Card.Content>
                     </Card>
                     {/* Submissions to Review */}
-                    <Card className="flex flex-col justify-between p-4 sm:p-5">
+                    <Card className="flex flex-col p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
                         <Card.Title className="text-base font-bold text-foreground sm:text-lg">
                           Submissions to Review
                         </Card.Title>
                         <Tooltip >
                           <TooltipTrigger
-
                             render={
                               <Button
                                 variant="secondary"
@@ -529,9 +543,20 @@ export default function Dashboard() {
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
                         {reviewSubmissions.length === 0 && (
-                          <Card.Description className="text-xs text-muted-foreground">
-                            {emptyMessage(reviewWarnings.length ? "Review queue incomplete." : "No submissions need grading.")}
-                          </Card.Description>
+                          <Empty className="border-none bg-transparent shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground">
+                            <Empty.Content>
+                              <Empty.Icon>
+                                {reviewWarnings.length ? (
+                                  <AlertCircle className="size-6 text-muted-foreground" />
+                                ) : (
+                                  <CheckCircle className="size-6 text-muted-foreground" />
+                                )}
+                              </Empty.Icon>
+                              <Empty.Title>
+                                {emptyMessage(reviewWarnings.length ? "Review queue incomplete." : "No submissions need grading.")}
+                              </Empty.Title>
+                            </Empty.Content>
+                          </Empty>
                         )}
                         {reviewSubmissions.map((item) => (
                           <Card
@@ -777,10 +802,14 @@ export default function Dashboard() {
                       <Card.Content className="flex flex-col justify-between gap-2.5 p-0 justify-between h-full">
                         <div className="flex flex-col gap-2.5 ">
                           {!lessonSubject?.items.length && (
-                            <Empty className="border-none bg-transparent shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground">
+                            <Empty className="rounded! bg-retro shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground">
                               <Empty.Content>
-                                <Empty.Icon><BookOpen className="size-6 text-muted-foreground" /></Empty.Icon>
-                                <Empty.Title>{emptyMessage(!lessonSubject
+                                <Empty.Icon>
+                                  <IconContainer className="bg-primary rounded-none">
+                                    <BookOpen className="size-6 text-foreground" />
+                                  </IconContainer>
+                                </Empty.Icon>
+                                <Empty.Title className="text-base! font-medium">{emptyMessage(!lessonSubject
                                   ? "No subjects assigned for this academic period."
                                   : lessonSubject.coverage.scored_mapped_response_count === 0
                                     ? "No scored quiz answers linked to lessons for this subject."
@@ -813,68 +842,34 @@ export default function Dashboard() {
                       </Card.Content>
                     </Card>
 
-                    {/* Due this week */}
-                    <Card className="flex flex-col justify-between p-4 sm:p-5">
-                      <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
-                        <Card.Title className="text-base font-bold text-foreground sm:text-lg">
-                          Due this week
+                    {/* Attendance by Section */}
+                    <Card className="flex flex-col p-4 sm:p-5 sm:col-span-2 xl:col-span-1">
+                      <Card.Header className="mb-0 p-0">
+                        <Card.Title className="text-base font-semibold text-foreground sm:text-lg">
+                          Attendance By Section
                         </Card.Title>
-                        <Tooltip >
-                          <TooltipTrigger
-
-                            render={
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                autoIcon={false}
-                                onClick={() => navigate(routes.teacher.classworks)}
-                                className="text-foreground shadow-none px-1.5"
-                              >
-                                <ArrowUpRight className="size-4" />
-                              </Button>
-                            }
-                          />
-                          <TooltipContent side="right">View classworks</TooltipContent>
-                        </Tooltip>
                       </Card.Header>
 
-                      <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
-                        {dueWeek.length === 0 && (
-                          <Card.Description className="text-xs text-muted-foreground">
-                            {emptyMessage("No classwork due this week.")}
-                          </Card.Description>
-                        )}
-                        {dueWeek.map((d, idx) => (
-                          <Card
-                            key={idx}
-                            onClick={() => {
-                              if (isPositiveId(d.classwork_id)) navigate(`/teacher/classworks/${d.classwork_id}`);
-                            }}
-                            className="flex items-center justify-between shadow-none rounded px-3 py-2.5 text-xs sm:text-sm cursor-pointer hover:bg-retro hover:-translate-y-1"
+                      <Card.Content className="mt-3 flex flex-col justify-between gap-3 p-0">
+                        {attendanceSections.map((item) => (
+                          <div
+                            key={item.class_id}
+                            className="flex items-center justify-between gap-2 text-xs sm:text-sm"
+                            title={`${item.record_count} recorded ${item.record_count === 1 ? "entry" : "entries"}.`}
                           >
-                            <div className="flex flex-col min-w-0 pr-2">
-                              <span className="font-semibold text-foreground truncate">
-                                {d.title}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground truncate">
-                                {d.section_name}
-                              </span>
-                              {d.warnings?.map((warning, index) => (
-                                <span key={`${warning.code}-${index}`} className={cn("text-xs", "text-muted-foreground")}>
-                                  {warning.message}
-                                </span>
-                              ))}
-                            </div>
-                            <Badge
-                              size="sm"
-                              variant={formatDeadline(d.due_date) === "Tomorrow" ? "destructive" : "default"}
-                              className="shrink-0"
-                            >
-                              {formatDeadline(d.due_date)}
-                            </Badge>
-                          </Card>
+                            <span className="font-medium text-foreground/90 shrink-0 w-20 truncate">
+                              {item.section}
+                            </span>
+                            <Progress value={item.rate ?? 0} className="h-3 flex-1" />
+                            <span className="font-semibold text-foreground text-right w-10 shrink-0">
+                              {formatPercent(item.rate)}
+                            </span>
+                          </div>
                         ))}
                       </Card.Content>
+                      <Card.Description className="mt-3 text-[11px] text-muted-foreground mt-auto">
+                        {/* This month · Present + late / recorded entries. Excused and absent do not count as present. */}
+                      </Card.Description>
                     </Card>
                   </div>
 
@@ -1016,10 +1011,6 @@ export default function Dashboard() {
                                   </span>
                                 </div>
                                 <Card.Description className="text-xs text-muted-foreground">
-                                  {sec.available_grade_count != null && sec.total_grade_count != null
-                                    ? `${sec.available_grade_count} of ${sec.total_grade_count} student-subject grades available. `
-                                    : ""}
-                                  Weighted and transmuted, as in the class record. Passing grade is set by the subject grading template.
                                   {sec.warnings?.map((warning: { code: string; message: string }) => (
                                     <span key={warning.code}> {warning.message}</span>
                                   ))}
@@ -1176,40 +1167,7 @@ export default function Dashboard() {
                       </Card.Description>
                     </Card>
 
-                    {/* Attendance by Section */}
-                    <Card className="flex flex-col justify-between p-4 sm:p-5 sm:col-span-2 xl:col-span-1">
-                      <Card.Header className="mb-0 p-0">
-                        <Card.Title className="text-base font-semibold text-foreground sm:text-lg">
-                          Attendance by section
-                        </Card.Title>
-                      </Card.Header>
 
-                      <Card.Content className="mt-3 flex flex-col justify-between gap-3 p-0">
-                        {attendanceSections.every((item) => item.record_count === 0) && (
-                          <Card.Description className="text-xs text-muted-foreground">
-                            {emptyMessage("No attendance records this month for the selected period.")}
-                          </Card.Description>
-                        )}
-                        {attendanceSections.map((item) => (
-                          <div
-                            key={item.class_id}
-                            className="flex items-center justify-between gap-2 text-xs sm:text-sm"
-                            title={`${item.record_count} recorded ${item.record_count === 1 ? "entry" : "entries"}.`}
-                          >
-                            <span className="font-medium text-foreground/90 shrink-0 w-20 truncate">
-                              {item.section}
-                            </span>
-                            <Progress value={item.rate ?? 0} className="h-3 flex-1" />
-                            <span className="font-semibold text-foreground text-right w-10 shrink-0">
-                              {formatPercent(item.rate)}
-                            </span>
-                          </div>
-                        ))}
-                      </Card.Content>
-                      <Card.Description className="mt-3 text-[11px] text-muted-foreground">
-                        This month · Present + late / recorded entries. Excused and absent do not count as present.
-                      </Card.Description>
-                    </Card>
                   </div>
                 </div>
 

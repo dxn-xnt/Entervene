@@ -24,7 +24,7 @@ import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Text } from "@/components/retroui/Text";
 import { Select } from "@/components/retroui/Select";

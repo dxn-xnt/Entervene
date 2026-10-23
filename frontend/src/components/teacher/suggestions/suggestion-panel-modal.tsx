@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bot, Lightbulb, Send } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Input } from "@/components/retroui/Input";
 import { Alert } from "@/components/retroui/Alert";
 import { apiFetch } from "@/lib/api";
@@ -118,19 +118,19 @@ export function SuggestionPanel({
       const options =
         resourceType === "LESSON"
           ? (data as LessonOption[]).map((lesson) => ({
-              id: `LESSON:${lesson.lesson_id}`,
-              kind: "LESSON" as const,
-              lessonId: lesson.lesson_id,
-              label: lesson.title,
-              meta: lesson.is_published ? "Published lesson" : "Draft lesson",
-            }))
+            id: `LESSON:${lesson.lesson_id}`,
+            kind: "LESSON" as const,
+            lessonId: lesson.lesson_id,
+            label: lesson.title,
+            meta: lesson.is_published ? "Published lesson" : "Draft lesson",
+          }))
           : (data as ClassworkOption[]).map((classwork) => ({
-              id: `CLASSWORK:${classwork.classwork_assignment_id}`,
-              kind: "CLASSWORK" as const,
-              classworkAssignmentId: classwork.classwork_assignment_id,
-              label: classwork.title,
-              meta: `${classwork.classwork_type || "Classwork"}${classwork.is_published ? "" : " draft"}`,
-            }));
+            id: `CLASSWORK:${classwork.classwork_assignment_id}`,
+            kind: "CLASSWORK" as const,
+            classworkAssignmentId: classwork.classwork_assignment_id,
+            label: classwork.title,
+            meta: `${classwork.classwork_type || "Classwork"}${classwork.is_published ? "" : " draft"}`,
+          }));
       setResources(options);
       setResourceId(options[0]?.id ?? "");
     } catch (err) {

@@ -3,7 +3,7 @@ import { OverviewCard } from "@/components/overview-cards";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Select } from "@/components/retroui/Select";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
@@ -156,6 +156,13 @@ export default function StudentInterventions() {
                   </Select>
                 </div>
               </div>
+              {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEVELOPMENT_PREDICTIONS === "true" &&
+                <>
+                  <StudentActiveInterventions />
+                  <StudentResolvedInterventions />
+                  <StudentReviewerSection />
+                </>
+              }
 
               {/* Main Content Area */}
               {loading ? (
@@ -181,24 +188,22 @@ export default function StudentInterventions() {
                               </Badge>
                             )}
                             <Badge
-                              className={`border-2 border-black text-[9px] font-black uppercase px-2 py-0.5 ${
-                                item.resource_type === "LESSON"
-                                  ? "bg-sky-300 text-black"
-                                  : "bg-purple-300 text-black"
-                              }`}
+                              className={`border-2 border-black text-[9px] font-black uppercase px-2 py-0.5 ${item.resource_type === "LESSON"
+                                ? "bg-sky-300 text-black"
+                                : "bg-purple-300 text-black"
+                                }`}
                             >
                               {item.resource_type}
                             </Badge>
                           </div>
 
                           <Badge
-                            className={`border-2 border-black text-[10px] font-extrabold uppercase px-2 py-0.5 ${
-                              item.priority === "URGENT"
-                                ? "bg-rose-400 text-black"
-                                : item.priority === "HIGH"
+                            className={`border-2 border-black text-[10px] font-extrabold uppercase px-2 py-0.5 ${item.priority === "URGENT"
+                              ? "bg-rose-400 text-black"
+                              : item.priority === "HIGH"
                                 ? "bg-amber-300 text-black"
                                 : "bg-sky-200 text-black"
-                            }`}
+                              }`}
                           >
                             {item.priority} PRIORITY
                           </Badge>

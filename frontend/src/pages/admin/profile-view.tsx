@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Card } from "@/components/retroui/Card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { getMySchedule, type DynamicScheduleResponse } from "@/lib/api";
