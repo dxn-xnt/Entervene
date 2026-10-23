@@ -32,7 +32,7 @@ import SubmissionViewer from "@/components/submission-viewer";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
 import StudentQuizFullscreen from "./forms/student-quiz-fullscreen";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { API_URL, apiFetch } from "@/lib/api";
 import { getQuizAttempt, type QuizAttemptResponse } from "@/lib/quiz-api";
 import {

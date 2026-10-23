@@ -119,10 +119,12 @@ describe("teacher candidate review", () => {
     expect(within(sheet).getByText(/unranked because the assessment has one shared total score/i)).toBeTruthy();
     expect(within(sheet).getByText(/Evidence cutoff:/)).toBeTruthy();
   });
-  it("explains unavailable individual competency scores", async () => {
+  it("hides unavailable individual competency scores section when empty", async () => {
     api.detail.mockResolvedValue({ ...detail, diagnosis_snapshot: { ...detail.diagnosis_snapshot, lowest_supported_competencies: [] } });
     mount("/teacher/interventions?candidate=12");
-    expect(await screen.findByText("No specific competency could be identified from scored evidence.")).toBeTruthy();
+    await screen.findByRole("dialog");
+    expect(screen.queryByText("Scored competency evidence")).toBeNull();
+    expect(screen.queryByText("No specific competency could be identified from scored evidence.")).toBeNull();
   });
   it("labels question scores as stronger than assessment coverage", async () => {
     api.detail.mockResolvedValue({ ...detail, diagnosis_snapshot: { ...detail.diagnosis_snapshot,

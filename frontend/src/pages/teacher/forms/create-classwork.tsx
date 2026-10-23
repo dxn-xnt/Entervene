@@ -9,7 +9,7 @@ import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Switch } from "@/components/retroui/Switch";
 import { apiFetch } from "@/lib/api";
 import {

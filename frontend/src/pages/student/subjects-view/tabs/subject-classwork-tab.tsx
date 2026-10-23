@@ -24,7 +24,7 @@ import { Alert } from "@/components/retroui/Alert";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { QuizTextAnswerInput, QuizTextAnswerSummary } from "@/components/quiz/student-quiz-answer";
 import { API_URL, apiFetch } from "@/lib/api";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
@@ -818,10 +818,10 @@ export default function SubjectClassworkTab({
                         setQuizReviewMode(false);
                       }}
                       className={`relative h-8 min-w-8 rounded border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${index === quizCurrentIndex
-                          ? "bg-white"
-                          : hasQuizAnswer(question)
-                            ? "bg-[#F6E9B2]"
-                            : "bg-white"
+                        ? "bg-white"
+                        : hasQuizAnswer(question)
+                          ? "bg-[#F6E9B2]"
+                          : "bg-white"
                         }`}
                     >
                       {flaggedQuizQuestionIds.has(question.quiz_question_id) ? (
@@ -878,10 +878,10 @@ export default function SubjectClassworkTab({
                               <div
                                 key={option.option_id}
                                 className={`border border-foreground px-3 py-2 text-sm ${isSelected
-                                    ? "bg-primary text-primary-foreground"
-                                    : isCorrect
-                                      ? "bg-success/10"
-                                      : "bg-background"
+                                  ? "bg-primary text-primary-foreground"
+                                  : isCorrect
+                                    ? "bg-success/10"
+                                    : "bg-background"
                                   }`}
                               >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -969,8 +969,8 @@ export default function SubjectClassworkTab({
                     className={`rounded border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${flaggedQuizQuestionIds.has(
                       currentQuestion.quiz_question_id,
                     )
-                        ? "bg-[#F6E9B2]"
-                        : "bg-white"
+                      ? "bg-[#F6E9B2]"
+                      : "bg-white"
                       }`}
                   >
                     Flag Question
@@ -1006,9 +1006,9 @@ export default function SubjectClassworkTab({
                         disabled={isQuizSubmitting}
                         style={{ borderWidth: 1 }}
                         className={`w-full min-w-0 h-full min-h-24 rounded border-black p-4 text-base sm:text-lg font-bold shadow-md hover:shadow-none whitespace-normal break-words [overflow-wrap:anywhere] ${quizAnswers[currentQuestion.quiz_question_id]
-                            ?.selected_option_id === option.option_id
-                            ? "bg-success hover:bg-success"
-                            : "bg-white hover:bg-white"
+                          ?.selected_option_id === option.option_id
+                          ? "bg-success hover:bg-success"
+                          : "bg-white hover:bg-white"
                           }`}
                       >
                         <span className="w-full max-w-full min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] text-center leading-snug">

@@ -8,7 +8,7 @@ import { Empty } from "@/components/retroui/Empty";
 import { Skeleton } from "@/components/retroui/Skeleton";
 import { Table } from "@/components/retroui/Table";
 import { Tabs } from "@/components/retroui/Tabs";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Activity, CheckCircle2, UserCheck } from "lucide-react";
 import InterventionModal from "./forms/intervention-modal";
 import {
@@ -24,6 +24,8 @@ import {
   type TeacherInterventionSummary,
   type TeacherResolvedInterventionDetail,
 } from "@/lib/teacher-interventions-api";
+import { EmptyHeader, EmptyMedia } from "@/components/ui/empty";
+import { Avatar } from "@/components/retroui/Avatar";
 
 const label = (value: string) =>
   value
@@ -406,108 +408,136 @@ export default function TeacherInterventions() {
                   </Empty.Content>
                 </Empty>
               ) : sorted.length === 0 ? (
-                <Empty>
-                  <Empty.Content>
-                    <Empty.Title>
-                      {resolvedView
-                        ? "No resolved interventions"
-                        : activeView
-                          ? "No active interventions"
-                          : "No candidates to review"}
-                    </Empty.Title>
-                    <Empty.Description>
-                      {resolvedView
-                        ? "Resolved support will appear here."
-                        : activeView
-                          ? "Approved interventions will appear here."
-                          : "New candidates will appear when a current corrected prediction qualifies."}
-                    </Empty.Description>
-                  </Empty.Content>
+                <Empty className="rounded">
+                  <EmptyHeader>
+                    <EmptyMedia>
+                      <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background *:data-[slot=avatar]:grayscale">
+                        <Avatar variant="student" >
+                          <Avatar.Image
+                            src="/avatars/student-avatars/3.svg"
+                            alt="@shadcn" />
+                          <Avatar.Fallback>CN</Avatar.Fallback>
+                        </Avatar>
+                        <Avatar variant="student" >
+                          <Avatar.Image
+                            src="/avatars/student-avatars/2.svg"
+                            alt="@maxleiter"
+                          />
+                          <Avatar.Fallback>LR</Avatar.Fallback>
+                        </Avatar>
+                        <Avatar variant="student" >
+                          <Avatar.Image
+                            src="/avatars/student-avatars/1.svg"
+                            alt="@evilrabbit"
+                          />
+                          <Avatar.Fallback>ER</Avatar.Fallback>
+                        </Avatar>
+                      </div>
+                    </EmptyMedia>
+                    <Empty.Content>
+                      <Empty.Title className="text-lg!">
+                        {resolvedView
+                          ? "No resolved interventions"
+                          : activeView
+                            ? "No active interventions"
+                            : "No candidates to review"}
+                      </Empty.Title>
+                      <Empty.Description className="text-sm!">
+                        {resolvedView
+                          ? "Resolved support will appear here."
+                          : activeView
+                            ? "Approved interventions will appear here."
+                            : "New candidates will appear when a current corrected prediction qualifies."}
+                      </Empty.Description>
+                    </Empty.Content>
+                  </EmptyHeader>
                 </Empty>
+
+
               ) : (
                 <Table wrapperClassName="h-auto">
-                    <Table.Header>
-                      <Table.Row>
-                        <Table.Head>Student</Table.Head>
-                        <Table.Head>Subject</Table.Head>
-                        <Table.Head className="text-center">Trigger</Table.Head>
-                        <Table.Head className="text-center">Status</Table.Head>
-                        <Table.Head>Saved reason</Table.Head>
-                        <Table.Head>
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.Head>Student</Table.Head>
+                      <Table.Head>Subject</Table.Head>
+                      <Table.Head className="text-center">Trigger</Table.Head>
+                      <Table.Head className="text-center">Status</Table.Head>
+                      <Table.Head>Saved reason</Table.Head>
+                      <Table.Head>
+                        {resolvedView
+                          ? "Resolved"
+                          : activeView
+                            ? "Activated"
+                            : "Created"}
+                      </Table.Head>
+                      <Table.Head className="w-10">Review</Table.Head>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {sorted.map((candidate) => (
+                      <Table.Row key={candidate.intervention_id}>
+                        <Table.Cell className="font-semibold">
+                          {candidate.student_name}
+                          <span className="block text-xs text-muted-foreground">
+                            {candidate.student_lrn}
+                          </span>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <span className="text-sm font-semibold">
+                            {candidate.subject_name}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            {candidate.class_name} · {candidate.academic_period_name}
+                          </span>
+                        </Table.Cell>
+                        <Table.Cell className="font-semibold text-center">
+                          {candidate.triggering_predicted_grade.toFixed(2)}
+                        </Table.Cell>
+                        <Table.Cell className="flex flex-row items-center justify-center mt-2">
+                          <Badge variant="surface" size="sm">
+                            {label(candidate.triggering_intervention_level)}
+                          </Badge>
+                        </Table.Cell>
+                        <Table.Cell>
                           {resolvedView
-                            ? "Resolved"
-                            : activeView
-                              ? "Activated"
-                              : "Created"}
-                        </Table.Head>
-                        <Table.Head className="w-10">Review</Table.Head>
+                            ? label(candidate.resolution_reason || "Unavailable")
+                            : reason(candidate)}
+                        </Table.Cell>
+                        <Table.Cell>
+                          {(() => {
+                            const rawDate =
+                              resolvedView && candidate.resolved_at
+                                ? candidate.resolved_at
+                                : activeView && candidate.activated_at
+                                  ? candidate.activated_at
+                                  : candidate.created_at;
+                            if (!rawDate) return "—";
+                            return (
+                              <div className="flex flex-col leading-tight">
+                                <span className="font-semibold text-sm text-black">
+                                  {formatDate(rawDate)}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {formatTime(rawDate)}
+                                </span>
+                              </div>
+                            );
+                          })()}
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            autoIcon={false}
+                            onClick={() => open(candidate.intervention_id)}
+                          >
+                            Review
+                          </Button>
+                        </Table.Cell>
                       </Table.Row>
-                    </Table.Header>
-                    <Table.Body>
-                      {sorted.map((candidate) => (
-                        <Table.Row key={candidate.intervention_id}>
-                          <Table.Cell className="font-semibold">
-                            {candidate.student_name}
-                            <span className="block text-xs text-muted-foreground">
-                              {candidate.student_lrn}
-                            </span>
-                          </Table.Cell>
-                          <Table.Cell>
-                            <span className="text-sm font-semibold">
-                              {candidate.subject_name}
-                            </span>
-                            <span className="block text-xs text-muted-foreground">
-                              {candidate.class_name} · {candidate.academic_period_name}
-                            </span>
-                          </Table.Cell>
-                          <Table.Cell className="font-semibold text-center">
-                            {candidate.triggering_predicted_grade.toFixed(2)}
-                          </Table.Cell>
-                          <Table.Cell className="flex flex-row items-center justify-center mt-2">
-                            <Badge variant="surface" size="sm">
-                              {label(candidate.triggering_intervention_level)}
-                            </Badge>
-                          </Table.Cell>
-                          <Table.Cell>
-                            {resolvedView
-                              ? label(candidate.resolution_reason || "Unavailable")
-                              : reason(candidate)}
-                          </Table.Cell>
-                          <Table.Cell>
-                            {(() => {
-                              const rawDate =
-                                resolvedView && candidate.resolved_at
-                                  ? candidate.resolved_at
-                                  : activeView && candidate.activated_at
-                                    ? candidate.activated_at
-                                    : candidate.created_at;
-                              if (!rawDate) return "—";
-                              return (
-                                <div className="flex flex-col leading-tight">
-                                  <span className="font-semibold text-sm text-black">
-                                    {formatDate(rawDate)}
-                                  </span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {formatTime(rawDate)}
-                                  </span>
-                                </div>
-                              );
-                            })()}
-                          </Table.Cell>
-                          <Table.Cell>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              autoIcon={false}
-                              onClick={() => open(candidate.intervention_id)}
-                            >
-                              Review
-                            </Button>
-                          </Table.Cell>
-                        </Table.Row>
-                      ))}
-                    </Table.Body>
-                  </Table>
+                    ))}
+                  </Table.Body>
+                </Table>
               )}
             </main>
           </div>

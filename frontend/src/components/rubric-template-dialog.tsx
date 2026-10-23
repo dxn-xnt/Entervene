@@ -13,7 +13,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/retroui/Tooltip";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import {
   DropdownMenu,

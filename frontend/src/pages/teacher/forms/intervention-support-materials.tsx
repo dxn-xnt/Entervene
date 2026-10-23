@@ -2,7 +2,7 @@ import { useEffect, useImperativeHandle, useMemo, useState, forwardRef } from "r
 import { useNavigate } from "react-router-dom";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Avatar } from "@/components/retroui/Avatar";
@@ -13,6 +13,7 @@ import { Select } from "@/components/retroui/Select";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Empty } from "@/components/retroui/Empty";
+import { Activity, SlidersHorizontal } from "lucide-react";
 import {
   createSupportMaterial,
   generateStudentReviewer,
@@ -73,13 +74,14 @@ export interface InterventionSupportMaterialsProps {
   detail: TeacherInterventionDetail;
   page?: "overview" | "plan";
   previousResolved?: TeacherInterventionSummary;
+  onAdjustSupport?: () => void;
 }
 
 const InterventionSupportMaterials = forwardRef<
   InterventionSupportMaterialsHandle,
   InterventionSupportMaterialsProps
 >(function InterventionSupportMaterials(
-  { detail, page = "overview", previousResolved },
+  { detail, page = "overview", previousResolved, onAdjustSupport },
   ref
 ) {
   const toast = useToast();
@@ -205,9 +207,7 @@ const InterventionSupportMaterials = forwardRef<
   const focusPercent = focus?.component
     ? detail.diagnosis_snapshot.components?.[focus.component]?.percent
     : null;
-  const sourceBadge = sourceName ? (
-    <em className="ml-1.5 text-muted-foreground text-sm">({sourceName})</em>
-  ) : null;
+
 
   const strongestEvidenceText =
     focus?.evidence_level === "QUESTION_SCORE"
@@ -382,57 +382,58 @@ const InterventionSupportMaterials = forwardRef<
         (plan.grade_treatment === "EXAMINATION" && !plan.original_exam_assignment_id)));
 
   return (
-    <section className="space-y-3" aria-label="Intervention workflow">
-      <Card className="w-full space-y-2 border-2 border-black bg-primary">
-        <div className="flex items-start gap-4">
-          <div className="flex flex-col mt-3 items-center h-full">
-            <Avatar variant="student" className="size-14  shrink-0">
-              <Avatar.Image
-                src="/avatars/student-avatars/1.svg"
-                alt={detail.student_name}
-              />
-              <Avatar.Fallback>
-                {(detail.student_name || "?").charAt(0).toUpperCase()}
-              </Avatar.Fallback>
-            </Avatar>
-          </div>
+    <section className="flex flex-col gap-4" aria-label="Intervention workflow">
+      <div className="flex flex-col gap-2">
+        <Card className="w-full space-y-2 border-2 border-black bg-primary">
+          <div className="flex items-start gap-4">
+            <div className="flex flex-col mt-3 items-center h-full">
+              <Avatar variant="student" className="size-14  shrink-0">
+                <Avatar.Image
+                  src="/avatars/student-avatars/1.svg"
+                  alt={detail.student_name}
+                />
+                <Avatar.Fallback>
+                  {(detail.student_name || "?").charAt(0).toUpperCase()}
+                </Avatar.Fallback>
+              </Avatar>
+            </div>
 
+            <div className="flex flex-col gap-1 w-full">
+              <div className="flex flex-row justify-between w-full items-end">
+                <h2 className="text-xl font-black -mb-1">{detail.student_name}</h2>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge variant="solid" size="md">
+                    Active
+                  </Badge>
+                  <Badge variant="outline" size="md">
+                    {phase}
+                  </Badge>
+                </div>
+              </div>
 
-          <div className="flex flex-col gap-1 w-full">
-            <div className="flex flex-row justify-between w-full items-end">
-              <h2 className="text-xl font-black -mb-1">{detail.student_name}</h2>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Badge variant="solid" size="md">
-                  Active
-                </Badge>
-                <Badge variant="outline" size="md">
-                  {phase}
-                </Badge>
+              <div className="mt-2 grid grid-cols-2 gap-1 text-sm">
+                <p className="text-sm">
+                  Subject: <span className="text-base font-semibold">{subjectName}</span>
+                </p>
+                <p className="text-sm">
+                  Class: <span className="text-base font-semibold">{detail.class_name}</span>
+                </p>
+                <p>
+                  Trigger: <strong>{detail.triggering_predicted_grade.toFixed(2)}</strong>
+                </p>
+                <p>
+                  Latest:{" "}
+                  <strong>{progress?.latest_projection?.toFixed(2) ?? "Unavailable"}</strong>
+                </p>
               </div>
             </div>
-
-            <div className="mt-2 grid grid-cols-2 gap-1 text-sm">
-              <p className="text-sm">
-                Subject: <span className="text-base font-semibold">{subjectName}</span>
-              </p>
-              <p className="text-sm">
-                Class: <span className="text-base font-semibold">{detail.class_name}</span>
-              </p>
-              <p>
-                Trigger: <strong>{detail.triggering_predicted_grade.toFixed(2)}</strong>
-              </p>
-              <p>
-                Latest:{" "}
-                <strong>{progress?.latest_projection?.toFixed(2) ?? "Unavailable"}</strong>
-              </p>
-            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
 
-      <p className="text-sm text-muted-foreground">
-        {progress?.status_reason ?? "Loading current progress."}
-      </p>
+        <p className="text-sm text-muted-foreground px-1">
+          {progress?.status_reason ?? "Loading current progress."}
+        </p>
+      </div>
 
       {previousResolved && (
         <Card className="space-y-2 w-full border-2 border-border">
@@ -459,61 +460,64 @@ const InterventionSupportMaterials = forwardRef<
         <>
           {page === "overview" && (
             <>
-              <h3 className="font-black">Academic Diagnosis</h3>
-
-              <Card className="space-y-2 w-full">
-                <p className="text-base">
-                  Support focus: <strong>{focusName}</strong>
-                  {sourceBadge}
-                </p>
-                <p className="text-base">
-                  Strongest available evidence: <strong>{strongestEvidenceText}</strong>
-                </p>
-                {focus?.evidence_level === "QUESTION_SCORE" && (
-                  <>
+              <div className="flex flex-col gap-1">
+                <h3 className="font-black">Academic Diagnosis</h3>
+                <Card className="space-y-2 w-full mb-1">
+                  <p className="text-base">
+                    Support focus: <strong>{focusName}</strong>
+                    <span className="text-sm text-muted-foreground ml-1">{sourceName ? `(${sourceName})` : ""}</span>
+                  </p>
+                  <p className="text-base">
+                    Strongest available evidence: <strong>{strongestEvidenceText}</strong>
+                  </p>
+                  {focus?.evidence_level === "QUESTION_SCORE" && (
+                    <>
+                      <p className="text-base">
+                        Scored competency focus:{" "}
+                        {focus.competencies.map((item) => item.label).join("; ")}
+                      </p>
+                      {focus.question_evidence.map((item, index) => (
+                        <p
+                          key={`${item.quiz_question_id ?? "unknown"}-${index}`}
+                          className="text-sm"
+                        >
+                          Question #{item.quiz_question_id ?? "unknown"}: {item.score}/
+                          {item.possible_score}
+                        </p>
+                      ))}
+                    </>
+                  )}
+                  {focus?.evidence_level === "SCORED_COMPETENCY" && (
                     <p className="text-base">
                       Scored competency focus:{" "}
                       {focus.competencies.map((item) => item.label).join("; ")}
                     </p>
-                    {focus.question_evidence.map((item, index) => (
-                      <p
-                        key={`${item.quiz_question_id ?? "unknown"}-${index}`}
-                        className="text-sm"
-                      >
-                        Question #{item.quiz_question_id ?? "unknown"}: {item.score}/
-                        {item.possible_score}
-                      </p>
-                    ))}
-                  </>
-                )}
-                {focus?.evidence_level === "SCORED_COMPETENCY" && (
-                  <p className="text-base">
-                    Scored competency focus:{" "}
-                    {focus.competencies.map((item) => item.label).join("; ")}
+                  )}
+                  {focus?.evidence_level === "ACTIVITY_COVERAGE" && (
+                    <p className="text-sm text-gray-600">
+                      Covered competencies are study context. The assessment total does not
+                      identify which one was difficult.
+                    </p>
+                  )}
+                  {focusPercent != null && (
+                    <p className="text-base">
+                      Weakest component:{" "}
+                      <strong>{focusName}{" "}</strong>
+                      <span className="text-sm text-muted-foreground">({focusPercent.toFixed(0)}%)</span>
+                    </p>
+                  )}
+                </Card>
+                {focus?.evidence_level === "COMPONENT_ONLY" && (
+                  <p className="text-sm text-muted-foreground px-1">
+                    No specific lesson or competency weakness can be identified from the
+                    available scored evidence.
                   </p>
                 )}
-                {focus?.evidence_level === "ACTIVITY_COVERAGE" && (
-                  <p className="text-sm text-gray-600">
-                    Covered competencies are study context. The assessment total does not
-                    identify which one was difficult.
-                  </p>
-                )}
-                {focusPercent != null && (
-                  <p className="text-base">
-                    Weakest component: {focusName}{" "}
-                    <strong>{focusPercent.toFixed(0)}%</strong>
-                  </p>
-                )}
-              </Card>
-              {focus?.evidence_level === "COMPONENT_ONLY" && (
-                <p className="text-sm text-muted-foreground">
-                  No specific lesson or competency weakness can be identified from the
-                  available scored evidence.
-                </p>
-              )}
+              </div>
 
+              {/* Current Support */}
               {assigned.length > 0 ? (
-                <div className="space-y-2">
+                <div className="flex flex-col gap-1">
                   <h3 className="font-black mb-2">Current Support</h3>
                   {assigned.map((item) => (
                     <Card
@@ -594,110 +598,128 @@ const InterventionSupportMaterials = forwardRef<
                   </Card>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <h3 className="font-black mb-2">Current Support</h3>
+                <div className="flex flex-col gap-1">
+                  <h3 className="font-black">Current Support</h3>
                   <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
                     <Empty.Content>
+                      <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
+                        <Activity className="size-8" />
+                      </Empty.Icon>
                       <Empty.Description className="text-sm text-muted-foreground">
                         No support activity has been recorded yet. Click Adjust Support below to configure learning resources and prepare remediation.
                       </Empty.Description>
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={onAdjustSupport}
+                        className="mt-1"
+                      >
+                        <SlidersHorizontal className="size-3.5 mr-1.5" />
+                        Adjust Support
+                      </Button>
                     </Empty.Content>
                   </Empty>
                 </div>
               )}
 
-              <Card className="w-full space-y-3">
-                <div className="flex items-center justify-between border-b border-border pb-2">
-                  <h4 className="font-bold text-sm">Prepared Support Plan</h4>
-                  {plan.teacher_choice ? (
-                    <Badge variant="solid" size="sm">Configured</Badge>
-                  ) : (
-                    <Badge variant="outline" size="sm">Needs Setup</Badge>
-                  )}
+              {/* Prepared Support Plan */}
+              <div className="flex flex-col gap-1">
+                <div className="flex flex-row gap-2">
+                  <h4 className="font-bold text-lg">Prepared Support Plan</h4>
+                  <div className="flex items-center">
+                    {plan.teacher_choice ? (
+                      <Badge variant="solid" size="sm">Configured</Badge>
+                    ) : (
+                      <Badge variant="outline" size="sm">Needs Setup</Badge>
+                    )}
+                  </div>
                 </div>
-                {plan.teacher_choice ? (
-                  <div className="space-y-2 text-sm">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <p>
-                        Method:{" "}
-                        <strong>
-                          {methods.find((item) => item.value === plan.teacher_choice)?.label}
-                        </strong>
-                      </p>
-                      {isGraded(plan.teacher_choice) && (
+                <Card className="w-full flex flex-col gap-3">
+                  {plan.teacher_choice ? (
+                    <div className="space-y-2 text-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <p>
-                          Grade treatment:{" "}
+                          Method:{" "}
                           <strong>
-                            {plan.grade_treatment === "PRACTICE_ONLY"
-                              ? "Practice only · No official grade impact"
-                              : plan.grade_treatment
-                                ? componentLabel(plan.grade_treatment)
-                                : "Selection required"}
+                            {methods.find((item) => item.value === plan.teacher_choice)?.label}
                           </strong>
                         </p>
-                      )}
-                      {plan.grade_treatment === "EXAMINATION" && (
-                        <p className="col-span-full">
-                          Original Exam:{" "}
-                          <strong>
-                            {originalExams.find(
-                              (exam) =>
-                                exam.assignment_id === plan.original_exam_assignment_id
-                            )?.title ?? "Selection required"}
-                          </strong>
-                        </p>
-                      )}
-                      {isGraded(plan.teacher_choice) && (
-                        <p className="col-span-full text-xs text-muted-foreground">
-                          Recipient: <strong>This student only</strong>
-                        </p>
-                      )}
-                      {plan.teacher_choice === "TOS" && (
-                        <p className="text-xs text-muted-foreground">
-                          TOS is a blueprint/export. It creates no graded student activity.
-                        </p>
-                      )}
-                      {plan.teacher_choice === "EXISTING_MATERIAL_ONLY" && (
-                        <p className="text-xs text-muted-foreground">
-                          Selected materials remain planning references; they are not
-                          privately delivered.
-                        </p>
-                      )}
+                        {isGraded(plan.teacher_choice) && (
+                          <p>
+                            Grade treatment:{" "}
+                            <strong>
+                              {plan.grade_treatment === "PRACTICE_ONLY"
+                                ? "Practice only · No official grade impact"
+                                : plan.grade_treatment
+                                  ? componentLabel(plan.grade_treatment)
+                                  : "Selection required"}
+                            </strong>
+                          </p>
+                        )}
+                        {plan.grade_treatment === "EXAMINATION" && (
+                          <p className="col-span-full">
+                            Original Exam:{" "}
+                            <strong>
+                              {originalExams.find(
+                                (exam) =>
+                                  exam.assignment_id === plan.original_exam_assignment_id
+                              )?.title ?? "Selection required"}
+                            </strong>
+                          </p>
+                        )}
+                        {isGraded(plan.teacher_choice) && (
+                          <p className="col-span-full text-xs text-muted-foreground">
+                            Recipient: <strong>This student only</strong>
+                          </p>
+                        )}
+                        {plan.teacher_choice === "TOS" && (
+                          <p className="text-xs text-muted-foreground">
+                            TOS is a blueprint/export. It creates no graded student activity.
+                          </p>
+                        )}
+                        {plan.teacher_choice === "EXISTING_MATERIAL_ONLY" && (
+                          <p className="text-xs text-muted-foreground">
+                            Selected materials remain planning references; they are not
+                            privately delivered.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No support method has been chosen yet. Click Adjust Support below to plan one.
+                    </p>
+                  )}
+                  <div className="border-t border-border pt-2 space-y-1.5 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span>Student Reviewer:</span>
+                      <Badge
+                        variant={
+                          reviewer?.status === "SENT"
+                            ? "solid"
+                            : reviewer
+                              ? "secondary"
+                              : "outline"
+                        }
+                        size="sm"
+                      >
+                        {reviewer?.status === "SENT"
+                          ? "Sent to student"
+                          : reviewer
+                            ? "Private draft"
+                            : "Not prepared"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Planning references:</span>
+                      <Badge variant="outline" size="sm">
+                        {plan.selected_resources.length} selected
+                      </Badge>
                     </div>
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No support method has been chosen yet. Click Adjust Support below to plan one.
-                  </p>
-                )}
-                <div className="border-t border-border pt-2 space-y-1.5 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span>Student Reviewer:</span>
-                    <Badge
-                      variant={
-                        reviewer?.status === "SENT"
-                          ? "solid"
-                          : reviewer
-                            ? "secondary"
-                            : "outline"
-                      }
-                      size="sm"
-                    >
-                      {reviewer?.status === "SENT"
-                        ? "Sent to student"
-                        : reviewer
-                          ? "Private draft"
-                          : "Not prepared"}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Planning references:</span>
-                    <Badge variant="outline" size="sm">
-                      {plan.selected_resources.length} selected
-                    </Badge>
-                  </div>
-                </div>
-              </Card>
+                </Card>
+              </div>
+
             </>
           )}
 
@@ -707,7 +729,7 @@ const InterventionSupportMaterials = forwardRef<
               <Card className="w-full">
                 <p className="text-base">
                   Evidence-based focus: <strong>{focusName}</strong>
-                  {sourceBadge}.{" "}
+                  <span className="text-sm text-muted-foreground ml-1">{sourceName ? `(${sourceName})` : ""}</span>
 
                 </p>
                 <p className="text-base">
@@ -802,7 +824,7 @@ const InterventionSupportMaterials = forwardRef<
                   Select resources
                 </Button>
               </Card>
-                
+
               <Dialog
                 open={panel === "reviewer"}
                 onOpenChange={(open) => setPanel(open ? "reviewer" : "")}
@@ -1154,7 +1176,7 @@ const InterventionSupportMaterials = forwardRef<
                   </div>
                   <p className="text-sm">
                     Support focus: <strong>{focusName}</strong>
-                    {sourceBadge}
+                    <p className="ml-1.5 text-muted-foreground text-sm">({sourceName})</p>
                   </p>
                   {focus?.component === "EXAMINATION" && (
                     <p className="text-xs text-muted-foreground">
@@ -1284,7 +1306,7 @@ const InterventionSupportMaterials = forwardRef<
                     <p>Target: <strong>{detail.student_name}</strong></p>
                     <p>
                       Support focus: <strong>{focusName}</strong>
-                      {sourceBadge}
+                      <p className="ml-1.5 text-muted-foreground text-sm">({sourceName})</p>
                     </p>
                     <p>
                       Method:{" "}

@@ -8,15 +8,17 @@ import { Badge } from "@/components/retroui/Badge";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Empty } from "@/components/retroui/Empty";
+import { ArrowLeft, SlidersHorizontal } from "lucide-react";
 import InterventionSupportMaterials, {
   type InterventionSupportMaterialsHandle,
-} from "../intervention-support-materials";
+} from "./intervention-support-materials";
 import type {
   DiagnosisSnapshot,
   TeacherInterventionDetail,
   TeacherInterventionSummary,
   TeacherResolvedInterventionDetail,
 } from "@/lib/teacher-interventions-api";
+import { formatDate } from "@/lib/formatters";
 
 const label = (value: string) =>
   value
@@ -143,8 +145,8 @@ function AcademicDiagnosisCard({
 
       {focusPercent != null && (
         <div className="flex items-center justify-between border-t border-border pt-2">
-          <span className="text-sm font-semibold">
-            Weakest component: {primaryComp ? label(primaryComp) : focusName}
+          <span className="text-sm">
+            Weakest component: <span className="font-semibold">{primaryComp ? label(primaryComp) : focusName}</span>
           </span>
           <Badge variant={percentVariant(focusPercent)} size="sm">
             {focusPercent.toFixed(0)}%
@@ -222,7 +224,7 @@ export default function InterventionModal({
           </Dialog.Title>
         </Dialog.Header>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
           {detailLoading ? (
             <div
               aria-label={
@@ -409,6 +411,7 @@ export default function InterventionModal({
                     page={supportPage}
                     detail={detail}
                     previousResolved={previousResolved}
+                    onAdjustSupport={() => setSupportPage("plan")}
                   />
                 ) : (
                   <>
@@ -492,41 +495,21 @@ export default function InterventionModal({
                 )}
 
                 {(!isActive || supportPage === "overview") && (
-                  <Accordion className="w-full">
+                  <Accordion className="w-full rounded!">
                     <Accordion.Item
                       value="frozen-evidence"
-                      className="overflow-hidden rounded border-2 border-border bg-card shadow-sm"
+                      className="overflow-hidden rounded! border-2 border-border bg-card shadow-sm"
                     >
-                      <Accordion.Header className="items-center px-4 py-3 bg-card font-bold text-sm">
+                      <Accordion.Header className="items-center px-4 py-3 bg-card font-bold text-lg">
                         View full frozen evidence
                       </Accordion.Header>
-                      <Accordion.Content className="space-y-4 p-4 border-t-2 border-border bg-background">
-                        <section className="space-y-2">
-                          <h3 className="text-base font-bold">
-                            Frozen academic diagnosis
-                          </h3>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-muted-foreground">
-                            <p>
-                              Source prediction #{detail.source_prediction_id}, revision {detail.source_prediction_revision}
-                            </p>
-                            {detail.activated_by_staff_id && (
-                              <p>Activated by staff {detail.activated_by_staff_id}</p>
-                            )}
-                            <p className="col-span-full">
-                              Evidence cutoff:{" "}
-                              <strong>
-                                {detail.diagnosis_snapshot.evidence_cutoff_at
-                                  ? date(detail.diagnosis_snapshot.evidence_cutoff_at)
-                                  : "Unavailable"}
-                              </strong>
-                            </p>
-                          </div>
-
-                          <div className="space-y-1 pt-2">
-                            <span className="text-xs font-bold uppercase text-muted-foreground block mb-1">
-                              Components evidence
+                      <Accordion.Content className="flex flex-col gap-2 p-4 border-t-2 border-border bg-background">
+                        <section className="flex flex-col gap-2">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-sm font-bold">
+                              Components Evidence
                             </span>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                               {Object.entries(
                                 detail.diagnosis_snapshot.components ?? {}
                               ).map(([name, component]) => (
@@ -550,7 +533,7 @@ export default function InterventionModal({
                           </div>
 
                           <div className="space-y-1.5 pt-2">
-                            <h4 className="font-bold text-sm">Supporting activities</h4>
+                            <h4 className="font-bold text-sm">Supporting Activities</h4>
                             {(detail.diagnosis_snapshot.supporting_activities ?? []).length ? (
                               <div className="space-y-1.5">
                                 {detail.diagnosis_snapshot.supporting_activities?.map((activity) => (
@@ -564,14 +547,15 @@ export default function InterventionModal({
                                       </span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                      <Badge variant="surface" size="sm">
-                                        {activity.score}/{activity.possible_score}
-                                      </Badge>
+                                      <span className="text-sm font-bold">
+                                        {activity.score}
+                                        <span className="font-medium text-muted-foreground text-xs"> / {activity.possible_score}</span>
+                                      </span>
                                       <Badge
                                         variant={percentVariant(activity.percent)}
                                         size="sm"
                                       >
-                                        ({percent(activity.percent)})
+                                        {percent(activity.percent)}
                                       </Badge>
                                     </div>
                                   </Card>
@@ -589,14 +573,14 @@ export default function InterventionModal({
                           </div>
                         </section>
 
-                        <section className="space-y-2 pt-2 border-t border-border">
-                          <h3 className="text-base font-bold">
-                            Scored competency evidence
-                          </h3>
-                          <p className="text-xs text-muted-foreground">
-                            Ranked only when a competency has its own traceable scored evidence.
-                          </p>
-                          {(detail.diagnosis_snapshot.lowest_supported_competencies ?? []).length ? (
+                        {Boolean(detail.diagnosis_snapshot.lowest_supported_competencies?.length) && (
+                          <section className="space-y-2 border-border">
+                            <h3 className="text-base font-bold">
+                              Scored competency evidence
+                            </h3>
+                            <p className="text-xs text-muted-foreground">
+                              Ranked only when a competency has its own traceable scored evidence.
+                            </p>
                             <div className="space-y-2">
                               {detail.diagnosis_snapshot.lowest_supported_competencies?.map((item) => (
                                 <Card key={item.competency_id} className="space-y-2 p-3">
@@ -641,25 +625,17 @@ export default function InterventionModal({
                                 </Card>
                               ))}
                             </div>
-                          ) : (
-                            <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
-                              <Empty.Content>
-                                <Empty.Description className="text-sm text-muted-foreground">
-                                  No specific competency could be identified from scored evidence.
-                                </Empty.Description>
-                              </Empty.Content>
-                            </Empty>
-                          )}
-                        </section>
+                          </section>
+                        )}
 
-                        <section className="space-y-2 pt-2 border-t border-border">
-                          <h3 className="text-base font-bold">
-                            Manual assessment coverage for teacher review
-                          </h3>
-                          <p className="text-xs text-muted-foreground">
-                            A total assessment score shows performance on the assessment. It does not score each covered competency separately or rank them against one another.
-                          </p>
-                          {(detail.diagnosis_snapshot.manual_assessment_coverage ?? []).length ? (
+                        {Boolean(detail.diagnosis_snapshot.manual_assessment_coverage?.length) && (
+                          <section className="space-y-2 border-border">
+                            <h3 className="text-base font-bold">
+                              Manual assessment coverage for teacher review
+                            </h3>
+                            <p className="text-xs text-muted-foreground">
+                              A total assessment score shows performance on the assessment. It does not score each covered competency separately or rank them against one another.
+                            </p>
                             <div className="space-y-2">
                               {detail.diagnosis_snapshot.manual_assessment_coverage?.map((assessment) => (
                                 <Card key={assessment.classwork_id} className="space-y-1.5 p-3">
@@ -689,21 +665,27 @@ export default function InterventionModal({
                                 </Card>
                               ))}
                             </div>
-                          ) : (
-                            <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
-                              <Empty.Content>
-                                <Empty.Description className="text-sm text-muted-foreground">
-                                  No dated manual assessment coverage was available at the evidence cutoff.
-                                </Empty.Description>
-                              </Empty.Content>
-                            </Empty>
+                            {(detail.diagnosis_snapshot.covered_competencies_for_teacher_review ?? []).length > 0 && (
+                              <p className="text-xs text-muted-foreground">
+                                Covered competencies in weak components require teacher review; they are unranked because the assessment has one shared total score.
+                              </p>
+                            )}
+                          </section>
+                        )}
+
+                        <div className="mt-2 px-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-muted-foreground">
+                          {detail.activated_by_staff_id && (
+                            <p>Activated by staff {detail.activated_by_staff_id}</p>
                           )}
-                          {(detail.diagnosis_snapshot.covered_competencies_for_teacher_review ?? []).length > 0 && (
-                            <p className="text-xs text-muted-foreground">
-                              Covered competencies in weak components require teacher review; they are unranked because the assessment has one shared total score.
-                            </p>
-                          )}
-                        </section>
+                          <p className="col-span-full">
+                            Evidence cutoff:{" "}
+                            <strong>
+                              {detail.diagnosis_snapshot.evidence_cutoff_at
+                                ? formatDate(detail.diagnosis_snapshot.evidence_cutoff_at)
+                                : "Unavailable"}
+                            </strong>
+                          </p>
+                        </div>
                       </Accordion.Content>
                     </Accordion.Item>
                   </Accordion>
@@ -747,11 +729,21 @@ export default function InterventionModal({
                 }
               }}
             >
-              {supportPage === "plan"
-                ? savingAdjustments
-                  ? "Saving adjustments..."
-                  : "Back to Overview"
-                : "Adjust Support"}
+              {supportPage === "plan" ? (
+                savingAdjustments ? (
+                  "Saving adjustments..."
+                ) : (
+                  <>
+                    <ArrowLeft className="size-4 mr-1.5" />
+                    Back to Overview
+                  </>
+                )
+              ) : (
+                <>
+                  <SlidersHorizontal className="size-4 mr-1.5" />
+                  Adjust Support
+                </>
+              )}
             </Button>
           )}
           {selectedKind === "candidate" && detail?.status === "CANDIDATE" && (

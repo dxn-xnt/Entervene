@@ -8,7 +8,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -234,10 +234,12 @@ export default function AdminSubjects() {
     setOfferingFilters((current) => {
       if (current.academic_year_id !== ALL_VALUE && current.grade !== ALL_VALUE) return current;
       const defaults = defaultOfferingFilters(offeringOptions);
-      return { ...defaults, ...current,
+      return {
+        ...defaults, ...current,
         academic_year_id: current.academic_year_id !== ALL_VALUE ? current.academic_year_id : defaults.academic_year_id,
         grade: current.grade !== ALL_VALUE ? current.grade : defaults.grade,
-        pathway: current.pathway !== ALL_VALUE ? current.pathway : defaults.pathway };
+        pathway: current.pathway !== ALL_VALUE ? current.pathway : defaults.pathway
+      };
     });
   }, [offeringOptions]);
 
@@ -518,316 +520,316 @@ export default function AdminSubjects() {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             <div data-page-tabs-sticky-region>
-            <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="shrink-0 md:hidden" />
-                <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">Subjects</h1>
-              </div>
-          <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-wrap [&_button]:min-w-0 [&_button]:w-full md:[&_button]:w-auto">
-            {activeSection === "catalog" ? (
-              <>
-                <input
-                  ref={catalogImportInputRef}
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  onChange={(event) => void handleCatalogImport(event.target.files?.[0])}
-                />
-                <Button size="header" className="col-span-2 md:col-auto" onClick={openCreateSubject}>
-                  <Plus className="size-4" /> New Subject
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="header" className="col-span-2 md:hidden" variant="outline">
-                      <MoreHorizontal className="size-4" /> Catalog Actions
+              <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
+                <div className="flex items-center gap-3">
+                  <SidebarTrigger className="shrink-0 md:hidden" />
+                  <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">Subjects</h1>
+                </div>
+                <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-wrap [&_button]:min-w-0 [&_button]:w-full md:[&_button]:w-auto">
+                  {activeSection === "catalog" ? (
+                    <>
+                      <input
+                        ref={catalogImportInputRef}
+                        type="file"
+                        accept=".csv,text/csv"
+                        className="hidden"
+                        onChange={(event) => void handleCatalogImport(event.target.files?.[0])}
+                      />
+                      <Button size="header" className="col-span-2 md:col-auto" onClick={openCreateSubject}>
+                        <Plus className="size-4" /> New Subject
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="header" className="col-span-2 md:hidden" variant="outline">
+                            <MoreHorizontal className="size-4" /> Catalog Actions
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-[calc(100vw-1.5rem)] border-2 sm:w-72">
+                          <DropdownMenuItem disabled={isImportingCatalog} onClick={() => catalogImportInputRef.current?.click()}>
+                            <Upload className="mr-2 size-4" /> Import Catalog CSV
+                          </DropdownMenuItem>
+                          <DropdownMenuItem disabled={isDownloadingCatalogTemplate} onClick={handleDownloadCatalogTemplate}>
+                            <DownloadIcon className="mr-2 size-4" /> Download Catalog Template
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <Button
+                        size="header"
+                        className="hidden md:inline-flex"
+                        variant="outline"
+                        onClick={() => catalogImportInputRef.current?.click()}
+                        disabled={isImportingCatalog}
+                      >
+                        <Upload className="size-4" /> Import Catalog CSV
+                      </Button>
+                      <Button
+                        size="header"
+                        className="hidden md:inline-flex"
+                        variant="outline"
+                        onClick={handleDownloadCatalogTemplate}
+                        disabled={isDownloadingCatalogTemplate}
+                      >
+                        <DownloadIcon className="size-4" />
+                        Download Catalog Template
+                      </Button>
+                    </>
+                  ) : null}
+                  {activeSection === "offerings" ? (
+                    <>
+                      <input
+                        ref={offeringImportInputRef}
+                        type="file"
+                        accept=".csv,text/csv"
+                        className="hidden"
+                        onChange={(event) => void handleOfferingImport(event.target.files?.[0])}
+                      />
+                      <Button
+                        size="header"
+                        variant="outline"
+                        className="hidden md:inline-flex"
+                        onClick={() => {
+                          setError(null);
+                          setCopyResult(null);
+                          setIsCopySetupModalOpen(true);
+                        }}
+                        disabled={isLoadingOptions || !activeAcademicYear}
+                      >
+                        <Copy className="size-4" /> Copy Previous Year Setup
+                      </Button>
+                      <Button
+                        size="header"
+                        className="col-span-2 md:col-auto"
+                        onClick={openCreateOffering}
+                        disabled={isLoadingOptions || isViewingInactiveAcademicYear}
+                        title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
+                      >
+                        <Plus className="size-4" /> Add Offerings
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="header" className="col-span-2 md:hidden" variant="outline">
+                            <MoreHorizontal className="mr-2 size-4" /> Offering Actions
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-[calc(100vw-1.5rem)] border-2 sm:w-72">
+                          <DropdownMenuItem
+                            disabled={isLoadingOptions || !activeAcademicYear}
+                            onClick={() => {
+                              setError(null);
+                              setCopyResult(null);
+                              setIsCopySetupModalOpen(true);
+                            }}
+                          >
+                            <Copy className="mr-2 size-4" /> Copy Previous Year Setup
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={isImportingOfferings || isViewingInactiveAcademicYear}
+                            onClick={() => offeringImportInputRef.current?.click()}
+                          >
+                            <Upload className="mr-2 size-4" /> Import Offering CSV
+                          </DropdownMenuItem>
+                          <DropdownMenuItem disabled={isDownloadingTemplate} onClick={handleDownloadOfferingTemplate}>
+                            <DownloadIcon className="mr-2 size-4" /> Download Offering Template
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <Button
+                        size="header"
+                        className="hidden md:inline-flex"
+                        variant="outline"
+                        onClick={() => offeringImportInputRef.current?.click()}
+                        disabled={isImportingOfferings || isViewingInactiveAcademicYear}
+                        title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
+                      >
+                        <Upload className="size-4 mr-2" /> Import Offering CSV
+                      </Button>
+                      <Button
+                        size="header"
+                        className="hidden md:inline-flex"
+                        variant="outline"
+                        onClick={handleDownloadOfferingTemplate}
+                        disabled={isDownloadingTemplate}
+                      >
+                        <DownloadIcon className="size-4 mr-2" />
+                        Download Offering Template
+                      </Button>
+                    </>
+                  ) : null}
+                  {activeSection === "grading" ? (
+                    <Button
+                      size="header"
+                      className="col-span-2 md:col-auto"
+                      onClick={() => setGradingCreateRequest((request) => request + 1)}
+                    >
+                      <Plus className="size-4" /> New Grading Template
                     </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-[calc(100vw-1.5rem)] border-2 sm:w-72">
-                    <DropdownMenuItem disabled={isImportingCatalog} onClick={() => catalogImportInputRef.current?.click()}>
-                      <Upload className="mr-2 size-4" /> Import Catalog CSV
-                    </DropdownMenuItem>
-                    <DropdownMenuItem disabled={isDownloadingCatalogTemplate} onClick={handleDownloadCatalogTemplate}>
-                      <DownloadIcon className="mr-2 size-4" /> Download Catalog Template
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <Button
-                  size="header"
-                  className="hidden md:inline-flex"
-                  variant="outline"
-                  onClick={() => catalogImportInputRef.current?.click()}
-                  disabled={isImportingCatalog}
-                >
-                  <Upload className="size-4" /> Import Catalog CSV
-                </Button>
-                <Button
-                  size="header"
-                  className="hidden md:inline-flex"
-                  variant="outline"
-                  onClick={handleDownloadCatalogTemplate}
-                  disabled={isDownloadingCatalogTemplate}
-                >
-                  <DownloadIcon className="size-4" />
-                  Download Catalog Template
-                </Button>
-              </>
-            ) : null}
-            {activeSection === "offerings" ? (
-              <>
-                <input
-                  ref={offeringImportInputRef}
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  onChange={(event) => void handleOfferingImport(event.target.files?.[0])}
-                />
-                <Button
-                  size="header"
-                  variant="outline"
-                  className="hidden md:inline-flex"
-                  onClick={() => {
-                    setError(null);
-                    setCopyResult(null);
-                    setIsCopySetupModalOpen(true);
+                  ) : null}
+                </div>
+              </header>
+              <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                <Tabs
+                  tabs={MODULE_TABS}
+                  activeTab={activeSection}
+                  onTabChange={(tab) => {
+                    setActiveSection(tab);
+                    const next = new URLSearchParams(searchParams);
+                    next.set("tab", tab);
+                    setSearchParams(next, { replace: true });
                   }}
-                  disabled={isLoadingOptions || !activeAcademicYear}
-                >
-                  <Copy className="size-4" /> Copy Previous Year Setup
-                </Button>
-                <Button
-                  size="header"
-                  className="col-span-2 md:col-auto"
-                  onClick={openCreateOffering}
-                  disabled={isLoadingOptions || isViewingInactiveAcademicYear}
-                  title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
-                >
-                  <Plus className="size-4" /> Add Offerings
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="header" className="col-span-2 md:hidden" variant="outline">
-                      <MoreHorizontal className="mr-2 size-4" /> Offering Actions
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-[calc(100vw-1.5rem)] border-2 sm:w-72">
-                    <DropdownMenuItem
-                      disabled={isLoadingOptions || !activeAcademicYear}
-                      onClick={() => {
-                        setError(null);
-                        setCopyResult(null);
-                        setIsCopySetupModalOpen(true);
-                      }}
-                    >
-                      <Copy className="mr-2 size-4" /> Copy Previous Year Setup
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      disabled={isImportingOfferings || isViewingInactiveAcademicYear}
-                      onClick={() => offeringImportInputRef.current?.click()}
-                    >
-                      <Upload className="mr-2 size-4" /> Import Offering CSV
-                    </DropdownMenuItem>
-                    <DropdownMenuItem disabled={isDownloadingTemplate} onClick={handleDownloadOfferingTemplate}>
-                      <DownloadIcon className="mr-2 size-4" /> Download Offering Template
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <Button
-                  size="header"
-                  className="hidden md:inline-flex"
-                  variant="outline"
-                  onClick={() => offeringImportInputRef.current?.click()}
-                  disabled={isImportingOfferings || isViewingInactiveAcademicYear}
-                  title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
-                >
-                  <Upload className="size-4 mr-2" /> Import Offering CSV
-                </Button>
-                <Button
-                  size="header"
-                  className="hidden md:inline-flex"
-                  variant="outline"
-                  onClick={handleDownloadOfferingTemplate}
-                  disabled={isDownloadingTemplate}
-                >
-                  <DownloadIcon className="size-4 mr-2" />
-                  Download Offering Template
-                </Button>
-              </>
-            ) : null}
-            {activeSection === "grading" ? (
-              <Button
-                size="header"
-                className="col-span-2 md:col-auto"
-                onClick={() => setGradingCreateRequest((request) => request + 1)}
-              >
-                <Plus className="size-4" /> New Grading Template
-              </Button>
-            ) : null}
-          </div>
-            </header>
-            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-              <Tabs
-                tabs={MODULE_TABS}
-                activeTab={activeSection}
-                onTabChange={(tab) => {
-                  setActiveSection(tab);
-                  const next = new URLSearchParams(searchParams);
-                  next.set("tab", tab);
-                  setSearchParams(next, { replace: true });
-                }}
-              />
-            </div>
+                />
+              </div>
 
             </div>
 
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 [&_table]:min-w-[720px] sm:px-4 sm:py-4 md:px-6">
-            {isViewingInactiveAcademicYear && activeSection === "offerings" ? (
-              <div className="rounded border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
-                <p className="font-bold">{readOnlyReason}</p>
-                <p className="text-black/70">
-                  {readOnlyHelper} Previous academic years are locked in the UI to protect historical grades and prediction records.
+              {isViewingInactiveAcademicYear && activeSection === "offerings" ? (
+                <div className="rounded border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
+                  <p className="font-bold">{readOnlyReason}</p>
+                  <p className="text-black/70">
+                    {readOnlyHelper} Previous academic years are locked in the UI to protect historical grades and prediction records.
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="mt-3"
+                    disabled={isLoadingOptions || !activeAcademicYear}
+                    onClick={() => {
+                      setError(null);
+                      setCopyResult(null);
+                      setIsCopySetupModalOpen(true);
+                    }}
+                  >
+                    Copy Previous Year Setup
+                  </Button>
+                </div>
+              ) : null}
+
+              {notice ? (
+                <p className="border-2 border-black bg-[#bbf7d0] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">
+                  {notice}
                 </p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="mt-3"
-                  disabled={isLoadingOptions || !activeAcademicYear}
-                  onClick={() => {
-                    setError(null);
-                    setCopyResult(null);
-                    setIsCopySetupModalOpen(true);
-                  }}
-                >
-                  Copy Previous Year Setup
-                </Button>
-              </div>
-            ) : null}
-
-            {notice ? (
-              <p className="border-2 border-black bg-[#bbf7d0] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">
-                {notice}
-              </p>
-            ) : null}
-            {error ? (
-              <div className="flex flex-col gap-2 rounded border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000] md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="font-bold">Unable to load the latest subject data.</p>
-                  <p className="text-black/70">{friendlyErrorMessage(error)}</p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setError(null);
-                    void loadSubjects();
-                    void loadOfferingOptions();
-                    void loadOfferings();
-                    void loadGradingTemplates();
-                  }}
-                >
-                  Retry
-                </Button>
-              </div>
-            ) : null}
-
-            {activeSection === "catalog" ? (
-              <section className="flex flex-col gap-4">
-                <div className="grid gap-3 md:grid-cols-[1fr_160px]">
-                  <label className="relative">
-                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
-                    <Input
-                      value={catalogSearch}
-                      onChange={(event) => setCatalogSearch(event.target.value)}
-                      placeholder="Search name, code, template"
-                      className="h-10 w-full border-black pl-9 pr-3"
-                    />
-                  </label>
-                  <Select
-                    value={catalogTemplateFilter}
-                    onValueChange={(val) => setCatalogTemplateFilter(val)}
+              ) : null}
+              {error ? (
+                <div className="flex flex-col gap-2 rounded border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000] md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="font-bold">Unable to load the latest subject data.</p>
+                    <p className="text-black/70">{friendlyErrorMessage(error)}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setError(null);
+                      void loadSubjects();
+                      void loadOfferingOptions();
+                      void loadOfferings();
+                      void loadGradingTemplates();
+                    }}
                   >
-                    <Select.Trigger className="w-full">
-                      <Select.Value placeholder="Grading Template" />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Group>
-                        <Select.Item value="all">All Templates</Select.Item>
-                        {availableGradingTemplates.map((templateName) => (
-                          <Select.Item key={templateName} value={templateName}>
-                            {templateName}
-                          </Select.Item>
-                        ))}
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>
+                    Retry
+                  </Button>
                 </div>
+              ) : null}
 
-                {catalogImportResult ? (
-                  <RetroCard className="p-3 text-sm">
-                    <p className="font-bold">Catalog Import Summary</p>
-                    <p>
-                      {catalogImportResult.created_count} created, {catalogImportResult.skipped_count} skipped, {catalogImportResult.error_count} errors from {catalogImportResult.total_rows} rows.
-                    </p>
-                    {catalogImportResult.warnings?.length ? (
-                      <div className="mt-2 max-h-32 overflow-y-auto rounded border border-amber-300 bg-amber-50 p-2 text-amber-900">
-                        <p className="font-semibold">Needs Review / Notes ({catalogImportResult.warnings.length}):</p>
-                        {catalogImportResult.warnings.map((warn, index) => (
-                          <p key={`warn-${index}`}>{warn}</p>
-                        ))}
-                      </div>
-                    ) : null}
-                    {catalogImportResult.errors.length ? (
-                      <div className="mt-2 max-h-32 overflow-y-auto">
-                        {catalogImportResult.errors.map((item, index) => (
-                          <p key={`${item.row ?? "file"}-${index}`}>
-                            Row {item.row ?? "-"}: {item.message}
-                          </p>
-                        ))}
-                      </div>
-                    ) : null}
-                  </RetroCard>
-                ) : null}
-
-                {isLoadingCatalog ? (
-                  <LoadingCard label="Loading subjects..." />
-                ) : gradeGroups.length === 0 ? (
-                  <EmptyStateCard
-                    title="No subjects exist yet."
-                    description="Create catalog subjects first, then use offerings to place them in a year, grade, pathway, and term."
-                  >
-                    <Button size="sm" onClick={openCreateSubject}>Create Subject</Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => catalogImportInputRef.current?.click()}
-                      disabled={isImportingCatalog}
+              {activeSection === "catalog" ? (
+                <section className="flex flex-col gap-4">
+                  <div className="grid gap-3 md:grid-cols-[1fr_160px]">
+                    <label className="relative">
+                      <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+                      <Input
+                        value={catalogSearch}
+                        onChange={(event) => setCatalogSearch(event.target.value)}
+                        placeholder="Search name, code, template"
+                        className="h-10 w-full border-black pl-9 pr-3"
+                      />
+                    </label>
+                    <Select
+                      value={catalogTemplateFilter}
+                      onValueChange={(val) => setCatalogTemplateFilter(val)}
                     >
-                      Import Catalog CSV
-                    </Button>
-                  </EmptyStateCard>
-                ) : (
-                  gradeGroups.map((item) => (
-                    <SubjectGradeSection
-                      key={item.academicLevelId}
-                      group={item}
-                      onEdit={openEditSubject}
-                      onArchive={(itemToArchive) =>
-                        setPendingAction({
-                          kind: "subject",
-                          action: "archive",
-                          id: itemToArchive.subject_id,
-                          label: itemToArchive.subject_name,
-                        })
-                      }
-                    />
-                  ))
-                )}
-              </section>
-            ) : null}
+                      <Select.Trigger className="w-full">
+                        <Select.Value placeholder="Grading Template" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Group>
+                          <Select.Item value="all">All Templates</Select.Item>
+                          {availableGradingTemplates.map((templateName) => (
+                            <Select.Item key={templateName} value={templateName}>
+                              {templateName}
+                            </Select.Item>
+                          ))}
+                        </Select.Group>
+                      </Select.Content>
+                    </Select>
+                  </div>
 
-            {activeSection === "offerings" ? (
-              <section className="flex flex-col gap-4">
-                {/* <RetroCard className="p-4">
+                  {catalogImportResult ? (
+                    <RetroCard className="p-3 text-sm">
+                      <p className="font-bold">Catalog Import Summary</p>
+                      <p>
+                        {catalogImportResult.created_count} created, {catalogImportResult.skipped_count} skipped, {catalogImportResult.error_count} errors from {catalogImportResult.total_rows} rows.
+                      </p>
+                      {catalogImportResult.warnings?.length ? (
+                        <div className="mt-2 max-h-32 overflow-y-auto rounded border border-amber-300 bg-amber-50 p-2 text-amber-900">
+                          <p className="font-semibold">Needs Review / Notes ({catalogImportResult.warnings.length}):</p>
+                          {catalogImportResult.warnings.map((warn, index) => (
+                            <p key={`warn-${index}`}>{warn}</p>
+                          ))}
+                        </div>
+                      ) : null}
+                      {catalogImportResult.errors.length ? (
+                        <div className="mt-2 max-h-32 overflow-y-auto">
+                          {catalogImportResult.errors.map((item, index) => (
+                            <p key={`${item.row ?? "file"}-${index}`}>
+                              Row {item.row ?? "-"}: {item.message}
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
+                    </RetroCard>
+                  ) : null}
+
+                  {isLoadingCatalog ? (
+                    <LoadingCard label="Loading subjects..." />
+                  ) : gradeGroups.length === 0 ? (
+                    <EmptyStateCard
+                      title="No subjects exist yet."
+                      description="Create catalog subjects first, then use offerings to place them in a year, grade, pathway, and term."
+                    >
+                      <Button size="sm" onClick={openCreateSubject}>Create Subject</Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => catalogImportInputRef.current?.click()}
+                        disabled={isImportingCatalog}
+                      >
+                        Import Catalog CSV
+                      </Button>
+                    </EmptyStateCard>
+                  ) : (
+                    gradeGroups.map((item) => (
+                      <SubjectGradeSection
+                        key={item.academicLevelId}
+                        group={item}
+                        onEdit={openEditSubject}
+                        onArchive={(itemToArchive) =>
+                          setPendingAction({
+                            kind: "subject",
+                            action: "archive",
+                            id: itemToArchive.subject_id,
+                            label: itemToArchive.subject_name,
+                          })
+                        }
+                      />
+                    ))
+                  )}
+                </section>
+              ) : null}
+
+              {activeSection === "offerings" ? (
+                <section className="flex flex-col gap-4">
+                  {/* <RetroCard className="p-4">
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div>
@@ -839,213 +841,213 @@ export default function AdminSubjects() {
 
                     </div>
                   </RetroCard> */}
-                <CurriculumFilters
-                  search={offeringFilters.search}
-                  grade={offeringFilters.grade}
-                  pathway={offeringFilters.pathway}
-                  status={offeringFilters.status}
-                  onSearchChange={setOfferingSearch}
-                  onGradeChange={setOfferingGrade}
-                  onPathwayChange={setOfferingPathway}
-                  onStatusChange={setOfferingStatus}
-                  onReset={resetOfferingFilters}
-                />
-
-                {offeringImportResult ? (
-                  <RetroCard className="p-3 text-sm">
-                    <p className="font-bold">Offering Import Summary</p>
-                    <p>
-                      {offeringImportResult.created_count} created, {offeringImportResult.skipped_count} skipped, {offeringImportResult.error_count} errors from {offeringImportResult.total_rows} rows.
-                    </p>
-                    {offeringImportResult.errors.length ? (
-                      <div className="mt-2 max-h-32 overflow-y-auto">
-                        {offeringImportResult.errors.map((item, index) => (
-                          <p key={`${item.row ?? "file"}-${index}`}>
-                            Row {item.row ?? "-"}: {item.message}
-                          </p>
-                        ))}
-                      </div>
-                    ) : null}
-                  </RetroCard>
-                ) : null}
-
-                {copyResult ? (
-                  <RetroCard className="p-3 text-sm">
-                    <p className="font-bold">Copy Previous Year Setup Summary</p>
-                    <p>
-                      {copyResult.created_count} created, {copyResult.updated_count} updated, {copyResult.skipped_count} skipped.
-                    </p>
-                    {copyResult.skipped.length ? (
-                      <div className="mt-2 max-h-32 overflow-y-auto">
-                        {copyResult.skipped.map((item, index) => (
-                          <p key={`${item.source_subject_offering_id ?? "offering"}-${index}`}>
-                            Subject {item.subject_id ?? "-"}: {item.reason}
-                          </p>
-                        ))}
-                      </div>
-                    ) : null}
-                  </RetroCard>
-                ) : null}
-
-                {isLoadingOfferings ? (
-                  <LoadingCard label="Loading subject offerings..." />
-                ) : offerings.length === 0 ? (
-                  <EmptyStateCard
-                    title="No subjects have been offered for this setup yet."
-                    description="Click Add Offerings to choose subjects for the selected year, grade, pathway, and term."
-                  >
-                    <Button
-                      size="sm"
-                      onClick={openCreateOffering}
-                      disabled={isLoadingOptions || isViewingInactiveAcademicYear}
-                      title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
-                    >
-                      Add Offerings
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setError(null);
-                        setCopyResult(null);
-                        setIsCopySetupModalOpen(true);
-                      }}
-                      disabled={isLoadingOptions || !activeAcademicYear}
-                    >
-                      Copy Previous Year Setup
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => offeringImportInputRef.current?.click()}
-                      disabled={isImportingOfferings || isViewingInactiveAcademicYear}
-                      title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
-                    >
-                      Import Offering CSV
-                    </Button>
-                  </EmptyStateCard>
-                ) : (
-                  <CurriculumPlanTable
-                    offerings={offerings}
-                    periods={curriculumPeriods}
-                    catalogSubjects={catalogSubjectsForPlan}
-                    academicYearLabel={selectedYearLabel}
-                    gradeLabel={selectedGradeLabel}
-                    pathwayLabel={selectedPathwayLabel}
+                  <CurriculumFilters
+                    search={offeringFilters.search}
+                    grade={offeringFilters.grade}
                     pathway={offeringFilters.pathway}
-                    readOnly={isViewingInactiveAcademicYear}
-                    readOnlyReason={readOnlyReason}
-                    onEdit={openEditOffering}
-                    onArchive={(itemToArchive) =>
-                      setPendingAction({
-                        kind: "offering",
-                        action: "archive",
-                        id: itemToArchive.subject_offering_id,
-                        label: itemToArchive.subject.subject_name,
-                      })
-                    }
-                    onRestore={(itemToRestore) =>
-                      setPendingAction({
-                        kind: "offering",
-                        action: "restore",
-                        id: itemToRestore.subject_offering_id,
-                        label: itemToRestore.subject.subject_name,
-                      })
-                    }
+                    status={offeringFilters.status}
+                    onSearchChange={setOfferingSearch}
+                    onGradeChange={setOfferingGrade}
+                    onPathwayChange={setOfferingPathway}
+                    onStatusChange={setOfferingStatus}
+                    onReset={resetOfferingFilters}
                   />
-                )}
-              </section>
-            ) : null}
 
-            {activeSection === "grading" ? (
-              <GradingTemplateManager
-                templates={gradingTemplates}
-                subjects={[...subjects, ...archivedSubjects]}
-                academicYears={offeringOptions?.academic_years ?? []}
-                createRequest={gradingCreateRequest}
-                showCreateButton={false}
-                onReload={async () => {
-                  await Promise.all([loadGradingTemplates(), loadSubjects()]);
-                }}
-              />
-            ) : null}
+                  {offeringImportResult ? (
+                    <RetroCard className="p-3 text-sm">
+                      <p className="font-bold">Offering Import Summary</p>
+                      <p>
+                        {offeringImportResult.created_count} created, {offeringImportResult.skipped_count} skipped, {offeringImportResult.error_count} errors from {offeringImportResult.total_rows} rows.
+                      </p>
+                      {offeringImportResult.errors.length ? (
+                        <div className="mt-2 max-h-32 overflow-y-auto">
+                          {offeringImportResult.errors.map((item, index) => (
+                            <p key={`${item.row ?? "file"}-${index}`}>
+                              Row {item.row ?? "-"}: {item.message}
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
+                    </RetroCard>
+                  ) : null}
 
-            {activeSection === "archived" ? (
-              <section className="flex flex-col gap-4">
-                <RetroCard className="flex flex-col bg-primary">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-xl font-bold">Archived Catalog Subjects</h2>
-                      <p className="text-sm">Subjects no longer used in the catalog.</p>
-                    </div>
-                    <Badge variant="outline" className="border-border">
-                      {archivedSubjects.length} subject
-                      {archivedSubjects.length !== 1 ? "s" : ""}
-                    </Badge>
-                  </div>
-                  <div >
-                    {archivedSubjects.length === 0 ? (
-                      <p className="text-sm">No archived catalog subjects.</p>
-                    ) : (
-                      <div className="flex gap-3 overflow-auto pb-2 pt-1">
-                        {archivedSubjects.map((subject) => (
-                          <SubjectCatalogCard
-                            key={subject.subject_id}
-                            subject={subject}
-                            onRestore={(itemToRestore) =>
-                              setPendingAction({
-                                kind: "subject",
-                                action: "restore",
-                                id: itemToRestore.subject_id,
-                                label: itemToRestore.subject_name,
-                              })
-                            }
-                          />
-                        ))}
+                  {copyResult ? (
+                    <RetroCard className="p-3 text-sm">
+                      <p className="font-bold">Copy Previous Year Setup Summary</p>
+                      <p>
+                        {copyResult.created_count} created, {copyResult.updated_count} updated, {copyResult.skipped_count} skipped.
+                      </p>
+                      {copyResult.skipped.length ? (
+                        <div className="mt-2 max-h-32 overflow-y-auto">
+                          {copyResult.skipped.map((item, index) => (
+                            <p key={`${item.source_subject_offering_id ?? "offering"}-${index}`}>
+                              Subject {item.subject_id ?? "-"}: {item.reason}
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
+                    </RetroCard>
+                  ) : null}
+
+                  {isLoadingOfferings ? (
+                    <LoadingCard label="Loading subject offerings..." />
+                  ) : offerings.length === 0 ? (
+                    <EmptyStateCard
+                      title="No subjects have been offered for this setup yet."
+                      description="Click Add Offerings to choose subjects for the selected year, grade, pathway, and term."
+                    >
+                      <Button
+                        size="sm"
+                        onClick={openCreateOffering}
+                        disabled={isLoadingOptions || isViewingInactiveAcademicYear}
+                        title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
+                      >
+                        Add Offerings
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setError(null);
+                          setCopyResult(null);
+                          setIsCopySetupModalOpen(true);
+                        }}
+                        disabled={isLoadingOptions || !activeAcademicYear}
+                      >
+                        Copy Previous Year Setup
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => offeringImportInputRef.current?.click()}
+                        disabled={isImportingOfferings || isViewingInactiveAcademicYear}
+                        title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
+                      >
+                        Import Offering CSV
+                      </Button>
+                    </EmptyStateCard>
+                  ) : (
+                    <CurriculumPlanTable
+                      offerings={offerings}
+                      periods={curriculumPeriods}
+                      catalogSubjects={catalogSubjectsForPlan}
+                      academicYearLabel={selectedYearLabel}
+                      gradeLabel={selectedGradeLabel}
+                      pathwayLabel={selectedPathwayLabel}
+                      pathway={offeringFilters.pathway}
+                      readOnly={isViewingInactiveAcademicYear}
+                      readOnlyReason={readOnlyReason}
+                      onEdit={openEditOffering}
+                      onArchive={(itemToArchive) =>
+                        setPendingAction({
+                          kind: "offering",
+                          action: "archive",
+                          id: itemToArchive.subject_offering_id,
+                          label: itemToArchive.subject.subject_name,
+                        })
+                      }
+                      onRestore={(itemToRestore) =>
+                        setPendingAction({
+                          kind: "offering",
+                          action: "restore",
+                          id: itemToRestore.subject_offering_id,
+                          label: itemToRestore.subject.subject_name,
+                        })
+                      }
+                    />
+                  )}
+                </section>
+              ) : null}
+
+              {activeSection === "grading" ? (
+                <GradingTemplateManager
+                  templates={gradingTemplates}
+                  subjects={[...subjects, ...archivedSubjects]}
+                  academicYears={offeringOptions?.academic_years ?? []}
+                  createRequest={gradingCreateRequest}
+                  showCreateButton={false}
+                  onReload={async () => {
+                    await Promise.all([loadGradingTemplates(), loadSubjects()]);
+                  }}
+                />
+              ) : null}
+
+              {activeSection === "archived" ? (
+                <section className="flex flex-col gap-4">
+                  <RetroCard className="flex flex-col bg-primary">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-xl font-bold">Archived Catalog Subjects</h2>
+                        <p className="text-sm">Subjects no longer used in the catalog.</p>
                       </div>
-                    )}
-                  </div>
-                </RetroCard>
-
-                <RetroCard className="flex flex-col bg-primary">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-xl font-bold">Archived Subject Offerings</h2>
-                      <p className="text-sm">Offerings removed from the active school year/pathway setup.</p>
+                      <Badge variant="outline" className="border-border">
+                        {archivedSubjects.length} subject
+                        {archivedSubjects.length !== 1 ? "s" : ""}
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="border-border">
-                      {archivedOfferings.length} offering
-                      {archivedOfferings.length !== 1 ? "s" : ""}
-                    </Badge>
-                  </div>
-                  <div>
-                    {archivedOfferings.length === 0 ? (
-                      <p className="text-sm">No archived subject offerings.</p>
-                    ) : (
-                      <div className="flex gap-3 overflow-auto pb-2 pt-1">
-                        {archivedOfferings.map((offering) => (
-                          <OfferingRow
-                            key={offering.subject_offering_id}
-                            offering={offering}
-                            readOnly={isViewingInactiveAcademicYear}
-                            readOnlyReason={readOnlyReason}
-                            onRestore={(itemToRestore) =>
-                              setPendingAction({
-                                kind: "offering",
-                                action: "restore",
-                                id: itemToRestore.subject_offering_id,
-                                label: itemToRestore.subject.subject_name,
-                              })
-                            }
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </RetroCard>
+                    <div >
+                      {archivedSubjects.length === 0 ? (
+                        <p className="text-sm">No archived catalog subjects.</p>
+                      ) : (
+                        <div className="flex gap-3 overflow-auto pb-2 pt-1">
+                          {archivedSubjects.map((subject) => (
+                            <SubjectCatalogCard
+                              key={subject.subject_id}
+                              subject={subject}
+                              onRestore={(itemToRestore) =>
+                                setPendingAction({
+                                  kind: "subject",
+                                  action: "restore",
+                                  id: itemToRestore.subject_id,
+                                  label: itemToRestore.subject_name,
+                                })
+                              }
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </RetroCard>
 
-              </section>
-            ) : null}
+                  <RetroCard className="flex flex-col bg-primary">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-xl font-bold">Archived Subject Offerings</h2>
+                        <p className="text-sm">Offerings removed from the active school year/pathway setup.</p>
+                      </div>
+                      <Badge variant="outline" className="border-border">
+                        {archivedOfferings.length} offering
+                        {archivedOfferings.length !== 1 ? "s" : ""}
+                      </Badge>
+                    </div>
+                    <div>
+                      {archivedOfferings.length === 0 ? (
+                        <p className="text-sm">No archived subject offerings.</p>
+                      ) : (
+                        <div className="flex gap-3 overflow-auto pb-2 pt-1">
+                          {archivedOfferings.map((offering) => (
+                            <OfferingRow
+                              key={offering.subject_offering_id}
+                              offering={offering}
+                              readOnly={isViewingInactiveAcademicYear}
+                              readOnlyReason={readOnlyReason}
+                              onRestore={(itemToRestore) =>
+                                setPendingAction({
+                                  kind: "offering",
+                                  action: "restore",
+                                  id: itemToRestore.subject_offering_id,
+                                  label: itemToRestore.subject.subject_name,
+                                })
+                              }
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </RetroCard>
+
+                </section>
+              ) : null}
             </div>
           </div>
         </div>

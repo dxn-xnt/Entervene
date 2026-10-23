@@ -11,7 +11,7 @@ import { apiFetch } from "@/lib/api";
 import type { InviteUserPayload } from "@/lib/api";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { cn } from "@/lib/utils";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 
 type Step = "choose" | "import" | "manual";
 type Role = "Teacher" | "Student" | "Admin";

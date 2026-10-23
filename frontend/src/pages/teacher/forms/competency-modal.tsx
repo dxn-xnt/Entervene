@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Loader2, Plus, Save, X } from "lucide-react";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import Field from "@/components/admin/classes/fields/Field";

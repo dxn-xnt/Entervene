@@ -12,7 +12,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Switch } from "@/components/retroui/Switch";
 import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { ArrowUpRight, Lock, Calendar, Save } from "lucide-react";
 import AddAcademicPeriodModal from "./forms/add-academic-period";
 import AddPathwayModal from "./forms/add-pathway";
@@ -512,12 +512,12 @@ export default function AdminSystemSettings() {
     ) || academicPeriods[0];
   const progressRatio = activePeriod
     ? Math.min(
-        1,
-        Math.max(
-          0,
-          activePeriod.period_sequence / (activePeriod.total_periods || 3),
-        ),
-      )
+      1,
+      Math.max(
+        0,
+        activePeriod.period_sequence / (activePeriod.total_periods || 3),
+      ),
+    )
     : 0.33;
   const progressPercent = Math.round(progressRatio * 100);
 
@@ -672,7 +672,7 @@ export default function AdminSystemSettings() {
                       Reusable grade weight templates stored in the database. Assign them to subjects during grading setup.
                     </Text>
                   </div>
-                  <Button size="sm" onClick={() => navigate("/admin/subjects?tab=grading") }>
+                  <Button size="sm" onClick={() => navigate("/admin/subjects?tab=grading")}>
                     Manage in Subjects <ArrowUpRight className="ml-1 size-4" />
                   </Button>
                 </div>
@@ -690,7 +690,7 @@ export default function AdminSystemSettings() {
                               </div>
                               <Text as="p" className="mt-1 line-clamp-2 text-xs text-black/70">{template.description || "Custom grading template"}</Text>
                             </div>
-                            <Button aria-label={`Manage ${template.name}`} size="icon" variant="outline" className="size-8 shrink-0 bg-white p-1 shadow-[2px_2px_0_#000]" onClick={() => navigate("/admin/subjects?tab=grading") }>
+                            <Button aria-label={`Manage ${template.name}`} size="icon" variant="outline" className="size-8 shrink-0 bg-white p-1 shadow-[2px_2px_0_#000]" onClick={() => navigate("/admin/subjects?tab=grading")}>
                               <ArrowUpRight className="size-4" />
                             </Button>
                           </div>
@@ -793,7 +793,7 @@ export default function AdminSystemSettings() {
                       <Text as="h6" className="font-sans font-medium">
                         Period Type
                       </Text>
-                      <div className="h-10 border-2 border-black flex items-center gap-2 px-3 text-md font-medium">
+                      <div className="h-10 border-2 border-black rounded flex items-center gap-2 px-3 text-md font-medium">
                         <Lock className="w-3.5 h-3.5" />
                         Three-Term Academic Calendar
                       </div>

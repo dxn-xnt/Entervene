@@ -30,7 +30,7 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Badge } from "@/components/retroui/Badge";
 import { Accordion } from "@/components/retroui/Accordion";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 
 export default function AdminClasses() {
   const toast = useToast();
@@ -367,6 +367,7 @@ export default function AdminClasses() {
                         </Accordion.Content>
                       </Accordion.Item>
                     ))}
+
                   </Accordion>
                 )}
               </section>

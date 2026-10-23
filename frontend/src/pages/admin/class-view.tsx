@@ -9,7 +9,7 @@ import { Avatar } from "@/components/retroui/Avatar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
-import { useToast } from "@/components/retroui/use-toast";
+import { useToast } from "@/components/retroui/Toast";
 import { Card as RetroCard } from "@/components/retroui/Card";
 import { Empty } from "@/components/retroui/Empty";
 import { Input } from "@/components/retroui/Input";
@@ -369,51 +369,51 @@ export default function AdminClassDetail() {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             <div data-page-tabs-sticky-region>
-            {/* Header with Breadcrumb & Context Actions */}
-            <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                <SidebarTrigger className="shrink-0 md:hidden" />
-                <Breadcrumb className="min-w-0 overflow-hidden">
-                  <Breadcrumb.List className="flex-nowrap">
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Link href="/admin/classes">Classes</Breadcrumb.Link>
-                    </Breadcrumb.Item>
-                    <Breadcrumb.Separator />
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Link
-                        href={`/admin/classes?grade=${encodeURIComponent(selectedClass.grade)}`}
-                        className="text-xl text-muted-foreground font-semibold"
-                      >
-                        {selectedClass.grade}
-                      </Breadcrumb.Link>
-                    </Breadcrumb.Item>
-                    <Breadcrumb.Separator />
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Page>{selectedClass.section}</Breadcrumb.Page>
-                    </Breadcrumb.Item>
-                  </Breadcrumb.List>
-                </Breadcrumb>
-              </div>
+              {/* Header with Breadcrumb & Context Actions */}
+              <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
+                <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                  <SidebarTrigger className="shrink-0 md:hidden" />
+                  <Breadcrumb className="min-w-0 overflow-hidden">
+                    <Breadcrumb.List className="flex-nowrap">
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Link href="/admin/classes">Classes</Breadcrumb.Link>
+                      </Breadcrumb.Item>
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Link
+                          href={`/admin/classes?grade=${encodeURIComponent(selectedClass.grade)}`}
+                          className="text-xl text-muted-foreground font-semibold"
+                        >
+                          {selectedClass.grade}
+                        </Breadcrumb.Link>
+                      </Breadcrumb.Item>
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Page>{selectedClass.section}</Breadcrumb.Page>
+                      </Breadcrumb.Item>
+                    </Breadcrumb.List>
+                  </Breadcrumb>
+                </div>
 
-              <div className="flex w-full items-center gap-2 md:w-auto">
-                {!isArchived && (
-                  <Button size="header" onClick={() => setShowEditClass(true)} className="w-full whitespace-nowrap md:w-auto">
-                    <Pencil className="size-4" /> Edit Class
-                  </Button>
-                )}
+                <div className="flex w-full items-center gap-2 md:w-auto">
+                  {!isArchived && (
+                    <Button size="header" onClick={() => setShowEditClass(true)} className="w-full whitespace-nowrap md:w-auto">
+                      <Pencil className="size-4" /> Edit Class
+                    </Button>
+                  )}
+                </div>
+              </header>
+              <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                <Tabs<DetailTab>
+                  tabs={[
+                    { id: "classes", label: "Overview", icon: BookOpen },
+                    { id: "students", label: "Students", icon: Users },
+                    { id: "subjects", label: "Subject Load", icon: BookOpen },
+                  ]}
+                  activeTab={tab}
+                  onTabChange={(id) => setTab(id)}
+                />
               </div>
-            </header>
-            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-              <Tabs<DetailTab>
-                tabs={[
-                  { id: "classes", label: "Overview", icon: BookOpen },
-                  { id: "students", label: "Students", icon: Users },
-                  { id: "subjects", label: "Subject Load", icon: BookOpen },
-                ]}
-                activeTab={tab}
-                onTabChange={(id) => setTab(id)}
-              />
-            </div>
             </div>
 
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 [&_table]:min-w-[560px] sm:px-4 sm:py-4 md:px-6">
@@ -489,13 +489,13 @@ export default function AdminClassDetail() {
           currentSectionId={loadedClass.class_id}
           currentSectionName={loadedClass.section_name}
           academicLevel={loadedClass.academic_level.level_name}
-            academicYear={loadedClass.academic_year.year_label}
-            requiresPathway={Boolean(loadedClass.academic_level.requires_pathway)}
+          academicYear={loadedClass.academic_year.year_label}
+          requiresPathway={Boolean(loadedClass.academic_level.requires_pathway)}
           students={classStudents.students}
           availableStudents={availableStudents}
           availableSections={transferOptions}
           onSaveChanges={saveStudentListChanges}
-            onDistributionCommitted={distributionCommitted}
+          onDistributionCommitted={distributionCommitted}
           onClose={() => setShowEditStudents(false)}
         />
       )}
@@ -736,13 +736,13 @@ function StudentsTab({
   const genderCounts = studentData?.summary.gender_counts;
   const genderSummary = genderCounts
     ? [
-        genderCounts.male ? `${genderCounts.male} male${genderCounts.male !== 1 ? "s" : ""}` : null,
-        genderCounts.female ? `${genderCounts.female} female${genderCounts.female !== 1 ? "s" : ""}` : null,
-        genderCounts.other ? `${genderCounts.other} other` : null,
-        genderCounts.unspecified ? `${genderCounts.unspecified} unspecified` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ")
+      genderCounts.male ? `${genderCounts.male} male${genderCounts.male !== 1 ? "s" : ""}` : null,
+      genderCounts.female ? `${genderCounts.female} female${genderCounts.female !== 1 ? "s" : ""}` : null,
+      genderCounts.other ? `${genderCounts.other} other` : null,
+      genderCounts.unspecified ? `${genderCounts.unspecified} unspecified` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ")
     : null;
 
   return (
