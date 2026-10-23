@@ -26,9 +26,9 @@ import {
   markInterventionViewed,
   type StudentSuggestionItem,
 } from "@/lib/interventions-api";
-import StudentReviewerSection from "./student-reviewer-section";
-import StudentActiveInterventions from "./student-active-interventions";
-import StudentResolvedInterventions from "./student-resolved-interventions";
+import StudentReviewerSection from "./intervention/student-reviewer-section";
+import StudentActiveInterventions from "./intervention/student-active-interventions";
+import StudentResolvedInterventions from "./intervention/student-resolved-interventions";
 
 export default function StudentInterventions() {
   const navigate = useNavigate();

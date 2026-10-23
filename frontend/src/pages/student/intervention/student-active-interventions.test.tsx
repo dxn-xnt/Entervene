@@ -12,8 +12,10 @@ vi.mock("@/lib/student-persistent-interventions-api", () => ({
 const item = {
   intervention_id: 2, status: "ACTIVE", subject_id: 1, subject_name: "Mathematics",
   class_id: 1, class_name: "Demo Class", teacher_name: "Demo Teacher", reviewer_id: null,
-  activities: [{ assignment_id: 12, title: "Practice Quiz", classwork_type: "QUIZ",
-    submission_status: "graded", grade: 10, total_points: 10 }],
+  activities: [{
+    assignment_id: 12, title: "Practice Quiz", classwork_type: "QUIZ",
+    submission_status: "graded", grade: 10, total_points: 10
+  }],
 };
 
 const mount = (path = "/student/interventions") => render(<MemoryRouter initialEntries={[path]}><Routes>
