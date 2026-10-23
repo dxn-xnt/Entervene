@@ -16,6 +16,7 @@ import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";
 import IconContainer from "@/components/icon-container";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
@@ -700,7 +701,7 @@ export default function SubjectLessonTab({
     return (
       <div
         key={lesson.lesson_id}
-        className="w-full cursor-pointer overflow-hidden rounded border-2 border-black bg-primary transition-all hover:translate-x-1"
+        className="w-full overflow-hidden rounded border-2 border-black bg-primary shadow-md transition-all hover:translate-x-1"
         id={`student-lesson-${lesson.lesson_id}`}
       >
         <div className="flex items-stretch">
@@ -709,13 +710,15 @@ export default function SubjectLessonTab({
             onClick={() => void openLessonDetail(lesson)}
             className="min-w-0 flex-1 cursor-pointer p-4 text-left"
           >
-            <span className="flex flex-wrap items-center gap-2">
-              <span className="text-lg font-bold leading-tight">{lesson.title}</span>
-              {lesson.attachments.length > 0 && (
-                <Badge variant="secondary" size="sm" className="rounded border border-black bg-success px-2 py-0.5 text-[10px] font-bold text-black">
-                  {lesson.attachments.length} material{lesson.attachments.length === 1 ? "" : "s"}
-                </Badge>
-              )}
+            <span className="flex flex-wrap items-center justify-between gap-2 pr-2">
+              <span className="text-xl font-semibold leading-tight hover:underline sm:text-2xl">{lesson.title}</span>
+              <span className="flex flex-wrap items-center gap-2">
+                {lesson.attachments.length > 0 && (
+                  <Badge variant="secondary" size="sm" className="rounded border border-black bg-success px-2 py-0.5 text-[10px] font-bold text-black">
+                    {lesson.attachments.length} material{lesson.attachments.length === 1 ? "" : "s"}
+                  </Badge>
+                )}
+              </span>
             </span>
             <span className="mt-1 block text-xs text-foreground">
               {lesson.description ||
@@ -731,7 +734,7 @@ export default function SubjectLessonTab({
             onClick={() => toggleLesson(lesson.lesson_id)}
             aria-label={`${expandedId === lesson.lesson_id ? "Collapse" : "Expand"} ${lesson.title} classwork`}
             aria-expanded={expandedId === lesson.lesson_id}
-            className="flex w-12 shrink-0 cursor-pointer items-center justify-center"
+            className="flex w-10 shrink-0 cursor-pointer items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             <ChevronRight className={`size-4 transition-transform ${expandedId === lesson.lesson_id ? "rotate-90" : ""}`} aria-hidden="true" />
           </button>
@@ -764,7 +767,21 @@ export default function SubjectLessonTab({
 
     if (classworks.length === 0) {
       return (
-        <StudentEmptyState cardless={nested} icon={<ClipboardList />} title="No classwork for this lesson yet" description="Related activities will appear when your teacher publishes them." />
+        nested ? (
+          <Empty className="border-2 border-black bg-retro p-6 shadow-none hover:shadow-none">
+            <EmptyHeader>
+              <EmptyMedia>
+                <div className="flex size-9 items-center justify-center border-2 border-black bg-primary">
+                  <ClipboardList className="size-4.5 text-black" />
+                </div>
+              </EmptyMedia>
+              <EmptyTitle className="text-sm font-bold">No classwork for this lesson yet</EmptyTitle>
+              <EmptyDescription className="text-xs">Related activities will appear when your teacher publishes them.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <StudentEmptyState icon={<ClipboardList />} title="No classwork for this lesson yet" description="Related activities will appear when your teacher publishes them." />
+        )
       );
     }
 

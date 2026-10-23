@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
 import { Award, BookOpen, ChevronDown, FileSpreadsheet, FileText, Loader2, Users } from "lucide-react";
+import { TeacherEmptyAvatarGroup, TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
@@ -302,9 +303,9 @@ function StudentsTab({
         <Card className="block w-full border-black">
           <Card.Content className="max-h-[560px] overflow-y-auto p-4">
             {!detail.students.length ? (
-              <StateInline message="No students are currently enrolled in this class." />
+              <TeacherEmptyState compact illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
             ) : !filteredStudents.length ? (
-              <StateInline message="No students match your search." />
+              <TeacherEmptyState compact illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
             ) : (
               <div className="grid items-start gap-3">
                 {groupedStudents.map(([gender, students]) => (
@@ -599,9 +600,9 @@ function GradesTab({ classId }: { classId: number }) {
         </div>
 
         {!gradesData.students.length ? (
-          <StateInline message="No students are enrolled in this class." />
+          <TeacherEmptyState compact illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
         ) : !filteredStudents.length ? (
-          <StateInline message="No students match your search." />
+          <TeacherEmptyState compact illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
         ) : (
           <Table
             wrapperClassName="border-0 shadow-none rounded-none min-w-0 w-full max-w-full"

@@ -46,7 +46,8 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingPanel } from "@/components/loading-panel";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import "./attendance.css";
 import { SegmentedControl } from "@/components/retroui/SegmentedControl";
 
@@ -1532,17 +1533,11 @@ export default function TeacherAttendancePage() {
                       {loadingLogs ? (
                         <LoadingPanel label="Calculating attendance summaries..." />
                       ) : summaryMatrix.length === 0 ? (
-                        <Empty>
-                          <EmptyHeader>
-                            <EmptyMedia>
-                              <BarChart3 className="w-10 h-10 opacity-50" />
-                            </EmptyMedia>
-                            <EmptyTitle>No attendance records found</EmptyTitle>
-                            <EmptyDescription>
-                              Mark attendance for this class to populate the summary report.
-                            </EmptyDescription>
-                          </EmptyHeader>
-                        </Empty>
+                        <TeacherEmptyState
+                          icon={<BarChart3 />}
+                          title="No attendance records found"
+                          description="Mark attendance for this class to populate the summary report."
+                        />
                       ) : summaryLayout === "summary" ? (
                         /* Standard Summary Table with Individual or Global Expand */
                         <Table

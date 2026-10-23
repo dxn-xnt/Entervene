@@ -94,6 +94,7 @@ import type {
 } from "@/types/adminClasses";
 import type { SuggestionResponse } from "@/types/suggestion";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { TeacherEmptyAvatarGroup, TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 
 
 
@@ -1284,9 +1285,9 @@ function StudentsTab({
           </label>
         </div>
         {!detail.students.length ? (
-          <StateInline message="No students are currently enrolled in this class." />
+          <TeacherEmptyState illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
         ) : !filteredStudents.length ? (
-          <StateInline message="No students match your search." />
+          <TeacherEmptyState illustration={<TeacherEmptyAvatarGroup />} title="No Students Found" />
         ) : (
           <Accordion
             multiple
@@ -2160,14 +2161,6 @@ function StudentRow({
         onSuccess={loadHistory}
       />
     </>
-  );
-}
-
-function StateInline({ message }: { message: string }) {
-  return (
-    <div className="p-6 text-center text-sm font-semibold text-black/60">
-      {message}
-    </div>
   );
 }
 

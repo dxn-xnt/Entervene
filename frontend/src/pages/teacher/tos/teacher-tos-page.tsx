@@ -5,7 +5,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Badge } from "@/components/retroui/Badge";
-import { Card } from "@/components/retroui/Card";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import {
@@ -307,49 +307,43 @@ export const TeacherTOSPage: React.FC = () => {
               </Button>
             </header>
 
-            <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {remediationError && <p role="alert" className="rounded border p-3 text-sm text-red-700">{remediationError}</p>}
               {/* Filter Toolbar */}
-              <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-center md:justify-between">
+              <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
                 {/* Search Input */}
-                <div className="relative w-full md:w-100">
-                  <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <div className="relative min-w-0 flex-1 md:min-w-64">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                   <Input
                     aria-label="Search exam or subject"
                     placeholder="Search exam or subject..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full rounded pl-8 text-sm"
+                    className="h-10 w-full border-black pl-9 pr-3"
                   />
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="w-full md:w-72 md:shrink-0">
                   {/* Subject Filter Dropdown */}
-                  <div className="w-full sm:w-auto">
-                    <Select
-                      value={selectedSubjectFilter}
-                      onValueChange={setSelectedSubjectFilter}
-                    >
-                      <Select.Trigger aria-label="Filter by subject" className="w-full rounded text-xs font-bold sm:w-52">
-                        <Select.Value placeholder="All Assigned Subjects" />
-                      </Select.Trigger>
-                      <Select.Content>
-                        <Select.Item value="ALL">All Assigned Subjects</Select.Item>
-                        {subjects.map((subject) => (
-                          <Select.Item
-                            key={subject.subject_id}
-                            value={String(subject.subject_id)}
-                          >
-                            {subject.subject_name}
-                          </Select.Item>
-                        ))}
-                      </Select.Content>
-                    </Select>
-                  </div>
-
-
+                  <Select
+                    value={selectedSubjectFilter}
+                    onValueChange={setSelectedSubjectFilter}
+                  >
+                    <Select.Trigger aria-label="Filter by subject" className="w-full">
+                      <Select.Value placeholder="All Assigned Subjects" />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="ALL">All Assigned Subjects</Select.Item>
+                      {subjects.map((subject) => (
+                        <Select.Item
+                          key={subject.subject_id}
+                          value={String(subject.subject_id)}
+                        >
+                          {subject.subject_name}
+                        </Select.Item>
+                      ))}
+                    </Select.Content>
+                  </Select>
                 </div>
-
-
               </div>
               {/* Academic Term Filter Chips */}
               <div className="flex flex-wrap items-center gap-2">
@@ -381,33 +375,20 @@ export const TeacherTOSPage: React.FC = () => {
                   </p>
                 </div>
               ) : filteredExams.length === 0 ? (
-                <Card className="block w-full border-black text-center">
-                  <Card.Content className="flex flex-col items-center px-6 py-12">
-                    <div className="mb-3 flex h-14 w-14 items-center justify-center rounded border-2 border-black">
-                      <TableProperties className="size-7" />
-                    </div>
-
-                    <Card.Title className="mb-2 text-base font-bold">
-                      No TOS Exams Found
-                    </Card.Title>
-
-                    <p className="mb-6 max-w-md text-sm font-normal text-gray-500">
-                      {exams.length === 0
-                        ? "Create your first Table of Specifications blueprint and exam questionnaire."
-                        : "No exam matches the selected filters."}
-                    </p>
-
-                    <Button
-                      variant="default"
-                      size="md"
-                      onClick={handleStartNewTOS}
-                      className="gap-2"
-                    >
-                      <Plus size={16} />
-                      <span>Create New TOS</span>
-                    </Button>
-                  </Card.Content>
-                </Card>
+                <TeacherEmptyState
+                  icon={<TableProperties />}
+                  title={exams.length === 0 ? "No TOS Exams Found" : "No TOS exams match your filters"}
+                  description={exams.length === 0
+                    ? "Create your first Table of Specifications blueprint and exam questionnaire."
+                    : "Try another search, subject, or term."}
+                  action={exams.length === 0
+                    ? { label: "Create New TOS", icon: <Plus size={16} />, onClick: handleStartNewTOS }
+                    : { label: "Clear filters", onClick: () => {
+                      setSearchQuery("");
+                      setSelectedSubjectFilter("ALL");
+                      setSelectedQuarterFilter("ALL");
+                    } }}
+                />
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {filteredExams.map((ex) => {
