@@ -466,6 +466,18 @@ export async function fetchDashboardFilters(
   return response.json();
 }
 
+export async function fetchTeacherAcademicScope(
+  params?: { class_id?: number; academic_period_id?: number }
+): Promise<DashboardFilters> {
+  const query = new URLSearchParams();
+  if (params?.class_id !== undefined) query.set("class_id", String(params.class_id));
+  if (params?.academic_period_id !== undefined) query.set("academic_period_id", String(params.academic_period_id));
+  const qs = query.toString();
+  const response = await apiFetch(`/api/v1/subject-loads/teacher/scope${qs ? `?${qs}` : ""}`);
+  if (!response.ok) throw new Error("Failed to load teacher academic scope.");
+  return response.json();
+}
+
 export async function fetchDashboardGradeSummaries(
   params: { academic_period_id?: number; term?: number } = {}
 ): Promise<DashboardGradeGroupSummary[]> {
