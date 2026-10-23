@@ -114,7 +114,7 @@ export interface DevelopmentCurrentTermListItem {
   official_final_grade: number | null;
   model_version_id: number;
   model_name: string;
-  lifecycle_status: "DEVELOPMENT";
+  lifecycle_status: "DEVELOPMENT" | "PRODUCTION";
   generated_at: string | null;
 }
 
@@ -164,6 +164,31 @@ export async function fetchDevelopmentCurrentTermPredictions(
       throw new CurrentTermPredictionLoadError("You do not have access to these current-term projections.", "access");
     }
     if (response.status === 404) {
+      throw new CurrentTermPredictionLoadError("Current-term projections are unavailable in this environment.", "unavailable");
+    }
+    throw new CurrentTermPredictionLoadError("Current-term projections could not be loaded. Please try again.", "failure");
+  }
+  return (await response.json()) as DevelopmentCurrentTermListResponse;
+}
+
+export async function fetchCurrentTermPredictions(
+  params: DevelopmentCurrentTermListParams,
+  role: string | null,
+): Promise<DevelopmentCurrentTermListResponse> {
+  if (developmentPredictionsAvailable(role)) {
+    return fetchDevelopmentCurrentTermPredictions(params, role);
+  }
+  const query = new URLSearchParams({
+    class_id: String(params.class_id),
+    subject_id: String(params.subject_id),
+    academic_period_id: String(params.academic_period_id),
+  });
+  const response = await apiFetch(`/api/v1/current-term-predictions?${query.toString()}`);
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new CurrentTermPredictionLoadError("You do not have access to these current-term projections.", "access");
+    }
+    if (response.status === 404 || response.status === 503) {
       throw new CurrentTermPredictionLoadError("Current-term projections are unavailable in this environment.", "unavailable");
     }
     throw new CurrentTermPredictionLoadError("Current-term projections could not be loaded. Please try again.", "failure");

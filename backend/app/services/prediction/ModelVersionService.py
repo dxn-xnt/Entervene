@@ -82,6 +82,7 @@ def get_production_model_versions(db: Session, purpose: ModelPurpose | str) -> l
         AIModelVersion.model_purpose == _purpose_value(purpose),
         AIModelVersion.lifecycle_status == "PRODUCTION",
         AIModelVersion.production_validated.is_(True),
+        AIModelVersion.independent_three_term_validation.is_(True),
         AIModelVersion.is_active.is_(True),
     ).order_by(AIModelVersion.model_version_id).all()
 

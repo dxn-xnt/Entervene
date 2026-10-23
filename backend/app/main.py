@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.db.Session import get_db
 from app.api.v1.routes.Predictions import router as predictions_router
 from app.api.v1.routes.DevelopmentCurrentTermPredictions import router as development_current_term_router
+from app.api.v1.routes.CurrentTermPredictions import router as current_term_router
 from app.api.v1.routes.TeacherInterventions import router as teacher_interventions_router
 from app.api.v1.routes.StudentInterventionReviewers import router as student_intervention_reviewers_router
 from app.api.v1.routes.StudentPersistentInterventions import router as student_persistent_interventions_router
@@ -104,6 +105,7 @@ app.include_router(auth_router,        prefix="/api/v1/auth",                 ta
 app.include_router(users_router,       prefix="/api/v1",                      tags=["Users"])
 app.include_router(predictions_router, prefix="/api/v1/predictions",           tags=["Predictions"])
 app.include_router(development_current_term_router, prefix="/api/v1/development", tags=["Development Predictions"])
+app.include_router(current_term_router, prefix="/api/v1/current-term-predictions", tags=["Current-Term Predictions"])
 app.include_router(teacher_interventions_router, prefix="/api/v1/teacher/interventions", tags=["Teacher Interventions"])
 app.include_router(student_intervention_reviewers_router, prefix="/api/v1/student/intervention-reviewers", tags=["Student Intervention Reviewers"])
 app.include_router(student_persistent_interventions_router, prefix="/api/v1/student/interventions", tags=["Student Interventions"])

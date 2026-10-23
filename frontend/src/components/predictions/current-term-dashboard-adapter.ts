@@ -1,6 +1,6 @@
 import {
   fetchTeacherAcademicScope,
-  fetchDevelopmentCurrentTermPredictions,
+  fetchCurrentTermPredictions,
   type DashboardAtRiskResponse,
   type DashboardFilters,
   type DashboardGradeGroupSummary,
@@ -42,7 +42,7 @@ export async function loadAuthorizedCurrentTermPredictions(
         section_name: classItem.section_name,
       });
     });
-    const responses = await Promise.all(subjects.map((subject) => fetchDevelopmentCurrentTermPredictions({
+    const responses = await Promise.all(subjects.map((subject) => fetchCurrentTermPredictions({
       class_id: classItem.class_id,
       subject_id: subject.subject_id,
       academic_period_id: academicPeriodId,

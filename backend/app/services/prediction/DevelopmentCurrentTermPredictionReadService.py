@@ -214,6 +214,7 @@ def list_latest_development_current_term_predictions(
     academic_period_id: int,
     model_version_id: int,
     require_active_enrollment: bool = False,
+    lifecycle_status: str = "DEVELOPMENT",
 ) -> dict[str, Any]:
     latest_revision = (
         db.query(
@@ -232,7 +233,7 @@ def list_latest_development_current_term_predictions(
             DevelopmentCurrentTermPrediction.source_period_id == academic_period_id,
             DevelopmentCurrentTermPrediction.target_period_id == academic_period_id,
             AIModelVersion.model_purpose == ModelPurpose.CURRENT_TERM_FINAL_GRADE_PROJECTION.value,
-            AIModelVersion.lifecycle_status == "DEVELOPMENT",
+            AIModelVersion.lifecycle_status == lifecycle_status,
             DevelopmentCurrentTermPrediction.model_version_id == model_version_id,
         )
         .group_by(
