@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import func, or_
+from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session, aliased
 
 from app.models.academic.AcademicPeriod import AcademicPeriod
@@ -53,6 +53,63 @@ class SourceTeacher:
 
 class ContentCloningAuthorizationService:
     LOAD_STATUSES = ("active", "published")
+
+    @classmethod
+    def verified_source_period_ids(
+        cls,
+        db: Session,
+        *,
+        owner_staff_id: str,
+        subject_id: int,
+        destination_period_id: int,
+        previous_year_only: bool = False,
+    ) -> set[int]:
+        """Periods with an exact primary load and a matching historical offering."""
+        destination = db.get(AcademicPeriod, destination_period_id)
+        if destination is None:
+            return set()
+        destination_year = db.get(AcademicYear, destination.academic_year_id)
+        if destination_year is None:
+            return set()
+        source_year = aliased(AcademicYear)
+        has_pathway = exists().where(
+            SubjectOfferingPathway.subject_offering_id
+            == SubjectOffering.subject_offering_id
+        )
+        matches_pathway = exists().where(
+            (SubjectOfferingPathway.subject_offering_id
+             == SubjectOffering.subject_offering_id)
+            & (SubjectOfferingPathway.pathway_id == Class.pathway_id)
+        )
+        query = (
+            db.query(AcademicPeriod.academic_period_id)
+            .join(SubjectLoad, SubjectLoad.academic_period_id == AcademicPeriod.academic_period_id)
+            .join(Class, Class.class_id == SubjectLoad.class_id)
+            .join(source_year, source_year.academic_year_id == AcademicPeriod.academic_year_id)
+            .join(
+                SubjectOffering,
+                (SubjectOffering.subject_id == SubjectLoad.subject_id)
+                & (SubjectOffering.academic_year_id == source_year.academic_year_id)
+                & (SubjectOffering.academic_level_id == Class.academic_level_id)
+                & (SubjectOffering.academic_period_id == AcademicPeriod.academic_period_id),
+            )
+            .filter(
+                SubjectLoad.staff_id == owner_staff_id,
+                SubjectLoad.subject_id == subject_id,
+                SubjectLoad.is_active_version.is_(True),
+                func.lower(SubjectLoad.status).in_(cls.LOAD_STATUSES),
+                Class.academic_year_id == source_year.academic_year_id,
+                or_(Class.academic_period_id.is_(None),
+                    Class.academic_period_id == AcademicPeriod.academic_period_id),
+                func.lower(SubjectOffering.status).in_(("active", "archived")),
+                or_(~has_pathway, matches_pathway),
+                AcademicPeriod.end_date < destination.start_date,
+            )
+            .distinct()
+        )
+        if previous_year_only:
+            query = query.filter(source_year.end_date < destination_year.start_date)
+        return {period_id for (period_id,) in query.all()}
 
     @classmethod
     def list_destination_scopes(

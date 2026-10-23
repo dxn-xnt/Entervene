@@ -5,7 +5,7 @@ import type { SubjectOfferingListItem } from "@/lib/api";
 import { pathwayLabel, subjectCode } from "./subject-utils";
 import { Badge } from "@/components/retroui/Badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 
 export function OfferingRow({
   offering,
@@ -37,17 +37,17 @@ export function OfferingRow({
             <DropdownMenu>
               <Tooltip>
                 <TooltipTrigger render={<span className="inline-flex">
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="p-2 shadow-none"
-                  aria-label="More options"
-                  disabled={readOnly}
-                >
-                  <EllipsisIcon className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="p-2 shadow-none"
+                      aria-label="More options"
+                      disabled={readOnly}
+                    >
+                      <EllipsisIcon className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
                 </span>} />
                 <TooltipContent>{readOnly ? readOnlyReason || "Read-only" : "Offering actions"}</TooltipContent>
               </Tooltip>

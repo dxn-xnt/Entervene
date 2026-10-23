@@ -1,6 +1,6 @@
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { formatDate } from "@/lib/classwork-utils";
 import type { ClassworkTracking, TeacherClasswork } from "@/types/classwork";
 

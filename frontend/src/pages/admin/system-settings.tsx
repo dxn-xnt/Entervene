@@ -22,6 +22,9 @@ import {
   getAllSettings,
   updateSetting,
   getAcademicYearsSettings,
+  getYearGeneralAveragePolicy,
+  saveYearGeneralAveragePolicy,
+  type YearGeneralAveragePolicy,
   setActiveAcademicYear,
   getAcademicLevelsSettings,
   getAcademicPeriodsSettings,
@@ -64,7 +67,12 @@ export default function AdminSystemSettings() {
   const [isSavingScope, setIsSavingScope] = React.useState(false);
 
   // Passing grade thresholds
-  const [averagePassing, setAveragePassing] = React.useState("80");
+  const [averagePassing, setAveragePassing] = React.useState("");
+  const [averageYearId, setAverageYearId] = React.useState("");
+  const [averagePolicy, setAveragePolicy] = React.useState<YearGeneralAveragePolicy | null>(null);
+  const [averageReason, setAverageReason] = React.useState("");
+  const [averageConfirmed, setAverageConfirmed] = React.useState(false);
+  const [averageError, setAverageError] = React.useState("");
 
   // Academic calendar & periods
   const [schoolDayStart, setSchoolDayStart] = React.useState("06:00");
@@ -254,8 +262,6 @@ export default function AdminSystemSettings() {
         });
       });
 
-      if (flatSettings["general_average_passing_grade"])
-        setAveragePassing(flatSettings["general_average_passing_grade"]);
       if (flatSettings["jhs_enabled"])
         setJhsEnabled(flatSettings["jhs_enabled"] === "true");
       if (flatSettings["shs_enabled"])
@@ -286,6 +292,7 @@ export default function AdminSystemSettings() {
       const activeYear = yearsData.find((y) => y.is_active) || yearsData[0];
       if (activeYear) {
         setSelectedYearId(String(activeYear.academic_year_id));
+        setAverageYearId(String(activeYear.academic_year_id));
         setScopeConfigYearId(String(activeYear.academic_year_id));
         await Promise.all([
           loadAcademicPeriodsForYear(activeYear.academic_year_id),
@@ -308,6 +315,21 @@ export default function AdminSystemSettings() {
     loadSettingsFromBackend();
   }, [loadSettingsFromBackend]);
 
+  React.useEffect(() => {
+    if (!averageYearId) return;
+    let cancelled = false;
+    setAverageError("");
+    getYearGeneralAveragePolicy(Number(averageYearId)).then((policy) => {
+      if (cancelled) return;
+      setAveragePolicy(policy);
+      setAveragePassing(policy.threshold ?? "");
+      setAverageReason(""); setAverageConfirmed(false);
+    }).catch((error: unknown) => {
+      if (!cancelled) setAverageError(error instanceof Error ? error.message : "Unable to load year policy.");
+    });
+    return () => { cancelled = true; };
+  }, [averageYearId]);
+
   const saveSingleSetting = async (key: string, value: string) => {
     try {
       await updateSetting(key, value);
@@ -318,16 +340,35 @@ export default function AdminSystemSettings() {
     }
   };
 
-  const handleSaveThresholds = async () => {
+  const handleSaveThresholds = async (action: "edit" | "confirm_legacy" | "initialize_manual" | "copy_previous") => {
+    if (!averagePolicy || !averageConfirmed || !averageReason.trim()) {
+      setAverageError("Select a year, enter an audit reason, and confirm this change.");
+      return;
+    }
     setIsSavingThresholds(true);
+    setAverageError("");
     try {
-      await saveSingleSetting("general_average_passing_grade", averagePassing);
-      showToast("General average threshold saved");
+      let value = averagePassing;
+      let sourceYearId: number | undefined;
+      if (action === "confirm_legacy") value = averagePolicy.legacy_proposal ?? "";
+      if (action === "copy_previous") {
+        sourceYearId = averagePolicy.previous_academic_year_id ?? undefined;
+        if (!sourceYearId) throw new Error("No previous academic year is available.");
+        const source = await getYearGeneralAveragePolicy(sourceYearId);
+        if (!source.configured || !source.threshold) throw new Error("Configure the previous academic year first.");
+        value = source.threshold;
+      }
+      const saved = await saveYearGeneralAveragePolicy(Number(averageYearId), {
+        threshold: value, expected_version: averagePolicy.version,
+        reason: averageReason.trim(), action, confirmed: true,
+        ...(sourceYearId ? { source_year_id: sourceYearId } : {}),
+      });
+      setAveragePolicy(saved); setAveragePassing(saved.threshold ?? "");
+      setAverageReason(""); setAverageConfirmed(false);
+      showToast("Academic-year passing policy saved.");
     } catch (err) {
-      showToast(
-        err instanceof Error ? err.message : "Failed to save threshold.",
-        "error",
-      );
+      const message = err instanceof Error ? err.message : "Failed to save threshold.";
+      setAverageError(message); showToast(message, "error");
     } finally {
       setIsSavingThresholds(false);
     }
@@ -575,21 +616,29 @@ export default function AdminSystemSettings() {
                       as="p"
                       className="mt-1 text-sm font-normal leading-normal text-muted-foreground"
                     >
-                      Used for general promotion/completion reports. Adjust only
-                      if the client confirms a different rule.
+                      Configured separately for each academic year. Numeric grades stay unchanged; displayed Passed/Failed may change while the year is open.
                     </Text>
                   </Card.Title>
                   <Button
                     size="sm"
                     className="w-full justify-center whitespace-nowrap sm:w-auto"
-                    onClick={handleSaveThresholds}
-                    disabled={isSavingThresholds}
+                    onClick={() => void handleSaveThresholds("edit")}
+                    disabled={isSavingThresholds || !averagePolicy?.configured}
                   >
                     <Save className="mr-2 size-3.5" />
                     Save Threshold
                   </Button>
                 </Card.Header>
                 <Card.Content className="flex flex-col gap-4">
+                  <label className="flex flex-col gap-1 text-sm font-semibold">Academic year
+                    <Select value={averageYearId} onValueChange={(value) => { setAveragePolicy(null); setAverageYearId(value); }}><Select.Trigger className="w-full"><Select.Value placeholder="Select academic year" /></Select.Trigger><Select.Content><Select.Group>{academicYears.map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}{year.is_active ? " (active)" : ""}</Select.Item>)}</Select.Group></Select.Content></Select>
+                  </label>
+                  <p className="text-sm font-semibold">{averagePolicy?.configured ? `Confirmed for ${averagePolicy.year_label}: ${averagePolicy.threshold}%` : "Unconfigured for this academic year"}</p>
+                  {!averagePolicy?.configured && averagePolicy?.legacy_proposal ? <Button variant="outline" disabled={isSavingThresholds} onClick={() => void handleSaveThresholds("confirm_legacy")}>Confirm legacy proposal ({averagePolicy.legacy_proposal}%)</Button> : null}
+                  {averagePolicy && !averagePolicy.configured && !averagePolicy.legacy_proposal ? <Button variant="outline" disabled={isSavingThresholds} onClick={() => void handleSaveThresholds("initialize_manual")}>Set initial passing grade manually</Button> : null}
+                  {!averagePolicy?.configured && averagePolicy?.previous_academic_year_id ? <Button variant="outline" disabled={isSavingThresholds} onClick={() => void handleSaveThresholds("copy_previous")}>Copy from Previous Academic Year</Button> : null}
+                  {averagePolicy && !averagePolicy.configured && !averagePolicy.legacy_proposal ? <p className="text-sm">No validated legacy proposal is available. Enter a grade for this year, give an audit reason, and confirm it explicitly.</p> : null}
+                  {averagePolicy?.legacy_error ? <p role="alert" className="text-sm text-red-700">{averagePolicy.legacy_error}</p> : null}
                   <div className="flex flex-col gap-2">
                     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                       <span className="hidden sm:block" />
@@ -599,6 +648,7 @@ export default function AdminSystemSettings() {
                         type="number"
                         min={0}
                         max={100}
+                        step="0.01"
                         value={averagePassing}
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                           setAveragePassing(e.target.value)
@@ -606,6 +656,9 @@ export default function AdminSystemSettings() {
                       />
                     </div>
                   </div>
+                  <label className="flex flex-col gap-1 text-sm font-semibold">Audit reason<Input value={averageReason} onChange={(event) => setAverageReason(event.target.value)} /></label>
+                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={averageConfirmed} onChange={(event) => setAverageConfirmed(event.target.checked)} /> I confirm this year-specific policy action.</label>
+                  {averageError ? <p role="alert" className="border-2 border-black bg-red-100 p-2 text-sm">{averageError}</p> : null}
                 </Card.Content>
               </Card>
 

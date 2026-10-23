@@ -961,6 +961,7 @@ export default function AdminSubjects() {
               <GradingTemplateManager
                 templates={gradingTemplates}
                 subjects={[...subjects, ...archivedSubjects]}
+                academicYears={offeringOptions?.academic_years ?? []}
                 createRequest={gradingCreateRequest}
                 showCreateButton={false}
                 onReload={async () => {

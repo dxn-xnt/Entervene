@@ -6,7 +6,7 @@ import { Tabs } from "@/components/retroui/Tabs";
 import { Input } from "@/components/retroui/Input";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Alert } from "@/components/retroui/Alert";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import {
@@ -150,216 +150,215 @@ export const LessonPlannerListPage: React.FC = () => {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             <div data-page-tabs-sticky-region>
-            <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                <SidebarTrigger className="shrink-0 md:hidden" />
-                <Breadcrumb className="min-w-0">
-                  <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Link href="/teacher/classes" className="whitespace-nowrap">
-                        Classes
-                      </Breadcrumb.Link>
-                    </Breadcrumb.Item>
-                    {classId && subjectId && (
-                      <>
-                        <Breadcrumb.Separator />
-                        <Breadcrumb.Item className="min-w-0">
-                          <Breadcrumb.Link
-                            href={backUrl}
-                            className="block truncate max-w-[140px] sm:max-w-[200px]"
-                          >
-                            {subjectInfo.subjectName || "Subject"}
-                          </Breadcrumb.Link>
-                        </Breadcrumb.Item>
-                      </>
-                    )}
-                    <Breadcrumb.Separator />
-                    <Breadcrumb.Item className="min-w-0">
-                      <Breadcrumb.Page className="block truncate">Lesson Planner</Breadcrumb.Page>
-                    </Breadcrumb.Item>
-                  </Breadcrumb.List>
-                </Breadcrumb>
-              </div>
+              <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                  <SidebarTrigger className="shrink-0 md:hidden" />
+                  <Breadcrumb className="min-w-0">
+                    <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Link href="/teacher/classes" className="whitespace-nowrap">
+                          Classes
+                        </Breadcrumb.Link>
+                      </Breadcrumb.Item>
+                      {classId && subjectId && (
+                        <>
+                          <Breadcrumb.Separator />
+                          <Breadcrumb.Item className="min-w-0">
+                            <Breadcrumb.Link
+                              href={backUrl}
+                              className="block truncate max-w-[140px] sm:max-w-[200px]"
+                            >
+                              {subjectInfo.subjectName || "Subject"}
+                            </Breadcrumb.Link>
+                          </Breadcrumb.Item>
+                        </>
+                      )}
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item className="min-w-0">
+                        <Breadcrumb.Page className="block truncate">Lesson Planner</Breadcrumb.Page>
+                      </Breadcrumb.Item>
+                    </Breadcrumb.List>
+                  </Breadcrumb>
+                </div>
 
-              <div className="flex items-center gap-2">
-                {classId && subjectId && (
+                <div className="flex items-center gap-2">
+                  {classId && subjectId && (
+                    <Button
+                      variant="outline"
+                      size="header"
+                      onClick={() => navigate(backUrl)}
+                      className="whitespace-nowrap"
+                    >
+                      <ArrowLeft className="size-4" />
+                      <span>Back to Subject</span>
+                    </Button>
+                  )}
                   <Button
-                    variant="outline"
+                    variant="default"
                     size="header"
-                    onClick={() => navigate(backUrl)}
-                    className="whitespace-nowrap"
+                    onClick={() => navigate(createUrl)}
+                    className="shrink-0 whitespace-nowrap"
                   >
-                    <ArrowLeft className="size-4" />
-                    <span>Back to Subject</span>
+                    <Plus className="size-4" />
+                    <span>Create Lesson Plan</span>
                   </Button>
-                )}
-                <Button
-                  variant="default"
-                  size="header"
-                  onClick={() => navigate(createUrl)}
-                  className="shrink-0 whitespace-nowrap"
-                >
-                  <Plus className="size-4" />
-                  <span>Create Lesson Plan</span>
-                </Button>
+                </div>
+              </header>
+              <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                <Tabs
+                  tabs={TABS}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                />
               </div>
-            </header>
-            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-              <Tabs
-                tabs={TABS}
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
-              />
-            </div>
             </div>
 
             <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
 
-            {/* Error Alert */}
-            {error && (
-              <Alert status="error">
-                <Alert.Title>Lesson plan error</Alert.Title>
-                <Alert.Description>{error}</Alert.Description>
-              </Alert>
-            )}
+              {/* Error Alert */}
+              {error && (
+                <Alert status="error">
+                  <Alert.Title>Lesson plan error</Alert.Title>
+                  <Alert.Description>{error}</Alert.Description>
+                </Alert>
+              )}
 
-            <label className="relative w-full md:w-96">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+              <label className="relative w-full md:w-96">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
 
-              <Input
-                type="search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search lesson plans..."
-                className="h-10 w-full border-black pl-9 pr-3"
-              />
-            </label>
+                <Input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search lesson plans..."
+                  className="h-10 w-full border-black pl-9 pr-3"
+                />
+              </label>
 
-            {/* Loading state */}
-            {isLoading && (
-              <LoadingPanel label="Loading your lesson plans..." />
-            )}
+              {/* Loading state */}
+              {isLoading && (
+                <LoadingPanel label="Loading your lesson plans..." />
+              )}
 
-            {/* Empty state */}
-            {!isLoading && filteredPlans.length === 0 && (
-              <Card className="block w-full text-center border-black">
-                <Card.Content className="flex flex-col items-center px-6 py-12">
-                  <div className="mb-3 flex h-14 w-14 items-center justify-center rounded border-2 border-black">
-                    <BookOpen className="size-7" />
-                  </div>
+              {/* Empty state */}
+              {!isLoading && filteredPlans.length === 0 && (
+                <Card className="block w-full text-center border-black">
+                  <Card.Content className="flex flex-col items-center px-6 py-12">
+                    <div className="mb-3 flex h-14 w-14 items-center justify-center rounded border-2 border-black">
+                      <BookOpen className="size-7" />
+                    </div>
 
-                  <Card.Title className="mb-2 text-base font-bold">
-                    No Lesson Plans Found
-                  </Card.Title>
+                    <Card.Title className="mb-2 text-base font-bold">
+                      No Lesson Plans Found
+                    </Card.Title>
 
-                  <p className="mb-6 max-w-md text-sm font-normal text-gray-500">
-                    {searchQuery
-                      ? "No lesson plans match your search filter."
-                      : "Start structuring your lessons using the DepEd ILAW format with built-in AI assistance."}
-                  </p>
+                    <p className="mb-6 max-w-md text-sm font-normal text-gray-500">
+                      {searchQuery
+                        ? "No lesson plans match your search filter."
+                        : "Start structuring your lessons using the DepEd ILAW format with built-in AI assistance."}
+                    </p>
 
-                  <Button
-                    variant="default"
-                    size="md"
-                    onClick={() => navigate(createUrl)}
-                    className="gap-2"
-                  >
-                    <Plus size={16} />
-                    <span>Create Lesson Plan</span>
-                  </Button>
-                </Card.Content>
-              </Card>
-            )}
+                    <Button
+                      variant="default"
+                      size="md"
+                      onClick={() => navigate(createUrl)}
+                      className="gap-2"
+                    >
+                      <Plus size={16} />
+                      <span>Create Lesson Plan</span>
+                    </Button>
+                  </Card.Content>
+                </Card>
+              )}
 
-            {/* Lesson Plans List */}
-            {!isLoading && filteredPlans.length > 0 && (
-              <div className="flex flex-col gap-3.5 w-full">
-                {filteredPlans.map((plan) => (
-                  <div
-                    key={plan.plan_id}
-                    onClick={() =>
-                      navigate(
-                        classId && subjectId
-                          ? `/teacher/classes/${classId}/subjects/${subjectId}/lesson-planner/${plan.plan_id}`
-                          : `/teacher/lesson-planner/${plan.plan_id}`,
-                      )
-                    }
-                    className="group flex items-center justify-between gap-4 p-4 rounded border border-black bg-white shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000] cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                      <div className="flex size-10 items-center justify-center rounded border border-black bg-[#E6F4EA] text-emerald-800 font-bold shrink-0 shadow-[2px_2px_0_#000]">
-                        <BookOpen className="size-5" />
-                      </div>
+              {/* Lesson Plans List */}
+              {!isLoading && filteredPlans.length > 0 && (
+                <div className="flex flex-col gap-3.5 w-full">
+                  {filteredPlans.map((plan) => (
+                    <div
+                      key={plan.plan_id}
+                      onClick={() =>
+                        navigate(
+                          classId && subjectId
+                            ? `/teacher/classes/${classId}/subjects/${subjectId}/lesson-planner/${plan.plan_id}`
+                            : `/teacher/lesson-planner/${plan.plan_id}`,
+                        )
+                      }
+                      className="group flex items-center justify-between gap-4 p-4 rounded border border-black bg-white shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000] cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                        <div className="flex size-10 items-center justify-center rounded border border-black bg-[#E6F4EA] text-emerald-800 font-bold shrink-0 shadow-[2px_2px_0_#000]">
+                          <BookOpen className="size-5" />
+                        </div>
 
-                      <div className="flex flex-col min-w-0 flex-1">
-                        <h2 className="text-base md:text-lg font-bold text-gray-900 truncate group-hover:text-emerald-700 transition-colors">
-                          {plan.title || "Untitled Lesson Plan"}
-                        </h2>
-                        <div className="flex items-center gap-2 text-xs md:text-sm text-gray-500 flex-wrap mt-0.5">
-                          {plan.learning_area && (
-                            <span>{plan.learning_area}</span>
-                          )}
-                          {plan.learning_area && plan.grade_section && (
-                            <span>&middot;</span>
-                          )}
-                          {plan.grade_section && (
-                            <span>{plan.grade_section}</span>
-                          )}
-                          {(plan.date || plan.created_at) && (
-                            <span>&middot;</span>
-                          )}
-                          {plan.date ? (
-                            <span className="flex items-center gap-1">
-                              <Calendar className="size-3 shrink-0" />
-                              {plan.date}
-                            </span>
-                          ) : plan.created_at ? (
-                            <span>
-                              Created{" "}
-                              {new Date(plan.created_at).toLocaleDateString()}
-                            </span>
-                          ) : null}
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <h2 className="text-base md:text-lg font-bold text-gray-900 truncate group-hover:text-emerald-700 transition-colors">
+                            {plan.title || "Untitled Lesson Plan"}
+                          </h2>
+                          <div className="flex items-center gap-2 text-xs md:text-sm text-gray-500 flex-wrap mt-0.5">
+                            {plan.learning_area && (
+                              <span>{plan.learning_area}</span>
+                            )}
+                            {plan.learning_area && plan.grade_section && (
+                              <span>&middot;</span>
+                            )}
+                            {plan.grade_section && (
+                              <span>{plan.grade_section}</span>
+                            )}
+                            {(plan.date || plan.created_at) && (
+                              <span>&middot;</span>
+                            )}
+                            {plan.date ? (
+                              <span className="flex items-center gap-1">
+                                <Calendar className="size-3 shrink-0" />
+                                {plan.date}
+                              </span>
+                            ) : plan.created_at ? (
+                              <span>
+                                Created{" "}
+                                {new Date(plan.created_at).toLocaleDateString()}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
+
+                      {/* Badges & Delete Action */}
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <span className="rounded-full border border-black bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900 shadow-[1px_1px_0_#000]">
+                          ILAW
+                        </span>
+
+                        <span
+                          className={`rounded-full border border-black px-2.5 py-0.5 text-xs font-semibold shadow-[1px_1px_0_#000] ${plan.status === "SUBMITTED"
+                              ? "bg-[#7ABA78] text-black"
+                              : "bg-gray-100 text-gray-800"
+                            }`}
+                        >
+                          {plan.status === "SUBMITTED" ? "Submitted" : "Draft"}
+                        </span>
+
+                        <Tooltip>
+                          <TooltipTrigger render={<span className="inline-flex"><button
+                            type="button"
+                            disabled={deletingId === plan.plan_id}
+                            onClick={(e) => handleDelete(e, plan.plan_id)}
+                            className="rounded p-1 text-gray-400 hover:text-red-600 hover:bg-gray-100 transition"
+                            aria-label="Delete lesson plan"
+                          >
+                            {deletingId === plan.plan_id ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="size-4" />
+                            )}
+                          </button></span>} />
+                          <TooltipContent>Delete lesson plan</TooltipContent>
+                        </Tooltip>
+                      </div>
                     </div>
-
-                    {/* Badges & Delete Action */}
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      <span className="rounded-full border border-black bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900 shadow-[1px_1px_0_#000]">
-                        ILAW
-                      </span>
-
-                      <span
-                        className={`rounded-full border border-black px-2.5 py-0.5 text-xs font-semibold shadow-[1px_1px_0_#000] ${
-                          plan.status === "SUBMITTED"
-                            ? "bg-[#7ABA78] text-black"
-                            : "bg-gray-100 text-gray-800"
-                        }`}
-                      >
-                        {plan.status === "SUBMITTED" ? "Submitted" : "Draft"}
-                      </span>
-
-                      <Tooltip>
-                        <TooltipTrigger render={<span className="inline-flex"><button
-                        type="button"
-                        disabled={deletingId === plan.plan_id}
-                        onClick={(e) => handleDelete(e, plan.plan_id)}
-                        className="rounded p-1 text-gray-400 hover:text-red-600 hover:bg-gray-100 transition"
-                        aria-label="Delete lesson plan"
-                      >
-                        {deletingId === plan.plan_id ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="size-4" />
-                        )}
-                      </button></span>} />
-                        <TooltipContent>Delete lesson plan</TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

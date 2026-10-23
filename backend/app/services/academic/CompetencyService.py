@@ -7,6 +7,7 @@ from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAssignment import LessonAssignment
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.Class_ import Class
 from app.models.people.AcademicStaff import AcademicStaff
@@ -137,6 +138,46 @@ def list_subject_competencies(
     return [build_competency_response(c, db) for c in competencies]
 
 
+def list_student_published_competencies(
+    *, subject_id: int, student_id, db: Session, period_id: int | None = None,
+) -> list[CompetencyResponse]:
+    """Student discovery only follows enrolled, published lesson assignments."""
+    query = (
+        db.query(Competency)
+        .join(Lesson, Lesson.competency_id == Competency.competency_id)
+        .join(LessonAssignment, LessonAssignment.lesson_id == Lesson.lesson_id)
+        .join(StudentClass, StudentClass.class_id == LessonAssignment.class_id)
+        .filter(
+            Competency.subject_id == subject_id,
+            Competency.is_archived.is_(False),
+            Lesson.is_archived.is_(False),
+            Lesson.is_published.is_(True),
+            Lesson.is_locked.is_(False),
+            LessonAssignment.is_published.is_(True),
+            StudentClass.student_id == student_id,
+            StudentClass.enrollment_status == "enrolled",
+        )
+    )
+    if period_id is not None:
+        query = query.filter(Competency.academic_period_id == period_id)
+    visible = {}
+    for competency, lesson_id in query.with_entities(
+        Competency, Lesson.lesson_id
+    ).distinct().order_by(
+        Competency.order_index, Competency.competency_id
+    ).all():
+        _, lesson_ids = visible.setdefault(
+            competency.competency_id, (competency, set())
+        )
+        lesson_ids.add(lesson_id)
+    return [
+        build_competency_response(item, db).model_copy(
+            update={"lesson_count": len(lesson_ids)}
+        )
+        for item, lesson_ids in visible.values()
+    ]
+
+
 def update_competency_record(
     competency_id: int,
     body: CompetencyUpdate,
@@ -190,11 +231,19 @@ def get_subject_hierarchy_tree(
     is_admin: bool = False,
     class_id: Optional[int] = None,
     period_id: Optional[int] = None,
+    student_id=None,
 ) -> SubjectHierarchyTreeResponse:
     """Build the Competency -> Lesson -> Classwork hierarchy tree."""
     subject = db.query(Subject).filter(Subject.subject_id == subject_id).first()
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
+    if student_id is not None:
+        if class_id is None or not db.query(StudentClass).filter(
+            StudentClass.student_id == student_id,
+            StudentClass.class_id == class_id,
+            StudentClass.enrollment_status == "enrolled",
+        ).first():
+            raise HTTPException(status_code=403, detail="Class access denied")
 
     target_staff_id = staff_id
     if target_staff_id is None and class_id is not None:
@@ -245,8 +294,23 @@ def get_subject_hierarchy_tree(
         lesson_query = lesson_query.join(
             LessonAssignment, LessonAssignment.lesson_id == Lesson.lesson_id
         ).filter(LessonAssignment.class_id == class_id)
+        if student_id is not None:
+            lesson_query = lesson_query.filter(
+                LessonAssignment.is_published.is_(True),
+                Lesson.is_published.is_(True),
+                Lesson.is_locked.is_(False),
+            )
 
     lessons = lesson_query.order_by(Lesson.order_index.asc(), Lesson.created_at.asc()).all()
+    if student_id is not None:
+        linked_competencies = {
+            lesson.competency_id for lesson in lessons
+            if lesson.competency_id is not None
+        }
+        competencies = [
+            item for item in competencies
+            if item.competency_id in linked_competencies
+        ]
 
     # 3. Group lessons under competency
     lessons_by_comp: dict[int, list] = {}
@@ -263,6 +327,10 @@ def get_subject_hierarchy_tree(
     for c in competencies:
         base_resp = build_competency_response(c, db)
         comp_lessons = lessons_by_comp.get(c.competency_id, [])
+        if student_id is not None:
+            base_resp = base_resp.model_copy(
+                update={"lesson_count": len(comp_lessons)}
+            )
         nodes.append(
             CompetencyTreeNode(
                 **base_resp.model_dump(),

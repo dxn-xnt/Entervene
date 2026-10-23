@@ -21,6 +21,7 @@ from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
+from app.models.people.Student import Student
 
 
 TABLES = [
@@ -28,6 +29,7 @@ TABLES = [
     AcademicLevel.__table__,
     UserAccount.__table__,
     AcademicStaff.__table__,
+    Student.__table__,
     Subject.__table__,
     AcademicPeriod.__table__,
     Class.__table__,
@@ -304,21 +306,19 @@ def test_competency_admin_scoping_and_filtering():
 
 
 def test_student_and_fallback_safety():
-    """Non-admin callers without a resolved staff_id return empty list (never leak all competencies)."""
+    """A caller without a student profile cannot enumerate teacher content."""
     db, ctx = setup_test_db()
     client_a = create_client(db, {"sub": str(ctx["user_a_id"]), "user_id": str(ctx["user_a_id"]), "role": "teacher"})
     client_a.post("/api/v1/competencies/", json={"statement": "Comp by Teacher A", "subject_id": ctx["subject_id"]})
 
-    # Student with class_id=10 (Section Newton handled by Teacher A)
+    # A claimed student role alone does not establish enrollment or publication.
     client_student = create_client(db, {"sub": str(uuid.uuid4()), "user_id": str(uuid.uuid4()), "role": "student"})
     resp_student = client_student.get(f"/api/v1/competencies/tree/subject/{ctx['subject_id']}?class_id=10")
-    assert resp_student.status_code == 200
-    assert len(resp_student.json()["competencies"]) == 1
+    assert resp_student.status_code == 404
 
-    # Student without class_id -> returns 0 competencies (does not leak raw list)
+    # The subject listing is also non-enumerating without a real student record.
     resp_unscoped = client_student.get(f"/api/v1/competencies/subject/{ctx['subject_id']}")
-    assert resp_unscoped.status_code == 200
-    assert len(resp_unscoped.json()) == 0
+    assert resp_unscoped.status_code == 404
 
 
 def test_competency_detail_authorization():

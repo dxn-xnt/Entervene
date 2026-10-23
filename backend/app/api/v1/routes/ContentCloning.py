@@ -13,18 +13,32 @@ from app.models.academic.Subject import Subject
 from app.models.cloning.ContentCloning import ContentShareRequest
 from app.models.people.AcademicStaff import AcademicStaff
 from app.schemas.ContentCloning import (
+    ContentCloneOperationResponse,
     ContentShareRequestCreate,
     ContentShareRequestDecline,
     ContentShareRequestListResponse,
     ContentShareRequestResponse,
     DestinationScopeResponse,
+    OwnerEligibleMaterialsResponse,
+    PackageCreateRequest,
+    PackageDecisionRequest,
+    PackageDecision,
+    RequesterVisiblePackageSummary,
+    SelfCloneRequest,
+    SelfEligibleMaterialsResponse,
     SourceTeacherResponse,
 )
 from app.services.cloning.ContentCloningAuthorizationService import (
     ContentCloningAuthorizationService,
 )
+from app.services.cloning.ContentCloningPackageService import (
+    ContentCloningPackageService,
+)
 from app.services.cloning.ContentCloningRequestService import (
     ContentCloningRequestService,
+)
+from app.services.cloning.ContentCloningExecutionService import (
+    ContentCloningExecutionService,
 )
 
 
@@ -212,3 +226,179 @@ def decline_content_request(
         expected_version=payload.expected_version,
     )
     return _request_response(db, request)
+
+
+# ── PR B Routes ─────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/requests/{request_id}/eligible-materials",
+    response_model=OwnerEligibleMaterialsResponse,
+)
+def list_eligible_materials(
+    request_id: uuid.UUID,
+    item_type: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    items, total = ContentCloningPackageService.get_eligible_materials(
+        db,
+        request_id=request_id,
+        staff_id=staff_id,
+        item_type_filter=item_type,
+        page=page,
+        page_size=page_size,
+    )
+    return OwnerEligibleMaterialsResponse(
+        request_id=request_id,
+        items=items,
+        total=total,
+    )
+
+
+@router.post(
+    "/requests/{request_id}/package",
+    response_model=RequesterVisiblePackageSummary,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_package(
+    request_id: uuid.UUID,
+    payload: PackageCreateRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return ContentCloningPackageService.create_package(
+        db,
+        request_id=request_id,
+        staff_id=staff_id,
+        payload=payload,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.get(
+    "/requests/{request_id}/package",
+    response_model=RequesterVisiblePackageSummary,
+)
+def get_package_preview(
+    request_id: uuid.UUID,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return ContentCloningPackageService.get_package_preview(
+        db,
+        request_id=request_id,
+        staff_id=staff_id,
+    )
+
+
+@router.post(
+    "/requests/{request_id}/package-decision",
+    response_model=ContentShareRequestResponse | ContentCloneOperationResponse,
+)
+def decide_package(
+    request_id: uuid.UUID,
+    payload: PackageDecisionRequest,
+    response: Response,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    if payload.decision == PackageDecision.ACCEPT:
+        operation, replayed = ContentCloningExecutionService.accept_package(
+            db, request_id=request_id, actor_staff_id=staff_id,
+            expected_version=payload.expected_version,
+            idempotency_key=idempotency_key,
+            period_mappings=[item.model_dump() for item in payload.period_mappings],
+        )
+        response.headers["X-Idempotent-Replay"] = "true" if replayed else "false"
+        return _operation_response(operation)
+    req = ContentCloningPackageService.decide_package(
+        db,
+        request_id=request_id,
+        staff_id=staff_id,
+        payload=payload,
+        idempotency_key=idempotency_key,
+    )
+    return _request_response(db, req)
+
+
+def _operation_response(operation) -> ContentCloneOperationResponse:
+    return ContentCloneOperationResponse(
+        operation_id=operation.operation_id,
+        mode=operation.mode,
+        status=operation.status,
+        destination_class_id=operation.destination_class_id,
+        destination_subject_id=operation.destination_subject_id,
+        destination_academic_period_id=operation.destination_academic_period_id,
+        summary=operation.summary_counts or {},
+        error_code=operation.error_code,
+        created_at=operation.created_at,
+        completed_at=operation.completed_at,
+    )
+
+
+@router.get(
+    "/clone-operations/self/eligible-materials",
+    response_model=SelfEligibleMaterialsResponse,
+)
+def list_self_clone_materials(
+    destination_class_id: int = Query(ge=1),
+    destination_subject_id: int = Query(ge=1),
+    destination_academic_period_id: int = Query(ge=1),
+    item_type: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    destination = ContentCloningAuthorizationService.resolve_destination(
+        db, actor_staff_id=staff_id, class_id=destination_class_id,
+        subject_id=destination_subject_id,
+        academic_period_id=destination_academic_period_id,
+    )
+    items, total = ContentCloningPackageService.get_eligible_materials(
+        db, request_id=None, staff_id=staff_id, item_type_filter=item_type,
+        page=page, page_size=page_size,
+        self_destination_subject_id=destination.subject_id,
+        self_destination_period_id=destination.academic_period_id,
+    )
+    return SelfEligibleMaterialsResponse(items=items, total=total)
+
+
+@router.post(
+    "/clone-operations/self",
+    response_model=ContentCloneOperationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def clone_own_materials(
+    payload: SelfCloneRequest,
+    response: Response,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    operation, replayed = ContentCloningExecutionService.clone_self(
+        db, actor_staff_id=staff_id, idempotency_key=idempotency_key,
+        payload=payload.model_dump(mode="json"),
+    )
+    response.headers["X-Idempotent-Replay"] = "true" if replayed else "false"
+    return _operation_response(operation)
+
+
+@router.get(
+    "/clone-operations/{operation_id}",
+    response_model=ContentCloneOperationResponse,
+)
+def get_clone_operation(
+    operation_id: uuid.UUID,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    operation = ContentCloningExecutionService.get_operation(
+        db, operation_id=operation_id, actor_staff_id=staff_id,
+    )
+    return _operation_response(operation)

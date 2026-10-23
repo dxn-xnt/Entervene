@@ -5,9 +5,10 @@ import { GradingTemplateManager } from "./subjects/components/grading-template-m
 
 const createTemplate = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 const updateTemplate = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const editThreshold = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 vi.mock("@/lib/api", async (loadOriginal) => {
   const original = await loadOriginal<typeof import("@/lib/api")>();
-  return { ...original, createGradingTemplate: createTemplate, updateGradingTemplate: updateTemplate };
+  return { ...original, createGradingTemplate: createTemplate, updateGradingTemplate: updateTemplate, editGradingTemplateThreshold: editThreshold };
 });
 
 const templates = [{
@@ -21,7 +22,7 @@ const templates = [{
   ], created_at: null, updated_at: "2026-10-18T00:00:00Z",
 }];
 
-afterEach(() => { cleanup(); createTemplate.mockClear(); updateTemplate.mockClear(); });
+afterEach(() => { cleanup(); createTemplate.mockClear(); updateTemplate.mockClear(); editThreshold.mockClear(); });
 
 describe("Subjects grading template manager", () => {
   it("renders stored values and opens the creation dialog", () => {
@@ -65,5 +66,21 @@ describe("Subjects grading template manager", () => {
     expect(screen.getByText("Subject 5")).toBeTruthy();
     expect(screen.getByText("Grade 7")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+  });
+
+  it("sends threshold edits through the audited year-specific action", async () => {
+    const reload = vi.fn().mockResolvedValue(undefined);
+    render(<GradingTemplateManager templates={templates} subjects={[]} onReload={reload}
+      academicYears={[{ academic_year_id: 7, year_label: "2026-2027", is_active: true }]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit Core" }));
+    fireEvent.change(screen.getByLabelText("Audited passing threshold"), { target: { value: "88.25" } });
+    fireEvent.change(screen.getByLabelText("Reason for threshold edit"), { target: { value: "Approved school adjustment" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Threshold with Audit" }));
+    await waitFor(() => expect(editThreshold).toHaveBeenCalledWith(1, {
+      academic_year_id: 7, threshold: "88.25", expected_updated_at: "2026-10-18T00:00:00Z",
+      reason: "Approved school adjustment",
+    }));
+    expect(updateTemplate).not.toHaveBeenCalled();
+    expect(reload).toHaveBeenCalled();
   });
 });

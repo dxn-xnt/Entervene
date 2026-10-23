@@ -2,8 +2,8 @@
 
 This is the authoritative backend/frontend contract for the Content Cloning & Repost feature.
 - **Backend PR A (Implemented & Available)**: Publishes domain models, Alembic migration, lifecycle/expiration logic, destination/owner authorization, Pydantic schemas, and the 5 request-foundation endpoints.
-- **Backend PR B (Planned - Not Routed in PR A)**: Implements owner material picker persistence, immutable snapshot packaging, package preview query, and requester acceptance/decline decisions.
-- **Backend PR C (Planned - Not Routed in PR A)**: Implements independent deep-copy cloning engine, file asset duplication, quiz scheduling resets, and self-cloning execution.
+- **Backend PR B (Implemented)**: Owner material picker, immutable private packaging, safe package preview, and requester decline.
+- **Backend PR C (Implemented locally; publication pending)**: Synchronous independent copying on acceptance and self-clone, physical asset duplication, locked drafts, and operation results.
 
 ---
 
@@ -217,28 +217,31 @@ Owner explicitly declines an incoming pending request.
 
 ---
 
-## 6. Reconciled Contract for Backend PR B & PR C (Planned - Not Routed in PR A)
+## 6. Cloning execution
 
-*Note: The following endpoints represent the agreed contract for subsequent pull requests. They are NOT available or routed in PR A.*
+Package acceptance and self-cloning execute synchronously. A successful response means the database transaction committed and the created content is unpublished and locked.
 
 ### Endpoint Classification Table
 | Endpoint | Stage | Purpose |
 |---|---|---|
-| `GET /requests/{request_id}/eligible-materials` | Planned for PR B | Owner material picker with revision tokens |
-| `POST /requests/{request_id}/package` | Planned for PR B | Owner package creation & immutable snapshot |
-| `GET /requests/{request_id}/package` | Planned for PR B | Requester preview (safe titles & counts only) |
-| `POST /requests/{request_id}/package-decision` | Planned for PR B | Unified requester accept/decline action |
-| `POST /requests/{request_id}/accept` | Planned for PR B | (Alias) Direct accept action |
-| `POST /requests/{request_id}/decline-by-requester` | Planned for PR B | (Alias) Direct decline action |
-| `POST /clone-operations/self` | Planned for PR C | Teacher self-clone execution |
-| `POST /my-content/clones` | Planned for PR C | (Alias) Self-clone convenience route |
-| `GET /clone-operations/{operation_id}` | Planned for PR C | Clone operation polling & status |
+| `GET /scopes` | Implemented in PR A | Supported source filter modes |
+| `GET /source-teachers` | Implemented in PR A | Eligible source teachers listing |
+| `POST /requests` | Implemented in PR A | Content share request submission |
+| `GET /requests` | Implemented in PR A | Incoming/outgoing share requests |
+| `POST /requests/{request_id}/decline` | Implemented in PR A | Source owner decline action |
+| `GET /requests/{request_id}/eligible-materials` | Implemented in PR B | Owner material picker with revision tokens |
+| `POST /requests/{request_id}/package` | Implemented in PR B | Owner package creation & immutable snapshot |
+| `GET /requests/{request_id}/package` | Implemented in PR B | Requester preview (safe titles & counts only) |
+| `POST /requests/{request_id}/package-decision` | Implemented in PR C | `DECLINE` returns the request; `ACCEPT` returns the completed clone operation |
+| `GET /clone-operations/self/eligible-materials` | Implemented in PR C | Authorized self-clone picker with revision tokens for owned prior-year materials |
+| `POST /clone-operations/self` | Implemented in PR C | Teacher self-clone execution |
+| `GET /clone-operations/{operation_id}` | Implemented in PR C | Read own completed operation |
 
 ---
 
 ### Detailed Planned Specifications
 
-#### `GET /requests/{request_id}/eligible-materials` (Planned for PR B)
+### `GET /requests/{request_id}/eligible-materials` (Implemented in PR B)
 Owner picker endpoint. Returns owned materials matching request subject and scope.
 - **Response `200 OK`:**
   ```json
@@ -275,7 +278,7 @@ Owner picker endpoint. Returns owned materials matching request subject and scop
   ```
   *Each item provides `source_revision_token` for optimistic concurrency verification during packaging.*
 
-#### `POST /requests/{request_id}/package` (Planned for PR B)
+### `POST /requests/{request_id}/package` (Implemented in PR B)
 Owner submits selected items to freeze one immutable package.
 - **Headers:** `Idempotency-Key: <string>`
 - **Body:**
@@ -302,7 +305,7 @@ Owner submits selected items to freeze one immutable package.
   - Creates immutable snapshot and stages assets.
   - Starts fresh 7-day decision window for requester.
 
-#### `GET /requests/{request_id}/package` (Planned for PR B)
+### `GET /requests/{request_id}/package` (Implemented in PR B)
 Requester package preview.
 - **Response `200 OK`:**
   ```json
@@ -334,7 +337,7 @@ Requester package preview.
   ```
   *CRITICAL PRIVACY RULE: Exposes ONLY safe titles, item types, and counts. NEVER exposes private lesson body texts, quiz questions, options, answer keys, source database IDs, or file paths.*
 
-#### `POST /requests/{request_id}/package-decision` (Planned for PR B)
+### `POST /requests/{request_id}/package-decision` (Implemented in PR B)
 Requester accepts or declines the received package. (Aliases `POST /requests/{request_id}/accept` and `POST /requests/{request_id}/decline-by-requester` are planned for PR B).
 - **Headers:** `Idempotency-Key: <string>`
 - **Body (Accept):**
@@ -344,7 +347,8 @@ Requester accepts or declines the received package. (Aliases `POST /requests/{re
     "expected_version": 2
   }
   ```
-  *Triggers independent cloning into destination. Returns `200 OK` with `ContentCloneOperationResponse`.*
+  Acceptance requires `Idempotency-Key`. It returns `ContentCloneOperationResponse` with `status=SUCCEEDED` only after copying and commit. A replay of the same accepted request returns the same operation and `X-Idempotent-Replay: true`.
+  If selected materials span source terms, supply `period_mappings: [{"source_academic_period_id": 11, "destination_academic_period_id": 22}, ...]` for every term. A term cannot be inferred from the current date.
 - **Body (Decline):**
   ```json
   {
@@ -354,7 +358,10 @@ Requester accepts or declines the received package. (Aliases `POST /requests/{re
   ```
   *Transitions request status to `DECLINED_BY_REQUESTER`.*
 
-#### `POST /clone-operations/self` (Planned for PR C)
+#### `GET /clone-operations/self/eligible-materials` (Implemented in PR C)
+Supply `destination_class_id`, `destination_subject_id`, and `destination_academic_period_id` as query parameters. The server verifies the exact primary destination teaching scope, then returns paginated owned materials with safe titles, source term IDs and revision tokens. Only unambiguous source terms from previous academic years are eligible; private lesson bodies, questions, answers and file paths are not returned.
+
+#### `POST /clone-operations/self` (Implemented in PR C)
 Teacher clones their own materials from prior academic periods into an authorized destination without cross-teacher request. (Alias `POST /my-content/clones` is planned for PR C).
 - **Headers:** `Idempotency-Key: <string>`
 - **Body:**
@@ -377,7 +384,7 @@ Teacher clones their own materials from prior academic periods into an authorize
   {
     "operation_id": "c1d2e3f4-5a6b-7c8d-9e0f-1a2b3c4d5e6f",
     "mode": "SELF",
-    "status": "PENDING",
+  "status": "SUCCEEDED",
     "destination_class_id": 20,
     "destination_subject_id": 5,
     "destination_academic_period_id": 22,
@@ -389,10 +396,15 @@ Teacher clones their own materials from prior academic periods into an authorize
     },
     "error_code": null,
     "created_at": "2026-10-20T04:30:00Z",
-    "completed_at": null
+    "completed_at": "2026-10-20T04:30:00Z"
   }
   ```
 
-#### `GET /clone-operations/{operation_id}` (Planned for PR C)
-Monitors status of a running or completed clone operation.
-- **Response `200 OK`:** Same structure as `ContentCloneOperationResponse`, reflecting current `status` (`PENDING` | `RUNNING` | `SUCCEEDED` | `FAILED`).
+#### `GET /clone-operations/{operation_id}` (Implemented in PR C)
+Only the operation actor can read the safe status and counts. It never returns source IDs, private snapshots, answer keys, original paths, or the internal item map.
+
+Self-cloning requires an exact owned historical period with a direct primary teaching load in a previous academic year. The selected items carry PR B revision tokens. Multiple source terms require explicit `period_mappings` to the one selected destination term. Targeted and remedial assignments are excluded.
+
+New lesson and classwork assignments are unpublished and locked. Quiz status is DRAFT, and quiz and summary release schedules are cleared. Existing publication and unlock endpoints remain responsible for student release.
+
+Attachments are checked against approved storage and checksum before copying. The transaction rolls back and operation files are removed on ordinary failures. A process crash between writing a file and database commit can leave an orphan UUID-named clone or staging directory. The explicit `cleanup_orphan_storage` maintenance hook only removes directories older than 24 hours with no committed package or operation row; run it during quiet time. No background worker is used.

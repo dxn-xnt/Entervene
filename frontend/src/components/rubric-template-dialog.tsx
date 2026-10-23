@@ -12,7 +12,7 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/retroui/tooltip";
+} from "@/components/retroui/Tooltip";
 import { useToast } from "@/components/retroui/use-toast";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import {

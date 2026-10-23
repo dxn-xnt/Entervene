@@ -9,7 +9,7 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { StudentLessonDetailScreen } from "@/pages/student/lesson-view";
-import { apiFetch, getLessonGoals, type LessonGoalItemResponse } from "@/lib/api";
+import { apiFetch, getLessonGoals, getStudentTodos, type LessonGoalItemResponse, type TodoItem } from "@/lib/api";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { Card } from "@/components/retroui/Card";
@@ -19,6 +19,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
+import { StudentLessonMastery } from "@/components/student-lesson-mastery";
 import { LoadingPanel } from "@/components/loading-panel";
 import type { StudentLesson as Lesson } from "@/types/student-subject";
 import StudentClassworkDetailModal from "@/pages/student/forms/student-classwork-detail-modal";
@@ -189,6 +190,7 @@ export default function SubjectLessonTab({
   const [subjectAssignments, setSubjectAssignments] = useState<
     ClassworkDetail[]
   >([]);
+  const [studentClassworks, setStudentClassworks] = useState<TodoItem[]>([]);
   const [sortAsc, setSortAsc] = useState(false);
   const [lessonFilter, setLessonFilter] = useState("all");
   const [selectedLessonDetail, setSelectedLessonDetail] =
@@ -202,6 +204,17 @@ export default function SubjectLessonTab({
       setIsLoading(false);
     }
   }, [classId, subjectId]);
+
+  useEffect(() => {
+    if (!classId || !subjectId) return;
+    let mounted = true;
+    getStudentTodos(selectedPeriodId || undefined)
+      .then((data) => {
+        if (mounted) setStudentClassworks((data.all ?? []).filter((work) => work.class_id === classId && work.subject_id === subjectId));
+      })
+      .catch(() => { if (mounted) setStudentClassworks([]); });
+    return () => { mounted = false; };
+  }, [classId, subjectId, selectedPeriodId]);
 
   useEffect(() => {
     const targetId = Number(searchParams.get("lessonId"));
@@ -927,9 +940,9 @@ export default function SubjectLessonTab({
               </Empty.Content>
             </Empty>
           ) : (
-            <div className="flex min-w-0 flex-col items-start gap-4 lg:flex-row">
+            <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
               {/* ════════════════ LEFT: Lessons list ════════════════ */}
-              <div className="w-full min-w-0 lg:flex-[2]">
+              <div className="w-full min-w-0">
                 <div className="mb-4 flex w-full flex-wrap items-center justify-end gap-3">
                   <Select value={lessonFilter} onValueChange={setLessonFilter}>
                     <Select.Trigger aria-label="Filter lessons" className="h-10 w-44 text-sm sm:w-48">
@@ -964,17 +977,25 @@ export default function SubjectLessonTab({
               </div>
 
               {/* ════════════════ RIGHT: Weekly Goals ════════════════ */}
-              <LessonGoalProgress
-                goalItems={curatedGoals}
-                className="w-full min-w-0 lg:max-w-md lg:flex-1"
-                onClassworkClick={(_cwId, asgnId) => {
-                  if (asgnId) {
-                    openClassworkDetail({
-                      classwork_assignment_id: asgnId,
-                    } as LessonClasswork);
-                  }
-                }}
-              />
+              <div className="flex w-full min-w-0 flex-col gap-4">
+                <LessonGoalProgress
+                  goalItems={curatedGoals}
+                  className="w-full min-w-0"
+                  onClassworkClick={(_cwId, asgnId) => {
+                    if (asgnId) {
+                      openClassworkDetail({
+                        classwork_assignment_id: asgnId,
+                      } as LessonClasswork);
+                    }
+                  }}
+                />
+                <StudentLessonMastery
+                  lessons={sortedLessons}
+                  assignmentIdsByLesson={Object.fromEntries(lessons.map((lesson) => [lesson.lesson_id, (classworksByLesson[lesson.lesson_id] ?? []).map((work) => work.classwork_assignment_id)]))}
+                  classworks={studentClassworks}
+                  onReview={(lesson) => void openLessonDetail(lesson)}
+                />
+              </div>
             </div>
           )}
         </>

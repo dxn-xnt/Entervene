@@ -1,6 +1,6 @@
 import { BookOpen, CheckSquare, ClipboardList, FileText } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 
 type ListItemProps = {
   title: string;

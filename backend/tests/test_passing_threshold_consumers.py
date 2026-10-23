@@ -19,6 +19,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import quoted_name
 
 from app.models.academic.AcademicYear import AcademicYear
+from app.models.academic.AcademicYearPassingPolicy import AcademicYearPassingPolicy
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.GradingTemplate import GradingTemplate
@@ -81,8 +82,8 @@ def _policy_selects(statements):
             rf'^select\s+{_column_ref("academic_year", "academic_year_id")}\s+'
             rf'from\s+{_table_ref("academic_year")}(?:\s|$)', sql)
         setting_projection = re.match(
-            rf'^select\s+{_column_ref("setting", "value")}\s+'
-            rf'from\s+{_table_ref("setting")}(?:\s|$)', sql)
+            rf'^select\s+{_column_ref("academic_year_passing_policy", "general_average_threshold")}\s+'
+            rf'from\s+{_table_ref("academic_year_passing_policy")}(?:\s|$)', sql)
         subject_projection = (
             sql.startswith("select ")
             and re.search(rf'\sfrom\s+{_table_ref("subject")}(?:\s|$)', sql)
@@ -111,7 +112,8 @@ def _compiled_policy_selects(schema=None):
             GradingTemplate,
             Subject.grading_template_id == GradingTemplate.grading_template_id,
         ).where(Subject.subject_id.in_([1, 2])),
-        select(Setting.value).where(Setting.key == "general_average_passing_grade"),
+        select(AcademicYearPassingPolicy.general_average_threshold).where(
+            AcademicYearPassingPolicy.academic_year_id == 1),
     ]
     dialect = postgresql.dialect()
     result = []

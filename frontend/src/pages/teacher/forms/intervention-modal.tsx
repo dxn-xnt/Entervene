@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Skeleton } from "@/components/retroui/Skeleton";
 import { Card } from "@/components/retroui/Card";
@@ -8,7 +8,9 @@ import { Badge } from "@/components/retroui/Badge";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Empty } from "@/components/retroui/Empty";
-import InterventionSupportMaterials from "../intervention-support-materials";
+import InterventionSupportMaterials, {
+  type InterventionSupportMaterialsHandle,
+} from "../intervention-support-materials";
 import type {
   DiagnosisSnapshot,
   TeacherInterventionDetail,
@@ -30,6 +32,15 @@ const date = (value: string) =>
 
 const percent = (value: number | null | undefined) =>
   value == null ? "Unavailable" : `${value.toFixed(1)}%`;
+
+const percentVariant = (
+  value: number | null | undefined
+): "success" | "surface" | "destructive" => {
+  if (value == null) return "surface";
+  if (value >= 80) return "success";
+  if (value >= 75) return "surface";
+  return "destructive";
+};
 
 const strongestEvidence = (diagnosis: DiagnosisSnapshot) => {
   const scored = diagnosis.lowest_supported_competencies ?? [];
@@ -92,35 +103,56 @@ function AcademicDiagnosisCard({
   );
 
   return (
-    <Card className="space-y-2 w-full">
-      <p className="text-base">
-        Support focus: <strong>{focusName}</strong>
-      </p>
-      <p className="text-base">
-        Strongest available evidence: <strong>{strongestEvidenceText}</strong>
-      </p>
+    <Card className="space-y-3 w-full">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground uppercase font-bold">Support focus:</span>
+          <span className="text-base font-bold">{focusName}</span>
+        </div>
+        <Badge variant="outline" size="sm">
+          {strongestEvidenceText}
+        </Badge>
+      </div>
+
       {scoredCompetencies.length > 0 && (
-        <>
-          <p className="text-base">
-            Scored competency focus:{" "}
-            {scoredCompetencies
-              .map((item) => `${item.competency_code}: ${item.competency_statement}`)
-              .join("; ")}
-          </p>
-          {questionScores.slice(0, 3).map((item) => (
-            <p key={item.key} className="text-sm">
-              Question #{item.id}: {item.score}/{item.possible}
-            </p>
-          ))}
-        </>
+        <div className="space-y-2">
+          <span className="text-xs font-bold uppercase text-muted-foreground block">
+            Scored competency focus
+          </span>
+          <div className="space-y-1.5">
+            {scoredCompetencies.map((item) => (
+              <div key={item.competency_id} className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" size="sm">
+                  {item.competency_code}
+                </Badge>
+                <span className="text-sm font-medium">{item.competency_statement}</span>
+              </div>
+            ))}
+          </div>
+          {questionScores.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              {questionScores.slice(0, 3).map((item) => (
+                <Badge key={item.key} variant="outline" size="sm">
+                  Question #{item.id}: {item.score}/{item.possible}
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
       )}
+
       {focusPercent != null && (
-        <p className="text-base">
-          Weakest component: {primaryComp ? label(primaryComp) : focusName}{" "}
-          <strong>{focusPercent.toFixed(0)}%</strong>
-        </p>
+        <div className="flex items-center justify-between border-t border-border pt-2">
+          <span className="text-sm font-semibold">
+            Weakest component: {primaryComp ? label(primaryComp) : focusName}
+          </span>
+          <Badge variant={percentVariant(focusPercent)} size="sm">
+            {focusPercent.toFixed(0)}%
+          </Badge>
+        </div>
       )}
-      <div className="flex flex-wrap gap-2 pt-1 text-xs">
+
+      <div className="flex flex-wrap gap-2 pt-2 border-t border-border text-xs">
         <Badge variant="surface" size="sm">
           {scoredCompetencies.length} scored competency targets
         </Badge>
@@ -162,6 +194,8 @@ export default function InterventionModal({
   newerActive,
 }: InterventionModalProps) {
   const [supportPage, setSupportPage] = useState<"overview" | "plan">("overview");
+  const [savingAdjustments, setSavingAdjustments] = useState(false);
+  const supportMaterialsRef = useRef<InterventionSupportMaterialsHandle>(null);
   const interventionId = detail?.intervention_id;
 
   useEffect(() => {
@@ -370,6 +404,7 @@ export default function InterventionModal({
                   })()
                 ) : detail.status === "ACTIVE" ? (
                   <InterventionSupportMaterials
+                    ref={supportMaterialsRef}
                     key={detail.intervention_id}
                     page={supportPage}
                     detail={detail}
@@ -429,9 +464,9 @@ export default function InterventionModal({
                           </div>
                         </div>
                       </div>
-                      <p className="text-sm rounded border border-amber-400 bg-amber-50 p-2">
+                      <Alert status="warning">
                         This is a saved review candidate. No teacher-approved active Intervention exists yet. Approval rechecks the current prediction, teaching scope, and authorization before support can begin.
-                      </p>
+                      </Alert>
                     </Card>
 
                     <p className="text-sm text-muted-foreground">
@@ -456,183 +491,223 @@ export default function InterventionModal({
                   </>
                 )}
 
-                <Accordion className="w-full">
-                  <Accordion.Item
-                    value="frozen-evidence"
-                    className="overflow-hidden rounded border-2 border-border bg-card shadow-sm"
-                  >
-                    <Accordion.Header className="items-center px-4 py-3 bg-card font-bold text-sm">
-                      View full frozen evidence
-                    </Accordion.Header>
-                    <Accordion.Content className="space-y-4 p-4 border-t-2 border-border bg-background">
-                      <section className="space-y-2">
-                        <h3 className="text-base font-bold">
-                          Frozen academic diagnosis
-                        </h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-muted-foreground">
-                          <p>
-                            Source prediction #{detail.source_prediction_id}, revision {detail.source_prediction_revision}
-                          </p>
-                          {detail.activated_by_staff_id && (
-                            <p>Activated by staff {detail.activated_by_staff_id}</p>
-                          )}
-                          <p className="col-span-full">
-                            Evidence cutoff:{" "}
-                            <strong>
-                              {detail.diagnosis_snapshot.evidence_cutoff_at
-                                ? date(detail.diagnosis_snapshot.evidence_cutoff_at)
-                                : "Unavailable"}
-                            </strong>
-                          </p>
-                        </div>
-
-                        <div className="space-y-1 pt-2">
-                          <span className="text-xs font-bold uppercase text-muted-foreground block mb-1">
-                            Components evidence
-                          </span>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {Object.entries(
-                              detail.diagnosis_snapshot.components ?? {}
-                            ).map(([name, component]) => (
-                              <Card key={name} className="flex items-center justify-between p-2.5">
-                                <span className="font-semibold text-sm">{label(name)}</span>
-                                <Badge
-                                  variant={component.evidence_state === "AVAILABLE" ? "surface" : "default"}
-                                  size="sm"
-                                >
-                                  {component.evidence_state === "AVAILABLE"
-                                    ? percent(component.percent)
-                                    : "Unavailable"}
-                                </Badge>
-                              </Card>
-                            ))}
+                {(!isActive || supportPage === "overview") && (
+                  <Accordion className="w-full">
+                    <Accordion.Item
+                      value="frozen-evidence"
+                      className="overflow-hidden rounded border-2 border-border bg-card shadow-sm"
+                    >
+                      <Accordion.Header className="items-center px-4 py-3 bg-card font-bold text-sm">
+                        View full frozen evidence
+                      </Accordion.Header>
+                      <Accordion.Content className="space-y-4 p-4 border-t-2 border-border bg-background">
+                        <section className="space-y-2">
+                          <h3 className="text-base font-bold">
+                            Frozen academic diagnosis
+                          </h3>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-muted-foreground">
+                            <p>
+                              Source prediction #{detail.source_prediction_id}, revision {detail.source_prediction_revision}
+                            </p>
+                            {detail.activated_by_staff_id && (
+                              <p>Activated by staff {detail.activated_by_staff_id}</p>
+                            )}
+                            <p className="col-span-full">
+                              Evidence cutoff:{" "}
+                              <strong>
+                                {detail.diagnosis_snapshot.evidence_cutoff_at
+                                  ? date(detail.diagnosis_snapshot.evidence_cutoff_at)
+                                  : "Unavailable"}
+                              </strong>
+                            </p>
                           </div>
-                        </div>
 
-                        <div className="space-y-1.5 pt-2">
-                          <h4 className="font-bold text-sm">Supporting activities</h4>
-                          {(detail.diagnosis_snapshot.supporting_activities ?? []).length ? (
-                            <div className="space-y-1.5">
-                              {detail.diagnosis_snapshot.supporting_activities?.map((activity) => (
-                                <Card key={activity.classwork_id} className="flex flex-wrap items-center justify-between gap-2 p-2.5">
-                                  <div>
-                                    <span className="font-semibold text-sm">{activity.title}</span>
-                                    <span className="ml-2">
-                                      <Badge variant="outline" size="sm">
-                                        {label(activity.component)}
-                                      </Badge>
-                                    </span>
-                                  </div>
-                                  <Badge variant="surface" size="sm">
-                                    {activity.score}/{activity.possible_score} ({percent(activity.percent)})
+                          <div className="space-y-1 pt-2">
+                            <span className="text-xs font-bold uppercase text-muted-foreground block mb-1">
+                              Components evidence
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {Object.entries(
+                                detail.diagnosis_snapshot.components ?? {}
+                              ).map(([name, component]) => (
+                                <Card key={name} className="flex items-center justify-between p-2.5">
+                                  <span className="font-semibold text-sm">{label(name)}</span>
+                                  <Badge
+                                    variant={
+                                      component.evidence_state === "AVAILABLE"
+                                        ? percentVariant(component.percent)
+                                        : "default"
+                                    }
+                                    size="sm"
+                                  >
+                                    {component.evidence_state === "AVAILABLE"
+                                      ? percent(component.percent)
+                                      : "Unavailable"}
                                   </Badge>
                                 </Card>
                               ))}
                             </div>
-                          ) : (
-                            <p className="text-xs text-muted-foreground">No scored activity detail in the saved diagnosis.</p>
-                          )}
-                        </div>
-                      </section>
+                          </div>
 
-                      <section className="space-y-2 pt-2 border-t border-border">
-                        <h3 className="text-base font-bold">
-                          Scored competency evidence
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
-                          Ranked only when a competency has its own traceable scored evidence.
-                        </p>
-                        {(detail.diagnosis_snapshot.lowest_supported_competencies ?? []).length ? (
-                          <div className="space-y-2">
-                            {detail.diagnosis_snapshot.lowest_supported_competencies?.map((item) => (
-                              <Card key={item.competency_id} className="space-y-2 p-3">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="secondary" size="sm">{item.competency_code}</Badge>
-                                    <span className="font-semibold text-sm">{item.competency_statement}</span>
-                                  </div>
-                                  <Badge variant="surface" size="sm">
-                                    {item.score}/{item.possible_score} ({percent(item.percent)})
-                                  </Badge>
-                                </div>
-                                {item.supporting_scores.map((score, index) => (
-                                  <div
-                                    key={`${score.quiz_question_id ?? score.source_type}-${index}`}
-                                    className="text-xs text-muted-foreground flex flex-wrap gap-1.5 pt-1.5 border-t border-border"
-                                  >
-                                    <Badge variant="outline" size="sm">
-                                      {score.source_type === "QUIZ_QUESTION"
-                                        ? `Question #${score.quiz_question_id ?? "unknown"}`
-                                        : "Activity score"}
-                                    </Badge>
-                                    <span>
-                                      {score.activity_title}
-                                      {score.lesson_title ? ` · ${score.lesson_title}` : ""}
-                                    </span>
-                                    {score.score != null && score.possible_score != null && (
-                                      <span className="font-semibold">
-                                        {score.score}/{score.possible_score}
+                          <div className="space-y-1.5 pt-2">
+                            <h4 className="font-bold text-sm">Supporting activities</h4>
+                            {(detail.diagnosis_snapshot.supporting_activities ?? []).length ? (
+                              <div className="space-y-1.5">
+                                {detail.diagnosis_snapshot.supporting_activities?.map((activity) => (
+                                  <Card key={activity.classwork_id} className="flex flex-wrap items-center justify-between gap-2 p-2.5">
+                                    <div>
+                                      <span className="font-semibold text-sm">{activity.title}</span>
+                                      <span className="ml-2">
+                                        <Badge variant="outline" size="sm">
+                                          {label(activity.component)}
+                                        </Badge>
                                       </span>
-                                    )}
-                                  </div>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <Badge variant="surface" size="sm">
+                                        {activity.score}/{activity.possible_score}
+                                      </Badge>
+                                      <Badge
+                                        variant={percentVariant(activity.percent)}
+                                        size="sm"
+                                      >
+                                        ({percent(activity.percent)})
+                                      </Badge>
+                                    </div>
+                                  </Card>
                                 ))}
-                              </Card>
-                            ))}
+                              </div>
+                            ) : (
+                              <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+                                <Empty.Content>
+                                  <Empty.Description className="text-sm text-muted-foreground">
+                                    No scored activity detail in the saved diagnosis.
+                                  </Empty.Description>
+                                </Empty.Content>
+                              </Empty>
+                            )}
                           </div>
-                        ) : (
-                          <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
-                            <Empty.Content>
-                              <Empty.Description className="text-sm text-muted-foreground">
-                                No specific competency could be identified from scored evidence.
-                              </Empty.Description>
-                            </Empty.Content>
-                          </Empty>
-                        )}
-                      </section>
+                        </section>
 
-                      <section className="space-y-2 pt-2 border-t border-border">
-                        <h3 className="text-base font-bold">
-                          Manual assessment coverage for teacher review
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
-                          A total assessment score shows performance on the assessment. It does not score each covered competency separately or rank them against one another.
-                        </p>
-                        {(detail.diagnosis_snapshot.manual_assessment_coverage ?? []).length ? (
-                          <div className="space-y-2">
-                            {detail.diagnosis_snapshot.manual_assessment_coverage?.map((assessment) => (
-                              <Card key={assessment.classwork_id} className="space-y-1.5 p-3">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-semibold text-sm">{assessment.title}</span>
-                                    <Badge variant="outline" size="sm">{label(assessment.component)}</Badge>
+                        <section className="space-y-2 pt-2 border-t border-border">
+                          <h3 className="text-base font-bold">
+                            Scored competency evidence
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            Ranked only when a competency has its own traceable scored evidence.
+                          </p>
+                          {(detail.diagnosis_snapshot.lowest_supported_competencies ?? []).length ? (
+                            <div className="space-y-2">
+                              {detail.diagnosis_snapshot.lowest_supported_competencies?.map((item) => (
+                                <Card key={item.competency_id} className="space-y-2 p-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="secondary" size="sm">{item.competency_code}</Badge>
+                                      <span className="font-semibold text-sm">{item.competency_statement}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <Badge variant="surface" size="sm">
+                                        {item.score}/{item.possible_score}
+                                      </Badge>
+                                      <Badge
+                                        variant={percentVariant(item.percent)}
+                                        size="sm"
+                                      >
+                                        ({percent(item.percent)})
+                                      </Badge>
+                                    </div>
                                   </div>
-                                  <Badge variant="surface" size="sm">
-                                    {assessment.score}/{assessment.possible_score} ({percent(assessment.percent)})
-                                  </Badge>
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                  Covered lessons: {assessment.covered_lessons.map((lesson) => lesson.title).join(", ") || "None linked"}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  Covered competencies: {assessment.covered_competencies.map((item) => `${item.competency_code}: ${item.competency_statement}`).join("; ") || "None linked"}
-                                </p>
-                              </Card>
-                            ))}
-                          </div>
-                        ) : (
+                                  {item.supporting_scores.map((score, index) => (
+                                    <div
+                                      key={`${score.quiz_question_id ?? score.source_type}-${index}`}
+                                      className="text-xs text-muted-foreground flex flex-wrap gap-1.5 pt-1.5 border-t border-border"
+                                    >
+                                      <Badge variant="outline" size="sm">
+                                        {score.source_type === "QUIZ_QUESTION"
+                                          ? `Question #${score.quiz_question_id ?? "unknown"}`
+                                          : "Activity score"}
+                                      </Badge>
+                                      <span>
+                                        {score.activity_title}
+                                        {score.lesson_title ? ` · ${score.lesson_title}` : ""}
+                                      </span>
+                                      {score.score != null && score.possible_score != null && (
+                                        <span className="font-semibold">
+                                          {score.score}/{score.possible_score}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </Card>
+                              ))}
+                            </div>
+                          ) : (
+                            <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+                              <Empty.Content>
+                                <Empty.Description className="text-sm text-muted-foreground">
+                                  No specific competency could be identified from scored evidence.
+                                </Empty.Description>
+                              </Empty.Content>
+                            </Empty>
+                          )}
+                        </section>
+
+                        <section className="space-y-2 pt-2 border-t border-border">
+                          <h3 className="text-base font-bold">
+                            Manual assessment coverage for teacher review
+                          </h3>
                           <p className="text-xs text-muted-foreground">
-                            No dated manual assessment coverage was available at the evidence cutoff.
+                            A total assessment score shows performance on the assessment. It does not score each covered competency separately or rank them against one another.
                           </p>
-                        )}
-                        {(detail.diagnosis_snapshot.covered_competencies_for_teacher_review ?? []).length > 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            Covered competencies in weak components require teacher review; they are unranked because the assessment has one shared total score.
-                          </p>
-                        )}
-                      </section>
-                    </Accordion.Content>
-                  </Accordion.Item>
-                </Accordion>
+                          {(detail.diagnosis_snapshot.manual_assessment_coverage ?? []).length ? (
+                            <div className="space-y-2">
+                              {detail.diagnosis_snapshot.manual_assessment_coverage?.map((assessment) => (
+                                <Card key={assessment.classwork_id} className="space-y-1.5 p-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-semibold text-sm">{assessment.title}</span>
+                                      <Badge variant="outline" size="sm">{label(assessment.component)}</Badge>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <Badge variant="surface" size="sm">
+                                        {assessment.score}/{assessment.possible_score}
+                                      </Badge>
+                                      <Badge
+                                        variant={percentVariant(assessment.percent)}
+                                        size="sm"
+                                      >
+                                        ({percent(assessment.percent)})
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    Covered lessons: {assessment.covered_lessons.map((lesson) => lesson.title).join(", ") || "None linked"}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Covered competencies: {assessment.covered_competencies.map((item) => `${item.competency_code}: ${item.competency_statement}`).join("; ") || "None linked"}
+                                  </p>
+                                </Card>
+                              ))}
+                            </div>
+                          ) : (
+                            <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+                              <Empty.Content>
+                                <Empty.Description className="text-sm text-muted-foreground">
+                                  No dated manual assessment coverage was available at the evidence cutoff.
+                                </Empty.Description>
+                              </Empty.Content>
+                            </Empty>
+                          )}
+                          {(detail.diagnosis_snapshot.covered_competencies_for_teacher_review ?? []).length > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              Covered competencies in weak components require teacher review; they are unranked because the assessment has one shared total score.
+                            </p>
+                          )}
+                        </section>
+                      </Accordion.Content>
+                    </Accordion.Item>
+                  </Accordion>
+                )}
 
                 {actionError && <Alert status="error">{actionError}</Alert>}
               </div>
@@ -644,18 +719,39 @@ export default function InterventionModal({
           <Button
             variant="outline"
             onClick={onClose}
-            disabled={activating}
+            disabled={activating || savingAdjustments}
           >
             Close
           </Button>
           {isActive && (
             <Button
               variant={supportPage === "plan" ? "outline" : "default"}
-              onClick={() =>
-                setSupportPage(supportPage === "plan" ? "overview" : "plan")
-              }
+              disabled={activating || savingAdjustments}
+              onClick={async () => {
+                if (supportPage === "plan") {
+                  if (supportMaterialsRef.current) {
+                    setSavingAdjustments(true);
+                    try {
+                      const success = await supportMaterialsRef.current.saveAdjustments();
+                      if (success) {
+                        setSupportPage("overview");
+                      }
+                    } finally {
+                      setSavingAdjustments(false);
+                    }
+                  } else {
+                    setSupportPage("overview");
+                  }
+                } else {
+                  setSupportPage("plan");
+                }
+              }}
             >
-              {supportPage === "plan" ? "Back to Overview" : "Adjust Support"}
+              {supportPage === "plan"
+                ? savingAdjustments
+                  ? "Saving adjustments..."
+                  : "Back to Overview"
+                : "Adjust Support"}
             </Button>
           )}
           {selectedKind === "candidate" && detail?.status === "CANDIDATE" && (

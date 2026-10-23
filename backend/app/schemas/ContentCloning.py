@@ -163,22 +163,51 @@ class OwnerEligibleMaterialsResponse(BaseModel):
     total: int
 
 
+class SelfEligibleMaterialsResponse(BaseModel):
+    items: list[OwnerEligibleMaterialItem]
+    total: int
+
+
 class PackageDecision(str, Enum):
     ACCEPT = "ACCEPT"
     DECLINE = "DECLINE"
 
 
+class PackageCreateRequest(BaseModel):
+    expected_version: int = Field(ge=1)
+    items: list[ContentSelectionItem] = Field(min_length=1)
+
+
+class ContentPeriodMapping(BaseModel):
+    source_academic_period_id: int = Field(gt=0)
+    destination_academic_period_id: int = Field(gt=0)
+
+
 class PackageDecisionRequest(BaseModel):
     decision: PackageDecision
     expected_version: int = Field(ge=1)
+    period_mappings: list[ContentPeriodMapping] = Field(default_factory=list)
+
+
+class SelfCloneRequest(BaseModel):
+    destination_class_id: int
+    destination_subject_id: int
+    destination_academic_period_id: int
+    items: list[ContentSelectionItem] = Field(min_length=1, max_length=100)
+    period_mappings: list[ContentPeriodMapping] = Field(default_factory=list)
 
 
 class RequesterVisiblePackageSummary(BaseModel):
-    """Future PR B response: includes safe item titles and counts; intentionally excludes source IDs and snapshots."""
+    """PR B response: includes safe item titles and counts; intentionally excludes source IDs and snapshots."""
 
     package_id: uuid.UUID
     request_id: uuid.UUID
     status: ContentShareRequestStatus
+    source_owner_staff_id: str | None = None
+    source_owner_name: str | None = None
+    subject_id: int | None = None
+    subject_name: str | None = None
+    source_scope_mode: ContentSourceScopeMode | None = None
     sent_at: datetime
     expires_at: datetime
     summary: ContentSelectionSummary

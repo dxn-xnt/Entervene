@@ -1,7 +1,7 @@
 
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { useToast } from "@/components/retroui/use-toast";
 import { Dialog } from "@/components/retroui/Dialog";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -124,30 +124,30 @@ export default function TeacherProfile() {
               Select your profile picture:
             </p>
             <div className="grid grid-cols-3 gap-3 sm:gap-4">
-                  {TEACHER_AVATARS.map((avatarPath) => {
-                    const isSelected = tempSelectedAvatar === avatarPath;
-                    return (
-                      <Tooltip key={avatarPath}>
-                        <TooltipTrigger render={<button
-                        type="button"
-                        aria-label={`Select teacher avatar ${TEACHER_AVATARS.indexOf(avatarPath) + 1}`}
-                        aria-pressed={isSelected}
-                        onClick={() => setTempSelectedAvatar(avatarPath)}
-                        className={`aspect-square cursor-pointer rounded border-2 p-2 transition-colors ${isSelected
-                          ? "border-primary bg-primary/20 ring-2 ring-primary ring-offset-2 ring-offset-background"
-                          : "border-border bg-card hover:bg-accent"
-                          }`}
-                      >
-                        <img
-                          src={avatarPath}
-                          alt=""
-                          className="h-full w-full object-contain"
-                        />
-                      </button>} />
-                        <TooltipContent>Select avatar {TEACHER_AVATARS.indexOf(avatarPath) + 1}</TooltipContent>
-                      </Tooltip>
-                    );
-                  })}
+              {TEACHER_AVATARS.map((avatarPath) => {
+                const isSelected = tempSelectedAvatar === avatarPath;
+                return (
+                  <Tooltip key={avatarPath}>
+                    <TooltipTrigger render={<button
+                      type="button"
+                      aria-label={`Select teacher avatar ${TEACHER_AVATARS.indexOf(avatarPath) + 1}`}
+                      aria-pressed={isSelected}
+                      onClick={() => setTempSelectedAvatar(avatarPath)}
+                      className={`aspect-square cursor-pointer rounded border-2 p-2 transition-colors ${isSelected
+                        ? "border-primary bg-primary/20 ring-2 ring-primary ring-offset-2 ring-offset-background"
+                        : "border-border bg-card hover:bg-accent"
+                        }`}
+                    >
+                      <img
+                        src={avatarPath}
+                        alt=""
+                        className="h-full w-full object-contain"
+                      />
+                    </button>} />
+                    <TooltipContent>Select avatar {TEACHER_AVATARS.indexOf(avatarPath) + 1}</TooltipContent>
+                  </Tooltip>
+                );
+              })}
             </div>
           </div>
 

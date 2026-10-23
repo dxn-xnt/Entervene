@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Accordion } from "@/components/retroui/Accordion";
 import { ArrowUpRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -84,17 +84,17 @@ export function SubjectGradeSection({
             </div>
             <Tooltip>
               <TooltipTrigger render={<span className="inline-flex"><Button
-              variant="link"
-              className="p-0 text-sm text-foreground inline-flex items-center gap-1"
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                navigate(`/admin/subjects/${encodeURIComponent(group.grade)}`);
-              }}
-            >
-              View all subjects
-              <ArrowUpRight className="size-4" />
-            </Button></span>} />
+                variant="link"
+                className="p-0 text-sm text-foreground inline-flex items-center gap-1"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  navigate(`/admin/subjects/${encodeURIComponent(group.grade)}`);
+                }}
+              >
+                View all subjects
+                <ArrowUpRight className="size-4" />
+              </Button></span>} />
               <TooltipContent>View {group.grade} subjects</TooltipContent>
             </Tooltip>
           </div>

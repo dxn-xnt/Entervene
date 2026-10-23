@@ -1,11 +1,11 @@
 """Pure passing-policy resolution for the current template-based schema.
 
-PR 1a: the explicitly requested existing year uses live validated policy, even
+The explicitly requested existing year uses live validated policy, even
 when inactive. The reader does not infer closure from active flags. Closure
 snapshots below are contracts only: no closure storage, finalization, revision
-workflow or year-scoped general-average configuration is implemented here.
-The raw global general-average setting is transitional legacy policy, not an
-initialized academic-year policy. Official SF9 reporting semantics are separate.
+workflow is implemented here. General-average values come only from confirmed
+year policies; raw global text is accepted only by admin initialization.
+Official SF9 reporting semantics are separate.
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from typing import Literal, Mapping
 
 ThresholdScope = Literal["subject", "general_average"]
 PolicyMode = Literal["live", "snapshot_required"]
-ThresholdSource = Literal["live_grading_template", "legacy_general_average_setting", "closure_snapshot"]
+ThresholdSource = Literal["live_grading_template", "academic_year_general_average_policy", "closure_snapshot"]
 GENERAL_AVERAGE_SETTING_KEY = "general_average_passing_grade"
 
 ERROR_MESSAGES = MappingProxyType({
@@ -29,8 +29,8 @@ ERROR_MESSAGES = MappingProxyType({
     "grading_template_missing": "The subject's configured grading template is missing.",
     "grading_template_mismatch": "The subject and grading-template identities do not match.",
     "passing_threshold_invalid": "The grading-template passing threshold must be a finite number from 0 to 100.",
-    "general_average_threshold_missing": "The legacy general-average passing-grade setting is missing.",
-    "general_average_threshold_invalid": "The raw legacy general-average setting must be a finite number from 0 to 100.",
+    "general_average_threshold_missing": "The academic year's general-average passing grade is not configured.",
+    "general_average_threshold_invalid": "The general-average passing grade must be a finite number from 0 to 100.",
     "historical_threshold_snapshot_missing": "A non-live year requires an explicit closure-policy snapshot.",
     "snapshot_scope_mismatch": "The snapshot does not match the requested year, scope or subject.",
     "snapshot_invalid": "The closure-policy snapshot or its provenance is invalid.",
@@ -127,7 +127,8 @@ class PassingThresholdContext:
     policy_mode: PolicyMode
     subjects: Mapping[int, SubjectThresholdConfig]
     grading_templates: Mapping[int, TemplateThresholdConfig]
-    general_average_raw: object
+    general_average_raw: object  # Retained for PR 1a caller compatibility; never consulted.
+    general_average_year_threshold: object = None
 
     def __post_init__(self):
         object.__setattr__(self, "subjects", MappingProxyType(dict(self.subjects)))
@@ -194,10 +195,14 @@ def resolve_passing_threshold(
         return _snapshot_resolution(result_snapshot, academic_year_id=academic_year_id,
                                     scope=scope, subject_id=subject_id)
     if scope == "general_average":
+        if context.general_average_year_threshold is None:
+            raise PassingThresholdConfigurationError("general_average_threshold_missing")
         return PassingThresholdResolution(
             academic_year_id=academic_year_id, scope=scope,
-            threshold=parse_raw_general_average_threshold(context.general_average_raw),
-            source="legacy_general_average_setting",
+            threshold=validate_passing_threshold(
+                context.general_average_year_threshold,
+                code="general_average_threshold_invalid"),
+            source="academic_year_general_average_policy",
         )
     subject = context.subjects.get(subject_id)
     if subject is None or subject.subject_id != subject_id:
