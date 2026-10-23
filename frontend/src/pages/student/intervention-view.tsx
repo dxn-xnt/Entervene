@@ -5,7 +5,6 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
-import { Badge } from "@/components/retroui/Badge";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Progress } from "@/components/retroui/Progress";
 import { useToast } from "@/components/retroui/Toast";

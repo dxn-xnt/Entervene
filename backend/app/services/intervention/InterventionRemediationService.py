@@ -144,12 +144,13 @@ def progress(db: Session, row: Intervention) -> dict:
         source_intervention_id=row.intervention_id, recipient_student_id=row.student_id,
     ).order_by(ClassworkAssignment.classwork_assignment_id).all()
     for assignment in assignments:
-        if not assignment.is_published or not assignment.classwork.is_published:
+        work = assignment.classwork
+        if not work or work.is_archived:
             continue
+        is_published = bool(assignment.is_published and work.is_published)
         submission = db.query(StudentSubmission).filter_by(
             classwork_assignment_id=assignment.classwork_assignment_id, student_id=row.student_id,
         ).order_by(StudentSubmission.submission_id.desc()).first()
-        work = assignment.classwork
         original_result = None
         effective_result = None
         if assignment.original_exam_assignment_id is not None:
@@ -163,6 +164,8 @@ def progress(db: Session, row: Intervention) -> dict:
                 effective_result = effective_exam_score_for_change(db, assignment, row.student_id,
                     float(submission.grade) if submission and submission.grade is not None else None)
         assigned.append({"title": work.title, "assignment_id": assignment.classwork_assignment_id,
+                         "classwork_id": work.classwork_id,
+                         "classwork_type": work.classwork_type,
                          "original_assignment_id": assignment.original_exam_assignment_id,
                          "exam_subtype": work.exam_subtype,
                          "original_title": original.classwork.title if assignment.original_exam_assignment_id is not None and original else None,
@@ -170,10 +173,11 @@ def progress(db: Session, row: Intervention) -> dict:
                          "effective_grade": effective_result,
                          "component": work.classwork_category,
                          "is_graded": work.is_graded,
-                         "submission_status": submission.status if submission else None,
+                         "is_published": is_published,
+                         "submission_status": submission.status if submission else ("draft" if not is_published else None),
                          "grade": float(submission.grade) if submission and submission.grade is not None and work.show_scores else None,
                          "total_points": float(work.total_points) if work.total_points is not None and work.show_scores else None})
-        if submission and submission.status == "graded":
+        if is_published and submission and submission.status == "graded":
             completed.append({"title": work.title, "assignment_id": assignment.classwork_assignment_id,
                               "grade": float(submission.grade) if submission.grade is not None and work.show_scores else None,
                               "total_points": float(work.total_points) if work.total_points is not None and work.show_scores else None})

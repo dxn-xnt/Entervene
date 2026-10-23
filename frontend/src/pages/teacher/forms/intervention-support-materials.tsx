@@ -13,7 +13,7 @@ import { Select } from "@/components/retroui/Select";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Empty } from "@/components/retroui/Empty";
-import { Activity, SlidersHorizontal } from "lucide-react";
+import { Activity, Check, Plus, Search } from "lucide-react";
 import {
   createSupportMaterial,
   generateStudentReviewer,
@@ -45,8 +45,8 @@ const date = (value: string) =>
 const methods: Array<{ value: RemediationFormat; label: string; detail: string }> = [
   { value: "QUIZ", label: "Quiz", detail: "Focused practice in the existing Quiz builder" },
   { value: "CLASSWORK", label: "Classwork", detail: "Targeted activity in the existing Classwork creator" },
-  { value: "TOS", label: "TOS blueprint", detail: "Assessment blueprint and export only; no student grade" },
-  { value: "EXISTING_MATERIAL_ONLY", label: "Materials only", detail: "Planning references; no new graded assessment" },
+  { value: "TOS", label: "TOS blueprint", detail: "Assessment blueprint and export only" },
+  { value: "EXISTING_MATERIAL_ONLY", label: "Materials only", detail: "Planning references only, no new graded assessment" },
 ];
 
 const label = (value: string) =>
@@ -104,7 +104,7 @@ const InterventionSupportMaterials = forwardRef<
   });
   const [reviewerDraft, setReviewerDraft] = useState<ReviewerDraft | null>(null);
   const [browseAll, setBrowseAll] = useState(false);
-  const [panel, setPanel] = useState<"" | "reviewer" | "materials" | "remediation">("");
+  const [panel, setPanel] = useState<"" | "reviewer" | "materials">("");
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState("ALL");
   const [working, setWorking] = useState(false);
@@ -161,15 +161,23 @@ const InterventionSupportMaterials = forwardRef<
     () => new Set(plan.selected_resources.map((item) => `${item.kind}:${item.id}`)),
     [plan]
   );
+  const selectedResources = useMemo(
+    () => resources.filter((item) => selected.has(`${item.kind}:${item.id}`)),
+    [resources, selected]
+  );
   const precise = resources.filter((item) => item.recommended);
   const evidenceSources = resources.filter(
     (item) => item.match_level === "SOURCE_ACTIVITY"
   );
   const manuallySelected = resources.filter(
-    (item) => selected.has(`${item.kind}:${item.id}`) && !item.recommended
+    (item) =>
+      selected.has(`${item.kind}:${item.id}`) &&
+      !item.recommended &&
+      item.match_level !== "SOURCE_ACTIVITY"
   );
   const visible = resources.filter(
     (item) =>
+      item.match_level !== "SOURCE_ACTIVITY" &&
       (browseAll || item.recommended) &&
       (kindFilter === "ALL" || item.kind === kindFilter) &&
       `${item.title} ${item.description} ${item.lesson}`
@@ -187,14 +195,14 @@ const InterventionSupportMaterials = forwardRef<
     [];
   const phase = progress?.completed_remediation.length
     ? "Monitoring"
-    : assigned.length
+    : assigned.some((item) => item.is_published !== false)
       ? "Assigned"
-      : plan.teacher_choice
-        ? "Preparing Support"
-        : "Needs Support";
-  const selectedMethod = methods.find(
-    (item) => item.value === plan.teacher_choice
-  );
+      : assigned.length
+        ? "Draft Prepared"
+        : plan.teacher_choice
+          ? "Preparing Support"
+          : "Needs Support";
+  const hasConfiguredSupport = Boolean(plan.teacher_choice || assigned.length > 0);
   const focusName = focus?.component
     ? componentLabel(focus.component)
     : "Component unavailable";
@@ -515,263 +523,330 @@ const InterventionSupportMaterials = forwardRef<
                 )}
               </div>
 
-              {/* Current Support */}
-              {assigned.length > 0 ? (
-                <div className="flex flex-col gap-1">
-                  <h3 className="font-black mb-2">Current Support</h3>
-                  {assigned.map((item) => (
-                    <Card
-                      key={item.assignment_id}
-                      className="p-3 text-sm space-y-1.5 w-full"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-semibold">{item.title}</span>
-                        <Badge
-                          variant={item.submission_status === "graded" ? "solid" : "outline"}
-                          size="sm"
-                        >
-                          {item.submission_status === "graded"
-                            ? "Completed"
-                            : label(item.submission_status || "Awaiting submission")}
-                        </Badge>
-                      </div>
-                      {item.grade != null && item.total_points != null && (
-                        <p className="text-xs text-muted-foreground">
-                          Score: <strong>{item.grade}/{item.total_points}</strong>
-                        </p>
-                      )}
-                      <div className="text-xs text-muted-foreground pt-1 border-t border-border flex flex-wrap gap-x-3 gap-y-0.5">
-                        <span>
-                          Treatment:{" "}
-                          <strong>
-                            {item.is_graded
-                              ? plan.teacher_choice === "EXISTING_MATERIAL_ONLY"
-                                ? "Historical grade treatment"
-                                : `Count as ${componentLabel(item.component)}`
-                              : "Practice only · No official grade impact"}
-                          </strong>
-                        </span>
-                        {item.original_assignment_id && (
-                          <>
-                            <span>
-                              Original: {item.original_title} ·{" "}
-                              {componentLabel(item.exam_subtype || "Examination")}
-                            </span>
-                            <span>
-                              Original: {item.original_grade ?? "—"}/{item.total_points ?? "—"}
-                            </span>
-                            <span>
-                              Remedial: {item.grade ?? "Pending"}/{item.total_points ?? "—"}
-                            </span>
-                            <span>
-                              Effective:{" "}
-                              <strong>
-                                {item.effective_grade ?? "—"}/{item.total_points ?? "—"}
-                              </strong>
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </Card>
-                  ))}
-
-                  <Card className="w-full space-y-1.5 p-3 text-sm border-2 border-border">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-sm">Official Academic Outcome</h4>
-                      <Badge variant="outline" size="sm">{phase}</Badge>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-sm pt-1">
-                      <p>
-                        Trigger projection: <strong>{progress?.triggering_projection.toFixed(2)}</strong>
-                      </p>
-                      <p>
-                        Latest projected grade:{" "}
-                        <strong>{progress?.latest_projection?.toFixed(2) ?? "Unavailable"}</strong>
-                      </p>
-                    </div>
-                    <p className="text-xs text-muted-foreground pt-1 border-t border-border">
-                      {progress?.completed_remediation.length
-                        ? "The student completed the support activity. "
-                        : ""}
-                      {progress?.status_reason} Completion alone does not resolve the Intervention.
-                    </p>
-                  </Card>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-1">
-                  <h3 className="font-black">Current Support</h3>
-                  <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
-                    <Empty.Content>
-                      <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
-                        <Activity className="size-8" />
-                      </Empty.Icon>
-                      <Empty.Description className="text-sm text-muted-foreground">
-                        No support activity has been recorded yet. Click Adjust Support below to configure learning resources and prepare remediation.
-                      </Empty.Description>
-                      <Button
-                        size="sm"
-                        variant="default"
-                        onClick={onAdjustSupport}
-                        className="mt-1"
-                      >
-                        <SlidersHorizontal className="size-3.5 mr-1.5" />
-                        Adjust Support
-                      </Button>
-                    </Empty.Content>
-                  </Empty>
-                </div>
-              )}
-
               {/* Prepared Support Plan */}
               <div className="flex flex-col gap-1">
                 <div className="flex flex-row gap-2">
                   <h4 className="font-bold text-lg">Prepared Support Plan</h4>
                   <div className="flex items-center">
-                    {plan.teacher_choice ? (
+                    {hasConfiguredSupport ? (
                       <Badge variant="solid" size="sm">Configured</Badge>
                     ) : (
                       <Badge variant="outline" size="sm">Needs Setup</Badge>
                     )}
                   </div>
                 </div>
-                <Card className="w-full flex flex-col gap-3">
-                  {plan.teacher_choice ? (
-                    <div className="space-y-2 text-sm">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <p>
-                          Method:{" "}
-                          <strong>
-                            {methods.find((item) => item.value === plan.teacher_choice)?.label}
-                          </strong>
-                        </p>
-                        {isGraded(plan.teacher_choice) && (
-                          <p>
-                            Grade treatment:{" "}
-                            <strong>
-                              {plan.grade_treatment === "PRACTICE_ONLY"
-                                ? "Practice only · No official grade impact"
-                                : plan.grade_treatment
-                                  ? componentLabel(plan.grade_treatment)
-                                  : "Selection required"}
-                            </strong>
-                          </p>
-                        )}
-                        {plan.grade_treatment === "EXAMINATION" && (
-                          <p className="col-span-full">
-                            Original Exam:{" "}
-                            <strong>
-                              {originalExams.find(
-                                (exam) =>
-                                  exam.assignment_id === plan.original_exam_assignment_id
-                              )?.title ?? "Selection required"}
-                            </strong>
-                          </p>
-                        )}
-                        {isGraded(plan.teacher_choice) && (
-                          <p className="col-span-full text-xs text-muted-foreground">
-                            Recipient: <strong>This student only</strong>
-                          </p>
-                        )}
-                        {plan.teacher_choice === "TOS" && (
-                          <p className="text-xs text-muted-foreground">
-                            TOS is a blueprint/export. It creates no graded student activity.
-                          </p>
-                        )}
-                        {plan.teacher_choice === "EXISTING_MATERIAL_ONLY" && (
-                          <p className="text-xs text-muted-foreground">
-                            Selected materials remain planning references; they are not
-                            privately delivered.
-                          </p>
-                        )}
+
+                <Card className="flex flex-col gap-2">
+                  <Card className="w-full p-1 flex flex-col gap-3">
+                    {assigned.length > 0 ? (
+                      <div className="space-y-3 text-base">
+                        {assigned.map((item, idx) => {
+                          const methodLabel = item.classwork_type
+                            ? item.classwork_type === "QUIZ"
+                              ? "Quiz"
+                              : item.classwork_type === "ASSIGNMENT"
+                                ? "Assignment"
+                                : label(item.classwork_type)
+                            : methods.find((m) => m.value === plan.teacher_choice)?.label ?? "Classwork";
+
+                          const treatmentLabel = item.is_graded
+                            ? item.component
+                              ? `Count as ${componentLabel(item.component)}`
+                              : "Graded"
+                            : "Practice only · No official grade impact";
+
+                          const examLabel = item.original_title
+                            ? `${item.original_title}${item.exam_subtype ? ` · ${componentLabel(item.exam_subtype)}` : ""}`
+                            : originalExams.find((e) => e.assignment_id === item.original_assignment_id)?.title ?? null;
+
+                          return (
+                            <div
+                              key={item.assignment_id}
+                              className={
+                                idx > 0
+                                  ? "pt-3 border-t border-border grid grid-cols-1 sm:grid-cols-2 gap-2"
+                                  : "grid grid-cols-1 sm:grid-cols-2 gap-2"
+                              }
+                            >
+                              <p>
+                                Activity: <strong>{item.title}</strong>
+                              </p>
+                              <p>
+                                Method: <strong>{methodLabel}</strong>
+                              </p>
+                              <p>
+                                Grade treatment: <strong>{treatmentLabel}</strong>
+                              </p>
+                              {item.original_assignment_id && examLabel && (
+                                <p className="col-span-full">
+                                  Original Exam: <strong>{examLabel}</strong>
+                                </p>
+                              )}
+                              <p className="col-span-full">
+                                Recipient: <strong>This student only</strong>
+                              </p>
+                            </div>
+                          );
+                        })}
                       </div>
+                    ) : plan.teacher_choice ? (
+                      <div className="space-y-2 text-base">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <p>
+                            Method:{" "}
+                            <strong>
+                              {methods.find((item) => item.value === plan.teacher_choice)?.label}
+                            </strong>
+                          </p>
+                          {isGraded(plan.teacher_choice) && (
+                            <p>
+                              Grade treatment:{" "}
+                              <strong>
+                                {plan.grade_treatment === "PRACTICE_ONLY"
+                                  ? "Practice only · No official grade impact"
+                                  : plan.grade_treatment
+                                    ? `Count as ${componentLabel(plan.grade_treatment)}`
+                                    : "Selection required"}
+                              </strong>
+                            </p>
+                          )}
+                          {plan.grade_treatment === "EXAMINATION" && (
+                            <p className="col-span-full">
+                              Original Exam:{" "}
+                              <strong>
+                                {originalExams.find(
+                                  (exam) =>
+                                    exam.assignment_id === plan.original_exam_assignment_id
+                                )?.title ?? "Selection required"}
+                              </strong>
+                            </p>
+                          )}
+                          {isGraded(plan.teacher_choice) && (
+                            <p className="col-span-full">
+                              Recipient: <strong>This student only</strong>
+                            </p>
+                          )}
+                          {plan.teacher_choice === "TOS" && (
+                            <p className="text-muted-foreground">
+                              TOS is a blueprint/export. It creates no graded student activity.
+                            </p>
+                          )}
+                          {plan.teacher_choice === "EXISTING_MATERIAL_ONLY" && (
+                            <p className="text-muted-foreground">
+                              Selected materials remain planning references; they are not
+                              privately delivered.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No support method has been chosen yet. Click Add Intervention Activity below to plan one.
+                      </p>
+                    )}
+
+                  </Card>
+
+                  {/* Current Support */}
+                  {assigned.length > 0 ? (
+                    <div className="flex flex-col gap-2">
+                      {assigned.map((item) => (
+                        <Card
+                          key={item.assignment_id}
+                          className="border-2! p-3 text-sm space-y-1.5 w-full"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-semibold">{item.title}</span>
+                            <Badge
+                              variant={
+                                item.submission_status === "graded"
+                                  ? "solid"
+                                  : item.is_published === false || item.submission_status === "draft"
+                                    ? "secondary"
+                                    : "outline"
+                              }
+                              size="sm"
+                            >
+                              {item.is_published === false || item.submission_status === "draft"
+                                ? "Draft"
+                                : item.submission_status === "graded"
+                                  ? "Completed"
+                                  : label(item.submission_status || "Awaiting submission")}
+                            </Badge>
+                          </div>
+                          {item.grade != null && item.total_points != null && (
+                            <p className="text-xs text-muted-foreground">
+                              Score: <strong>{item.grade}/{item.total_points}</strong>
+                            </p>
+                          )}
+                          <div className="text-xs text-muted-foreground pt-1 border-t border-border flex flex-wrap gap-x-3 gap-y-0.5">
+                            <span>
+                              Treatment:{" "}
+                              <strong>
+                                {item.is_graded
+                                  ? plan.teacher_choice === "EXISTING_MATERIAL_ONLY"
+                                    ? "Historical grade treatment"
+                                    : `Count as ${componentLabel(item.component)}`
+                                  : "Practice only · No official grade impact"}
+                              </strong>
+                            </span>
+                            {item.original_assignment_id && (
+                              <>
+                                <span>
+                                  Original: {item.original_title} ·{" "}
+                                  {componentLabel(item.exam_subtype || "Examination")}
+                                </span>
+                                <span>
+                                  Original: {item.original_grade ?? "—"}/{item.total_points ?? "—"}
+                                </span>
+                                <span>
+                                  Remedial: {item.grade ?? "Pending"}/{item.total_points ?? "—"}
+                                </span>
+                                <span>
+                                  Effective:{" "}
+                                  <strong>
+                                    {item.effective_grade ?? "—"}/{item.total_points ?? "—"}
+                                  </strong>
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </Card>
+                      ))}
+
+                      <Card className="border-2! w-full space-y-1.5 p-3 text-sm border-2 border-border">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-bold text-sm">Official Academic Outcome</h4>
+                          <Badge variant="outline" size="sm">{phase}</Badge>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-sm pt-1">
+                          <p>
+                            Trigger projection: <strong>{progress?.triggering_projection.toFixed(2)}</strong>
+                          </p>
+                          <p>
+                            Latest projected grade:{" "}
+                            <strong>{progress?.latest_projection?.toFixed(2) ?? "Unavailable"}</strong>
+                          </p>
+                        </div>
+                        <p className="text-xs text-muted-foreground pt-1 border-t border-border">
+                          {progress?.completed_remediation.length
+                            ? "The student completed the support activity. "
+                            : ""}
+                          {progress?.status_reason} Completion alone does not resolve the Intervention.
+                        </p>
+                      </Card>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No support method has been chosen yet. Click Adjust Support below to plan one.
-                    </p>
+                    <div className="flex flex-col gap-1">
+                      <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+                        <Empty.Content>
+                          <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
+                            <Activity className="size-8" />
+                          </Empty.Icon>
+                          <Empty.Description className="text-sm text-muted-foreground">
+                            No support activity has been recorded yet. Click Adjust Support below to configure learning resources and prepare remediation.
+                          </Empty.Description>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={onAdjustSupport}
+                            className="mt-1"
+                          >
+                            <Plus className="size-3.5 mr-1.5" />
+                            Add Intervention Activity
+                          </Button>
+                        </Empty.Content>
+                      </Empty>
+                    </div>
                   )}
-                  <div className="border-t border-border pt-2 space-y-1.5 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span>Student Reviewer:</span>
-                      <Badge
-                        variant={
-                          reviewer?.status === "SENT"
-                            ? "solid"
-                            : reviewer
-                              ? "secondary"
-                              : "outline"
-                        }
-                        size="sm"
-                      >
-                        {reviewer?.status === "SENT"
-                          ? "Sent to student"
+
+                  <div className="flex items-center gap-2 text-base">
+                    <span>Student Reviewer:</span>
+                    <Badge
+                      variant={
+                        reviewer?.status === "SENT"
+                          ? "solid"
                           : reviewer
-                            ? "Private draft"
-                            : "Not prepared"}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Planning references:</span>
-                      <Badge variant="outline" size="sm">
-                        {plan.selected_resources.length} selected
-                      </Badge>
-                    </div>
+                            ? "secondary"
+                            : "outline"
+                      }
+                      size="sm"
+                    >
+                      {reviewer?.status === "SENT"
+                        ? "Sent to student"
+                        : reviewer
+                          ? "Private draft"
+                          : "Not prepared"}
+                    </Badge>
+                  </div>
+
+                  <div className="flex flex-col text-base gap-2">
+                    <span>Supporting Resources:</span>
+                    {selectedResources.length > 0 ? (
+                      <Card className="">
+                        {selectedResources.map((item) => item.title).join(", ")}
+                      </Card>
+                    ) : (
+                      <span className="text-muted-foreground">None selected</span>
+                    )}
                   </div>
                 </Card>
               </div>
-
             </>
           )}
 
           {page === "plan" && (
-            <div className="flex flex-col w-full gap-2">
-              <h3 className="font-black">Recommended Support</h3>
-              <Card className="w-full">
-                <p className="text-base">
-                  Evidence-based focus: <strong>{focusName}</strong>
-                  <span className="text-sm text-muted-foreground ml-1">{sourceName ? `(${sourceName})` : ""}</span>
+            <div className="flex flex-col w-full gap-3">
+              <div className="flex flex-col gap-1">
+                <h3 className="font-black">Recommended Support</h3>
+                <Card className="w-full">
+                  <p className="text-base">
+                    Evidence-based focus: <strong>{focusName}</strong>
+                    <span className="text-sm text-muted-foreground ml-1">{sourceName ? `(${sourceName})` : ""}</span>
 
-                </p>
-                <p className="text-base">
-                  {focus?.evidence_level === "COMPONENT_ONLY"
-                    ? "General practice and teacher review are appropriate; no specific topic is established."
-                    : "Use only the traceable scored or coverage context shown above."}
-                </p>
-                <div className="flex justify-end">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={working}
-                    onClick={requestAdvisory}
-                  >
-                    {plan.ai_suggestion ? "Refresh AI advisory" : "Get AI advisory"}
-                  </Button>
-                </div>
+                  </p>
+                  <p className="text-base">
+                    {focus?.evidence_level === "COMPONENT_ONLY"
+                      ? "General practice and teacher review are appropriate; no specific topic is established."
+                      : "Use only the traceable scored or coverage context shown above."}
+                  </p>
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={working}
+                      onClick={requestAdvisory}
+                    >
+                      {plan.ai_suggestion ? "Refresh AI advisory" : "Get AI advisory"}
+                    </Button>
+                  </div>
 
-                {plan.ai_suggestion && (
-                  <Card className="border-2 border-primary/40 bg-primary/10 p-3 space-y-1.5 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="solid" size="sm">AI Advisory</Badge>
-                      <strong className="font-bold">
-                        {
-                          methods.find(
-                            (item) => item.value === plan.ai_suggestion?.recommended_format
-                          )?.label
-                        }
-                      </strong>
-                    </div>
-                    <p>{plan.ai_suggestion.reason}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Format advice only. Diagnosis and grade treatment come from saved
-                      evidence and teacher choice.
-                    </p>
-                  </Card>
-                )}
-              </Card>
+                  {plan.ai_suggestion && (
+                    <Card className="border-2 border-primary/40 bg-primary/10 p-3 space-y-1.5 text-sm">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="solid" size="sm">AI Advisory</Badge>
+                        <strong className="font-bold">
+                          {
+                            methods.find(
+                              (item) => item.value === plan.ai_suggestion?.recommended_format
+                            )?.label
+                          }
+                        </strong>
+                      </div>
+                      <p>{plan.ai_suggestion.reason}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Format advice only. Diagnosis and grade treatment come from saved
+                        evidence and teacher choice.
+                      </p>
+                    </Card>
+                  )}
+                </Card>
+              </div>
 
-              <h3 className="font-black">Support Materials</h3>
-              <Card className="w-full">
-                <p>
+              <div className="flex flex-col gap-1">
+                <h3 className="font-black">Supporting Resources</h3>
+                <Card className="w-full space-y-2.5">
+                  {/* <p>
                   <strong>Student Reviewer</strong> · Optional study support ·{" "}
                   {reviewer?.status === "SENT"
                     ? "Sent to student"
@@ -790,41 +865,59 @@ const InterventionSupportMaterials = forwardRef<
                   onClick={() => setPanel("reviewer")}
                 >
                   Open reviewer
-                </Button>
-                <p className="font-semibold">Recommended Materials</p>
-                {precise.length ? (
-                  <p className="text-sm">
-                    {precise.length} evidence-matched learning{" "}
-                    {precise.length === 1 ? "resource" : "resources"} available.
-                  </p>
-                ) : (
-                  <p className="text-sm text-gray-600">
-                    No precise lesson/material recommendation can be made from the
-                    current component-level evidence.
-                  </p>
-                )}
-                {evidenceSources.length > 0 && (
-                  <p className="text-sm text-gray-600">
-                    Related evidence source:{" "}
-                    {evidenceSources.map((item) => item.title).join("; ")}. This
-                    assessment is not a recommended learning material.
-                  </p>
-                )}
-                {manuallySelected.length > 0 && (
-                  <p className="text-sm">
-                    Teacher selected manually:{" "}
-                    {manuallySelected.map((item) => item.title).join("; ")}
-                  </p>
-                )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setPanel("materials")}
-                >
-                  Select resources
-                </Button>
-              </Card>
+                </Button> */}
 
+                  <div className="flex flex-col gap-1">
+                    <p className="text-sm font-medium">Related evidence sources:</p>
+                    <div className="flex flex-col gap-2">
+                      {evidenceSources.map((item) => (
+                        <Card
+                          key={`evidence:${item.kind}:${item.id}`}
+                          className="border-2! p-2.5 px-3 text-sm flex items-center justify-between gap-2 hover:bg-retro"
+                        >
+                          <strong className="font-bold">{item.title}</strong>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                  {precise.length ? (
+                    <p className="text-sm px-1 -mt-1">
+                      {precise.length} evidence-matched learning{" "}
+                      {precise.length === 1 ? "resource" : "resources"} available.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground px-1 -mt-1">
+                      No precise lesson/material recommendation can be made from the
+                      current component-level evidence.
+                    </p>
+                  )}
+
+                  <div className="flex flex-col gap-1">
+                    <p className="text-sm font-medium">Teacher-selected:</p>
+                    <div className="flex flex-col gap-2">
+                      {manuallySelected.map((item) => (
+                        <Card
+                          key={`manual:${item.kind}:${item.id}`}
+                          className="border-2! p-2.5 px-3 text-sm flex items-center justify-between gap-2 hover:bg-retro"
+                        >
+                          <strong className="font-bold">{item.title}</strong>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex w-full justify-end">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-2"
+                      onClick={() => setPanel("materials")}
+                    >
+                      Select resources
+                    </Button>
+                  </div>
+                </Card>
+              </div>
               <Dialog
                 open={panel === "reviewer"}
                 onOpenChange={(open) => setPanel(open ? "reviewer" : "")}
@@ -976,31 +1069,20 @@ const InterventionSupportMaterials = forwardRef<
                     </Dialog.Title>
                   </Dialog.Header>
                   <div className="flex-1 space-y-3 overflow-y-auto p-5">
-                    <p className="text-sm text-muted-foreground">
-                      Selected items are planning references. Access follows existing
-                      publication rules. File contents were not analyzed.
-                    </p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setBrowseAll((current) => !current)}
-                      >
-                        {browseAll
-                          ? "Show recommended materials"
-                          : "Browse all eligible materials"}
-                      </Button>
-                    </div>
+
                     <div className="flex flex-col sm:flex-row gap-2">
-                      <Input
-                        aria-label="Search materials"
-                        placeholder="Search materials..."
-                        className="min-w-0 flex-1"
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                      />
+                      <label className="relative min-w-0 flex-1 sm:min-w-48">
+                        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50 z-10" />
+                        <Input
+                          value={search}
+                          onChange={(event) => setSearch(event.target.value)}
+                          placeholder="Search materials..."
+                          className="h-10 w-full border-black pl-9 pr-3 text-base"
+                        />
+                      </label>
+
                       <Select value={kindFilter} onValueChange={(val) => setKindFilter(val)}>
-                        <Select.Trigger className="w-full sm:w-48 h-10">
+                        <Select.Trigger className="w-full text-sm font-normal sm:w-48 h-10">
                           <Select.Value placeholder="Filter type" />
                         </Select.Trigger>
                         <Select.Content>
@@ -1011,296 +1093,133 @@ const InterventionSupportMaterials = forwardRef<
                       </Select>
                     </div>
                     {visible.length ? (
-                      <div className="space-y-2">
+                      <Card className="flex flex-col px-3 min-h-40">
                         {visible.map((item) => {
                           const isChecked = selected.has(`${item.kind}:${item.id}`);
                           return (
                             <Card
                               key={`${item.kind}:${item.id}`}
-                              className={`flex items-start gap-3 p-3 transition-colors cursor-pointer border-2 ${isChecked
-                                ? "border-primary bg-primary/5"
-                                : "border-border hover:bg-muted/30"
+                              className={`flex items-start gap-3 p-3 transition-colors border-2! cursor-pointer border-2 ${isChecked
+                                ? "border-primary bg-primary"
+                                : "border-border hover:bg-retro"
                                 }`}
                               onClick={() => !working && toggleResource(item)}
                             >
                               <Checkbox
                                 checked={isChecked}
                                 disabled={working}
-                                className="mt-0.5"
+                                variant="solid"
+                                className={`mt-0.5 border-black transition-colors ${isChecked ? "bg-black text-white" : "bg-white text-black"
+                                  }`}
+                                onClick={(e) => e.stopPropagation()}
                                 onCheckedChange={() => toggleResource(item)}
                               />
                               <div className="space-y-1 min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-1.5">
+                                <div className="flex flex-wrap items-center justify-between gap-1.5">
                                   <strong className="text-sm font-bold">{item.title}</strong>
-                                  <Badge
-                                    variant={item.recommended ? "secondary" : "outline"}
-                                    size="sm"
-                                  >
-                                    {item.recommended
-                                      ? "Recommended"
-                                      : item.match_level === "SOURCE_ACTIVITY"
-                                        ? "Related source"
-                                        : "Teacher selected"}
-                                  </Badge>
-                                  <Badge variant="surface" size="sm">
-                                    {item.access === "ALREADY_ACCESSIBLE"
-                                      ? "Accessible to class"
-                                      : "Planning reference only"}
-                                  </Badge>
+
+                                  {(item.recommended || item.match_level === "SOURCE_ACTIVITY") && (
+                                    <Badge
+                                      variant={item.recommended ? "secondary" : "outline"}
+                                      size="sm"
+                                    >
+                                      {item.recommended ? "Recommended" : "Related source"}
+                                    </Badge>
+                                  )}
+
                                 </div>
                                 {item.match_reason && (
-                                  <p className="text-xs text-muted-foreground">{item.match_reason}</p>
+                                  <p className="text-xs text-foreground">{item.match_reason}</p>
                                 )}
                               </div>
                             </Card>
                           );
                         })}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground text-center py-4">
-                        {browseAll
-                          ? "No eligible materials match this search."
-                          : "No precise learning resources match this evidence. Browse all eligible materials for a teacher-selected reference."}
-                      </p>
-                    )}
-                  </div>
-                  <Dialog.Footer className="mt-0">
-                    <Button onClick={() => setPanel("")}>Done</Button>
-                  </Dialog.Footer>
-                </Dialog.Content>
-              </Dialog>
-
-              <h3 className="font-black text-base">Remediation Activity</h3>
-              <Card className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold">Chosen method:</span>
-                    {selectedMethod ? (
-                      <Badge variant="surface" size="sm">
-                        {selectedMethod.label}
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" size="sm">
-                        Not chosen
-                      </Badge>
-                    )}
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPanel("remediation")}
-                  >
-                    {selectedMethod ? "Change method" : "Choose method"}
-                  </Button>
-                </div>
-                {selectedMethod ? (
-                  <p className="text-xs text-muted-foreground">
-                    {selectedMethod.detail}
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Choose how you want to prepare remedial practice for this student.
-                  </p>
-                )}
-              </Card>
-
-              <Dialog
-                open={panel === "remediation"}
-                onOpenChange={(open) => setPanel(open ? "remediation" : "")}
-              >
-                <Dialog.Content size="md" className="max-h-[85vh]">
-                  <Dialog.Header>
-                    <div className="flex items-center gap-2">
-                      <Dialog.Title className="text-lg font-bold">
-                        Choose Support Method
-                      </Dialog.Title>
-                      {selectedMethod && (
-                        <Badge variant="surface" size="sm">
-                          {selectedMethod.label}
-                        </Badge>
-                      )}
-                    </div>
-                  </Dialog.Header>
-                  <div className="flex-1 space-y-3 overflow-y-auto p-5">
-                    <p className="text-sm text-muted-foreground">
-                      Select how you want to deliver remediation. Graded methods allow grade treatment configuration in the next step.
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {methods.map((method) => {
-                        const isSelected = plan.teacher_choice === method.value;
-                        return (
-                          <Card
-                            key={method.value}
-                            className={`p-3 cursor-pointer border-2 transition-all ${isSelected
-                              ? "border-primary bg-primary/10 shadow-sm"
-                              : "border-border hover:bg-muted/40"
-                              }`}
-                            onClick={() => {
-                              if (working) return;
-                              setPlan((current) => ({
-                                ...current,
-                                teacher_choice: method.value,
-                                grade_treatment: isGraded(method.value)
-                                  ? (current.grade_treatment ?? "PRACTICE_ONLY")
-                                  : null,
-                              }));
-                            }}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-bold text-sm">{method.label}</span>
-                              {isSelected && (
-                                <Badge variant="solid" size="sm">
-                                  Selected
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {method.detail}
-                            </p>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <Dialog.Footer className="mt-0">
-                    <Button onClick={() => setPanel("")}>Done</Button>
-                  </Dialog.Footer>
-                </Dialog.Content>
-              </Dialog>
-
-              {isGraded(plan.teacher_choice) && (
-                <Card className="space-y-3 border-2 border-primary/50 bg-card">
-                  <div className="flex items-center justify-between border-b border-border pb-2">
-                    <h3 className="font-black text-base">Step 5 · Grade treatment</h3>
-                    <Badge variant="outline" size="sm">Graded</Badge>
-                  </div>
-                  <p className="text-sm">
-                    Support focus: <strong>{focusName}</strong>
-                    <p className="ml-1.5 text-muted-foreground text-sm">({sourceName})</p>
-                  </p>
-                  {focus?.component === "EXAMINATION" && (
-                    <p className="text-xs text-muted-foreground">
-                      Select the student's scored original Examination. Its subtype and
-                      maximum points will be fixed for the remedial assessment.
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    Practice only stores completion without changing grades. Written
-                    Work and Performance Task add a new activity in that component.
-                    Remedial Examination replaces the original assessment's effective
-                    score only when higher.
-                  </p>
-                  <div className="space-y-2">
-                    <Label className="font-bold text-sm">
-                      How should this activity be treated?
-                    </Label>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      {(["PRACTICE_ONLY", "WRITTEN_WORK", "PERFORMANCE_TASK"] as const).map(
-                        (choice) => {
-                          const isSelected = plan.grade_treatment === choice;
-                          return (
-                            <Card
-                              key={choice}
-                              className={`p-2.5 cursor-pointer border-2 transition-all text-xs font-semibold flex items-center justify-between ${isSelected
-                                ? "border-primary bg-primary/10"
-                                : "border-border hover:bg-muted/40"
-                                }`}
-                              onClick={() => {
-                                if (working) return;
-                                setPlan((current) => ({
-                                  ...current,
-                                  grade_treatment: choice,
-                                  original_exam_assignment_id: null,
-                                }));
-                              }}
-                            >
-                              <span>
-                                {choice === "PRACTICE_ONLY"
-                                  ? "Practice only"
-                                  : componentLabel(choice)}
-                              </span>
-                              {isSelected && <Badge variant="solid" size="sm">✓</Badge>}
-                            </Card>
-                          );
-                        }
-                      )}
-                    </div>
-                    {focus?.component === "EXAMINATION" && (
-                      <Card
-                        className={`p-2.5 cursor-pointer border-2 transition-all text-xs font-semibold flex items-center justify-between ${plan.grade_treatment === "EXAMINATION"
-                          ? "border-primary bg-primary/10"
-                          : "border-border hover:bg-muted/40"
-                          } ${originalExams.length === 0 ? "opacity-50 pointer-events-none" : ""}`}
-                        onClick={() => {
-                          if (working || originalExams.length === 0) return;
-                          setPlan((current) => ({
-                            ...current,
-                            grade_treatment: "EXAMINATION",
-                            original_exam_assignment_id:
-                              (
-                                originalExams.find(
-                                  (exam) => exam.subtype === focus.exam_subtype
-                                ) ?? originalExams[0]
-                              )?.assignment_id ?? null,
-                          }));
-                        }}
-                      >
-                        <span>Remedial Examination · Higher score counts</span>
-                        {plan.grade_treatment === "EXAMINATION" && <Badge variant="solid" size="sm">✓</Badge>}
                       </Card>
+                    ) : (
+                      <Empty className="py-6 rounded!">
+                        <Empty.Content>
+                          <Empty.Description className="max-w-md text-sm">
+                            {browseAll
+                              ? "No eligible materials match this search."
+                              : "No precise learning resources match this evidence. Browse all eligible materials for a teacher-selected reference."}
+                          </Empty.Description>
+                        </Empty.Content>
+                      </Empty>
                     )}
+
+
+                    <div className="flex flex-wrap w-full justify-end gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => setBrowseAll((current) => !current)}
+                      >
+                        {browseAll
+                          ? "Show recommended materials"
+                          : "Browse eligible materials"}
+                      </Button>
+                    </div>
                   </div>
+                  <Dialog.Footer className="mt-0">
+                    <Button onClick={() => setPanel("")}>Done</Button>
+                  </Dialog.Footer>
+                </Dialog.Content>
+              </Dialog>
 
-                  {focus?.component === "EXAMINATION" && originalExams.length === 0 && (
-                    <Alert status="warning">
-                      No scored original Examination is available for this student and
-                      period.
-                    </Alert>
-                  )}
-
-                  {plan.grade_treatment === "EXAMINATION" && (
-                    <div className="space-y-1.5 pt-1">
-                      <Label className="text-sm font-bold">Original Examination</Label>
-                      <Select
-                        value={plan.original_exam_assignment_id != null ? String(plan.original_exam_assignment_id) : ""}
-                        onValueChange={(val) => {
-                          if (val) {
+              <div className="flex flex-col gap-1">
+                <h3 className="font-black">Remediation Activity</h3>
+                <Card className="flex flex-col gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {methods.map((method) => {
+                      const isSelected = plan.teacher_choice === method.value;
+                      return (
+                        <Card
+                          key={method.value}
+                          className={`p-3 cursor-pointer border-2! transition-all ${isSelected
+                            ? "border-primary bg-primary"
+                            : "hover:bg-retro"
+                            }`}
+                          onClick={() => {
+                            if (working) return;
                             setPlan((current) => ({
                               ...current,
-                              original_exam_assignment_id: Number(val),
+                              teacher_choice: method.value,
+                              grade_treatment: isGraded(method.value)
+                                ? (current.grade_treatment ?? "PRACTICE_ONLY")
+                                : null,
                             }));
-                          }
-                        }}
-                        disabled={working}
-                      >
-                        <Select.Trigger className="w-full h-10">
-                          <Select.Value placeholder="Select original examination..." />
-                        </Select.Trigger>
-                        <Select.Content>
-                          {originalExams.map((exam) => (
-                            <Select.Item key={exam.assignment_id} value={String(exam.assignment_id)}>
-                              {exam.title} · {componentLabel(exam.subtype)} · {exam.score}/{exam.total_points}
-                            </Select.Item>
-                          ))}
-                        </Select.Content>
-                      </Select>
-                    </div>
-                  )}
-
-                  {!plan.grade_treatment && (
-                    <Alert status="warning">
-                      Choose practice only or an official grade component before
-                      continuing.
-                    </Alert>
-                  )}
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-base">{method.label}</span>
+                            {isSelected && (
+                              <Badge variant="solid" size="sm">
+                                Selected
+                              </Badge>
+                            )}
+                          </div>
+                          <p className={`text-sm mt-1 ${isSelected
+                            ? "text-foreground"
+                            : "text-muted-foreground"
+                            }`}>
+                            {method.detail}
+                          </p>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                  <p className="text-sm text-muted-foreground px-1">
+                    Select how you want to deliver remediation. Graded methods allow grade treatment configuration in the next step.
+                  </p>
                 </Card>
-              )}
+              </div>
 
               {plan.teacher_choice && (
-                <Card className="space-y-3 border-2 border-primary/50 bg-primary/5">
+                <Card className="space-y-3 border-2">
                   <div className="flex items-center justify-between border-b border-border pb-2">
                     <h3 className="font-black text-base">Prepared support</h3>
-                    <Badge variant="surface" size="sm">Ready</Badge>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                     <p>Target: <strong>{detail.student_name}</strong></p>
@@ -1356,7 +1275,7 @@ const InterventionSupportMaterials = forwardRef<
                   )}
                   {plan.teacher_choice !== "EXISTING_MATERIAL_ONLY" && (
                     <div className="pt-2">
-                      <Button disabled={continueDisabled} onClick={openTool}>
+                      <Button disabled={continueDisabled} onClick={openTool} size="sm" className="gap-2">
                         Continue to{" "}
                         {plan.teacher_choice === "QUIZ"
                           ? "Quiz Builder"
@@ -1367,6 +1286,137 @@ const InterventionSupportMaterials = forwardRef<
                     </div>
                   )}
                 </Card>
+              )}
+
+              {isGraded(plan.teacher_choice) && (
+                <div className="flex flex-col gap-1">
+                  <h3 className="font-black text-xl">Grade Treatment</h3>
+                  <Card className="space-y-3 border-2 bg-card">
+                    {focus?.component === "EXAMINATION" && (
+                      <p className="text-xs text-muted-foreground">
+                        Select the student's scored original Examination. Its subtype and
+                        maximum points will be fixed for the remedial assessment.
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Practice only stores completion without changing grades. Written
+                      Work and Performance Task add a new activity in that component.
+                      Remedial Examination replaces the original assessment's effective
+                      score only when higher.
+                    </p>
+                    <div className="space-y-2">
+                      <Label className="font-bold text-sm">
+                        How should this activity be treated?
+                      </Label>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {(["PRACTICE_ONLY", "WRITTEN_WORK", "PERFORMANCE_TASK"] as const).map(
+                          (choice) => {
+                            const isSelected = plan.grade_treatment === choice;
+                            return (
+                              <Card
+                                key={choice}
+                                className={`p-2.5 cursor-pointer border-2 transition-all border-2! text-xs font-semibold flex items-center justify-between ${isSelected
+                                  ? "border-primary bg-primary"
+                                  : "border-border hover:bg-muted/40"
+                                  }`}
+                                onClick={() => {
+                                  if (working) return;
+                                  setPlan((current) => ({
+                                    ...current,
+                                    grade_treatment: choice,
+                                    original_exam_assignment_id: null,
+                                  }));
+                                }}
+                              >
+                                <span>
+                                  {choice === "PRACTICE_ONLY"
+                                    ? "Practice only"
+                                    : componentLabel(choice)}
+                                </span>
+                                {isSelected && (
+                                  <Badge variant="solid" size="sm">
+                                    <Check className="size-3.5 stroke-[3]" />
+                                  </Badge>
+                                )}
+                              </Card>
+                            );
+                          }
+                        )}
+                      </div>
+                      {focus?.component === "EXAMINATION" && (
+                        <Card
+                          className={`p-2.5 cursor-pointer border-2 transition-all text-xs font-semibold flex items-center justify-between ${plan.grade_treatment === "EXAMINATION"
+                            ? "border-primary bg-primary/10"
+                            : "border-border hover:bg-muted/40"
+                            } ${originalExams.length === 0 ? "opacity-50 pointer-events-none" : ""}`}
+                          onClick={() => {
+                            if (working || originalExams.length === 0) return;
+                            setPlan((current) => ({
+                              ...current,
+                              grade_treatment: "EXAMINATION",
+                              original_exam_assignment_id:
+                                (
+                                  originalExams.find(
+                                    (exam) => exam.subtype === focus.exam_subtype
+                                  ) ?? originalExams[0]
+                                )?.assignment_id ?? null,
+                            }));
+                          }}
+                        >
+                          <span>Remedial Examination · Higher score counts</span>
+                          {plan.grade_treatment === "EXAMINATION" && (
+                            <Badge variant="solid" size="sm">
+                              <Check className="size-3.5 stroke-[3]" />
+                            </Badge>
+                          )}
+                        </Card>
+                      )}
+                    </div>
+
+                    {focus?.component === "EXAMINATION" && originalExams.length === 0 && (
+                      <Alert status="warning">
+                        No scored original Examination is available for this student and
+                        period.
+                      </Alert>
+                    )}
+
+                    {plan.grade_treatment === "EXAMINATION" && (
+                      <div className="space-y-1.5 pt-1">
+                        <Label className="text-sm font-bold">Original Examination</Label>
+                        <Select
+                          value={plan.original_exam_assignment_id != null ? String(plan.original_exam_assignment_id) : ""}
+                          onValueChange={(val) => {
+                            if (val) {
+                              setPlan((current) => ({
+                                ...current,
+                                original_exam_assignment_id: Number(val),
+                              }));
+                            }
+                          }}
+                          disabled={working}
+                        >
+                          <Select.Trigger className="w-full h-10">
+                            <Select.Value placeholder="Select original examination..." />
+                          </Select.Trigger>
+                          <Select.Content>
+                            {originalExams.map((exam) => (
+                              <Select.Item key={exam.assignment_id} value={String(exam.assignment_id)}>
+                                {exam.title} · {componentLabel(exam.subtype)} · {exam.score}/{exam.total_points}
+                              </Select.Item>
+                            ))}
+                          </Select.Content>
+                        </Select>
+                      </div>
+                    )}
+
+                    {!plan.grade_treatment && (
+                      <Alert status="warning">
+                        Choose practice only or an official grade component before
+                        continuing.
+                      </Alert>
+                    )}
+                  </Card>
+                </div>
               )}
 
               {hasOldDraft && oldDraft && (
