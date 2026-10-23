@@ -3,6 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
+import { BookOpen } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   getMyReviewer, listMyReviewers,
@@ -39,7 +41,7 @@ export default function StudentReviewerSection() {
 
   return <section className="w-full space-y-4" aria-label="Reviewers from your teacher"><h2 className="text-xl font-bold">Reviewers from your teacher</h2>
     {error && <Alert status="error">{error} <Button size="sm" variant="outline" className="gap-2" onClick={() => void load()}>Retry</Button></Alert>}
-    {loading ? <p>Loading your reviewers...</p> : !error && items.length === 0 ? <Card className="w-full p-5 md:p-6"><p className="font-semibold">No teacher reviewers have been shared with you yet.</p><p className="mt-1 text-sm text-muted-foreground">Reviewers sent by your teacher will appear here.</p></Card>
+    {loading ? <p>Loading your reviewers...</p> : !error && items.length === 0 ? <StudentEmptyState icon={<BookOpen />} title="No teacher reviewers have been shared with you yet." description="Reviewers sent by your teacher will appear here." />
       : !error && <div className="grid w-full gap-4">{items.map((item) => <Card key={item.material_id} className="w-full space-y-4 p-5 md:p-6">
         <h3 className="font-bold">{item.title}</h3><p>{item.subject_name}</p>
         <p className="text-xs text-muted-foreground">Shared {new Date(item.sent_at).toLocaleDateString("en-PH")}</p>

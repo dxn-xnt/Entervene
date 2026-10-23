@@ -5,7 +5,8 @@ import { routes } from "@/../routes";
 import { apiFetch, getStudentTodos, type TodoItem } from "@/lib/api";
 import { LoadingPanel } from "@/components/loading-panel";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Empty } from "@/components/retroui/Empty";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
+import { BookOpen } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { StudentSubjectSectionCard } from "@/components/student/student-subject-section-card";
 
@@ -87,11 +88,7 @@ const Subjects = () => {
                   </Button>
                 </div>
               ) : subjects.length === 0 ? (
-                <Empty className="px-4 py-10 sm:px-6 sm:py-12">
-                  <Empty.Content>
-                    <Empty.Title>No enrolled subjects found.</Empty.Title>
-                  </Empty.Content>
-                </Empty>
+                <StudentEmptyState icon={<BookOpen />} title="No subjects yet" description="Your assigned subjects will appear here once your enrollment is available." />
               ) : (
                 <div className="grid min-w-0 grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {subjects.map((subject) => (

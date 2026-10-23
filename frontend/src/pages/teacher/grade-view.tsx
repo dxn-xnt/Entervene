@@ -1138,7 +1138,7 @@ const TeacherGradeView = () => {
 
                   <div className="flex flex-row gap-4">
                     <Select value={sortBy} onValueChange={(v) => setSortBy(v)}>
-                      <Select.Trigger className="w-full">
+                      <Select.Trigger className="h-10 w-full text-sm">
                         <Select.Value placeholder="Sort By" />
                       </Select.Trigger>
                       <Select.Content>

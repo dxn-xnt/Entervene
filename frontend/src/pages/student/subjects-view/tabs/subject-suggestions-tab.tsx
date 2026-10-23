@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowUpDown, Search, Sparkles } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
-import { Empty } from "@/components/retroui/Empty";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
 import { Alert } from "@/components/retroui/Alert";
@@ -203,7 +203,7 @@ export default function SubjectSuggestionsTab({
         </Alert>
       ) : null}
       {/* typescriptreact */}
-      <div className="grid gap-3 py-2 md:grid-cols-[1fr_180px]">
+      <div className="grid gap-3 py-2 md:grid-cols-[1fr_192px]">
         <label className="relative">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
           <Input
@@ -219,7 +219,7 @@ export default function SubjectSuggestionsTab({
             value={sortMode}
             onValueChange={(value) => setSortMode(value as SortMode)}
           >
-            <Select.Trigger className="w-full">
+            <Select.Trigger className="w-full text-sm">
               <ArrowUpDown size={15} className="mr-1" />
               <Select.Value placeholder="Sort By" />
             </Select.Trigger>
@@ -236,16 +236,13 @@ export default function SubjectSuggestionsTab({
       </div>
       {isLoading ? (
         <LoadingPanel label="Loading study suggestions..." />
-      ) : visibleSuggestions.length === 0 ? (
-        <Empty>
-          <Empty.Content>
-            <Empty.Title>
-              {selectedLessonId
-                ? "No suggested study materials for this lesson yet."
-                : "No suggested study materials for this subject yet."}
-            </Empty.Title>
-          </Empty.Content>
-        </Empty>
+      ) : notice?.status !== "error" && visibleSuggestions.length === 0 ? (
+        <StudentEmptyState
+          icon={<Sparkles />}
+          title={search.trim() ? "No matching study materials" : selectedLessonId ? "No lesson suggestions yet" : "No study suggestions yet"}
+          description={search.trim() ? "Try a different search term to find a recommendation." : "Recommendations will appear when relevant study materials are available."}
+          action={search.trim() ? { label: "Reset search", onClick: () => setSearch("") } : undefined}
+        />
       ) : (
         <section className="flex flex-col gap-4">
           {visibleSuggestions.map((suggestion) => (

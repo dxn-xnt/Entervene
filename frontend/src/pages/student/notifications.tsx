@@ -4,9 +4,10 @@ import { Button } from "@/components/retroui/Button";
 import { NotificationCard } from "@/components/notification-card";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Loader2 } from "lucide-react";
+import { Bell, Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
-import { Empty } from "@/components/retroui/Empty";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
+import { Alert } from "@/components/retroui/Alert";
 import { routes } from "@/../routes";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import {
@@ -20,15 +21,18 @@ const Notifications = () => {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(false);
       const data = await getNotifications(false, 50);
       setNotifications(data.notifications);
     } catch (err) {
       console.error("Failed to load notifications:", err);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -164,13 +168,10 @@ const Notifications = () => {
             <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {loading ? (
                 <LoadingPanel label="Loading notifications..." />
+              ) : loadError ? (
+                <Alert status="error">Unable to load notifications. <Button size="sm" variant="outline" className="ml-2 gap-2" onClick={() => void fetchNotifications()}>Retry</Button></Alert>
               ) : notifications.length === 0 ? (
-                <Empty>
-                  <Empty.Content>
-                    <Empty.Title>No notifications yet.</Empty.Title>
-                    <Empty.Description>You are all caught up!</Empty.Description>
-                  </Empty.Content>
-                </Empty>
+                <StudentEmptyState icon={<Bell />} title="No notifications yet" description="Updates from your classes will appear here when available." />
               ) : (
                 <div className="flex flex-col gap-3 w-full">
                   {notifications.map((card) => (

@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
+import { ShieldCheck, ClipboardList } from "lucide-react";
 import { getMyActiveIntervention, listMyActiveInterventions, type StudentPersistentIntervention } from "@/lib/student-persistent-interventions-api";
 
 export default function StudentActiveInterventions() {
@@ -40,7 +42,7 @@ export default function StudentActiveInterventions() {
   return <section className="w-full space-y-4" aria-label="Active Interventions">
     <h2 className="text-xl font-bold">Active Interventions</h2>
     {loading ? <p>Loading your active support...</p> : error ? <Alert status="error">{error}</Alert>
-      : items.length === 0 ? <p>No active interventions at this time.</p>
+      : items.length === 0 ? <StudentEmptyState icon={<ShieldCheck />} title="No active support right now" description="Support from your teacher will appear here when available." />
       : <div className="grid w-full gap-4">{items.map((item) => <Card key={item.intervention_id} className="w-full space-y-4 p-5 md:p-6">
         <div><h3 className="text-lg font-bold">{item.subject_name} Support</h3><p className="text-sm">{item.activities.some((activity) => activity.submission_status === "graded") ? "Completed · Monitoring" : "Active Support"} · {item.class_name}</p></div>
         <p className="text-sm">Your teacher has prepared additional support for this subject.</p>
@@ -55,7 +57,7 @@ export default function StudentActiveInterventions() {
           <p className="font-semibold">{activity.title}</p>
           <p className="text-sm">{activity.submission_status === "graded" ? "Completed" : activity.submission_status === "submitted" ? "Submitted" : "Ready to work on"}{activity.grade !== null && activity.total_points !== null ? ` · Score: ${activity.grade}/${activity.total_points}` : ""}</p>
           <Button size="sm" className="gap-2" onClick={() => navigate(activityLink(detail, activity.assignment_id))}>View Activity</Button>
-        </div>)}</div> : <p>No support activity has been published yet.</p>}
+        </div>)}</div> : <StudentEmptyState embedded icon={<ClipboardList />} title="No support activities yet" description="Activities will appear here when your teacher publishes them." />}
         {detail.reviewer_id !== null && <Button size="sm" variant="outline" className="gap-2" onClick={() => { const next = new URLSearchParams(params); next.set("reviewer", String(detail.reviewer_id)); setParams(next); }}>Read Reviewer</Button>}
       </>}
     </div>}

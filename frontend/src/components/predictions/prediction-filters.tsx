@@ -111,7 +111,7 @@ export default function PredictionFilters({
               onGradeChange?.(v === "all" ? undefined : Number(v))
             }
           >
-            <Select.Trigger className="w-[140px] bg-white">
+            <Select.Trigger className="h-10 w-full bg-white text-sm sm:w-48">
               <Select.Value placeholder="All Grades" />
             </Select.Trigger>
             <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -133,7 +133,7 @@ export default function PredictionFilters({
               onClassChange?.(v === "all" ? undefined : Number(v))
             }
           >
-            <Select.Trigger className="w-[160px] bg-white">
+            <Select.Trigger className="h-10 w-full bg-white text-sm sm:w-48">
               <Select.Value placeholder="All Classes" />
             </Select.Trigger>
             <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -155,7 +155,7 @@ export default function PredictionFilters({
               onSubjectChange(v === "all" ? undefined : Number(v))
             }
           >
-            <Select.Trigger className="w-[160px] bg-white">
+            <Select.Trigger className="h-10 w-full bg-white text-sm sm:w-48">
               <Select.Value placeholder="All Subjects" />
             </Select.Trigger>
             <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -178,7 +178,7 @@ export default function PredictionFilters({
             onTermChange?.(val);
           }}
         >
-          <Select.Trigger className="w-[140px] bg-white">
+          <Select.Trigger className="h-10 w-full bg-white text-sm sm:w-48">
             <Select.Value placeholder="All Terms" />
           </Select.Trigger>
           <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -198,7 +198,7 @@ export default function PredictionFilters({
             onRiskChange(v === "all" ? undefined : v)
           }
         >
-          <Select.Trigger className="w-[170px] bg-white">
+          <Select.Trigger className="h-10 w-full bg-white text-sm sm:w-48">
             <Select.Value placeholder="All Risk Levels">
               {riskLevel ? (RISK_OPTIONS.find((r) => r.value === riskLevel)?.label ?? riskLevel) : "All Risk Levels"}
             </Select.Value>

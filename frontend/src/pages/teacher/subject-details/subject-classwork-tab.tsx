@@ -24,7 +24,7 @@ import { Button } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { DialogueSelect } from "@/components/dialogue-select";
-import { Card } from "@/components/retroui/Card";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
 import CreateClassworkModal from "@/pages/teacher/forms/create-classwork";
@@ -456,7 +456,7 @@ export default function SubjectClassworkTab({
               value={sectionFilter}
               onValueChange={setSectionFilter}
             >
-              <Select.Trigger className="w-full sm:w-44 border-black">
+              <Select.Trigger className="h-10 w-full border-black text-sm sm:w-44">
                 <Select.Value placeholder="All sections" />
               </Select.Trigger>
               <Select.Content className="max-h-72 overflow-y-auto">
@@ -475,7 +475,7 @@ export default function SubjectClassworkTab({
               value={statusFilter}
               onValueChange={setStatusFilter}
             >
-              <Select.Trigger className="w-full sm:w-44 border-black">
+              <Select.Trigger className="h-10 w-full border-black text-sm sm:w-44">
                 <Select.Value placeholder="All statuses" />
               </Select.Trigger>
               <Select.Content>
@@ -563,13 +563,13 @@ export default function SubjectClassworkTab({
             ))}
           </section>
         ) : (
-          <Card className="flex flex-col justify-center items-center p-12">
-            {/* <ClipboardList className="mx-auto mb-2 text-gray-400" size={28} /> */}
-            <p className="font-bold">No classworks found</p>
-            <p className="mt-1 text-sm text-gray-500">
-              No classwork items match the selected filter criteria for this subject.
-            </p>
-          </Card>
+          <TeacherEmptyState
+            icon={<ClipboardList />}
+            title={items.length ? "No classworks match these filters" : "No classworks yet"}
+            description={items.length
+              ? "Try a different classwork type, lesson, section, or status."
+              : "Classwork for this subject will appear here once it is created."}
+          />
         )}
       </main>
 

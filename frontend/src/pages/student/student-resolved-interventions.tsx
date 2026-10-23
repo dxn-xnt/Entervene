@@ -3,6 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
+import { History, CheckCircle2 } from "lucide-react";
 import { getMyResolvedIntervention, listMyResolvedInterventions, type StudentPersistentIntervention } from "@/lib/student-persistent-interventions-api";
 
 const date = (value: string) => new Date(value).toLocaleDateString("en-PH", { dateStyle: "medium" });
@@ -40,7 +42,7 @@ export default function StudentResolvedInterventions() {
   return <section className="w-full space-y-4" aria-label="Previous Support">
     <h2 className="text-xl font-bold">Previous Support</h2>
     {loading ? <p>Loading previous support...</p> : error ? <Alert status="error">{error}</Alert>
-      : items.length === 0 ? <p>No previous support yet.</p>
+      : items.length === 0 ? <StudentEmptyState icon={<History />} title="No previous support yet" description="Support you've completed or resolved will appear here." />
       : <div className="grid w-full gap-4">{items.map((item) => <Card key={item.intervention_id} className="w-full space-y-4 border-green-700 bg-green-50 p-5 md:p-6">
         <h3 className="font-bold">{item.subject_name} · Resolved</h3>
         <p className="text-sm">{item.resolved_at ? date(item.resolved_at) : "Previous support"} · {item.resolution_message}</p>
@@ -52,7 +54,7 @@ export default function StudentResolvedInterventions() {
         <p>{detail.resolution_message}</p>
         <p>Resolved: {detail.resolved_at ? date(detail.resolved_at) : "Unavailable"}</p>
         <h4 className="font-bold">Completed support</h4>
-        {detail.activities.filter((activity) => activity.submission_status === "graded").length ? detail.activities.filter((activity) => activity.submission_status === "graded").map((activity) => <p key={activity.assignment_id}>{activity.title} · Completed{activity.grade != null && activity.total_points != null ? ` · Score: ${activity.grade}/${activity.total_points}` : ""}</p>) : <p>No completed activity was recorded.</p>}
+        {detail.activities.filter((activity) => activity.submission_status === "graded").length ? detail.activities.filter((activity) => activity.submission_status === "graded").map((activity) => <p key={activity.assignment_id}>{activity.title} · Completed{activity.grade != null && activity.total_points != null ? ` · Score: ${activity.grade}/${activity.total_points}` : ""}</p>) : <StudentEmptyState embedded icon={<CheckCircle2 />} title="No completed activities recorded" description="Completed support activities will appear here once graded." />}
         {detail.reviewer_id !== null && <Button size="sm" variant="outline" className="gap-2" onClick={() => openReviewer(detail.reviewer_id!)}>Read Reviewer</Button>}
       </>}
     </Card>}
