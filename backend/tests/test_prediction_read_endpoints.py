@@ -20,6 +20,7 @@ from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.academic.StudentCLass import StudentClass
 from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
@@ -148,6 +149,12 @@ def prediction_read_context():
         is_active_version=True,
     )
     db.add(load)
+    db.add(StudentClass(
+        student_id=student.student_id,
+        class_id=class_.class_id,
+        academic_year_id=year.academic_year_id,
+        enrollment_status="enrolled",
+    ))
     db.flush()
     prediction = AIPrediction(
         student_id=student.student_id,

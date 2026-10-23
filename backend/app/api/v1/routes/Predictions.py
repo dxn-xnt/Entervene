@@ -4,12 +4,14 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, tuple_
 from sqlalchemy.orm import Session
 
 from app.core.Dependencies import get_current_user, get_optional_staff_id, get_staff_id, require_role
 from app.db.Session import get_db
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
+from app.models.academic.StudentCLass import StudentClass
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
 from app.schemas.Prediction import (
@@ -119,6 +121,43 @@ def _assert_teacher_can_use_prediction_scope(
     triplet = (int(scope["class_id"]), int(scope["subject_id"]), int(scope["source_period_id"]))
     if triplet not in assigned:
         raise HTTPException(status_code=403, detail="Access denied. You are not assigned to this class, subject, and source period.")
+    _assert_student_is_actively_enrolled(db, UUID(str(scope["student_id"])), int(scope["class_id"]))
+
+
+def _assert_student_is_actively_enrolled(db: Session, student_id: UUID, class_id: int) -> None:
+    enrollment = db.query(StudentClass.student_class_id).filter(
+        StudentClass.student_id == student_id,
+        StudentClass.class_id == class_id,
+        func.lower(func.coalesce(StudentClass.enrollment_status, "enrolled")) == "enrolled",
+    ).first()
+    if enrollment is None:
+        raise HTTPException(status_code=403, detail="Access denied. The student is not actively enrolled in this prediction scope.")
+
+
+def _authorize_stored_prediction(
+    db: Session,
+    current_user: dict[str, Any],
+    staff_id: str | None,
+    prediction_id: int,
+) -> AIPrediction:
+    """Authorize prediction-ID operations against the persisted target scope."""
+    prediction = db.get(AIPrediction, prediction_id)
+    if prediction is None:
+        raise HTTPException(status_code=404, detail="Prediction not found.")
+    if current_user.get("role") == "admin":
+        return prediction
+    if not staff_id:
+        raise HTTPException(status_code=403, detail="Access denied. Teacher profile is required for prediction access.")
+    assigned = get_teacher_assigned_triplets(
+        db,
+        staff_id,
+        academic_period_id=prediction.target_period_id,
+    )
+    triplet = (prediction.class_id, prediction.subject_id, prediction.target_period_id)
+    if triplet not in assigned:
+        raise HTTPException(status_code=403, detail="Access denied. You are not assigned to this prediction scope.")
+    _assert_student_is_actively_enrolled(db, prediction.student_id, prediction.class_id)
+    return prediction
 
 
 def _with_readiness(scoring_result: dict[str, Any], built: dict[str, Any]) -> dict[str, Any]:
@@ -272,7 +311,7 @@ def dashboard_filters(
 @router.post("/preview", response_model=PredictionPreviewResponse)
 def preview_prediction(
     payload: PredictionPreviewRequest,
-    current_user: dict = Depends(require_role("admin", "teacher")),
+    current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -367,6 +406,7 @@ def create_prediction_from_records(
 def create_prediction(
     payload: PredictionPersistRequest,
     current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
     try:
@@ -374,6 +414,7 @@ def create_prediction(
         model_name = request_data.pop("model_name") or DEFAULT_MODEL_NAME
         replace_existing = bool(request_data.pop("replace_existing", False))
         generation_request_id = request_data.pop("generation_request_id", None)
+        _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, request_data)
         return run_prediction_generation_transaction(
             request_data,
             model_name,
@@ -400,6 +441,7 @@ def get_latest_prediction(
     target_period_id: int | None = None,
     model_version_id: int | None = None,
     current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
     query = db.query(AIPrediction).filter(
@@ -417,6 +459,7 @@ def get_latest_prediction(
     prediction = query.order_by(AIPrediction.generated_at.desc(), AIPrediction.prediction_id.desc()).first()
     if prediction is None:
         raise HTTPException(status_code=404, detail="Prediction not found")
+    _authorize_stored_prediction(db, current_user, staff_id, prediction.prediction_id)
     return _summary(prediction)
 
 
@@ -430,9 +473,31 @@ def list_class_risk_predictions(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
     query = db.query(AIPrediction).filter(AIPrediction.class_id == class_id)
+    if current_user.get("role") != "admin":
+        if not staff_id:
+            raise HTTPException(status_code=403, detail="Access denied. Teacher profile is required for prediction access.")
+        assigned = {
+            triplet
+            for triplet in get_teacher_assigned_triplets(db, staff_id, academic_period_id=target_period_id)
+            if triplet[0] == class_id
+        }
+        if not assigned:
+            raise HTTPException(status_code=403, detail="Access denied. You are not assigned to this class prediction scope.")
+        if subject_id is not None and not any(triplet[1] == subject_id for triplet in assigned):
+            raise HTTPException(status_code=403, detail="Access denied. You are not assigned to this subject prediction scope.")
+        query = query.filter(
+            tuple_(AIPrediction.class_id, AIPrediction.subject_id, AIPrediction.target_period_id).in_(assigned)
+        ).join(
+            StudentClass,
+            (StudentClass.student_id == AIPrediction.student_id)
+            & (StudentClass.class_id == AIPrediction.class_id),
+        ).filter(
+            func.lower(func.coalesce(StudentClass.enrollment_status, "enrolled")) == "enrolled"
+        )
     if subject_id is not None:
         query = query.filter(AIPrediction.subject_id == subject_id)
     if source_period_id is not None:
@@ -463,7 +528,7 @@ def get_model_performance(
     class_id: int | None = None,
     subject_id: int | None = None,
     academic_period_id: int | None = None,
-    current_user: dict = Depends(require_role("admin", "teacher")),
+    current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
     return get_model_performance_summary(
@@ -480,9 +545,11 @@ def evaluate_outcome(
     prediction_id: int,
     payload: PredictionOutcomeEvaluateRequest,
     current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
     try:
+        _authorize_stored_prediction(db, current_user, staff_id, prediction_id)
         return evaluate_prediction_outcome(
             db,
             prediction_id=prediction_id,
@@ -501,6 +568,7 @@ def read_prediction_detail(
 ):
     is_admin = current_user.get("role") == "admin"
     try:
+        _authorize_stored_prediction(db, current_user, staff_id, prediction_id)
         return get_prediction_detail(
             db,
             prediction_id=prediction_id,
@@ -520,6 +588,7 @@ def create_teacher_risk_review(
     db: Session = Depends(get_db),
 ):
     try:
+        _authorize_stored_prediction(db, current_user, staff_id, prediction_id)
         return review_prediction_risk(
             db,
             prediction_id=prediction_id,
@@ -535,10 +604,11 @@ def create_teacher_risk_review(
 def read_teacher_risk_reviews(
     prediction_id: int,
     current_user: dict = Depends(require_role("admin", "teacher")),
-    staff_id: str = Depends(get_staff_id),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
     try:
+        _authorize_stored_prediction(db, current_user, staff_id, prediction_id)
         return get_teacher_reviews_for_prediction(
             db,
             prediction_id=prediction_id,
@@ -553,11 +623,10 @@ def read_teacher_risk_reviews(
 def list_prediction_features(
     prediction_id: int,
     current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
-    prediction = db.get(AIPrediction, prediction_id)
-    if prediction is None:
-        raise HTTPException(status_code=404, detail="Prediction not found")
+    _authorize_stored_prediction(db, current_user, staff_id, prediction_id)
 
     rows = (
         db.query(AIPredictionFeature)
@@ -595,6 +664,7 @@ def assign_prediction_intervention(
     staff_id: str | None = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
+    _authorize_stored_prediction(db, current_user, staff_id, prediction_id)
     suggestion = assign_intervention_from_prediction(
         db, prediction_id, staff_id=staff_id, payload=payload
     )
@@ -610,8 +680,10 @@ def assign_prediction_intervention(
 def list_prediction_suggestions(
     prediction_id: int,
     current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
+    _authorize_stored_prediction(db, current_user, staff_id, prediction_id)
     suggestions = get_suggestions_for_prediction(db, prediction_id)
     return [
         {

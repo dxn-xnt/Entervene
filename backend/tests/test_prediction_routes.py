@@ -21,9 +21,13 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.AssessmentItem import AssessmentItem
 from app.models.academic.Class_ import Class
+from app.models.academic.GradingTemplate import GradingTemplate
+from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.StudentAssessmentScore import StudentAssessmentScore
+from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
+from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
@@ -143,7 +147,19 @@ def prediction_api_context():
         academic_year_id=year.academic_year_id,
         academic_level_id=level.academic_level_id,
     )
-    subject = Subject(subject_name="Science", academic_level_id=level.academic_level_id)
+    template = GradingTemplate(template_name="Prediction route Core", passing_threshold=75, status="active")
+    template.components = [
+        GradingTemplateComponent(component_name="Written Work", weight=20, display_order=1),
+        GradingTemplateComponent(component_name="Performance Tasks", weight=50, display_order=2),
+        GradingTemplateComponent(component_name="Exams", weight=30, display_order=3),
+    ]
+    db.add(template)
+    db.flush()
+    subject = Subject(
+        subject_name="Science",
+        academic_level_id=level.academic_level_id,
+        grading_template_id=template.grading_template_id,
+    )
     model_version = AIModelVersion(
         model_version_id=1,
         model_name="entervene_next_period_grade_rf",
@@ -285,6 +301,35 @@ def add_prediction(context, **overrides):
     context["db"].add(prediction)
     context["db"].flush()
     return prediction
+
+
+def authenticate_teacher(context, *, assigned_periods=()):
+    context["identity"].update(
+        sub=str(context["staff"].user_id),
+        role="teacher",
+    )
+    enrollment = context["db"].query(StudentClass).filter_by(
+        student_id=context["student"].student_id,
+        class_id=context["class"].class_id,
+    ).one_or_none()
+    if enrollment is None:
+        context["db"].add(StudentClass(
+            student_id=context["student"].student_id,
+            class_id=context["class"].class_id,
+            academic_year_id=context["class"].academic_year_id,
+            enrollment_status="enrolled",
+        ))
+    for period in assigned_periods:
+        context["db"].add(SubjectLoad(
+            staff_id=context["staff"].staff_id,
+            subject_id=context["subject"].subject_id,
+            class_id=context["class"].class_id,
+            academic_period_id=period.academic_period_id,
+            status="published",
+            is_active_version=True,
+            is_locked=True,
+        ))
+    context["db"].commit()
 
 
 def add_period_grade(context, grade=86):
@@ -830,3 +875,190 @@ def test_from_records_response_does_not_return_classifier_fields(prediction_api_
     assert "at_risk_probability" not in body
     assert "is_at_risk" not in body
     assert "probability" not in body
+
+
+def test_assigned_teacher_can_read_latest_prediction_scope(prediction_api_context):
+    prediction = add_prediction(prediction_api_context)
+    prediction_api_context["db"].commit()
+    authenticate_teacher(
+        prediction_api_context,
+        assigned_periods=(prediction_api_context["target_period"],),
+    )
+
+    response = prediction_api_context["client"].get(
+        "/api/v1/predictions/latest",
+        params={
+            "student_id": str(prediction_api_context["student"].student_id),
+            "class_id": prediction_api_context["class"].class_id,
+            "subject_id": prediction_api_context["subject"].subject_id,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["prediction_id"] == prediction.prediction_id
+
+
+@pytest.mark.parametrize("suffix", ["detail", "features", "teacher-review", "suggestions"])
+def test_unassigned_teacher_cannot_read_prediction_id_endpoints(prediction_api_context, suffix):
+    prediction = add_prediction(prediction_api_context)
+    prediction_api_context["db"].commit()
+    authenticate_teacher(prediction_api_context)
+
+    response = prediction_api_context["client"].get(
+        f"/api/v1/predictions/{prediction.prediction_id}/{suffix}"
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Access denied. You are not assigned to this prediction scope."
+
+
+def test_assigned_teacher_cannot_access_prediction_for_student_outside_class(prediction_api_context):
+    prediction = add_prediction(
+        prediction_api_context,
+        student_id=prediction_api_context["other_student"].student_id,
+    )
+    prediction_api_context["db"].commit()
+    authenticate_teacher(
+        prediction_api_context,
+        assigned_periods=(prediction_api_context["target_period"],),
+    )
+
+    response = prediction_api_context["client"].get(
+        f"/api/v1/predictions/{prediction.prediction_id}/features"
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Access denied. The student is not actively enrolled in this prediction scope."
+
+
+def test_unassigned_teacher_direct_generation_is_rejected_without_writes(prediction_api_context, monkeypatch):
+    authenticate_teacher(prediction_api_context)
+    transaction_called = False
+
+    def fail_if_called(*args, **kwargs):
+        nonlocal transaction_called
+        transaction_called = True
+        raise AssertionError("generation transaction must not start for an unauthorized scope")
+
+    monkeypatch.setattr(predictions_route, "run_prediction_generation_transaction", fail_if_called)
+    response = prediction_api_context["client"].post(
+        "/api/v1/predictions",
+        json=prediction_payload(prediction_api_context),
+    )
+
+    assert response.status_code == 403
+    assert transaction_called is False
+    assert prediction_api_context["db"].query(AIPrediction).count() == 0
+    assert prediction_api_context["db"].query(AIPredictionFeature).count() == 0
+
+
+def test_assigned_teacher_direct_generation_remains_available(prediction_api_context, monkeypatch):
+    authenticate_teacher(
+        prediction_api_context,
+        assigned_periods=(prediction_api_context["source_period"],),
+    )
+    patch_scoring(monkeypatch)
+
+    response = prediction_api_context["client"].post(
+        "/api/v1/predictions",
+        json=prediction_payload(prediction_api_context),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["prediction_id"] is not None
+    assert prediction_api_context["db"].query(AIPrediction).count() == 1
+
+
+def test_class_risk_endpoint_requires_and_filters_teacher_assignment(prediction_api_context):
+    assigned_prediction = add_prediction(prediction_api_context)
+    hidden_prediction = add_prediction(
+        prediction_api_context,
+        target_period_id=prediction_api_context["later_target_period"].academic_period_id,
+        predicted_period_grade=72,
+        risk_level="HIGH_RISK",
+    )
+    prediction_api_context["db"].commit()
+    authenticate_teacher(
+        prediction_api_context,
+        assigned_periods=(prediction_api_context["target_period"],),
+    )
+
+    response = prediction_api_context["client"].get(
+        f"/api/v1/predictions/classes/{prediction_api_context['class'].class_id}/risks"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert response.json()["items"][0]["prediction_id"] == assigned_prediction.prediction_id
+    assert response.json()["items"][0]["prediction_id"] != hidden_prediction.prediction_id
+
+
+def test_unassigned_teacher_class_risk_request_is_rejected(prediction_api_context):
+    add_prediction(prediction_api_context)
+    prediction_api_context["db"].commit()
+    authenticate_teacher(prediction_api_context)
+
+    response = prediction_api_context["client"].get(
+        f"/api/v1/predictions/classes/{prediction_api_context['class'].class_id}/risks"
+    )
+
+    assert response.status_code == 403
+
+
+def test_teacher_class_risk_request_rejects_unassigned_subject(prediction_api_context):
+    context = prediction_api_context
+    authenticate_teacher(context, assigned_periods=(context["target_period"],))
+
+    response = context["client"].get(
+        f"/api/v1/predictions/classes/{context['class'].class_id}/risks",
+        params={"subject_id": context["subject"].subject_id + 1},
+    )
+
+    assert response.status_code == 403
+
+
+def test_unassigned_teacher_cannot_create_outcome_or_review(prediction_api_context):
+    prediction = add_prediction(prediction_api_context)
+    prediction_api_context["db"].commit()
+    authenticate_teacher(prediction_api_context)
+
+    outcome = prediction_api_context["client"].post(
+        f"/api/v1/predictions/{prediction.prediction_id}/outcome/evaluate",
+        json={"actual_period_grade": 86.5, "passing_grade": 75},
+    )
+    review = prediction_api_context["client"].post(
+        f"/api/v1/predictions/{prediction.prediction_id}/teacher-review",
+        json={"decision": "CONFIRMED_RISK", "teacher_notes": "Should not persist"},
+    )
+
+    assert outcome.status_code == 403
+    assert review.status_code == 403
+    assert prediction_api_context["db"].query(PredictionOutcome).count() == 0
+
+
+def test_teacher_dashboard_filters_preserve_assigned_current_term_scope(prediction_api_context):
+    authenticate_teacher(
+        prediction_api_context,
+        assigned_periods=(prediction_api_context["source_period"],),
+    )
+
+    response = prediction_api_context["client"].get("/api/v1/predictions/dashboard/filters")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["class_id"] for item in body["classes"]] == [prediction_api_context["class"].class_id]
+    assert [item["subject_id"] for item in body["subjects"]] == [prediction_api_context["subject"].subject_id]
+    assert [item["academic_period_id"] for item in body["terms"]] == [
+        prediction_api_context["source_period"].academic_period_id
+    ]
+
+
+@pytest.mark.parametrize("path", ["/api/v1/predictions/preview", "/api/v1/predictions/model-performance"])
+def test_unscoped_legacy_analytics_are_admin_only(prediction_api_context, path):
+    authenticate_teacher(prediction_api_context)
+    if path.endswith("preview"):
+        response = prediction_api_context["client"].post(path, json={"features": {}})
+    else:
+        response = prediction_api_context["client"].get(path)
+
+    assert response.status_code == 403

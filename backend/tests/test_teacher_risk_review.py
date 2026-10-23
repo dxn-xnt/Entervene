@@ -19,6 +19,7 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
+from app.models.academic.StudentCLass import StudentClass
 from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.academic.SubjectLoad import SubjectLoad
@@ -141,6 +142,12 @@ def teacher_review_context():
     )
     db.add(prediction)
     db.add(SubjectLoad(class_id=class_.class_id, subject_id=subject.subject_id, academic_period_id=target_period.academic_period_id, staff_id=staff.staff_id, status="active"))
+    db.add(StudentClass(
+        student_id=student.student_id,
+        class_id=class_.class_id,
+        academic_year_id=year.academic_year_id,
+        enrollment_status="enrolled",
+    ))
     db.commit()
 
     identity = {"sub": staff_account.user_id, "role": "teacher"}
