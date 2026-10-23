@@ -8,6 +8,8 @@ import { Badge } from "@/components/retroui/Badge";
 import { Table } from "@/components/retroui/Table";
 import { getStudentTodos, type TodoItem } from "@/lib/api";
 import { Progress } from "@/components/retroui/Progress";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
+import { FileCheck2 } from "lucide-react";
 
 type SubjectGradeProps = {
   classId?: number;
@@ -167,7 +169,7 @@ const SubjectGrade = ({
                         colSpan={3}
                         className="text-center py-6 text-muted-foreground"
                       >
-                        No graded classworks found for this subject.
+                        <StudentEmptyState embedded icon={<FileCheck2 />} title="No graded classwork yet" description="Scores for this subject will appear after your teacher grades and releases them." />
                       </Table.Cell>
                     </Table.Row>
                   ) : (

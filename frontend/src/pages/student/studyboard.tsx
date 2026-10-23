@@ -32,6 +32,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Progress } from "@/components/retroui/Progress";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Empty } from "@/components/retroui/Empty";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { GradeOverviewCards } from "@/components/student/grade-overview-cards";
 import { SubjectCard } from "@/components/subject-card";
@@ -94,6 +95,10 @@ const StoryBoard = () => {
     useStudentOverviewData();
   const { selectedPeriodId } = useAcademicPeriod();
   const [metrics, setMetrics] = useState<StudentStudyboardMetrics | null>(null);
+  const [metricsLoadedPeriod, setMetricsLoadedPeriod] = useState<number | null | "unloaded">("unloaded");
+  const [metricsErrorPeriod, setMetricsErrorPeriod] = useState<number | null | "unloaded">("unloaded");
+  const metricsLoading = metricsLoadedPeriod === "unloaded" || metricsLoadedPeriod !== selectedPeriodId;
+  const metricsError = metricsErrorPeriod === selectedPeriodId;
   const [isSubjectsExpanded, setIsSubjectsExpanded] = useState(false);
 
   useEffect(() => {
@@ -104,7 +109,9 @@ const StoryBoard = () => {
       })
       .catch((cause: unknown) => {
         console.error("Failed to load studyboard metrics", cause);
-      });
+        if (active) setMetricsErrorPeriod(selectedPeriodId);
+      })
+      .finally(() => { if (active) setMetricsLoadedPeriod(selectedPeriodId); });
     return () => {
       active = false;
     };
@@ -319,12 +326,7 @@ const StoryBoard = () => {
                         </Empty.Content>
                       </Empty>
                     ) : subjects.length === 0 ? (
-                      <Empty className="border-none bg-white shadow-none hover:shadow-none">
-                        <Empty.Content>
-                          <Empty.Title>No enrolled subjects found</Empty.Title>
-                          <Empty.Description>You are not enrolled in any subjects for this period.</Empty.Description>
-                        </Empty.Content>
-                      </Empty>
+                      <StudentEmptyState embedded icon={<BookOpen />} title="No subjects this period" description="Your assigned subjects will appear here once enrollment is available." />
                     ) : (
                       <>
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -575,8 +577,8 @@ const StoryBoard = () => {
                         Cumulative reading time on work recorded this week
                       </p>
                       <div className="space-y-3">
-                        {(metrics?.subject_reading_seconds || []).length === 0 ? (
-                          <p className="text-xs text-muted-foreground">No reading time recorded yet</p>
+                        {metricsLoading ? <LoadingPanel label="Loading reading time..." /> : metricsError ? <p className="text-sm text-destructive">Unable to load reading time.</p> : (metrics?.subject_reading_seconds || []).length === 0 ? (
+                          <StudentEmptyState embedded icon={<BookOpen />} title="No reading time yet" description="Time spent reading class materials will appear here after you start." />
                         ) : (
                           metrics!.subject_reading_seconds.map((item) => (
                             <div
@@ -660,6 +662,9 @@ const StoryBoard = () => {
                       title="Attendance"
                       className="sm:col-span-2 xl:col-span-12"
                     >
+                      {metricsLoading ? <LoadingPanel label="Loading attendance..." /> : metricsError ? <p className="text-sm text-destructive">Unable to load attendance.</p> : !metrics?.attendance?.some((day) => day.status !== "no_record") ? (
+                        <StudentEmptyState embedded icon={<Calendar />} title="No attendance recorded yet" description="Your attendance for this week will appear when your school records it." />
+                      ) : <>
                       <div className="flex items-baseline gap-2">
                         <p className="text-4xl font-black">
                           {metrics?.attendance_rate == null
@@ -692,16 +697,15 @@ const StoryBoard = () => {
                       <p className="mt-3 text-xs text-muted-foreground">
                         Monday–Friday · Present, late, and excused count as attended
                       </p>
+                      </>}
                     </MetricCard>
 
                     <MetricCard
                       title="Strengths & Focus Areas"
                       className="sm:col-span-2 xl:col-span-12"
                     >
-                      {overview.subjects.length === 0 ? (
-                        <p className="my-auto py-7 text-sm text-muted-foreground">
-                          No released subject scores yet.
-                        </p>
+                      {isLoading ? <LoadingPanel label="Loading subject scores..." /> : error ? <p className="text-sm text-destructive">Unable to load subject scores.</p> : overview.subjects.length === 0 ? (
+                        <StudentEmptyState embedded icon={<FileText />} title="No released scores yet" description="Subject strengths and focus areas will appear after graded scores are released." />
                       ) : (
                         <>
                           <p className="mb-4 text-xs text-muted-foreground">
@@ -856,12 +860,7 @@ const StoryBoard = () => {
                           </Empty.Content>
                         </Empty>
                       ) : urgentTodos.length === 0 ? (
-                        <Empty className="border-none bg-white shadow-none hover:shadow-none">
-                          <Empty.Content>
-                            <Empty.Title>All caught up!</Empty.Title>
-                            <Empty.Description>No pending tasks</Empty.Description>
-                          </Empty.Content>
-                        </Empty>
+                        <StudentEmptyState embedded icon={<CheckSquare />} title="You're all caught up!" description="You have no pending classwork right now." />
                       ) : (
                         <div className="flex flex-col gap-2.5">
                           {urgentTodos.map((item) => {

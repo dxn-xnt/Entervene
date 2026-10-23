@@ -5,7 +5,23 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
+import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/Toast";
+import { Select } from "@/components/retroui/Select";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import AppLayout from "@/layouts/app-layout";
+import {
+  Sparkles,
+  CheckCircle2,
+  BookOpen,
+  Loader2,
+  Clock,
+  ArrowRight,
+  PartyPopper,
+} from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
 import { Empty } from "@/components/retroui/Empty";
+import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
 import {
   listMyReviewers,
@@ -28,76 +44,30 @@ export default function StudentInterventions() {
   const [resolvedInterventions, setResolvedInterventions] = useState<StudentPersistentIntervention[]>([]);
 
   useEffect(() => {
-    let cancelled = false;
+    loadData();
+  }, [statusFilter]);
 
-    const loadAll = async () => {
-      try {
-        const [revRes, activeRes, resolvedRes] = await Promise.allSettled([
-          listMyReviewers(),
-          listMyActiveInterventions(),
-          listMyResolvedInterventions(),
-        ]);
-
-        if (cancelled) return;
-
-        if (revRes.status === "fulfilled") {
-          setReviewers(revRes.value.items || []);
-        }
-        if (activeRes.status === "fulfilled") {
-          setActiveInterventions(activeRes.value.items || []);
-        }
-        if (resolvedRes.status === "fulfilled") {
-          setResolvedInterventions(resolvedRes.value.items || []);
-        }
-      } catch (err) {
-        console.warn("Unable to load live interventions", err);
-      }
-    };
-
-    void loadAll();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Primary featured reviewer (or default mockup reviewer matching design)
-  const latestReviewer = reviewers[0];
-  const featuredReviewer = {
-    id: latestReviewer?.material_id || null,
-    title: latestReviewer?.title || "Math Review: Strengthening Your Exam Skills",
-    subject: latestReviewer?.subject_name || "Mathematics",
-    date: latestReviewer?.sent_at
-      ? `Shared ${formatDate(latestReviewer.sent_at, {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-      })}`
-      : "Shared Oct 24, 2026 ",
-    intro:
-      "Your written work is going well. This review shows where to focus to lift your exam score.",
-    tags: ["Focus: Exam", "Practise: Algebraic Expressions"],
+  const handleComplete = async (id: number) => {
+    setCompletingId(id);
+    try {
+      await completeMyIntervention(id);
+      toast.success({ title: "Study recommendation completed" });
+      void loadData();
+    } catch (err) {
+      toast.error({ title: "Unable to complete recommendation", description: err instanceof Error ? err.message : "Please try again." });
+    } finally {
+      setCompletingId(null);
+    }
   };
 
-  // Active interventions fallback to demo item if empty
-  const activeItems =
-    activeInterventions.length > 0
-      ? activeInterventions
-      : [
-        {
-          intervention_id: 1,
-          status: "ACTIVE" as const,
-          subject_id: 1,
-          subject_name: "Mathematics",
-          class_id: 1,
-          class_name: "Grade 10 - Mathematics",
-          teacher_name: null,
-          activities: [],
-          reviewer_id: latestReviewer?.material_id || null,
-          resolved_at: null,
-          resolution_message: null,
-        },
-      ];
+  const handleViewMaterial = async (item: StudentSuggestionItem) => {
+    // Mark as viewed in background
+    if (!item.is_viewed) {
+      markInterventionViewed(item.suggestion_id).catch(console.error);
+    }
+    // Navigate to subjects page
+    navigate(routes.student.subjects);
+  };
 
   return (
     <AppLayout>
@@ -111,30 +81,46 @@ export default function StudentInterventions() {
               </h1>
             </header>
 
-            <div className="-mt-[1px] flex min-w-0 flex-col gap-6 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-              <div className="w-full flex flex-col gap-4">
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:gap-6 sm:px-4 sm:py-4 md:px-6">
+              {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEVELOPMENT_PREDICTIONS === "true" &&
+                <>
+                  <StudentActiveInterventions />
+                  <StudentResolvedInterventions />
+                  <StudentReviewerSection />
+                </>
+              }
 
-                {/* Section 1: New from your teacher */}
-                <Card aria-label="New from your teacher" className="flex flex-col gap-3 p-5">
-                  <h3 className="text-lg sm:text-2xl font-bold text-foreground">
-                    New Support for You
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card className="w-full bg-background border-2 border-border p-4 sm:p-5 shadow-none flex flex-col gap-2 transition-all hover:bg-retro hover:-translate-y-1">
-                      {/* Main Card Title */}
-                      <div className="w-full justify-between flex items-start mb-3 gap-2">
-                        <div className="flex flex-row gap-3 items-start min-w-0">
-                          <IconContainer className="bg-primary shrink-0" size="xl">
-                            <Shield className="text-border" size="36" />
-                          </IconContainer>
-                          <div className="flex flex-col gap-0.5 min-w-0">
-                            <h4
-                              className="text-xl sm:text-2xl font-black text-foreground tracking-tight truncate"
-                              title={featuredReviewer.title}
+              {/* Main Content Area */}
+              {loading ? (
+                <LoadingPanel label="Loading your study recommendations..." />
+              ) : error ? (
+                <div className="p-6 border-2 border-black bg-rose-50 text-rose-700 font-bold text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                  {error}
+                </div>
+              ) : items.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {items.map((item) => (
+                    <Card
+                      key={item.suggestion_id}
+                      className="p-5 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between gap-4 rounded hover:translate-y-[-2px] transition-transform"
+                    >
+                      <div className="flex flex-col gap-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {item.prediction_id && (
+                              <Badge className="bg-yellow-300 border-2 border-black text-[9px] font-black uppercase px-1.5 py-0.5">
+                                <Sparkles className="size-3 mr-1 fill-black inline" />
+                                AI Recommended
+                              </Badge>
+                            )}
+                            <Badge
+                              className={`border-2 border-black text-[9px] font-black uppercase px-2 py-0.5 ${item.resource_type === "LESSON"
+                                ? "bg-sky-300 text-black"
+                                : "bg-purple-300 text-black"
+                                }`}
                             >
-                              {featuredReviewer.title}
-                            </h4>
-                            <p className="text-sm font-medium text-foreground truncate">{featuredReviewer.subject}</p>
+                              {item.resource_type}
+                            </Badge>
                           </div>
                         </div>
                       </div>
@@ -262,59 +248,34 @@ export default function StudentInterventions() {
                           >
                             Read the review
                           </Button>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                </section>
-
-                {/* Section 3: Past support */}
-                <section aria-label="Past support" className="space-y-3 pb-8">
-                  <h3 className="text-base sm:text-lg font-bold text-foreground">
-                    Past support
-                  </h3>
-
-                  {resolvedInterventions.length === 0 ? (
-                    <Empty className="py-8 border-2 border-border">
-                      <Empty.Content>
-                        <Empty.Title>Nothing here yet.</Empty.Title>
-                        <Empty.Description>
-                          Finished support will be saved here so you can look back on it.
-                        </Empty.Description>
-                      </Empty.Content>
-                    </Empty>
-                  ) : (
-                    <div className="space-y-3">
-                      {resolvedInterventions.map((item) => (
-                        <Card
-                          key={item.intervention_id}
-                          className="w-full border-2 border-border bg-card p-4 space-y-2"
-                        >
-                          <div className="flex justify-between items-center text-sm">
-                            <span className="font-bold text-foreground">
-                              {item.subject_name} Support
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {item.resolved_at
-                                ? new Date(item.resolved_at).toLocaleDateString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                })
-                                : "Resolved"}
-                            </span>
-                          </div>
-                          {item.resolution_message && (
-                            <p className="text-xs text-muted-foreground">
-                              {item.resolution_message}
-                            </p>
-                          )}
-                        </Card>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              </div>
+                        ) : (
+                          <Badge className="bg-emerald-100 text-emerald-800 border-2 border-black font-extrabold text-xs px-2.5 py-1">
+                            <CheckCircle2 className="size-3.5 mr-1 inline" />
+                            Completed
+                          </Badge>
+                        )}
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                /* Clean RetroUI Empty State */
+                <Empty>
+                  <Empty.Content>
+                    <Empty.Icon><PartyPopper size={24} /></Empty.Icon>
+                    <Empty.Title>No Study Recommendations</Empty.Title>
+                    <Empty.Description>You currently have no study recommendations for this view.</Empty.Description>
+                    <Button
+                      size="sm"
+                      onClick={() => navigate(routes.student.subjects)}
+                      className="bg-yellow-300 hover:bg-yellow-400 text-black border-2 border-black font-extrabold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] mt-2"
+                    >
+                      <BookOpen className="size-4 mr-1.5" />
+                      Browse Subjects & Lessons
+                    </Button>
+                  </Empty.Content>
+                </Empty>
+              )}
             </div>
           </div>
         </div>

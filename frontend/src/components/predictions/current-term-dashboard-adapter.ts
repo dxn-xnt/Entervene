@@ -1,6 +1,6 @@
 import {
-  fetchDashboardFilters,
-  fetchDevelopmentCurrentTermPredictions,
+  fetchTeacherAcademicScope,
+  fetchCurrentTermPredictions,
   type DashboardAtRiskResponse,
   type DashboardFilters,
   type DashboardGradeGroupSummary,
@@ -22,7 +22,7 @@ export async function loadAuthorizedCurrentTermPredictions(
   academicPeriodId: number,
   constraints: { gradeLevel?: number; classId?: number; subjectId?: number } = {},
 ): Promise<{ filters: DashboardFilters; rows: AuthorizedCurrentTermRow[]; assignedScopes: AssignedSubjectSectionScope[] }> {
-  const filters = await fetchDashboardFilters();
+  const filters = await fetchTeacherAcademicScope();
   const classes = filters.classes.filter((item) =>
     (constraints.gradeLevel === undefined || item.grade_level === constraints.gradeLevel)
     && (constraints.classId === undefined || item.class_id === constraints.classId));
@@ -30,7 +30,7 @@ export async function loadAuthorizedCurrentTermPredictions(
   const assignedScopes: AssignedSubjectSectionScope[] = [];
 
   const nested = await Promise.all(classes.map(async (classItem) => {
-    const scoped = await fetchDashboardFilters({ class_id: classItem.class_id, academic_period_id: academicPeriodId });
+    const scoped = await fetchTeacherAcademicScope({ class_id: classItem.class_id, academic_period_id: academicPeriodId });
     const subjects = scoped.subjects.filter((item) => constraints.subjectId === undefined || item.subject_id === constraints.subjectId);
     subjects.forEach((subj) => {
       assignedScopes.push({
@@ -42,7 +42,7 @@ export async function loadAuthorizedCurrentTermPredictions(
         section_name: classItem.section_name,
       });
     });
-    const responses = await Promise.all(subjects.map((subject) => fetchDevelopmentCurrentTermPredictions({
+    const responses = await Promise.all(subjects.map((subject) => fetchCurrentTermPredictions({
       class_id: classItem.class_id,
       subject_id: subject.subject_id,
       academic_period_id: academicPeriodId,

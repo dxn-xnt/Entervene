@@ -23,6 +23,7 @@ vi.mock("@/lib/prediction-api", () => ({
   generateDevelopmentCurrentTermPrediction: api.generate,
   fetchDevelopmentCurrentTermPredictions: api.fetchPersisted,
   fetchDashboardFilters: api.fetchFilters,
+  fetchTeacherAcademicScope: api.fetchFilters,
 }));
 vi.mock("@/components/ui/sheet", () => ({
   Sheet: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? <div>{children}</div> : null,

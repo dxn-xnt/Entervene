@@ -319,6 +319,8 @@ export default function AdminSystemSettings() {
     if (!averageYearId) return;
     let cancelled = false;
     setAverageError("");
+    setAveragePolicy(null);
+    setAveragePassing("");
     getYearGeneralAveragePolicy(Number(averageYearId)).then((policy) => {
       if (cancelled) return;
       setAveragePolicy(policy);
@@ -633,7 +635,7 @@ export default function AdminSystemSettings() {
                   <label className="flex flex-col gap-1 text-sm font-semibold">Academic year
                     <Select value={averageYearId} onValueChange={(value) => { setAveragePolicy(null); setAverageYearId(value); }}><Select.Trigger className="w-full"><Select.Value placeholder="Select academic year" /></Select.Trigger><Select.Content><Select.Group>{academicYears.map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}{year.is_active ? " (active)" : ""}</Select.Item>)}</Select.Group></Select.Content></Select>
                   </label>
-                  <p className="text-sm font-semibold">{averagePolicy?.configured ? `Confirmed for ${averagePolicy.year_label}: ${averagePolicy.threshold}%` : "Unconfigured for this academic year"}</p>
+                  <p className="text-sm font-semibold">{averagePolicy?.configured ? `Confirmed for ${averagePolicy.year_label}: ${averagePolicy.threshold}%` : averagePolicy ? "Unconfigured for this academic year" : averageError ? "Passing grade status unavailable" : "Loading passing grade status..."}</p>
                   {!averagePolicy?.configured && averagePolicy?.legacy_proposal ? <Button variant="outline" disabled={isSavingThresholds} onClick={() => void handleSaveThresholds("confirm_legacy")}>Confirm legacy proposal ({averagePolicy.legacy_proposal}%)</Button> : null}
                   {averagePolicy && !averagePolicy.configured && !averagePolicy.legacy_proposal ? <Button variant="outline" disabled={isSavingThresholds} onClick={() => void handleSaveThresholds("initialize_manual")}>Set initial passing grade manually</Button> : null}
                   {!averagePolicy?.configured && averagePolicy?.previous_academic_year_id ? <Button variant="outline" disabled={isSavingThresholds} onClick={() => void handleSaveThresholds("copy_previous")}>Copy from Previous Academic Year</Button> : null}
@@ -644,8 +646,9 @@ export default function AdminSystemSettings() {
                       <span className="hidden sm:block" />
                       <Input
                         aria-label="General Average Passing Grade"
-                        className="w-full min-w-0 shadow-none transition-all hover:shadow-md focus:shadow-md focus-visible:shadow-md sm:w-20"
+                        className="w-full min-w-0 shadow-none transition-all hover:shadow-md focus:shadow-md focus-visible:shadow-md sm:w-32"
                         type="number"
+                        placeholder="0-100"
                         min={0}
                         max={100}
                         step="0.01"

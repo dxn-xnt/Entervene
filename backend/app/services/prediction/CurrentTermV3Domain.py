@@ -23,18 +23,17 @@ VERIFIED_JHS_SUBJECTS = {
 UNVERIFIED_ENHANCED_SUBJECTS = frozenset({"EMATH8", "ESCIE8", "MATH9", "SCI9"})
 
 
-def resolve_v3_scope(db, student_id, class_id: int, subject_id: int) -> dict:
-    student = db.get(Student, student_id)
+def resolve_v3_academic_scope(db, class_id: int, subject_id: int) -> dict:
     class_ = db.get(Class, class_id)
     subject = db.get(Subject, subject_id)
-    if student is None or class_ is None or subject is None:
+    if class_ is None or subject is None:
         return {"supported": False, "reason_codes": ["INVALID_ACADEMIC_SCOPE"]}
 
     level = db.get(AcademicLevel, class_.academic_level_id)
     grade = level.grade_level if level is not None else None
     if grade not in SUPPORTED_GRADES:
         return {"supported": False, "reason_codes": ["UNSUPPORTED_GRADE_SCOPE"], "grade_level": grade}
-    if student.academic_level_id != class_.academic_level_id or subject.academic_level_id != class_.academic_level_id:
+    if subject.academic_level_id != class_.academic_level_id:
         return {"supported": False, "reason_codes": ["MISMATCHED_GRADE_SCOPE"], "grade_level": grade}
     if subject.status != "active":
         return {"supported": False, "reason_codes": ["UNSUPPORTED_SUBJECT"], "grade_level": grade}
@@ -57,6 +56,19 @@ def resolve_v3_scope(db, student_id, class_id: int, subject_id: int) -> dict:
             reason = "UNSUPPORTED_SUBJECT"
         return {"supported": False, "reason_codes": [reason], "grade_level": grade}
     return {"supported": True, "reason_codes": [], "grade_level": grade, "canonical_subject": canonical}
+
+
+def resolve_v3_scope(db, student_id, class_id: int, subject_id: int) -> dict:
+    student = db.get(Student, student_id)
+    if student is None:
+        return {"supported": False, "reason_codes": ["INVALID_ACADEMIC_SCOPE"]}
+    scope = resolve_v3_academic_scope(db, class_id, subject_id)
+    if not scope["supported"]:
+        return scope
+    class_ = db.get(Class, class_id)
+    if student.academic_level_id != class_.academic_level_id:
+        return {"supported": False, "reason_codes": ["MISMATCHED_GRADE_SCOPE"], "grade_level": scope["grade_level"]}
+    return scope
 
 
 def canonicalize_v3_features(features: dict, scope: dict) -> dict:

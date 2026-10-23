@@ -8,7 +8,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { Bell, Megaphone, FileCheck, AlertTriangle, Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
-import { Empty } from "@/components/retroui/Empty";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { routes } from "@/../routes";
 import {
   getNotifications,
@@ -153,12 +153,13 @@ const Notifications = () => {
               {loading ? (
                 <LoadingPanel label="Loading notifications..." />
               ) : filteredNotifications.length === 0 ? (
-                <Empty>
-                  <Empty.Content>
-                    <Empty.Title>No notifications</Empty.Title>
-                    <Empty.Description>You are all caught up!</Empty.Description>
-                  </Empty.Content>
-                </Empty>
+                <TeacherEmptyState
+                  icon={activeTab === "all" ? <Bell /> : activeTab === "announcements" ? <Megaphone /> : activeTab === "submissions" ? <FileCheck /> : <AlertTriangle />}
+                  title={activeTab === "all" ? "No notifications" : `No ${activeTab} notifications`}
+                  description={notifications.length
+                    ? "There are no notifications in this category yet."
+                    : "New updates will appear here when they arrive."}
+                />
               ) : (
                 <div className="flex flex-col gap-3 w-full">
                   {filteredNotifications.map((card) => (

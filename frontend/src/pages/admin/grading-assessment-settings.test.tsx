@@ -80,6 +80,14 @@ describe("grading template settings overview", () => {
     }));
   });
 
+  it("does not label an unavailable policy as unconfigured", async () => {
+    getYearPolicy.mockRejectedValueOnce(new Error("Unable to load year policy."));
+    render(<AdminSystemSettings />);
+    expect(await screen.findByText("Passing grade status unavailable")).toBeTruthy();
+    expect(screen.queryByText("Unconfigured for this academic year")).toBeNull();
+    expect(screen.getByRole("button", { name: "Save Threshold" }).hasAttribute("disabled")).toBe(true);
+  });
+
   it("requires explicit confirmation of the legacy proposal", async () => {
     getYearPolicy.mockResolvedValueOnce({ academic_year_id: 7, year_label: "2026-2027",
       is_active: true, configured: false, threshold: null, version: 0,

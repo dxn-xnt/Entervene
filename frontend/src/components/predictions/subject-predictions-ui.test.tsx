@@ -236,11 +236,12 @@ describe("TeacherCurrentTermDashboard (Subject-First Main Page)", () => {
       terms: [{ term_number: 1, term_label: "Term 1 Demo", academic_period_id: 1 }],
     };
 
-    // Mock fetchDashboardFilters
+    // Mock fetchDashboardFilters / fetchTeacherAcademicScope
+    vi.spyOn(predictionApi, "fetchTeacherAcademicScope").mockResolvedValue(mockFilters);
     vi.spyOn(predictionApi, "fetchDashboardFilters").mockResolvedValue(mockFilters);
 
-    // Mock fetchDevelopmentCurrentTermPredictions
-    vi.spyOn(predictionApi, "fetchDevelopmentCurrentTermPredictions").mockResolvedValue({
+    // Mock the environment-aware Current-Term read contract.
+    vi.spyOn(predictionApi, "fetchCurrentTermPredictions").mockResolvedValue({
       items: [
         {
           prediction_id: 1,
@@ -326,9 +327,10 @@ describe("TeacherCurrentTermSectionPredictions (Section Detail & Navigation)", (
       terms: [{ term_number: 1, term_label: "Term 1 Demo", academic_period_id: 1 }],
     };
 
+    vi.spyOn(predictionApi, "fetchTeacherAcademicScope").mockResolvedValue(sectionMockFilters);
     vi.spyOn(predictionApi, "fetchDashboardFilters").mockResolvedValue(sectionMockFilters);
 
-    vi.spyOn(predictionApi, "fetchDevelopmentCurrentTermPredictions").mockResolvedValue({
+    vi.spyOn(predictionApi, "fetchCurrentTermPredictions").mockResolvedValue({
       items: [
         {
           prediction_id: 33,
