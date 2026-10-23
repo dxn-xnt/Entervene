@@ -110,7 +110,7 @@ def _unsupported_domain(features: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def predict_development_current_term(
+def prepare_development_current_term(
     db: Session,
     student_id: UUID,
     class_id: int,
@@ -120,8 +120,7 @@ def predict_development_current_term(
     *,
     cutoff_at: datetime | None = None,
     model_name: str | None = None,
-    scored_features_out: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
     model_name = require_development_model_name(model_name or selected_development_model_name())
     result = partial(_base_result, model_name=model_name)
     target_period_id = source_period_id if target_period_id is None else target_period_id
@@ -132,7 +131,7 @@ def predict_development_current_term(
             source_period_id=source_period_id,
             target_period_id=target_period_id,
             reason_codes=["SOURCE_TARGET_PERIOD_MISMATCH"],
-        )
+        ), None
 
     if _finalized_same_term_grade_exists(
         db,
@@ -146,7 +145,7 @@ def predict_development_current_term(
             source_period_id=source_period_id,
             target_period_id=target_period_id,
             reason_codes=["FINALIZED_SAME_TERM_GRADE_EXISTS"],
-        )
+        ), None
 
     period = db.get(AcademicPeriod, source_period_id)
     if period is None or not period.is_active:
@@ -155,7 +154,7 @@ def predict_development_current_term(
             source_period_id=source_period_id,
             target_period_id=target_period_id,
             reason_codes=["PERIOD_NOT_ACTIVE"],
-        )
+        ), None
 
     scope = resolve_v3_scope(db, student_id, class_id, subject_id)
     if not scope["supported"] and any(
@@ -168,7 +167,7 @@ def predict_development_current_term(
             target_period_id=target_period_id,
             reason_codes=scope["reason_codes"],
             domain_result=scope,
-        )
+        ), None
 
     built = build_current_period_features_from_records(
         db,
@@ -192,7 +191,7 @@ def predict_development_current_term(
             source_period_id=source_period_id,
             target_period_id=target_period_id,
             readiness_result=readiness_result,
-        )
+        ), None
 
     if not scope["supported"]:
         return result(
@@ -206,7 +205,7 @@ def predict_development_current_term(
                 "subject": built["features"]["subject"],
                 "weight_pattern": _weight_pattern(built["features"]),
             },
-        )
+        ), None
 
     domain_result = _unsupported_domain(built["features"])
     if not domain_result["supported"]:
@@ -217,7 +216,7 @@ def predict_development_current_term(
             readiness_result=readiness_result,
             reason_codes=list(domain_result["reason_codes"]),
             domain_result=domain_result,
-        )
+        ), None
 
     contract = v3_scorer.compare_feature_contract(built["features"], v3_scorer.load_development_current_term_schema(model_name))
     if contract["missing_features"] or contract["unexpected_features"] or contract["type_mismatches"]:
@@ -228,19 +227,66 @@ def predict_development_current_term(
             readiness_result=readiness_result,
             reason_codes=["V3_FEATURE_CONTRACT_MISMATCH"],
             domain_result={"supported": True, "feature_contract": contract},
-        )
+        ), None
 
-    if model_name == v3_scorer.MODEL_NAME:
-        projected = v3_scorer.score_development_current_term(built["features"])
-    else:
-        projected = v3_scorer.score_development_current_term(built["features"], model_name=model_name)
-    if scored_features_out is not None:
-        scored_features_out.update(built["features"])
-    return result(
+    prediction = result(
         status=STATUS_DEVELOPMENT_PREDICTION_AVAILABLE,
         source_period_id=source_period_id,
         target_period_id=target_period_id,
         readiness_result=readiness_result,
-        projected_final_term_grade=projected,
         domain_result=domain_result,
+    )
+    return prediction, {
+        "features": dict(built["features"]),
+        "evidence_summary": built["evidence_summary"],
+    }
+
+
+def score_prepared_development_current_term(
+    prediction: dict[str, Any],
+    prepared: dict[str, Any],
+    *,
+    scored_features_out: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if prediction["status"] != STATUS_DEVELOPMENT_PREDICTION_AVAILABLE:
+        raise ValueError("Only a ready development prediction may be scored.")
+    features = prepared["features"]
+    model_name = prediction["model_name"]
+    if model_name == v3_scorer.MODEL_NAME:
+        projected = v3_scorer.score_development_current_term(features)
+    else:
+        projected = v3_scorer.score_development_current_term(features, model_name=model_name)
+    if scored_features_out is not None:
+        scored_features_out.update(features)
+    return {**prediction, "projected_final_term_grade": projected}
+
+
+def predict_development_current_term(
+    db: Session,
+    student_id: UUID,
+    class_id: int,
+    subject_id: int,
+    source_period_id: int,
+    target_period_id: int | None = None,
+    *,
+    cutoff_at: datetime | None = None,
+    model_name: str | None = None,
+    scored_features_out: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    prediction, prepared = prepare_development_current_term(
+        db,
+        student_id,
+        class_id,
+        subject_id,
+        source_period_id,
+        target_period_id,
+        cutoff_at=cutoff_at,
+        model_name=model_name,
+    )
+    if prepared is None:
+        return prediction
+    return score_prepared_development_current_term(
+        prediction,
+        prepared,
+        scored_features_out=scored_features_out,
     )

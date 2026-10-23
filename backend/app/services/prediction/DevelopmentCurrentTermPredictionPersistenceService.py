@@ -99,6 +99,95 @@ def _require_development_model(db: Session, model_version_id: int | None) -> AIM
     return version
 
 
+def _prediction_scope(
+    *,
+    student_id: UUID,
+    class_id: int,
+    subject_id: int,
+    period_id: int,
+    model_version_id: int,
+) -> tuple[Any, ...]:
+    return (
+        DevelopmentCurrentTermPrediction.student_id == student_id,
+        DevelopmentCurrentTermPrediction.class_id == class_id,
+        DevelopmentCurrentTermPrediction.subject_id == subject_id,
+        DevelopmentCurrentTermPrediction.source_period_id == period_id,
+        DevelopmentCurrentTermPrediction.target_period_id == period_id,
+        DevelopmentCurrentTermPrediction.model_version_id == model_version_id,
+    )
+
+
+def _material_evidence(
+    model_version: AIModelVersion,
+    features: dict[str, Any],
+    examination_presentation: dict[str, Any],
+) -> dict[str, Any]:
+    columns = scorer.required_feature_columns(model_version.feature_schema_json)
+    if len(columns) != 31:
+        raise ValueError("The V3 feature schema must contain exactly 31 ordered values.")
+    metadata = model_version.registry_metadata_json or {}
+    return {
+        "model_features": [{"name": name, "value": features[name]} for name in columns],
+        "examination_presentation": examination_presentation,
+        "feature_schema_sha256": metadata["feature_schema_sha256"],
+        "artifact_sha256": metadata["artifact_sha256"],
+        "training_dataset_version": metadata.get("training_dataset_version"),
+    }
+
+
+def _same_material_evidence(snapshot: object, material_evidence: dict[str, Any]) -> bool:
+    return isinstance(snapshot, dict) and all(
+        snapshot.get(name) == value for name, value in material_evidence.items()
+    )
+
+
+def _latest_prediction(db: Session, scope: tuple[Any, ...]) -> DevelopmentCurrentTermPrediction | None:
+    return db.query(DevelopmentCurrentTermPrediction).filter(*scope).order_by(
+        DevelopmentCurrentTermPrediction.revision.desc()
+    ).first()
+
+
+def _reuse_latest_prediction(
+    db: Session,
+    *,
+    model_version: AIModelVersion,
+    latest: DevelopmentCurrentTermPrediction,
+    prediction: dict[str, Any],
+    student_id: UUID,
+    class_id: int,
+    subject_id: int,
+    period_id: int,
+) -> dict[str, Any]:
+    _sync_corrected_intervention_if_enabled(
+        db, model_version, latest,
+        student_id=student_id, class_id=class_id, subject_id=subject_id,
+        period_id=period_id,
+    )
+    snapshot = latest.evidence_snapshot if isinstance(latest.evidence_snapshot, dict) else {}
+    return {
+        "persisted": False,
+        "unchanged": True,
+        "prediction_id": latest.prediction_id,
+        "model_version_id": latest.model_version_id,
+        "revision": latest.revision,
+        "prediction_status": prediction["status"],
+        "projected_final_term_grade": float(latest.predicted_period_grade),
+        "intervention_level": latest.intervention_level,
+        "intervention_basis": latest.intervention_basis,
+        "risk_score": None,
+        "readiness_status": "READY",
+        "readiness_level": snapshot.get("readiness", {}).get("level"),
+        "readiness_reason_codes": list(snapshot.get("readiness", {}).get("reason_codes") or []),
+        "source_period_id": period_id,
+        "target_period_id": period_id,
+        "prediction_purpose": prediction["prediction_purpose"],
+        "model_name": model_version.model_name,
+        "lifecycle_status": model_version.lifecycle_status,
+        "development_status": prediction["model_development_status"],
+        "generated_at": latest.generated_at,
+    }
+
+
 def _persist_successful_result(
     db: Session,
     *,
@@ -111,6 +200,7 @@ def _persist_successful_result(
     prediction: dict[str, Any],
     intervention: dict[str, Any],
     scored_features: dict[str, Any],
+    material_evidence: dict[str, Any],
 ) -> dict[str, Any]:
     if prediction["status"] != prediction_service.STATUS_DEVELOPMENT_PREDICTION_AVAILABLE:
         raise ValueError("Only successful development predictions may be persisted.")
@@ -168,10 +258,13 @@ def _persist_successful_result(
     if features != scored_features:
         raise ValueError("Current-term model features changed between scoring and persistence.")
     features = scored_features
-
-    columns = scorer.required_feature_columns(model_version.feature_schema_json)
-    if len(columns) != 31:
-        raise ValueError("The V3 feature schema must contain exactly 31 ordered values.")
+    rebuilt_material_evidence = _material_evidence(
+        model_version,
+        features,
+        built["evidence_summary"]["examination"]["presentation"],
+    )
+    if rebuilt_material_evidence != material_evidence:
+        raise ValueError("Current-term material evidence changed between freshness detection and persistence.")
     now = datetime.now(timezone.utc)
     metadata = model_version.registry_metadata_json or {}
     supporting_signals = {}
@@ -187,9 +280,6 @@ def _persist_successful_result(
         "source_period_id": period_id,
         "target_period_id": period_id,
         "feature_schema_version": metadata["feature_schema_version"],
-        "feature_schema_sha256": metadata["feature_schema_sha256"],
-        "artifact_sha256": metadata["artifact_sha256"],
-        "training_dataset_version": metadata.get("training_dataset_version"),
         "projected_final_term_grade_raw": prediction["projected_final_term_grade"],
         "normalized_subject": features["subject"],
         "grading_weight_pattern": prediction["domain_result"]["weight_pattern"],
@@ -198,61 +288,20 @@ def _persist_successful_result(
             "level": prediction["readiness_result"]["readiness_level"],
             "reason_codes": list(prediction["readiness_reason_codes"]),
         },
-        "model_features": [{"name": name, "value": features[name]} for name in columns],
-        "examination_presentation": built["evidence_summary"]["examination"]["presentation"],
         "intervention_reason_codes": list(intervention["triggered_reasons"]),
         "supporting_context": {
             "role": intervention_service.SUPPORTING_CONTEXT_ROLE,
             "signals": supporting_signals,
         },
+        **material_evidence,
     }
-    scope = (
-        DevelopmentCurrentTermPrediction.student_id == student_id,
-        DevelopmentCurrentTermPrediction.class_id == class_id,
-        DevelopmentCurrentTermPrediction.subject_id == subject_id,
-        DevelopmentCurrentTermPrediction.source_period_id == period_id,
-        DevelopmentCurrentTermPrediction.target_period_id == period_id,
-        DevelopmentCurrentTermPrediction.model_version_id == model_version.model_version_id,
+    scope = _prediction_scope(
+        student_id=student_id,
+        class_id=class_id,
+        subject_id=subject_id,
+        period_id=period_id,
+        model_version_id=model_version.model_version_id,
     )
-    latest = db.query(DevelopmentCurrentTermPrediction).filter(*scope).order_by(
-        DevelopmentCurrentTermPrediction.revision.desc()
-    ).first()
-    if latest is not None and isinstance(latest.evidence_snapshot, dict):
-        old = latest.evidence_snapshot
-        if (
-            old.get("model_features") == snapshot["model_features"]
-            and old.get("examination_presentation") == snapshot["examination_presentation"]
-            and old.get("feature_schema_sha256") == snapshot["feature_schema_sha256"]
-            and old.get("artifact_sha256") == snapshot["artifact_sha256"]
-            and old.get("training_dataset_version") == snapshot["training_dataset_version"]
-        ):
-            _sync_corrected_intervention_if_enabled(
-                db, model_version, latest,
-                student_id=student_id, class_id=class_id, subject_id=subject_id,
-                period_id=period_id,
-            )
-            return {
-                "persisted": False,
-                "unchanged": True,
-                "prediction_id": latest.prediction_id,
-                "model_version_id": latest.model_version_id,
-                "revision": latest.revision,
-                "prediction_status": prediction["status"],
-                "projected_final_term_grade": float(latest.predicted_period_grade),
-                "intervention_level": latest.intervention_level,
-                "intervention_basis": latest.intervention_basis,
-                "risk_score": None,
-                "readiness_status": "READY",
-                "readiness_level": old.get("readiness", {}).get("level"),
-                "readiness_reason_codes": list(old.get("readiness", {}).get("reason_codes") or []),
-                "source_period_id": period_id,
-                "target_period_id": period_id,
-                "prediction_purpose": prediction["prediction_purpose"],
-                "model_name": model_version.model_name,
-                "lifecycle_status": model_version.lifecycle_status,
-                "development_status": prediction["model_development_status"],
-                "generated_at": latest.generated_at,
-            }
     revision = (db.query(func.max(DevelopmentCurrentTermPrediction.revision)).filter(*scope).scalar() or 0) + 1
     row = DevelopmentCurrentTermPrediction(
         student_id=student_id,
@@ -322,12 +371,42 @@ def generate_and_persist_development_current_term(
 
     def operation(db: Session) -> dict[str, Any]:
         version = _require_development_model(db, model_version_id)
-        scored_features: dict[str, Any] = {}
-        prediction = prediction_service.predict_development_current_term(
+        prediction, prepared = prediction_service.prepare_development_current_term(
             db, student_id, class_id, subject_id, period_id, cutoff_at=cutoff,
             model_name=version.model_name,
-            scored_features_out=scored_features,
         )
+        if prepared is not None:
+            material_evidence = _material_evidence(
+                version,
+                prepared["features"],
+                prepared["evidence_summary"]["examination"]["presentation"],
+            )
+            prediction_scope = _prediction_scope(
+                student_id=student_id,
+                class_id=class_id,
+                subject_id=subject_id,
+                period_id=period_id,
+                model_version_id=version.model_version_id,
+            )
+            latest = _latest_prediction(db, prediction_scope)
+            if latest is not None and _same_material_evidence(latest.evidence_snapshot, material_evidence):
+                return _reuse_latest_prediction(
+                    db,
+                    model_version=version,
+                    latest=latest,
+                    prediction=prediction,
+                    student_id=student_id,
+                    class_id=class_id,
+                    subject_id=subject_id,
+                    period_id=period_id,
+                )
+
+            scored_features: dict[str, Any] = {}
+            prediction = prediction_service.score_prepared_development_current_term(
+                prediction,
+                prepared,
+                scored_features_out=scored_features,
+            )
         intervention = intervention_service.assess_development_current_term_intervention(
             prediction, supporting_context=supporting_context,
         )
@@ -348,6 +427,8 @@ def generate_and_persist_development_current_term(
                 "lifecycle_status": version.lifecycle_status,
                 "development_status": prediction["model_development_status"],
             }
+        if prepared is None:
+            raise AssertionError("Assessed development prediction is missing prepared evidence.")
         return _persist_successful_result(
             db,
             model_version=version,
@@ -359,6 +440,7 @@ def generate_and_persist_development_current_term(
             prediction=prediction,
             intervention=intervention,
             scored_features=scored_features,
+            material_evidence=material_evidence,
         )
 
     def operation_with_followup(db: Session) -> dict[str, Any]:

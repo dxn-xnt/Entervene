@@ -59,22 +59,31 @@ def test_corrected_package_and_selector(monkeypatch):
     assert selected_development_model_name() == LEGACY_MODEL_NAME
 
 
-def test_separate_histories_and_fail_closed_registry(current_period_context):
+def test_separate_histories_and_fail_closed_registry(current_period_context, monkeypatch):
     ctx = current_period_context
     _set_weights(ctx)
     _make_ready(ctx)
     legacy_id = _register_test_model(ctx)
     corrected = _register_corrected(ctx)
+    score_calls = []
+
+    def score(_features, model_name=LEGACY_MODEL_NAME):
+        score_calls.append(model_name)
+        return 84.0
+
+    monkeypatch.setattr(scorer, "score_development_current_term", score)
     legacy = _run(ctx, legacy_id)
     first = _run(ctx, corrected.model_version_id)
     same = _run(ctx, corrected.model_version_id)
     assert legacy["revision"] == first["revision"] == same["revision"] == 1
     assert legacy["model_version_id"] != first["model_version_id"]
     assert first["persisted"] is True and same["unchanged"] is True
+    assert score_calls == [LEGACY_MODEL_NAME, CORRECTED_MODEL_NAME]
     assert math.isfinite(first["projected_final_term_grade"])
     add_activity(ctx, "PERFORMANCE_TASK", 15, 20)
     second = _run(ctx, corrected.model_version_id)
     assert second["revision"] == 2
+    assert score_calls == [LEGACY_MODEL_NAME, CORRECTED_MODEL_NAME, CORRECTED_MODEL_NAME]
     assert ctx["db"].query(DevelopmentCurrentTermPrediction).filter_by(model_version_id=legacy_id).count() == 1
     scope = dict(class_id=ctx["class"].class_id, subject_id=ctx["subject"].subject_id,
                  academic_period_id=ctx["period"].academic_period_id)
