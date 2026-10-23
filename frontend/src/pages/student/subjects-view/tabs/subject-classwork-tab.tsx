@@ -19,7 +19,7 @@ import SubmissionViewer from "@/components/submission-viewer";
 import AttachmentDisplay from "@/components/attachment-display";
 import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
-import { Empty } from "@/components/retroui/Empty";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { Alert } from "@/components/retroui/Alert";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Badge } from "@/components/retroui/Badge";
@@ -1104,15 +1104,12 @@ export default function SubjectClassworkTab({
       </div>
 
       {visibleClassworks.length === 0 ? (
-        <Empty>
-          <Empty.Content>
-            <Empty.Title>
-              {classworks.length === 0
-                ? "No classworks assigned yet."
-                : "No classworks match this type."}
-            </Empty.Title>
-          </Empty.Content>
-        </Empty>
+        <StudentEmptyState
+          icon={<ClipboardList />}
+          title={classworks.length === 0 ? "No classwork assigned yet" : "No classwork matches this filter"}
+          description={classworks.length === 0 ? "Classwork will appear when your teacher assigns it." : "Try another type or clear the filter to see all classwork."}
+          action={classworks.length > 0 ? { label: "Clear filter", onClick: () => setTypeFilter("all") } : undefined}
+        />
       ) : (
         visibleClassworks.map((cw) => {
           const submission = submissions[cw.classwork_assignment_id];

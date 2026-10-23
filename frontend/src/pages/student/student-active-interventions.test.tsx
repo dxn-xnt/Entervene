@@ -42,7 +42,7 @@ it("shows only sent reviewer links and no target card for an empty student list"
   cleanup();
   api.list.mockResolvedValue({ items: [] });
   mount();
-  expect(await screen.findByText("No active interventions at this time.")).toBeTruthy();
+  expect(await screen.findByText("No active support right now")).toBeTruthy();
   expect(screen.queryByText("Mathematics")).toBeNull();
 });
 

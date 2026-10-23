@@ -14,10 +14,9 @@ import {
   Loader2,
   Clock,
   ArrowRight,
-  PartyPopper,
 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
-import { Empty } from "@/components/retroui/Empty";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
 import {
@@ -259,22 +258,11 @@ export default function StudentInterventions() {
                   ))}
                 </div>
               ) : (
-                /* Clean RetroUI Empty State */
-                <Empty>
-                  <Empty.Content>
-                    <Empty.Icon><PartyPopper size={24} /></Empty.Icon>
-                    <Empty.Title>No Study Recommendations</Empty.Title>
-                    <Empty.Description>You currently have no study recommendations for this view.</Empty.Description>
-                    <Button
-                      size="sm"
-                      onClick={() => navigate(routes.student.subjects)}
-                      className="bg-yellow-300 hover:bg-yellow-400 text-black border-2 border-black font-extrabold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] mt-2"
-                    >
-                      <BookOpen className="size-4 mr-1.5" />
-                      Browse Subjects & Lessons
-                    </Button>
-                  </Empty.Content>
-                </Empty>
+                <StudentEmptyState
+                  icon={<BookOpen />}
+                  title={statusFilter === "COMPLETED" ? "No completed recommendations yet" : "No study recommendations yet"}
+                  description={statusFilter === "COMPLETED" ? "Recommendations you finish will appear here." : "Relevant study recommendations will appear here when available."}
+                />
               )}
             </div>
           </div>

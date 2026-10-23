@@ -26,6 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/retroui/Tooltip";
 import { LoadingPanel } from "@/components/loading-panel";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
 import AttachmentDisplay from "@/components/attachment-display";
 import SubmissionForm from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
@@ -519,11 +520,7 @@ export default function StudentClassworkView() {
                           }
                         />
                       ) : (
-                        <Card className="block w-full py-4 text-center shadow-none">
-                          <p className="text-sm text-muted-foreground">
-                            No files attached.
-                          </p>
-                        </Card>
+                        <StudentEmptyState embedded icon={<FileText />} title="No files attached" description="Your teacher has not attached files to this classwork." />
                       )}
                     </section>
                     <div className="text-sm text-muted-foreground">

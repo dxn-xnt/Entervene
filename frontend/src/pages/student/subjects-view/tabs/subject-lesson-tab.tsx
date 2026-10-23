@@ -13,8 +13,9 @@ import { apiFetch, getLessonGoals, getStudentTodos, type LessonGoalItemResponse,
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { Card } from "@/components/retroui/Card";
+import { Alert } from "@/components/retroui/Alert";
 import IconContainer from "@/components/icon-container";
-import { Empty } from "@/components/retroui/Empty";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
@@ -143,6 +144,8 @@ export default function SubjectLessonTab({
   const [classworksByLesson, setClassworksByLesson] = useState<
     Record<number, LessonClasswork[]>
   >({});
+  const [classworkErrorIds, setClassworkErrorIds] = useState<Set<number>>(new Set());
+  const [classworkLoadingIds, setClassworkLoadingIds] = useState<Set<number>>(new Set());
   const [classworkLoadingId, setClassworkLoadingId] = useState<number | null>(
     null,
   );
@@ -230,24 +233,25 @@ export default function SubjectLessonTab({
     setSelectedLessonDetail(targetLesson);
     onLessonSelect?.(targetId);
     if (classId && classworksByLesson[targetId] === undefined) {
+      setClassworkLoadingIds((prev) => new Set(prev).add(targetId));
       void apiFetch(
         `/api/v1/lessons/${targetId}/classwork-assignments?class_id=${classId}`,
       )
-        .then(async (res) =>
-          res.ok ? ((await res.json()) as LessonClasswork[]) : [],
-        )
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Unable to load lesson classwork");
+          return (await res.json()) as LessonClasswork[];
+        })
         .then((data) => {
+          setClassworkErrorIds((prev) => { const next = new Set(prev); next.delete(targetId); return next; });
           setClassworksByLesson((prev) => ({
             ...prev,
             [targetId]: prev[targetId] ?? data,
           }));
         })
         .catch(() => {
-          setClassworksByLesson((prev) => ({
-            ...prev,
-            [targetId]: prev[targetId] ?? [],
-          }));
-        });
+          setClassworkErrorIds((prev) => new Set(prev).add(targetId));
+        })
+        .finally(() => setClassworkLoadingIds((prev) => { const next = new Set(prev); next.delete(targetId); return next; }));
     }
   }, [classId, classworksByLesson, lessons, onLessonSelect, searchParams]);
 
@@ -307,6 +311,7 @@ export default function SubjectLessonTab({
   const fetchAllClassworks = (lessonList: Lesson[]) => {
     if (!classId) return;
     lessonList.forEach(async (lesson) => {
+      setClassworkLoadingIds((prev) => new Set(prev).add(lesson.lesson_id));
       // Skip if already loaded or being loaded by accordion toggle
       setClassworksByLesson((prev) => {
         if (prev[lesson.lesson_id] !== undefined) return prev;
@@ -317,16 +322,17 @@ export default function SubjectLessonTab({
         const res = await apiFetch(
           `/api/v1/lessons/${lesson.lesson_id}/classwork-assignments?class_id=${classId}`,
         );
-        const data = res.ok ? ((await res.json()) as LessonClasswork[]) : [];
+        if (!res.ok) throw new Error("Unable to load lesson classwork");
+        const data = (await res.json()) as LessonClasswork[];
+        setClassworkErrorIds((prev) => { const next = new Set(prev); next.delete(lesson.lesson_id); return next; });
         setClassworksByLesson((prev) => ({
           ...prev,
           [lesson.lesson_id]: prev[lesson.lesson_id] ?? data,
         }));
       } catch {
-        setClassworksByLesson((prev) => ({
-          ...prev,
-          [lesson.lesson_id]: prev[lesson.lesson_id] ?? [],
-        }));
+        setClassworkErrorIds((prev) => new Set(prev).add(lesson.lesson_id));
+      } finally {
+        setClassworkLoadingIds((prev) => { const next = new Set(prev); next.delete(lesson.lesson_id); return next; });
       }
     });
   };
@@ -338,10 +344,12 @@ export default function SubjectLessonTab({
       const res = await apiFetch(
         `/api/v1/lessons/${lessonId}/classwork-assignments?class_id=${classId}`,
       );
-      const data = res.ok ? ((await res.json()) as LessonClasswork[]) : [];
+      if (!res.ok) throw new Error("Unable to load lesson classwork");
+      const data = (await res.json()) as LessonClasswork[];
+      setClassworkErrorIds((prev) => { const next = new Set(prev); next.delete(lessonId); return next; });
       setClassworksByLesson((prev) => ({ ...prev, [lessonId]: data }));
     } catch {
-      setClassworksByLesson((prev) => ({ ...prev, [lessonId]: [] }));
+      setClassworkErrorIds((prev) => new Set(prev).add(lessonId));
     } finally {
       setClassworkLoadingId(null);
     }
@@ -746,15 +754,17 @@ export default function SubjectLessonTab({
           (classworkLessonCounts.get(cw.classwork_assignment_id) ?? 0) <= 1),
     );
 
-    if (classworkLoadingId === lesson.lesson_id) {
+    if (classworkLoadingId === lesson.lesson_id || classworkLoadingIds.has(lesson.lesson_id) || classworksByLesson[lesson.lesson_id] === undefined && !classworkErrorIds.has(lesson.lesson_id)) {
       return <LoadingPanel label="Loading classworks..." className="py-6" />;
+    }
+
+    if (classworkErrorIds.has(lesson.lesson_id)) {
+      return <Alert status="error">Unable to load classwork for this lesson. <Button size="sm" variant="outline" className="ml-2 gap-2" onClick={() => void fetchLessonClassworks(lesson.lesson_id)}>Retry</Button></Alert>;
     }
 
     if (classworks.length === 0) {
       return (
-        <Card className="w-full text-center rounded border-0 bg-muted px-4 py-3 text-sm text-muted-foreground shadow-none">
-          No classworks linked to this lesson
-        </Card>
+        <StudentEmptyState cardless={nested} icon={<ClipboardList />} title="No classwork for this lesson yet" description="Related activities will appear when your teacher publishes them." />
       );
     }
 
@@ -933,12 +943,7 @@ export default function SubjectLessonTab({
 
           {/* ── Empty state ── */}
           {lessons.length === 0 ? (
-            <Empty>
-              <Empty.Content>
-                <Empty.Icon><BookOpen size={24} /></Empty.Icon>
-                <Empty.Title>No lessons available for this subject.</Empty.Title>
-              </Empty.Content>
-            </Empty>
+            <StudentEmptyState icon={<BookOpen />} title="No lessons published yet" description="Lessons and materials will appear here when your teacher publishes them." />
           ) : (
             <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
               {/* ════════════════ LEFT: Lessons list ════════════════ */}
@@ -972,7 +977,7 @@ export default function SubjectLessonTab({
                 </div>
 
                 <div className="space-y-3">
-                  {sortedLessons.map(renderStudentLessonItem)}
+                  {sortedLessons.length === 0 ? <StudentEmptyState icon={<BookOpen />} title="No lessons match this filter" description="Choose another lesson or clear the filter to see all lessons." action={{ label: "Clear filter", onClick: () => setLessonFilter("all") }} /> : sortedLessons.map(renderStudentLessonItem)}
                 </div>
               </div>
 
