@@ -203,7 +203,7 @@ export default function SubjectSuggestionsTab({
         </Alert>
       ) : null}
       {/* typescriptreact */}
-      <div className="grid gap-3 py-2 md:grid-cols-[1fr_180px]">
+      <div className="grid gap-3 py-2 md:grid-cols-[1fr_192px]">
         <label className="relative">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
           <Input
@@ -219,7 +219,7 @@ export default function SubjectSuggestionsTab({
             value={sortMode}
             onValueChange={(value) => setSortMode(value as SortMode)}
           >
-            <Select.Trigger className="w-full">
+            <Select.Trigger className="w-full text-sm">
               <ArrowUpDown size={15} className="mr-1" />
               <Select.Value placeholder="Sort By" />
             </Select.Trigger>

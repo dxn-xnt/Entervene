@@ -1068,7 +1068,7 @@ export default function SubjectClassworkTab({
         </Alert>
       ) : null}
 
-      <div className="ml-auto grid w-full max-w-[21rem] grid-cols-2 gap-3 py-2">
+      <div className="ml-auto grid w-full max-w-[25rem] grid-cols-2 gap-3 py-2">
         <div className="min-w-0">
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <Select.Trigger className="h-10 w-full border-2 border-black bg-white text-sm">

@@ -39,12 +39,13 @@ export default function StudentInterventions() {
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE");
+  const [subjectFilter, setSubjectFilter] = useState<string>("ALL");
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchMyInterventions(statusFilter === "All" ? undefined : statusFilter);
+      const res = await fetchMyInterventions();
       setItems(res.suggestions || []);
     } catch (err: unknown) {
       console.error(err);
@@ -56,7 +57,7 @@ export default function StudentInterventions() {
 
   useEffect(() => {
     loadData();
-  }, [statusFilter]);
+  }, []);
 
   const handleComplete = async (id: number) => {
     setCompletingId(id);
@@ -87,6 +88,13 @@ export default function StudentInterventions() {
     [items]
   );
   const completedCount = useMemo(() => items.filter((s) => s.status === "COMPLETED").length, [items]);
+  const subjects = useMemo(() => Array.from(
+    new Map(items.map((item) => [item.subject_id, item.subject_name || `Subject #${item.subject_id}`])).entries(),
+  ).sort((a, b) => a[1].localeCompare(b[1])), [items]);
+  const filteredItems = useMemo(() => items.filter((item) =>
+    (statusFilter === "All" || item.status === statusFilter) &&
+    (subjectFilter === "ALL" || String(item.subject_id) === subjectFilter),
+  ), [items, statusFilter, subjectFilter]);
 
   return (
     <AppLayout>
@@ -126,19 +134,18 @@ export default function StudentInterventions() {
 
               {/* Filter Toolbar */}
               <div className="flex items-center justify-end gap-3 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <Select.Trigger className="h-9 w-full font-bold sm:w-40">
-                      <Select.Value placeholder="Select Status" />
+                <div className="flex items-center gap-3">
+                  <Select value={subjectFilter} onValueChange={setSubjectFilter}>
+                    <Select.Trigger aria-label="Filter by subject" className="h-10 w-44 text-sm sm:w-48">
+                      <Select.Value placeholder="All subjects" />
                     </Select.Trigger>
                     <Select.Content>
-                      <Select.Item value="ACTIVE">Math</Select.Item>
-                      <Select.Item value="COMPLETED">Science</Select.Item>
-                      <Select.Item value="All">Filipino</Select.Item>
+                      <Select.Item value="ALL">All subjects</Select.Item>
+                      {subjects.map(([id, name]) => <Select.Item key={id} value={String(id)}>{name}</Select.Item>)}
                     </Select.Content>
                   </Select>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <Select.Trigger className="h-9 w-full font-bold sm:w-40">
+                    <Select.Trigger aria-label="Filter by task status" className="h-10 w-44 text-sm sm:w-48">
                       <Select.Value placeholder="Select Status" />
                     </Select.Trigger>
                     <Select.Content>
@@ -157,9 +164,9 @@ export default function StudentInterventions() {
                 <div className="p-6 border-2 border-black bg-rose-50 text-rose-700 font-bold text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                   {error}
                 </div>
-              ) : items.length > 0 ? (
+              ) : filteredItems.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {items.map((item) => (
+                  {filteredItems.map((item) => (
                     <Card
                       key={item.suggestion_id}
                       className="p-5 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between gap-4 rounded hover:translate-y-[-2px] transition-transform"
@@ -260,8 +267,8 @@ export default function StudentInterventions() {
               ) : (
                 <StudentEmptyState
                   icon={<BookOpen />}
-                  title={statusFilter === "COMPLETED" ? "No completed recommendations yet" : "No study recommendations yet"}
-                  description={statusFilter === "COMPLETED" ? "Recommendations you finish will appear here." : "Relevant study recommendations will appear here when available."}
+                  title={subjectFilter !== "ALL" && items.length > 0 ? "No recommendations for this subject" : statusFilter === "COMPLETED" ? "No completed recommendations yet" : "No study recommendations yet"}
+                  description={subjectFilter !== "ALL" && items.length > 0 ? "Try another subject or task status." : statusFilter === "COMPLETED" ? "Recommendations you finish will appear here." : "Relevant study recommendations will appear here when available."}
                 />
               )}
             </div>
