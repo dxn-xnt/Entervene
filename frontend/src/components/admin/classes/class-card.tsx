@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ArchiveIcon, EllipsisIcon, PenIcon } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { classPathwayLabel } from "@/lib/class-pathway";
 
 export default function ClassCard({ item, onEdit, onArchive }: {
@@ -53,17 +53,17 @@ export default function ClassCard({ item, onEdit, onArchive }: {
           <DropdownMenu>
             <Tooltip>
               <TooltipTrigger render={<span className="inline-flex">
-            <DropdownMenuTrigger asChild>
-              <Button
-                size="sm"
-                variant="secondary"
-                className="p-2 shadow-none"
-                aria-label="More options"
-                onClick={(e) => e.preventDefault()}
-              >
-                <EllipsisIcon className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="p-2 shadow-none"
+                    aria-label="More options"
+                    onClick={(e) => e.preventDefault()}
+                  >
+                    <EllipsisIcon className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
               </span>} />
               <TooltipContent>Class actions</TooltipContent>
             </Tooltip>

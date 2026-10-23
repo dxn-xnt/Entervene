@@ -6,7 +6,7 @@ import { LoadingPanel } from "@/components/loading-panel";
 import { Empty } from "@/components/retroui/Empty";
 import { useStudentOverviewData } from "@/hooks/use-student-overview-data";
 import SubjectGrade from "./subject-grade";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 
 const Grades = () => {
   const [selectedSubject, setSelectedSubject] = useState<{ id: number; classId?: number; name: string } | null>(null);
@@ -47,22 +47,22 @@ const Grades = () => {
                 </Empty>
               ) : subjects.map((subject) => (
                 <Tooltip key={subject.subject_load_id}>
-                <TooltipTrigger render={<Card className="block w-full cursor-pointer transition-colors hover:border-border"
-                  role="button" tabIndex={0} aria-label={`View grades for ${subject.subject_name}`}
-                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedSubject({ id: subject.subject_id, classId: subject.class_id, name: subject.subject_name }); } }}
-                  onClick={() => setSelectedSubject({ id: subject.subject_id, classId: subject.class_id, name: subject.subject_name })}>
-                  <Card.Content className="flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <Card.Title className="mb-1 truncate text-lg">{subject.subject_name}</Card.Title>
-                      <p className="truncate text-sm text-muted-foreground">{subject.teacher_name}</p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <Card.Description>{getGradedCount(subject.subject_id)}</Card.Description>
-                      <p className="text-xs text-muted-foreground">Graded Classwork</p>
-                    </div>
-                  </Card.Content>
-                </Card>} />
-                <TooltipContent>View grades</TooltipContent>
+                  <TooltipTrigger render={<Card className="block w-full cursor-pointer transition-colors hover:border-border"
+                    role="button" tabIndex={0} aria-label={`View grades for ${subject.subject_name}`}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedSubject({ id: subject.subject_id, classId: subject.class_id, name: subject.subject_name }); } }}
+                    onClick={() => setSelectedSubject({ id: subject.subject_id, classId: subject.class_id, name: subject.subject_name })}>
+                    <Card.Content className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <Card.Title className="mb-1 truncate text-lg">{subject.subject_name}</Card.Title>
+                        <p className="truncate text-sm text-muted-foreground">{subject.teacher_name}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <Card.Description>{getGradedCount(subject.subject_id)}</Card.Description>
+                        <p className="text-xs text-muted-foreground">Graded Classwork</p>
+                      </div>
+                    </Card.Content>
+                  </Card>} />
+                  <TooltipContent>View grades</TooltipContent>
                 </Tooltip>
               ))}
             </div>

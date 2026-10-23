@@ -29,7 +29,7 @@ import { QuizTextAnswerInput, QuizTextAnswerSummary } from "@/components/quiz/st
 import { API_URL, apiFetch } from "@/lib/api";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { LoadingPanel } from "@/components/loading-panel";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import IconContainer from "@/components/icon-container";
 import { StudentDialogCloseButton } from "@/components/student/student-dialog-close-button";
 
@@ -502,9 +502,9 @@ export default function SubjectClassworkTab({
       setSelectedClasswork((prev) =>
         prev
           ? {
-              ...prev,
-              submission_status: attempt.status,
-            }
+            ...prev,
+            submission_status: attempt.status,
+          }
           : null,
       );
       updateClassworkStatus(
@@ -654,9 +654,9 @@ export default function SubjectClassworkTab({
       setSelectedClasswork((prev) =>
         prev
           ? {
-              ...prev,
-              submission_status: submission.status,
-            }
+            ...prev,
+            submission_status: submission.status,
+          }
           : null,
       );
       updateClassworkStatus(assignmentId, submission.status);
@@ -817,13 +817,12 @@ export default function SubjectClassworkTab({
                         setQuizCurrentIndex(index);
                         setQuizReviewMode(false);
                       }}
-                      className={`relative h-8 min-w-8 rounded border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${
-                        index === quizCurrentIndex
+                      className={`relative h-8 min-w-8 rounded border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${index === quizCurrentIndex
                           ? "bg-white"
                           : hasQuizAnswer(question)
                             ? "bg-[#F6E9B2]"
                             : "bg-white"
-                      }`}
+                        }`}
                     >
                       {flaggedQuizQuestionIds.has(question.quiz_question_id) ? (
                         <span className="absolute -top-2 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-red-500" />
@@ -878,13 +877,12 @@ export default function SubjectClassworkTab({
                             return (
                               <div
                                 key={option.option_id}
-                                className={`border border-foreground px-3 py-2 text-sm ${
-                                   isSelected
-                                     ? "bg-primary text-primary-foreground"
-                                     : isCorrect
-                                       ? "bg-success/10"
-                                       : "bg-background"
-                                 }`}
+                                className={`border border-foreground px-3 py-2 text-sm ${isSelected
+                                    ? "bg-primary text-primary-foreground"
+                                    : isCorrect
+                                      ? "bg-success/10"
+                                      : "bg-background"
+                                  }`}
                               >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <span className="min-w-0 break-words">
@@ -968,13 +966,12 @@ export default function SubjectClassworkTab({
                     onClick={() =>
                       toggleQuizFlag(currentQuestion.quiz_question_id)
                     }
-                    className={`rounded border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${
-                      flaggedQuizQuestionIds.has(
-                        currentQuestion.quiz_question_id,
-                      )
+                    className={`rounded border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${flaggedQuizQuestionIds.has(
+                      currentQuestion.quiz_question_id,
+                    )
                         ? "bg-[#F6E9B2]"
                         : "bg-white"
-                    }`}
+                      }`}
                   >
                     Flag Question
                   </Button>
@@ -1008,12 +1005,11 @@ export default function SubjectClassworkTab({
                         }
                         disabled={isQuizSubmitting}
                         style={{ borderWidth: 1 }}
-                        className={`w-full min-w-0 h-full min-h-24 rounded border-black p-4 text-base sm:text-lg font-bold shadow-md hover:shadow-none whitespace-normal break-words [overflow-wrap:anywhere] ${
-                          quizAnswers[currentQuestion.quiz_question_id]
+                        className={`w-full min-w-0 h-full min-h-24 rounded border-black p-4 text-base sm:text-lg font-bold shadow-md hover:shadow-none whitespace-normal break-words [overflow-wrap:anywhere] ${quizAnswers[currentQuestion.quiz_question_id]
                             ?.selected_option_id === option.option_id
                             ? "bg-success hover:bg-success"
                             : "bg-white hover:bg-white"
-                        }`}
+                          }`}
                       >
                         <span className="w-full max-w-full min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] text-center leading-snug">
                           {option.option_text}
@@ -1146,39 +1142,39 @@ export default function SubjectClassworkTab({
                   }
                 }}
               >
-              <div className="flex w-full items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Icon size={20} className="shrink-0" />
-                    <span className="font-semibold text-base text-black line-clamp-2 break-words [overflow-wrap:anywhere]">
-                      {cw.title}
-                    </span>
+                <div className="flex w-full items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Icon size={20} className="shrink-0" />
+                      <span className="font-semibold text-base text-black line-clamp-2 break-words [overflow-wrap:anywhere]">
+                        {cw.title}
+                      </span>
+                    </div>
+
+                    <p className="mt-2 text-left text-xs text-gray-600">
+                      {[
+                        cw.classwork_type,
+                        formatDate(cw.due_date),
+                        cw.total_points ? `${cw.total_points} pts` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" | ")}
+                    </p>
                   </div>
 
-                  <p className="mt-2 text-left text-xs text-gray-600">
-                    {[
-                      cw.classwork_type,
-                      formatDate(cw.due_date),
-                      cw.total_points ? `${cw.total_points} pts` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" | ")}
-                  </p>
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                    <Badge variant={badge.variant} size="sm" className={badge.cls}>{badge.label}</Badge>
+                    {deadline && (
+                      <Badge variant={deadline.variant} size="sm" className={deadline.cls}>
+                        {deadline.label}
+                      </Badge>
+                    )}
+                    {isItemLoading && (
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+                    )}
+                  </div>
                 </div>
-
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                  <Badge variant={badge.variant} size="sm" className={badge.cls}>{badge.label}</Badge>
-                  {deadline && (
-                    <Badge variant={deadline.variant} size="sm" className={deadline.cls}>
-                      {deadline.label}
-                    </Badge>
-                  )}
-                  {isItemLoading && (
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-                  )}
-                </div>
-              </div>
-            </Card>} />
+              </Card>} />
               <TooltipContent>{cw.is_locked ? "Not available yet" : "View classwork"}</TooltipContent>
             </Tooltip>
           );
@@ -1240,8 +1236,8 @@ export default function SubjectClassworkTab({
                         >
                           {statusLabel(
                             selectedQuizAttempt?.status ??
-                              selectedSubmission?.status ??
-                              selectedClasswork.submission_status,
+                            selectedSubmission?.status ??
+                            selectedClasswork.submission_status,
                           )}
                         </Badge>
                       </div>
@@ -1257,8 +1253,8 @@ export default function SubjectClassworkTab({
                           <p className="font-bold">
                             {selectedClasswork.due_date
                               ? new Date(
-                                  selectedClasswork.due_date,
-                                ).toLocaleString()
+                                selectedClasswork.due_date,
+                              ).toLocaleString()
                               : "No due date"}
                           </p>
                         </Card>
@@ -1434,10 +1430,10 @@ export default function SubjectClassworkTab({
                     {isReadingType(selectedClasswork.classwork_type) ? (
                       <div className="space-y-3">
                         {selectedSubmission?.status === "submitted" ||
-                        selectedSubmission?.status === "graded" ||
-                        selectedClasswork.submission_status === "submitted" ||
-                        selectedClasswork.submission_status === "graded" ||
-                        selectedClasswork.submission_status === "completed" ? (
+                          selectedSubmission?.status === "graded" ||
+                          selectedClasswork.submission_status === "submitted" ||
+                          selectedClasswork.submission_status === "graded" ||
+                          selectedClasswork.submission_status === "completed" ? (
                           <div className="border border-green-300 bg-green-50 p-3 text-sm font-semibold text-green-800 flex items-center gap-2">
                             <CheckCircle className="size-5 text-green-600 shrink-0" />
                             <span>
@@ -1451,21 +1447,21 @@ export default function SubjectClassworkTab({
                               finished, mark it as completed to update your
                               progress.
                             </p>
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={() =>
-                                  handleCompleteReading(
-                                    selectedClasswork.classwork_assignment_id,
-                                  )
-                                }
-                                disabled={isMarkingRead}
-                                className="w-full gap-2 disabled:opacity-50"
-                              >
-                                {isMarkingRead
-                                  ? "Marking as completed..."
-                                  : "Mark as Completed"}
-                              </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() =>
+                                handleCompleteReading(
+                                  selectedClasswork.classwork_assignment_id,
+                                )
+                              }
+                              disabled={isMarkingRead}
+                              className="w-full gap-2 disabled:opacity-50"
+                            >
+                              {isMarkingRead
+                                ? "Marking as completed..."
+                                : "Mark as Completed"}
+                            </Button>
                           </div>
                         )}
                       </div>
@@ -1510,7 +1506,7 @@ export default function SubjectClassworkTab({
                                 ) : null}
                               </div>
                               {selectedQuizAttempt.grade !== null &&
-                              selectedQuizAttempt.grade !== undefined ? (
+                                selectedQuizAttempt.grade !== undefined ? (
                                 <p className="mt-2 text-sm font-bold">
                                   {selectedClasswork.show_scores ? (
                                     <>
@@ -1538,7 +1534,7 @@ export default function SubjectClassworkTab({
                                   </div>
                                 ) : null}
                                 {selectedQuizAttempt.status !==
-                                "not_started" ? (
+                                  "not_started" ? (
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -1556,7 +1552,7 @@ export default function SubjectClassworkTab({
                                     {selectedQuizAttempt.summary_available
                                       ? "View Summary"
                                       : selectedQuizAttempt.summary_release_mode ===
-                                          "NEVER"
+                                        "NEVER"
                                         ? "Summary Not Available"
                                         : "Summary Scheduled"}
                                   </Button>

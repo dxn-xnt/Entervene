@@ -34,7 +34,7 @@ import { Table } from "@/components/retroui/Table";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Avatar } from "@/components/retroui/Avatar";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
 import SetLessonGoalModal from "./forms/set-lesson-goal-modal";

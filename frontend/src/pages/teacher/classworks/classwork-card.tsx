@@ -12,7 +12,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/retroui/ContextMenu";
 import { Progress } from "@/components/retroui/Progress";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { useToast } from "@/components/retroui/use-toast";
 import {
   DropdownMenu,

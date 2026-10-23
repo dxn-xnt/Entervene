@@ -35,7 +35,7 @@ import { Empty } from "@/components/retroui/Empty";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { GradeOverviewCards } from "@/components/student/grade-overview-cards";
 import { SubjectCard } from "@/components/subject-card";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { routes } from "@/../routes";
 import {
   getMyStudyboardMetrics,
@@ -616,8 +616,8 @@ const StoryBoard = () => {
                           value={
                             onTimeTotal > 0
                               ? Math.round(
-                                  ((metrics?.on_time_count || 0) / onTimeTotal) * 100,
-                                )
+                                ((metrics?.on_time_count || 0) / onTimeTotal) * 100,
+                              )
                               : 0
                           }
                           variant="circular"

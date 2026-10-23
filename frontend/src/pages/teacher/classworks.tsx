@@ -43,7 +43,7 @@ import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/D
 import { Text } from "@/components/retroui/Text";
 import { Select } from "@/components/retroui/Select";
 import SegmentedControl from "@/components/retroui/SegmentedControl";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { DialogueSelect } from "@/components/dialogue-select";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";

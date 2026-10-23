@@ -6,7 +6,7 @@ import { getClassFormOptions } from "@/lib/api";
 import type { AdviserOption, ClassFormOptions, ManualClassSetup, ManualSectionDraft } from "@/types/adminClasses";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/retroui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Select } from "@/components/retroui/Select";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
@@ -290,14 +290,14 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
               </div>
               <Tooltip>
                 <TooltipTrigger render={<span className="inline-flex"><Button
-                aria-label="Remove section"
-                variant={"outline"}
-                size={"icon"}
-                disabled={sections.length === 1}
-                onClick={() => setSections((current) => current.filter((item) => item.localId !== section.localId))}
-              >
-                <Trash2 className="size-4 text-destructive" />
-              </Button></span>} />
+                  aria-label="Remove section"
+                  variant={"outline"}
+                  size={"icon"}
+                  disabled={sections.length === 1}
+                  onClick={() => setSections((current) => current.filter((item) => item.localId !== section.localId))}
+                >
+                  <Trash2 className="size-4 text-destructive" />
+                </Button></span>} />
                 <TooltipContent>{sections.length === 1 ? "Keep one section" : "Remove section"}</TooltipContent>
               </Tooltip>
             </div>

@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import { dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 
 export function StudentDialogCloseButton({ onClick }: { onClick: () => void }) {
   return (

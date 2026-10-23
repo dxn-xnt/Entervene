@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/retroui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Text } from "@/components/retroui/Text";
 import { Table } from "@/components/retroui/Table";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -149,13 +149,13 @@ export default function ViewGradeScoreModal({
                         {onEnterScores && (
                           <Tooltip>
                             <TooltipTrigger render={<button
-                            type="button"
-                            aria-label="Enter or edit scores"
-                            className="border border-transparent p-1 text-black transition-colors hover:border-black hover:bg-yellow-200"
-                            onClick={() => onEnterScores(item)}
-                          >
-                            <Edit3 className="size-3.5" />
-                          </button>} />
+                              type="button"
+                              aria-label="Enter or edit scores"
+                              className="border border-transparent p-1 text-black transition-colors hover:border-black hover:bg-yellow-200"
+                              onClick={() => onEnterScores(item)}
+                            >
+                              <Edit3 className="size-3.5" />
+                            </button>} />
                             <TooltipContent>Edit scores</TooltipContent>
                           </Tooltip>
                         )}

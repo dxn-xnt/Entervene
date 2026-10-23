@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs } from "@/components/retroui/Tabs";
 import { Button } from "@/components/retroui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { NotificationCard } from "@/components/notification-card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
@@ -116,65 +116,65 @@ const Notifications = () => {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             <div data-page-tabs-sticky-region>
-            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="shrink-0 md:hidden" />
-                <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
-                  Notifications
-                </h1>
+              <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+                <div className="flex items-center gap-3">
+                  <SidebarTrigger className="shrink-0 md:hidden" />
+                  <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
+                    Notifications
+                  </h1>
+                </div>
+                <Tooltip>
+                  <TooltipTrigger render={<span className="inline-flex"><Button
+                    variant="default"
+                    size="header"
+                    onClick={handleMarkAll}
+                    disabled={markingAll || notifications.every((n) => n.is_read)}
+                    className="shrink-0 whitespace-nowrap"
+                  >
+                    {markingAll ? <Loader2 className="size-4 animate-spin" /> : null}
+                    <span className="hidden sm:inline">Mark All as Read</span>
+                    <span className="sm:hidden">Read All</span>
+                  </Button></span>} />
+                  <TooltipContent>{markingAll ? "Marking as read" : notifications.every((n) => n.is_read) ? "No unread notifications" : "Mark all as read"}</TooltipContent>
+                </Tooltip>
+              </header>
+              <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                <Tabs
+                  tabs={tabs}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                />
               </div>
-              <Tooltip>
-                <TooltipTrigger render={<span className="inline-flex"><Button
-                variant="default"
-                size="header"
-                onClick={handleMarkAll}
-                disabled={markingAll || notifications.every((n) => n.is_read)}
-                className="shrink-0 whitespace-nowrap"
-              >
-                {markingAll ? <Loader2 className="size-4 animate-spin" /> : null}
-                <span className="hidden sm:inline">Mark All as Read</span>
-                <span className="sm:hidden">Read All</span>
-              </Button></span>} />
-                <TooltipContent>{markingAll ? "Marking as read" : notifications.every((n) => n.is_read) ? "No unread notifications" : "Mark all as read"}</TooltipContent>
-              </Tooltip>
-            </header>
-            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-              <Tabs
-                tabs={tabs}
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
-              />
-            </div>
 
             </div>
 
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
 
-            {loading ? (
-              <LoadingPanel label="Loading notifications..." />
-            ) : filteredNotifications.length === 0 ? (
-              <Empty>
-                <Empty.Content>
-                  <Empty.Title>No notifications</Empty.Title>
-                  <Empty.Description>You are all caught up!</Empty.Description>
-                </Empty.Content>
-              </Empty>
-            ) : (
-              <div className="flex flex-col gap-3 w-full">
-                {filteredNotifications.map((card) => (
-                  <div key={card.notification_id} onClick={() => handleCardClick(card)} className="cursor-pointer w-full">
-                    <NotificationCard
-                      title={card.title}
-                      description={card.body ?? ""}
-                      date={card.created_at ? new Date(card.created_at).toLocaleDateString() : ""}
-                      user={card.notification_type.replace(/_/g, " ")}
-                      badge={card.is_read ? undefined : "Unread"}
-                      isRead={card.is_read}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
+              {loading ? (
+                <LoadingPanel label="Loading notifications..." />
+              ) : filteredNotifications.length === 0 ? (
+                <Empty>
+                  <Empty.Content>
+                    <Empty.Title>No notifications</Empty.Title>
+                    <Empty.Description>You are all caught up!</Empty.Description>
+                  </Empty.Content>
+                </Empty>
+              ) : (
+                <div className="flex flex-col gap-3 w-full">
+                  {filteredNotifications.map((card) => (
+                    <div key={card.notification_id} onClick={() => handleCardClick(card)} className="cursor-pointer w-full">
+                      <NotificationCard
+                        title={card.title}
+                        description={card.body ?? ""}
+                        date={card.created_at ? new Date(card.created_at).toLocaleDateString() : ""}
+                        user={card.notification_type.replace(/_/g, " ")}
+                        badge={card.is_read ? undefined : "Unread"}
+                        isRead={card.is_read}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

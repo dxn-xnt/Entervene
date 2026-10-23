@@ -3,7 +3,7 @@ import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/D
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Progress } from "@/components/retroui/Progress";
 import { BookOpen, CheckSquare, ClipboardList, ExternalLink, FileText, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";

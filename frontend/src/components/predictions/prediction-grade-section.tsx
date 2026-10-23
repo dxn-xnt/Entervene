@@ -4,7 +4,7 @@ import { Card } from "@/components/retroui/Card";
 import { ArrowUpRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { GradeCard } from "./grade-card";
 import type { DashboardGradeGroupSummary } from "@/lib/prediction-api";
 
@@ -54,14 +54,14 @@ export function PredictionGradeSection({ group, role }: PredictionGradeSectionPr
           )}
           <Tooltip>
             <TooltipTrigger render={<span className="inline-flex"><Button
-            variant="secondary"
-            className="shadow-none h-6 w-6 p-1 border-2 border-black"
-            size="sm"
-            onClick={() => navigate(`/${activeRole}/predictions/${gradeLevel}`)}
-            aria-label={`View ${levelName} predictions`}
-          >
-            <ArrowUpRight className="size-4" />
-          </Button></span>} />
+              variant="secondary"
+              className="shadow-none h-6 w-6 p-1 border-2 border-black"
+              size="sm"
+              onClick={() => navigate(`/${activeRole}/predictions/${gradeLevel}`)}
+              aria-label={`View ${levelName} predictions`}
+            >
+              <ArrowUpRight className="size-4" />
+            </Button></span>} />
             <TooltipContent>View {levelName} predictions</TooltipContent>
           </Tooltip>
         </div>

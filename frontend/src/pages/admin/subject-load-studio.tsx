@@ -23,7 +23,7 @@ import { Alert } from "@/components/retroui/Alert";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { TimePickerSingle, type TimeValue } from "@/components/retroui/TimePicker";
 import { SegmentedControl } from "@/components/retroui/SegmentedControl";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import {
   apiFetch,
   getSubjectLoadStudioData,
@@ -260,30 +260,30 @@ function GradeGroupCarousel({
           {!hideGradeNav && (
             <Tooltip>
               <TooltipTrigger render={<span className="inline-flex"><Button
-              size="sm"
-              variant="outline"
-              disabled={!hasPrevGrade}
-              onClick={handlePrevGrade}
-              className="size-8 p-0 border-black shadow-none disabled:opacity-40"
-              aria-label="Previous grade level"
-            >
-              <ChevronsLeft className="size-4" />
-            </Button></span>} />
+                size="sm"
+                variant="outline"
+                disabled={!hasPrevGrade}
+                onClick={handlePrevGrade}
+                className="size-8 p-0 border-black shadow-none disabled:opacity-40"
+                aria-label="Previous grade level"
+              >
+                <ChevronsLeft className="size-4" />
+              </Button></span>} />
               <TooltipContent>Previous grade</TooltipContent>
             </Tooltip>
           )}
           {!hideSectionNav && (
             <Tooltip>
               <TooltipTrigger render={<span className="inline-flex"><Button
-              size="sm"
-              variant="outline"
-              disabled={!canScrollPrev}
-              onClick={() => setActiveIdx((prev) => Math.max(0, prev - 1))}
-              className="size-8 p-0 border-black shadow-none disabled:opacity-40"
-              aria-label="Previous section"
-            >
-              <ChevronLeft className="size-4" />
-            </Button></span>} />
+                size="sm"
+                variant="outline"
+                disabled={!canScrollPrev}
+                onClick={() => setActiveIdx((prev) => Math.max(0, prev - 1))}
+                className="size-8 p-0 border-black shadow-none disabled:opacity-40"
+                aria-label="Previous section"
+              >
+                <ChevronLeft className="size-4" />
+              </Button></span>} />
               <TooltipContent>Previous section</TooltipContent>
             </Tooltip>
           )}
@@ -298,30 +298,30 @@ function GradeGroupCarousel({
           {!hideSectionNav && (
             <Tooltip>
               <TooltipTrigger render={<span className="inline-flex"><Button
-              size="sm"
-              variant="outline"
-              disabled={!canScrollNext}
-              onClick={() => setActiveIdx((prev) => Math.min(classes.length - 1, prev + 1))}
-              className="size-8 p-0 border-black shadow-none disabled:opacity-40"
-              aria-label="Next section"
-            >
-              <ChevronRight className="size-4" />
-            </Button></span>} />
+                size="sm"
+                variant="outline"
+                disabled={!canScrollNext}
+                onClick={() => setActiveIdx((prev) => Math.min(classes.length - 1, prev + 1))}
+                className="size-8 p-0 border-black shadow-none disabled:opacity-40"
+                aria-label="Next section"
+              >
+                <ChevronRight className="size-4" />
+              </Button></span>} />
               <TooltipContent>Next section</TooltipContent>
             </Tooltip>
           )}
           {!hideGradeNav && (
             <Tooltip>
               <TooltipTrigger render={<span className="inline-flex"><Button
-              size="sm"
-              variant="outline"
-              disabled={!hasNextGrade}
-              onClick={handleNextGrade}
-              className="size-8 p-0 border-black shadow-none disabled:opacity-40"
-              aria-label="Next grade level"
-            >
-              <ChevronsRight className="size-4" />
-            </Button></span>} />
+                size="sm"
+                variant="outline"
+                disabled={!hasNextGrade}
+                onClick={handleNextGrade}
+                className="size-8 p-0 border-black shadow-none disabled:opacity-40"
+                aria-label="Next grade level"
+              >
+                <ChevronsRight className="size-4" />
+              </Button></span>} />
               <TooltipContent>Next grade</TooltipContent>
             </Tooltip>
           )}
@@ -1854,14 +1854,14 @@ export default function AdminSubjectLoadStudio() {
                         {activeSectionErrorConflictsCount > 0 && (
                           <Tooltip>
                             <TooltipTrigger render={<span className="inline-flex"><Badge
-                            size="sm"
-                            variant="solid"
-                            onClick={() => handleJumpToItem("error")}
-                            className="bg-destructive inline-flex items-center gap-1.5 cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
-                          >
-                            <AlertCircle className="size-3.5" />
-                            {activeSectionErrorConflictsCount} conflicts — must resolve to publish
-                          </Badge></span>} />
+                              size="sm"
+                              variant="solid"
+                              onClick={() => handleJumpToItem("error")}
+                              className="bg-destructive inline-flex items-center gap-1.5 cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
+                            >
+                              <AlertCircle className="size-3.5" />
+                              {activeSectionErrorConflictsCount} conflicts — must resolve to publish
+                            </Badge></span>} />
                             <TooltipContent>Jump to conflict</TooltipContent>
                           </Tooltip>
                         )}
@@ -1869,14 +1869,14 @@ export default function AdminSubjectLoadStudio() {
                         {activeSectionWarningConflictsCount > 0 && (
                           <Tooltip>
                             <TooltipTrigger render={<span className="inline-flex"><Badge
-                            size="sm"
-                            variant="surface"
-                            onClick={() => handleJumpToItem("warning")}
-                            className="inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
-                          >
-                            <AlertTriangle className="size-3.5" />
-                            {activeSectionWarningConflictsCount} warnings
-                          </Badge></span>} />
+                              size="sm"
+                              variant="surface"
+                              onClick={() => handleJumpToItem("warning")}
+                              className="inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
+                            >
+                              <AlertTriangle className="size-3.5" />
+                              {activeSectionWarningConflictsCount} warnings
+                            </Badge></span>} />
                             <TooltipContent>Jump to warning</TooltipContent>
                           </Tooltip>
                         )}
@@ -1884,13 +1884,13 @@ export default function AdminSubjectLoadStudio() {
                         {activeSectionUnassignedTotal > 0 && (
                           <Tooltip>
                             <TooltipTrigger render={<span className="inline-flex"><Badge
-                            size="sm"
-                            variant="default"
-                            onClick={() => handleJumpToItem("unassigned")}
-                            className="cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
-                          >
-                            {activeSectionUnassignedTotal} unassigned
-                          </Badge></span>} />
+                              size="sm"
+                              variant="default"
+                              onClick={() => handleJumpToItem("unassigned")}
+                              className="cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
+                            >
+                              {activeSectionUnassignedTotal} unassigned
+                            </Badge></span>} />
                             <TooltipContent>Jump to unassigned</TooltipContent>
                           </Tooltip>
                         )}
@@ -2016,18 +2016,18 @@ export default function AdminSubjectLoadStudio() {
                           <DropdownMenu>
                             <Tooltip>
                               <TooltipTrigger render={<span className="inline-flex">
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                disabled={isSectionPublished || isSaving}
-                                className="p-[7px] shadow-white"
-                                aria-label="More options"
-                                onClick={(e) => e.preventDefault()}
-                              >
-                                <EllipsisIcon className="size-3.5" />
-                              </Button>
-                            </DropdownMenuTrigger>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    disabled={isSectionPublished || isSaving}
+                                    className="p-[7px] shadow-white"
+                                    aria-label="More options"
+                                    onClick={(e) => e.preventDefault()}
+                                  >
+                                    <EllipsisIcon className="size-3.5" />
+                                  </Button>
+                                </DropdownMenuTrigger>
                               </span>} />
                               <TooltipContent>Section actions</TooltipContent>
                             </Tooltip>
@@ -2690,14 +2690,14 @@ export default function AdminSubjectLoadStudio() {
                                                     {!sectionLocked && <div className="flex">
                                                       <Tooltip>
                                                         <TooltipTrigger render={<Button
-                                                        onClick={() => setOpenRowKey(isRowMenuOpen ? null : rowKey)}
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="bg-background w-8"
-                                                        aria-label="Row options"
-                                                      >
-                                                        ⋯
-                                                      </Button>} />
+                                                          onClick={() => setOpenRowKey(isRowMenuOpen ? null : rowKey)}
+                                                          size="sm"
+                                                          variant="outline"
+                                                          className="bg-background w-8"
+                                                          aria-label="Row options"
+                                                        >
+                                                          ⋯
+                                                        </Button>} />
                                                         <TooltipContent>Row options</TooltipContent>
                                                       </Tooltip>
 

@@ -4,7 +4,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Table } from "@/components/retroui/Table";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -302,10 +302,10 @@ export function CurriculumPlanTable({
                             <TooltipTrigger render={<span
                               tabIndex={0}
                               aria-label={`${row.subjectName} offered in ${formatPeriodLabel(term)}`}
-                             className="inline-grid size-7 place-items-center rounded-full border-2 border-black bg-primary"
-                           >
-                             <Check className="size-4" />
-                           </span>} />
+                              className="inline-grid size-7 place-items-center rounded-full border-2 border-black bg-primary"
+                            >
+                              <Check className="size-4" />
+                            </span>} />
                             <TooltipContent>Offered in {formatPeriodLabel(term)}</TooltipContent>
                           </Tooltip>
                         ) : (
@@ -322,17 +322,17 @@ export function CurriculumPlanTable({
                       <DropdownMenu>
                         <Tooltip>
                           <TooltipTrigger render={<span className="inline-flex">
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 w-8 p-0"
-                            disabled={readOnly}
-                            aria-label="Actions"
-                          >
-                            <Ellipsis className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 w-8 p-0"
+                                disabled={readOnly}
+                                aria-label="Actions"
+                              >
+                                <Ellipsis className="size-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
                           </span>} />
                           <TooltipContent>{readOnly ? readOnlyReason || "Read-only" : "Curriculum actions"}</TooltipContent>
                         </Tooltip>

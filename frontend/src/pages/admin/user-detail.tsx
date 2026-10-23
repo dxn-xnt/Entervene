@@ -15,7 +15,7 @@ import { ToggleSwitch } from "@/components/retroui/ToggleSwitch";
 import { OverviewCard } from "@/components/overview-cards";
 import { useToast } from "@/components/retroui/use-toast";
 import { UserProfileHeader } from "@/components/profile-header";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import {
   archiveUser,
   getUserAnalytics,
@@ -793,8 +793,8 @@ function TeacherHandledSideCard({
                   <div className="min-w-0 flex-1">
                     <Tooltip>
                       <TooltipTrigger render={<h4 className="font-bold text-md truncate leading-tight block" tabIndex={0}>
-                      {subject.subject_name}
-                    </h4>} />
+                        {subject.subject_name}
+                      </h4>} />
                       <TooltipContent>{subject.subject_name}</TooltipContent>
                     </Tooltip>
                   </div>

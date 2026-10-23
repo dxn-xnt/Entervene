@@ -9,7 +9,7 @@ import { Ellipsis, Plus, Search, Download, Send, CheckCircle2, AlertTriangle, Lo
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Card } from "@/components/retroui/Card";
 import {
@@ -698,65 +698,65 @@ const TeacherGradeView = () => {
             <Table.Head className="w-[17%] font-head text-black">Learner's Name</Table.Head>
             <Tooltip>
               <TooltipTrigger render={<Table.Head
-              className="w-[20%] cursor-pointer text-center font-head text-black transition-colors hover:bg-primary/50"
-              aria-label="View Written Works breakdown"
-              onClick={() =>
-                setSelectedCategory({
-                  name: "Written Works",
-                  items: cg.writtenWork,
-                  studentGrades: filtered.map((sg) => ({
-                    student_id: sg.student_id,
-                    name: sg.name,
-                    scores: sg.writtenWork,
-                    gender: sg.gender,
-                  })),
-                })
-              }
-            >
-              {wwLabel}
-            </Table.Head>} />
+                className="w-[20%] cursor-pointer text-center font-head text-black transition-colors hover:bg-primary/50"
+                aria-label="View Written Works breakdown"
+                onClick={() =>
+                  setSelectedCategory({
+                    name: "Written Works",
+                    items: cg.writtenWork,
+                    studentGrades: filtered.map((sg) => ({
+                      student_id: sg.student_id,
+                      name: sg.name,
+                      scores: sg.writtenWork,
+                      gender: sg.gender,
+                    })),
+                  })
+                }
+              >
+                {wwLabel}
+              </Table.Head>} />
               <TooltipContent>View breakdown</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger render={<Table.Head
-              className="w-[20%] cursor-pointer text-center font-head text-black transition-colors hover:bg-primary/50"
-              aria-label="View Performance Tasks breakdown"
-              onClick={() =>
-                setSelectedCategory({
-                  name: "Performance Tasks",
-                  items: cg.performanceTask,
-                  studentGrades: filtered.map((sg) => ({
-                    student_id: sg.student_id,
-                    name: sg.name,
-                    scores: sg.performanceTask,
-                    gender: sg.gender,
-                  })),
-                })
-              }
-            >
-              {ptLabel}
-            </Table.Head>} />
+                className="w-[20%] cursor-pointer text-center font-head text-black transition-colors hover:bg-primary/50"
+                aria-label="View Performance Tasks breakdown"
+                onClick={() =>
+                  setSelectedCategory({
+                    name: "Performance Tasks",
+                    items: cg.performanceTask,
+                    studentGrades: filtered.map((sg) => ({
+                      student_id: sg.student_id,
+                      name: sg.name,
+                      scores: sg.performanceTask,
+                      gender: sg.gender,
+                    })),
+                  })
+                }
+              >
+                {ptLabel}
+              </Table.Head>} />
               <TooltipContent>View breakdown</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger render={<Table.Head
-              className="w-[12%] cursor-pointer text-center font-head text-black transition-colors hover:bg-primary/50"
-              aria-label="View Exams breakdown"
-              onClick={() =>
-                setSelectedCategory({
-                  name: "Exams",
-                  items: examItems,
-                  studentGrades: filtered.map((sg) => ({
-                    student_id: sg.student_id,
-                    name: sg.name,
-                    scores: sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []),
-                    gender: sg.gender,
-                  })),
-                })
-              }
-            >
-              {examsLabel}
-            </Table.Head>} />
+                className="w-[12%] cursor-pointer text-center font-head text-black transition-colors hover:bg-primary/50"
+                aria-label="View Exams breakdown"
+                onClick={() =>
+                  setSelectedCategory({
+                    name: "Exams",
+                    items: examItems,
+                    studentGrades: filtered.map((sg) => ({
+                      student_id: sg.student_id,
+                      name: sg.name,
+                      scores: sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []),
+                      gender: sg.gender,
+                    })),
+                  })
+                }
+              >
+                {examsLabel}
+              </Table.Head>} />
               <TooltipContent>View breakdown</TooltipContent>
             </Tooltip>
             <Table.Head className="w-[8%] text-center font-head text-black">Initial Grade</Table.Head>
@@ -772,34 +772,34 @@ const TeacherGradeView = () => {
               <div className="flex flex-row items-center justify-between gap-1 w-full">
                 <Tooltip>
                   <TooltipTrigger render={<button
-                  type="button"
-                  aria-label="View Written Works scores"
-                  onClick={() =>
-                    setSelectedCategory({
-                      name: "Written Works",
-                      items: cg.writtenWork,
-                      studentGrades: filtered.map((sg) => ({ student_id: sg.student_id, name: sg.name, scores: sg.writtenWork, gender: sg.gender })),
-                    })
-                  }
-                >
-                  <Ellipsis className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
-                </button>} />
+                    type="button"
+                    aria-label="View Written Works scores"
+                    onClick={() =>
+                      setSelectedCategory({
+                        name: "Written Works",
+                        items: cg.writtenWork,
+                        studentGrades: filtered.map((sg) => ({ student_id: sg.student_id, name: sg.name, scores: sg.writtenWork, gender: sg.gender })),
+                      })
+                    }
+                  >
+                    <Ellipsis className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                  </button>} />
                   <TooltipContent>View scores</TooltipContent>
                 </Tooltip>
                 <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
                   {getLatestTwo(cg.writtenWork).map(({ item }) => (
                     <Tooltip key={item.id}>
                       <TooltipTrigger render={<button
-                      type="button"
-                      className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
-                        }`}
-                      aria-label={isViewOnly ? item.title : `Enter scores for ${item.title}`}
-                      onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
-                    >
-                      <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
-                      {item.sourceInterventionId && <span className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
-                      <span className="text-muted-foreground font-normal">({item.maxScore})</span>
-                    </button>} />
+                        type="button"
+                        className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                          }`}
+                        aria-label={isViewOnly ? item.title : `Enter scores for ${item.title}`}
+                        onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
+                      >
+                        <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
+                        {item.sourceInterventionId && <span className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
+                        <span className="text-muted-foreground font-normal">({item.maxScore})</span>
+                      </button>} />
                       <TooltipContent>{isViewOnly ? item.title : `Enter scores: ${item.title}`}{item.sourceInterventionId ? " · Intervention" : ""}</TooltipContent>
                     </Tooltip>
                   ))}
@@ -807,12 +807,12 @@ const TeacherGradeView = () => {
                 {!isViewOnly && (
                   <Tooltip>
                     <TooltipTrigger render={<button
-                    type="button"
-                    aria-label="Add Written Works score"
-                    onClick={() => setAddingCategoryName("Written Works")}
-                  >
-                    <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
-                  </button>} />
+                      type="button"
+                      aria-label="Add Written Works score"
+                      onClick={() => setAddingCategoryName("Written Works")}
+                    >
+                      <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                    </button>} />
                     <TooltipContent>Add score</TooltipContent>
                   </Tooltip>
                 )}
@@ -822,34 +822,34 @@ const TeacherGradeView = () => {
               <div className="flex flex-row items-center justify-between gap-1 w-full">
                 <Tooltip>
                   <TooltipTrigger render={<button
-                  type="button"
-                  aria-label="View Performance Tasks scores"
-                  onClick={() =>
-                    setSelectedCategory({
-                      name: "Performance Tasks",
-                      items: cg.performanceTask,
-                      studentGrades: filtered.map((sg) => ({ student_id: sg.student_id, name: sg.name, scores: sg.performanceTask, gender: sg.gender })),
-                    })
-                  }
-                >
-                  <Ellipsis className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
-                </button>} />
+                    type="button"
+                    aria-label="View Performance Tasks scores"
+                    onClick={() =>
+                      setSelectedCategory({
+                        name: "Performance Tasks",
+                        items: cg.performanceTask,
+                        studentGrades: filtered.map((sg) => ({ student_id: sg.student_id, name: sg.name, scores: sg.performanceTask, gender: sg.gender })),
+                      })
+                    }
+                  >
+                    <Ellipsis className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                  </button>} />
                   <TooltipContent>View scores</TooltipContent>
                 </Tooltip>
                 <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
                   {getLatestTwo(cg.performanceTask).map(({ item }) => (
                     <Tooltip key={item.id}>
                       <TooltipTrigger render={<button
-                      type="button"
-                      className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
-                        }`}
-                      aria-label={isViewOnly ? item.title : `Enter scores for ${item.title}`}
-                      onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
-                    >
-                      <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
-                      {item.sourceInterventionId && <span className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
-                      <span className="text-muted-foreground font-normal">({item.maxScore})</span>
-                    </button>} />
+                        type="button"
+                        className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                          }`}
+                        aria-label={isViewOnly ? item.title : `Enter scores for ${item.title}`}
+                        onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
+                      >
+                        <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
+                        {item.sourceInterventionId && <span className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
+                        <span className="text-muted-foreground font-normal">({item.maxScore})</span>
+                      </button>} />
                       <TooltipContent>{isViewOnly ? item.title : `Enter scores: ${item.title}`}{item.sourceInterventionId ? " · Intervention" : ""}</TooltipContent>
                     </Tooltip>
                   ))}
@@ -857,12 +857,12 @@ const TeacherGradeView = () => {
                 {!isViewOnly && (
                   <Tooltip>
                     <TooltipTrigger render={<button
-                    type="button"
-                    aria-label="Add Performance Tasks score"
-                    onClick={() => setAddingCategoryName("Performance Tasks")}
-                  >
-                    <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
-                  </button>} />
+                      type="button"
+                      aria-label="Add Performance Tasks score"
+                      onClick={() => setAddingCategoryName("Performance Tasks")}
+                    >
+                      <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                    </button>} />
                     <TooltipContent>Add score</TooltipContent>
                   </Tooltip>
                 )}
@@ -872,39 +872,39 @@ const TeacherGradeView = () => {
               <div className="flex flex-row items-center justify-between gap-1 w-full">
                 <Tooltip>
                   <TooltipTrigger render={<button
-                  type="button"
-                  aria-label="View Exams scores"
-                  onClick={() =>
-                    setSelectedCategory({
-                      name: "Exams",
-                      items: examItems,
-                      studentGrades: filtered.map((sg) => ({
-                        student_id: sg.student_id,
-                        name: sg.name,
-                        scores: sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []),
-                        gender: sg.gender,
-                      })),
-                    })
-                  }
-                >
-                  <Ellipsis className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
-                </button>} />
+                    type="button"
+                    aria-label="View Exams scores"
+                    onClick={() =>
+                      setSelectedCategory({
+                        name: "Exams",
+                        items: examItems,
+                        studentGrades: filtered.map((sg) => ({
+                          student_id: sg.student_id,
+                          name: sg.name,
+                          scores: sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []),
+                          gender: sg.gender,
+                        })),
+                      })
+                    }
+                  >
+                    <Ellipsis className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                  </button>} />
                   <TooltipContent>View scores</TooltipContent>
                 </Tooltip>
                 <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
                   {getLatestTwo(examItems).map(({ item }) => (
                     <Tooltip key={item.id}>
                       <TooltipTrigger render={<button
-                      type="button"
-                      className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
-                        }`}
-                      aria-label={isViewOnly ? item.title : `Enter scores for ${item.title}`}
-                      onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
-                    >
-                      <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
-                      {item.sourceInterventionId && <span className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
-                      <span className="text-muted-foreground font-normal">({item.maxScore})</span>
-                    </button>} />
+                        type="button"
+                        className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                          }`}
+                        aria-label={isViewOnly ? item.title : `Enter scores for ${item.title}`}
+                        onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
+                      >
+                        <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
+                        {item.sourceInterventionId && <span className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
+                        <span className="text-muted-foreground font-normal">({item.maxScore})</span>
+                      </button>} />
                       <TooltipContent>{isViewOnly ? item.title : `Enter scores: ${item.title}`}{item.sourceInterventionId ? " · Intervention" : ""}</TooltipContent>
                     </Tooltip>
                   ))}
@@ -912,12 +912,12 @@ const TeacherGradeView = () => {
                 {!isViewOnly && (
                   <Tooltip>
                     <TooltipTrigger render={<button
-                    type="button"
-                    aria-label="Add Exams score"
-                    onClick={() => setAddingCategoryName("Exams")}
-                  >
-                    <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
-                  </button>} />
+                      type="button"
+                      aria-label="Add Exams score"
+                      onClick={() => setAddingCategoryName("Exams")}
+                    >
+                      <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                    </button>} />
                     <TooltipContent>Add score</TooltipContent>
                   </Tooltip>
                 )}
@@ -962,112 +962,112 @@ const TeacherGradeView = () => {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             <div data-page-tabs-sticky-region>
-            <header className="flex min-w-0 flex-col items-stretch gap-3 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:gap-3 md:px-6">
-              <div className="flex min-w-0 items-center gap-2">
-                <SidebarTrigger className="shrink-0 md:hidden" />
-                <Breadcrumb className="min-w-0 overflow-hidden">
-                  <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Link href="/teacher/grades">
-                        Grades
-                      </Breadcrumb.Link>
-                    </Breadcrumb.Item>
-                    <Breadcrumb.Separator />
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Page className="flex flex-row items-center gap-2"><span>{displaySectionName}</span>  <span className="text-base font-normal">({displaySubjectName})</span></Breadcrumb.Page>
-                    </Breadcrumb.Item>
-                  </Breadcrumb.List>
-                </Breadcrumb>
-              </div>
-              {/* {gradebook?.grading_weights?.template_name && (
+              <header className="flex min-w-0 flex-col items-stretch gap-3 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:gap-3 md:px-6">
+                <div className="flex min-w-0 items-center gap-2">
+                  <SidebarTrigger className="shrink-0 md:hidden" />
+                  <Breadcrumb className="min-w-0 overflow-hidden">
+                    <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Link href="/teacher/grades">
+                          Grades
+                        </Breadcrumb.Link>
+                      </Breadcrumb.Item>
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Page className="flex flex-row items-center gap-2"><span>{displaySectionName}</span>  <span className="text-base font-normal">({displaySubjectName})</span></Breadcrumb.Page>
+                      </Breadcrumb.Item>
+                    </Breadcrumb.List>
+                  </Breadcrumb>
+                </div>
+                {/* {gradebook?.grading_weights?.template_name && (
                 <span className="hidden sm:inline-flex items-center gap-1 ml-2 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-950 border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]" title={`Assigned Template: ${gradebook.grading_weights.template_name}`}>
                   {gradebook.grading_weights.template_name}
                 </span>
               )} */}
 
-              <div className="grid w-full grid-cols-2 items-center gap-2 md:ml-auto md:flex md:w-auto md:flex-row">
-                {!isViewOnly && activeTab.startsWith("term-") && (
-                  <Tooltip>
-                    <TooltipTrigger render={<span className="inline-flex min-w-0"><Button
-                    size="header"
-                    variant="default"
-                    className="min-w-0 whitespace-nowrap"
-                    onClick={() => setShowBulkConfirm(true)}
-                    disabled={sendingAll || filtered.length === 0}
-                  >
-                    <Send className="size-4" /> Send All to Adviser
-                  </Button></span>} />
-                    <TooltipContent>{timingGate.isLocked ? timingGate.message : filtered.length === 0 ? "No students to send" : "Send all grades"}</TooltipContent>
-                  </Tooltip>
-                )}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      size="header"
-                      variant={"outline"}
-                      disabled={isExporting}
-                      className="whitespace-nowrap disabled:opacity-50"
-                    >
-                      {isExporting ? (
-                        <>
-                          <Loader2 className="size-4 animate-spin" /> Exporting...
-                        </>
-                      ) : (
-                        <>
-                          <Download className="size-4" /> Export Grades
-                          <ChevronDown className="size-3.5 opacity-70" />
-                        </>
-                      )}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] bg-background min-w-[240px]">
-                    <DropdownMenuItem
-                      onClick={handleExportWorkbook}
-                      className="flex items-start gap-2.5 p-2.5 font-bold cursor-pointer hover:bg-yellow-100 focus:bg-yellow-100"
-                    >
-                      <FileSpreadsheet className="size-4 mt-0.5 text-emerald-600 shrink-0" />
-                      <div>
-                        <div className="text-sm font-extrabold text-black">Full Year Workbook (.xlsx)</div>
-                        <div className="text-xs font-normal text-muted-foreground">All terms + Summary of Grades</div>
-                      </div>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={handleExportCurrent}
-                      className="flex items-start gap-2.5 p-2.5 font-bold cursor-pointer hover:bg-yellow-100 focus:bg-yellow-100"
-                    >
-                      <Download className="size-4 mt-0.5 text-primary shrink-0" />
-                      <div>
-                        <div className="text-sm font-extrabold text-black">
-                          {activeTab === "summary" ? "Summary Sheet (.csv)" : "Current Term (.xlsx)"}
+                <div className="grid w-full grid-cols-2 items-center gap-2 md:ml-auto md:flex md:w-auto md:flex-row">
+                  {!isViewOnly && activeTab.startsWith("term-") && (
+                    <Tooltip>
+                      <TooltipTrigger render={<span className="inline-flex min-w-0"><Button
+                        size="header"
+                        variant="default"
+                        className="min-w-0 whitespace-nowrap"
+                        onClick={() => setShowBulkConfirm(true)}
+                        disabled={sendingAll || filtered.length === 0}
+                      >
+                        <Send className="size-4" /> Send All to Adviser
+                      </Button></span>} />
+                      <TooltipContent>{timingGate.isLocked ? timingGate.message : filtered.length === 0 ? "No students to send" : "Send all grades"}</TooltipContent>
+                    </Tooltip>
+                  )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="header"
+                        variant={"outline"}
+                        disabled={isExporting}
+                        className="whitespace-nowrap disabled:opacity-50"
+                      >
+                        {isExporting ? (
+                          <>
+                            <Loader2 className="size-4 animate-spin" /> Exporting...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="size-4" /> Export Grades
+                            <ChevronDown className="size-3.5 opacity-70" />
+                          </>
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] bg-background min-w-[240px]">
+                      <DropdownMenuItem
+                        onClick={handleExportWorkbook}
+                        className="flex items-start gap-2.5 p-2.5 font-bold cursor-pointer hover:bg-yellow-100 focus:bg-yellow-100"
+                      >
+                        <FileSpreadsheet className="size-4 mt-0.5 text-emerald-600 shrink-0" />
+                        <div>
+                          <div className="text-sm font-extrabold text-black">Full Year Workbook (.xlsx)</div>
+                          <div className="text-xs font-normal text-muted-foreground">All terms + Summary of Grades</div>
                         </div>
-                        <div className="text-xs font-normal text-muted-foreground">
-                          {activeTab === "summary" ? "CSV format with final grades" : "Single term DepEd sheet"}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={handleExportCurrent}
+                        className="flex items-start gap-2.5 p-2.5 font-bold cursor-pointer hover:bg-yellow-100 focus:bg-yellow-100"
+                      >
+                        <Download className="size-4 mt-0.5 text-primary shrink-0" />
+                        <div>
+                          <div className="text-sm font-extrabold text-black">
+                            {activeTab === "summary" ? "Summary Sheet (.csv)" : "Current Term (.xlsx)"}
+                          </div>
+                          <div className="text-xs font-normal text-muted-foreground">
+                            {activeTab === "summary" ? "CSV format with final grades" : "Single term DepEd sheet"}
+                          </div>
                         </div>
-                      </div>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </header>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </header>
 
-            <div className="-mt-[1px] bg-background px-3 sm:px-4 md:px-6">
-              <Tabs
-                tabs={[
-                  ...periods.map((p) => ({
-                    id: `term-${p.academic_period_id}`,
-                    label: `${p.period_name}${p.is_active ? " (Active)" : ""}`,
-                    icon: Calendar,
-                  })),
-                  {
-                    id: "summary",
-                    label: "Summary of Termly Grades",
-                    icon: BarChart2,
-                  },
-                ]}
-                activeTab={activeTab}
-                onTabChange={(tabId) => setActiveTab(tabId)}
-              />
-            </div>
+              <div className="-mt-[1px] bg-background px-3 sm:px-4 md:px-6">
+                <Tabs
+                  tabs={[
+                    ...periods.map((p) => ({
+                      id: `term-${p.academic_period_id}`,
+                      label: `${p.period_name}${p.is_active ? " (Active)" : ""}`,
+                      icon: Calendar,
+                    })),
+                    {
+                      id: "summary",
+                      label: "Summary of Termly Grades",
+                      icon: BarChart2,
+                    },
+                  ]}
+                  activeTab={activeTab}
+                  onTabChange={(tabId) => setActiveTab(tabId)}
+                />
+              </div>
             </div>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6">

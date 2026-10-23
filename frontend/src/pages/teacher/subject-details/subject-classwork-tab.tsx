@@ -22,7 +22,7 @@ import type {
 } from "@/types/classwork";
 import { Button } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";

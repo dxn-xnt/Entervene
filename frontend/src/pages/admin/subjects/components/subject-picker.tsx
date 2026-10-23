@@ -3,7 +3,7 @@ import { Search, X } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Input } from "@/components/retroui/Input";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import type { SubjectListItem } from "@/lib/api";
 
 type SubjectPickerProps = {
@@ -109,14 +109,14 @@ export function SubjectPicker({
               <span className="truncate">{subject.subject_name}</span>
               <Tooltip>
                 <TooltipTrigger render={<span className="inline-flex shrink-0"><button
-                type="button"
-                className="grid size-5 shrink-0 place-items-center rounded-full border border-black bg-background"
-                onClick={() => clearSubject(String(subject.subject_id))}
-                disabled={disabled}
-                aria-label={`Remove ${subject.subject_name}`}
-              >
-                <X className="size-3" />
-              </button></span>} />
+                  type="button"
+                  className="grid size-5 shrink-0 place-items-center rounded-full border border-black bg-background"
+                  onClick={() => clearSubject(String(subject.subject_id))}
+                  disabled={disabled}
+                  aria-label={`Remove ${subject.subject_name}`}
+                >
+                  <X className="size-3" />
+                </button></span>} />
                 <TooltipContent>Remove subject</TooltipContent>
               </Tooltip>
             </span>
@@ -147,11 +147,10 @@ export function SubjectPicker({
             return (
               <label
                 key={subject.subject_id}
-                className={`flex items-start gap-3 border-b border-black/20 p-3 last:border-b-0 ${
-                  isAlreadyOffered
+                className={`flex items-start gap-3 border-b border-black/20 p-3 last:border-b-0 ${isAlreadyOffered
                     ? "cursor-not-allowed bg-black/5 opacity-60"
                     : "cursor-pointer hover:bg-[#fff7d6]"
-                }`}
+                  }`}
               >
                 <Checkbox
                   checked={selectedIds.has(subjectId)}

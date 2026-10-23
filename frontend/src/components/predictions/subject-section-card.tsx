@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { Card, Card as RetroCard } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Progress } from "@/components/retroui/Progress";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 
 export interface SubjectSectionCardProps {
   subjectId: number;
