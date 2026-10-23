@@ -446,8 +446,14 @@ def test_prediction_postgres_guard_rejects_unsafe_targets(monkeypatch, unsafe_ur
         _validate_admin_url(unsafe_url)
 
 
-def test_first_generation_and_sequential_idempotency(postgres_prediction_context):
+def test_first_generation_and_sequential_idempotency(postgres_prediction_context, monkeypatch):
     ctx = postgres_prediction_context
+    score_calls = []
+    monkeypatch.setattr(
+        scorer,
+        "score_development_current_term",
+        lambda features, **_kwargs: score_calls.append(dict(features)) or 74.25,
+    )
 
     def assert_transaction_contract(db, _result):
         assert db.execute(text("SHOW transaction_isolation")).scalar_one() == "repeatable read"
@@ -466,6 +472,7 @@ def test_first_generation_and_sequential_idempotency(postgres_prediction_context
     assert first["projected_final_term_grade"] == pytest.approx(74.25)
     assert second["unchanged"] is True and third["unchanged"] is True
     assert {first["prediction_id"], second["prediction_id"], third["prediction_id"]} == {first["prediction_id"]}
+    assert len(score_calls) == 1
     rows = _prediction_rows(ctx)
     assert len(rows) == 1
     assert rows[0].revision == 1
