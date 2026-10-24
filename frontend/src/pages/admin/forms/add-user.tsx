@@ -515,9 +515,9 @@ export default function AddUserModal({
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }} >
       <Dialog.Content size="md" className="w-[calc(100vw-1.5rem)] max-w-lg rounded-none font-sans lg:max-w-[40%]">
-        <Dialog.Header asChild className="bg-primary text-primary-foreground font-head flex items-center justify-between">
+        <Dialog.Header asChild className="bg-primary text-black font-sans flex items-center justify-between">
           <div>
-            <span className="font-bold text-lg">
+            <span className="text-xl font-bold normal-case">
               {step === "choose" && "Add New Users"}
               {step === "import" && "Import Users from File"}
               {step === "manual" && "Create User Manually"}
@@ -802,7 +802,7 @@ export default function AddUserModal({
                 <Field label="Address">
                   <textarea
                     rows={2}
-                    className="w-full rounded border-2 border-black bg-background px-4 py-2 text-sm font-medium shadow-md transition focus:outline-hidden focus:shadow-xs resize-none"
+                    className="w-full rounded border-2 border-black bg-background px-4 py-2 font-sans text-base font-normal shadow-md transition focus:outline-hidden focus:shadow-xs resize-none"
                     placeholder="Street, Barangay, City…"
                     value={form.address}
                     onChange={(e) => handleField("address", e.target.value)}
@@ -859,7 +859,7 @@ export default function AddUserModal({
                       <Input
                         placeholder="12-digit LRN"
                         maxLength={12}
-                        className="w-full bg-background border-2 border-black font-mono"
+                        className="w-full bg-background border-2 border-black"
                         value={form.studentLrn}
                         onChange={(e) =>
                           handleField(
@@ -892,7 +892,7 @@ export default function AddUserModal({
                       min="60"
                       max="100"
                       placeholder="e.g. 88.50 (optional)"
-                      className="w-full bg-background border-2 border-black font-mono"
+                      className="w-full bg-background border-2 border-black"
                       value={form.priorGwa}
                       onChange={(e) => handleField("priorGwa", e.target.value)}
                     />
@@ -929,7 +929,7 @@ function Field({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{label}</label>
+      <label className="text-sm font-medium text-black normal-case">{label}</label>
       {children}
     </div>
   );

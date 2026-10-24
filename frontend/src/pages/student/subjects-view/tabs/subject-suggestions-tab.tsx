@@ -219,7 +219,7 @@ export default function SubjectSuggestionsTab({
             value={sortMode}
             onValueChange={(value) => setSortMode(value as SortMode)}
           >
-            <Select.Trigger className="w-full text-sm">
+            <Select.Trigger className="w-full">
               <ArrowUpDown size={15} className="mr-1" />
               <Select.Value placeholder="Sort By" />
             </Select.Trigger>
