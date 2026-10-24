@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card as RetroCard } from "@/components/retroui/Card";
@@ -1103,15 +1103,18 @@ export default function AdminSubjects() {
         onCopied={handleCopySetupComplete}
       />
 
-      {pendingAction ? (
-        <ConfirmAlertDialog
-          title={`${pendingAction.action === "archive" ? "Archive" : "Restore"} ${pendingAction.kind}?`}
-          description={`${pendingAction.label} will be ${pendingAction.action === "archive" ? "moved out of active use" : "returned to active use"}.`}
-          confirmLabel={pendingAction.action === "archive" ? "Archive" : "Restore"}
-          onCancel={() => setPendingAction(null)}
-          onConfirm={() => void handlePendingAction()}
-        />
-      ) : null}
+      <ConfirmDialog
+        open={Boolean(pendingAction)}
+        onOpenChange={(open) => { if (!open) setPendingAction(null); }}
+        title={`${pendingAction?.action === "archive" ? "Archive" : "Restore"} ${pendingAction?.kind ?? "subject"}`}
+        description={pendingAction
+          ? `${pendingAction.label} will be ${pendingAction.action === "archive" ? "moved out of active use" : "returned to active use"}.`
+          : undefined}
+        confirmLabel={pendingAction?.action === "archive" ? "Archive" : "Restore"}
+        confirmVariant={pendingAction?.action === "archive" ? "destructive" : "default"}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={handlePendingAction}
+      />
     </AppLayout>
   );
 }

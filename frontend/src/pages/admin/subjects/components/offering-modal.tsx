@@ -325,7 +325,12 @@ export function OfferingModal({
   };
 
   const summaryMessage = (createdCount: number, skippedCount: number, errorCount = 0) => {
-    return `created_count: ${createdCount}, skipped_count: ${skippedCount}, error_count: ${errorCount}`;
+    const parts = [
+      `${createdCount} subject offering${createdCount === 1 ? "" : "s"} created`,
+      ...(skippedCount ? [`${skippedCount} already existed`] : []),
+      ...(errorCount ? [`${errorCount} could not be created`] : []),
+    ];
+    return `${parts.join("; ")}.`;
   };
 
   const handleSubmit = async () => {
@@ -379,7 +384,7 @@ export function OfferingModal({
                 minutes: parsedMinutes,
                 status: form.status,
               });
-            } catch (createErr) {
+            } catch {
               // Ignore duplicates if already existing
             }
           }

@@ -409,11 +409,11 @@ export default function AddUserModal({
   const handleManualSubmit = async () => {
     if (manualSubmitting) return;
     if (form.role !== "Admin" && form.contactNumber && !/^\d{11}$/.test(form.contactNumber)) {
-      window.alert("Contact number must contain exactly 11 digits.");
+      toast.error({ title: "Invalid contact number", description: "Contact number must contain exactly 11 digits." });
       return;
     }
     if (form.dob && !/^\d{4}-\d{2}-\d{2}$/.test(form.dob)) {
-      window.alert("DOB must use YYYY-MM-DD format.");
+      toast.error({ title: "Invalid date of birth", description: "DOB must use YYYY-MM-DD format." });
       return;
     }
 

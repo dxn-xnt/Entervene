@@ -15,6 +15,8 @@ import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/Toast";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { LoadingPanel } from "@/components/loading-panel";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
@@ -365,6 +367,7 @@ export default function AdminSubjectLoadStudio() {
   const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
   const [teacherWorkloads, setTeacherWorkloads] = useState<TeacherWorkloadItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [notice, setNotice] = useState<{ title?: string; message: string; type: "success" | "error" } | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
@@ -490,6 +493,7 @@ export default function AdminSubjectLoadStudio() {
   // Load studio data
   const loadStudio = useCallback(async (periodId?: number, preserveNotice = false) => {
     setIsLoading(true);
+    setLoadError(false);
     if (!preserveNotice) setNotice(null);
     try {
       const data = await getSubjectLoadStudioData(periodId);
@@ -571,6 +575,7 @@ export default function AdminSubjectLoadStudio() {
         setTeacherWorkloads(valRes.teacher_workloads);
       }
     } catch (err) {
+      setLoadError(true);
       setNotice({
         title: "Loading Failed",
         message: err instanceof Error ? err.message : "Failed to load Subject Load Studio.",
@@ -851,7 +856,7 @@ export default function AdminSubjectLoadStudio() {
 
   const handleCopyFromTerm = async () => {
     if (!copySourcePeriodId) {
-      alert("Please select a source term.");
+      toast.warning({ title: "Select a source term" });
       return;
     }
 
@@ -1908,15 +1913,28 @@ export default function AdminSubjectLoadStudio() {
                     </div>
                   </section>
 
-                  {filteredClasses.length === 0 ? (
-                    <Card className="bg-accent px-6 py-12 text-center">
-                      <Text as="h3" className="font-bold text-lg">
-                        No Class Sections Found
-                      </Text>
-                      <Text as="p" className="text-sm text-muted-foreground mt-1">
-                        Select a different Grade Level or create classes in the admin dashboard.
-                      </Text>
-                    </Card>
+                  {isLoading ? (
+                    <LoadingPanel label="Loading class sections..." />
+                  ) : loadError ? (
+                    <Empty className="transition-shadow hover:shadow-none">
+                      <EmptyHeader>
+                        <EmptyMedia><div className="flex size-10 items-center justify-center border-2 border-black bg-primary text-black" aria-hidden="true"><AlertTriangle className="size-5" /></div></EmptyMedia>
+                        <EmptyTitle>Unable to load class sections</EmptyTitle>
+                        <EmptyDescription>Please try again.</EmptyDescription>
+                      </EmptyHeader>
+                      <Button size="sm" className="gap-1.5" onClick={() => void loadStudio(selectedPeriodId)}>Retry</Button>
+                    </Empty>
+                  ) : filteredClasses.length === 0 ? (
+                    <Empty className="transition-shadow hover:shadow-none">
+                      <EmptyHeader>
+                        <EmptyMedia><div className="flex size-10 items-center justify-center border-2 border-black bg-primary text-black" aria-hidden="true"><Search className="size-5" /></div></EmptyMedia>
+                        <EmptyTitle>{searchQuery.trim() ? "No classes match your search" : studioData?.classes.length ? "No class sections match these filters" : "No class sections yet"}</EmptyTitle>
+                        <EmptyDescription>{searchQuery.trim() ? "Try a different class name or clear the search." : studioData?.classes.length ? "Choose another grade level or section to see class schedules." : "Create a class in the Admin Classes page to start assigning subjects."}</EmptyDescription>
+                      </EmptyHeader>
+                      {(searchQuery.trim() || selectedGradeId !== "all" || selectedSectionId !== "all") && (
+                        <Button size="sm" onClick={() => { setSearchQuery(""); setSelectedGradeId("all"); setSelectedSectionId("all"); }}>Clear filters</Button>
+                      )}
+                    </Empty>
                   ) : (() => {
                     const renderSectionActions = (cls?: (typeof filteredClasses)[number]) => {
                       if (!cls) return null;

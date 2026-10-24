@@ -247,12 +247,6 @@ export default function AdminUsers() {
     }
   }, [activeTab, debouncedSearch, statusFilter]);
 
-  const emptyText = useMemo(() => {
-    if (activeTab === "teacher") return "No teachers found";
-    if (activeTab === "student") return "No students found";
-    return "No admins found";
-  }, [activeTab]);
-
   useEffect(() => {
     setGradeFilter("all");
     setStatusFilter("all");
@@ -515,7 +509,7 @@ export default function AdminUsers() {
                             </EmptyDescription>
                           </EmptyHeader>
                           <EmptyContent>
-                            <Button size="sm" variant="default">
+                            <Button size="sm" variant="default" className="gap-1.5">
                               Enroll Student
                             </Button>
                           </EmptyContent>
@@ -552,7 +546,6 @@ export default function AdminUsers() {
                           <AccordionItem
                             key={key}
                             value={key}
-                            className={isUnassigned ? "border-amber-400" : ""}
                           >
                             <AccordionTrigger
                               className={cn(
@@ -564,10 +557,7 @@ export default function AdminUsers() {
                             >
                               <div className="flex items-center gap-2.5 flex-1 min-w-0">
                                 <span
-                                  className={cn(
-                                    "truncate flex-1 text-lg font-bold text-left",
-                                    isUnassigned ? "text-amber-800" : ""
-                                  )}
+                                  className="truncate flex-1 text-lg font-bold text-left"
                                 >
                                   {headerLabel}
                                 </span>
@@ -617,12 +607,34 @@ export default function AdminUsers() {
                   </>
                 )}
 
-                {!loading && activeTab !== "student" && (
+                {!loading && !error && activeTab !== "student" && (
                   <>
                     {displayUsers.length === 0 ? (
-                      <Card className="py-12 text-center text-sm text-black">
-                        {emptyText}
-                      </Card>
+                      <Empty className="shadow-md transition-shadow hover:shadow-none">
+                        <EmptyHeader>
+                          <EmptyMedia>
+                            <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background" aria-hidden="true">
+                              {activeTab === "teacher" ? [12, 13, 14].map((id) => (
+                                <Avatar key={id} variant="teacher">
+                                  <Avatar.Image src={`/avatars/teacher-avatars/${id}.svg`} alt="" />
+                                  <Avatar.Fallback>TC</Avatar.Fallback>
+                                </Avatar>
+                              )) : ["AD", "SA", "IA"].map((initials) => (
+                                <Avatar key={initials}>
+                                  <Avatar.Fallback className="text-xs font-bold">{initials}</Avatar.Fallback>
+                                </Avatar>
+                              ))}
+                            </div>
+                          </EmptyMedia>
+                          <EmptyTitle>{search.trim() ? `No ${activeTab === "teacher" ? "teachers" : "admins"} match your search` : `No ${activeTab === "teacher" ? "teachers" : "admins"} yet`}</EmptyTitle>
+                          <EmptyDescription className="text-center">{search.trim() ? "Try another name or clear your search." : `${activeTab === "teacher" ? "Teachers" : "Admins"} will appear here once they are added.`}</EmptyDescription>
+                        </EmptyHeader>
+                        <EmptyContent>
+                          <Button size="sm" className="gap-1.5" onClick={() => search.trim() ? setSearch("") : setModalOpen(true)}>
+                            {search.trim() ? "Clear search" : "New User"}
+                          </Button>
+                        </EmptyContent>
+                      </Empty>
                     ) : (
                       <Card className="block w-full overflow-hidden p-0 shadow-md">
                         <Table wrapperClassName="rounded-none border-0 shadow-none">

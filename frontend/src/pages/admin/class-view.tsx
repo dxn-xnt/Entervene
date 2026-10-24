@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, Pencil, Users } from "lucide-react";
+import { BookOpen, Pencil, Search, Users } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -12,6 +12,7 @@ import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/Toast";
 import { Card as RetroCard } from "@/components/retroui/Card";
 import { Empty } from "@/components/retroui/Empty";
+import { Empty as EmptyState, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Input } from "@/components/retroui/Input";
 import { Loader } from "@/components/retroui/Loader";
 import { Tabs } from "@/components/retroui/Tabs";
@@ -118,7 +119,6 @@ export default function AdminClassDetail() {
   const [classStudents, setClassStudents] = useState<ClassStudentListResponse | null>(null);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [studentsError, setStudentsError] = useState("");
-  const [studentsSuccess, setStudentsSuccess] = useState("");
   const [showEditStudents, setShowEditStudents] = useState(false);
   const [transferOptions, setTransferOptions] = useState<ClassTransferOption[]>([]);
   const [availableStudents, setAvailableStudents] = useState<ClassAssignmentStudent[]>([]);
@@ -244,7 +244,6 @@ export default function AdminClassDetail() {
   useEffect(() => {
     setClassStudents(null);
     setStudentsError("");
-    setStudentsSuccess("");
     setShowEditStudents(false);
     setTransferOptions([]);
     setAvailableStudents([]);
@@ -336,7 +335,6 @@ export default function AdminClassDetail() {
 
   async function saveStudentListChanges(payload: UpdateClassStudentListRequest) {
     const updatedStudents = await updateClassStudentList(loadedClass.class_id, payload);
-    toast.success({ title: "Student list updated" });
     setClassStudents(updatedStudents.pagination.total_pages > 1
       ? await loadClassRoster(loadedClass.class_id)
       : updatedStudents);
@@ -347,7 +345,6 @@ export default function AdminClassDetail() {
     if (availableResult.status === "fulfilled")
       setAvailableStudents(availableResult.value.students);
     if (detailResult.status === "fulfilled") setClassDetail(detailResult.value);
-    setStudentsSuccess("Student list updated successfully.");
   }
 
   async function distributionCommitted() {
@@ -462,7 +459,6 @@ export default function AdminClassDetail() {
                     studentData={classStudents}
                     isLoading={studentsLoading}
                     error={studentsError}
-                    success={studentsSuccess}
                     editError={transferOptionsError}
                     isReadOnly={isArchived}
                     onRetry={() => void refreshStudents()}
@@ -536,9 +532,6 @@ function OverviewTab({
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
       <div className="grid gap-4">
-        <Text as="h3" className="font-sans text-xl font-bold">
-          Overview
-        </Text>
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
           {/* Performance chart */}
           <RetroCard className="p-4">
@@ -708,7 +701,6 @@ function StudentsTab({
   studentData,
   isLoading,
   error,
-  success,
   editError,
   isReadOnly,
   onRetry,
@@ -717,7 +709,6 @@ function StudentsTab({
   studentData: ClassStudentListResponse | null;
   isLoading: boolean;
   error: string;
-  success: string;
   editError: string;
   isReadOnly: boolean;
   onRetry: () => void;
@@ -732,60 +723,29 @@ function StudentsTab({
     .filter((student) => !searchTerm || student.full_name.toLocaleLowerCase().includes(searchTerm))
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
   const groupedStudents = groupClassStudents(filteredStudents);
-  const totalCount = studentData?.summary.total_students ?? students.length;
-  const genderCounts = studentData?.summary.gender_counts;
-  const genderSummary = genderCounts
-    ? [
-      genderCounts.male ? `${genderCounts.male} male${genderCounts.male !== 1 ? "s" : ""}` : null,
-      genderCounts.female ? `${genderCounts.female} female${genderCounts.female !== 1 ? "s" : ""}` : null,
-      genderCounts.other ? `${genderCounts.other} other` : null,
-      genderCounts.unspecified ? `${genderCounts.unspecified} unspecified` : null,
-    ]
-      .filter(Boolean)
-      .join(" · ")
-    : null;
-
   return (
     <div className="grid gap-3">
-      <section className="flex flex-col gap-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b-2 border-border/70">
-          <div className="flex flex-wrap items-baseline gap-2">
-            <Text as="h3" className="font-sans text-xl font-bold">
-              Students
-            </Text>
-            <span className="text-sm font-bold text-foreground">
-              — {totalCount} enrolled
-            </span>
-            {genderSummary && (
-              <span className="text-xs font-semibold text-muted-foreground">
-                ({genderSummary})
-              </span>
-            )}
-          </div>
-
+      <section className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
           <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center w-full sm:w-auto">
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search students..."
-              className="h-9 sm:w-64 w-full !bg-white"
-            />
+            <label className="relative w-full sm:w-64">
+              <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-black/50" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search students..."
+                className="h-10 w-full border-black bg-white pl-9 pr-3"
+              />
+            </label>
             {!isReadOnly && (
-              <Button onClick={onEdit} size="sm" className="whitespace-nowrap font-bold h-9">
-                <Users className="size-4 mr-1.5" />
+              <Button onClick={onEdit} size="header" className="whitespace-nowrap">
+                <Users className="size-4" />
                 Add / Manage Students
               </Button>
             )}
           </div>
         </div>
 
-        {success && (
-          <RetroCard className="bg-[#d8efca] p-3">
-            <Text as="p" className="text-xs font-bold">
-              {success}
-            </Text>
-          </RetroCard>
-        )}
         {editError && (
           <RetroCard className="bg-red-50 text-red-800 p-3">
             <Text as="p" className="text-xs font-bold">
@@ -807,14 +767,28 @@ function StudentsTab({
                 <Button onClick={onRetry}>Retry</Button>
               </div>
             </div>
-          ) : !students.length ? (
-            <p className="p-6 text-center text-sm font-semibold text-black/60">
-              {isReadOnly ? "No students were assigned to this class." : "No students assigned yet. Use Add / Manage Students to build the roster."}
-            </p>
-          ) : !filteredStudents.length ? (
-            <p className="p-6 text-center text-sm font-semibold text-black/60">
-              No students match your search.
-            </p>
+          ) : !students.length || !filteredStudents.length ? (
+            <EmptyState className="border-0 bg-transparent shadow-none">
+              <EmptyHeader>
+                <EmptyMedia>
+                  <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background" aria-hidden="true">
+                    {[3, 2, 1].map((id) => (
+                      <Avatar key={id} variant="student">
+                        <Avatar.Image src={`/avatars/student-avatars/${id}.svg`} alt="" />
+                        <Avatar.Fallback>ST</Avatar.Fallback>
+                      </Avatar>
+                    ))}
+                  </div>
+                </EmptyMedia>
+                <EmptyTitle>{students.length ? "No students match your search" : "No students assigned yet"}</EmptyTitle>
+                <EmptyDescription>{students.length ? "Try another name or clear your search." : "Students assigned to this class will appear here."}</EmptyDescription>
+              </EmptyHeader>
+              {students.length ? (
+                <Button size="sm" className="gap-1.5" onClick={() => setSearch("")}>Clear search</Button>
+              ) : !isReadOnly ? (
+                <Button size="sm" className="gap-1.5" onClick={onEdit}>Add / Manage Students</Button>
+              ) : null}
+            </EmptyState>
           ) : (
             <Accordion
               multiple

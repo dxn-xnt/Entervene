@@ -6,6 +6,7 @@ import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
+import { useToast } from "@/components/retroui/Toast";
 import { createGradingTemplate, editGradingTemplateThreshold, updateGradingTemplate, type GradingTemplateListItem, type SubjectListItem, type SubjectStatus } from "@/lib/api";
 
 type Props = { templates: GradingTemplateListItem[]; subjects: SubjectListItem[]; academicYears?: Array<{ academic_year_id: number; year_label: string; is_active: boolean }>; onReload: () => Promise<void>; createRequest?: number; showCreateButton?: boolean };
@@ -14,6 +15,7 @@ const weight = (template: GradingTemplateListItem, name: string) => template.com
 const blank = (): EditorState => ({ name: "", description: "", status: "active", threshold: "85", ww: "20", pt: "50", exams: "30", subjectIds: new Set(), replacementTemplateId: "" });
 
 export function GradingTemplateManager({ templates, subjects, academicYears = [], onReload, createRequest = 0, showCreateButton = true }: Props) {
+  const toast = useToast();
   const [editing, setEditing] = useState<GradingTemplateListItem | null | undefined>();
   const [form, setForm] = useState<EditorState>(blank);
   const [search, setSearch] = useState("");
@@ -60,7 +62,12 @@ export function GradingTemplateManager({ templates, subjects, academicYears = []
       if (editing) await updateGradingTemplate(editing.grading_template_id, { updated_at: editing.updated_at ?? "", subject_ids: [...form.subjectIds], ...(removedIds.length ? { replacement_template_id: Number(form.replacementTemplateId) } : {}), ...(!editing.is_locked ? { template_name: form.name.trim(), description: form.description.trim() || null, status: form.status, components } : {}) });
       else await createGradingTemplate({ template_name: form.name.trim(), description: form.description.trim() || null, status: form.status, passing_threshold: threshold, subject_ids: [...form.subjectIds], components });
       await onReload(); setEditing(undefined);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Unable to save grading template."); }
+      toast.success({ title: editing ? "Grading template updated" : "Grading template created" });
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Unable to save grading template.";
+      setError(message);
+      toast.error({ title: "Unable to save grading template", description: message });
+    }
     finally { setSaving(false); }
   };
   const saveThreshold = async () => {
@@ -72,7 +79,12 @@ export function GradingTemplateManager({ templates, subjects, academicYears = []
         expected_updated_at: editing.updated_at ?? "", reason: thresholdReason.trim(),
       });
       await onReload(); setEditing(undefined);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Unable to update passing threshold."); }
+      toast.success({ title: "Passing threshold updated" });
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Unable to update passing threshold.";
+      setError(message);
+      toast.error({ title: "Unable to update passing threshold", description: message });
+    }
     finally { setThresholdSaving(false); }
   };
   const total = Number(form.ww || 0) + Number(form.pt || 0) + Number(form.exams || 0);

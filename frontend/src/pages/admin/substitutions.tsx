@@ -7,6 +7,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Input } from "@/components/retroui/Input";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Card } from "@/components/retroui/Card";
+import { Avatar } from "@/components/retroui/Avatar";
 import { OverviewCard } from "@/components/overview-cards";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import {
@@ -31,8 +32,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
-import { Empty } from "@/components/retroui/Empty";
-import { toast } from "sonner";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { useToast } from "@/components/retroui/Toast";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -48,6 +49,7 @@ const substitutionTabs: Array<TabItem<SubstitutionTab>> = [
 ];
 
 export default function AdminSubstitutions() {
+  const toast = useToast();
   const [substitutions, setSubstitutions] = React.useState<TeacherSubstitution[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -96,10 +98,10 @@ export default function AdminSubstitutions() {
     setActionLoadingId(sub.substitution_id);
     try {
       await endSubstitutionEarly(sub.substitution_id);
-      toast.success("Substitution ended successfully. Coverage ended today.");
+      toast.success({ title: "Substitution ended", description: "Coverage ended today." });
       await fetchSubstitutions();
     } catch (err: unknown) {
-      toast.error(getErrorMessage(err, "Failed to end substitution."));
+      toast.error({ title: "Unable to end substitution", description: getErrorMessage(err, "Failed to end substitution.") });
     } finally {
       setActionLoadingId(null);
     }
@@ -113,10 +115,10 @@ export default function AdminSubstitutions() {
     setActionLoadingId(batchId);
     try {
       await endBatchSubstitutionsEarly(batchId);
-      toast.success(`Successfully concluded all active loads for ${teacherName}'s leave program.`);
+      toast.success({ title: "Substitution program ended", description: `All active loads for ${teacherName} were concluded.` });
       await fetchSubstitutions();
     } catch (err: unknown) {
-      toast.error(getErrorMessage(err, "Failed to end program substitutions."));
+      toast.error({ title: "Unable to end substitution program", description: getErrorMessage(err, "Failed to end program substitutions.") });
     } finally {
       setActionLoadingId(null);
     }
@@ -130,10 +132,10 @@ export default function AdminSubstitutions() {
     setActionLoadingId(sub.substitution_id);
     try {
       await cancelSubstitution(sub.substitution_id);
-      toast.success("Substitution cancelled.");
+      toast.success({ title: "Substitution cancelled" });
       await fetchSubstitutions();
     } catch (err: unknown) {
-      toast.error(getErrorMessage(err, "Failed to cancel substitution."));
+      toast.error({ title: "Unable to cancel substitution", description: getErrorMessage(err, "Failed to cancel substitution.") });
     } finally {
       setActionLoadingId(null);
     }
@@ -241,15 +243,25 @@ export default function AdminSubstitutions() {
                   </div>
                 ) : filteredSubstitutions.length === 0 ? (
                   <Empty className="border-0 shadow-none">
-                    <Empty.Content>
-                      <Empty.Icon><UserCheck size={24} /></Empty.Icon>
-                      <Empty.Title>No substitutions found</Empty.Title>
-                      <Empty.Description>
-                        {searchQuery
-                          ? "Try adjusting your search terms or filters."
-                          : "Assign a substitute when a teacher goes on maternity leave or extended leave."}
-                      </Empty.Description>
-                    </Empty.Content>
+                    <EmptyHeader>
+                      <EmptyMedia>
+                        <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background" aria-hidden="true">
+                          {[12, 13, 14].map((id) => (
+                            <Avatar key={id} variant="teacher">
+                              <Avatar.Image src={`/avatars/teacher-avatars/${id}.svg`} alt="" />
+                              <Avatar.Fallback>TC</Avatar.Fallback>
+                            </Avatar>
+                          ))}
+                        </div>
+                      </EmptyMedia>
+                      <EmptyTitle>{searchQuery.trim() ? "No substitutions match your search" : activeTab === "all" ? "No substitutions yet" : `No ${activeTab} substitutions`}</EmptyTitle>
+                      <EmptyDescription>{searchQuery.trim() ? "Try another teacher or class name, or clear your search." : activeTab === "all" ? "Substitute assignments will appear here when they are added." : `There are no ${activeTab} substitute assignments right now.`}</EmptyDescription>
+                    </EmptyHeader>
+                    {searchQuery.trim() ? (
+                      <Button size="sm" className="gap-1.5" onClick={() => setSearchQuery("")}>Clear search</Button>
+                    ) : activeTab === "all" ? (
+                      <Button size="sm" className="gap-1.5" onClick={() => setIsAssignModalOpen(true)}>Assign Substitute</Button>
+                    ) : null}
                   </Empty>
                 ) : (
                   <div className="overflow-x-auto">
@@ -456,7 +468,10 @@ export default function AdminSubstitutions() {
           <AdjustSubstitutionModal
             target={selectedAdjustTarget}
             onClose={() => setSelectedAdjustTarget(null)}
-            onSuccess={fetchSubstitutions}
+            onSuccess={() => {
+              toast.success({ title: "Substitution end date updated" });
+              void fetchSubstitutions();
+            }}
           />
         </Dialog>
       )}

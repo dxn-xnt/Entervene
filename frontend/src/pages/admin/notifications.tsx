@@ -6,7 +6,8 @@ import { NotificationCard } from "@/components/notification-card";
 import { Button } from "@/components/retroui/Button";
 import { AlertTriangle, Bell, FileCheck, Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
-import { Empty } from "@/components/retroui/Empty";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { useToast } from "@/components/retroui/Toast";
 import {
   getNotifications,
   markAllNotificationsAsRead,
@@ -23,22 +24,27 @@ const tabs: Array<TabItem<NotificationTabId>> = [
 ];
 
 export default function AdminNotifications() {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<NotificationTabId>("all");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(false);
       const data = await getNotifications(false, 50);
       setNotifications(data.notifications);
     } catch (err) {
       console.error("Failed to load notifications:", err);
+      setLoadError(true);
+      toast.error({ title: "Unable to load notifications", description: err instanceof Error ? err.message : undefined });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     fetchNotifications();
@@ -49,8 +55,10 @@ export default function AdminNotifications() {
       setMarkingAll(true);
       await markAllNotificationsAsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      toast.success({ title: "All notifications marked as read" });
     } catch (err) {
       console.error("Failed to mark all as read:", err);
+      toast.error({ title: "Unable to mark notifications as read", description: err instanceof Error ? err.message : undefined });
     } finally {
       setMarkingAll(false);
     }
@@ -67,6 +75,7 @@ export default function AdminNotifications() {
       );
     } catch (err) {
       console.error("Failed to mark notification as read:", err);
+      toast.error({ title: "Unable to mark notification as read", description: err instanceof Error ? err.message : undefined });
     }
   };
 
@@ -76,6 +85,13 @@ export default function AdminNotifications() {
     if (activeTab === "interventions") return n.notification_type === "risk_alert";
     return true;
   });
+
+  const emptyContent = activeTab === "interventions"
+    ? { icon: AlertTriangle, title: "No intervention notifications", description: "Intervention updates will appear here when available." }
+    : activeTab === "submissions"
+      ? { icon: FileCheck, title: "No submission notifications", description: "Submission and deadline updates will appear here when available." }
+      : { icon: Bell, title: "No notifications", description: "You're all caught up!" };
+  const EmptyIcon = emptyContent.icon;
 
   return (
     <AppLayout>
@@ -109,12 +125,26 @@ export default function AdminNotifications() {
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:gap-6 md:px-6">
               {loading ? (
                 <LoadingPanel label="Loading notifications..." />
+              ) : loadError ? (
+                <Empty className="shadow-md transition-shadow hover:shadow-none">
+                  <EmptyHeader>
+                    <EmptyMedia>
+                      <div className="flex size-10 items-center justify-center border-2 border-black bg-primary text-black" aria-hidden="true"><AlertTriangle className="size-5" /></div>
+                    </EmptyMedia>
+                    <EmptyTitle>Unable to load notifications</EmptyTitle>
+                    <EmptyDescription>Please try again.</EmptyDescription>
+                  </EmptyHeader>
+                  <Button size="sm" className="gap-1.5" onClick={() => void fetchNotifications()}>Retry</Button>
+                </Empty>
               ) : filteredNotifications.length === 0 ? (
-                <Empty>
-                  <Empty.Content>
-                    <Empty.Title>No notifications</Empty.Title>
-                    <Empty.Description>You are all caught up!</Empty.Description>
-                  </Empty.Content>
+                <Empty className="shadow-md transition-shadow hover:shadow-none">
+                  <EmptyHeader>
+                    <EmptyMedia>
+                      <div className="flex size-10 items-center justify-center border-2 border-black bg-primary text-black" aria-hidden="true"><EmptyIcon className="size-5" /></div>
+                    </EmptyMedia>
+                    <EmptyTitle>{emptyContent.title}</EmptyTitle>
+                    <EmptyDescription>{emptyContent.description}</EmptyDescription>
+                  </EmptyHeader>
                 </Empty>
               ) : (
                 <div className="flex flex-col gap-3 w-full">
