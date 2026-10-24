@@ -258,7 +258,7 @@ export default function AdminClassDetail() {
     return (
       <AppLayout>
         <div className="flex flex-1 flex-col p-4 md:p-6">
-          <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+          <div className="flex items-center justify-center gap-3 py-12 text-sm text-muted-foreground" role="status">
             <Loader size="sm" />
             Loading class details...
           </div>
@@ -756,7 +756,7 @@ function StudentsTab({
 
         <RetroCard className="max-h-[520px] overflow-y-auto p-4">
           {isLoading ? (
-            <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+            <div className="flex items-center justify-center gap-3 py-12 text-sm text-muted-foreground" role="status">
               <Loader size="sm" />
               Loading students...
             </div>

@@ -27,6 +27,7 @@ import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
+import { FormMessage } from "@/components/retroui/FormMessage";
 
 const MODERN_CLASS_IMPORT_HEADERS = [
   "section_name",
@@ -442,15 +443,12 @@ export default function ImportClassWizard({
                   </div>
                 </Card>
               ) : configuredSections.length === 0 ? (
-                <Card className="grid gap-3.5 border-2 border-destructive/60 bg-destructive/10 p-4 sm:p-5 text-destructive shadow-[2px_2px_0_#000]">
-                  <div className="flex items-center gap-2.5 font-bold text-base sm:text-lg">
-                    <AlertTriangle className="size-5 shrink-0 text-destructive" />
-                    <span>No official sections configured</span>
-                  </div>
+                <div className="grid gap-2 text-destructive">
+                  <FormMessage>No official sections configured</FormMessage>
                   <p className="text-sm text-destructive/90 leading-relaxed">
                     No official sections are currently configured for {selectedLevel.level_name} in academic year {options.academic_year.year_label}. Configure official sections in System Settings before importing classes.
                   </p>
-                  <div className="pt-1">
+                  <div>
                     <Button
                       type="button"
                       variant="outline"
@@ -461,7 +459,7 @@ export default function ImportClassWizard({
                       Configure Sections
                     </Button>
                   </div>
-                </Card>
+                </div>
               ) : availableSections.length > 0 ? (
                 <Card className="grid gap-2.5 border-2 border-black bg-card p-3.5 sm:p-4 shadow-[2px_2px_0_#000]">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -675,7 +673,7 @@ function readableFileSize(size: number) {
 }
 
 function InlineError({ message }: { message: string }) {
-  return <p className="text-xs font-semibold text-destructive">{message}</p>;
+  return <FormMessage className="text-xs">{message}</FormMessage>;
 }
 
 type ImportValidationErrorState = {
@@ -899,11 +897,11 @@ function ValidationErrorPanel({ error, onDownloadTemplate }: { error: ImportVali
   const showGeneralMessage = error.message.trim().toLocaleLowerCase() !== "csv validation failed.";
 
   return (
-    <Card className="grid gap-2 border-destructive bg-destructive/10 p-4 text-sm text-destructive">
-      <Text as="h6" className="font-bold">CSV validation failed.</Text>
-      {showGeneralMessage && <p>{error.message}</p>}
+    <div className="grid gap-2 text-sm text-destructive">
+      <FormMessage>CSV validation failed.</FormMessage>
+      {showGeneralMessage && <FormMessage>{error.message}</FormMessage>}
       {hasHeaderError && (
-        <div className="grid gap-2 rounded border border-destructive/40 bg-card p-3">
+        <div className="grid gap-2">
           <p className="font-bold text-xs">Required Modern Header Template:</p>
           <code className="break-all rounded bg-muted p-2 text-[11px] font-mono">{MODERN_CLASS_IMPORT_HEADER_ROW}</code>
           <Button size="sm" variant={"outline"} className="w-fit" onClick={onDownloadTemplate}>
@@ -918,7 +916,7 @@ function ValidationErrorPanel({ error, onDownloadTemplate }: { error: ImportVali
           ))}
         </ul>
       )}
-    </Card>
+    </div>
   );
 }
 

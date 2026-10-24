@@ -7,8 +7,11 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { useToast } from "@/components/retroui/Toast";
 import {
+  ApiRequestError,
   createSubjectOffering,
   createSubject,
   updateSubject,
@@ -106,6 +109,7 @@ export default function AddSubjectModal({
   const [isLoadingOptions, setIsLoadingOptions] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [validationAttempt, setValidationAttempt] = React.useState(0);
   const [successMessage, setSuccessMessage] = React.useState<string | null>(
     null,
   );
@@ -215,6 +219,14 @@ export default function AddSubjectModal({
     value: SubjectFormState[TKey],
   ) => {
     setForm((current) => ({ ...current, [key]: value }));
+    if ((key === "academic_level_id" && error === "Select a grade level." && value)
+      || (key === "subject_name" && error === "Subject name is required." && String(value).trim())
+      || (key === "grading_template_id" && error === "Select an active grading template." && value)) setError(null);
+  };
+
+  const failValidation = (message: string) => {
+    setError(message);
+    setValidationAttempt((attempt) => attempt + 1);
   };
 
   const selectedTemplateObj = gradingTemplates.find(
@@ -273,9 +285,11 @@ export default function AddSubjectModal({
     value: OfferingFormState[TKey],
   ) => {
     setOfferingForm((current) => ({ ...current, [key]: value }));
+    if (key === "pathway" && error === "Select a pathway for the offering." && value) setError(null);
   };
 
   const handleYearChange = (value: string) => {
+    if (value && error === "Select an academic year for the offering.") setError(null);
     setOfferingForm((current) => ({
       ...current,
       academic_year_id: value,
@@ -284,6 +298,7 @@ export default function AddSubjectModal({
   };
 
   const togglePeriod = (periodId: string, checked: boolean) => {
+    if (checked && error === "Select at least one term for the offering.") setError(null);
     setOfferingForm((current) => ({
       ...current,
       academic_period_ids: checked
@@ -295,34 +310,34 @@ export default function AddSubjectModal({
   const handleSubmit = async () => {
     setError(null);
     if (!form.academic_level_id) {
-      setError("Select a grade level.");
+      failValidation("Select a grade level.");
       return;
     }
     if (!form.subject_name.trim()) {
-      setError("Subject name is required.");
+      failValidation("Subject name is required.");
       return;
     }
     if (offerNow) {
       if (!offeringForm.academic_year_id) {
-        setError("Select an academic year for the offering.");
+        failValidation("Select an academic year for the offering.");
         return;
       }
       if (!offeringForm.academic_period_ids.length) {
-        setError("Select at least one term for the offering.");
+        failValidation("Select at least one term for the offering.");
         return;
       }
       if (!offeringForm.pathway) {
-        setError("Select a pathway for the offering.");
+        failValidation("Select a pathway for the offering.");
         return;
       }
     }
 
+    if (!selectedTemplateObj) {
+      failValidation("Select an active grading template.");
+      return;
+    }
     setIsSaving(true);
     try {
-      if (!selectedTemplateObj) {
-        setError("Select an active grading template.");
-        return;
-      }
       const gradingTemplateId = selectedTemplateObj.grading_template_id;
 
       if (subjectToEdit) {
@@ -386,7 +401,6 @@ export default function AddSubjectModal({
             ? `Subject was created, but offering setup failed. You can finish it in Subject Offerings. ${offeringErr.message}`
             : "Subject was created, but offering setup failed. You can finish it in Subject Offerings.",
         );
-        toast.error({ title: "Offering setup failed", description: offeringErr instanceof Error ? offeringErr.message : undefined });
         setSuccessMessage(
           `${created.subject_name} has been added to the subject catalog.`,
         );
@@ -394,8 +408,11 @@ export default function AddSubjectModal({
         await onCreated?.();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save subject.");
-      toast.error({ title: "Unable to save subject", description: err instanceof Error ? err.message : undefined });
+      const message = err instanceof Error ? err.message : "Unable to save subject.";
+      if (err instanceof ApiRequestError && (err.status === 400 || err.status === 422)) {
+        setError(message);
+        setValidationAttempt((attempt) => attempt + 1);
+      } else toast.error({ title: "Unable to save subject", description: message });
     } finally {
       setIsSaving(false);
     }
@@ -416,7 +433,7 @@ export default function AddSubjectModal({
             {successMessage}
           </Text>
           {error ? (
-            <p className="text-sm font-semibold text-red-700">{error}</p>
+            <FormMessage>{error}</FormMessage>
           ) : null}
         </section>
         <Dialog.Footer>
@@ -449,6 +466,11 @@ export default function AddSubjectModal({
         </div>
       </Dialog.Header>
       <section className="flex flex-col gap-4 p-4">
+        <AdminValidationAlert
+          message={error && !["Select a grade level.", "Subject name is required.", "Select an academic year for the offering.", "Select at least one term for the offering.", "Select a pathway for the offering.", "Select an active grading template."].includes(error) ? error : null}
+          attempt={validationAttempt}
+          firstInvalidFieldId={error === "Select a grade level." ? "subject-level" : error === "Subject name is required." ? "subject-name" : error === "Select an active grading template." ? "grading-template" : error === "Select an academic year for the offering." ? "offering-year" : undefined}
+        />
         <div>
           <Text as="h6" className="font-sans text-lg font-bold">
             Subject Details
@@ -464,7 +486,7 @@ export default function AddSubjectModal({
               onValueChange={(value) => setField("academic_level_id", value)}
               disabled={isLevelLocked}
             >
-              <Select.Trigger id="subject-level" className="w-full min-w-0">
+              <Select.Trigger id="subject-level" aria-invalid={error === "Select a grade level."} aria-describedby={error === "Select a grade level." ? "subject-level-error" : undefined} className="w-full min-w-0 aria-[invalid=true]:border-destructive">
                 <Select.Value
                   placeholder={
                     isLoadingOptions
@@ -489,9 +511,10 @@ export default function AddSubjectModal({
                 </Select.Group>
               </Select.Content>
             </Select>
+            {error === "Select a grade level." && <FormMessage id="subject-level-error">{error}</FormMessage>}
 
             {subjectToEdit ? (
-              <Text as="p" className="text-xs text-black/70 mt-1">
+              <Text as="p" className="text-xs text-muted-foreground mt-1">
                 Grade level can&apos;t be changed after a subject is created.
               </Text>
             ) : null}
@@ -502,11 +525,14 @@ export default function AddSubjectModal({
             </label>
             <Input
               id="subject-name"
+              aria-invalid={error === "Subject name is required."}
+              aria-describedby={error === "Subject name is required." ? "subject-name-error" : undefined}
               value={form.subject_name}
               onChange={(event) => setField("subject_name", event.target.value)}
               type="text"
               placeholder="Enter name"
             />
+            {error === "Subject name is required." && <FormMessage id="subject-name-error">{error}</FormMessage>}
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="subject-code" className="text-sm">
@@ -525,7 +551,7 @@ export default function AddSubjectModal({
           <div className="flex flex-col gap-1.5 md:col-span-2">
             <label htmlFor="grading-template" className="text-sm font-semibold">Grading Template</label>
             <Select value={form.grading_template_id} onValueChange={(value) => setField("grading_template_id", value)}>
-              <Select.Trigger id="grading-template" className="w-full min-w-0">
+              <Select.Trigger id="grading-template" aria-invalid={error === "Select an active grading template."} aria-describedby={error === "Select an active grading template." ? "grading-template-error" : undefined} className="w-full min-w-0 aria-[invalid=true]:border-destructive">
                 <Select.Value placeholder="Select grading template" />
               </Select.Trigger>
               <Select.Content position="popper" className="max-h-72 overflow-y-auto">
@@ -538,6 +564,7 @@ export default function AddSubjectModal({
                 </Select.Group>
               </Select.Content>
             </Select>
+            {error === "Select an active grading template." && <FormMessage id="grading-template-error">{error}</FormMessage>}
             {selectedTemplateObj && (
               <div className="rounded border border-black/20 bg-muted/20 p-3 text-sm">
                 <strong>{selectedTemplateObj.template_name}</strong>
@@ -572,7 +599,7 @@ export default function AddSubjectModal({
                 <label htmlFor="is-math-science" className="font-bold">
                   Is Core Math or Science? (60-min requirement)
                 </label>
-                <p className="text-sm text-black/70">
+                <p className="text-sm text-muted-foreground">
                   Checking this flag enforces a 60-minute duration requirement
                   for this subject during automatic and manual scheduling to
                   comply with core curriculum standards.
@@ -593,7 +620,7 @@ export default function AddSubjectModal({
               <label htmlFor="offer-now" className="font-bold">
                 Offer This Subject Now optional
               </label>
-              <p className="text-sm text-black/70">
+              <p className="text-sm text-muted-foreground">
                 Offering means this subject will be available for a school year,
                 term, grade, and pathway. Teacher and schedule setup is still
                 done later in Classes.
@@ -611,7 +638,7 @@ export default function AddSubjectModal({
                   value={offeringForm.academic_year_id}
                   onValueChange={handleYearChange}
                 >
-                  <Select.Trigger id="offering-year" className="w-full min-w-0">
+                  <Select.Trigger id="offering-year" aria-invalid={error === "Select an academic year for the offering."} aria-describedby={error === "Select an academic year for the offering." ? "offering-year-error" : undefined} className="w-full min-w-0 aria-[invalid=true]:border-destructive">
                     <Select.Value placeholder="Select academic year" />
                   </Select.Trigger>
                   <Select.Content
@@ -630,6 +657,7 @@ export default function AddSubjectModal({
                     </Select.Group>
                   </Select.Content>
                 </Select>
+                {error === "Select an academic year for the offering." && <FormMessage id="offering-year-error">{error}</FormMessage>}
               </div>
               {requiresPathway ? (
                 <div className="flex flex-col gap-1">
@@ -650,7 +678,9 @@ export default function AddSubjectModal({
                   >
                     <Select.Trigger
                       id="offering-pathway"
-                      className="w-full min-w-0"
+                      aria-invalid={error === "Select a pathway for the offering."}
+                      aria-describedby={error === "Select a pathway for the offering." ? "offering-pathway-error" : undefined}
+                      className="w-full min-w-0 aria-[invalid=true]:border-destructive"
                     >
                       <Select.Value placeholder="Select pathway" />
                     </Select.Trigger>
@@ -674,12 +704,13 @@ export default function AddSubjectModal({
                       </Select.Group>
                     </Select.Content>
                   </Select>
+                  {error === "Select a pathway for the offering." && <FormMessage id="offering-pathway-error">{error}</FormMessage>}
                 </div>
               ) : null}
               <div className="flex flex-col gap-2 md:col-span-2">
                 <div>
                   <p className="text-sm font-semibold">Term(s)</p>
-                  <p className="text-xs text-black/70">
+                  <p className="text-xs text-muted-foreground">
                     Grade level is inherited from{" "}
                     {selectedLevel?.level_name || "the selected subject grade"}.
                   </p>
@@ -711,6 +742,7 @@ export default function AddSubjectModal({
                     })}
                   </div>
                 )}
+                {error === "Select at least one term for the offering." && <FormMessage>{error}</FormMessage>}
               </div>
             </div>
           ) : null}
@@ -722,9 +754,6 @@ export default function AddSubjectModal({
               {selectedLevel?.level_name || "Select grade level"}
             </span>
           </Text>
-          {error ? (
-            <p className="text-sm font-semibold text-red-700">{error}</p>
-          ) : null}
         </div>
       </section>
       <Dialog.Footer>

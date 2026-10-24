@@ -219,7 +219,7 @@ export default function AdminClasses() {
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {notice && (
-                <p className="border-2 border-black bg-[#bbf7d0] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">
+                <p role="status" className="text-sm text-muted-foreground">
                   {notice}
                 </p>
               )}

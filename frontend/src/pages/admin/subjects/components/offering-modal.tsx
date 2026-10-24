@@ -6,6 +6,8 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { formatPeriodLabel } from "@/lib/academic-periods";
 import {
   ApiRequestError,
@@ -69,6 +71,7 @@ export function OfferingModal({
   });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationAttempt, setValidationAttempt] = useState(0);
   const [showAdvancedYear, setShowAdvancedYear] = useState(false);
 
   const gradeLevels = useMemo(() => targetLevels(options?.academic_levels ?? []), [options]);
@@ -240,6 +243,12 @@ export function OfferingModal({
 
   const setField = <TKey extends keyof OfferingFormState>(key: TKey, value: OfferingFormState[TKey]) => {
     setForm((current) => ({ ...current, [key]: value }));
+    if ((key === "pathway" && error === "Select a valid pathway for the selected grade level.") || (key === "minutes" && error === "Minutes must be a positive number." && (!String(value).trim() || Number(value) > 0))) setError(null);
+  };
+
+  const failValidation = (message: string) => {
+    setError(message);
+    setValidationAttempt((attempt) => attempt + 1);
   };
 
   const handleYearChange = (value: string) => {
@@ -336,27 +345,27 @@ export function OfferingModal({
   const handleSubmit = async () => {
     setError(null);
     if (readOnly) {
-      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
+      failValidation(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
       return;
     }
     const selectedIds = isCreateMode ? form.subject_ids : [form.subject_id].filter(Boolean);
     const selectedTermIds = form.academic_period_ids;
     if (!selectedIds.length || !selectedTermIds.length || !form.academic_year_id || !form.academic_level_id) {
-      setError("Select setup details, at least one term, and at least one subject.");
+      failValidation("Select setup details, at least one term, and at least one subject.");
       return;
     }
     if (selectedTermIds.some((periodId) => Number(periodId) <= 0)) {
-      setError("No valid academic terms are available for the selected academic year.");
+      failValidation("No valid academic terms are available for the selected academic year.");
       return;
     }
     if (requiresPathway && !availablePathways.includes(form.pathway)) {
-      setError("Select a valid pathway for the selected grade level.");
+      failValidation("Select a valid pathway for the selected grade level.");
       return;
     }
 
     const parsedMinutes = form.minutes.trim() ? Number(form.minutes) : null;
     if (parsedMinutes !== null && (isNaN(parsedMinutes) || parsedMinutes <= 0)) {
-      setError("Minutes must be a positive number.");
+      failValidation("Minutes must be a positive number.");
       return;
     }
 
@@ -476,17 +485,18 @@ export function OfferingModal({
         </Dialog.Header>
         <section className="p-4">
           <div className="flex flex-col gap-4">
-            <div className="rounded border-2 border-black bg-[#fff1b8] p-3 shadow-[3px_3px_0_#000]">
-              <p className="text-sm font-semibold text-black/70">Current setup context</p>
-              <p className="text-lg font-bold">{contextLabel}</p>
-              <p className="text-xs text-black/70">
+            <div className="space-y-1 text-muted-foreground">
+              <p className="text-sm">Current setup context</p>
+              <p className="text-sm">{contextLabel}</p>
+              <p className="text-xs">
                 This offering will be added to the current active academic year. Change active year or active term in System Settings.
               </p>
             </div>
+            <AdminValidationAlert message={error && !["Select setup details, at least one term, and at least one subject.", "No valid academic terms are available for the selected academic year.", "Select a valid pathway for the selected grade level.", "Minutes must be a positive number."].includes(error) ? error : null} attempt={validationAttempt} />
             {readOnly ? (
               <div className="rounded border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
                 <p className="font-bold">Read-only academic year</p>
-                <p className="text-black/70">{readOnlyReason}</p>
+                <p className="text-muted-foreground">{readOnlyReason}</p>
               </div>
             ) : null}
 
@@ -500,7 +510,7 @@ export function OfferingModal({
                     onValueChange={handleLevelChange}
                     disabled={!isCreateMode}
                   >
-                    <Select.Trigger id="offering-level" className="w-full">
+                    <Select.Trigger id="offering-level" aria-invalid={error === "Select setup details, at least one term, and at least one subject." && !form.academic_level_id} aria-describedby={error === "Select setup details, at least one term, and at least one subject." && !form.academic_level_id ? "offering-level-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
                       <Select.Value placeholder="Select grade" />
                     </Select.Trigger>
                     <Select.Content>
@@ -513,8 +523,9 @@ export function OfferingModal({
                       </Select.Group>
                     </Select.Content>
                   </Select>
+                  {error === "Select setup details, at least one term, and at least one subject." && !form.academic_level_id && <FormMessage id="offering-level-error">Select a grade level.</FormMessage>}
                   {!isCreateMode ? (
-                    <p className="text-xs text-black/70 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       Grade level is tied to the catalog subject and cannot be changed here.
                     </p>
                   ) : null}
@@ -526,7 +537,7 @@ export function OfferingModal({
                       value={form.pathway}
                       onValueChange={(value) => setField("pathway", value as SubjectOfferingPathway)}
                     >
-                      <Select.Trigger id="offering-pathway" className="w-full">
+                    <Select.Trigger id="offering-pathway" aria-invalid={error === "Select a valid pathway for the selected grade level."} aria-describedby={error === "Select a valid pathway for the selected grade level." ? "offering-pathway-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
                         <Select.Value placeholder="Select pathway" />
                       </Select.Trigger>
                       <Select.Content>
@@ -543,6 +554,7 @@ export function OfferingModal({
                         </Select.Group>
                       </Select.Content>
                     </Select>
+                    {error === "Select a valid pathway for the selected grade level." && <FormMessage id="offering-pathway-error">{error}</FormMessage>}
                   </div>
                 ) : null}
                 {isCreateMode ? (
@@ -550,13 +562,16 @@ export function OfferingModal({
                     <label className="text-sm font-semibold" htmlFor="create-offering-minutes">Duration (Minutes)</label>
                     <Input
                       id="create-offering-minutes"
+                      aria-invalid={error === "Minutes must be a positive number."}
+                      aria-describedby={error === "Minutes must be a positive number." ? "create-offering-minutes-error" : undefined}
                       type="number"
                       min={1}
                       value={form.minutes}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField("minutes", e.target.value)}
                       placeholder="e.g. 45, 60, 72, 96 (optional)"
                     />
-                    <p className="text-xs text-black/70">Minutes per class period (optional now, required for publishing).</p>
+                    {error === "Minutes must be a positive number." && <FormMessage id="create-offering-minutes-error">{error}</FormMessage>}
+                    <p className="text-xs text-muted-foreground">Minutes per class period (optional now, required for publishing).</p>
                   </div>
                 ) : null}
                 <div className="flex flex-col gap-2 md:col-span-2">
@@ -568,7 +583,7 @@ export function OfferingModal({
                     />
                     <span>
                       <span className="block font-bold">Add to a different academic year</span>
-                      <span className="text-xs text-black/70">
+                      <span className="text-xs text-muted-foreground">
                         Keep this off unless you are copying or correcting offerings outside the active setup.
                       </span>
                     </span>
@@ -577,7 +592,7 @@ export function OfferingModal({
                     <div className="flex flex-col gap-1">
                       <label className="text-sm" htmlFor="offering-year">Academic Year</label>
                       <Select value={form.academic_year_id} onValueChange={handleYearChange}>
-                        <Select.Trigger id="offering-year" className="w-full">
+                        <Select.Trigger id="offering-year" aria-invalid={error === "Select setup details, at least one term, and at least one subject." && !form.academic_year_id} aria-describedby={error === "Select setup details, at least one term, and at least one subject." && !form.academic_year_id ? "offering-year-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
                           <Select.Value placeholder="Select year" />
                         </Select.Trigger>
                         <Select.Content>
@@ -590,6 +605,7 @@ export function OfferingModal({
                           </Select.Group>
                         </Select.Content>
                       </Select>
+                      {error === "Select setup details, at least one term, and at least one subject." && !form.academic_year_id && <FormMessage id="offering-year-error">Select an academic year.</FormMessage>}
                     </div>
                   ) : null}
                 </div>
@@ -598,10 +614,10 @@ export function OfferingModal({
                     <div>
                       <p className="text-sm font-semibold">Term(s)</p>
                       {isJhsSelection ? (
-                        <p className="text-xs text-black/70">Junior High subjects usually continue across terms. Adjust if needed.</p>
+                        <p className="text-xs text-muted-foreground">Junior High subjects usually continue across terms. Adjust if needed.</p>
                       ) : null}
                       {isShsSelection ? (
-                        <p className="text-xs text-black/70">Senior High subjects may be offered in selected term(s) depending on hours and curriculum mapping.</p>
+                        <p className="text-xs text-muted-foreground">Senior High subjects may be offered in selected term(s) depending on hours and curriculum mapping.</p>
                       ) : null}
                     </div>
                     {periods.length ? (
@@ -634,16 +650,18 @@ export function OfferingModal({
                   {!periods.length ? (
                     <p className="text-sm font-semibold text-amber-700">No terms found for this academic year.</p>
                   ) : null}
+                  {error === "No valid academic terms are available for the selected academic year." && <FormMessage>{error}</FormMessage>}
+                  {error === "Select setup details, at least one term, and at least one subject." && !form.academic_period_ids.length && <FormMessage>Select at least one term.</FormMessage>}
                 </div>
               </div>
             </div>
 
             {offering ? (
               <>
-                <div className="rounded border-2 border-black bg-[#fff1b8] p-3 shadow-[3px_3px_0_#000]">
-                  <p className="text-xs font-semibold text-black/70">Subject Being Edited</p>
-                  <p className="text-xl font-bold">{offering.subject.subject_name}</p>
-                  <p className="text-xs text-black/70">
+                <div className="space-y-1 text-muted-foreground">
+                  <p className="text-xs">Subject Being Edited</p>
+                  <p className="text-sm">{offering.subject.subject_name}</p>
+                  <p className="text-xs">
                     Code: {offering.subject.subject_codename || "N/A"} • Grade: {offering.academic_level.level_name}
                   </p>
                 </div>
@@ -653,17 +671,20 @@ export function OfferingModal({
                     <label className="text-sm font-semibold" htmlFor="offering-minutes">Duration (Minutes)</label>
                     <Input
                       id="offering-minutes"
+                      aria-invalid={error === "Minutes must be a positive number."}
+                      aria-describedby={error === "Minutes must be a positive number." ? "offering-minutes-error" : undefined}
                       type="number"
                       min={1}
                       value={form.minutes}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField("minutes", e.target.value)}
                       placeholder="e.g. 45, 60, 72, 96"
                     />
-                    <p className="text-xs text-black/70">Minutes per period. Required for publishing.</p>
+                    {error === "Minutes must be a positive number." && <FormMessage id="offering-minutes-error">{error}</FormMessage>}
+                    <p className="text-xs text-muted-foreground">Minutes per period. Required for publishing.</p>
                   </div>
                   <div className="text-sm">
                     <strong>Grading Template:</strong> {offering?.subject.grading_template ?? "Set in Subject Catalog"}
-                    <p className="text-xs text-black/70">Change this in Add/Edit Subject.</p>
+                    <p className="text-xs text-muted-foreground">Change this in Add/Edit Subject.</p>
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-sm font-semibold" htmlFor="offering-status">Status</label>
@@ -689,7 +710,7 @@ export function OfferingModal({
                 <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div>
                     <h6 className="font-bold">Select Subjects</h6>
-                    <p className="text-xs text-black/70">Catalog subjects are filtered by the selected grade level.</p>
+                    <p className="text-xs text-muted-foreground">Catalog subjects are filtered by the selected grade level.</p>
                   </div>
                 </div>
 
@@ -700,10 +721,10 @@ export function OfferingModal({
                   searchPlaceholder="Search subjects for this grade"
                   alreadyOfferedSubjectIds={alreadyOfferedSubjectIds}
                 />
+                {error === "Select setup details, at least one term, and at least one subject." && !form.subject_ids.length && <FormMessage>Select at least one subject.</FormMessage>}
               </div>
             )}
 
-            {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
           </div>
         </section>
         <Dialog.Footer>

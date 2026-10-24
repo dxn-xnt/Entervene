@@ -5,9 +5,11 @@ import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
-import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Progress } from "@/components/retroui/Progress";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
@@ -17,6 +19,7 @@ import { useToast } from "@/components/retroui/Toast";
 import { UserProfileHeader } from "@/components/profile-header";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import {
+  ApiRequestError,
   archiveUser,
   getUserAnalytics,
   getUserDetail,
@@ -106,6 +109,7 @@ export default function AdminUserDetail() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
 
   useEffect(() => {
@@ -181,7 +185,6 @@ export default function AdminUserDetail() {
       const updated = await getUserDetail(userId);
       setUser(updated);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to resend invitation.");
       toast.error({ title: "Failed to resend invitation", description: err instanceof Error ? err.message : undefined });
     } finally {
       setResending(false);
@@ -192,6 +195,7 @@ export default function AdminUserDetail() {
     if (!userId) return;
     setSaving(true);
     setError(null);
+    setEditError(null);
     setNotice(null);
     try {
       const updated = await updateUser(userId, payload);
@@ -200,8 +204,8 @@ export default function AdminUserDetail() {
       setNotice("User updated successfully.");
       toast.success({ title: "User updated" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to update user.");
-      toast.error({ title: "Unable to update user", description: err instanceof Error ? err.message : undefined });
+      if (err instanceof ApiRequestError && (err.status === 400 || err.status === 422)) setEditError(err.message);
+      else toast.error({ title: "Unable to update user", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSaving(false);
     }
@@ -220,7 +224,6 @@ export default function AdminUserDetail() {
       setNotice("User archived successfully.");
       toast.success({ title: "User archived" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to archive user.");
       toast.error({ title: "Unable to archive user", description: err instanceof Error ? err.message : undefined });
     } finally {
       setArchiving(false);
@@ -293,7 +296,7 @@ export default function AdminUserDetail() {
                   <Button
                     type="button"
                     variant="default"
-                    onClick={() => setEditOpen(true)}
+                    onClick={() => { setEditError(null); setEditOpen(true); }}
                     disabled={isPending || isArchived}
                     title={actionDisabledReason}
                     className="gap-2"
@@ -380,6 +383,8 @@ export default function AdminUserDetail() {
         <EditUserModal
           user={user}
           saving={saving}
+          error={editError}
+          onClearError={() => setEditError(null)}
           onClose={() => setEditOpen(false)}
           onSubmit={handleUpdate}
         />
@@ -387,6 +392,7 @@ export default function AdminUserDetail() {
 
       {user && archiveOpen && (
         <ArchiveUserDialog
+          userName={user.name}
           archiving={archiving}
           onCancel={() => setArchiveOpen(false)}
           onConfirm={handleArchive}
@@ -428,24 +434,47 @@ function labelize(value: string) {
 function EditUserModal({
   user,
   saving,
+  error,
+  onClearError,
   onClose,
   onSubmit,
 }: {
   user: UserDetail;
   saving: boolean;
+  error?: string | null;
+  onClearError: () => void;
   onClose: () => void;
   onSubmit: (payload: UpdateUserPayload) => void;
 }) {
   const [form, setForm] = useState<UpdateUserPayload>(() => initialEditForm(user));
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<"first_name" | "last_name" | "email" | "prior_gwa", string>>>({});
+  const [validationAttempt, setValidationAttempt] = useState(0);
   const isStudent = user.role === "student";
   const isTeacher = user.role === "teacher";
 
   function setField<K extends keyof UpdateUserPayload>(field: K, value: UpdateUserPayload[K]) {
+    onClearError();
     setForm((prev) => ({ ...prev, [field]: value }));
+    if (field === "first_name" || field === "last_name" || field === "email") {
+      const valid = field === "email" ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim()) : !!String(value).trim();
+      if (valid) setFieldErrors((current) => ({ ...current, [field]: undefined }));
+    }
+    if (field === "prior_gwa" && (value == null || value === "" || (Number.isFinite(Number(value)) && Number(value) >= 60 && Number(value) <= 100))) setFieldErrors((current) => ({ ...current, prior_gwa: undefined }));
   }
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    const errors: typeof fieldErrors = {};
+    if (!form.first_name.trim()) errors.first_name = "Enter a first name.";
+    if (!form.last_name.trim()) errors.last_name = "Enter a last name.";
+    if (!form.email.trim()) errors.email = "Enter an email address.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errors.email = "Enter a valid email address.";
+    if (form.prior_gwa != null && String(form.prior_gwa).trim() !== "" && (!Number.isFinite(Number(form.prior_gwa)) || Number(form.prior_gwa) < 60 || Number(form.prior_gwa) > 100)) errors.prior_gwa = "Enter a prior GWA from 60 to 100.";
+    if (Object.keys(errors).length) {
+      setFieldErrors(errors);
+      setValidationAttempt((attempt) => attempt + 1);
+      return;
+    }
     onSubmit({
       ...form,
       first_name: form.first_name.trim(),
@@ -467,19 +496,24 @@ function EditUserModal({
           <h2 className="font-sans text-xl font-bold">Edit User</h2>
         </Dialog.Header>
 
-        <form onSubmit={submit}>
+        <form onSubmit={submit} noValidate>
           <section className="grid gap-4 p-4">
             <Dialog.Description className="text-sm text-muted-foreground">
               Role changes are handled separately.
             </Dialog.Description>
+            <AdminValidationAlert message={error} attempt={validationAttempt} />
             <div className="grid gap-3 md:grid-cols-3">
               <EditField label="First Name">
                 <Input
+                  id="edit-user-first-name"
+                  aria-invalid={!!fieldErrors.first_name}
+                  aria-describedby={fieldErrors.first_name ? "edit-user-first-name-error" : undefined}
                   value={form.first_name}
                   onChange={(event) => setField("first_name", event.target.value)}
                   required
                   className="w-full"
                 />
+                <FormMessage id="edit-user-first-name-error">{fieldErrors.first_name}</FormMessage>
               </EditField>
               <EditField label="Middle Name">
                 <Input
@@ -490,22 +524,30 @@ function EditUserModal({
               </EditField>
               <EditField label="Last Name">
                 <Input
+                  id="edit-user-last-name"
+                  aria-invalid={!!fieldErrors.last_name}
+                  aria-describedby={fieldErrors.last_name ? "edit-user-last-name-error" : undefined}
                   value={form.last_name}
                   onChange={(event) => setField("last_name", event.target.value)}
                   required
                   className="w-full"
                 />
+                <FormMessage id="edit-user-last-name-error">{fieldErrors.last_name}</FormMessage>
               </EditField>
             </div>
 
             <EditField label="Email Address">
               <Input
+                id="edit-user-email"
+                aria-invalid={!!fieldErrors.email}
+                aria-describedby={fieldErrors.email ? "edit-user-email-error" : undefined}
                 type="email"
                 value={form.email}
                 onChange={(event) => setField("email", event.target.value)}
                 required
                 className="w-full"
               />
+              <FormMessage id="edit-user-email-error">{fieldErrors.email}</FormMessage>
             </EditField>
 
             <EditField label="Account Status">
@@ -557,6 +599,9 @@ function EditUserModal({
                 </div>
                 <EditField label="General Average (Prior GWA)">
                   <Input
+                    id="edit-user-prior-gwa"
+                    aria-invalid={!!fieldErrors.prior_gwa}
+                    aria-describedby={fieldErrors.prior_gwa ? "edit-user-prior-gwa-error" : undefined}
                     type="number"
                     step="0.01"
                     min="60"
@@ -569,6 +614,7 @@ function EditUserModal({
                     }}
                     className={`w-full ${user.has_computed_gwa ? "opacity-60 bg-muted/30" : ""}`}
                   />
+                  <FormMessage id="edit-user-prior-gwa-error">{fieldErrors.prior_gwa}</FormMessage>
                   {user.has_computed_gwa && (
                     <p className="mt-1 text-[11px] text-muted-foreground font-semibold">
                       Fallback only — this student has a computed average from prior year grades. The computed value is used for sectioning.
@@ -641,21 +687,29 @@ function EditField({ label, children }: { label: string; children: ReactNode }) 
 }
 
 function ArchiveUserDialog({
+  userName,
   archiving,
   onCancel,
   onConfirm,
 }: {
+  userName: string;
   archiving: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
   return (
-    <ConfirmAlertDialog
+    <ConfirmDialog
+      open
+      onOpenChange={(open) => { if (!open) onCancel(); }}
       title="Archive User"
-      description="Are you sure you want to archive this account? Archived users will no longer appear in the default active user list, but their records and analytics will be preserved."
-      confirmLabel={archiving ? "Archiving..." : "Archive"}
+      confirmationTitle={<p className="text-base">Are you sure you want to archive <strong>{userName}</strong>?</p>}
+      description="Archived users will no longer appear in the default active user list, but their records and analytics will be preserved."
+      confirmLabel={archiving ? "Archiving user..." : "Archive User"}
+      confirmVariant="destructive"
+      isLoading={archiving}
       onCancel={onCancel}
       onConfirm={onConfirm}
+      size="md"
     />
   );
 }

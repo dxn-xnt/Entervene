@@ -18,6 +18,7 @@ interface PredictionFiltersProps {
   hideGradeFilter?: boolean;
   hideSubjectFilter?: boolean;
   hidePeriodFilter?: boolean;
+  showClearButton?: boolean;
   riskSummary?: RiskSummary | null;
   onGradeChange?: (value: number | undefined) => void;
   onClassChange?: (value: number | undefined) => void;
@@ -50,6 +51,7 @@ export default function PredictionFilters({
   hideGradeFilter = false,
   hideSubjectFilter = false,
   hidePeriodFilter = false,
+  showClearButton = true,
   riskSummary,
   onGradeChange,
   onClassChange,
@@ -218,7 +220,7 @@ export default function PredictionFilters({
           </Select.Content>
         </Select>
 
-        {hasActiveFilters && (
+        {showClearButton && hasActiveFilters && (
           <Button
             size="sm"
             onClick={onClearAll}

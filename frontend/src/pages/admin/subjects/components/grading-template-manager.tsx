@@ -4,6 +4,8 @@ import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { useToast } from "@/components/retroui/Toast";
@@ -22,6 +24,7 @@ export function GradingTemplateManager({ templates, subjects, academicYears = []
   const [grade, setGrade] = useState("all");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationAttempt, setValidationAttempt] = useState(0);
   const [thresholdReason, setThresholdReason] = useState("");
   const [thresholdYearId, setThresholdYearId] = useState("");
   const [thresholdSaving, setThresholdSaving] = useState(false);
@@ -52,10 +55,10 @@ export function GradingTemplateManager({ templates, subjects, academicYears = []
   const toggleSubject = (id: number) => setForm((current) => { const subjectIds = new Set(current.subjectIds); if (subjectIds.has(id)) subjectIds.delete(id); else subjectIds.add(id); return { ...current, subjectIds }; });
   const save = async () => {
     const threshold = Number(form.threshold), ww = Number(form.ww), pt = Number(form.pt), exams = Number(form.exams);
-    if (!form.name.trim()) return setError("Template name is required.");
-    if (![threshold, ww, pt, exams].every(Number.isFinite)) return setError("Enter valid numeric grading values.");
-    if (ww + pt + exams !== 100) return setError("Written Work, Performance Tasks, and Exams must total exactly 100%.");
-    if (removedIds.length && !form.replacementTemplateId) return setError("Choose a replacement template for removed subjects.");
+    if (!form.name.trim()) { setError("Template name is required."); setValidationAttempt((attempt) => attempt + 1); return; }
+    if (![threshold, ww, pt, exams].every(Number.isFinite)) { setError("Enter valid numeric grading values."); setValidationAttempt((attempt) => attempt + 1); return; }
+    if (ww + pt + exams !== 100) { setError("Written Work, Performance Tasks, and Exams must total exactly 100%."); setValidationAttempt((attempt) => attempt + 1); return; }
+    if (removedIds.length && !form.replacementTemplateId) { setError("Choose a replacement template for removed subjects."); setValidationAttempt((attempt) => attempt + 1); return; }
     const components = [{ component_name: "Written Work", weight: ww, display_order: 1 }, { component_name: "Performance Tasks", weight: pt, display_order: 2 }, { component_name: "Exams", weight: exams, display_order: 3 }];
     setSaving(true); setError(null);
     try {
@@ -65,13 +68,12 @@ export function GradingTemplateManager({ templates, subjects, academicYears = []
       toast.success({ title: editing ? "Grading template updated" : "Grading template created" });
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Unable to save grading template.";
-      setError(message);
       toast.error({ title: "Unable to save grading template", description: message });
     }
     finally { setSaving(false); }
   };
   const saveThreshold = async () => {
-    if (!editing || !thresholdYearId || !thresholdReason.trim()) return setError("Select a year and enter an audit reason.");
+    if (!editing || !thresholdYearId || !thresholdReason.trim()) { setError("Select a year and enter an audit reason."); setValidationAttempt((attempt) => attempt + 1); return; }
     setThresholdSaving(true); setError(null);
     try {
       await editGradingTemplateThreshold(editing.grading_template_id, {
@@ -82,24 +84,30 @@ export function GradingTemplateManager({ templates, subjects, academicYears = []
       toast.success({ title: "Passing threshold updated" });
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Unable to update passing threshold.";
-      setError(message);
       toast.error({ title: "Unable to update passing threshold", description: message });
     }
     finally { setThresholdSaving(false); }
   };
   const total = Number(form.ww || 0) + Number(form.pt || 0) + Number(form.exams || 0);
+  const weightError = error === "Enter valid numeric grading values." || error === "Written Work, Performance Tasks, and Exams must total exactly 100%.";
+  const updateWeight = (key: "ww" | "pt" | "exams", value: string) => {
+    const next = { ...form, [key]: value };
+    setForm(next);
+    if (weightError && [next.ww, next.pt, next.exams].every((weight) => Number.isFinite(Number(weight))) && Number(next.ww) + Number(next.pt) + Number(next.exams) === 100) setError(null);
+  };
 
   return <section className="flex flex-col gap-5">
     {showCreateButton ? <div className="flex justify-end"><Button onClick={openCreate}><Plus className="mr-2 size-4" />New Grading Template</Button></div> : null}
-    <Card className="border-2 border-black bg-white p-5 shadow-[4px_4px_0_#000]"><h2 className="text-2xl font-bold">Grading Setup</h2><p className="text-sm text-black/70">Create reusable grading templates with Written Work, Performance Tasks, and Exams.</p></Card>
+    <div><h2 className="text-2xl font-bold">Grading Setup</h2><p className="text-sm text-muted-foreground">Create reusable grading templates with Written Work, Performance Tasks, and Exams.</p></div>
     {!templates.length ? <Card className="border-2 border-black p-5 text-sm">No grading templates found.</Card> : <div className="grid items-stretch gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-3">{templates.map((template) => <TemplateCard key={template.grading_template_id} template={template} onEdit={openEdit} />)}</div>}
 
     <Dialog open={editing !== undefined} onOpenChange={(open) => { if (!open) setEditing(undefined); }}>
       <Dialog.Content size="4xl" className="max-h-[calc(100dvh-1rem)]">
         <Dialog.Header className="flex-row items-center gap-3 border-b-2 border-black bg-primary px-5 py-4"><h3 className="text-xl font-bold">{editing ? "Edit Grading Template" : "New Grading Template"}</h3>{editing?.is_locked ? <Badge className="bg-black text-white" variant="solid"><Lock className="mr-1 size-3" />Locked</Badge> : null}</Dialog.Header>
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5">
+          <AdminValidationAlert message={error && !["Template name is required.", "Enter valid numeric grading values.", "Written Work, Performance Tasks, and Exams must total exactly 100%.", "Choose a replacement template for removed subjects.", "Select a year and enter an audit reason."].includes(error) ? error : null} attempt={validationAttempt} />
           <section className="grid gap-3 lg:grid-cols-3">
-            <Field label="Template Name"><Input value={form.name} disabled={Boolean(editing?.is_locked)} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+            <Field label="Template Name"><Input id="grading-template-name" value={form.name} disabled={Boolean(editing?.is_locked)} aria-invalid={error === "Template name is required."} aria-describedby={error === "Template name is required." ? "grading-template-name-error" : undefined} onChange={(e) => { setForm({ ...form, name: e.target.value }); if (e.target.value.trim() && error === "Template name is required.") setError(null); }} />{error === "Template name is required." && <FormMessage id="grading-template-name-error">{error}</FormMessage>}</Field>
             <Field label="Status"><Select value={form.status} disabled={Boolean(editing?.is_locked)} onValueChange={(value) => setForm({ ...form, status: value as SubjectStatus })}><Select.Trigger className="w-full"><Select.Value /></Select.Trigger><Select.Content><Select.Group><Select.Item value="active">Active</Select.Item><Select.Item value="archived">Archived</Select.Item></Select.Group></Select.Content></Select></Field>
             <Field label="Passing Threshold"><PercentInput value={form.threshold} disabled={Boolean(editing)} onChange={(value) => setForm({ ...form, threshold: value })} /></Field>
           </section>
@@ -107,9 +115,9 @@ export function GradingTemplateManager({ templates, subjects, academicYears = []
           {editing ? <section className="space-y-3 border-2 border-black bg-primary/20 p-3">
             <h4 className="font-bold">Audited passing-threshold edit</h4>
             <p className="text-xs">This changes the shared template for every assigned subject. Finalized grades anywhere on this template block the edit. Weights and subject assignments remain separate.</p>
-            <Field label="Academic year context"><Select value={thresholdYearId} onValueChange={setThresholdYearId}><Select.Trigger className="w-full"><Select.Value placeholder="Select year" /></Select.Trigger><Select.Content><Select.Group>{academicYears.map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}</Select.Item>)}</Select.Group></Select.Content></Select></Field>
+            <Field label="Academic year context"><Select value={thresholdYearId} onValueChange={(value) => { setThresholdYearId(value); if (value && thresholdReason.trim() && error === "Select a year and enter an audit reason.") setError(null); }}><Select.Trigger aria-invalid={error === "Select a year and enter an audit reason." && !thresholdYearId} className="w-full aria-[invalid=true]:border-destructive"><Select.Value placeholder="Select year" /></Select.Trigger><Select.Content><Select.Group>{academicYears.map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}</Select.Item>)}</Select.Group></Select.Content></Select>{error === "Select a year and enter an audit reason." && !thresholdYearId && <FormMessage>Select an academic year.</FormMessage>}</Field>
             <Field label="New passing threshold"><Input aria-label="Audited passing threshold" type="number" min="0" max="100" step="0.01" value={form.threshold} onChange={(event) => setForm({ ...form, threshold: event.target.value })} /></Field>
-            <Field label="Reason for threshold edit"><Input value={thresholdReason} onChange={(event) => setThresholdReason(event.target.value)} /></Field>
+            <Field label="Reason for threshold edit"><Input value={thresholdReason} aria-invalid={error === "Select a year and enter an audit reason." && !thresholdReason.trim()} onChange={(event) => { setThresholdReason(event.target.value); if (event.target.value.trim() && thresholdYearId && error === "Select a year and enter an audit reason.") setError(null); }} />{error === "Select a year and enter an audit reason." && !thresholdReason.trim() && <FormMessage>Enter an audit reason.</FormMessage>}</Field>
             <Button onClick={() => void saveThreshold()} disabled={thresholdSaving || !thresholdYearId}>{thresholdSaving ? "Saving..." : "Save Threshold with Audit"}</Button>
           </section> : null}
 
@@ -122,13 +130,14 @@ export function GradingTemplateManager({ templates, subjects, academicYears = []
             <p className="mt-2 text-xs text-black/60">Select subjects that will use this grading template. Subjects with recorded grades cannot move.</p>
           </section>
 
-          {removedIds.length ? <Field label={`Replacement template for ${removedIds.length} removed subject${removedIds.length === 1 ? "" : "s"}`}><Select value={form.replacementTemplateId} onValueChange={(value) => setForm({ ...form, replacementTemplateId: value })}><Select.Trigger className="w-full"><Select.Value placeholder="Choose replacement" /></Select.Trigger><Select.Content><Select.Group>{templates.filter((item) => item.status === "active" && item.grading_template_id !== editing?.grading_template_id).map((item) => <Select.Item key={item.grading_template_id} value={String(item.grading_template_id)}>{item.template_name}</Select.Item>)}</Select.Group></Select.Content></Select></Field> : null}
+          {removedIds.length ? <Field label={`Replacement template for ${removedIds.length} removed subject${removedIds.length === 1 ? "" : "s"}`}><Select value={form.replacementTemplateId} onValueChange={(value) => { setForm({ ...form, replacementTemplateId: value }); if (value && error === "Choose a replacement template for removed subjects.") setError(null); }}><Select.Trigger aria-invalid={error === "Choose a replacement template for removed subjects."} className="w-full aria-[invalid=true]:border-destructive"><Select.Value placeholder="Choose replacement" /></Select.Trigger><Select.Content><Select.Group>{templates.filter((item) => item.status === "active" && item.grading_template_id !== editing?.grading_template_id).map((item) => <Select.Item key={item.grading_template_id} value={String(item.grading_template_id)}>{item.template_name}</Select.Item>)}</Select.Group></Select.Content></Select></Field> : null}
+          {error === "Choose a replacement template for removed subjects." && <FormMessage>{error}</FormMessage>}
           <Field label="Description"><textarea className="min-h-14 w-full border-2 border-black bg-white p-2 disabled:bg-black/5" value={form.description} disabled={Boolean(editing?.is_locked)} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
 
           <section className="border-2 border-black bg-black/[0.03] p-3"><div className="mb-3 flex items-start justify-between gap-3"><div><h4 className="font-bold">Components {editing?.is_locked ? <Lock className="ml-1 inline size-4" /> : null}</h4>{editing?.is_locked ? <p className="text-xs text-black/55">Weights cannot be edited after use to protect historical grade records.</p> : null}</div><div className="border-2 border-black bg-white px-3 py-2">Total: <strong>{total}%</strong></div></div>
-            <div className="space-y-2">{[["Written Work", "ww"], ["Performance Tasks", "pt"], ["Exams", "exams"]].map(([label, key]) => <div key={key} className="grid grid-cols-[minmax(0,1fr)_150px] gap-2"><div className="flex items-center border-2 border-black bg-white px-3 text-sm">{label}</div><PercentInput value={form[key as "ww" | "pt" | "exams"]} disabled={Boolean(editing?.is_locked)} onChange={(value) => setForm({ ...form, [key]: value })} /></div>)}</div>
+            <div className="space-y-2">{[["Written Work", "ww"], ["Performance Tasks", "pt"], ["Exams", "exams"]].map(([label, key]) => <div key={key} className="grid grid-cols-[minmax(0,1fr)_150px] gap-2"><div className="flex items-center border-2 border-black bg-white px-3 text-sm">{label}</div><PercentInput value={form[key as "ww" | "pt" | "exams"]} disabled={Boolean(editing?.is_locked)} invalid={weightError} onChange={(value) => updateWeight(key as "ww" | "pt" | "exams", value)} /></div>)}</div>
+            {(error === "Enter valid numeric grading values." || error === "Written Work, Performance Tasks, and Exams must total exactly 100%.") && <FormMessage>{error}</FormMessage>}
           </section>
-          {error ? <p role="alert" className="border-2 border-black bg-red-100 p-3 text-sm font-semibold">{error}</p> : null}
         </div>
         <Dialog.Footer className="mt-0 border-t-2 border-black bg-white"><Button variant="outline" onClick={() => setEditing(undefined)}>Cancel</Button><Button onClick={() => void save()} disabled={saving}>{saving ? "Saving..." : "Save Template"}</Button></Dialog.Footer>
       </Dialog.Content>
@@ -158,4 +167,4 @@ function TemplateCard({ template, onEdit }: { template: GradingTemplateListItem;
 
 function Metric({ label, value }: { label: string; value: number }) { return <div className="min-w-0 border-2 border-black bg-white px-1 py-2 text-center"><span className="block break-words text-xs leading-tight">{label}</span><strong className="text-lg">{value}%</strong></div>; }
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="flex flex-col gap-1 text-sm font-semibold">{label}{children}</label>; }
-function PercentInput({ value, disabled, onChange }: { value: string; disabled: boolean; onChange: (value: string) => void }) { return <div className="relative"><Input className="pr-9" type="number" min="0" max="100" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">%</span></div>; }
+function PercentInput({ value, disabled, invalid, onChange }: { value: string; disabled: boolean; invalid?: boolean; onChange: (value: string) => void }) { return <div className="relative"><Input className="pr-9" type="number" min="0" max="100" value={value} disabled={disabled} aria-invalid={invalid} onChange={(event) => onChange(event.target.value)} /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">%</span></div>; }

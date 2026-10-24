@@ -1,15 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Alert } from "@/components/retroui/Alert";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Text } from "@/components/retroui/Text";
 import { Badge } from "@/components/retroui/Badge";
 import { useToast } from "@/components/retroui/Toast";
-import { adjustSubstitutionEndDate, adjustBatchSubstitutionsEndDate, type TeacherSubstitution } from "@/lib/api";
-import { AlertCircle, Calendar, Layers, Loader2 } from "lucide-react";
+import { ApiRequestError, adjustSubstitutionEndDate, adjustBatchSubstitutionsEndDate, type TeacherSubstitution } from "@/lib/api";
+import { Calendar, Layers, Loader2 } from "lucide-react";
 
 export interface AdjustModalTarget {
   type: "single" | "batch";
@@ -41,11 +42,13 @@ export default function AdjustSubstitutionModal({
   const [endDate, setEndDate] = React.useState<string>(initialEndDate);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+  const [validationAttempt, setValidationAttempt] = React.useState(0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (endDate && startDate && endDate < startDate) {
       setErrorMsg("End date cannot be earlier than start date.");
+      setValidationAttempt((attempt) => attempt + 1);
       return;
     }
 
@@ -62,8 +65,10 @@ export default function AdjustSubstitutionModal({
       onClose();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to adjust substitution end date.";
-      setErrorMsg(message);
-      toast.error({ title: "Unable to update substitution end date", description: message });
+      if (err instanceof ApiRequestError && (err.status === 400 || err.status === 422)) {
+        setErrorMsg(message);
+        setValidationAttempt((attempt) => attempt + 1);
+      } else toast.error({ title: "Unable to update substitution end date", description: message });
     } finally {
       setIsSubmitting(false);
     }
@@ -83,13 +88,7 @@ export default function AdjustSubstitutionModal({
       </Dialog.Header>
 
       <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-        {errorMsg && (
-          <Alert status="error" className="flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <div className="text-sm">{errorMsg}</div>
-          </Alert>
-        )}
-
+        <AdminValidationAlert message={errorMsg === "End date cannot be earlier than start date." ? null : errorMsg} attempt={validationAttempt} />
         <div className="p-3 bg-muted/40 rounded border space-y-2 text-sm">
           {!isBatch && target.substitution && (
             <div className="flex justify-between items-center">
@@ -135,11 +134,15 @@ export default function AdjustSubstitutionModal({
             <span>New End Date</span>
           </label>
           <Input
+            id="adjust-substitution-end-date"
             type="date"
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
+            onChange={(e) => { setEndDate(e.target.value); setErrorMsg(null); }}
             min={startDate || undefined}
+            aria-invalid={errorMsg === "End date cannot be earlier than start date."}
+            aria-describedby={errorMsg === "End date cannot be earlier than start date." ? "adjust-substitution-end-date-error" : undefined}
           />
+          {errorMsg === "End date cannot be earlier than start date." && <FormMessage id="adjust-substitution-end-date-error">{errorMsg}</FormMessage>}
           <p className="text-xs text-muted-foreground">
             {isBatch
               ? "Extends or shortens the coverage date across all loads in this batch. Leave blank for indefinite."

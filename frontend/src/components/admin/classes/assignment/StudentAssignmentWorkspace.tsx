@@ -15,6 +15,7 @@ import type {
 } from "@/types/adminClasses";
 import AssignmentToolbar from "./AssignmentToolbar";
 import { Button } from "@/components/retroui/Button";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import AssignEvenlyConfirmationModal from "./AssignEvenlyConfirmationModal";
 import AvailableStudentsPanel from "./AvailableStudentsPanel";
 import { recommendedTargets } from "./assignmentDistribution";
@@ -274,11 +275,11 @@ export default function StudentAssignmentWorkspace({
         )}
       </div>
       {distributeError && (
-        <div className="flex items-center justify-between rounded border-2 border-red-600 bg-red-50 p-2.5 text-xs font-bold text-red-700">
-          <span>{distributeError}</span>
+        <div className="grid gap-1">
+          <AdminValidationAlert message={distributeError} />
           <button
             type="button"
-            className="underline ml-2"
+            className="text-sm font-medium text-destructive underline"
             onClick={() => setDistributeError("")}
           >
             Dismiss
