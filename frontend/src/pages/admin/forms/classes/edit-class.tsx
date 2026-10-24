@@ -176,7 +176,7 @@ export default function EditClass({
                     setPathwayId(selected?.pathway_id == null ? "__none__" : String(selected.pathway_id));
                     setSaveError("");
                   }}>
-                    <Select.Trigger id="edit-class-section-name" aria-invalid={saveError === "Section name is required."} aria-describedby={saveError === "Section name is required." ? "edit-class-section-error" : undefined} className="w-full text-base aria-[invalid=true]:border-destructive"><Select.Value placeholder="Select official section" /></Select.Trigger>
+                    <Select.Trigger id="edit-class-section-name" aria-invalid={saveError === "Section name is required."} aria-describedby={saveError === "Section name is required." ? "edit-class-section-error" : undefined} className="w-full aria-[invalid=true]:border-destructive"><Select.Value placeholder="Select official section" /></Select.Trigger>
                     <Select.Content><Select.Group>
                       {officialSections.map((section) => <Select.Item key={section.id} value={section.section_name}>{section.section_name}{section.pathway_name ? ` — ${section.pathway_name}` : ""}</Select.Item>)}
                       {!officialSections.some((section) => section.section_name === classDetail.section_name) && <Select.Item value={classDetail.section_name} disabled>{classDetail.section_name} (historical)</Select.Item>}
@@ -205,7 +205,7 @@ export default function EditClass({
                       setSaveError("");
                     }}
                   >
-                    <Select.Trigger className="w-full text-base">
+                    <Select.Trigger className="w-full">
                       <Select.Value placeholder="Select class adviser..." />
                     </Select.Trigger>
                     <Select.Content>

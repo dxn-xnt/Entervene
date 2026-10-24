@@ -123,8 +123,6 @@ export default function AddClassModal({ classes, onClose, onClassesCreated }: Ad
     setManualStep("details");
   }
 
-  const inAssignmentStep = manualStep === "assignment";
-
   if (mode === "choice") {
     return (
       <Dialog.Content size="lg">
@@ -170,7 +168,7 @@ export default function AddClassModal({ classes, onClose, onClassesCreated }: Ad
         : "Review Class Setup";
 
   return (
-    <Dialog.Content size={!saveSuccess && inAssignmentStep ? "3xl" : "xl"}>
+    <Dialog.Content size="lg">
       <Dialog.Header asChild>
         <div className="flex items-center justify-between w-full">
           <Text as="h5" className="font-sans text-xl font-bold">{dialogTitle}</Text>

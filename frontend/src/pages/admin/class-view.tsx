@@ -731,10 +731,11 @@ function StudentsTab({
             <label className="relative w-full sm:w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-black/50" />
               <Input
+                variant="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search students..."
-                className="h-10 w-full border-black bg-white pl-9 pr-3"
+                className="w-full"
               />
             </label>
             {!isReadOnly && (

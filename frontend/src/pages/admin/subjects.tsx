@@ -731,10 +731,11 @@ export default function AdminSubjects() {
                     <label className="relative">
                       <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                       <Input
+                        variant="search"
                         value={catalogSearch}
                         onChange={(event) => setCatalogSearch(event.target.value)}
                         placeholder="Search name, code, template"
-                        className="h-10 w-full border-black pl-9 pr-3"
+                        className="w-full"
                       />
                     </label>
                     <Select

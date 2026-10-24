@@ -80,14 +80,15 @@ export function CurriculumFilters({
         <label className="relative min-w-0">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
           <Input
-            className="h-10 w-full pl-9"
+            variant="search"
+            className="w-full"
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder="Search subject or code"
           />
         </label>
         <Select value={grade} onValueChange={handleGradeChange}>
-          <Select.Trigger className="h-10 w-full">
+          <Select.Trigger className="w-full">
             <Select.Value placeholder="Grade" />
           </Select.Trigger>
           <Select.Content>
@@ -105,7 +106,7 @@ export function CurriculumFilters({
           onValueChange={(value) => onPathwayChange(value as CurriculumPathwayValue)}
           disabled={isJhs}
         >
-          <Select.Trigger className="h-10 w-full">
+          <Select.Trigger className="w-full">
             <Select.Value placeholder="Pathway" />
           </Select.Trigger>
           <Select.Content>
@@ -119,7 +120,7 @@ export function CurriculumFilters({
           </Select.Content>
         </Select>
         <Select value={status} onValueChange={(value) => onStatusChange(value as CurriculumStatusValue)}>
-          <Select.Trigger className="h-10 w-full">
+          <Select.Trigger className="w-full">
             <Select.Value placeholder="Status" />
           </Select.Trigger>
           <Select.Content>

@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/retroui/Skeleton";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Alert } from "@/components/retroui/Alert";
+import { FormMessage } from "@/components/retroui/FormMessage";
 import { Badge } from "@/components/retroui/Badge";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Avatar } from "@/components/retroui/Avatar";
@@ -240,7 +241,7 @@ export default function InterventionModal({
               <Skeleton className="h-40 w-full" />
             </div>
           ) : detailError ? (
-            <Alert status="error">{detailError}</Alert>
+            <FormMessage>{detailError}</FormMessage>
           ) : (
             detail && (
               <div className="space-y-5">
@@ -691,7 +692,7 @@ export default function InterventionModal({
                   </Accordion>
                 )}
 
-                {actionError && <Alert status="error">{actionError}</Alert>}
+                {actionError && <FormMessage>{actionError}</FormMessage>}
               </div>
             )
           )}

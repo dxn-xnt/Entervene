@@ -427,7 +427,7 @@ export default function BreakConfigDrawer({
                       }}
                       disabled={isReassigning}
                     >
-                      <Select.Trigger className="h-7 text-xs min-w-48 bg-background shadow-none">
+                      <Select.Trigger className="min-w-48 shadow-none">
                         <Select.Value placeholder="Assign Section to Template..." />
                       </Select.Trigger>
                       <Select.Content>
@@ -506,7 +506,7 @@ export default function BreakConfigDrawer({
                             handleSlotFieldChange(slot.slot_id ?? undefined, slot.display_order, "is_locked_break", isLocked);
                           }}
                         >
-                          <Select.Trigger className="h-7 text-xs min-w-28 py-0 bg-background shadow-none">
+                          <Select.Trigger className="min-w-28 shadow-none">
                             <Select.Value />
                           </Select.Trigger>
                           <Select.Content>

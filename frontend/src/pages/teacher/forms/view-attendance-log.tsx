@@ -205,19 +205,19 @@ export default function ViewAttendanceLogModal({
               </Select.Trigger>
               <Select.Content className="attendance-select-options">
                 <Select.Group>
-                  <Select.Item value="all" className="text-xs font-semibold">
+                  <Select.Item value="all" className="">
                     All Statuses
                   </Select.Item>
-                  <Select.Item value="present" className="text-xs font-semibold">
+                  <Select.Item value="present" className="">
                     Present
                   </Select.Item>
-                  <Select.Item value="absent" className="text-xs font-semibold">
+                  <Select.Item value="absent" className="">
                     Absent
                   </Select.Item>
-                  <Select.Item value="late" className="text-xs font-semibold">
+                  <Select.Item value="late" className="">
                     Late
                   </Select.Item>
-                  <Select.Item value="excused" className="text-xs font-semibold">
+                  <Select.Item value="excused" className="">
                     Excused
                   </Select.Item>
                 </Select.Group>

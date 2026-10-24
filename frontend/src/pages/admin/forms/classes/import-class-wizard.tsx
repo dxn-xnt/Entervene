@@ -314,10 +314,10 @@ export default function ImportClassWizard({
   return (
     <div className="grid gap-4">
       <div className="grid gap-3">
-        <Field label="Academic Year">
+        <Field label="Academic Year" isRequired>
           <Input readOnly value={options.academic_year.year_label} className="bg-muted/50 text-muted-foreground" />
         </Field>
-        <Field label="Academic Level">
+        <Field label="Academic Level" isRequired>
           <Select
             disabled={noLevels || isValidating}
             value={selectedAcademicLevelId}
@@ -783,8 +783,8 @@ function ValidationSuccessPanel({
               )}
 
               <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1 block">
-                  Class Adviser <span className="text-destructive">*</span>
+                <label className="mb-1 block text-sm font-medium text-foreground">
+                  Class Adviser <span className="text-red-500">*</span>
                 </label>
                 <Select
                   value={currentStaffId}

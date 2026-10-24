@@ -851,7 +851,7 @@ export default function TeacherAttendancePage() {
                           onValueChange={handleTargetChange}
                           disabled={loadingClasses || targets.length === 0}
                         >
-                          <Select.Trigger className="h-10 w-full min-w-0 text-sm">
+                          <Select.Trigger className="h-10 w-full min-w-0">
                             <Select.Value
                               placeholder={
                                 loadingClasses
@@ -869,7 +869,7 @@ export default function TeacherAttendancePage() {
                                   Advisory Classes (Homeroom Attendance)
                                 </Select.Label>
                                 {advisoryTargets.map((t) => (
-                                  <Select.Item key={t.key} value={t.key} className="text-sm">
+                                  <Select.Item key={t.key} value={t.key} className="">
                                     {t.label}
                                   </Select.Item>
                                 ))}
@@ -881,7 +881,7 @@ export default function TeacherAttendancePage() {
                                   Subject Teaching Classes
                                 </Select.Label>
                                 {subjectTargets.map((t) => (
-                                  <Select.Item key={t.key} value={t.key} className="text-sm">
+                                  <Select.Item key={t.key} value={t.key} className="">
                                     {t.label}
                                   </Select.Item>
                                 ))}
@@ -902,7 +902,7 @@ export default function TeacherAttendancePage() {
                         aria-label="Attendance date"
                         value={selectedDate}
                         onChange={(e) => setSelectedDate(e.target.value)}
-                        className="rounded border-black h-10 w-full bg-white text-md font-sans"
+                        className="rounded border-black h-10 w-full bg-white text-md"
                       />
                     </div>
 
@@ -1096,7 +1096,7 @@ export default function TeacherAttendancePage() {
                                   <Input
                                     type="text"
                                     aria-label={`Remarks for ${student.student_name}`}
-                                    className="w-full text-sm border-transparent hover:border-gray-300 focus:border-black outline-none bg-transparent transition-colors placeholder:text-gray-400 rounded shadow-none focus:shadow-none"
+                                    className="w-full border-transparent hover:border-gray-300 focus:border-black outline-none bg-transparent transition-colors placeholder:text-gray-400 rounded shadow-none focus:shadow-none"
                                     placeholder={
                                       student.status !== "present"
                                         ? "Add remarks..."
@@ -1173,7 +1173,7 @@ export default function TeacherAttendancePage() {
                       value={selectedTargetKey}
                       onValueChange={(val) => setSelectedTargetKey(val)}
                     >
-                      <Select.Trigger aria-label="Scanner class or subject" className="h-10 w-full text-sm">
+                      <Select.Trigger aria-label="Scanner class or subject" className="h-10 w-full">
                         <Select.Value placeholder="Select class / subject" />
                       </Select.Trigger>
                       <Select.Content className="attendance-select-options">
@@ -1183,7 +1183,7 @@ export default function TeacherAttendancePage() {
                               Advisory Classes (Homeroom Attendance)
                             </Select.Label>
                             {advisoryTargets.map((t) => (
-                              <Select.Item key={t.key} value={t.key} className="text-sm">
+                              <Select.Item key={t.key} value={t.key} className="">
                                 {t.label}
                               </Select.Item>
                             ))}
@@ -1195,7 +1195,7 @@ export default function TeacherAttendancePage() {
                               Subject Teaching Classes
                             </Select.Label>
                             {subjectTargets.map((t) => (
-                              <Select.Item key={t.key} value={t.key} className="text-sm">
+                              <Select.Item key={t.key} value={t.key} className="">
                                 {t.label}
                               </Select.Item>
                             ))}
@@ -1382,7 +1382,7 @@ export default function TeacherAttendancePage() {
                         value={selectedTargetKey}
                         onValueChange={(val) => setSelectedTargetKey(val)}
                       >
-                        <Select.Trigger className="h-10 w-full min-w-0 text-sm">
+                        <Select.Trigger className="h-10 w-full min-w-0">
                           <Select.Value placeholder="Select class / subject" />
                         </Select.Trigger>
                         <Select.Content className="attendance-select-options">
@@ -1392,7 +1392,7 @@ export default function TeacherAttendancePage() {
                                 Advisory Classes (Homeroom Attendance)
                               </Select.Label>
                               {advisoryTargets.map((t) => (
-                                <Select.Item key={t.key} value={t.key} className="text-sm">
+                                <Select.Item key={t.key} value={t.key} className="">
                                   {t.label}
                                 </Select.Item>
                               ))}
@@ -1404,7 +1404,7 @@ export default function TeacherAttendancePage() {
                                 Subject Teaching Classes
                               </Select.Label>
                               {subjectTargets.map((t) => (
-                                <Select.Item key={t.key} value={t.key} className="text-sm">
+                                <Select.Item key={t.key} value={t.key} className="">
                                   {t.label}
                                 </Select.Item>
                               ))}
@@ -1460,21 +1460,21 @@ export default function TeacherAttendancePage() {
                                 )
                               }
                             >
-                              <Select.Trigger className="h-9 w-full min-w-0 border-2 border-black bg-white text-xs font-bold shadow-none sm:w-36">
+                              <Select.Trigger className="h-9 w-full min-w-0 border-2 border-black bg-white shadow-none sm:w-36">
                                 <Select.Value />
                               </Select.Trigger>
                               <Select.Content className="attendance-select-options">
                                 <Select.Group>
-                                  <Select.Item value="all" className="text-xs font-semibold">
+                                  <Select.Item value="all" className="">
                                     All Students
                                   </Select.Item>
-                                  <Select.Item value="absent" className="text-xs font-semibold">
+                                  <Select.Item value="absent" className="">
                                     Has Absences
                                   </Select.Item>
-                                  <Select.Item value="late" className="text-xs font-semibold">
+                                  <Select.Item value="late" className="">
                                     Has Tardies
                                   </Select.Item>
-                                  <Select.Item value="excused" className="text-xs font-semibold">
+                                  <Select.Item value="excused" className="">
                                     Has Excused
                                   </Select.Item>
                                 </Select.Group>

@@ -178,7 +178,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
 
   return (
     <div className="grid gap-5">
-      <Field label="Academic Year">
+      <Field label="Academic Year" isRequired>
         <Select value={selectedYearId} onValueChange={(value) => {
           setSelectedYearId(value);
           setOptions(null);
@@ -198,7 +198,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
         </Text>
       )}
 
-      <Field label="Academic Level">
+      <Field label="Academic Level" isRequired>
         <Select
           disabled={noLevels}
           value={academicLevelId}
@@ -237,10 +237,10 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
           {errors.sections && <InlineError message={errors.sections} />}
         </div>
 
-        <div className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} gap-2 text-xs font-semibold text-muted-foreground px-1`}>
-          <span>Section Name</span>
+        <div className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} gap-2 px-1 text-sm font-medium text-foreground`}>
+          <span>Section Name <span className="text-red-500">*</span></span>
           {showPathwayColumn && <span>Strand / Pathway</span>}
-          <span>Adviser</span>
+          <span>Adviser <span className="text-red-500">*</span></span>
           <span />
         </div>
 

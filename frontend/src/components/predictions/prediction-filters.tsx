@@ -98,10 +98,11 @@ export default function PredictionFilters({
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 z-10"
           />
           <Input
+            variant="search"
             placeholder="Search student or LRN..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-9 h-10 w-full bg-white"
+            className="w-full"
           />
         </div>
 
@@ -113,10 +114,10 @@ export default function PredictionFilters({
               onGradeChange?.(v === "all" ? undefined : Number(v))
             }
           >
-            <Select.Trigger className="h-10 w-full bg-white text-sm sm:w-48">
+            <Select.Trigger className="w-full sm:w-48">
               <Select.Value placeholder="All Grades" />
             </Select.Trigger>
-            <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <Select.Content>
               <Select.Item value="all">All Grades</Select.Item>
               {filters.grades.map((g) => (
                 <Select.Item key={g.grade_level} value={String(g.grade_level)}>
@@ -135,10 +136,10 @@ export default function PredictionFilters({
               onClassChange?.(v === "all" ? undefined : Number(v))
             }
           >
-            <Select.Trigger className="h-10 w-full bg-white text-sm sm:w-48">
+            <Select.Trigger className="w-full sm:w-48">
               <Select.Value placeholder="All Classes" />
             </Select.Trigger>
-            <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <Select.Content>
               <Select.Item value="all">All Classes</Select.Item>
               {filteredClasses.map((c) => (
                 <Select.Item key={c.class_id} value={String(c.class_id)}>
@@ -157,10 +158,10 @@ export default function PredictionFilters({
               onSubjectChange(v === "all" ? undefined : Number(v))
             }
           >
-            <Select.Trigger className="h-10 w-full bg-white text-sm sm:w-48">
+            <Select.Trigger className="w-full sm:w-48">
               <Select.Value placeholder="All Subjects" />
             </Select.Trigger>
-            <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <Select.Content>
               <Select.Item value="all">All Subjects</Select.Item>
               {filters?.subjects.map((s) => (
                 <Select.Item key={s.subject_id} value={String(s.subject_id)}>
@@ -180,10 +181,10 @@ export default function PredictionFilters({
             onTermChange?.(val);
           }}
         >
-          <Select.Trigger className="h-10 w-full bg-white text-sm sm:w-48">
+          <Select.Trigger className="w-full sm:w-48">
             <Select.Value placeholder="All Terms" />
           </Select.Trigger>
-          <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <Select.Content>
             <Select.Item value="all">All Terms</Select.Item>
             {filters?.terms.map((t) => (
               <Select.Item key={t.academic_period_id} value={String(t.academic_period_id)}>
@@ -200,12 +201,12 @@ export default function PredictionFilters({
             onRiskChange(v === "all" ? undefined : v)
           }
         >
-          <Select.Trigger className="h-10 w-full bg-white text-sm sm:w-48">
+          <Select.Trigger className="w-full sm:w-48">
             <Select.Value placeholder="All Risk Levels">
               {riskLevel ? (RISK_OPTIONS.find((r) => r.value === riskLevel)?.label ?? riskLevel) : "All Risk Levels"}
             </Select.Value>
           </Select.Trigger>
-          <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <Select.Content>
             <Select.Item value="all">
               All Risk Levels{riskSummary ? ` (${riskSummary.total})` : ""}
             </Select.Item>

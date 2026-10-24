@@ -421,10 +421,11 @@ function EnrolledStudentsPanel({
         <label className="relative w-full sm:w-80">
           <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-black/50" />
           <Input
+            variant="search"
             value={search}
             onChange={(event) => onSearch(event.target.value)}
             placeholder="Search enrolled students..."
-            className="h-10 w-full rounded! border-black bg-white pl-9 pr-3 text-base placeholder:text-base shadow-none!"
+            className="w-full shadow-none!"
           />
         </label>
         <Button
@@ -519,10 +520,11 @@ function AvailableStudentsPanel({
         <label className="relative w-full sm:w-80">
           <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-black/50" />
           <Input
+            variant="search"
             value={search}
             onChange={(event) => onSearch(event.target.value)}
             placeholder="Search available students..."
-            className="h-10 w-full rounded! border-black bg-white pl-9 pr-3 text-base placeholder:text-base shadow-none!"
+            className="w-full shadow-none!"
           />
         </label>
         <Button size="sm" variant="outline" disabled={!canDistribute} onClick={onDistribute}>Assign Evenly</Button>

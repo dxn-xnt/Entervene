@@ -355,7 +355,7 @@ export default function SubjectLessonList({
                 value={activeCompetencyFilter}
                 onValueChange={(val) => handleCompetencyFilterChange(val)}
               >
-                <Select.Trigger className="h-10 text-sm w-full max-w-112">
+                <Select.Trigger className="h-10 w-full max-w-112">
                   <Select.Value placeholder="Filter by competency" />
                 </Select.Trigger>
                 <Select.Content className="border-2 border-black bg-white overflow-y-auto">
@@ -382,7 +382,7 @@ export default function SubjectLessonList({
                   setLessonSort(v as "order" | "newest" | "oldest" | "title")
                 }
               >
-                <Select.Trigger className="h-10 text-sm">
+                <Select.Trigger className="h-10">
                   <Select.Value placeholder="Sort by" />
                 </Select.Trigger>
                 <Select.Content className="border-2 border-black">

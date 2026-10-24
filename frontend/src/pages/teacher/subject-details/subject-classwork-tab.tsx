@@ -434,7 +434,7 @@ export default function SubjectClassworkTab({
               value={lessonFilter}
               onValueChange={(val) => setLessonFilter(val)}
             >
-              <Select.Trigger className="h-10 w-full border-2 border-black bg-white text-sm">
+              <Select.Trigger className="h-10 w-full border-2 border-black bg-white">
                 <Select.Value placeholder="Filter by lesson" />
               </Select.Trigger>
               <Select.Content className="border-2 border-black bg-white max-h-72 overflow-y-auto">
@@ -456,7 +456,7 @@ export default function SubjectClassworkTab({
               value={sectionFilter}
               onValueChange={setSectionFilter}
             >
-              <Select.Trigger className="h-10 w-full border-black text-sm sm:w-44">
+              <Select.Trigger className="h-10 w-full border-black sm:w-44">
                 <Select.Value placeholder="All sections" />
               </Select.Trigger>
               <Select.Content className="max-h-72 overflow-y-auto">
@@ -475,7 +475,7 @@ export default function SubjectClassworkTab({
               value={statusFilter}
               onValueChange={setStatusFilter}
             >
-              <Select.Trigger className="h-10 w-full border-black text-sm sm:w-44">
+              <Select.Trigger className="h-10 w-full border-black sm:w-44">
                 <Select.Value placeholder="All statuses" />
               </Select.Trigger>
               <Select.Content>

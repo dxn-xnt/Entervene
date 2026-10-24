@@ -303,7 +303,7 @@ export default function StudentAssignmentWorkspace({
         onAssignEvenly={() => setShowAssignEvenlyConfirmation(true)}
       />
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <div className="grid min-h-0 grid-cols-1 gap-3 overflow-y-auto lg:grid-cols-[minmax(320px,36%)_minmax(0,1fr)] lg:overflow-hidden">
+        <div className="grid min-h-0 grid-cols-1 gap-3 overflow-y-auto 2xl:grid-cols-[minmax(280px,36%)_minmax(0,1fr)] 2xl:overflow-hidden">
           <AvailableStudentsPanel
             students={state.unassignedStudents}
             assignedCount={assignedCount}
@@ -322,7 +322,7 @@ export default function StudentAssignmentWorkspace({
           />
           <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 border-2 border-black bg-white p-3">
             <h3 className="font-bold">Sections</h3>
-            <div className="grid min-h-0 grid-cols-1 content-start gap-3 overflow-y-auto pr-1 xl:grid-cols-2">
+            <div className="grid min-h-0 grid-cols-1 content-start gap-3 overflow-y-auto pr-1">
               {setup.sections.map((section) => (
                 <SectionAssignmentCard
                   key={section.localId}

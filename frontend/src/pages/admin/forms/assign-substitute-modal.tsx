@@ -240,7 +240,7 @@ export default function AssignSubstituteModal({
                 onChange={(e) => { setSelectedOriginalStaffId(e.target.value); if (e.target.value) setErrorMsg(null); }}
                 disabled={isLoadingTeachers}
               >
-                <Select.Trigger id="original-teacher" className="w-full text-sm" aria-invalid={validationError === "Please select the teacher going on leave."} aria-describedby={validationError === "Please select the teacher going on leave." ? "original-teacher-error" : undefined}>
+                <Select.Trigger id="original-teacher" className="w-full" aria-invalid={validationError === "Please select the teacher going on leave."} aria-describedby={validationError === "Please select the teacher going on leave." ? "original-teacher-error" : undefined}>
                   <Select.Value placeholder="Select Teacher on Leave..." />
                 </Select.Trigger>
                 <Select.Content>
@@ -384,7 +384,7 @@ export default function AssignSubstituteModal({
 
           {/* 3. Select Substitute Teacher (Grouped Dropdown) */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-muted-foreground flex justify-between items-center">
+            <label className="text-xs font-semibold text-foreground flex justify-between items-center">
               <span>Substitute Teacher</span>
               {dedicatedSubs.length > 0 && (
                 <span className="text-xs font-normal text-primary">
@@ -397,7 +397,7 @@ export default function AssignSubstituteModal({
               onChange={(e) => { setSelectedSubstituteStaffId(e.target.value); if (e.target.value && e.target.value !== selectedOriginalStaffId) setErrorMsg(null); }}
               disabled={isLoadingTeachers}
             >
-              <Select.Trigger id="substitute-teacher" className="w-full text-sm" aria-invalid={validationError?.toLowerCase().includes("substitute teacher") ?? false} aria-describedby={validationError?.toLowerCase().includes("substitute teacher") ? "substitute-teacher-error" : undefined}>
+              <Select.Trigger id="substitute-teacher" className="w-full" aria-invalid={validationError?.toLowerCase().includes("substitute teacher") ?? false} aria-describedby={validationError?.toLowerCase().includes("substitute teacher") ? "substitute-teacher-error" : undefined}>
                 <Select.Value placeholder="Select Substitute Teacher..." />
               </Select.Trigger>
               <Select.Content>
@@ -438,7 +438,7 @@ export default function AssignSubstituteModal({
           {/* 4. Dates & Reason */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+              <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                 <Calendar className="h-3 w-3" />
                 <span>Start Date *</span>
               </label>
@@ -455,7 +455,7 @@ export default function AssignSubstituteModal({
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+              <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                 <Calendar className="h-3 w-3" />
                 <span>Expected End Date (Optional)</span>
               </label>
@@ -469,14 +469,11 @@ export default function AssignSubstituteModal({
                 aria-describedby={validationError === "End date cannot be earlier than start date." ? "substitution-end-date-error" : undefined}
               />
               {validationError === "End date cannot be earlier than start date." && <FormMessage id="substitution-end-date-error">{validationError}</FormMessage>}
-              <Text as="p" className="text-xs text-muted-foreground">
-                Leave blank for indefinite duration.
-              </Text>
             </div>
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-muted-foreground">
+            <label className="text-xs font-semibold text-foreground">
               Reason / Notes
             </label>
             <Input

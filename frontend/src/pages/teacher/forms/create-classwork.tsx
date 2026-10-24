@@ -9,6 +9,7 @@ import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
+import { FormMessage } from "@/components/retroui/FormMessage";
 import { useToast } from "@/components/retroui/Toast";
 import { Switch } from "@/components/retroui/Switch";
 import { apiFetch } from "@/lib/api";
@@ -108,6 +109,7 @@ export default function CreateClassworkModal({
   );
   const [isLessonLoading, setIsLessonLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [validationError, setValidationError] = useState("");
   const [rubricLevels, setRubricLevels] = useState<ActivityRubricLevel[]>(() =>
     defaultActivityRubric.map((level) => ({ ...level })),
   );
@@ -202,9 +204,10 @@ export default function CreateClassworkModal({
   const goToAssignStep = () => {
     const validationError = validateDetails();
     if (validationError) {
-      setFormError(validationError);
+      setValidationError(validationError);
       return;
     }
+    setValidationError("");
     setSelectedClassIds((current) => {
       const validIds = new Set(
         selectedSubjectLoads.map((load) => load.class_id),
@@ -308,18 +311,19 @@ export default function CreateClassworkModal({
   const handleCreateClasswork = async () => {
     const validationError = validateDetails();
     if (validationError) {
-      setFormError(validationError);
+      setValidationError(validationError);
       setCreateStep("details");
       return;
     }
     if (selectedClassIds.length === 0) {
-      setFormError("Select at least one section to assign this classwork.");
+      setValidationError("Select at least one section to assign this classwork.");
       return;
     }
     if (selectedLessonIds.length === 0) {
-      setFormError("Select the lesson where this classwork should appear.");
+      setValidationError("Select the lesson where this classwork should appear.");
       return;
     }
+    setValidationError("");
 
     setIsCreating(true);
     try {
@@ -444,6 +448,9 @@ export default function CreateClassworkModal({
         </Dialog.Header>
 
         <section className="flex flex-col gap-4 p-5">
+          {validationError && validationError !== "Topic title is required." && (
+            <FormMessage>{validationError}</FormMessage>
+          )}
           {createStep === "details" && (
             <div className="grid gap-3">
               <Field label="Subject">
@@ -456,10 +463,11 @@ export default function CreateClassworkModal({
                     }));
                     setSelectedClassIds([]);
                     setSelectedLessonIds([]);
+                    setValidationError("");
                   }}
                   disabled={isCreating || Boolean(remediationTarget)}
                 >
-                  <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm font-medium">
+                  <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                     <Select.Value placeholder="Choose subject" />
                   </Select.Trigger>
                   <Select.Content className="border-2 border-black rounded bg-white">
@@ -479,6 +487,7 @@ export default function CreateClassworkModal({
                   value={selectedLessonIds[0] ? String(selectedLessonIds[0]) : ""}
                   onValueChange={(val) => {
                     setSelectedLessonIds(val ? [Number(val)] : []);
+                    setValidationError("");
                   }}
                   disabled={
                     isCreating ||
@@ -487,7 +496,7 @@ export default function CreateClassworkModal({
                     availableLessons.length === 0
                   }
                 >
-                  <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm font-medium">
+                  <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                     <Select.Value
                       className="text-muted-foreground"
                       placeholder={
@@ -520,16 +529,22 @@ export default function CreateClassworkModal({
               <Field label="Topic Title" isRequired={true}>
                 <Input
                   value={draft.title}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setDraft((current) => ({
                       ...current,
                       title: event.target.value,
-                    }))
-                  }
+                    }));
+                    if (event.target.value.trim()) setValidationError("");
+                  }}
+                  aria-invalid={validationError === "Topic title is required."}
+                  aria-describedby={validationError === "Topic title is required." ? "classwork-topic-title-error" : undefined}
                   disabled={isCreating}
                   placeholder="Introduction to Programming Reading Materials"
-                  className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
+                  className={`w-full bg-white border-2 rounded shadow-md ${validationError === "Topic title is required." ? "border-destructive focus:border-destructive" : "border-black"}`}
                 />
+                {validationError === "Topic title is required." && (
+                  <FormMessage id="classwork-topic-title-error">{validationError}</FormMessage>
+                )}
               </Field>
 
               <Field label="Instructions">
@@ -543,7 +558,7 @@ export default function CreateClassworkModal({
                   }
                   disabled={isCreating}
                   placeholder="What students need to read, answer, or submit"
-                  className="px-4 py-2 w-full rounded! border-2 border-black bg-white shadow-md transition focus:outline-hidden focus:shadow-xs min-h-20 text-sm"
+                  className="px-4 py-2 w-full rounded! border-2 border-black bg-white font-sans text-base font-normal shadow-md transition focus:outline-hidden focus:shadow-xs min-h-20"
                 />
               </Field>
 
@@ -564,7 +579,7 @@ export default function CreateClassworkModal({
                         }
                         disabled={isCreating || remediationDraft}
                       >
-                        <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
+                        <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                           <Select.Value placeholder="Select Category" />
                         </Select.Trigger>
                         <Select.Content className="border-2 border-black rounded bg-white">
@@ -595,7 +610,7 @@ export default function CreateClassworkModal({
                         }
                         disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
                       >
-                        <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
+                        <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                           <Select.Value placeholder="Select Sub-type" />
                         </Select.Trigger>
                         <Select.Content className="border-2 border-black rounded bg-white">
@@ -629,7 +644,7 @@ export default function CreateClassworkModal({
                         }))
                       }
                       disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
-                      className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
+                      className="w-full bg-white border-2 border-black rounded shadow-md"
                     />
                   </Field>}
                 </div>
@@ -756,7 +771,7 @@ export default function CreateClassworkModal({
                         }))
                       }
                       disabled={isCreating}
-                      className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
+                      className="w-full bg-white border-2 border-black rounded shadow-md"
                     />
                   </Field>
                 )}
@@ -772,7 +787,7 @@ export default function CreateClassworkModal({
                     }
                     disabled={isCreating}
                   >
-                    <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
+                    <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                       <Select.Value />
                     </Select.Trigger>
                     <Select.Content className="border-2 border-black rounded bg-white">
@@ -798,7 +813,7 @@ export default function CreateClassworkModal({
                     }))
                   }
                   disabled={isCreating || !draft.is_published}
-                  className="w-full bg-white border-2 border-black rounded shadow-md text-sm disabled:bg-gray-100 disabled:opacity-55"
+                  className="w-full bg-white border-2 border-black rounded shadow-md disabled:bg-gray-100 disabled:opacity-55"
                 />
               </Field>
 

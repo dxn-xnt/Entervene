@@ -615,7 +615,7 @@ export default function Dashboard() {
                               >
                                 <Select.Trigger
                                   id="trend-filter"
-                                  className="h-8 text-xs font-semibold sm:min-w-44 shadow-none"
+                                  className="h-8 sm:min-w-44 shadow-none"
                                 >
                                   <Select.Value placeholder="Select section" />
                                 </Select.Trigger>

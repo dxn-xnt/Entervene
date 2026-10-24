@@ -457,7 +457,7 @@ export default function AddSubjectModal({
   }
 
   return (
-    <Dialog.Content size="2xl">
+    <Dialog.Content size="lg">
       <Dialog.Header asChild>
         <div className="flex w-full items-center justify-between">
           <Text as="h5" className="font-sans text-xl font-bold">
@@ -471,15 +471,10 @@ export default function AddSubjectModal({
           attempt={validationAttempt}
           firstInvalidFieldId={error === "Select a grade level." ? "subject-level" : error === "Subject name is required." ? "subject-name" : error === "Select an active grading template." ? "grading-template" : error === "Select an academic year for the offering." ? "offering-year" : undefined}
         />
-        <div>
-          <Text as="h6" className="font-sans text-lg font-bold">
-            Subject Details
-          </Text>
-        </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3">
           <div className="flex flex-col gap-1">
-            <label htmlFor="subject-level" className="text-sm">
-              Grade Level
+            <label htmlFor="subject-level" className="text-sm font-medium">
+              Grade Level <span className="text-red-500">*</span>
             </label>
             <Select
               value={form.academic_level_id}
@@ -520,8 +515,8 @@ export default function AddSubjectModal({
             ) : null}
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="subject-name" className="text-sm">
-              Subject Name
+            <label htmlFor="subject-name" className="text-sm font-medium">
+              Subject Name <span className="text-red-500">*</span>
             </label>
             <Input
               id="subject-name"
@@ -535,7 +530,7 @@ export default function AddSubjectModal({
             {error === "Subject name is required." && <FormMessage id="subject-name-error">{error}</FormMessage>}
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="subject-code" className="text-sm">
+            <label htmlFor="subject-code" className="text-sm font-medium">
               Subject Code
             </label>
             <Input
@@ -548,8 +543,8 @@ export default function AddSubjectModal({
               placeholder="Enter code"
             />
           </div>
-          <div className="flex flex-col gap-1.5 md:col-span-2">
-            <label htmlFor="grading-template" className="text-sm font-semibold">Grading Template</label>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="grading-template" className="text-sm font-medium">Grading Template <span className="text-red-500">*</span></label>
             <Select value={form.grading_template_id} onValueChange={(value) => setField("grading_template_id", value)}>
               <Select.Trigger id="grading-template" aria-invalid={error === "Select an active grading template."} aria-describedby={error === "Select an active grading template." ? "grading-template-error" : undefined} className="w-full min-w-0 aria-[invalid=true]:border-destructive">
                 <Select.Value placeholder="Select grading template" />
@@ -573,8 +568,8 @@ export default function AddSubjectModal({
               </div>
             )}
           </div>
-          <div className="flex flex-col gap-1 md:col-span-2">
-            <label htmlFor="subject-description" className="text-sm">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="subject-description" className="text-sm font-medium">
               Description
             </label>
             <Input
@@ -585,7 +580,7 @@ export default function AddSubjectModal({
               placeholder="Optional description"
             />
           </div>
-          <div className="flex flex-col gap-1 md:col-span-2">
+          <div className="flex flex-col gap-1">
             <div className="flex items-start gap-3 mt-2 rounded border-2 border-black p-3 shadow-[2px_2px_0_#000]">
               <Checkbox
                 id="is-math-science"
@@ -596,7 +591,7 @@ export default function AddSubjectModal({
                 className="mt-1 shrink-0"
               />
               <div className="flex flex-col gap-1">
-                <label htmlFor="is-math-science" className="font-bold">
+                <label htmlFor="is-math-science" className="text-sm font-medium">
                   Is Core Math or Science? (60-min requirement)
                 </label>
                 <p className="text-sm text-muted-foreground">
@@ -617,7 +612,7 @@ export default function AddSubjectModal({
               className="mt-1 shrink-0"
             />
             <div className="flex flex-col gap-1">
-              <label htmlFor="offer-now" className="font-bold">
+              <label htmlFor="offer-now" className="text-sm font-medium">
                 Offer This Subject Now optional
               </label>
               <p className="text-sm text-muted-foreground">
@@ -631,8 +626,8 @@ export default function AddSubjectModal({
           {offerNow ? (
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="flex flex-col gap-1">
-                <label htmlFor="offering-year" className="text-sm">
-                  Academic Year
+                <label htmlFor="offering-year" className="text-sm font-medium">
+                  Academic Year <span className="text-red-500">*</span>
                 </label>
                 <Select
                   value={offeringForm.academic_year_id}
@@ -663,9 +658,9 @@ export default function AddSubjectModal({
                 <div className="flex flex-col gap-1">
                   <label
                     htmlFor="offering-pathway"
-                    className="text-sm font-semibold"
+                    className="text-sm font-medium"
                   >
-                    Pathway
+                    Pathway <span className="text-red-500">*</span>
                   </label>
                   <Select
                     value={offeringForm.pathway}
@@ -709,7 +704,7 @@ export default function AddSubjectModal({
               ) : null}
               <div className="flex flex-col gap-2 md:col-span-2">
                 <div>
-                  <p className="text-sm font-semibold">Term(s)</p>
+                  <p className="text-sm font-medium">Term(s) <span className="text-red-500">*</span></p>
                   <p className="text-xs text-muted-foreground">
                     Grade level is inherited from{" "}
                     {selectedLevel?.level_name || "the selected subject grade"}.
