@@ -134,7 +134,7 @@ export default function AdminNotifications() {
                     <EmptyTitle>Unable to load notifications</EmptyTitle>
                     <EmptyDescription>Please try again.</EmptyDescription>
                   </EmptyHeader>
-                  <Button size="sm" onClick={() => void fetchNotifications()}>Retry</Button>
+                  <Button size="sm" className="gap-1.5" onClick={() => void fetchNotifications()}>Retry</Button>
                 </Empty>
               ) : filteredNotifications.length === 0 ? (
                 <Empty className="shadow-md transition-shadow hover:shadow-none">

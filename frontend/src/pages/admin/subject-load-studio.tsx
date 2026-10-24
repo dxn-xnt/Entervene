@@ -1922,7 +1922,7 @@ export default function AdminSubjectLoadStudio() {
                         <EmptyTitle>Unable to load class sections</EmptyTitle>
                         <EmptyDescription>Please try again.</EmptyDescription>
                       </EmptyHeader>
-                      <Button size="sm" onClick={() => void loadStudio(selectedPeriodId)}>Retry</Button>
+                      <Button size="sm" className="gap-1.5" onClick={() => void loadStudio(selectedPeriodId)}>Retry</Button>
                     </Empty>
                   ) : filteredClasses.length === 0 ? (
                     <Empty className="transition-shadow hover:shadow-none">

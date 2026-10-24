@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Plus, UserPlus, Users } from "lucide-react";
+import { Check, Plus, Search, UserPlus, Users } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
 import type {
   ClassAssignmentStudent,
@@ -16,10 +16,11 @@ import { Alert } from "@/components/retroui/Alert";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
+import { useToast } from "@/components/retroui/Toast";
 import { Card } from "@/components/retroui/Card";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Dialog } from "@/components/retroui/Dialog";
-import { Empty } from "@/components/retroui/Empty";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
@@ -78,6 +79,7 @@ export default function EditStudentList({
   onDistributionCommitted: () => Promise<void>;
   onClose: () => void;
 }) {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<ModalTab>(students.length ? "enrolled" : "available");
   const [enrolledSearch, setEnrolledSearch] = useState("");
   const [availableSearch, setAvailableSearch] = useState("");
@@ -91,7 +93,6 @@ export default function EditStudentList({
   const [discardPrompt, setDiscardPrompt] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [saveSuccess, setSaveSuccess] = useState("");
   const [showDistribution, setShowDistribution] = useState(false);
 
   const pendingEnrolledIds = useMemo(
@@ -180,7 +181,6 @@ export default function EditStudentList({
 
   function clearMessages() {
     setSaveError("");
-    setSaveSuccess("");
     setDiscardPrompt(false);
   }
 
@@ -217,7 +217,7 @@ export default function EditStudentList({
 
     try {
       await onSaveChanges(payload);
-      setSaveSuccess("Student list updated successfully.");
+      toast.success({ title: "Student list updated" });
       setPendingAdditions(new Set());
       setPendingRemovals(new Set());
       setPendingTransfers(new Map());
@@ -249,6 +249,7 @@ export default function EditStudentList({
                 available: availableStudents.length,
               }}
               className="border-b border-border -mx-4 px-4"
+              tabClassName="rounded-t-[var(--radius)]!"
             />
             {!!pendingCount && (
               <Alert status="info" className="p-2">
@@ -332,12 +333,6 @@ export default function EditStudentList({
               <Alert.Title className="text-xs font-bold">{saveError}</Alert.Title>
             </Alert>
           )}
-          {saveSuccess && (
-            <Alert status="success">
-              <Alert.Title className="text-xs font-bold">{saveSuccess}</Alert.Title>
-            </Alert>
-          )}
-
           <div className="flex justify-end gap-2 w-full">
             <Button variant="outline" disabled={saving} onClick={closeModal}>
               Cancel
@@ -361,6 +356,32 @@ export default function EditStudentList({
       onCommitted={onDistributionCommitted}
     />}
     </>
+  );
+}
+
+function StudentListEmptyState({ title, description, onClearSearch }: {
+  title: string;
+  description: string;
+  onClearSearch?: () => void;
+}) {
+  return (
+    <Empty className="flex-none border-0 bg-transparent px-4 py-6 shadow-none">
+      <EmptyHeader>
+        <EmptyMedia>
+          <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background" aria-hidden="true">
+            {[3, 2, 1].map((id) => (
+              <Avatar key={id} variant="student">
+                <Avatar.Image src={`/avatars/student-avatars/${id}.svg`} alt="" />
+                <Avatar.Fallback>ST</Avatar.Fallback>
+              </Avatar>
+            ))}
+          </div>
+        </EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        <EmptyDescription>{description}</EmptyDescription>
+      </EmptyHeader>
+      {onClearSearch && <Button size="sm" className="gap-1.5" onClick={onClearSearch}>Clear search</Button>}
+    </Empty>
   );
 }
 
@@ -400,12 +421,15 @@ function EnrolledStudentsPanel({
   return (
     <section className="flex flex-col gap-2 min-h-0 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
-        <Input
-          value={search}
-          onChange={(event) => onSearch(event.target.value)}
-          placeholder="Search enrolled students..."
-          className="max-w-xs h-9"
-        />
+        <label className="relative w-full sm:w-80">
+          <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-black/50" />
+          <Input
+            value={search}
+            onChange={(event) => onSearch(event.target.value)}
+            placeholder="Search enrolled students..."
+            className="h-10 w-full rounded! border-black bg-white pl-9 pr-3 text-base placeholder:text-base shadow-none!"
+          />
+        </label>
         <Button
           variant={selectMultiple ? "default" : "outline"}
           size="sm"
@@ -415,15 +439,13 @@ function EnrolledStudentsPanel({
         </Button>
       </div>
 
-      <div className="min-h-0 max-h-[48vh] overflow-y-auto rounded border-2 border-border bg-card">
+      <Card className="block min-h-0 max-h-[48vh] overflow-y-auto p-0">
         {!totalCount ? (
-          <Empty className="p-6 border-0 shadow-none bg-transparent">
-            <Empty.Content>
-              <Empty.Description className="text-sm font-semibold">
-                {search.trim() ? "No students match your search." : "No enrolled students in this section."}
-              </Empty.Description>
-            </Empty.Content>
-          </Empty>
+          <StudentListEmptyState
+            title={search.trim() ? "No enrolled students match your search" : "No enrolled students yet"}
+            description={search.trim() ? "Try another name or clear your search." : "Students assigned to this section will appear here."}
+            onClearSearch={search.trim() ? () => onSearch("") : undefined}
+          />
         ) : (
           <Table wrapperClassName="border-0 shadow-none">
             <Table.Header className="font-sans">
@@ -467,7 +489,7 @@ function EnrolledStudentsPanel({
             </Table.Body>
           </Table>
         )}
-      </div>
+      </Card>
     </section>
   );
 }
@@ -497,24 +519,25 @@ function AvailableStudentsPanel({
   return (
     <section className="flex flex-col gap-2 min-h-0 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
-        <Input
-          value={search}
-          onChange={(event) => onSearch(event.target.value)}
-          placeholder="Search available students..."
-          className="max-w-xs h-9"
-        />
+        <label className="relative w-full sm:w-80">
+          <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-black/50" />
+          <Input
+            value={search}
+            onChange={(event) => onSearch(event.target.value)}
+            placeholder="Search available students..."
+            className="h-10 w-full rounded! border-black bg-white pl-9 pr-3 text-base placeholder:text-base shadow-none!"
+          />
+        </label>
         <Button size="sm" variant="outline" disabled={!canDistribute} onClick={onDistribute}>Assign Evenly</Button>
         {!canDistribute && <p className="w-full text-xs text-muted-foreground">Save or discard pending manual changes before distributing students.</p>}
       </div>
-      <div className="min-h-0 max-h-[48vh] overflow-y-auto rounded border-2 border-border bg-card">
+      <Card className="block min-h-0 max-h-[48vh] overflow-y-auto p-0">
         {!totalCount ? (
-          <Empty className="p-6 border-0 shadow-none bg-transparent">
-            <Empty.Content>
-              <Empty.Description className="text-sm font-semibold">
-                {search.trim() ? "No students match your search." : `No available ${academicLevel} students without a section.`}
-              </Empty.Description>
-            </Empty.Content>
-          </Empty>
+          <StudentListEmptyState
+            title={search.trim() ? "No unassigned students match your search" : "No unassigned students available"}
+            description={search.trim() ? "Try another name or clear your search." : `No ${academicLevel} students are waiting for a section.`}
+            onClearSearch={search.trim() ? () => onSearch("") : undefined}
+          />
         ) : (
           groups.map(([gender, students]) => <section key={gender} aria-label={`${gender} students`}>
             <div className="bg-muted/60 px-4 py-2 text-xs font-bold uppercase text-muted-foreground">
@@ -563,7 +586,7 @@ function AvailableStudentsPanel({
             })}
           </section>)
         )}
-      </div>
+      </Card>
     </section>
   );
 }

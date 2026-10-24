@@ -6,8 +6,10 @@ import {
   type ReactNode,
 } from "react";
 import {
+  AlertTriangle,
   Plus,
   Search,
+  School,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { routes } from "@/../routes";
@@ -31,6 +33,8 @@ import { Select } from "@/components/retroui/Select";
 import { Badge } from "@/components/retroui/Badge";
 import { Accordion } from "@/components/retroui/Accordion";
 import { useToast } from "@/components/retroui/Toast";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { LoadingPanel } from "@/components/loading-panel";
 
 export default function AdminClasses() {
   const toast = useToast();
@@ -305,26 +309,13 @@ export default function AdminClasses() {
 
               <section className="grid gap-4">
                 {isLoading ? (
-                  <StatePanel message="Loading classes..." />
+                  <LoadingPanel label="Loading classes..." />
                 ) : loadError ? (
-                  <StatePanel
-                    message="Unable to load classes."
-                    detail={loadError}
-                  >
-                    <button
-                      className="rounded border border-black bg-[#79bd80] px-3 py-1 text-xs font-bold shadow-[2px_2px_0_#000]"
-                      onClick={() => void refreshClasses()}
-                    >
-                      Retry
-                    </button>
-                  </StatePanel>
+                  <ClassesEmptyState icon={<AlertTriangle />} title="Unable to load classes" description={loadError} actionLabel="Retry" onAction={() => void refreshClasses()} />
                 ) : !classes.length ? (
-                  <StatePanel
-                    message="No classes found."
-                    detail="Create a new class to get started."
-                  />
+                  <ClassesEmptyState icon={<School />} title="No classes yet" description="Create a class to start organizing students and subjects." actionLabel="New Class" onAction={() => setShowNewClass(true)} />
                 ) : grouped.length === 0 ? (
-                  <StatePanel message="No classes match the selected filters." />
+                  <ClassesEmptyState icon={<Search />} title={search.trim() ? "No classes match your search" : "No classes match these filters"} description={search.trim() ? "Try another class or adviser name, or clear your filters." : "Choose another grade, year, or status to see classes."} actionLabel="Clear filters" onAction={() => { setSearch(""); setGradeFilter("All"); setYearFilter("All"); setStatusFilter("All"); }} />
                 ) : (
                   <Accordion
                     multiple
@@ -421,20 +412,21 @@ function normalizedStatus(status: string) {
   return status.trim().toLocaleLowerCase();
 }
 
-function StatePanel({
-  message,
-  detail,
-  children,
-}: {
-  message: string;
-  detail?: string;
-  children?: ReactNode;
+function ClassesEmptyState({ icon, title, description, actionLabel, onAction }: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  actionLabel: string;
+  onAction: () => void;
 }) {
   return (
-    <div className="rounded border-2 border-black p-8 text-center text-sm text-black/60 shadow-[3px_3px_0_#000]">
-      <p className="font-bold text-black">{message}</p>
-      {detail && <p className="mt-1">{detail}</p>}
-      {children && <div className="mt-3 flex justify-center">{children}</div>}
-    </div>
+    <Empty className="transition-shadow hover:shadow-none">
+      <EmptyHeader>
+        <EmptyMedia><div className="flex size-10 items-center justify-center border-2 border-black bg-primary text-black [&_svg]:size-5" aria-hidden="true">{icon}</div></EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        <EmptyDescription>{description}</EmptyDescription>
+      </EmptyHeader>
+      <Button size="sm" className="gap-1.5" onClick={onAction}>{actionLabel}</Button>
+    </Empty>
   );
 }
