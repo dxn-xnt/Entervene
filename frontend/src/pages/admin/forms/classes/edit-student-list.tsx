@@ -13,6 +13,7 @@ import type {
 } from "@/types/adminClasses";
 import { assignmentStudentName, matchesStudentSearch, sortAssignmentStudents } from "@/components/admin/classes/assignment/studentSorting";
 import { Alert } from "@/components/retroui/Alert";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
@@ -239,6 +240,7 @@ export default function EditStudentList({
         </Dialog.Header>
 
         <div className="flex flex-col gap-3 p-4 min-h-0 max-h-[75vh] overflow-hidden">
+          <AdminValidationAlert message={saveError} />
           <header className="grid gap-2 shrink-0">
             <Tabs<ModalTab>
               tabs={MODAL_TABS}
@@ -328,11 +330,6 @@ export default function EditStudentList({
             </Alert>
           )}
 
-          {saveError && (
-            <Alert status="error">
-              <Alert.Title className="text-xs font-bold">{saveError}</Alert.Title>
-            </Alert>
-          )}
           <div className="flex justify-end gap-2 w-full">
             <Button variant="outline" disabled={saving} onClick={closeModal}>
               Cancel
@@ -424,10 +421,11 @@ function EnrolledStudentsPanel({
         <label className="relative w-full sm:w-80">
           <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-black/50" />
           <Input
+            variant="search"
             value={search}
             onChange={(event) => onSearch(event.target.value)}
             placeholder="Search enrolled students..."
-            className="h-10 w-full rounded! border-black bg-white pl-9 pr-3 text-base placeholder:text-base shadow-none!"
+            className="w-full shadow-none!"
           />
         </label>
         <Button
@@ -522,10 +520,11 @@ function AvailableStudentsPanel({
         <label className="relative w-full sm:w-80">
           <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-black/50" />
           <Input
+            variant="search"
             value={search}
             onChange={(event) => onSearch(event.target.value)}
             placeholder="Search available students..."
-            className="h-10 w-full rounded! border-black bg-white pl-9 pr-3 text-base placeholder:text-base shadow-none!"
+            className="w-full shadow-none!"
           />
         </label>
         <Button size="sm" variant="outline" disabled={!canDistribute} onClick={onDistribute}>Assign Evenly</Button>

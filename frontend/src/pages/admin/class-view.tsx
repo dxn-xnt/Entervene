@@ -258,7 +258,7 @@ export default function AdminClassDetail() {
     return (
       <AppLayout>
         <div className="flex flex-1 flex-col p-4 md:p-6">
-          <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+          <div className="flex items-center justify-center gap-3 py-12 text-sm text-muted-foreground" role="status">
             <Loader size="sm" />
             Loading class details...
           </div>
@@ -731,10 +731,11 @@ function StudentsTab({
             <label className="relative w-full sm:w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-black/50" />
               <Input
+                variant="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search students..."
-                className="h-10 w-full border-black bg-white pl-9 pr-3"
+                className="w-full"
               />
             </label>
             {!isReadOnly && (
@@ -756,7 +757,7 @@ function StudentsTab({
 
         <RetroCard className="max-h-[520px] overflow-y-auto p-4">
           {isLoading ? (
-            <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+            <div className="flex items-center justify-center gap-3 py-12 text-sm text-muted-foreground" role="status">
               <Loader size="sm" />
               Loading students...
             </div>

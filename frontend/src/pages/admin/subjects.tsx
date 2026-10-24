@@ -123,9 +123,7 @@ export default function AdminSubjects() {
   const [isDownloadingCatalogTemplate, setIsDownloadingCatalogTemplate] = useState(false);
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNoticeState] = useState<string | null>(null);
   const setNotice = (message: string) => {
-    setNoticeState(message);
     toast.success({ title: message });
   };
   const [catalogImportResult, setCatalogImportResult] = useState<SubjectImportResult | null>(null);
@@ -705,11 +703,6 @@ export default function AdminSubjects() {
                 </div>
               ) : null}
 
-              {notice ? (
-                <p className="border-2 border-black bg-[#bbf7d0] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">
-                  {notice}
-                </p>
-              ) : null}
               {error ? (
                 <div className="flex flex-col gap-2 rounded border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000] md:flex-row md:items-center md:justify-between">
                   <div>
@@ -738,10 +731,11 @@ export default function AdminSubjects() {
                     <label className="relative">
                       <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                       <Input
+                        variant="search"
                         value={catalogSearch}
                         onChange={(event) => setCatalogSearch(event.target.value)}
                         placeholder="Search name, code, template"
-                        className="h-10 w-full border-black pl-9 pr-3"
+                        className="w-full"
                       />
                     </label>
                     <Select
@@ -1074,7 +1068,6 @@ export default function AdminSubjects() {
         onSaved={async (savedMeta) => {
           const message = savedMeta?.message ?? (editingOffering ? "Subject offering updated." : "Offerings saved.");
           if (savedMeta?.partialFailure) {
-            setNoticeState(message);
             toast.warning({ title: "Some offerings need attention", description: message });
           } else {
             setNotice(message);

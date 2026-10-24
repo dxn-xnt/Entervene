@@ -6,7 +6,6 @@ import {
   Loader2,
   BookOpen,
   HelpCircle,
-  AlertCircle,
   X,
   Settings2,
   ChevronDown,
@@ -18,8 +17,9 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Input } from "@/components/retroui/Input";
+import { Select } from "@/components/retroui/Select";
 import { Badge } from "@/components/retroui/Badge";
-import { Alert } from "@/components/retroui/Alert";
+import { FormMessage } from "@/components/retroui/FormMessage";
 import { apiFetch } from "@/lib/api";
 import type { RemediationFocus } from "@/lib/teacher-interventions-api";
 import { focusGuidance } from "@/lib/remediation-authoring";
@@ -549,12 +549,7 @@ export default function AIQuizGeneratorModal({
         {/* ── Scrollable Body ── */}
         <section className="flex flex-col gap-4 p-5">
 
-          {error && (
-            <Alert status="error" className="border-2 border-red-500">
-              <AlertCircle className="h-4 w-4" />
-              <Alert.Description className="text-xs font-semibold">{error}</Alert.Description>
-            </Alert>
-          )}
+          {error && <FormMessage>{error}</FormMessage>}
 
           {/* Subject Selection */}
           <div className="space-y-1.5">
@@ -568,23 +563,25 @@ export default function AIQuizGeneratorModal({
             </div>
             {subjects && subjects.length > 1 ? (
               <div className="relative">
-                <select
-                  value={currentSubjectId}
-                  onChange={(e) => {
-                    const newId = Number(e.target.value);
+                <Select
+                  value={String(currentSubjectId)}
+                  onValueChange={(value) => {
+                    const newId = Number(value);
                     setCurrentSubjectId(newId);
                     setSelectedLessonIds([]);
                     setSelectedReadingIds([]);
                   }}
                   disabled={isGenerating}
-                  className="w-full h-10 border-2 border-black bg-white px-3 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] outline-none cursor-pointer focus:shadow-none"
                 >
+                  <Select.Trigger className="w-full"><Select.Value /></Select.Trigger>
+                  <Select.Content>
                   {subjects.map((s) => (
-                    <option key={s.id} value={s.id}>
+                    <Select.Item key={s.id} value={String(s.id)}>
                       {s.name}
-                    </option>
+                    </Select.Item>
                   ))}
-                </select>
+                  </Select.Content>
+                </Select>
               </div>
             ) : (
               <div className="flex items-center gap-2 border-2 border-black bg-neutral-100 px-3 py-2 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
@@ -817,19 +814,16 @@ export default function AIQuizGeneratorModal({
                         #{index + 1}
                       </span>
 
-                      <select
-                        value={part.type}
-                        onChange={(e) =>
-                          updateTestPart(part.id, { type: e.target.value as AIQuizPartType })
-                        }
-                        className="flex-1 min-w-[160px] border-2 border-black bg-white px-2 py-1.5 text-xs font-bold cursor-pointer focus:outline-none"
-                      >
-                        <option value="MULTIPLE_CHOICE">Multiple Choice (4 Options)</option>
-                        <option value="TRUE_FALSE">True or False (2 Options)</option>
-                        <option value="IDENTIFICATION">Identification (Auto-graded key)</option>
-                        <option value="SHORT_ANSWER">Short Answer (Essay)</option>
-                        <option value="ESSAY">Essay / Open-ended Response</option>
-                      </select>
+                      <Select value={part.type} onValueChange={(value) => updateTestPart(part.id, { type: value as AIQuizPartType })}>
+                        <Select.Trigger className="min-w-[160px] flex-1"><Select.Value /></Select.Trigger>
+                        <Select.Content>
+                          <Select.Item value="MULTIPLE_CHOICE">Multiple Choice (4 Options)</Select.Item>
+                          <Select.Item value="TRUE_FALSE">True or False (2 Options)</Select.Item>
+                          <Select.Item value="IDENTIFICATION">Identification (Auto-graded key)</Select.Item>
+                          <Select.Item value="SHORT_ANSWER">Short Answer (Essay)</Select.Item>
+                          <Select.Item value="ESSAY">Essay / Open-ended Response</Select.Item>
+                        </Select.Content>
+                      </Select>
 
                       <div className="flex items-center gap-1 shrink-0">
                         <Tooltip>
@@ -846,7 +840,7 @@ export default function AIQuizGeneratorModal({
                               e.target.value = String(clamped);
                               updateTestPart(part.id, { count: clamped });
                             }}
-                            className="w-14 h-8 text-center text-xs font-bold border-2 border-black rounded shadow-none"
+                            className="w-14 h-8 text-center border-2 border-black rounded shadow-none"
                             aria-label="Number of questions"
                           />} />
                           <TooltipContent>Questions</TooltipContent>
@@ -871,7 +865,7 @@ export default function AIQuizGeneratorModal({
                               e.target.value = String(clamped);
                               updateTestPart(part.id, { points_per_item: clamped });
                             }}
-                            className="w-14 h-8 text-center text-xs font-bold border-2 border-black rounded shadow-none bg-amber-50"
+                            className="w-14 h-8 text-center border-2 border-black rounded shadow-none bg-amber-50"
                             aria-label="Points per question"
                           />} />
                           <TooltipContent>Points per question</TooltipContent>

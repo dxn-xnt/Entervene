@@ -9,6 +9,8 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { RoleBadge } from "@/components/role-badge";
 
 export default function EditClass({
@@ -31,7 +33,7 @@ export default function EditClass({
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [saveSuccess, setSaveSuccess] = useState("");
+  const [validationAttempt, setValidationAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +83,7 @@ export default function EditClass({
     const trimmedSectionName = sectionName.trim();
     if (!trimmedSectionName) {
       setSaveError("Section name is required.");
+      setValidationAttempt((attempt) => attempt + 1);
       return;
     }
 
@@ -92,6 +95,7 @@ export default function EditClass({
     if (pathwayId !== currentPathwayId) {
       if (classDetail.academic_level.requires_pathway && pathwayId === "__none__") {
         setSaveError("Select an enabled pathway for this academic level.");
+        setValidationAttempt((attempt) => attempt + 1);
         return;
       }
       payload.pathway_id = pathwayId === "__none__" ? null : Number(pathwayId);
@@ -99,19 +103,18 @@ export default function EditClass({
 
     if (!Object.keys(payload).length) {
       setSaveError("No changes to save.");
+      setValidationAttempt((attempt) => attempt + 1);
       return;
     }
 
     setSaving(true);
     setSaveError("");
-    setSaveSuccess("");
     try {
       const updatedClass = await updateClass(classDetail.class_id, payload);
       setClassDetail(updatedClass);
       setSectionName(updatedClass.section_name);
       setAdviserStaffId(updatedClass.adviser?.staff_id || "__none__");
       setPathwayId(updatedClass.pathway_id == null ? "__none__" : String(updatedClass.pathway_id));
-      setSaveSuccess("Class updated successfully.");
       onSaved(updatedClass);
     } catch (error: unknown) {
       setSaveError(updateErrorMessage(error));
@@ -144,6 +147,11 @@ export default function EditClass({
         ) : (
           <>
             <section className="flex flex-col gap-4 p-5">
+              <AdminValidationAlert
+                message={saveError === "Section name is required." || saveError === "Select an enabled pathway for this academic level." ? null : saveError}
+                attempt={validationAttempt}
+                firstInvalidFieldId={saveError === "Section name is required." ? "edit-class-section-name" : undefined}
+              />
               <div className="grid gap-4">
                 <Field label="Academic Year">
                   <Input
@@ -167,14 +175,14 @@ export default function EditClass({
                     setSectionName(name);
                     setPathwayId(selected?.pathway_id == null ? "__none__" : String(selected.pathway_id));
                     setSaveError("");
-                    setSaveSuccess("");
                   }}>
-                    <Select.Trigger className="w-full text-base"><Select.Value placeholder="Select official section" /></Select.Trigger>
+                    <Select.Trigger id="edit-class-section-name" aria-invalid={saveError === "Section name is required."} aria-describedby={saveError === "Section name is required." ? "edit-class-section-error" : undefined} className="w-full aria-[invalid=true]:border-destructive"><Select.Value placeholder="Select official section" /></Select.Trigger>
                     <Select.Content><Select.Group>
                       {officialSections.map((section) => <Select.Item key={section.id} value={section.section_name}>{section.section_name}{section.pathway_name ? ` — ${section.pathway_name}` : ""}</Select.Item>)}
                       {!officialSections.some((section) => section.section_name === classDetail.section_name) && <Select.Item value={classDetail.section_name} disabled>{classDetail.section_name} (historical)</Select.Item>}
                     </Select.Group></Select.Content>
                   </Select>
+                  {saveError === "Section name is required." && <FormMessage id="edit-class-section-error">{saveError}</FormMessage>}
                 </Field>
 
                 {classDetail.academic_level.grade_level >= 11 && (
@@ -185,6 +193,7 @@ export default function EditClass({
                     {!classDetail.academic_level.requires_pathway && (
                       <Text as="p" className="mt-1 text-xs text-muted-foreground">This grade does not require a pathway in this academic year.</Text>
                     )}
+                    {saveError === "Select an enabled pathway for this academic level." && <FormMessage>{saveError}</FormMessage>}
                   </Field>
                 )}
 
@@ -194,10 +203,9 @@ export default function EditClass({
                     onChange={(event) => {
                       setAdviserStaffId(event.target.value);
                       setSaveError("");
-                      setSaveSuccess("");
                     }}
                   >
-                    <Select.Trigger className="w-full text-base">
+                    <Select.Trigger className="w-full">
                       <Select.Value placeholder="Select class adviser..." />
                     </Select.Trigger>
                     <Select.Content>
@@ -225,17 +233,6 @@ export default function EditClass({
                 </Field>
               </div>
 
-              {saveError && (
-                <div className="rounded border-2 border-destructive bg-destructive/10 p-3 text-sm font-semibold text-destructive">
-                  {saveError}
-                </div>
-              )}
-
-              {saveSuccess && (
-                <div className="rounded border-2 border-primary bg-primary/10 p-3 text-sm font-semibold text-primary">
-                  {saveSuccess}
-                </div>
-              )}
             </section>
 
             <Dialog.Footer>

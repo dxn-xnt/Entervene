@@ -4,6 +4,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/Toast";
 import { Input } from "@/components/retroui/Input";
+import { Select } from "@/components/retroui/Select";
 import { Alert } from "@/components/retroui/Alert";
 import { apiFetch } from "@/lib/api";
 import {
@@ -291,7 +292,7 @@ export function SuggestionPanel({
                   onChange={(event) =>
                     setRecommendationThreshold(Number(event.target.value))
                   }
-                  className="mt-1 h-10 w-full rounded-none border-border bg-background px-2 text-xs shadow-none"
+                  className="mt-1 h-10 w-full rounded-none border-border bg-background px-2 shadow-none"
                 />
               </label>
               <Button
@@ -315,59 +316,47 @@ export function SuggestionPanel({
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-xs font-bold text-foreground">
                 Subject <span className="text-red-500">*</span>
-                <select
-                  value={subjectId}
-                  onChange={(event) => setSubjectId(Number(event.target.value))}
-                  className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 text-xs font-medium text-foreground"
-                >
+                <Select value={String(subjectId)} onValueChange={(value) => setSubjectId(Number(value))}>
+                  <Select.Trigger className="mt-1 w-full"><Select.Value /></Select.Trigger>
+                  <Select.Content>
                   {activeSubjects.map((subject) => (
-                    <option
+                    <Select.Item
                       key={subject.subject_load_id}
-                      value={subject.subject_id}
+                      value={String(subject.subject_id)}
                     >
                       {subject.subject_name}
-                    </option>
+                    </Select.Item>
                   ))}
-                </select>
+                  </Select.Content>
+                </Select>
               </label>
 
               <label className="text-xs font-bold text-foreground">
                 Resource Type <span className="text-red-500">*</span>
-                <select
-                  value={resourceType}
-                  onChange={(event) =>
-                    setResourceType(
-                      event.target.value as SuggestionResourceType,
-                    )
-                  }
-                  className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 text-xs font-medium text-foreground"
-                >
-                  <option value="CLASSWORK">Classwork or Reading</option>
-                  <option value="LESSON">Lesson</option>
-                </select>
+                <Select value={resourceType} onValueChange={(value) => setResourceType(value as SuggestionResourceType)}>
+                  <Select.Trigger className="mt-1 w-full"><Select.Value /></Select.Trigger>
+                  <Select.Content>
+                    <Select.Item value="CLASSWORK">Classwork or Reading</Select.Item>
+                    <Select.Item value="LESSON">Lesson</Select.Item>
+                  </Select.Content>
+                </Select>
               </label>
             </div>
 
             <label className="block text-xs font-bold text-foreground">
               Resource <span className="text-red-500">*</span>
-              <select
-                value={resourceId}
-                onChange={(event) => setResourceId(event.target.value)}
-                disabled={isResourceLoading || resources.length === 0}
-                className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 text-xs font-medium text-foreground disabled:opacity-60"
-              >
+              <Select value={resourceId} onValueChange={setResourceId} disabled={isResourceLoading || resources.length === 0}>
+                <Select.Trigger className="mt-1 w-full"><Select.Value placeholder={isResourceLoading ? "Loading resources..." : "No resources found"} /></Select.Trigger>
+                <Select.Content>
                 {resources.length ? (
                   resources.map((resource) => (
-                    <option key={resource.id} value={resource.id}>
+                    <Select.Item key={resource.id} value={resource.id}>
                       {resource.label} - {resource.meta}
-                    </option>
+                    </Select.Item>
                   ))
-                ) : (
-                  <option value="">
-                    {isResourceLoading ? "Loading resources..." : "No resources found"}
-                  </option>
-                )}
-              </select>
+                ) : null}
+                </Select.Content>
+              </Select>
             </label>
 
             <label className="block text-xs font-bold text-foreground">
@@ -375,7 +364,7 @@ export function SuggestionPanel({
               <Input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 text-xs font-medium shadow-none"
+                className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 shadow-none"
                 placeholder="e.g. Review this material"
                 required
               />
@@ -395,19 +384,16 @@ export function SuggestionPanel({
             <div className="grid gap-3 sm:grid-cols-2 items-center">
               <label className="text-xs font-bold text-foreground">
                 Priority
-                <select
-                  value={priority}
-                  onChange={(event) =>
-                    setPriority(event.target.value as SuggestionPriority)
-                  }
-                  className="mt-1 h-10 w-full rounded-none border-2 border-border bg-background px-2 text-xs font-medium text-foreground"
-                >
+                <Select value={priority} onValueChange={(value) => setPriority(value as SuggestionPriority)}>
+                  <Select.Trigger className="mt-1 w-full"><Select.Value /></Select.Trigger>
+                  <Select.Content>
                   {priorities.map((item) => (
-                    <option key={item} value={item}>
+                    <Select.Item key={item} value={item}>
                       {item}
-                    </option>
+                    </Select.Item>
                   ))}
-                </select>
+                  </Select.Content>
+                </Select>
               </label>
             </div>
 

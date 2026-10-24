@@ -848,7 +848,7 @@ function LessonsTab({
                       value={lessonFilter}
                       onValueChange={(val) => setLessonFilter(val)}
                     >
-                      <Select.Trigger className="h-10 w-full border-2 border-black bg-white text-sm">
+                      <Select.Trigger className="h-10 w-full border-2 border-black bg-white">
                         <Select.Value placeholder="Filter by lesson" />
                       </Select.Trigger>
                       <Select.Content className="border-2 border-black bg-white max-h-72 overflow-y-auto">
@@ -874,7 +874,7 @@ function LessonsTab({
                         )
                       }
                     >
-                      <Select.Trigger className="h-10 w-full border-2 border-black bg-white text-sm lg:w-40">
+                      <Select.Trigger className="h-10 w-full border-2 border-black bg-white lg:w-40">
                         <Select.Value placeholder="Sort by" />
                       </Select.Trigger>
                       <Select.Content className="border-2 border-black bg-white">
@@ -1633,7 +1633,7 @@ function ClassworkTab({
               value={lessonFilter}
               onValueChange={(val) => setLessonFilter(val)}
             >
-              <Select.Trigger className="h-10 w-full border-2 border-black bg-white text-sm">
+              <Select.Trigger className="h-10 w-full border-2 border-black bg-white">
                 <Select.Value placeholder="Filter by lesson" />
               </Select.Trigger>
               <Select.Content className="border-2 border-black bg-white max-h-72 overflow-y-auto">
@@ -1655,7 +1655,7 @@ function ClassworkTab({
               value={statusFilter}
               onValueChange={setStatusFilter}
             >
-              <Select.Trigger className="h-10 w-full border-black text-sm sm:w-44">
+              <Select.Trigger className="h-10 w-full border-black sm:w-44">
                 <Select.Value placeholder="All statuses" />
               </Select.Trigger>
               <Select.Content>

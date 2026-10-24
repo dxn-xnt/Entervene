@@ -608,10 +608,10 @@ export default function PredictionDetailSheet({
                       value={interventionPriority}
                       onValueChange={(value: string) => setInterventionPriority(value as "LOW" | "NORMAL" | "HIGH" | "URGENT")}
                     >
-                      <Select.Trigger className="w-[140px] h-8 text-xs font-bold border-2 border-black bg-white shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                      <Select.Trigger className="w-[140px]">
                         <Select.Value placeholder="Priority" />
                       </Select.Trigger>
-                      <Select.Content className="border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                      <Select.Content>
                         <Select.Item value="NORMAL">NORMAL</Select.Item>
                         <Select.Item value="HIGH">HIGH</Select.Item>
                         <Select.Item value="URGENT">URGENT</Select.Item>
@@ -699,10 +699,10 @@ export default function PredictionDetailSheet({
                       value={reviewDecision}
                       onValueChange={setReviewDecision}
                     >
-                      <Select.Trigger className="w-full bg-white border-2 border-black font-semibold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                      <Select.Trigger className="w-full">
                         <Select.Value placeholder="Select decision..." />
                       </Select.Trigger>
-                      <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                      <Select.Content>
                         {DECISION_OPTIONS.map((opt) => (
                           <Select.Item key={opt.value} value={opt.value}>
                             {opt.label}

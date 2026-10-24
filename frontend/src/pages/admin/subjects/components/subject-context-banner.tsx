@@ -1,6 +1,4 @@
 import { CalendarDays } from "lucide-react";
-import { Badge } from "@/components/retroui/Badge";
-import { Card as RetroCard } from "@/components/retroui/Card";
 import { formatPeriodLabel } from "@/lib/academic-periods";
 import type {
   SubjectOfferingAcademicPeriod,
@@ -51,28 +49,24 @@ export function SubjectContextBanner({
   const hasCompleteContext = Boolean(displayYear && displayPeriod);
 
   return (
-    <RetroCard className="w-full overflow-hidden p-0">
-      <div className="flex flex-col gap-3 bg-[#fff1b8] px-4 py-3 md:flex-row md:items-center md:justify-between">
+    <div className="flex flex-col gap-2 text-muted-foreground md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded border-2 border-black bg-background shadow-[2px_2px_0_#000]">
-            <CalendarDays className="size-5" />
+          <span className="shrink-0" aria-hidden="true">
+            <CalendarDays className="size-4" />
           </span>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-black/70">Current setup context</p>
-            <p className="text-lg font-bold">
+            <p className="text-sm">Current setup context</p>
+            <p className="text-sm">
               {isLoading
                 ? "Loading academic context..."
                 : hasCompleteContext
                   ? `${displayYear} • ${displayPeriod}`
                   : "Current setup context unavailable"}
             </p>
-            <p className="text-xs text-black/70">Change academic year or active term in System Settings.</p>
+            <p className="text-xs">Change academic year or active term in System Settings.</p>
           </div>
         </div>
-        <Badge size="sm" variant={hasCompleteContext ? "surface" : "outline"}>
-          {hasCompleteContext ? "Active context" : "Needs setup"}
-        </Badge>
-      </div>
-    </RetroCard>
+        <span className="text-xs">{hasCompleteContext ? "Active context" : "Needs setup"}</span>
+    </div>
   );
 }

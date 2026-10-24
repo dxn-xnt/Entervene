@@ -959,7 +959,7 @@ const InterventionSupportMaterials = forwardRef<
                             <div className="space-y-1.5">
                               <Label className="text-sm font-bold">Title</Label>
                               <Input
-                                className="w-full font-normal"
+                                className="w-full"
                                 value={reviewerDraft.title}
                                 onChange={(event) =>
                                   setReviewerDraft({
@@ -1077,12 +1077,12 @@ const InterventionSupportMaterials = forwardRef<
                           value={search}
                           onChange={(event) => setSearch(event.target.value)}
                           placeholder="Search materials..."
-                          className="h-10 w-full border-black pl-9 pr-3 text-base"
+                          className="h-10 w-full border-black pl-9 pr-3"
                         />
                       </label>
 
                       <Select value={kindFilter} onValueChange={(val) => setKindFilter(val)}>
-                        <Select.Trigger className="w-full text-sm font-normal sm:w-48 h-10">
+                        <Select.Trigger className="w-full sm:w-48 h-10">
                           <Select.Value placeholder="Filter type" />
                         </Select.Trigger>
                         <Select.Content>

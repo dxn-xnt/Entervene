@@ -224,7 +224,7 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
           <Select value={teacherPeriodId === null ? "none" : String(teacherPeriodId)} onValueChange={(value) => {
             setTeacherPeriodId(value === "none" ? null : Number(value)); setClassId(null); setSubjectId(null); setSelected(null);
           }}>
-            <Select.Trigger id="dev-period" className="w-full bg-white"><Select.Value placeholder="Select term" /></Select.Trigger>
+            <Select.Trigger id="dev-period" className="w-full"><Select.Value placeholder="Select term" /></Select.Trigger>
             <Select.Content><Select.Item value="none">Select term</Select.Item>{teacherTerms.map((item) => <Select.Item key={item.academic_period_id} value={String(item.academic_period_id)}>{item.term_label}</Select.Item>)}</Select.Content>
           </Select>
         </div>}
@@ -233,14 +233,14 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
           <Select value={classId === null ? "none" : String(classId)} onValueChange={(value) => {
             setClassId(value === "none" ? null : Number(value)); setSubjectId(null); setStudentId(""); setStudentLookup(""); setBlocked(null);
           }} disabled={role === "teacher" && activePeriodId === null}>
-            <Select.Trigger id="dev-class" className="w-full bg-white"><Select.Value placeholder="Select class" /></Select.Trigger>
+            <Select.Trigger id="dev-class" className="w-full"><Select.Value placeholder="Select class" /></Select.Trigger>
             <Select.Content><Select.Item value="none">Select class</Select.Item>{classOptions.map((item) => <Select.Item key={item.class_id} value={String(item.class_id)}>{item.section_name}</Select.Item>)}</Select.Content>
           </Select>
         </div>
         <div className="w-full sm:w-48">
           <label className="mb-1 block text-xs font-bold" htmlFor="dev-subject">Subject</label>
           <Select value={subjectId === null ? "none" : String(subjectId)} onValueChange={(value) => { setSubjectId(value === "none" ? null : Number(value)); setBlocked(null); }} disabled={!classId || loadingSubjects}>
-            <Select.Trigger id="dev-subject" className="w-full bg-white"><Select.Value placeholder="Select subject" /></Select.Trigger>
+            <Select.Trigger id="dev-subject" className="w-full"><Select.Value placeholder="Select subject" /></Select.Trigger>
             <Select.Content><Select.Item value="none">Select subject</Select.Item>{availableSubjects.map((item) => <Select.Item key={item.subject_id} value={String(item.subject_id)}>{item.subject_name}</Select.Item>)}</Select.Content>
           </Select>
         </div>
@@ -251,7 +251,7 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
         {role === "admin" && <div className="w-full sm:w-52">
           <label className="mb-1 block text-xs font-bold" htmlFor="dev-student">Student</label>
           <Select value={studentId || "none"} onValueChange={(value) => { setStudentId(value === "none" ? "" : value); setBlocked(null); }} disabled={!classId || loadingStudents}>
-            <Select.Trigger id="dev-student" className="w-full bg-white"><Select.Value placeholder="Select student" /></Select.Trigger>
+            <Select.Trigger id="dev-student" className="w-full"><Select.Value placeholder="Select student" /></Select.Trigger>
             <Select.Content><Select.Item value="none">Select student</Select.Item>{students.map((item) => <Select.Item key={item.student_id} value={item.student_id}>{item.full_name}</Select.Item>)}</Select.Content>
           </Select>
         </div>}
@@ -267,9 +267,9 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
       {unchanged && <p role="status" className="border border-green-700 bg-green-50 p-3 text-sm">Academic evidence is unchanged. The latest projection was reused; no new revision was created.</p>}
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative w-full min-w-48 flex-1 sm:max-w-xs"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search generated students" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search student" className="pl-9" /></div>
+        <div className="relative w-full min-w-48 flex-1 sm:max-w-xs"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input variant="search" aria-label="Search generated students" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search student" className="w-full" /></div>
         <Select value={levelFilter} onValueChange={(value) => setLevelFilter(value as DevelopmentInterventionLevel | "all")}>
-          <Select.Trigger className="w-full bg-white sm:w-52"><Select.Value placeholder="All Intervention Levels" /></Select.Trigger>
+          <Select.Trigger className="w-full sm:w-52"><Select.Value placeholder="All Intervention Levels" /></Select.Trigger>
           <Select.Content><Select.Item value="all">All Intervention Levels</Select.Item>{Object.entries(INTERVENTION_LABELS).map(([value, label]) => <Select.Item key={value} value={value}>{label}</Select.Item>)}</Select.Content>
         </Select>
       </div>

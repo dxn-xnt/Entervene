@@ -967,7 +967,7 @@ export default function SubjectLessonTab({
               <div className="w-full min-w-0">
                 <div className="mb-4 flex w-full flex-wrap items-center justify-between gap-3">
                   <Select value={lessonFilter} onValueChange={setLessonFilter}>
-                    <Select.Trigger aria-label="Filter lessons" className="h-10 w-full max-w-112 text-sm">
+                    <Select.Trigger aria-label="Filter lessons" className="h-10 w-full max-w-112">
                       <Select.Value placeholder="All lessons" />
                     </Select.Trigger>
                     <Select.Content className="max-h-72 overflow-y-auto border-2 border-black">
@@ -983,7 +983,7 @@ export default function SubjectLessonTab({
                     value={sortAsc ? "oldest" : "newest"}
                     onValueChange={(value) => setSortAsc(value === "oldest")}
                   >
-                    <Select.Trigger className="h-10 w-44 text-sm sm:w-48">
+                    <Select.Trigger className="h-10 w-44 sm:w-48">
                       <Select.Value placeholder="Sort by" />
                     </Select.Trigger>
                     <Select.Content className="border-2 border-black">

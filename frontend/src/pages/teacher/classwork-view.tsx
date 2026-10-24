@@ -1197,7 +1197,7 @@ export default function ClassworkView({
                             setSubmissionSort(value as "name" | "score")
                           }
                         >
-                          <Select.Trigger className="h-8 text-sm shadow-none">
+                          <Select.Trigger className="h-8 shadow-none">
                             <Select.Value placeholder="Sort by" />
                           </Select.Trigger>
                           <Select.Content>

@@ -191,7 +191,8 @@ export default function AdminSubjectLevel() {
                       <label className="relative min-w-0">
                         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                         <Input
-                          className="h-10 w-full pl-9 sm:w-72"
+                          variant="search"
+                          className="w-full sm:w-72"
                           value={search}
                           onChange={(event) => setSearch(event.target.value)}
                           placeholder="Search name, code, group"
@@ -203,7 +204,7 @@ export default function AdminSubjectLevel() {
                           setStatus(value as SubjectStatus | "all")
                         }
                       >
-                        <Select.Trigger className="h-10 w-full sm:w-40">
+                        <Select.Trigger className="w-full sm:w-40">
                           <Select.Value />
                         </Select.Trigger>
                         <Select.Content>

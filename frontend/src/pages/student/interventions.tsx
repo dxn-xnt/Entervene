@@ -5,7 +5,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
-import { Empty } from "@/components/retroui/Empty";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { routes } from "@/../routes";
 import {
   listMyReviewers,
@@ -17,7 +17,7 @@ import {
   type StudentPersistentIntervention,
 } from "@/lib/student-persistent-interventions-api";
 import IconContainer from "@/components/icon-container";
-import { Shield } from "lucide-react";
+import { ClipboardList, History, Shield } from "lucide-react";
 import { formatDate } from "@/lib/formatters";
 
 export default function StudentInterventions() {
@@ -215,8 +215,8 @@ export default function StudentInterventions() {
                         </p>
 
                         {/* Dashed practice notice container */}
-                        <div className="rounded border-2 border-dashed border-border p-4 text-xs sm:text-sm text-muted-foreground font-normal">
-                          {item.activities && item.activities.length > 0 ? (
+                        {item.activities && item.activities.length > 0 ? (
+                          <div className="rounded border-2 border-dashed border-border p-4 text-xs sm:text-sm text-muted-foreground font-normal">
                             <div className="space-y-2">
                               <p className="font-semibold text-foreground">
                                 Available practice activities:
@@ -241,10 +241,16 @@ export default function StudentInterventions() {
                                 ))}
                               </ul>
                             </div>
-                          ) : (
-                            "Practice activities are on their way. We'll let you know when the first one is ready."
-                          )}
-                        </div>
+                          </div>
+                        ) : (
+                          <StudentEmptyState
+                            embedded
+                            icon={<ClipboardList />}
+                            className="shadow-none"
+                            title="No practice activities yet"
+                            description="Practice activities are on their way. We'll let you know when the first one is ready."
+                          />
+                        )}
 
                         {/* Action button */}
                         <div className="pt-1">
@@ -258,7 +264,7 @@ export default function StudentInterventions() {
                                   : routes.student.interventionView
                               )
                             }
-                            className="font-bold"
+                            className="gap-2 font-bold"
                           >
                             Read the review
                           </Button>
@@ -275,14 +281,11 @@ export default function StudentInterventions() {
                   </h3>
 
                   {resolvedInterventions.length === 0 ? (
-                    <Empty className="py-8 border-2 border-border">
-                      <Empty.Content>
-                        <Empty.Title>Nothing here yet.</Empty.Title>
-                        <Empty.Description>
-                          Finished support will be saved here so you can look back on it.
-                        </Empty.Description>
-                      </Empty.Content>
-                    </Empty>
+                    <StudentEmptyState
+                      icon={<History />}
+                      title="No past support yet"
+                      description="Finished support will be saved here so you can look back on it."
+                    />
                   ) : (
                     <div className="space-y-3">
                       {resolvedInterventions.map((item) => (

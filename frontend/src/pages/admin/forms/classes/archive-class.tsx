@@ -2,6 +2,7 @@
 
 import type { ClassListItem } from "@/types/adminClasses";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 
 export default function ArchiveClass({ classRecord, isArchiving, error, onClose, onConfirm }: {
   classRecord: ClassListItem;
@@ -24,7 +25,7 @@ export default function ArchiveClass({ classRecord, isArchiving, error, onClose,
       onConfirm={onConfirm}
       size="md"
     >
-      {error && <p className="border-2 border-destructive bg-destructive/10 p-3 text-sm font-semibold text-destructive">{error}</p>}
+      <AdminValidationAlert message={error} />
     </ConfirmDialog>
   );
 }

@@ -91,7 +91,8 @@ export function SubjectPicker({
       <label className="relative min-w-0">
         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
         <Input
-          className="h-10 w-full pl-9"
+          variant="search"
+          className="w-full"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={searchPlaceholder}

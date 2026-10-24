@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/To
 import { Select } from "@/components/retroui/Select";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
+import { FormMessage } from "@/components/retroui/FormMessage";
 import { RoleBadge } from "@/components/role-badge";
 
 type SetupErrors = {
@@ -101,6 +102,15 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
 
   function updateSection(localId: string, changes: Partial<ManualSectionDraft>) {
     setSections((current) => current.map((section) => section.localId === localId ? { ...section, ...changes } : section));
+    setErrors((current) => {
+      const row = { ...current.sectionRows[localId] };
+      if (changes.sectionName && availableSections.some((item) => item.section_name === changes.sectionName)) delete row.sectionName;
+      if (changes.adviserStaffId) delete row.adviserStaffId;
+      const sectionRows = { ...current.sectionRows };
+      if (Object.keys(row).length) sectionRows[localId] = row;
+      else delete sectionRows[localId];
+      return { ...current, sections: sections.length ? undefined : current.sections, sectionRows };
+    });
   }
 
   function validate() {
@@ -168,7 +178,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
 
   return (
     <div className="grid gap-5">
-      <Field label="Academic Year">
+      <Field label="Academic Year" isRequired>
         <Select value={selectedYearId} onValueChange={(value) => {
           setSelectedYearId(value);
           setOptions(null);
@@ -183,12 +193,12 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
         </Select>
       </Field>
       {noAdvisers && (
-        <div className="rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-200 font-semibold">
+        <Text as="p" className="text-xs text-muted-foreground">
           All advisers are currently assigned for the active academic year. You can create sections after freeing an adviser slot.
-        </div>
+        </Text>
       )}
 
-      <Field label="Academic Level">
+      <Field label="Academic Level" isRequired>
         <Select
           disabled={noLevels}
           value={academicLevelId}
@@ -196,9 +206,10 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
             const newLevelId = e.target.value;
             setAcademicLevelId(newLevelId);
             setSections((current) => current.map((s) => ({ ...s, sectionName: "", pathway: "general" })));
+            setErrors((current) => ({ ...current, academicLevel: undefined, sectionRows: {} }));
           }}
         >
-          <Select.Trigger className="w-full">
+          <Select.Trigger id="new-class-academic-level" className="w-full aria-[invalid=true]:border-destructive" aria-invalid={!!errors.academicLevel} aria-describedby={errors.academicLevel ? "new-class-academic-level-error" : undefined}>
             <Select.Value placeholder="Select level" />
           </Select.Trigger>
           <Select.Content>
@@ -211,11 +222,11 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
             </Select.Group>
           </Select.Content>
         </Select>
-        {errors.academicLevel && <InlineError message={errors.academicLevel} />}
-        {!configuredSections.length && (
+        {errors.academicLevel && <InlineError id="new-class-academic-level-error" message={errors.academicLevel} />}
+        {!errors.academicLevel && !configuredSections.length && (
           <InlineError message="No official sections are configured for this grade and academic year. Configure them in System Settings or use another year." />
         )}
-        {configuredSections.length > 0 && !availableSections.length && (
+        {!errors.academicLevel && configuredSections.length > 0 && !availableSections.length && (
           <InlineError message={`All configured ${selectedLevel?.level_name || "Grade"} sections for this academic year already have classes. You can manage the existing classes or configure another authorized section.`} />
         )}
       </Field>
@@ -226,10 +237,10 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
           {errors.sections && <InlineError message={errors.sections} />}
         </div>
 
-        <div className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} gap-2 text-xs font-semibold text-muted-foreground px-1`}>
-          <span>Section Name</span>
+        <div className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} gap-2 px-1 text-sm font-medium text-foreground`}>
+          <span>Section Name <span className="text-red-500">*</span></span>
           {showPathwayColumn && <span>Strand / Pathway</span>}
-          <span>Adviser</span>
+          <span>Adviser <span className="text-red-500">*</span></span>
           <span />
         </div>
 
@@ -248,14 +259,14 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
                   const chosen = availableSections.find((option) => option.section_name === name);
                   updateSection(section.localId, { sectionName: name, pathway: chosen?.pathway_code || "general" });
                 }}>
-                  <Select.Trigger className="w-full"><Select.Value placeholder="Select official section" /></Select.Trigger>
+                  <Select.Trigger id={`new-class-section-${section.localId}`} className="w-full aria-[invalid=true]:border-destructive" aria-invalid={!!rowErrors?.sectionName} aria-describedby={rowErrors?.sectionName ? `new-class-section-error-${section.localId}` : undefined}><Select.Value placeholder="Select official section" /></Select.Trigger>
                   <Select.Content><Select.Group>
                     {availableSections
                       .filter((option) => option.section_name === section.sectionName || !sections.some((other) => other.localId !== section.localId && other.sectionName === option.section_name))
                       .map((option) => <Select.Item key={option.id} value={option.section_name}>{option.section_name}{option.pathway_name ? ` — ${option.pathway_name}` : ""}</Select.Item>)}
                   </Select.Group></Select.Content>
                 </Select>
-                {rowErrors?.sectionName && <InlineError message={rowErrors.sectionName} />}
+                {rowErrors?.sectionName && <InlineError id={`new-class-section-error-${section.localId}`} message={rowErrors.sectionName} />}
               </div>
               {showPathwayColumn && (
                 <div>
@@ -268,7 +279,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
                   value={section.adviserStaffId}
                   onChange={(e) => updateSection(section.localId, { adviserStaffId: e.target.value })}
                 >
-                  <Select.Trigger className="w-full">
+                  <Select.Trigger className="w-full aria-[invalid=true]:border-destructive" aria-invalid={!!rowErrors?.adviserStaffId} aria-describedby={rowErrors?.adviserStaffId ? `new-class-adviser-error-${section.localId}` : undefined}>
                     <Select.Value placeholder="Select adviser" />
                   </Select.Trigger>
                   <Select.Content>
@@ -286,7 +297,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
                     </Select.Group>
                   </Select.Content>
                 </Select>
-                {rowErrors?.adviserStaffId && <InlineError message={rowErrors.adviserStaffId} />}
+                {rowErrors?.adviserStaffId && <InlineError id={`new-class-adviser-error-${section.localId}`} message={rowErrors.adviserStaffId} />}
               </div>
               <Tooltip>
                 <TooltipTrigger render={<span className="inline-flex"><Button
@@ -337,8 +348,8 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
   );
 }
 
-function InlineError({ message }: { message: string }) {
-  return <p className="mt-1 text-xs font-semibold text-destructive">{message}</p>;
+function InlineError({ message, id }: { message: string; id?: string }) {
+  return <FormMessage id={id} className="mt-1 text-xs">{message}</FormMessage>;
 }
 
 function StatePanel({ message, detail, children }: { message: string; detail?: string; children?: React.ReactNode }) {

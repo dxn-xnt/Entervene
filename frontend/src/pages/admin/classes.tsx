@@ -219,7 +219,7 @@ export default function AdminClasses() {
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {notice && (
-                <p className="border-2 border-black bg-[#bbf7d0] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">
+                <p role="status" className="text-sm text-muted-foreground">
                   {notice}
                 </p>
               )}
@@ -247,10 +247,11 @@ export default function AdminClasses() {
                 <label className="relative">
                   <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                   <Input
+                    variant="search"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="Search class or adviser..."
-                    className="h-10 w-full border-black pl-9 pr-3"
+                    className="w-full"
                   />
                 </label>
                 <Select value={yearFilter}

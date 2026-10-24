@@ -6,6 +6,8 @@ import { useNavigate } from "react-router-dom";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -35,6 +37,7 @@ import {
 } from "@/lib/settings-api";
 import { useSettings } from "@/context/SettingsContext";
 import {
+  ApiRequestError,
   getGradingTemplates,
   fetchPathways,
   updatePathway,
@@ -73,17 +76,20 @@ export default function AdminSystemSettings() {
   const [averageReason, setAverageReason] = React.useState("");
   const [averageConfirmed, setAverageConfirmed] = React.useState(false);
   const [averageError, setAverageError] = React.useState("");
+  const [averageValidationAttempt, setAverageValidationAttempt] = React.useState(0);
 
   // Academic calendar & periods
   const [schoolDayStart, setSchoolDayStart] = React.useState("06:00");
   const [schoolDayEnd, setSchoolDayEnd] = React.useState("20:00");
   const [isSavingSchoolHours, setIsSavingSchoolHours] = React.useState(false);
+  const [schoolHoursError, setSchoolHoursError] = React.useState("");
 
   // Teacher Workload Caps
   const [minSubjects, setMinSubjects] = React.useState("4");
   const [maxSubjects, setMaxSubjects] = React.useState("6");
   const [maxMinutes, setMaxMinutes] = React.useState("360");
   const [isSavingTeacherCaps, setIsSavingTeacherCaps] = React.useState(false);
+  const [teacherCapsError, setTeacherCapsError] = React.useState("");
 
   const [academicYears, setAcademicYears] = React.useState<
     AcademicYearSettingItem[]
@@ -345,6 +351,7 @@ export default function AdminSystemSettings() {
   const handleSaveThresholds = async (action: "edit" | "confirm_legacy" | "initialize_manual" | "copy_previous") => {
     if (!averagePolicy || !averageConfirmed || !averageReason.trim()) {
       setAverageError("Select a year, enter an audit reason, and confirm this change.");
+      setAverageValidationAttempt((attempt) => attempt + 1);
       return;
     }
     setIsSavingThresholds(true);
@@ -370,7 +377,10 @@ export default function AdminSystemSettings() {
       showToast("Academic-year passing policy saved.");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save threshold.";
-      setAverageError(message); showToast(message, "error");
+      if (err instanceof ApiRequestError && (err.status === 400 || err.status === 422)) {
+        setAverageError(message);
+        setAverageValidationAttempt((attempt) => attempt + 1);
+      } else showToast(message, "error");
     } finally {
       setIsSavingThresholds(false);
     }
@@ -378,7 +388,7 @@ export default function AdminSystemSettings() {
 
   const handleSaveTeacherCaps = async () => {
     if (parseInt(minSubjects) > parseInt(maxSubjects)) {
-      showToast("Minimum subjects cannot exceed Maximum subjects.", "error");
+      setTeacherCapsError("Minimum subjects cannot exceed maximum subjects.");
       return;
     }
     setIsSavingTeacherCaps(true);
@@ -412,7 +422,7 @@ export default function AdminSystemSettings() {
         (parseInt(schoolDayEnd.split(":")[0]) || 0) * 60 +
         (parseInt(schoolDayEnd.split(":")[1]) || 0);
       if (startMins >= endMins) {
-        showToast("Start time must be before end time.", "error");
+        setSchoolHoursError("Start time must be before end time.");
         return;
       }
       await saveSingleSetting("school_day_start", schoolDayStart);
@@ -587,10 +597,11 @@ export default function AdminSystemSettings() {
                           Day Start
                         </Text>
                         <Input
+                          id="school-day-start"
                           className="w-full min-w-0 shadow-none transition-all hover:shadow-md focus:shadow-md focus-visible:shadow-md"
                           type="time"
                           value={schoolDayStart}
-                          onChange={(e) => setSchoolDayStart(e.target.value)}
+                          onChange={(e) => { setSchoolDayStart(e.target.value); if (e.target.value < schoolDayEnd) setSchoolHoursError(""); }}
                         />
                       </div>
                       <div className="flex min-w-0 flex-col gap-1 sm:w-1/3">
@@ -598,11 +609,15 @@ export default function AdminSystemSettings() {
                           Day End
                         </Text>
                         <Input
+                          id="school-day-end"
+                          aria-invalid={!!schoolHoursError}
+                          aria-describedby={schoolHoursError ? "school-day-end-error" : undefined}
                           className="w-full min-w-0 shadow-none transition-all hover:shadow-md focus:shadow-md focus-visible:shadow-md"
                           type="time"
                           value={schoolDayEnd}
-                          onChange={(e) => setSchoolDayEnd(e.target.value)}
+                          onChange={(e) => { setSchoolDayEnd(e.target.value); if (schoolDayStart < e.target.value) setSchoolHoursError(""); }}
                         />
+                        <FormMessage id="school-day-end-error">{schoolHoursError}</FormMessage>
                       </div>
                     </div>
                   </div>
@@ -632,6 +647,7 @@ export default function AdminSystemSettings() {
                   </Button>
                 </Card.Header>
                 <Card.Content className="flex flex-col gap-4">
+                  <AdminValidationAlert message={averageError === "Select a year, enter an audit reason, and confirm this change." ? null : averageError} attempt={averageValidationAttempt} />
                   <label className="flex flex-col gap-1 text-sm font-semibold">Academic year
                     <Select value={averageYearId} onValueChange={(value) => { setAveragePolicy(null); setAverageYearId(value); }}><Select.Trigger className="w-full"><Select.Value placeholder="Select academic year" /></Select.Trigger><Select.Content><Select.Group>{academicYears.map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}{year.is_active ? " (active)" : ""}</Select.Item>)}</Select.Group></Select.Content></Select>
                   </label>
@@ -659,9 +675,9 @@ export default function AdminSystemSettings() {
                       />
                     </div>
                   </div>
-                  <label className="flex flex-col gap-1 text-sm font-semibold">Audit reason<Input value={averageReason} onChange={(event) => setAverageReason(event.target.value)} /></label>
-                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={averageConfirmed} onChange={(event) => setAverageConfirmed(event.target.checked)} /> I confirm this year-specific policy action.</label>
-                  {averageError ? <p role="alert" className="border-2 border-black bg-red-100 p-2 text-sm">{averageError}</p> : null}
+                  <label className="flex flex-col gap-1 text-sm font-semibold">Audit reason<Input id="average-audit-reason" value={averageReason} aria-invalid={averageError === "Select a year, enter an audit reason, and confirm this change." && !averageReason.trim()} aria-describedby={averageError === "Select a year, enter an audit reason, and confirm this change." && !averageReason.trim() ? "average-audit-reason-error" : undefined} onChange={(event) => { setAverageReason(event.target.value); if (event.target.value.trim() && averageConfirmed) setAverageError(""); }} />{averageError === "Select a year, enter an audit reason, and confirm this change." && !averageReason.trim() && <FormMessage id="average-audit-reason-error">Enter an audit reason.</FormMessage>}</label>
+                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={averageConfirmed} onChange={(event) => { setAverageConfirmed(event.target.checked); if (event.target.checked && averageReason.trim()) setAverageError(""); }} /> I confirm this year-specific policy action.</label>
+                  {averageError === "Select a year, enter an audit reason, and confirm this change." && !averageConfirmed && <FormMessage>Confirm this policy action.</FormMessage>}
                 </Card.Content>
               </Card>
 
@@ -1148,8 +1164,7 @@ export default function AdminSystemSettings() {
                     className="w-full justify-center whitespace-nowrap sm:w-auto"
                     onClick={handleSaveTeacherCaps}
                     disabled={
-                      isSavingTeacherCaps ||
-                      parseInt(minSubjects) > parseInt(maxSubjects)
+                      isSavingTeacherCaps
                     }
                   >
                     <Save className="size-3.5 mr-2" />
@@ -1167,7 +1182,7 @@ export default function AdminSystemSettings() {
                         min={0}
                         className="w-full"
                         value={minSubjects}
-                        onChange={(e) => setMinSubjects(e.target.value)}
+                        onChange={(e) => { setMinSubjects(e.target.value); if (parseInt(e.target.value) <= parseInt(maxSubjects)) setTeacherCapsError(""); }}
                       />
                     </div>
                     <div className="flex flex-col gap-2 w-full">
@@ -1175,12 +1190,16 @@ export default function AdminSystemSettings() {
                         Max Subjects/Day
                       </label>
                       <Input
+                        id="teacher-max-subjects"
+                        aria-invalid={!!teacherCapsError || parseInt(minSubjects) > parseInt(maxSubjects)}
+                        aria-describedby={teacherCapsError || parseInt(minSubjects) > parseInt(maxSubjects) ? "teacher-max-subjects-error" : undefined}
                         type="number"
                         min={1}
                         className="w-full"
                         value={maxSubjects}
-                        onChange={(e) => setMaxSubjects(e.target.value)}
+                        onChange={(e) => { setMaxSubjects(e.target.value); if (parseInt(minSubjects) <= parseInt(e.target.value)) setTeacherCapsError(""); }}
                       />
+                      {parseInt(minSubjects) > parseInt(maxSubjects) && <FormMessage id="teacher-max-subjects-error">Minimum subjects cannot exceed maximum subjects.</FormMessage>}
                     </div>
                     <div className="flex flex-col gap-2 w-full">
                       <label className="text-sm font-semibold">
@@ -1195,13 +1214,6 @@ export default function AdminSystemSettings() {
                       />
                     </div>
                   </div>
-                  {parseInt(minSubjects) > parseInt(maxSubjects) ? (
-                    <p className="-my-2! font-sans text-sm text-red-600">
-                      Minimum subjects cannot exceed maximum subjects.
-                    </p>
-                  ) : (
-                    ``
-                  )}
                 </Card.Content>
               </Card>
 
