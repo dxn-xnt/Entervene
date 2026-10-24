@@ -4,6 +4,7 @@ import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
+import { useToast } from "@/components/retroui/Toast";
 import { createOfficialSection, getOfficialSections, updateOfficialSection, type AcademicPathwayRead, type PathwayScopeRead } from "@/lib/api";
 import type { OfficialSectionOption } from "@/types/adminClasses";
 import type { AcademicLevelSettingItem } from "@/lib/settings-api";
@@ -22,7 +23,7 @@ export default function OfficialSectionsSettings({ academicYearId, levels, pathw
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const toast = useToast();
 
   useEffect(() => {
     if (!levelId && levels.length) setLevelId(String(levels[0].academic_level_id));
@@ -55,20 +56,21 @@ export default function OfficialSectionsSettings({ academicYearId, levels, pathw
     if (!levelId || !name.trim() || (requiresPathway && !pathwayId) || saving) return;
     setSaving(true);
     setError("");
-    setSuccess("");
     try {
       if (editingId != null) {
         const updated = await updateOfficialSection(editingId, { section_name: name.trim(), pathway_id: requiresPathway ? Number(pathwayId) : null });
         setSections((current) => current.map((item) => item.id === editingId ? updated : item));
-        setSuccess("Official section updated.");
+        toast.success({ title: "Official section updated" });
       } else {
         const created = await createOfficialSection({ academic_year_id: academicYearId, academic_level_id: Number(levelId), section_name: name.trim(), pathway_id: requiresPathway ? Number(pathwayId) : null });
         setSections((current) => [...current, created]);
-        setSuccess("Official section added.");
+        toast.success({ title: "Official section added" });
       }
       resetDraft();
     } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : "Unable to save official section.");
+      const message = cause instanceof Error ? cause.message : "Unable to save official section.";
+      setError(message);
+      toast.error({ title: "Unable to save official section", description: message });
     } finally {
       setSaving(false);
     }
@@ -76,12 +78,14 @@ export default function OfficialSectionsSettings({ academicYearId, levels, pathw
 
   async function toggle(section: OfficialSectionOption) {
     setError("");
-    setSuccess("");
     try {
       const updated = await updateOfficialSection(section.id, { is_active: !section.is_active });
       setSections((current) => current.map((item) => item.id === section.id ? updated : item));
+      toast.success({ title: updated.is_active ? "Official section activated" : "Official section deactivated" });
     } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : "Unable to update official section.");
+      const message = cause instanceof Error ? cause.message : "Unable to update official section.";
+      setError(message);
+      toast.error({ title: "Unable to update official section", description: message });
     }
   }
 
@@ -111,7 +115,6 @@ export default function OfficialSectionsSettings({ academicYearId, levels, pathw
         </div>
         {editingId != null && <Button variant="outline" className="w-fit" onClick={resetDraft}>Cancel edit</Button>}
         {error && <Text as="p" className="text-sm text-destructive">{error}</Text>}
-        {success && <Text as="p" className="text-sm text-primary">{success}</Text>}
         {loading ? <Text as="p">Loading sections...</Text> : !gradeSections.length ? <Text as="p" className="text-sm text-muted-foreground">No official sections configured for this grade and academic year.</Text> : (
           <div className="grid gap-2">
             {gradeSections.map((section) => <div key={section.id} className="flex flex-wrap items-center justify-between gap-2 border-2 border-border p-2 text-sm">

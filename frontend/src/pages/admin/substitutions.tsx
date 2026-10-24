@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Empty } from "@/components/retroui/Empty";
-import { toast } from "sonner";
+import { useToast } from "@/components/retroui/Toast";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -48,6 +48,7 @@ const substitutionTabs: Array<TabItem<SubstitutionTab>> = [
 ];
 
 export default function AdminSubstitutions() {
+  const toast = useToast();
   const [substitutions, setSubstitutions] = React.useState<TeacherSubstitution[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -96,10 +97,10 @@ export default function AdminSubstitutions() {
     setActionLoadingId(sub.substitution_id);
     try {
       await endSubstitutionEarly(sub.substitution_id);
-      toast.success("Substitution ended successfully. Coverage ended today.");
+      toast.success({ title: "Substitution ended", description: "Coverage ended today." });
       await fetchSubstitutions();
     } catch (err: unknown) {
-      toast.error(getErrorMessage(err, "Failed to end substitution."));
+      toast.error({ title: "Unable to end substitution", description: getErrorMessage(err, "Failed to end substitution.") });
     } finally {
       setActionLoadingId(null);
     }
@@ -113,10 +114,10 @@ export default function AdminSubstitutions() {
     setActionLoadingId(batchId);
     try {
       await endBatchSubstitutionsEarly(batchId);
-      toast.success(`Successfully concluded all active loads for ${teacherName}'s leave program.`);
+      toast.success({ title: "Substitution program ended", description: `All active loads for ${teacherName} were concluded.` });
       await fetchSubstitutions();
     } catch (err: unknown) {
-      toast.error(getErrorMessage(err, "Failed to end program substitutions."));
+      toast.error({ title: "Unable to end substitution program", description: getErrorMessage(err, "Failed to end program substitutions.") });
     } finally {
       setActionLoadingId(null);
     }
@@ -130,10 +131,10 @@ export default function AdminSubstitutions() {
     setActionLoadingId(sub.substitution_id);
     try {
       await cancelSubstitution(sub.substitution_id);
-      toast.success("Substitution cancelled.");
+      toast.success({ title: "Substitution cancelled" });
       await fetchSubstitutions();
     } catch (err: unknown) {
-      toast.error(getErrorMessage(err, "Failed to cancel substitution."));
+      toast.error({ title: "Unable to cancel substitution", description: getErrorMessage(err, "Failed to cancel substitution.") });
     } finally {
       setActionLoadingId(null);
     }
@@ -456,7 +457,10 @@ export default function AdminSubstitutions() {
           <AdjustSubstitutionModal
             target={selectedAdjustTarget}
             onClose={() => setSelectedAdjustTarget(null)}
-            onSuccess={fetchSubstitutions}
+            onSuccess={() => {
+              toast.success({ title: "Substitution end date updated" });
+              void fetchSubstitutions();
+            }}
           />
         </Dialog>
       )}

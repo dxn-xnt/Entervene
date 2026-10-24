@@ -7,6 +7,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Text } from "@/components/retroui/Text";
 import { Badge } from "@/components/retroui/Badge";
+import { useToast } from "@/components/retroui/Toast";
 import { adjustSubstitutionEndDate, adjustBatchSubstitutionsEndDate, type TeacherSubstitution } from "@/lib/api";
 import { AlertCircle, Calendar, Layers, Loader2 } from "lucide-react";
 
@@ -32,6 +33,7 @@ export default function AdjustSubstitutionModal({
   onClose,
   onSuccess,
 }: AdjustSubstitutionModalProps) {
+  const toast = useToast();
   const isBatch = target.type === "batch";
   const initialEndDate = isBatch ? (target.currentEndDate || "") : (target.substitution?.end_date || "");
   const startDate = isBatch ? (target.startDate || "") : (target.substitution?.start_date || "");
@@ -58,8 +60,10 @@ export default function AdjustSubstitutionModal({
       }
       onSuccess();
       onClose();
-    } catch (err: any) {
-      setErrorMsg(err?.message || "Failed to adjust substitution end date.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to adjust substitution end date.";
+      setErrorMsg(message);
+      toast.error({ title: "Unable to update substitution end date", description: message });
     } finally {
       setIsSubmitting(false);
     }
