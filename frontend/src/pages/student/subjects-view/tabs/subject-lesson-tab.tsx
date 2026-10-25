@@ -18,7 +18,7 @@ import IconContainer from "@/components/icon-container";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/student/button";
 import { Select } from "@/components/retroui/Select";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
 import { StudentLessonMastery } from "@/components/student-lesson-mastery";

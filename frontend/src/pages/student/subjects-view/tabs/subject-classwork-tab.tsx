@@ -23,7 +23,7 @@ import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { Alert } from "@/components/retroui/Alert";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/student/button";
 import { useToast } from "@/components/retroui/Toast";
 import { QuizTextAnswerInput, QuizTextAnswerSummary } from "@/components/quiz/student-quiz-answer";
 import { API_URL, apiFetch } from "@/lib/api";

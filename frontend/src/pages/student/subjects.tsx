@@ -7,7 +7,7 @@ import { LoadingPanel } from "@/components/loading-panel";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { BookOpen } from "lucide-react";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/student/button";
 import { StudentSubjectSectionCard } from "@/components/student/student-subject-section-card";
 
 interface EnrolledSubject {

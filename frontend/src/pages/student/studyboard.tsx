@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/student/button";
 import { Text } from "@/components/retroui/Text";
 import { Badge } from "@/components/retroui/Badge";
 import { Progress } from "@/components/retroui/Progress";
@@ -385,7 +385,7 @@ const StoryBoard = () => {
                           </div>
                           <Button
                             variant="link"
-                            className="p-0 text-sm text-foreground inline-flex items-center gap-1 font-semibold hover:underline"
+                            className="p-0 text-sm text-foreground inline-flex items-center font-semibold hover:underline"
                             onClick={(e) => {
                               e.stopPropagation();
                               navigate(routes.student.subjects);
