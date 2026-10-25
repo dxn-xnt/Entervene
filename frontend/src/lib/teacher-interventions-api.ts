@@ -126,6 +126,7 @@ export interface RemediationResource {
   lesson: string; topic: string; attachments: string[]; classwork_type?: string;
   access: "ALREADY_ACCESSIBLE" | "PLANNING_ONLY"; ai_read: "METADATA_ONLY";
   recommended: boolean; match_reason: string | null; match_level: "COMPETENCY" | "LESSON" | "SOURCE_ACTIVITY" | null; match_rank: number;
+  is_graded?: boolean;
 }
 export interface RemediationFocus {
   basis: "FROZEN_TRIGGER_DIAGNOSIS";
@@ -149,14 +150,47 @@ export interface RemediationPlan {
   teacher_choice: RemediationFormat | null;
   grade_treatment?: "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | null;
   original_exam_assignment_id?: number | null;
+  target_assignment_ids?: number[];
+  score_adjustment_cap?: number;
   selected_resources: Array<{ kind: "LESSON" | "CLASSWORK"; id: number }>;
   ai_suggestion: null | { recommended_format: RemediationFormat; reason: string; focus: Array<{ competency: string }>; evidence_used: Record<string, unknown> };
 }
 export interface OriginalExamination { assignment_id: number; title: string; subtype: "SUMMATIVE_1" | "SUMMATIVE_2" | "TERM_EXAM"; score: number; total_points: number }
-export interface RemediationWorkspace { plan: RemediationPlan; resources: RemediationResource[]; focus: RemediationFocus; progress: RemediationProgress; original_exams: OriginalExamination[] }
+export interface ClassworkScorePreview {
+  assignment_id: number;
+  title?: string | null;
+  original_score: number;
+  max_points: number;
+  max_adjusted_score: number;
+  possible_gain: number;
+  cap_percentage: number;
+  was_adjusted: boolean;
+  was_capped: boolean;
+}
+export interface ScoreAdjustmentPreviewResponse {
+  score_adjustment_cap: number;
+  previews: ClassworkScorePreview[];
+  disclaimer: string;
+}
+export interface RemediationWorkspace {
+  plan: RemediationPlan;
+  resources: RemediationResource[];
+  focus: RemediationFocus;
+  progress: RemediationProgress;
+  original_exams: OriginalExamination[];
+  score_previews?: ClassworkScorePreview[];
+}
 export const getRemediationWorkspace = (id: number) => read<RemediationWorkspace>(`${base}/${id}/remediation`);
-export const saveRemediationPlan = (id: number, plan: Pick<RemediationPlan, "teacher_choice" | "selected_resources" | "grade_treatment"> & Partial<Pick<RemediationPlan, "original_exam_assignment_id">>) => read<RemediationWorkspace>(`${base}/${id}/remediation`, "PUT", plan);
+export const saveRemediationPlan = (id: number, plan: Pick<RemediationPlan, "teacher_choice" | "selected_resources" | "grade_treatment"> & Partial<Pick<RemediationPlan, "original_exam_assignment_id" | "target_assignment_ids" | "score_adjustment_cap">>) => read<RemediationWorkspace>(`${base}/${id}/remediation`, "PUT", plan);
 export const generateRemediationAdvisory = (id: number) => read<RemediationWorkspace>(`${base}/${id}/remediation/advisory`, "POST");
+export const previewScoreAdjustment = (
+  id: number,
+  payload: {
+    score_adjustment_cap: number;
+    target_assignment_ids: number[];
+    items?: Array<{ assignment_id: number; original_score?: number; max_points?: number; title?: string | null }>;
+  }
+) => read<ScoreAdjustmentPreviewResponse>(`${base}/${id}/remediation/score-preview`, "POST", payload);
 
 export function matchingCandidate(prediction: DevelopmentCurrentTermListItem, candidates: TeacherInterventionSummary[]): TeacherInterventionSummary | undefined {
   return candidates.find((candidate) => candidate.status === "CANDIDATE"
