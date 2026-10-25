@@ -24,8 +24,9 @@ from app.services.intervention.InterventionReviewerGenerationService import gene
 from app.services.intervention.InterventionReviewerDeliveryService import send_reviewer
 from app.services.ai.UsageGuard import actor
 from app.services.intervention.InterventionRemediationService import (
-    PlanUpdate, generate_advisory, get_workspace, save_plan,
+    PlanUpdate, generate_advisory, get_workspace, preview_score_adjustment, save_plan,
 )
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def require_development_intervention_api() -> None:
@@ -83,6 +84,39 @@ async def generate_remediation_endpoint(
         return await generate_advisory(db, staff_id, intervention_id)
     finally:
         actor.reset(token)
+
+
+class ScorePreviewItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    assignment_id: int
+    original_score: float | None = None
+    max_points: float | None = None
+    title: str | None = None
+
+
+class ScoreAdjustmentPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    score_adjustment_cap: float = 75.0
+    target_assignment_ids: list[int] = Field(default_factory=list)
+    items: list[ScorePreviewItem] = Field(default_factory=list)
+
+
+@router.post("/{intervention_id}/remediation/score-preview")
+def preview_score_adjustment_endpoint(
+    intervention_id: int,
+    body: ScoreAdjustmentPreviewRequest,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return preview_score_adjustment(
+        db=db,
+        staff_id=staff_id,
+        intervention_id=intervention_id,
+        cap_percentage=body.score_adjustment_cap,
+        target_assignment_ids=body.target_assignment_ids,
+        items=[item.model_dump() for item in body.items],
+    )
 
 
 @router.get("/candidates", response_model=TeacherInterventionList)

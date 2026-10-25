@@ -84,6 +84,31 @@ def test_advisory_uses_provider_and_keeps_teacher_choice(candidate_context, monk
     assert result["plan"]["ai_suggestion"]["evidence_used"]["source_prediction_id"] == ctx["candidate"].source_prediction_id
 
 
+def test_changing_selected_resources_invalidates_saved_advisory(candidate_context):
+    ctx = candidate_context; db = ctx["db"]
+    _activate(ctx)
+    own = Lesson(title="Owned review", subject_id=ctx["subject"].subject_id,
+                 created_by_staff_id=_staff(ctx), is_published=False)
+    db.add(own); db.commit()
+    row = db.get(Intervention, _id(ctx))
+    row.remediation_plan = {
+        "teacher_choice": "CLASSWORK",
+        "grade_treatment": "PRACTICE_ONLY",
+        "selected_resources": [],
+        "ai_suggestion": {"recommended_format": "QUIZ", "reason": "Previously valid advice."},
+    }
+    db.commit()
+
+    saved = save_plan(db, _staff(ctx), _id(ctx), PlanUpdate(
+        teacher_choice="CLASSWORK",
+        selected_resources=[{"kind": "LESSON", "id": own.lesson_id}],
+    ))
+
+    assert saved["plan"]["teacher_choice"] == "CLASSWORK"
+    assert saved["plan"]["selected_resources"] == [{"kind": "LESSON", "id": own.lesson_id}]
+    assert saved["plan"]["ai_suggestion"] is None
+
+
 def test_groq_required_before_provider_call(candidate_context, monkeypatch):
     ctx = candidate_context; _activate(ctx)
     monkeypatch.setattr(settings, "groq_api_key", None)
@@ -129,3 +154,85 @@ def test_http_teacher_only_and_candidate_rejected(candidate_context):
         assert _http(ctx, role=role).get(path).status_code == 403
     other = _other_staff(ctx)
     assert _http(ctx, user_id=other.user_id).get(path).status_code == 404
+
+
+def test_resources_includes_lessons_and_readings_and_excludes_graded_assessments_from_recommendations(candidate_context):
+    ctx = candidate_context
+    db = ctx["db"]
+    _activate(ctx)
+    staff_id = _staff(ctx)
+    subject_id = ctx["subject"].subject_id
+
+    # 1. Create a lesson matching the focus competency
+    focus = get_workspace(db, staff_id, _id(ctx))["focus"]
+    focus_comp_id = focus["competency_ids"][0] if focus["competency_ids"] else None
+
+    matching_lesson = Lesson(
+        title="Matching Lesson Review",
+        subject_id=subject_id,
+        created_by_staff_id=staff_id,
+        competency_id=focus_comp_id,
+        is_published=True,
+    )
+    # 2. Create an instructional non-graded reading
+    reading = Classwork(
+        title="Instructional Reading Handout",
+        classwork_type="READING",
+        is_graded=False,
+        subject_id=subject_id,
+        created_by_staff_id=staff_id,
+        is_published=True,
+    )
+    # 3. Create a graded quiz (should be excluded from recommendations)
+    graded_quiz = Classwork(
+        title="Chapter 1 Graded Quiz",
+        classwork_type="QUIZ",
+        is_graded=True,
+        total_points=20,
+        subject_id=subject_id,
+        created_by_staff_id=staff_id,
+        is_published=True,
+    )
+    # 4. Create a graded assignment (should be excluded from recommendations)
+    graded_assignment = Classwork(
+        title="Graded Performance Homework",
+        classwork_type="ASSIGNMENT",
+        is_graded=True,
+        total_points=50,
+        subject_id=subject_id,
+        created_by_staff_id=staff_id,
+        is_published=True,
+    )
+    db.add_all([matching_lesson, reading, graded_quiz, graded_assignment])
+    db.commit()
+
+    res_list = get_workspace(db, staff_id, _id(ctx))["resources"]
+    res_titles = {r["title"]: r for r in res_list}
+
+    # Lessons and readings are present
+    assert "Matching Lesson Review" in res_titles
+    assert res_titles["Matching Lesson Review"]["kind"] == "LESSON"
+    assert res_titles["Matching Lesson Review"]["is_graded"] is False
+    if focus_comp_id:
+        assert res_titles["Matching Lesson Review"]["recommended"] is True
+
+    assert "Instructional Reading Handout" in res_titles
+    assert res_titles["Instructional Reading Handout"]["kind"] == "CLASSWORK"
+    assert res_titles["Instructional Reading Handout"]["is_graded"] is False
+
+    # Graded quiz and assignment are NOT included as study resources
+    assert "Chapter 1 Graded Quiz" not in res_titles
+    assert "Graded Performance Homework" not in res_titles
+
+    # Selecting the lesson and saving succeeds
+    saved = save_plan(
+        db,
+        staff_id,
+        _id(ctx),
+        PlanUpdate(
+            teacher_choice="CLASSWORK",
+            grade_treatment="PRACTICE_ONLY",
+            selected_resources=[{"kind": "LESSON", "id": matching_lesson.lesson_id}],
+        ),
+    )
+    assert saved["plan"]["selected_resources"] == [{"kind": "LESSON", "id": matching_lesson.lesson_id}]
