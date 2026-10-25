@@ -241,9 +241,12 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
         recipient_student_id=row.student_id,
     ).first()
     current_plan = row.remediation_plan or {}
+    current_treatment = current_plan.get("grade_treatment")
+    if current_plan.get("teacher_choice") in {"QUIZ", "CLASSWORK"} and current_treatment is None:
+        current_treatment = "PRACTICE_ONLY"
     if existing_activity and (
         body.teacher_choice != current_plan.get("teacher_choice")
-        or requested_treatment != current_plan.get("grade_treatment")
+        or requested_treatment != current_treatment
         or requested_exam_id != current_plan.get("original_exam_assignment_id")
     ):
         raise HTTPException(409, "Remediation format and grade treatment cannot change after a targeted activity is created")
