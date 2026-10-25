@@ -158,25 +158,25 @@ export default function StudentInterventionView() {
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-6 border-t-2 border-border px-3 py-4 sm:px-4 sm:py-4 md:px-6">
-              <div className="mx-auto w-full space-y-6">
+              <div className="mx-auto w-full flex flex-col gap-4">
                 {/* Yellow Header Banner Card */}
-                <Card className="w-full flex flex-col gap-1 bg-primary border-2 border-border p-3 sm:p-4 shadow-md">
+                <div className="flex flex-col gap-2">
+                  <Card className="w-full flex flex-col gap-1 bg-primary border-2 border-border p-3 sm:p-4 shadow-md">
+                    <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
+                      {title}
+                    </h1>
+                    <p className="text-xs sm:text-sm font-medium text-foreground">
+                      {subjectName}
+                    </p>
+                  </Card>
 
-                  <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
-                    {title}
-                  </h1>
-
-                  <p className="text-xs sm:text-sm font-medium text-foreground">
-                    {subjectName}
+                  {/* Introduction paragraph */}
+                  <p className="text-sm px-1 text-muted-foreground font-normal">
+                    {introduction}
                   </p>
-                </Card>
+                </div>
 
-                {/* Introduction paragraph */}
-                <p className="text-sm sm:text-base leading-relaxed text-foreground/90 font-normal">
-                  {introduction}
-                </p>
-
-                {/* Custom Reviewer Body (if teacher provided extra body notes) */}
+                {/* Custom Reviewer Body (if teacher provided extra body notes)
                 {reviewer?.body && reviewer.body.trim().length > 0 && !reviewer.body.includes("Try one yourself") && (
                   <Card className="w-full border-2 border-border bg-card p-5 sm:p-6 shadow-md space-y-2">
                     <h3 className="font-bold text-foreground text-sm uppercase tracking-wide">
@@ -186,8 +186,7 @@ export default function StudentInterventionView() {
                       {reviewer.body}
                     </div>
                   </Card>
-                )}
-
+                )} */}
 
                 {/* Lesson Mastery */}
                 <Card
@@ -228,41 +227,6 @@ export default function StudentInterventionView() {
                         </p>
                       </div>
                     ))}
-                  </div>
-                </Card>
-
-                {/* Card 3: 3. Quick checklist */}
-                <Card
-                  aria-label="Quick checklist"
-                  className="w-full border-2 border-border bg-card p-5 sm:p-6 shadow-md space-y-4"
-                >
-                  <h2 className="text-base sm:text-lg font-bold text-foreground">
-                    3. Quick checklist
-                  </h2>
-
-                  <div className="space-y-3">
-                    {checklistItems.map((item, idx) => {
-                      const checked = Boolean(checkedItems[idx]);
-                      return (
-                        <label
-                          key={idx}
-                          className="flex items-center gap-3 cursor-pointer select-none group"
-                        >
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={() => toggleCheck(idx)}
-                          />
-                          <span
-                            className={`text-sm transition-colors ${checked
-                              ? "line-through text-muted-foreground font-normal"
-                              : "text-foreground font-medium"
-                              }`}
-                          >
-                            {item}
-                          </span>
-                        </label>
-                      );
-                    })}
                   </div>
                 </Card>
 

@@ -55,7 +55,6 @@ mobile app
 npx expo start
 npx expo start --offline (if ever mag bug inig run)
 
-
 Password is either
 12345678
 or

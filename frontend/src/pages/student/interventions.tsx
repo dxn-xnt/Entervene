@@ -5,7 +5,8 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/student/button";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
-import { StudentEmptyState } from "@/components/student/student-empty-state";
+import { Empty } from "@/components/retroui/Empty";
+import ClassworkItemLine from "@/components/item-line/classwork";
 import { routes } from "@/../routes";
 import {
   listMyReviewers,
@@ -203,7 +204,6 @@ export default function StudentInterventions() {
                           <Badge
                             variant="surface"
                             size="sm"
-                            className="rounded-full! px-3 py-1 text-xs font-semibold whitespace-nowrap"
                           >
                             Teacher support active
                           </Badge>
@@ -216,40 +216,88 @@ export default function StudentInterventions() {
 
                         {/* Dashed practice notice container */}
                         {item.activities && item.activities.length > 0 ? (
-                          <div className="rounded border-2 border-dashed border-border p-4 text-xs sm:text-sm text-muted-foreground font-normal">
-                            <div className="space-y-2">
-                              <p className="font-semibold text-foreground">
-                                Available practice activities:
-                              </p>
-                              <ul className="list-disc pl-5 space-y-1">
-                                {item.activities.map((act) => (
-                                  <li key={act.assignment_id}>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        navigate(
-                                          `/student/classworks/${act.assignment_id}?from=${encodeURIComponent(
-                                            window.location.pathname
-                                          )}`
-                                        )
-                                      }
-                                      className="text-foreground font-medium underline hover:text-primary cursor-pointer"
-                                    >
-                                      {act.title}
-                                    </button>
-                                  </li>
-                                ))}
-                              </ul>
+                          <div className="space-y-2">
+                            <p className="font-semibold text-foreground text-sm">
+                              Available practice activities:
+                            </p>
+                            <div className="flex flex-col gap-2">
+                              {item.activities.map((act) => (
+                                <ClassworkItemLine
+                                  key={act.assignment_id}
+                                  className="border-2! shadow-none!"
+                                  item={{
+                                    classwork_id: act.assignment_id,
+                                    title: act.title,
+                                    classwork_type: act.classwork_type,
+                                  }}
+                                  showPublicationStatus={false}
+                                  showCategory={false}
+                                  showType={false}
+                                  onClick={() =>
+                                    navigate(
+                                      `/student/classworks/${act.assignment_id}?from=${encodeURIComponent(
+                                        window.location.pathname
+                                      )}`
+                                    )
+                                  }
+                                  rightContent={
+                                    <div className="flex items-center gap-2">
+                                      {act.grade != null && act.total_points != null && (
+                                        <span className="text-xs font-bold">
+                                          {act.grade}
+                                          <span className="font-medium text-muted-foreground text-xs">
+                                            {" "}
+                                            / {act.total_points}
+                                          </span>
+                                        </span>
+                                      )}
+                                      {act.classwork_type && (
+                                        <Badge variant="surface" size="sm">
+                                          {act.classwork_type === "QUIZ"
+                                            ? "Quiz"
+                                            : act.classwork_type === "ASSIGNMENT"
+                                              ? "Assignment"
+                                              : act.classwork_type}
+                                        </Badge>
+                                      )}
+                                      {act.submission_status && (
+                                        <Badge
+                                          variant={
+                                            act.submission_status === "graded" || act.submission_status === "submitted"
+                                              ? "solid"
+                                              : "outline"
+                                          }
+                                          size="sm"
+                                        >
+                                          {act.submission_status === "graded"
+                                            ? "Completed"
+                                            : act.submission_status === "submitted"
+                                              ? "Submitted"
+                                              : act.submission_status}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  }
+                                />
+                              ))}
                             </div>
                           </div>
                         ) : (
-                          <StudentEmptyState
-                            embedded
-                            icon={<ClipboardList />}
-                            className="shadow-none"
-                            title="No practice activities yet"
-                            description="Practice activities are on their way. We'll let you know when the first one is ready."
-                          />
+                          <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+                            <Empty.Content>
+                              <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
+                                <IconContainer className="bg-primary" size="sm">
+                                  <ClipboardList className="size-8" />
+                                </IconContainer>
+                              </Empty.Icon>
+                              <Empty.Title className="text-base! font-bold">
+                                No practice activities yet
+                              </Empty.Title>
+                              <Empty.Description className="text-sm text-muted-foreground">
+                                Practice activities are on their way. We'll let you know when the first one is ready.
+                              </Empty.Description>
+                            </Empty.Content>
+                          </Empty>
                         )}
 
                         {/* Action button */}
@@ -281,11 +329,21 @@ export default function StudentInterventions() {
                   </h3>
 
                   {resolvedInterventions.length === 0 ? (
-                    <StudentEmptyState
-                      icon={<History />}
-                      title="No past support yet"
-                      description="Finished support will be saved here so you can look back on it."
-                    />
+                    <Empty className="w-full border-2 rounded! border-border bg-card p-6 shadow-md hover:shadow-none">
+                      <Empty.Content>
+                        <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
+                          <IconContainer className="bg-primary" size="sm">
+                            <History className="size-8" />
+                          </IconContainer>
+                        </Empty.Icon>
+                        <Empty.Title className="text-base! font-bold">
+                          No past support yet
+                        </Empty.Title>
+                        <Empty.Description className="text-sm text-muted-foreground">
+                          Finished support will be saved here so you can look back on it.
+                        </Empty.Description>
+                      </Empty.Content>
+                    </Empty>
                   ) : (
                     <div className="space-y-3">
                       {resolvedInterventions.map((item) => (
