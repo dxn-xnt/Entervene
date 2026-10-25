@@ -4,7 +4,7 @@ import * as React from "react";
 import { format } from "date-fns";
 import { CalendarDays } from "lucide-react";
 import { Popover } from "@base-ui/react/popover";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { useToast } from "@/components/retroui/Toast";
 import { Text } from "@/components/retroui/Text";
 import { FormMessage } from "@/components/retroui/FormMessage";

@@ -1,7 +1,7 @@
 import * as React from "react";
 import AppLayout from "@/layouts/app-layout";
 import { Text } from "@/components/retroui/Text";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "@/components/retroui/Badge";
@@ -129,7 +129,7 @@ export default function AdminAcademicPeriods() {
                 {isLoading ? (
                   <LoadingPanel label="Loading academic periods from database..." />
                 ) : (
-                  <Table>
+                  <Table wrapperClassName="shadow-none">
                     <Table.Header className="font-sans">
                       <Table.Row>
                         <Table.Head>Period</Table.Head>
@@ -172,7 +172,7 @@ export default function AdminAcademicPeriods() {
 
                 <Dialog>
                   <Dialog.Trigger className="w-full flex justify-end">
-                    <Button size="sm" variant="link" className="shadow-none p-0! flex-row gap-2 shrink-0 m-0! justify-end w-fit">
+                    <Button size="sm" variant="link" className="shadow-none p-0! flex-row gap-2 shrink-0 m-0! justify-end w-fit text-black">
                       View Previous Periods
                       <ArrowUpRight className="w-4 h-4" />
                     </Button>

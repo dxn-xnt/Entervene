@@ -16,7 +16,7 @@ import { Alert } from "@/components/retroui/Alert";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { useToast } from "@/components/retroui/Toast";
 import { Card } from "@/components/retroui/Card";
 import { Checkbox } from "@/components/retroui/Checkbox";

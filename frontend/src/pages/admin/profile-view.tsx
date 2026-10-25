@@ -1,7 +1,7 @@
 import { ProfileHeader } from "@/components/profile-header";
 import { useMemo, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { useToast } from "@/components/retroui/Toast";
 import { Card } from "@/components/retroui/Card";

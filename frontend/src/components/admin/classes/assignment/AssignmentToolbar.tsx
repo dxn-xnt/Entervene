@@ -1,4 +1,4 @@
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Select } from "@/components/retroui/Select";
 import type { ManualSectionDraft } from "@/types/adminClasses";
 

@@ -1,4 +1,4 @@
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Card as RetroCard } from "@/components/retroui/Card";
 import { ArchiveIcon, EllipsisIcon, PenIcon, RotateCcw } from "lucide-react";
 import type { SubjectOfferingListItem } from "@/lib/api";

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Text } from "@/components/retroui/Text";

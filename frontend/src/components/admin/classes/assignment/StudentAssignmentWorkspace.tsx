@@ -14,7 +14,7 @@ import type {
   ManualClassSetup,
 } from "@/types/adminClasses";
 import AssignmentToolbar from "./AssignmentToolbar";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import AssignEvenlyConfirmationModal from "./AssignEvenlyConfirmationModal";
 import AvailableStudentsPanel from "./AvailableStudentsPanel";
