@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   TableProperties,
   Sparkles,
@@ -16,8 +16,13 @@ import {
   Check,
   Search,
   Clock,
+  BookOpen,
+  Lightbulb,
+  X,
 } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/teacher/button";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -57,6 +62,7 @@ import {
 } from "@/lib/tos-export";
 
 export interface TOSGeneratorScreenProps {
+  modalMode?: boolean;
   initialTitle?: string;
   subjectId?: number;
   subjectName?: string;
@@ -79,6 +85,7 @@ type WizardStep =
   | "export";
 
 export function TOSGeneratorScreen({
+  modalMode = false,
   initialTitle,
   subjectId = 0,
   subjectName = "",
@@ -149,6 +156,17 @@ export function TOSGeneratorScreen({
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState("");
   const [generationError, setGenerationError] = useState("");
+  const [saveError, setSaveError] = useState<{ message: string; step: WizardStep; subjectId: number } | null>(null);
+  const saveErrorRef = useRef<HTMLDivElement>(null);
+  const visibleSaveError = saveError?.step === step && saveError.subjectId === currentSubjectId ? saveError.message : null;
+
+  useEffect(() => {
+    if (visibleSaveError) saveErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [visibleSaveError]);
+
+  useEffect(() => {
+    setSaveError(null);
+  }, [step, currentSubjectId]);
 
   const [editingQuestionIdx, setEditingQuestionIdx] = useState<number | null>(null);
   const [editQuestionForm, setEditQuestionForm] = useState<TOSExportQuestion | null>(null);
@@ -158,7 +176,6 @@ export function TOSGeneratorScreen({
   const [includeAnswerKey, setIncludeAnswerKey] = useState(true);
   const [isExporting, setIsExporting] = useState<"blueprint-pdf" | "blueprint-docx" | "exam-pdf" | "exam-docx" | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState("");
 
   // AI Field Assistance states
   const [isSuggestingTitle, setIsSuggestingTitle] = useState(false);
@@ -337,6 +354,7 @@ export function TOSGeneratorScreen({
   };
 
   const startNewExam = () => {
+    setSaveError(null);
     setExamId(null);
     setTitle(`Summative Assessment ${savedExams.length + 1}`);
     setQuarter("Term 1");
@@ -552,7 +570,9 @@ export function TOSGeneratorScreen({
 
   const handleSaveDraft = async () => {
     setIsSaving(true);
-    setSaveSuccessMsg("");
+    setSaveError(null);
+    const saveStep = step;
+    const saveSubjectId = currentSubjectId;
     try {
       const payload = buildExamPayload(questions.length > 0 ? "FINALIZED" : "DRAFT");
 
@@ -580,15 +600,20 @@ export function TOSGeneratorScreen({
       if (result?.tos_exam_id) {
         setExamId(result.tos_exam_id);
       }
-      setSaveSuccessMsg("TOS Exam saved successfully!");
-      loadSavedExams();
-      setTimeout(() => setSaveSuccessMsg(""), 4000);
+      toast.success("TOS draft saved");
+      if (!modalMode) void loadSavedExams();
+      return true;
     } catch (e: any) {
       console.error("Failed to save exam", e);
-      alert(e.message || "Failed to save TOS Exam.");
+      setSaveError({ message: e.message || "Failed to save TOS Exam.", step: saveStep, subjectId: saveSubjectId });
+      return false;
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleSaveAndClose = async () => {
+    if (await handleSaveDraft()) onBack();
   };
 
   const handleSuggestTitle = async () => {
@@ -771,7 +796,6 @@ export function TOSGeneratorScreen({
       console.error("AI Question generation failed", e);
       const errMsg = e.message || "AI question generation failed. Please retry.";
       setGenerationError(errMsg);
-      toast.error(errMsg);
     } finally {
       setIsGenerating(false);
       setGenerationProgress("");
@@ -781,6 +805,7 @@ export function TOSGeneratorScreen({
   const handleRegenerateQuestion = async (index: number) => {
     const targetQ = questions[index];
     if (!targetQ) return;
+    setGenerationError("");
     setRegeneratingIdx(index);
 
     try {
@@ -819,7 +844,7 @@ export function TOSGeneratorScreen({
         setQuestions(updated);
       }
     } catch (e: any) {
-      alert("Failed to regenerate single question: " + (e.message || "AI Error"));
+      setGenerationError("Failed to regenerate single question: " + (e.message || "AI Error"));
     } finally {
       setRegeneratingIdx(null);
     }
@@ -852,7 +877,6 @@ export function TOSGeneratorScreen({
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Could not generate missing items.";
       setGenerationError(message);
-      toast.error(message);
     } finally {
       setIsGenerating(false);
     }
@@ -934,10 +958,27 @@ export function TOSGeneratorScreen({
     });
   }, [savedExams, examFilterQuarter, examSearchQuery]);
 
+  const stepNumber = ({
+    "test-parts": 1,
+    competencies: 2,
+    difficulty: 3,
+    blueprint: 4,
+    "ai-review": 5,
+    export: 6,
+  } as Partial<Record<WizardStep, number>>)[step];
+
   return (
-    <div className="flex min-w-0 flex-col overflow-x-clip">
+    <div className={modalMode ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" : "flex min-w-0 flex-col overflow-x-clip"}>
+      {modalMode && (
+        <Dialog.Header position="fixed" asChild>
+          <div className="flex w-full flex-wrap items-center justify-between gap-2">
+            <Dialog.Title className="min-w-0 text-xl font-bold">{initialExamId ? "Edit TOS" : "Create TOS"}</Dialog.Title>
+            <span className="shrink-0 text-base font-semibold">{stepNumber ? `Step ${stepNumber} of 6` : "My TOS Exams"}</span>
+          </div>
+        </Dialog.Header>
+      )}
       {/* ── Breadcrumb & Action Header ── */}
-      <header className="flex min-w-0 flex-wrap items-center justify-between gap-3 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+      {!modalMode && <header className="flex min-w-0 flex-wrap items-center justify-between gap-3 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6">
         <SidebarTrigger className="shrink-0 md:hidden" />
         <Breadcrumb className="min-w-0 w-auto flex-1">
           <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
@@ -1001,14 +1042,14 @@ export function TOSGeneratorScreen({
             </>
           )}
         </div>
-      </header>
+      </header>}
 
       {/* ── Main Container (Full-Width, No Sidebar Inside Wizard) ── */}
-      <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+      <div className={modalMode ? "min-h-0 min-w-0 flex-1 overflow-auto p-3 pb-6 sm:p-4 sm:pb-7" : "-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6"}>
         {remediationFocus && <p className="mb-3 rounded border p-3 text-sm">Intervention blueprint focus: {focusGuidance(remediationFocus)} TOS is a blueprint/export, not a graded student activity.</p>}
-        <Card className="block p-0 rounded border-2 border-border bg-card shadow-lg overflow-hidden">
+        <Card className={modalMode ? "block overflow-visible border-0 bg-card p-0 shadow-none" : "block p-0 rounded border-2 border-border bg-card shadow-lg overflow-hidden"}>
           {/* Top Banner */}
-          <div className="flex flex-col gap-2 border-b-2 border-border bg-accent px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
+          {!modalMode && <div className="flex flex-col gap-2 border-b-2 border-border bg-accent px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded border-2 border-border bg-primary shadow-sm">
                 <TableProperties className="h-5 w-5 text-foreground" />
@@ -1024,15 +1065,10 @@ export function TOSGeneratorScreen({
                 </p>
               </div>
             </div>
-            {saveSuccessMsg && (
-              <span className="text-xs font-bold text-foreground bg-success/10 border border-success rounded px-2.5 py-1">
-                {saveSuccessMsg}
-              </span>
-            )}
-          </div>
+          </div>}
 
           {/* Stepper Navigation (Only shown when inside wizard steps) */}
-          {step !== "saved-list" && (
+          {!modalMode && step !== "saved-list" && (
             <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-border bg-accent px-3 py-2.5 text-xs font-bold sm:px-6">
               <div className="flex items-center gap-2 overflow-x-auto">
                 <button
@@ -1096,7 +1132,8 @@ export function TOSGeneratorScreen({
           )}
 
           {/* Screen Content Body */}
-          <div className="min-w-0 p-3 sm:p-6">
+          <div className={modalMode ? "min-w-0 p-1" : "min-w-0 p-3 sm:p-6"}>
+            {visibleSaveError && <div ref={saveErrorRef} className="mb-4"><FormMessage>{visibleSaveError}</FormMessage></div>}
             {(step === "ai-review" || step === "export") &&
               (generationWarnings.length > 0 || shortfall.missing > 0) && (
                 <section aria-label="Generator warnings" role="status" className="mb-6 rounded border-2 border-amber-600 bg-amber-50 p-4 text-black">
@@ -1170,24 +1207,17 @@ export function TOSGeneratorScreen({
                     <p className="mt-3 text-xs font-bold text-muted-foreground">Loading your Table of Specifications...</p>
                   </div>
                 ) : filteredSavedExams.length === 0 ? (
-                  <Card className="block rounded border-2 border-dashed border-border/30 bg-muted/20 px-6 py-12 text-center shadow-md">
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded border-2 border-border bg-primary shadow">
-                      <TableProperties className="h-7 w-7 text-foreground" />
-                    </div>
-                    <h3 className="mt-4 text-base font-bold text-foreground">No TOS Exams Found</h3>
-                    <p className="mx-auto mt-1 max-w-sm text-sm font-normal text-muted-foreground">
-                      {savedExams.length === 0
-                        ? "Create your first Table of Specifications blueprint and exam questionnaire."
-                        : "No exam matches the selected term or search query."}
-                    </p>
-                    <Button
-                      size="sm"
-                      onClick={startNewExam}
-                      className="rounded mt-5 border-2 border-border bg-primary font-black text-xs text-primary-foreground shadow hover:bg-primary-hover"
-                    >
-                      <Plus className="mr-1.5 h-4 w-4" /> Create New TOS
-                    </Button>
-                  </Card>
+                  <TeacherEmptyState
+                    icon={<TableProperties />}
+                    title={savedExams.length === 0 ? "No TOS exams yet" : "No TOS exams match your filters"}
+                    description={savedExams.length === 0
+                      ? "Create your first Table of Specifications blueprint and exam questionnaire."
+                      : "No exam matches the selected term or search query."}
+                    action={savedExams.length === 0
+                      ? { label: "Create New TOS", icon: <Plus className="size-4" />, onClick: startNewExam }
+                      : { label: "Clear filters", onClick: () => { setExamFilterQuarter("ALL"); setExamSearchQuery(""); } }}
+                    compact={modalMode}
+                  />
                 ) : (
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {filteredSavedExams.map((ex) => {
@@ -1362,10 +1392,10 @@ export function TOSGeneratorScreen({
                   </div>
                 </div>
 
-                <Card className="block rounded border-2 border-border bg-card p-5 shadow-md">
-                  <div className="flex flex-col gap-2 border-b-2 border-border pb-2 sm:flex-row sm:items-center sm:justify-between">
+                <Card className={modalMode ? "block border-0 bg-transparent p-0 shadow-none" : "block rounded border-2 border-border bg-card p-5 shadow-md"}>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3">
-                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Question Types & Item Composition</span>
+                      <span className="text-sm font-semibold text-muted-foreground">Question Types & Item Composition</span>
                       <span className="text-xs font-bold text-foreground">
                         Total Items Target: <span className="text-lg font-black text-foreground">{totalItems}</span>
                       </span>
@@ -1377,15 +1407,15 @@ export function TOSGeneratorScreen({
                         variant="outline"
                         onClick={handleSuggestTestParts}
                         disabled={isSuggestingParts}
-                        className="rounded border-2 border-border bg-card font-bold shadow-xs hover:bg-accent text-xs h-8 text-foreground shrink-0 cursor-pointer"
+                        className="shrink-0 text-muted-foreground"
                       >
                         {isSuggestingParts ? (
                           <>
-                            <RefreshCw className="mr-1.5 h-3 w-3 animate-spin" /> Recommending...
+                            <RefreshCw className="size-4 animate-spin" /> Recommending...
                           </>
                         ) : (
                           <>
-                            <Sparkles className="mr-1.5 h-3 w-3 text-purple-600 dark:text-purple-400" /> AI Recommend Parts
+                            <Sparkles className="size-4" /> AI Recommend Parts
                           </>
                         )}
                       </Button></span>} />
@@ -1456,7 +1486,7 @@ export function TOSGeneratorScreen({
                   </div>
                 </Card>
 
-                <div className="grid grid-cols-2 gap-2 pt-2 sm:flex sm:justify-between">
+                <div className={modalMode ? "hidden" : "grid grid-cols-2 gap-2 pt-2 sm:flex sm:justify-between"}>
                   <Button
                     variant="outline"
                     onClick={onBack}
@@ -1497,7 +1527,7 @@ export function TOSGeneratorScreen({
                 </div>
 
                 {/* Competency Picker Bar */}
-                <Card className="flex flex-col sm:flex-row sm:items-center gap-3 rounded border-2 border-border bg-accent p-3.5 shadow">
+                <Card className={modalMode ? "flex flex-col gap-3 border-0 bg-transparent p-0 shadow-none sm:flex-row sm:items-center" : "flex flex-col sm:flex-row sm:items-center gap-3 rounded border-2 border-border bg-accent p-3.5 shadow"}>
                   <div className="flex-1">
                     <Select value="" onValueChange={handleSelectCompetency} disabled={availableCompetencies.length === 0}>
                       <Select.Trigger aria-label="Add Curriculum Competency" className="mt-1 w-full min-w-0 rounded">
@@ -1524,15 +1554,15 @@ export function TOSGeneratorScreen({
                         variant="outline"
                         onClick={handleSuggestCompetencies}
                         disabled={isSuggestingComps || !currentSubjectName}
-                        className="rounded border-2 border-border bg-card font-bold shadow-sm hover:bg-accent h-9 text-xs cursor-pointer text-foreground"
+                        className="text-muted-foreground"
                       >
                         {isSuggestingComps ? (
                           <>
-                            <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Suggesting Topics...
+                            <RefreshCw className="size-4 animate-spin" /> Suggesting Topics...
                           </>
                         ) : (
                           <>
-                            <Sparkles className="mr-1.5 h-3.5 w-3.5 text-purple-600 dark:text-purple-400" /> AI Suggest Topics & Days
+                            <Sparkles className="size-4" /> AI Suggest Topics & Days
                           </>
                         )}
                       </Button></span>} />
@@ -1549,9 +1579,9 @@ export function TOSGeneratorScreen({
                           { label: `Ad-hoc Topic #${compInputs.length + 1}`, days: 2, is_adhoc: true },
                         ]);
                       }}
-                      className="rounded border-2 border-border bg-card font-bold shadow-sm hover:bg-muted/20 h-9 text-xs cursor-pointer"
+                      className="text-muted-foreground"
                     >
-                      <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Ad-hoc Topic
+                      <Plus className="size-4" /> Add Ad-hoc Topic
                     </Button>
                   </div>
                 </Card>
@@ -1559,12 +1589,12 @@ export function TOSGeneratorScreen({
                 {/* Competency Items List */}
                 <div className="space-y-3">
                   {compInputs.length === 0 ? (
-                    <Card className="block rounded border-2 border-dashed border-border bg-muted/20 px-6 py-12 text-center">
-                      <p className="text-xs font-bold text-muted-foreground">No competencies selected yet.</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Use the dropdown above to add competencies from your curriculum bank or add an ad-hoc topic.
-                      </p>
-                    </Card>
+                    <TeacherEmptyState
+                      icon={<BookOpen />}
+                      title="No competencies selected yet"
+                      description="Use the dropdown above to add competencies from your curriculum bank or add an ad-hoc topic."
+                      compact={modalMode}
+                    />
                   ) : (
                     compInputs.map((comp, idx) => {
                       const isCurriculum = !!comp.competency_id;
@@ -1572,10 +1602,12 @@ export function TOSGeneratorScreen({
                       return (
                         <Card
                           key={idx}
-                          className="flex flex-col gap-2.5 rounded border-2 border-border bg-card p-4 shadow"
+                          className={modalMode
+                            ? "flex flex-col gap-2.5 border-0 bg-transparent p-0 shadow-none hover:shadow-none"
+                            : "flex flex-col gap-2.5 rounded border-2 border-border bg-card p-4 shadow-md hover:shadow-md"}
                         >
                           {/* 1. Top row: Competency name/code (Bold, larger font) + Weight % badge aligned top-right (small/muted) */}
-                          <div className="flex items-center justify-between gap-2 border-b border-border/10 pb-2">
+                          <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-sm sm:text-base font-black text-foreground">
                                 {comp.code || `Competency #${idx + 1}`}
@@ -1639,7 +1671,7 @@ export function TOSGeneratorScreen({
                           </div>
 
                           {/* 3. Bottom row: Days Taught input + delete icon */}
-                          <div className="flex items-center justify-between border-t border-border/10 pt-2.5">
+                          <div className="flex items-center justify-between pt-2.5">
                             <div className="flex items-center gap-2">
                               <label className="text-xs font-bold text-muted-foreground">Days Taught:</label>
                               <Input
@@ -1673,7 +1705,7 @@ export function TOSGeneratorScreen({
                   )}
                 </div>
 
-                <div className="flex justify-between gap-2 pt-2">
+                <div className={modalMode ? "hidden" : "flex justify-between gap-2 pt-2"}>
                   <Button
                     variant="outline"
                     onClick={() => setStep("test-parts")}
@@ -1704,10 +1736,10 @@ export function TOSGeneratorScreen({
                   </p>
                 </div>
 
-                <Card className="block rounded border-2 border-border bg-card p-6 shadow-md">
+                <Card className={modalMode ? "block border-0 bg-transparent p-0 shadow-none" : "block rounded border-2 border-border bg-card p-6 shadow-md"}>
                   <div className="grid gap-6 sm:grid-cols-3">
-                    <Card className="block space-y-2 rounded border-2 border-border bg-success/10 p-4 text-center shadow-sm">
-                      <p className="text-xs font-black text-foreground uppercase tracking-wider">Easy (60%)</p>
+                    <Card className="block space-y-2 border-2! border-black! bg-success/10 p-4 text-center shadow-none hover:shadow-none">
+                      <p className="text-sm font-semibold text-foreground">Easy (60%)</p>
                       <p className="text-[11px] font-semibold text-foreground">Remember & Understand</p>
                       <Input
                         type="number"
@@ -1724,8 +1756,8 @@ export function TOSGeneratorScreen({
                       </span>
                     </Card>
 
-                    <Card className="block space-y-2 rounded border-2 border-border bg-accent p-4 text-center shadow-sm">
-                      <p className="text-xs font-black text-foreground uppercase tracking-wider">Average (30%)</p>
+                    <Card className="block space-y-2 border-2! border-black! bg-accent p-4 text-center shadow-none hover:shadow-none">
+                      <p className="text-sm font-semibold text-foreground">Average (30%)</p>
                       <p className="text-[11px] font-semibold text-foreground">Apply & Analyze</p>
                       <Input
                         type="number"
@@ -1742,8 +1774,8 @@ export function TOSGeneratorScreen({
                       </span>
                     </Card>
 
-                    <Card className="block space-y-2 rounded border-2 border-border bg-destructive/10 p-4 text-center shadow-sm">
-                      <p className="text-xs font-black text-destructive uppercase tracking-wider">Difficult (10%)</p>
+                    <Card className="block space-y-2 border-2! border-black! bg-destructive/10 p-4 text-center shadow-none hover:shadow-none">
+                      <p className="text-sm font-semibold text-destructive">Difficult (10%)</p>
                       <p className="text-[11px] font-semibold text-destructive">Evaluate & Create</p>
                       <Input
                         type="number"
@@ -1761,7 +1793,7 @@ export function TOSGeneratorScreen({
                     </Card>
                   </div>
 
-                  <div className="mt-6 flex items-center justify-between border-t-2 border-border pt-4">
+                  <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold">Sum of Target Ratios:</span>
                       <Badge
@@ -1775,14 +1807,14 @@ export function TOSGeneratorScreen({
                       size="sm"
                       variant="outline"
                       onClick={() => setDifficultyRatio({ easy: 60, average: 30, difficult: 10 })}
-                      className="rounded border-2 border-border text-xs font-bold shadow-sm"
+                      className="text-muted-foreground"
                     >
                       Reset to 60/30/10 Standard
                     </Button>
                   </div>
                 </Card>
 
-                <div className="flex justify-between gap-2 pt-2">
+                <div className={modalMode ? "hidden" : "flex justify-between gap-2 pt-2"}>
                   <Button
                     variant="outline"
                     onClick={() => setStep("competencies")}
@@ -1821,9 +1853,9 @@ export function TOSGeneratorScreen({
                       size="sm"
                       variant="outline"
                       onClick={handleRecalculate}
-                      className="rounded border-2 border-border bg-card text-xs font-bold shadow-sm"
+                      className="text-muted-foreground"
                     >
-                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Recalculate
+                      <RefreshCw className="size-4" /> Recalculate
                     </Button>
                     <Button
                       size="sm"
@@ -1835,9 +1867,9 @@ export function TOSGeneratorScreen({
                           setIsExporting(null);
                         }
                       }}
-                      className="rounded border-2 border-border bg-accent text-xs font-bold shadow-sm hover:bg-primary"
+                      className="text-muted-foreground"
                     >
-                      <FileDown className="mr-1.5 h-3.5 w-3.5" /> Blueprint PDF
+                      <FileDown className="size-4" /> Blueprint PDF
                     </Button>
                     <Button
                       size="sm"
@@ -1849,20 +1881,20 @@ export function TOSGeneratorScreen({
                           setIsExporting(null);
                         }
                       }}
-                      className="rounded border-2 border-border bg-success/10 text-xs font-bold shadow-sm hover:bg-success/20"
+                      className="text-muted-foreground"
                     >
-                      <FileText className="mr-1.5 h-3.5 w-3.5" /> Word (.docx)
+                      <FileText className="size-4" /> Word (.docx)
                     </Button>
                   </div>
                 </div>
 
                 {/* Informative Hint Banner */}
-                <Card className="flex items-center gap-2 rounded border-2 border-border bg-accent px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-sm">
-                  <span className="text-base">💡</span>
+                <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <Lightbulb aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
                   <span>
                     <strong>Interactive Cells:</strong> The number inputs under Bloom's Taxonomy (Rem, Und, App, Ana, Eva, Cre) are fully editable. Changes update the Easy/Average/Difficult subtotals and Grand Totals automatically.
                   </span>
-                </Card>
+                </p>
 
                 {!draftValidation.valid && (
                   <Card className="block rounded border-2 border-destructive bg-destructive/10 p-3 text-xs font-bold text-destructive">
@@ -1879,7 +1911,7 @@ export function TOSGeneratorScreen({
                 )}
 
                 {/* DepEd Standard 2-Tier Structured Table */}
-                <Card className="block p-0 overflow-x-auto rounded border-2 border-border bg-card shadow-md">
+                <Card className="block overflow-x-auto border-2! border-black! bg-card p-0 shadow-none hover:shadow-none">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       {/* Header Row 1 */}
@@ -2065,12 +2097,10 @@ export function TOSGeneratorScreen({
                 )}
 
                 {generationError && (
-                  <Card className="block rounded border-2 border-destructive bg-destructive/10 p-3 text-xs font-bold text-destructive">
-                    {generationError}
-                  </Card>
+                  <FormMessage>{generationError}</FormMessage>
                 )}
 
-                <div className="flex justify-between gap-2 pt-2">
+                <div className={modalMode ? "hidden" : "flex justify-between gap-2 pt-2"}>
                   <Button
                     variant="outline"
                     onClick={() => setStep("difficulty")}
@@ -2115,17 +2145,17 @@ export function TOSGeneratorScreen({
                       variant="outline"
                       disabled={isGenerating}
                       onClick={handleGenerateQuestions}
-                      className="rounded border-2 border-border bg-card text-xs font-bold shadow-sm"
+                      className="text-muted-foreground"
                     >
-                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Regenerate All ({totalItems})
+                      <RefreshCw className="size-4" /> Regenerate All ({totalItems})
                     </Button>
-                    <Button
+                    {!modalMode && <Button
                       size="sm"
                       onClick={proceedToExport}
                       className="rounded border-2 border-border bg-primary text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary-hover"
                     >
                       Proceed to Export <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                    </Button>
+                    </Button>}
                   </div>
                 </div>
 
@@ -2136,23 +2166,17 @@ export function TOSGeneratorScreen({
                 )}
 
                 {generationError && (
-                  <Card className="block rounded border-2 border-destructive bg-destructive/10 p-3 text-xs font-bold text-destructive">
-                    {generationError}
-                  </Card>
+                  <FormMessage>{generationError}</FormMessage>
                 )}
 
                 {questions.length === 0 ? (
-                  <Card className="block rounded border-2 border-dashed border-border px-6 py-12 text-center">
-                    <Sparkles className="mx-auto h-8 w-8 text-foreground" />
-                    <p className="mt-2 text-sm font-bold text-muted-foreground">No questions generated yet.</p>
-                    <Button
-                      size="sm"
-                      onClick={handleGenerateQuestions}
-                      className="rounded mt-3 border-2 border-border bg-primary font-bold text-primary-foreground"
-                    >
-                      Generate {totalItems} Questions Now
-                    </Button>
-                  </Card>
+                  <TeacherEmptyState
+                    icon={<Sparkles />}
+                    title="No questions generated yet"
+                    description="Generate questions from the current blueprint to review and export them."
+                    action={{ label: `Generate ${totalItems} Questions Now`, onClick: handleGenerateQuestions }}
+                    compact={modalMode}
+                  />
                 ) : (
                   <div className="space-y-6">
                     {groupedQuestions.map((grp, gIdx) => {
@@ -2463,7 +2487,7 @@ export function TOSGeneratorScreen({
                   </div>
                 )}
 
-                <div className="flex justify-between gap-2 pt-2">
+                <div className={modalMode ? "hidden" : "flex justify-between gap-2 pt-2"}>
                   <Button
                     variant="outline"
                     onClick={() => setStep("blueprint")}
@@ -2515,11 +2539,11 @@ export function TOSGeneratorScreen({
                             setIsExporting(null);
                           }
                         }}
-                        className="rounded border-2 border-border bg-accent font-bold text-primary-foreground hover:bg-primary shadow-sm"
                       >
-                        <FileDown className="mr-2 h-4 w-4" /> Export Blueprint PDF (Landscape Legal)
+                        <FileDown className="size-4" /> Export Blueprint PDF (Landscape Legal)
                       </Button>
                       <Button
+                        variant="outline"
                         disabled={isExporting !== null}
                         onClick={async () => {
                           if (fullDraft) {
@@ -2528,9 +2552,8 @@ export function TOSGeneratorScreen({
                             setIsExporting(null);
                           }
                         }}
-                        className="rounded border-2 border-border bg-card font-bold text-foreground hover:bg-muted/20 shadow-sm"
                       >
-                        <FileText className="mr-2 h-4 w-4" /> Export Blueprint Word (.docx)
+                        <FileText className="size-4" /> Export Blueprint Word (.docx)
                       </Button>
                     </div>
                   </Card>
@@ -2563,11 +2586,11 @@ export function TOSGeneratorScreen({
                           });
                           setIsExporting(null);
                         })}
-                        className="rounded border-2 border-border bg-primary font-bold text-primary-foreground hover:bg-primary-hover shadow-sm"
                       >
-                        <FileDown className="mr-2 h-4 w-4" /> Export Exam Paper PDF (Portrait Legal)
+                        <FileDown className="size-4" /> Export Exam Paper PDF (Portrait Legal)
                       </Button>
                       <Button
+                        variant="outline"
                         disabled={isExporting !== null || questions.length === 0}
                         onClick={() => guardShortExam(async () => {
                           setIsExporting("exam-docx");
@@ -2579,15 +2602,14 @@ export function TOSGeneratorScreen({
                           });
                           setIsExporting(null);
                         })}
-                        className="rounded border-2 border-border bg-card font-bold text-foreground hover:bg-muted/20 shadow-sm"
                       >
-                        <FileText className="mr-2 h-4 w-4" /> Export Exam Paper Word (.docx)
+                        <FileText className="size-4" /> Export Exam Paper Word (.docx)
                       </Button>
                     </div>
                   </Card>
                 </div>
 
-                <div className="flex justify-between gap-2 pt-4 border-t-2 border-border">
+                <div className={modalMode ? "hidden" : "flex justify-between gap-2 pt-4 border-t-2 border-border"}>
                   <Button
                     variant="outline"
                     onClick={() => setStep("ai-review")}
@@ -2596,9 +2618,8 @@ export function TOSGeneratorScreen({
                     <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Review
                   </Button>
                   <Button
-                    onClick={() => guardShortExam(() => {
-                      handleSaveDraft();
-                      setStep("saved-list");
+                    onClick={() => guardShortExam(async () => {
+                      if (await handleSaveDraft()) setStep("saved-list");
                     })}
                     className="rounded border-2 border-border bg-success/20 font-bold text-foreground shadow"
                   >
@@ -2627,6 +2648,67 @@ export function TOSGeneratorScreen({
           </Dialog.Content>
         </Dialog>
       </div>
+      {modalMode && (
+        <Dialog.Footer className="mt-0">
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
+            <Button type="button" variant="outline" onClick={onBack}>
+              <X className="size-4" /> Cancel
+            </Button>
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+              {step !== "saved-list" && (
+                <Button type="button" variant="outline" disabled={isSaving} onClick={() => questions.length > 0 ? guardShortExam(handleSaveAndClose) : void handleSaveAndClose()}>
+                  <Save className="size-4" /> {isSaving ? "Saving..." : "Save Draft"}
+                </Button>
+              )}
+              {step !== "test-parts" && step !== "saved-list" && (
+                <Button type="button" variant="outline" onClick={() => setStep(({
+                  competencies: "test-parts",
+                  difficulty: "competencies",
+                  blueprint: "difficulty",
+                  "ai-review": "blueprint",
+                  export: "ai-review",
+                } as Partial<Record<WizardStep, WizardStep>>)[step] ?? "test-parts")}>
+                  <ArrowLeft className="size-4" /> Back
+                </Button>
+              )}
+              {step === "test-parts" && (
+                <Button type="button" disabled={totalItems <= 0 || !currentSubjectId} onClick={() => setStep("competencies")}>
+                  Next <ArrowRight className="size-4" />
+                </Button>
+              )}
+              {step === "competencies" && (
+                <Button type="button" disabled={compInputs.length === 0 || totalDays <= 0} onClick={() => setStep("difficulty")}>
+                  Next <ArrowRight className="size-4" />
+                </Button>
+              )}
+              {step === "difficulty" && (
+                <Button type="button" disabled={difficultyRatio.easy + difficultyRatio.average + difficultyRatio.difficult !== 100} onClick={() => { handleRecalculate(); setStep("blueprint"); }}>
+                  Calculate Blueprint <ArrowRight className="size-4" />
+                </Button>
+              )}
+              {step === "blueprint" && (
+                <Button type="button" disabled={isGenerating} onClick={handleGenerateQuestions}>
+                  {isGenerating ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                  {isGenerating ? "Generating..." : "Generate Exam Questions"}
+                </Button>
+              )}
+              {step === "ai-review" && (
+                <Button type="button" disabled={questions.length === 0} onClick={proceedToExport}>
+                  Next <ArrowRight className="size-4" />
+                </Button>
+              )}
+              {step === "export" && (
+                <Button type="button" disabled={isSaving} onClick={() => guardShortExam(handleSaveAndClose)}>
+                  <Save className="size-4" /> Save & Return to TOS Archive
+                </Button>
+              )}
+              {step === "saved-list" && (
+                <Button type="button" onClick={startNewExam}><Plus className="size-4" /> New TOS</Button>
+              )}
+            </div>
+          </div>
+        </Dialog.Footer>
+      )}
     </div>
   );
 }
