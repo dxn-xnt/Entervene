@@ -5,6 +5,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Badge } from "@/components/retroui/Badge";
+import { Card } from "@/components/retroui/Card";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
@@ -13,8 +14,8 @@ import {
   Plus,
   Trash2,
   Search,
-  BookOpen,
-  ArrowRight,
+  MoreVertical,
+  Pencil,
   RefreshCw,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
@@ -22,7 +23,10 @@ import { toast } from "sonner";
 import { TOSGeneratorScreen } from "../subject-details/tos-generator-screen";
 import type { CompetencyItem } from "../subject-details/types";
 import { Text } from "@/components/retroui/Text";
+import { Dialog } from "@/components/retroui/Dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { getTeacherActive, getRemediationWorkspace, type RemediationFocus } from "@/lib/teacher-interventions-api";
+import { formatDate } from "@/lib/classwork-utils";
 
 interface SubjectOption {
   subject_id: number;
@@ -250,38 +254,6 @@ export const TeacherTOSPage: React.FC = () => {
     });
   }, [exams, selectedSubjectFilter, selectedQuarterFilter, searchQuery]);
 
-  // If in wizard mode, render TOSGeneratorScreen full-width
-  if (isWizardOpen) {
-    return (
-      <AppLayout>
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col">
-            <div className="flex flex-1 flex-col">
-              <TOSGeneratorScreen
-                initialTitle={routeParams.get("title") || undefined}
-                subjectId={activeSubject?.subject_id ?? 0}
-                subjectName={activeSubject?.subject_name ?? ""}
-                competencies={activeCompetencies}
-                remediationFocus={remediationFocus}
-                initialExamId={activeExamId}
-                initialStep={activeExamId ? "blueprint" : "test-parts"}
-                parentLabel="TOS Generator"
-                subjectsList={subjects}
-                onBack={() => {
-                  setIsWizardOpen(false);
-                  setRemediationFocus(null);
-                  setActiveSubject(null);
-                  setActiveExamId(null);
-                  fetchData();
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      </AppLayout>
-    );
-  }
-
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
@@ -390,110 +362,107 @@ export const TeacherTOSPage: React.FC = () => {
                     } }}
                 />
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <section className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {filteredExams.map((ex) => {
                     const isFinalized = ex.status === "FINALIZED";
 
                     return (
-                      <div
+                      <Card
                         key={ex.tos_exam_id}
-                        className="flex flex-col justify-between rounded border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                        className="flex h-full min-w-0 w-full flex-col"
                       >
-                        <div>
-                          {/* Top Badges */}
-                          <div className="flex items-center justify-between gap-2 border-b border-black/10 pb-2.5">
-                            <Badge
-                              variant="outline"
-                              className="border-black bg-[#E3F2FD] text-blue-950 font-black text-[10px]"
-                            >
-                              <BookOpen className="mr-1 h-3 w-3" />{" "}
-                              {ex.subject_name || "Subject"}
+                        <Card.Header className="flex-col items-stretch gap-2">
+                          <div className="flex w-full items-start justify-between gap-2">
+                            <Card.Title className="min-w-0 flex-1 break-words text-lg font-bold [overflow-wrap:anywhere]">
+                              {ex.title}
+                            </Card.Title>
+                            <DropdownMenu>
+                              <Tooltip>
+                                <TooltipTrigger render={<span className="inline-flex shrink-0">
+                                  <DropdownMenuTrigger asChild>
+                                    <Button type="button" variant="secondary" size="sm" className="p-1 shadow-none" aria-label={`Actions for ${ex.title}`}>
+                                      <MoreVertical className="size-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                </span>} />
+                                <TooltipContent>Exam actions</TooltipContent>
+                              </Tooltip>
+                              <DropdownMenuContent align="end" className="z-50 min-w-[160px] rounded border-2 border-border bg-card p-1 text-xs font-semibold shadow-md">
+                                <DropdownMenuItem className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded p-2 text-xs hover:bg-accent" onClick={() => handleOpenExam(ex)}>
+                                  <Pencil className="size-4" /><span>Edit</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded p-2 text-xs text-destructive hover:bg-destructive/10" disabled={deletingId === ex.tos_exam_id} onClick={(event) => handleDeleteExam(event, ex.tos_exam_id)}>
+                                  <Trash2 className="size-4" /><span>Delete</span>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge variant="outline" size="sm">{ex.subject_name || "Subject"}</Badge>
+                            <Badge variant="outline" size="sm">{ex.quarter}</Badge>
+                            <Badge variant={isFinalized ? "solid" : "default"} size="sm">
+                              {isFinalized ? "Finalized" : "Draft"}
                             </Badge>
-                            <div className="flex items-center gap-1.5">
-                              <Badge
-                                variant="outline"
-                                className="border-black bg-amber-100 font-black text-[10px]"
-                              >
-                                {ex.quarter}
-                              </Badge>
-                              <Badge
-                                variant="outline"
-                                className={`border-black font-black text-[10px] ${isFinalized
-                                  ? "bg-emerald-100 text-emerald-900"
-                                  : "bg-gray-100 text-gray-700"
-                                  }`}
-                              >
-                                {isFinalized ? "FINALIZED" : "DRAFT"}
-                              </Badge>
-                            </div>
                           </div>
+                        </Card.Header>
 
-                          {/* Title */}
-                          <h4 className="mt-3 text-sm font-black text-black leading-snug line-clamp-2">
-                            {ex.title}
-                          </h4>
-
-                          {/* Metrics */}
-                          <div className="mt-3.5 grid grid-cols-2 gap-2 rounded border border-black/20 bg-gray-50/80 p-2.5 text-center">
+                        <Card.Content className="mt-auto flex flex-col gap-3 pt-2">
+                          <div className="grid grid-cols-2 gap-4 text-sm">
                             <div>
-                              <p className="text-[10px] font-bold text-gray-500 uppercase">
-                                Target Items
-                              </p>
-                              <p className="text-sm font-black text-black">
-                                {ex.total_items || "—"}
-                              </p>
+                              <p className="text-muted-foreground">Target items</p>
+                              <p className="font-bold text-foreground">{ex.total_items || "—"}</p>
                             </div>
                             <div>
-                              <p className="text-[10px] font-bold text-gray-500 uppercase">
-                                AI Questions
-                              </p>
-                              <p className="text-sm font-black text-blue-700">
-                                {ex.question_count}
-                              </p>
+                              <p className="text-muted-foreground">AI questions</p>
+                              <p className="font-bold text-foreground">{ex.question_count}</p>
                             </div>
                           </div>
-                        </div>
-
-                        {/* Bottom Toolbar */}
-                        <div className="mt-4 flex items-center justify-between border-t border-black/10 pt-3">
-                          <span className="text-[11px] font-semibold text-gray-400">
-                            {ex.updated_at
-                              ? new Date(ex.updated_at).toLocaleDateString()
-                              : "Recently"}
-                          </span>
-
-                          <div className="flex items-center gap-1.5">
-                            <Tooltip>
-                              <TooltipTrigger render={<span className="inline-flex"><Button
-                                size="sm"
-                                variant="outline"
-                                onClick={(e) => handleDeleteExam(e, ex.tos_exam_id)}
-                                disabled={deletingId === ex.tos_exam_id}
-                                className="h-7 border-2 border-black bg-red-50 px-2 text-red-700 hover:bg-red-100"
-                                aria-label="Delete exam"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button></span>} />
-                              <TooltipContent>Delete exam</TooltipContent>
-                            </Tooltip>
-                            <Button
-                              size="sm"
-                              onClick={() => handleOpenExam(ex)}
-                              className="h-7 border-2 border-black bg-[#FFD54F] px-3 text-xs font-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
-                            >
-                              Open Exam <ArrowRight className="ml-1 h-3 w-3" />
-                            </Button>
+                          <div className="text-sm text-muted-foreground">
+                            {ex.created_at ? `Created ${formatDate(ex.created_at)}` : "Recently"}
                           </div>
-                        </div>
-                      </div>
+                        </Card.Content>
+                      </Card>
                     );
                   })}
-                </div>
+                </section>
               )}
             </div>
           </div>
         </div>
       </div>
+      <Dialog open={isWizardOpen} onOpenChange={(open) => {
+        if (!open) {
+          setIsWizardOpen(false);
+          setRemediationFocus(null);
+          setActiveSubject(null);
+          setActiveExamId(null);
+          void fetchData();
+        }
+      }}>
+        {isWizardOpen && (
+          <Dialog.Content size="3xl">
+            <TOSGeneratorScreen
+              modalMode
+              initialTitle={routeParams.get("title") || undefined}
+              subjectId={activeSubject?.subject_id ?? 0}
+              subjectName={activeSubject?.subject_name ?? ""}
+              competencies={activeCompetencies}
+              remediationFocus={remediationFocus}
+              initialExamId={activeExamId}
+              initialStep={activeExamId ? "blueprint" : "test-parts"}
+              parentLabel="TOS Generator"
+              subjectsList={subjects}
+              onBack={() => {
+                setIsWizardOpen(false);
+                setRemediationFocus(null);
+                setActiveSubject(null);
+                setActiveExamId(null);
+                void fetchData();
+              }}
+            />
+          </Dialog.Content>
+        )}
+      </Dialog>
     </AppLayout>
   );
 };
