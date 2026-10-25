@@ -110,7 +110,7 @@ export default function AdminSubjectView() {
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {isLoading ? (
-              <RetroCard className="py-3 px-4 bg-accent">Loading subject...</RetroCard>
+              <Text as="p" role="status" className="text-sm text-muted-foreground">Loading subject...</Text>
             ) : error ? (
               <RetroCard className="py-3 px-4 bg-accent">
                 <Text as="h1" className="font-sans text-2xl font-bold">

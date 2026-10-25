@@ -5,7 +5,9 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
 import { useToast } from "@/components/retroui/Toast";
-import { createOfficialSection, getOfficialSections, updateOfficialSection, type AcademicPathwayRead, type PathwayScopeRead } from "@/lib/api";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
+import { ApiRequestError, createOfficialSection, getOfficialSections, updateOfficialSection, type AcademicPathwayRead, type PathwayScopeRead } from "@/lib/api";
 import type { OfficialSectionOption } from "@/types/adminClasses";
 import type { AcademicLevelSettingItem } from "@/lib/settings-api";
 
@@ -23,6 +25,8 @@ export default function OfficialSectionsSettings({ academicYearId, levels, pathw
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [validationError, setValidationError] = useState("");
+  const [validationAttempt, setValidationAttempt] = useState(0);
   const toast = useToast();
 
   useEffect(() => {
@@ -50,10 +54,16 @@ export default function OfficialSectionsSettings({ academicYearId, levels, pathw
     setEditingId(null);
     setName("");
     setPathwayId("");
+    setValidationError("");
   }
 
   async function save() {
-    if (!levelId || !name.trim() || (requiresPathway && !pathwayId) || saving) return;
+    if (saving) return;
+    if (!levelId || !name.trim() || (requiresPathway && !pathwayId)) {
+      setValidationError(!levelId ? "Select a grade level." : !name.trim() ? "Enter a section name." : "Select a pathway.");
+      setValidationAttempt((attempt) => attempt + 1);
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -69,8 +79,10 @@ export default function OfficialSectionsSettings({ academicYearId, levels, pathw
       resetDraft();
     } catch (cause: unknown) {
       const message = cause instanceof Error ? cause.message : "Unable to save official section.";
-      setError(message);
-      toast.error({ title: "Unable to save official section", description: message });
+      if (cause instanceof ApiRequestError && (cause.status === 400 || cause.status === 422)) {
+        setError(message);
+        setValidationAttempt((attempt) => attempt + 1);
+      } else toast.error({ title: "Unable to save official section", description: message });
     } finally {
       setSaving(false);
     }
@@ -84,7 +96,6 @@ export default function OfficialSectionsSettings({ academicYearId, levels, pathw
       toast.success({ title: updated.is_active ? "Official section activated" : "Official section deactivated" });
     } catch (cause: unknown) {
       const message = cause instanceof Error ? cause.message : "Unable to update official section.";
-      setError(message);
       toast.error({ title: "Unable to update official section", description: message });
     }
   }
@@ -94,27 +105,29 @@ export default function OfficialSectionsSettings({ academicYearId, levels, pathw
       <Card.Header><Card.Title>Official Sections</Card.Title></Card.Header>
       <Card.Content className="grid gap-4">
         <Text as="p" className="text-sm text-muted-foreground">Maintain approved section choices for the configuration year above. Used sections cannot be renamed, remapped, or deactivated.</Text>
+        <AdminValidationAlert message={error} attempt={validationAttempt} />
         <div className="grid gap-1 sm:max-w-xs">
           <Text as="p" className="text-sm font-semibold">Grade level</Text>
           <Select value={levelId} onValueChange={(value) => { setLevelId(value); resetDraft(); }}>
-            <Select.Trigger><Select.Value placeholder="Select grade" /></Select.Trigger>
+            <Select.Trigger id="official-section-level" aria-invalid={validationError === "Select a grade level."} className="aria-[invalid=true]:border-destructive"><Select.Value placeholder="Select grade" /></Select.Trigger>
             <Select.Content><Select.Group>{levels.map((level) => <Select.Item key={level.academic_level_id} value={String(level.academic_level_id)}>{level.level_name}</Select.Item>)}</Select.Group></Select.Content>
           </Select>
+          {validationError === "Select a grade level." && <FormMessage>{validationError}</FormMessage>}
         </div>
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
-          <label className="grid gap-1 text-sm font-semibold">Section name<Input value={name} onChange={(event) => setName(event.target.value)} maxLength={100} placeholder="Official school name" disabled={saving} /></label>
+          <label className="grid gap-1 text-sm font-semibold">Section name<Input id="official-section-name" value={name} aria-invalid={validationError === "Enter a section name."} aria-describedby={validationError === "Enter a section name." ? "official-section-name-error" : undefined} onChange={(event) => { setName(event.target.value); if (event.target.value.trim()) setValidationError(""); }} maxLength={100} placeholder="Official school name" disabled={saving} />{validationError === "Enter a section name." && <FormMessage id="official-section-name-error">{validationError}</FormMessage>}</label>
           {requiresPathway ? (
             <div className="grid gap-1 text-sm font-semibold">Pathway
-              <Select value={pathwayId} onValueChange={setPathwayId} disabled={saving}>
-                <Select.Trigger><Select.Value placeholder="Select pathway" /></Select.Trigger>
+              <Select value={pathwayId} onValueChange={(value) => { setPathwayId(value); setValidationError(""); }} disabled={saving}>
+                <Select.Trigger id="official-section-pathway" aria-invalid={validationError === "Select a pathway."} aria-describedby={validationError === "Select a pathway." ? "official-section-pathway-error" : undefined} className="aria-[invalid=true]:border-destructive"><Select.Value placeholder="Select pathway" /></Select.Trigger>
                 <Select.Content><Select.Group>{enabledPathways.map((pathway) => <Select.Item key={pathway.id} value={String(pathway.id)}>{pathway.name}</Select.Item>)}</Select.Group></Select.Content>
               </Select>
+              {validationError === "Select a pathway." && <FormMessage id="official-section-pathway-error">{validationError}</FormMessage>}
             </div>
           ) : <Text as="p" className="pb-2 text-xs text-muted-foreground">No pathway required for this grade in the selected year.</Text>}
-          <Button onClick={() => void save()} disabled={saving || !name.trim() || (requiresPathway && !pathwayId)}>{editingId == null ? "Add Section" : "Save Section"}</Button>
+          <Button onClick={() => void save()} disabled={saving}>{editingId == null ? "Add Section" : "Save Section"}</Button>
         </div>
         {editingId != null && <Button variant="outline" className="w-fit" onClick={resetDraft}>Cancel edit</Button>}
-        {error && <Text as="p" className="text-sm text-destructive">{error}</Text>}
         {loading ? <Text as="p">Loading sections...</Text> : !gradeSections.length ? <Text as="p" className="text-sm text-muted-foreground">No official sections configured for this grade and academic year.</Text> : (
           <div className="grid gap-2">
             {gradeSections.map((section) => <div key={section.id} className="flex flex-wrap items-center justify-between gap-2 border-2 border-border p-2 text-sm">

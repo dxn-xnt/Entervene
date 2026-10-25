@@ -2,7 +2,8 @@
 
 import React, { useRef, useState } from "react";
 import { Download, FileSpreadsheet, UserPlus, Upload } from "lucide-react";
-import { Alert } from "@/components/retroui/Alert";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
@@ -338,6 +339,9 @@ export default function AddUserModal({
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [manualErrors, setManualErrors] = useState<{ firstName?: string; lastName?: string; email?: string; contactNumber?: string; dob?: string }>({});
+  const [manualApiError, setManualApiError] = useState<string | null>(null);
+  const [manualValidationAttempt, setManualValidationAttempt] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
@@ -347,6 +351,8 @@ export default function AddUserModal({
     setDragOver(false);
     setUploadedFile(null);
     setImportResult(null);
+    setManualErrors({});
+    setManualApiError(null);
     setImporting(false);
     onClose();
   };
@@ -376,18 +382,17 @@ export default function AddUserModal({
       );
 
       const data = await res.json().catch(() => ({}));
-      setImportResult(res.ok ? data : backendImportResult(data, importRole));
+      setImportResult(res.ok ? data : res.status === 400 || res.status === 422 ? backendImportResult(data, importRole) : null);
 
       if (res.ok) {
         onUserAdded?.(form);
         const created = data.created_count ?? data.created ?? 0;
         if (created > 0) toast.success({ title: `${created} user${created === 1 ? "" : "s"} imported` });
-      } else {
+      } else if (res.status !== 400 && res.status !== 422) {
         toast.error({ title: "User import failed", description: backendImportResult(data, importRole).message });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to import users.";
-      setImportResult({ message, failed_count: 1 });
       toast.error({ title: "User import failed", description: message });
     } finally {
       setImporting(false);
@@ -395,6 +400,7 @@ export default function AddUserModal({
   };
 
   const handleField = (field: keyof ManualFormData, value: string) => {
+    setManualApiError(null);
     if (field === "contactNumber") {
       value = value.replace(/\D/g, "").slice(0, 11);
     }
@@ -404,18 +410,29 @@ export default function AddUserModal({
       }
       return { ...prev, [field]: value };
     });
+    if (field === "contactNumber" && (!value || /^\d{11}$/.test(value))) setManualErrors((current) => ({ ...current, contactNumber: undefined }));
+    if (field === "dob" && (!value || /^\d{4}-\d{2}-\d{2}$/.test(value))) setManualErrors((current) => ({ ...current, dob: undefined }));
+    if (field === "firstName" && value.trim()) setManualErrors((current) => ({ ...current, firstName: undefined }));
+    if (field === "lastName" && value.trim()) setManualErrors((current) => ({ ...current, lastName: undefined }));
+    if (field === "email" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) setManualErrors((current) => ({ ...current, email: undefined }));
   };
 
   const handleManualSubmit = async () => {
     if (manualSubmitting) return;
-    if (form.role !== "Admin" && form.contactNumber && !/^\d{11}$/.test(form.contactNumber)) {
-      toast.error({ title: "Invalid contact number", description: "Contact number must contain exactly 11 digits." });
+    setManualApiError(null);
+    const nextErrors = {
+      firstName: !form.firstName.trim() ? "Enter a first name." : undefined,
+      lastName: !form.lastName.trim() ? "Enter a last name." : undefined,
+      email: !form.email.trim() ? "Enter an email address." : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()) ? "Enter a valid email address." : undefined,
+      contactNumber: form.role !== "Admin" && form.contactNumber && !/^\d{11}$/.test(form.contactNumber) ? "Contact number must contain exactly 11 digits." : undefined,
+      dob: form.dob && !/^\d{4}-\d{2}-\d{2}$/.test(form.dob) ? "DOB must use YYYY-MM-DD format." : undefined,
+    };
+    if (Object.values(nextErrors).some(Boolean)) {
+      setManualErrors(nextErrors);
+      setManualValidationAttempt((attempt) => attempt + 1);
       return;
     }
-    if (form.dob && !/^\d{4}-\d{2}-\d{2}$/.test(form.dob)) {
-      toast.error({ title: "Invalid date of birth", description: "DOB must use YYYY-MM-DD format." });
-      return;
-    }
+    setManualErrors({});
 
     setManualSubmitting(true);
     try {
@@ -451,7 +468,10 @@ export default function AddUserModal({
 
       if (!res.ok) {
         const detail = typeof data.detail === "string" ? data.detail : "Unable to send invite.";
-        toast.error({ title: "Unable to create user", description: detail });
+        if (res.status === 400 || res.status === 422) {
+          setManualApiError(detail);
+          setManualValidationAttempt((attempt) => attempt + 1);
+        } else toast.error({ title: "Unable to create user", description: detail });
         return;
       }
 
@@ -495,9 +515,9 @@ export default function AddUserModal({
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }} >
       <Dialog.Content size="md" className="w-[calc(100vw-1.5rem)] max-w-lg rounded-none font-sans lg:max-w-[40%]">
-        <Dialog.Header asChild className="bg-primary text-primary-foreground font-head flex items-center justify-between">
+        <Dialog.Header asChild className="bg-primary text-black font-sans flex items-center justify-between">
           <div>
-            <span className="font-bold text-lg">
+            <span className="text-xl font-bold normal-case">
               {step === "choose" && "Add New Users"}
               {step === "import" && "Import Users from File"}
               {step === "manual" && "Create User Manually"}
@@ -620,21 +640,14 @@ export default function AddUserModal({
               />
 
               {importResult && (
-                <Alert
-                  status={importResult.errors?.length ? "error" : "success"}
-                  className="px-3 py-2 text-xs border-2 border-black"
-                >
-                  <Alert.Title className="text-sm font-bold">
-                    {importResult.errors?.length ? "Import needs attention" : "Import complete"}
-                  </Alert.Title>
-                  <Alert.Description>
-                    {importSummary(importResult)}
-                  </Alert.Description>
+                <div className="grid gap-1 text-sm">
+                  {importResult.errors?.length ? <FormMessage>Import needs attention</FormMessage> : <p className="font-medium text-foreground">Import complete</p>}
+                  {importResult.errors?.length ? <FormMessage>{importSummary(importResult)}</FormMessage> : <p>{importSummary(importResult)}</p>}
                   {importResult.skipped_emails?.length
                     ? ` Skipped: ${importResult.skipped_emails.join(", ")}`
                     : ""}
                   {importResult.errors?.length ? (
-                    <ul className="mt-2 max-h-24 overflow-y-auto list-disc pl-4">
+                    <ul className="mt-1 max-h-24 overflow-y-auto list-disc pl-4 text-destructive" role="alert">
                       {importResult.errors.slice(0, 5).map((error, index) => (
                         <li key={`${error.row}-${error.field}-${index}`}>
                           {formatImportError(error)}
@@ -647,7 +660,7 @@ export default function AddUserModal({
                       ) : null}
                     </ul>
                   ) : null}
-                </Alert>
+                </div>
               )}
             </div>
 
@@ -670,6 +683,11 @@ export default function AddUserModal({
         {step === "manual" && (
           <>
             <div className="flex flex-col gap-3.5 p-5">
+              <AdminValidationAlert
+                message={manualApiError}
+                attempt={manualValidationAttempt}
+                firstInvalidFieldId={manualErrors.firstName ? "new-user-first-name" : manualErrors.lastName ? "new-user-last-name" : manualErrors.email ? "new-user-email" : manualErrors.contactNumber ? "new-user-contact-number" : manualErrors.dob ? "new-user-dob" : undefined}
+              />
               <Field label="Role">
                 <Select value={form.role} onValueChange={(val) => handleField("role", val)}>
                   <Select.Trigger className="w-full">
@@ -686,19 +704,27 @@ export default function AddUserModal({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="First Name">
                   <Input
+                    id="new-user-first-name"
+                    aria-invalid={!!manualErrors.firstName}
+                    aria-describedby={manualErrors.firstName ? "new-user-first-name-error" : undefined}
                     placeholder="John"
                     value={form.firstName}
                     onChange={(e) => handleField("firstName", e.target.value)}
                     className="w-full bg-background border-2 border-black"
                   />
+                  <FormMessage id="new-user-first-name-error">{manualErrors.firstName}</FormMessage>
                 </Field>
                 <Field label="Last Name">
                   <Input
+                    id="new-user-last-name"
+                    aria-invalid={!!manualErrors.lastName}
+                    aria-describedby={manualErrors.lastName ? "new-user-last-name-error" : undefined}
                     placeholder="Doe"
                     value={form.lastName}
                     onChange={(e) => handleField("lastName", e.target.value)}
                     className="w-full bg-background border-2 border-black"
                   />
+                  <FormMessage id="new-user-last-name-error">{manualErrors.lastName}</FormMessage>
                 </Field>
               </div>
 
@@ -725,12 +751,16 @@ export default function AddUserModal({
 
               <Field label="Email Address">
                 <Input
+                  id="new-user-email"
+                  aria-invalid={!!manualErrors.email}
+                  aria-describedby={manualErrors.email ? "new-user-email-error" : undefined}
                   type="email"
                   placeholder="john@example.com"
                   value={form.email}
                   onChange={(e) => handleField("email", e.target.value)}
                   className="w-full bg-background border-2 border-black"
                 />
+                <FormMessage id="new-user-email-error">{manualErrors.email}</FormMessage>
               </Field>
 
               {!isAdmin && (
@@ -748,6 +778,7 @@ export default function AddUserModal({
                   </Field>
                   <Field label="Contact Number">
                     <Input
+                      id="new-user-contact-number"
                       type="tel"
                       inputMode="numeric"
                       autoComplete="tel-national"
@@ -759,7 +790,10 @@ export default function AddUserModal({
                         handleField("contactNumber", e.target.value)
                       }
                       className="w-full bg-background border-2 border-black"
+                      aria-invalid={!!manualErrors.contactNumber}
+                      aria-describedby={manualErrors.contactNumber ? "new-user-contact-number-error" : undefined}
                     />
+                    <FormMessage id="new-user-contact-number-error">{manualErrors.contactNumber}</FormMessage>
                   </Field>
                 </div>
               )}
@@ -768,7 +802,7 @@ export default function AddUserModal({
                 <Field label="Address">
                   <textarea
                     rows={2}
-                    className="w-full rounded border-2 border-black bg-background px-4 py-2 text-sm font-medium shadow-md transition focus:outline-hidden focus:shadow-xs resize-none"
+                    className="w-full rounded border-2 border-black bg-background px-4 py-2 font-sans text-base font-normal shadow-md transition focus:outline-hidden focus:shadow-xs resize-none"
                     placeholder="Street, Barangay, City…"
                     value={form.address}
                     onChange={(e) => handleField("address", e.target.value)}
@@ -779,11 +813,15 @@ export default function AddUserModal({
               {!isAdmin && (
                 <Field label="Date of Birth">
                   <Input
+                    id="new-user-dob"
                     type="date"
                     value={form.dob}
                     onChange={(e) => handleField("dob", e.target.value)}
                     className="w-full bg-background border-2 border-black"
+                    aria-invalid={!!manualErrors.dob}
+                    aria-describedby={manualErrors.dob ? "new-user-dob-error" : undefined}
                   />
+                  <FormMessage id="new-user-dob-error">{manualErrors.dob}</FormMessage>
                 </Field>
               )}
 
@@ -821,7 +859,7 @@ export default function AddUserModal({
                       <Input
                         placeholder="12-digit LRN"
                         maxLength={12}
-                        className="w-full bg-background border-2 border-black font-mono"
+                        className="w-full bg-background border-2 border-black"
                         value={form.studentLrn}
                         onChange={(e) =>
                           handleField(
@@ -854,7 +892,7 @@ export default function AddUserModal({
                       min="60"
                       max="100"
                       placeholder="e.g. 88.50 (optional)"
-                      className="w-full bg-background border-2 border-black font-mono"
+                      className="w-full bg-background border-2 border-black"
                       value={form.priorGwa}
                       onChange={(e) => handleField("priorGwa", e.target.value)}
                     />
@@ -891,7 +929,7 @@ function Field({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{label}</label>
+      <label className="text-sm font-medium text-black normal-case">{label}</label>
       {children}
     </div>
   );

@@ -221,10 +221,11 @@ export default function AdminSubstitutions() {
                 <div className="relative min-w-0 w-full sm:w-72">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
+                    variant="search"
                     placeholder="Search teacher, class, subject..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full min-w-0 pl-9 text-sm"
+                    className="w-full min-w-0"
                   />
                 </div>
               </div>

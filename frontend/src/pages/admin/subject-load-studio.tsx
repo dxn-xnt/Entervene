@@ -22,6 +22,8 @@ import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
 import { Text } from "@/components/retroui/Text";
 import { Alert } from "@/components/retroui/Alert";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { TimePickerSingle, type TimeValue } from "@/components/retroui/TimePicker";
 import { SegmentedControl } from "@/components/retroui/SegmentedControl";
@@ -370,6 +372,7 @@ export default function AdminSubjectLoadStudio() {
   const [loadError, setLoadError] = useState(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [notice, setNotice] = useState<{ title?: string; message: string; type: "success" | "error" } | null>(null);
+  const [timeValidationError, setTimeValidationError] = useState<{ slotKey: string; message: string } | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [jumpIndex, setJumpIndex] = useState<{ type: "error" | "warning" | "unassigned"; idx: number } | null>(null);
   const [isBreakDrawerOpen, setIsBreakDrawerOpen] = useState<boolean>(false);
@@ -463,6 +466,7 @@ export default function AdminSubjectLoadStudio() {
   // Copy Schedule Modal State
   const [isCopyModalOpen, setIsCopyModalOpen] = useState<boolean>(false);
   const [copySourcePeriodId, setCopySourcePeriodId] = useState<string>("");
+  const [copySourceError, setCopySourceError] = useState("");
   const [isCopying, setIsCopying] = useState<boolean>(false);
 
   const activeGroupKey = useMemo(() => {
@@ -636,9 +640,10 @@ export default function AdminSubjectLoadStudio() {
 
     const errorMsg = validatePeriodTimeRange(start, end, schoolDayStart, schoolDayEnd);
     if (errorMsg) {
-      setNotice({ type: "error", message: errorMsg });
+      setTimeValidationError({ slotKey, message: errorMsg });
       return; // Reject change
     }
+    if (timeValidationError?.slotKey === slotKey) setTimeValidationError(null);
 
     const updated = loads.map((item) => {
       if (item._key !== slotKey) return item;
@@ -856,7 +861,7 @@ export default function AdminSubjectLoadStudio() {
 
   const handleCopyFromTerm = async () => {
     if (!copySourcePeriodId) {
-      toast.warning({ title: "Select a source term" });
+      setCopySourceError("Select a source term.");
       return;
     }
 
@@ -1416,10 +1421,6 @@ export default function AdminSubjectLoadStudio() {
           type: "error",
         });
       }
-      toast.error({
-        title: action === "draft" ? "Unable to save draft" : "Unable to publish subject loads",
-        description: typeof detail === "string" && detail ? detail : `Failed to ${action} subject loads.`,
-      });
     } finally {
       setIsSaving(false);
     }
@@ -1744,8 +1745,9 @@ export default function AdminSubjectLoadStudio() {
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+              {notice?.type === "error" && <AdminValidationAlert message={notice.message} />}
               {/* Notice Alert Overlay */}
-              {notice && (
+              {notice?.type === "success" && (
                 <Alert
                   status={notice.type}
                   position="top-right"
@@ -1753,11 +1755,7 @@ export default function AdminSubjectLoadStudio() {
                   onClose={() => setNotice(null)}
                 >
                   <div className="flex gap-2.5 items-start">
-                    {notice.type === "success" ? (
-                      <CheckCircle2 className="size-5 shrink-0 text-emerald-800 mt-0.5" />
-                    ) : (
-                      <AlertTriangle className="size-5 shrink-0 text-rose-800 mt-0.5" />
-                    )}
+                    <CheckCircle2 className="size-5 shrink-0 text-emerald-800 mt-0.5" />
                     <div className="flex flex-col gap-0.5 min-w-0">
                       {notice.title && (
                         <Alert.Title className="font-bold text-sm text-foreground">
@@ -1781,10 +1779,11 @@ export default function AdminSubjectLoadStudio() {
                       <label className="relative w-full">
                         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                         <Input
+                          variant="search"
                           value={searchQuery}
                           onChange={(event) => setSearchQuery(event.target.value)}
                           placeholder="Search class"
-                          className="h-10 w-full border-black pl-9 pr-3"
+                          className="w-full"
                         />
                       </label>
 
@@ -2609,7 +2608,8 @@ export default function AdminSubjectLoadStudio() {
                                                         </div>
 
                                                         {/* Time Picker */}
-                                                        <fieldset disabled={sectionLocked} className="flex items-center gap-1">
+                                                        <div className="grid gap-1">
+                                                        <fieldset id={`schedule-time-${slotKey}`} tabIndex={-1} disabled={sectionLocked} aria-invalid={timeValidationError?.slotKey === slotKey} className={`flex items-center gap-1 ${timeValidationError?.slotKey === slotKey ? "rounded border-2 border-destructive" : ""}`}>
                                                           <TimePickerSingle
                                                             value={stringToTimeValue(slot.start_time, 8)}
                                                             onChange={(newStart) =>
@@ -2625,6 +2625,8 @@ export default function AdminSubjectLoadStudio() {
                                                             }
                                                           />
                                                         </fieldset>
+                                                        {timeValidationError?.slotKey === slotKey && <FormMessage>{timeValidationError.message}</FormMessage>}
+                                                        </div>
 
                                                         {/* Delete slot button */}
                                                         {subjectSlots.length > 1 && (
@@ -2804,9 +2806,9 @@ export default function AdminSubjectLoadStudio() {
                   <label className="block text-sm font-bold mb-1">Source Term</label>
                   <Select
                     value={copySourcePeriodId}
-                    onValueChange={(val) => setCopySourcePeriodId(val)}
+                    onValueChange={(val) => { setCopySourcePeriodId(val); setCopySourceError(""); }}
                   >
-                    <Select.Trigger className="w-full">
+                    <Select.Trigger id="copy-source-term" aria-invalid={!!copySourceError} aria-describedby={copySourceError ? "copy-source-term-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
                       <Select.Value placeholder="Select a source term..." />
                     </Select.Trigger>
                     <Select.Content>
@@ -2819,16 +2821,17 @@ export default function AdminSubjectLoadStudio() {
                       </Select.Group>
                     </Select.Content>
                   </Select>
+                  <FormMessage id="copy-source-term-error">{copySourceError}</FormMessage>
                 </div>
 
                 <div>
                   <label className="block text-sm font-bold mb-1">Scope</label>
-                  <div className="p-2 bg-gray-50 border border-gray-300 rounded text-sm text-gray-700">
+                  <p className="text-sm text-muted-foreground">
                     {selectedGradeId === "all"
                       ? "Entire Term (All Grades & Sections)"
                       : `Grade ${studioData?.academic_levels?.find(l => String(l.academic_level_id) === selectedGradeId)?.grade_level} (All Sections)`
                     }
-                  </div>
+                  </p>
                 </div>
 
                 <div className="bg-amber-50 border-2 border-amber-900 p-3 rounded">
@@ -2846,7 +2849,7 @@ export default function AdminSubjectLoadStudio() {
                 <Button
                   variant="default"
                   onClick={() => void handleCopyFromTerm()}
-                  disabled={isCopying || !copySourcePeriodId}
+                  disabled={isCopying}
                 >
                   {isCopying ? "Copying..." : "Yes, Overwrite & Copy"}
                 </Button>

@@ -7,11 +7,14 @@ import { Popover } from "@base-ui/react/popover";
 import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/Toast";
 import { Text } from "@/components/retroui/Text";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Carousel } from "@/components/retroui/Carousel";
 import { Calendar } from "@/components/retroui/Calendar";
 import { formatPeriodLabel, periodTotal } from "@/lib/academic-periods";
+import { ApiRequestError } from "@/lib/api";
 import {
     createAcademicPeriods,
     getAcademicYearsSettings,
@@ -21,6 +24,8 @@ import {
 
 interface DatePickerProps {
     id?: string;
+    invalid?: boolean;
+    errorId?: string;
     selected: Date | undefined;
     onSelect: (date: Date | undefined) => void;
     placeholder?: string;
@@ -28,7 +33,7 @@ interface DatePickerProps {
     maxDate?: Date;
 }
 
-function DatePicker({ id, selected, onSelect, placeholder = "Select date", minDate, maxDate }: DatePickerProps) {
+function DatePicker({ id, invalid, errorId, selected, onSelect, placeholder = "Select date", minDate, maxDate }: DatePickerProps) {
     const [isOpen, setIsOpen] = React.useState(false);
 
     // Helpers to compare dates ignoring time
@@ -48,7 +53,9 @@ function DatePicker({ id, selected, onSelect, placeholder = "Select date", minDa
         <Popover.Root open={isOpen} onOpenChange={setIsOpen}>
             <Popover.Trigger
                 id={id}
-                className="flex h-10 w-full rounded items-center justify-between border-2 border-input border-border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground outline-none focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 text-left cursor-pointer"
+                aria-invalid={invalid}
+                aria-describedby={invalid ? errorId : undefined}
+                className={`flex h-10 w-full rounded items-center justify-between border-2 border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground outline-none focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 text-left cursor-pointer ${invalid ? "border-destructive" : "border-border"}`}
             >
                 <span className={selected ? "text-foreground" : "text-muted-foreground"}>
                     {selected ? format(selected, "PPP") : placeholder}
@@ -92,6 +99,7 @@ interface PeriodCardProps {
     minEndDate?: Date;
     maxEndDate?: Date;
     periodType: string;
+    error?: string | null;
 }
 
 function PeriodCard({
@@ -106,7 +114,11 @@ function PeriodCard({
     minEndDate,
     maxEndDate,
     periodType,
+    error,
 }: PeriodCardProps) {
+    const invalidStart = !!error && !startDate;
+    const invalidEnd = !!error && (!endDate || (!!startDate && !!endDate && startDate > endDate));
+    const errorId = `period-date-error-${index}`;
     return (
         <div className="flex flex-col gap-5 py-3">
             <div className="flex items-center justify-between border-b pb-3 border-border/40">
@@ -122,6 +134,8 @@ function PeriodCard({
                     <label className="text-xs font-medium text-muted-foreground" htmlFor={`start-date-${index}`}>Start Date</label>
                     <DatePicker
                         id={`start-date-${index}`}
+                        invalid={invalidStart}
+                        errorId={errorId}
                         selected={startDate}
                         onSelect={onStartDateChange}
                         minDate={minStartDate}
@@ -133,6 +147,8 @@ function PeriodCard({
                     <label className="text-xs font-medium text-muted-foreground" htmlFor={`end-date-${index}`}>End Date</label>
                     <DatePicker
                         id={`end-date-${index}`}
+                        invalid={invalidEnd}
+                        errorId={errorId}
                         selected={endDate}
                         onSelect={onEndDateChange}
                         minDate={minEndDate}
@@ -141,6 +157,7 @@ function PeriodCard({
                     />
                 </div>
             </div>
+            {error && <FormMessage id={errorId}>{error}</FormMessage>}
         </div>
     );
 }
@@ -157,6 +174,7 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
     const [periodType, setPeriodType] = React.useState<string>("TERM");
     const [isSaving, setIsSaving] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
+    const [validationAttempt, setValidationAttempt] = React.useState(0);
 
     React.useEffect(() => {
         getAcademicYearsSettings()
@@ -203,12 +221,13 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
     }, [academicYear, academicYears]);
 
     const handleDateChange = (idx: number, field: "startDate" | "endDate", value: Date | undefined) => {
+        const nextPeriod = { ...dates[idx], [field]: value };
         setDates(prev => {
             const next = [...prev];
             next[idx] = { ...next[idx], [field]: value };
             return next;
         });
-        setError(null);
+        if (error?.endsWith(formatPeriodLabel({ period_type: periodType, period_sequence: idx + 1 }) + ".") && nextPeriod.startDate && nextPeriod.endDate && nextPeriod.startDate <= nextPeriod.endDate) setError(null);
     };
 
     // Start date calculations:
@@ -281,6 +300,7 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
         const selectedAyObj = academicYears.find((y) => y.year_label === academicYear);
         if (!selectedAyObj) {
             setError("Please select a valid academic year.");
+            setValidationAttempt((attempt) => attempt + 1);
             return;
         }
 
@@ -289,10 +309,12 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
             const p = dates[i];
             if (!p?.startDate || !p?.endDate) {
                 setError(`Please select both start and end dates for ${formatPeriodLabel({ period_type: periodType, period_sequence: i + 1 })}.`);
+                setValidationAttempt((attempt) => attempt + 1);
                 return;
             }
             if (p.startDate > p.endDate) {
                 setError(`Start date cannot be after end date for ${formatPeriodLabel({ period_type: periodType, period_sequence: i + 1 })}.`);
+                setValidationAttempt((attempt) => attempt + 1);
                 return;
             }
         }
@@ -322,8 +344,10 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
         } catch (err: unknown) {
             console.error("Failed to save academic periods:", err);
             const msg = err instanceof Error ? err.message : "Failed to create academic periods.";
-            setError(msg);
-            if (!created) toast.error({ title: "Unable to create academic periods", description: msg });
+            if (!created && err instanceof ApiRequestError && (err.status === 400 || err.status === 422)) {
+                setError(msg);
+                setValidationAttempt((attempt) => attempt + 1);
+            } else if (!created) toast.error({ title: "Unable to create academic periods", description: msg });
         } finally {
             setIsSaving(false);
         }
@@ -335,12 +359,17 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
                 <Text as="h5" className="font-sans text-xl font-bold">Add Academic Period</Text>
             </Dialog.Header>
             <section className="flex flex-col gap-4 p-4">
+                <AdminValidationAlert
+                    message={error && !error.startsWith("Please select") && !error.startsWith("Start date") ? error : null}
+                    attempt={validationAttempt}
+                    firstInvalidFieldId={error === "Please select a valid academic year." ? "academic-year" : undefined}
+                />
                 <section className="text-md">
                     <div className="flex flex-col gap-3">
                         <div className="flex flex-col gap-1">
                             <label htmlFor="academic-year" className="text-sm font-semibold">Academic Year</label>
-                            <Select value={academicYear} onValueChange={setAcademicYear}>
-                                <Select.Trigger className="w-full">
+                            <Select value={academicYear} onValueChange={(value) => { setAcademicYear(value); setError(null); }}>
+                                <Select.Trigger id="academic-year" aria-invalid={error === "Please select a valid academic year."} aria-describedby={error === "Please select a valid academic year." ? "academic-year-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
                                     <Select.Value placeholder="Select Academic Year" />
                                 </Select.Trigger>
                                 <Select.Content>
@@ -357,6 +386,7 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
                                     </Select.Group>
                                 </Select.Content>
                             </Select>
+                            {error === "Please select a valid academic year." && <FormMessage id="academic-year-error">{error}</FormMessage>}
                         </div>
                         <div className="flex flex-col gap-1">
                             <label htmlFor="period-type" className="text-sm font-semibold">Period Type</label>
@@ -390,6 +420,7 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
                                                 minEndDate={getMinEndDate(index)}
                                                 maxEndDate={getMaxEndDate(index)}
                                                 periodType={periodType}
+                                                error={error?.endsWith(formatPeriodLabel({ period_type: periodType, period_sequence: index + 1 }) + ".") ? error : null}
                                             />
                                         </Carousel.Item>
                                     ))}
@@ -399,9 +430,6 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
                             <Carousel.Next className="right-0 top-1/2 size-10" />
                         </Carousel>
 
-                        {error ? (
-                            <p className="text-sm font-semibold text-red-600">{error}</p>
-                        ) : null}
                     </div>
                 </section>
             </section>

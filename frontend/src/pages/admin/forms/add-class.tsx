@@ -18,6 +18,8 @@ import ManualClassWizard from "@/pages/admin/forms/classes/manual-class-wizard";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import { Text } from "@/components/retroui/Text";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Card } from "@/components/retroui/Card";
 import { DialogueSelect } from "@/components/dialogue-select";
 
@@ -121,8 +123,6 @@ export default function AddClassModal({ classes, onClose, onClassesCreated }: Ad
     setManualStep("details");
   }
 
-  const inAssignmentStep = manualStep === "assignment";
-
   if (mode === "choice") {
     return (
       <Dialog.Content size="lg">
@@ -168,7 +168,7 @@ export default function AddClassModal({ classes, onClose, onClassesCreated }: Ad
         : "Review Class Setup";
 
   return (
-    <Dialog.Content size={!saveSuccess && inAssignmentStep ? "3xl" : "xl"}>
+    <Dialog.Content size="lg">
       <Dialog.Header asChild>
         <div className="flex items-center justify-between w-full">
           <Text as="h5" className="font-sans text-xl font-bold">{dialogTitle}</Text>
@@ -283,6 +283,7 @@ function ManualReview({ setup, assignmentState, skippedStudents, onSaved, onBack
 }) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<SaveErrorState | null>(null);
+  const [validationAttempt, setValidationAttempt] = useState(0);
 
   async function saveClasses() {
     if (isSaving) return;
@@ -293,6 +294,7 @@ function ManualReview({ setup, assignmentState, skippedStudents, onSaved, onBack
         details: payloadResult.errors,
         retryable: false,
       });
+      setValidationAttempt((attempt) => attempt + 1);
       return;
     }
 
@@ -314,6 +316,7 @@ function ManualReview({ setup, assignmentState, skippedStudents, onSaved, onBack
         <Text as="p" className="text-sm"><b>Academic Level:</b> {setup.academicLevelName}</Text>
         <Text as="p" className="text-sm"><b>Academic Year:</b> {setup.academicYear.year_label}</Text>
       </div>
+      <AdminValidationAlert message={saveError?.message === "Review the class setup before saving." ? null : saveError?.message} attempt={validationAttempt} />
 
       <div className="grid gap-3 sm:grid-cols-2">
         {setup.sections.map((section) => (
@@ -330,11 +333,10 @@ function ManualReview({ setup, assignmentState, skippedStudents, onSaved, onBack
       </Text>
 
       {saveError && (
-        <div className="grid gap-2 rounded border-2 border-destructive bg-destructive/10 p-3 text-sm text-destructive">
-          <p className="font-bold">{saveError.message}</p>
-          {saveError.backendMessage && saveError.backendMessage !== saveError.message && <p>{saveError.backendMessage}</p>}
+        <div className="grid gap-1">
+          {saveError.backendMessage && saveError.backendMessage !== saveError.message && <FormMessage>{saveError.backendMessage}</FormMessage>}
           {!!saveError.details.length && (
-            <ul className="grid gap-1 text-xs">
+            <ul className="grid gap-1 text-xs text-destructive" role="alert">
               {saveError.details.map((detail) => <li key={detail}>- {detail}</li>)}
             </ul>
           )}

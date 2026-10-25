@@ -328,7 +328,7 @@ export const TeacherTOSPage: React.FC = () => {
                     value={selectedSubjectFilter}
                     onValueChange={setSelectedSubjectFilter}
                   >
-                    <Select.Trigger aria-label="Filter by subject" className="h-10 w-full text-sm">
+                    <Select.Trigger aria-label="Filter by subject" className="h-10 w-full">
                       <Select.Value placeholder="All Assigned Subjects" />
                     </Select.Trigger>
                     <Select.Content>

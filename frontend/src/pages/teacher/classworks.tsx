@@ -483,7 +483,7 @@ export default function Classworks() {
                     value={classFilter}
                     onValueChange={(val) => setClassFilter(val)}
                   >
-                    <Select.Trigger className="h-10 w-full text-sm md:w-44">
+                    <Select.Trigger className="h-10 w-full md:w-44">
                       <Select.Value placeholder="All sections" />
                     </Select.Trigger>
                     <Select.Content>
@@ -505,7 +505,7 @@ export default function Classworks() {
                     value={statusFilter}
                     onValueChange={(val) => setStatusFilter(val)}
                   >
-                    <Select.Trigger className="h-10 w-full text-sm md:w-44">
+                    <Select.Trigger className="h-10 w-full md:w-44">
                       <Select.Value placeholder="All statuses" />
                     </Select.Trigger>
                     <Select.Content>

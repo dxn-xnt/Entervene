@@ -4,6 +4,8 @@ import { Checkbox } from "@/components/retroui/Checkbox";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import {
   copySubjectOfferingsFromAcademicYear,
   type SubjectOfferingCopyAcademicYearResult,
@@ -28,6 +30,7 @@ export function CopyPreviousYearSetupModal({
   const [overwriteExisting, setOverwriteExisting] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationAttempt, setValidationAttempt] = useState(0);
 
   const activeYears = useMemo(
     () => options?.academic_years.filter((year) => year.is_active) ?? [],
@@ -63,10 +66,12 @@ export function CopyPreviousYearSetupModal({
     setError(null);
     if (!sourceAcademicYearId || !targetAcademicYearId) {
       setError("Select a source academic year and active target academic year.");
+      setValidationAttempt((attempt) => attempt + 1);
       return;
     }
     if (sourceAcademicYearId === targetAcademicYearId) {
       setError("Source and target academic years must be different.");
+      setValidationAttempt((attempt) => attempt + 1);
       return;
     }
 
@@ -97,18 +102,19 @@ export function CopyPreviousYearSetupModal({
           </div>
         </Dialog.Header>
         <section className="flex flex-col gap-4 p-4">
-          <div className="rounded border-2 border-black bg-[#fff1b8] p-3 text-sm shadow-[3px_3px_0_#000]">
-            <p className="font-bold">This copies subject offerings only.</p>
-            <p className="text-black/70">
+          <div className="space-y-1 text-sm text-muted-foreground">
+            <p>This copies subject offerings only.</p>
+            <p>
               It does not copy teachers, classes, grades, submissions, or predictions.
             </p>
           </div>
+          <AdminValidationAlert message={error} attempt={validationAttempt} firstInvalidFieldId={!sourceAcademicYearId ? "copy-source-year" : !targetAcademicYearId || sourceAcademicYearId === targetAcademicYearId ? "copy-target-year" : undefined} />
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="flex flex-col gap-1">
               <label className="text-sm" htmlFor="copy-source-year">Source Academic Year</label>
-              <Select value={sourceAcademicYearId} onValueChange={setSourceAcademicYearId}>
-                <Select.Trigger id="copy-source-year" className="w-full">
+              <Select value={sourceAcademicYearId} onValueChange={(value) => { setSourceAcademicYearId(value); setError(null); }}>
+                <Select.Trigger id="copy-source-year" aria-invalid={!!error && !sourceAcademicYearId} aria-describedby={error && !sourceAcademicYearId ? "copy-source-year-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
                   <Select.Value placeholder="Select previous year" />
                 </Select.Trigger>
                 <Select.Content>
@@ -121,17 +127,18 @@ export function CopyPreviousYearSetupModal({
                   </Select.Group>
                 </Select.Content>
               </Select>
-              <p className="text-xs text-black/70">Previous or inactive years are allowed as the copy source.</p>
+              {error && !sourceAcademicYearId && <FormMessage id="copy-source-year-error">Select a source academic year.</FormMessage>}
+              <p className="text-xs text-muted-foreground">Previous or inactive years are allowed as the copy source.</p>
             </div>
 
             <div className="flex flex-col gap-1">
               <label className="text-sm" htmlFor="copy-target-year">Target Academic Year</label>
               <Select
                 value={targetAcademicYearId}
-                onValueChange={setTargetAcademicYearId}
+                onValueChange={(value) => { setTargetAcademicYearId(value); setError(null); }}
                 disabled={targetYears.length <= 1}
               >
-                <Select.Trigger id="copy-target-year" className="w-full">
+                <Select.Trigger id="copy-target-year" aria-invalid={!!error && (!targetAcademicYearId || sourceAcademicYearId === targetAcademicYearId)} aria-describedby={error && (!targetAcademicYearId || sourceAcademicYearId === targetAcademicYearId) ? "copy-target-year-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
                   <Select.Value placeholder="Select active year" />
                 </Select.Trigger>
                 <Select.Content>
@@ -144,7 +151,8 @@ export function CopyPreviousYearSetupModal({
                   </Select.Group>
                 </Select.Content>
               </Select>
-              <p className="text-xs text-black/70">Target year must be active. Future terms remain editable.</p>
+              {error && (!targetAcademicYearId || sourceAcademicYearId === targetAcademicYearId) && <FormMessage id="copy-target-year-error">{sourceAcademicYearId === targetAcademicYearId ? "Choose a different target year." : "Select an active target year."}</FormMessage>}
+              <p className="text-xs text-muted-foreground">Target year must be active. Future terms remain editable.</p>
             </div>
           </div>
 
@@ -156,13 +164,12 @@ export function CopyPreviousYearSetupModal({
             />
             <span>
               <span className="block font-bold">Overwrite existing offerings</span>
-              <span className="text-xs text-black/70">
+              <span className="text-xs text-muted-foreground">
                 Updates exact matching target offerings. Extra target offerings are not deleted.
               </span>
             </span>
           </label>
 
-          {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
         </section>
         <Dialog.Footer>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isCopying}>Cancel</Button>

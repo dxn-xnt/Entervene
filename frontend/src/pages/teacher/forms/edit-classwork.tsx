@@ -527,7 +527,7 @@ export default function EditClassworkModal({
                     availableLessons.length === 0
                   }
                 >
-                  <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm font-medium">
+                  <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                     <Select.Value
                       className="text-muted-foreground"
                       placeholder={
@@ -568,7 +568,7 @@ export default function EditClassworkModal({
                   }
                   disabled={isSavingEdit}
                   placeholder="Classwork title"
-                  className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
+                  className="w-full bg-white border-2 border-black rounded shadow-md"
                 />
               </Field>
 
@@ -583,7 +583,7 @@ export default function EditClassworkModal({
                   }
                   disabled={isSavingEdit}
                 >
-                  <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm font-medium">
+                  <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                     <Select.Value />
                   </Select.Trigger>
                   <Select.Content className="border-2 border-black rounded bg-white">
@@ -633,7 +633,7 @@ export default function EditClassworkModal({
                       }
                       disabled={isSavingEdit}
                     >
-                      <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
+                      <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                         <Select.Value placeholder="Select Category" />
                       </Select.Trigger>
                       <Select.Content className="border-2 border-black rounded bg-white">
@@ -666,7 +666,7 @@ export default function EditClassworkModal({
                           }
                           disabled={isSavingEdit}
                         >
-                          <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
+                          <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                             <Select.Value placeholder="Select Sub-type" />
                           </Select.Trigger>
                           <Select.Content className="border-2 border-black rounded bg-white">
@@ -702,7 +702,7 @@ export default function EditClassworkModal({
                             }))
                           }
                           disabled={isSavingEdit}
-                          className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
+                          className="w-full bg-white border-2 border-black rounded shadow-md"
                         />
                       </Field>
                     )}
@@ -875,7 +875,7 @@ export default function EditClassworkModal({
                         }))
                       }
                       disabled={isSavingEdit}
-                      className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
+                      className="w-full bg-white border-2 border-black rounded shadow-md"
                     />
                   </Field>
                 )}
@@ -891,7 +891,7 @@ export default function EditClassworkModal({
                     }
                     disabled={isSavingEdit}
                   >
-                    <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
+                    <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                       <Select.Value />
                     </Select.Trigger>
                     <Select.Content className="border-2 border-black rounded bg-white">
@@ -914,7 +914,7 @@ export default function EditClassworkModal({
                       }))
                     }
                     disabled={isSavingEdit || !editDraft.is_published}
-                    className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
+                    className="w-full bg-white border-2 border-black rounded shadow-md"
                   />
                 </Field>
 
@@ -932,7 +932,7 @@ export default function EditClassworkModal({
                         }))
                       }
                       disabled={isSavingEdit}
-                      className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
+                      className="w-full bg-white border-2 border-black rounded shadow-md"
                     />
                   </Field>
                 )}

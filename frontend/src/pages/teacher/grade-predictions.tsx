@@ -22,6 +22,8 @@ import {
 } from "@/lib/prediction-api";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { BrainCircuit } from "lucide-react";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import {
   buildCurrentTermDashboard,
@@ -195,6 +197,7 @@ function LegacyGradePredictions() {
                       setOffset(0);
                     }}
                     hidePeriodFilter
+                    showClearButton={false}
                     onRiskChange={(v) => {
                       setRiskLevel(v);
                       setOffset(0);
@@ -208,14 +211,15 @@ function LegacyGradePredictions() {
                       Loading Grade {grade} predictions...
                     </div>
                   ) : (data?.items.length ?? 0) === 0 ? (
-                    <div className="p-8 bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-center">
-                      <p className="text-lg font-bold text-gray-900">
-                        No at-risk predictions recorded yet for Grade {grade}.
-                      </p>
-                      <p className="text-sm text-gray-600 mt-1 max-w-md mx-auto">
-                        Predictions for this grade level will appear once the AI model generates risk assessments for its active classes and subjects.
-                      </p>
-                    </div>
+                    <Empty className="flex-none px-4 py-8 shadow-md transition-shadow hover:shadow-none">
+                      <EmptyHeader>
+                        <EmptyMedia>
+                          <div className="flex size-10 items-center justify-center border-2 border-black bg-primary text-black" aria-hidden="true"><BrainCircuit className="size-5" /></div>
+                        </EmptyMedia>
+                        <EmptyTitle>{search.trim() || classId || subjectId || riskLevel ? "No predictions match these filters" : `No at-risk predictions yet for Grade ${grade}`}</EmptyTitle>
+                        <EmptyDescription>{search.trim() || classId || subjectId || riskLevel ? "Try another student, class, subject, or risk level." : "Risk assessments will appear when predictions are available for this grade."}</EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
                   ) : (
                     <PredictionTable
                       items={data?.items ?? []}

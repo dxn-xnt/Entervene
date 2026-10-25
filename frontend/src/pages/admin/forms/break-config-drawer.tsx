@@ -12,6 +12,8 @@ import { Loader } from "@/components/retroui/Loader";
 import { Select } from "@/components/retroui/Select";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Text } from "@/components/retroui/Text";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Alert } from "@/components/retroui/Alert";
 import { TimePickerSingle, type TimeValue } from "@/components/retroui/TimePicker";
 import { apiFetch } from "@/lib/api";
@@ -303,7 +305,6 @@ export default function BreakConfigDrawer({
       onClose();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error saving break settings.";
-      setNotice(message);
       toast.error({ title: "Unable to save break timelines", description: message });
       setShowConfirmModal(false);
     } finally {
@@ -341,15 +342,10 @@ export default function BreakConfigDrawer({
           setNotice(`Warning: Reassigned section, but detected ${errorConflicts.length} schedule conflict(s) with new break walls.`);
         }
       }
-      if (conflictCount > 0) {
-        toast.warning({ title: "Section reassigned with schedule conflicts", description: `${conflictCount} conflict(s) need review.` });
-      } else {
-        toast.success({ title: "Section assigned to break timeline" });
-      }
+      if (conflictCount === 0) toast.success({ title: "Section assigned to break timeline" });
       onSaved();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to reassign section.";
-      setNotice(message);
       toast.error({ title: "Failed to reassign section", description: message });
     } finally {
       setIsReassigning(false);
@@ -370,11 +366,7 @@ export default function BreakConfigDrawer({
           </Dialog.Header>
 
           <section className="flex flex-1 flex-col overflow-y-auto px-4 py-1 min-h-0 max-h-[72vh]">
-            {notice && (
-              <Alert status="error">
-                <Alert.Description>{notice}</Alert.Description>
-              </Alert>
-            )}
+            {notice?.startsWith("Warning:") ? <Alert status="warning">{notice}</Alert> : <AdminValidationAlert message={notice} />}
 
             {/* Group Tab Switcher & New Group Button */}
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -435,7 +427,7 @@ export default function BreakConfigDrawer({
                       }}
                       disabled={isReassigning}
                     >
-                      <Select.Trigger className="h-7 text-xs min-w-48 bg-background shadow-none">
+                      <Select.Trigger className="min-w-48 shadow-none">
                         <Select.Value placeholder="Assign Section to Template..." />
                       </Select.Trigger>
                       <Select.Content>
@@ -514,7 +506,7 @@ export default function BreakConfigDrawer({
                             handleSlotFieldChange(slot.slot_id ?? undefined, slot.display_order, "is_locked_break", isLocked);
                           }}
                         >
-                          <Select.Trigger className="h-7 text-xs min-w-28 py-0 bg-background shadow-none">
+                          <Select.Trigger className="min-w-28 shadow-none">
                             <Select.Value />
                           </Select.Trigger>
                           <Select.Content>
@@ -662,14 +654,10 @@ export default function BreakConfigDrawer({
             <Text as="p" className="text-xs text-muted-foreground font-medium leading-relaxed">
               Enter a name for the new period template group (e.g. <code className="font-bold bg-muted px-1 border border-border rounded">SHS_TVL</code>, <code className="font-bold bg-muted px-1 border border-border rounded">REMEDIAL_SUMMER</code>). It will clone the base periods from <span className="font-bold">{formatGroupName(activeGroup)}</span>.
             </Text>
-            {newGroupError && (
-              <Alert status="error">
-                <Alert.Description>{newGroupError}</Alert.Description>
-              </Alert>
-            )}
             <div className="space-y-1.5">
               <Label className="block text-xs font-bold">Group Name / Identifier:</Label>
               <Input
+                id="new-template-group-name"
                 value={newGroupNameInput}
                 onChange={(e) => {
                   setNewGroupNameInput(e.target.value);
@@ -678,7 +666,10 @@ export default function BreakConfigDrawer({
                 placeholder="e.g. SHS_TVL"
                 className="w-full"
                 autoFocus
+                aria-invalid={!!newGroupError}
+                aria-describedby={newGroupError ? "new-period-group-error" : undefined}
               />
+              <FormMessage id="new-period-group-error">{newGroupError}</FormMessage>
             </div>
           </section>
 

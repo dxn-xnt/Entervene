@@ -1071,7 +1071,7 @@ export default function SubjectClassworkTab({
       <div className="ml-auto grid w-full max-w-[25rem] grid-cols-2 gap-3 py-2">
         <div className="min-w-0">
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <Select.Trigger className="h-10 w-full border-2 border-black bg-white text-sm">
+            <Select.Trigger className="h-10 w-full border-2 border-black bg-white">
               <Select.Value placeholder="Filter by type" />
             </Select.Trigger>
             <Select.Content className="border-2 border-black bg-white">
@@ -1089,7 +1089,7 @@ export default function SubjectClassworkTab({
             value={sortMode}
             onValueChange={(value) => setSortMode(value as SortMode)}
           >
-            <Select.Trigger className="h-10 w-full border-2 border-black bg-white text-sm">
+            <Select.Trigger className="h-10 w-full border-2 border-black bg-white">
               <Select.Value placeholder="Sort By" />
             </Select.Trigger>
             <Select.Content className="border-2 border-black bg-white">

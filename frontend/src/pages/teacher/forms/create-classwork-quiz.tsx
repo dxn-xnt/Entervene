@@ -10,7 +10,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
-import { Alert } from "@/components/retroui/Alert";
+import { FormMessage } from "@/components/retroui/FormMessage";
 import { Switch } from "@/components/retroui/Switch";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import Field from "@/components/admin/classes/fields/Field";
@@ -373,6 +373,7 @@ export default function CreateClassworkQuizModal({
 
     const toggleClass = (classId: number) => {
         if (remediationTarget) return;
+        if (createError === "Select at least one section to assign this quiz.") setCreateError("");
         setSelectedClassIds((current) =>
             current.includes(classId)
                 ? current.filter((id) => id !== classId)
@@ -381,6 +382,7 @@ export default function CreateClassworkQuizModal({
     };
 
     const toggleLesson = (lessonId: number) => {
+        if (createError === "Select the lesson where this quiz should appear.") setCreateError("");
         setSelectedLessonIds((current) =>
             current.includes(lessonId)
                 ? current.filter((id) => id !== lessonId)
@@ -773,7 +775,7 @@ export default function CreateClassworkQuizModal({
     return (
         <>
             {!isAIModalOpen && (
-                <Dialog.Content size="2xl">
+                <Dialog.Content size={createStep === "details" ? "lg" : "2xl"}>
                     <Dialog.Header position="fixed" asChild>
                         <div className="flex w-full items-center justify-between gap-3">
                             <Text as="h5" className="min-w-0 font-sans text-xl font-bold">
@@ -791,10 +793,8 @@ export default function CreateClassworkQuizModal({
                     </Dialog.Header>
 
                     <section className="flex flex-col gap-4 p-5">
-                        {createError && (
-                            <Alert status="error" className="mb-2">
-                                <Alert.Description>{createError}</Alert.Description>
-                            </Alert>
+                        {createError && !(createStep === "details" && ["Choose a subject.", "Topic title is required.", "Choose an Examination sub-type explicitly.", "Total points must be greater than zero."].includes(createError)) && !(createStep === "assign" && ["Select at least one section to assign this quiz.", "Select the lesson where this quiz should appear.", "A due date is required when Quiz Summary Availability is set to 'After the quiz due date'. Please specify a due date below."].includes(createError)) && (
+                            <FormMessage className="mb-2">{createError}</FormMessage>
                         )}
 
                         {createStep === "quiz-source" && (
@@ -879,7 +879,7 @@ export default function CreateClassworkQuizModal({
                                         )}
                                     </div>
                                 )}
-                                <Field label="Subject">
+                                <Field label="Subject" isRequired>
                                     <Select
                                         value={draft.subject_id}
                                         onValueChange={(val) => {
@@ -887,11 +887,12 @@ export default function CreateClassworkQuizModal({
                                                 ...current,
                                                 subject_id: val,
                                             }));
+                                            if (val && createError === "Choose a subject.") setCreateError("");
                                             setSelectedClassIds([]);
                                         }}
                                         disabled={isCreating || Boolean(remediationTarget)}
                                     >
-                                        <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-none focus:shadow-none text-sm font-medium">
+                                        <Select.Trigger id="quiz-subject" aria-invalid={createError === "Choose a subject."} aria-describedby={createError === "Choose a subject." ? "quiz-subject-error" : undefined} className="w-full shadow-none aria-[invalid=true]:border-destructive">
                                             <Select.Value placeholder="Choose subject" />
                                         </Select.Trigger>
                                         <Select.Content className="border-2 border-black rounded bg-white shadow-none">
@@ -904,21 +905,26 @@ export default function CreateClassworkQuizModal({
                                             </Select.Group>
                                         </Select.Content>
                                     </Select>
+                                    {createError === "Choose a subject." && <FormMessage id="quiz-subject-error">{createError}</FormMessage>}
                                 </Field>
 
                                 <Field label="Topic Title" isRequired={true}>
                                     <Input
                                         value={draft.title}
-                                        onChange={(event) =>
+                                        onChange={(event) => {
+                                            if (event.target.value.trim() && createError === "Topic title is required.") setCreateError("");
                                             setDraft((current) => ({
                                                 ...current,
                                                 title: event.target.value,
-                                            }))
-                                        }
+                                            }));
+                                        }}
+                                        aria-invalid={createError === "Topic title is required."}
+                                        aria-describedby={createError === "Topic title is required." ? "quiz-topic-title-error" : undefined}
                                         disabled={isCreating}
                                         placeholder="Introduction to Programming Quiz"
-                                        className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
+                                        className="w-full shadow-none"
                                     />
+                                    {createError === "Topic title is required." && <FormMessage id="quiz-topic-title-error">{createError}</FormMessage>}
                                 </Field>
 
 
@@ -954,7 +960,7 @@ export default function CreateClassworkQuizModal({
                                                 }
                                                 disabled={isCreating || remediationDraft}
                                             >
-                                                <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-none focus:shadow-none text-sm">
+                                                <Select.Trigger className="w-full shadow-none">
                                                     <Select.Value placeholder="Select Category" />
                                                 </Select.Trigger>
                                                 <Select.Content className="border-2 border-black rounded bg-white shadow-none">
@@ -977,18 +983,19 @@ export default function CreateClassworkQuizModal({
                                     )}
 
                                     {(draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && (
-                                        <Field label="Exam Sub-type">
+                                        <Field label="Exam Sub-type" isRequired>
                                             <Select
                                                 value={draft.exam_subtype}
-                                                onValueChange={(val) =>
+                                                onValueChange={(val) => {
+                                                    if (val && createError === "Choose an Examination sub-type explicitly.") setCreateError("");
                                                     setDraft((current) => ({
                                                         ...current,
                                                         exam_subtype: val,
-                                                    }))
-                                                }
+                                                    }));
+                                                }}
                                                 disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
                                             >
-                                                <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-none focus:shadow-none text-sm">
+                                                <Select.Trigger id="quiz-exam-subtype" aria-invalid={createError === "Choose an Examination sub-type explicitly."} aria-describedby={createError === "Choose an Examination sub-type explicitly." ? "quiz-exam-subtype-error" : undefined} className="w-full shadow-none aria-[invalid=true]:border-destructive">
                                                     <Select.Value placeholder="Select Sub-type" />
                                                 </Select.Trigger>
                                                 <Select.Content className="border-2 border-black rounded bg-white shadow-none">
@@ -1005,10 +1012,11 @@ export default function CreateClassworkQuizModal({
                                                     </Select.Group>
                                                 </Select.Content>
                                             </Select>
+                                            {createError === "Choose an Examination sub-type explicitly." && <FormMessage id="quiz-exam-subtype-error">{createError}</FormMessage>}
                                         </Field>
                                     )}
 
-                                    <Field label="Total points">
+                                    <Field label="Total points" isRequired>
                                         <Input
                                             type="number"
                                             min="1"
@@ -1016,15 +1024,19 @@ export default function CreateClassworkQuizModal({
                                             inputMode="decimal"
                                             value={draft.total_points}
                                             onFocus={(event) => event.target.select()}
-                                            onChange={(event) =>
+                                            onChange={(event) => {
+                                                if (Number(event.target.value) > 0 && createError === "Total points must be greater than zero.") setCreateError("");
                                                 setDraft((current) => ({
                                                     ...current,
                                                     total_points: event.target.value,
-                                                }))
-                                            }
+                                                }));
+                                            }}
+                                            aria-invalid={createError === "Total points must be greater than zero."}
+                                            aria-describedby={createError === "Total points must be greater than zero." ? "quiz-total-points-error" : undefined}
                                             disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
-                                            className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
+                                            className="w-full shadow-none"
                                         />
+                                        {createError === "Total points must be greater than zero." && <FormMessage id="quiz-total-points-error">{createError}</FormMessage>}
                                     </Field>
                                 </div>
                                 {remediationFocus && (
@@ -1173,7 +1185,7 @@ export default function CreateClassworkQuizModal({
                                                                 }}
                                                                 disabled={isCreating}
                                                             >
-                                                                <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-none text-sm">
+                                                                <Select.Trigger className="w-full shadow-none">
                                                                     <Select.Value />
                                                                 </Select.Trigger>
                                                                 <Select.Content className="border-2 border-black rounded bg-white">
@@ -1206,7 +1218,7 @@ export default function CreateClassworkQuizModal({
                                                                     })
                                                                 }
                                                                 disabled={isCreating}
-                                                                className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
+                                                                className="w-full bg-white border-2 border-black rounded shadow-none"
                                                             />
                                                         </Field>
                                                     </div>
@@ -1248,7 +1260,7 @@ export default function CreateClassworkQuizModal({
                                                                     }
                                                                     disabled={isCreating}
                                                                     placeholder={`Choice ${optionIndex + 1}`}
-                                                                    className="flex-1 bg-white border-2 border-black rounded shadow-md text-sm"
+                                                                    className="flex-1 bg-white border-2 border-black rounded shadow-md"
                                                                 />
                                                                 <Tooltip>
                                                                     <TooltipTrigger render={<span className="inline-flex"><button
@@ -1318,7 +1330,7 @@ export default function CreateClassworkQuizModal({
                                                                             ? "e.g. Isaac Newton (primary correct answer)"
                                                                             : `Alternative spelling / synonym ${optionIndex + 1}`
                                                                     }
-                                                                    className="flex-1 bg-white border-2 border-black rounded shadow-md text-sm font-semibold"
+                                                                    className="flex-1 bg-white border-2 border-black rounded shadow-md"
                                                                 />
                                                                 <Tooltip>
                                                                     <TooltipTrigger render={<span className="inline-flex"><button
@@ -1506,12 +1518,12 @@ export default function CreateClassworkQuizModal({
                                                 }
                                                 disabled={isCreating}
                                                 placeholder="No time limit"
-                                                className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
+                                                className="w-full bg-white border-2 border-black rounded shadow-none"
                                             />
                                         </div>
                                     </Field>
 
-                                    <Field label="Attempts">
+                                    <Field label="Attempts" isRequired>
                                         <Input
                                             type="number"
                                             min="1"
@@ -1529,7 +1541,7 @@ export default function CreateClassworkQuizModal({
                                                 }));
                                             }}
                                             disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
-                                            className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
+                                            className="w-full bg-white border-2 border-black rounded shadow-none"
                                         />
                                     </Field>
                                 </div>
@@ -1549,7 +1561,7 @@ export default function CreateClassworkQuizModal({
                                             }
                                             disabled={isCreating}
                                         >
-                                            <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-none text-sm">
+                                            <Select.Trigger className="w-full shadow-none">
                                                 <Select.Value placeholder="Select Release Mode" />
                                             </Select.Trigger>
                                             <Select.Content className="border-2 border-black rounded bg-white">
@@ -1570,7 +1582,7 @@ export default function CreateClassworkQuizModal({
                                     </Field>
 
                                     {quizSettings.summary_release_mode === "SCHEDULED" ? (
-                                        <Field label="Release Date & Time">
+                                        <Field label="Release Date & Time" isRequired>
                                             <Input
                                                 type="datetime-local"
                                                 value={quizSettings.summary_release_at}
@@ -1581,7 +1593,7 @@ export default function CreateClassworkQuizModal({
                                                     }))
                                                 }
                                                 disabled={isCreating}
-                                                className="w-full bg-white border-2 border-black rounded shadow-none text-sm"
+                                                className="w-full bg-white border-2 border-black rounded shadow-none"
                                             />
                                         </Field>
                                     ) : (
@@ -1656,19 +1668,23 @@ export default function CreateClassworkQuizModal({
                                 </div>
 
                                 <div className="grid gap-4 sm:grid-cols-2">
-                                    <Field label="Due Date">
+                                    <Field label="Due Date" isRequired={quizSettings.summary_release_mode === "AFTER_DUE_DATE"}>
                                         <Input
                                             type="datetime-local"
                                             value={draft.due_date}
-                                            onChange={(event) =>
+                                            onChange={(event) => {
+                                                if (event.target.value && createError.startsWith("A due date is required")) setCreateError("");
                                                 setDraft((current) => ({
                                                     ...current,
                                                     due_date: event.target.value,
-                                                }))
-                                            }
+                                                }));
+                                            }}
                                             disabled={isCreating}
-                                            className="w-full bg-white border-2 border-black rounded shadow-md text-sm"
+                                            aria-invalid={createError.startsWith("A due date is required")}
+                                            aria-describedby={createError.startsWith("A due date is required") ? "quiz-due-date-error" : undefined}
+                                            className="w-full"
                                         />
+                                        {createError.startsWith("A due date is required") && <FormMessage id="quiz-due-date-error">{createError}</FormMessage>}
                                     </Field>
 
                                     <Field label="Publish Status">
@@ -1682,7 +1698,7 @@ export default function CreateClassworkQuizModal({
                                             }
                                             disabled={isCreating}
                                         >
-                                            <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
+                                            <Select.Trigger className="w-full">
                                                 <Select.Value />
                                             </Select.Trigger>
                                             <Select.Content className="border-2 border-black rounded bg-white">
@@ -1730,7 +1746,7 @@ export default function CreateClassworkQuizModal({
                                                 }))
                                             }
                                             disabled={isCreating || !draft.is_published}
-                                            className="w-full bg-white border-2 border-black rounded shadow-md text-sm disabled:bg-gray-100 disabled:opacity-55"
+                                            className="w-full bg-white border-2 border-black rounded shadow-md disabled:bg-gray-100 disabled:opacity-55"
                                         />
                                     </Field>
 
@@ -1760,7 +1776,7 @@ export default function CreateClassworkQuizModal({
                                     )}
                                 </div>
 
-                                <Field label="Assign to sections">
+                                <Field label="Assign to sections" isRequired>
                                     <div className="mb-2 flex items-center justify-between">
                                         {remediationTarget && <p className="rounded border p-2 text-xs">Remedial assignment for <strong>{remediationTarget.student_name}</strong> in {remediationTarget.class_name}. Only this student will receive this quiz.</p>}
                                         {remediationFocus && <p className="rounded border p-2 text-xs">Evidence focus: {focusGuidance(remediationFocus)}{remediationGradeTreatment === "EXAMINATION" && remediationOriginalExam ? ` Original ${remediationOriginalExam.title} fixes the subtype and ${remediationOriginalExam.total_points} possible points.` : ""}</p>}
@@ -1769,11 +1785,12 @@ export default function CreateClassworkQuizModal({
                                             type="button"
                                             variant="outline"
                                             size="sm"
-                                            onClick={() =>
+                                            onClick={() => {
+                                                setCreateError("");
                                                 setSelectedClassIds(
                                                     selectedSubjectLoads.map((load) => load.class_id),
-                                                )
-                                            }
+                                                );
+                                            }}
                                             disabled={isCreating || Boolean(remediationTarget) || selectedSubjectLoads.length === 0}
                                             className="px-2 py-1 text-xs border border-black rounded shadow-xs"
                                         >
@@ -1803,9 +1820,10 @@ export default function CreateClassworkQuizModal({
                                             No active sections are assigned to this subject.
                                         </p>
                                     )}
+                                    {createError === "Select at least one section to assign this quiz." && <FormMessage>{createError}</FormMessage>}
                                 </Field>
 
-                                <Field label="Link under lesson (Coverage)">
+                                <Field label="Link under lesson (Coverage)" isRequired>
                                     <p className="text-[10px] text-gray-500 -mt-0.5 mb-2 font-normal">
                                         Links this quiz to the lesson and its associated reading materials for student coverage. Only lessons assigned to every selected section are shown.
                                     </p>
@@ -1848,6 +1866,7 @@ export default function CreateClassworkQuizModal({
                                             No shared lesson is assigned to all selected sections.
                                         </p>
                                     )}
+                                    {createError === "Select the lesson where this quiz should appear." && <FormMessage>{createError}</FormMessage>}
                                 </Field>
 
                                 {selectedLessonIds.length > 0 && (() => {
@@ -1920,7 +1939,7 @@ export default function CreateClassworkQuizModal({
                                                                 onValueChange={(val) => setBulkLessonId(val)}
                                                                 disabled={isCreating}
                                                             >
-                                                                <Select.Trigger className="w-full bg-white border-2 border-black rounded px-2 py-1 text-xs h-8">
+                                                                <Select.Trigger className="w-full bg-white border-2 border-black rounded px-2 py-1 h-8">
                                                                     <Select.Value placeholder="Assign lesson…" />
                                                                 </Select.Trigger>
                                                                 <Select.Content className="border-2 border-black rounded bg-white">
@@ -1999,7 +2018,7 @@ export default function CreateClassworkQuizModal({
                                                                         }
                                                                         disabled={isCreating}
                                                                     >
-                                                                        <Select.Trigger className="w-full bg-white border-2 border-black rounded px-2 py-1 text-xs mt-1">
+                                                                        <Select.Trigger className="w-full bg-white border-2 border-black rounded px-2 py-1 mt-1">
                                                                             <Select.Value placeholder="Not mapped" />
                                                                         </Select.Trigger>
                                                                         <Select.Content className="border-2 border-black rounded bg-white">

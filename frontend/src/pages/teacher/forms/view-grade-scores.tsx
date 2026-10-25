@@ -118,7 +118,7 @@ export default function ViewGradeScoreModal({
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              className="w-full pl-9 h-9 text-sm"
+              className="w-full pl-9 h-9"
               placeholder="Search student's name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

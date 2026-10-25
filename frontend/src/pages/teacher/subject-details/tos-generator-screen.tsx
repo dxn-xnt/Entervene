@@ -1150,7 +1150,7 @@ export function TOSGeneratorScreen({
                         placeholder="Search exam title..."
                         value={examSearchQuery}
                         onChange={(e) => setExamSearchQuery(e.target.value)}
-                        className="rounded h-8 w-48 pl-8 text-xs font-semibold border-2 border-border"
+                        className="rounded h-8 w-48 pl-8 border-2 border-border"
                       />
                     </div>
                     <Button
@@ -1289,7 +1289,7 @@ export function TOSGeneratorScreen({
                     <label className="text-xs font-bold text-muted-foreground block">Subject Curriculum</label>
                     <Select value={currentSubjectId ? String(currentSubjectId) : ""}
                       onValueChange={(value) => handleSubjectChange(Number(value))}>
-                      <Select.Trigger aria-label="Subject Curriculum" className="mt-1 w-full min-w-0 rounded text-xs font-bold">
+                      <Select.Trigger aria-label="Subject Curriculum" className="mt-1 w-full min-w-0 rounded">
                         <Select.Value placeholder="-- Select Subject Curriculum --" />
                       </Select.Trigger>
                       <Select.Content className="rounded border-2">
@@ -1306,7 +1306,7 @@ export function TOSGeneratorScreen({
                     <label className="text-xs font-bold text-muted-foreground block">Exam Language</label>
                     <Select value={language}
                       onValueChange={(value) => setLanguage(value as "English" | "Filipino")}>
-                      <Select.Trigger aria-label="Exam Language" className="mt-1 w-full min-w-0 rounded text-xs font-bold">
+                      <Select.Trigger aria-label="Exam Language" className="mt-1 w-full min-w-0 rounded">
                         <Select.Value />
                       </Select.Trigger>
                       <Select.Content className="rounded border-2">
@@ -1340,7 +1340,7 @@ export function TOSGeneratorScreen({
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
                       placeholder="e.g. Summative Assessment 1"
-                      className="rounded mt-1 border-2 border-border font-semibold shadow-sm"
+                      className="rounded mt-1 border-2 border-border shadow-sm"
                     />
                   </div>
 
@@ -1348,7 +1348,7 @@ export function TOSGeneratorScreen({
                     <label className="text-xs font-bold text-muted-foreground block">Academic Term (Trimester)</label>
                     <Select value={quarter}
                       onValueChange={(value) => setQuarter(value)}>
-                      <Select.Trigger aria-label="Academic Term" className="mt-1 w-full min-w-0 rounded text-xs font-bold">
+                      <Select.Trigger aria-label="Academic Term" className="mt-1 w-full min-w-0 rounded">
                         <Select.Value />
                       </Select.Trigger>
                       <Select.Content className="rounded border-2">
@@ -1445,7 +1445,7 @@ export function TOSGeneratorScreen({
                                   setTestParts(filtered);
                                 }
                               }}
-                              className="rounded h-9 w-20 border-2 border-border text-center font-black text-sm"
+                              className="rounded h-9 w-20 border-2 border-border text-center"
                             />
                           </div>
                         </div>
@@ -1498,7 +1498,7 @@ export function TOSGeneratorScreen({
                 <Card className="flex flex-col sm:flex-row sm:items-center gap-3 rounded border-2 border-border bg-accent p-3.5 shadow">
                   <div className="flex-1">
                     <Select value="" onValueChange={handleSelectCompetency} disabled={availableCompetencies.length === 0}>
-                      <Select.Trigger aria-label="Add Curriculum Competency" className="mt-1 w-full min-w-0 rounded text-xs font-bold">
+                      <Select.Trigger aria-label="Add Curriculum Competency" className="mt-1 w-full min-w-0 rounded">
                         <Select.Value placeholder={availableCompetencies.length > 0
                           ? `+ Select Competency from Curriculum (${availableCompetencies.length} available)...`
                           : "All curriculum competencies added to assessment"} />
@@ -1647,7 +1647,7 @@ export function TOSGeneratorScreen({
                                   updated[idx].days = Math.max(1, parseInt(e.target.value) || 1);
                                   setCompInputs(updated);
                                 }}
-                                className="rounded h-8 w-20 border-2 border-border text-center font-black text-xs shadow-xs bg-card"
+                                className="rounded h-8 w-20 border-2 border-border text-center shadow-xs bg-card"
                               />
                               <span className="text-[11px] text-muted-foreground font-semibold">day(s)</span>
                             </div>
@@ -1713,7 +1713,7 @@ export function TOSGeneratorScreen({
                         onChange={(e) =>
                           setDifficultyRatio({ ...difficultyRatio, easy: parseInt(e.target.value) || 0 })
                         }
-                        className="rounded mx-auto h-12 w-24 border-2 border-border text-center text-xl font-black bg-card"
+                        className="rounded mx-auto h-12 w-24 border-2 border-border text-center bg-card"
                       />
                       <span className="text-xs font-bold text-muted-foreground block">
                         ≈ {Math.round((totalItems * (difficultyRatio.easy || 0)) / 100)} Items
@@ -1731,7 +1731,7 @@ export function TOSGeneratorScreen({
                         onChange={(e) =>
                           setDifficultyRatio({ ...difficultyRatio, average: parseInt(e.target.value) || 0 })
                         }
-                        className="rounded mx-auto h-12 w-24 border-2 border-border text-center text-xl font-black bg-card"
+                        className="rounded mx-auto h-12 w-24 border-2 border-border text-center bg-card"
                       />
                       <span className="text-xs font-bold text-muted-foreground block">
                         ≈ {Math.round((totalItems * (difficultyRatio.average || 0)) / 100)} Items
@@ -1749,7 +1749,7 @@ export function TOSGeneratorScreen({
                         onChange={(e) =>
                           setDifficultyRatio({ ...difficultyRatio, difficult: parseInt(e.target.value) || 0 })
                         }
-                        className="rounded mx-auto h-12 w-24 border-2 border-border text-center text-xl font-black bg-card"
+                        className="rounded mx-auto h-12 w-24 border-2 border-border text-center bg-card"
                       />
                       <span className="text-xs font-bold text-muted-foreground block">
                         ≈ {Math.round((totalItems * (difficultyRatio.difficult || 0)) / 100)} Items
@@ -2259,7 +2259,7 @@ export function TOSGeneratorScreen({
                                                 question_type: value as TestPartType,
                                               })
                                             }>
-                                            <Select.Trigger aria-label="Question Type" className="mt-1 w-full min-w-0 rounded text-xs font-bold">
+                                            <Select.Trigger aria-label="Question Type" className="mt-1 w-full min-w-0 rounded">
                                               <Select.Value />
                                             </Select.Trigger>
                                             <Select.Content className="rounded border-2">
@@ -2281,7 +2281,7 @@ export function TOSGeneratorScreen({
                                                 difficulty_band: value as DifficultyBand,
                                               })
                                             }>
-                                            <Select.Trigger aria-label="Difficulty" className="mt-1 w-full min-w-0 rounded text-xs font-bold">
+                                            <Select.Trigger aria-label="Difficulty" className="mt-1 w-full min-w-0 rounded">
                                               <Select.Value />
                                             </Select.Trigger>
                                             <Select.Content className="rounded border-2">
@@ -2301,7 +2301,7 @@ export function TOSGeneratorScreen({
                                                 cognitive_level: value as CognitiveLevel,
                                               })
                                             }>
-                                            <Select.Trigger aria-label="Cognitive Level" className="mt-1 w-full min-w-0 rounded text-xs font-bold">
+                                            <Select.Trigger aria-label="Cognitive Level" className="mt-1 w-full min-w-0 rounded">
                                               <Select.Value />
                                             </Select.Trigger>
                                             <Select.Content className="rounded border-2">
@@ -2340,7 +2340,7 @@ export function TOSGeneratorScreen({
                                                   updatedOpts[oIdx].option_text = e.target.value;
                                                   setEditQuestionForm({ ...editQuestionForm, options: updatedOpts });
                                                 }}
-                                                className="rounded h-8 border-2 border-border bg-card text-xs font-semibold"
+                                                className="rounded h-8 border-2 border-border bg-card"
                                               />
                                             </div>
                                           ))}
@@ -2355,7 +2355,7 @@ export function TOSGeneratorScreen({
                                             setEditQuestionForm({ ...editQuestionForm, explanation: e.target.value })
                                           }
                                           placeholder="Model answer or grading rubric..."
-                                          className="rounded mt-1 border-2 border-border bg-card text-xs font-semibold"
+                                          className="rounded mt-1 border-2 border-border bg-card"
                                         />
                                       </div>
                                     </div>

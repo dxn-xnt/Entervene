@@ -14,6 +14,7 @@ import { useState } from "react";
 import { commitExistingClassDistribution, previewExistingClassDistribution } from "@/lib/api";
 import type { ClassTransferOption, ExistingClassDistributionPreview } from "@/types/adminClasses";
 import { Alert } from "@/components/retroui/Alert";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
@@ -289,6 +290,7 @@ export default function ExistingClassDistribution({
         <div className="grid max-h-[70vh] gap-4 overflow-y-auto p-4 text-sm">
           <p><b>Academic Year:</b> {academicYear} <span className="mx-2">•</span> <b>Grade:</b> {academicLevel}</p>
           <p>Unassigned students available when opened: {initialAvailableCount}. Preview checks the live, complete grade-level pool.</p>
+          <AdminValidationAlert message={error} />
           {requiresPathway ? (
             <Alert status="info">Automatic distribution is unavailable for this pathway-based grade because student pathway assignments are not recorded.</Alert>
           ) : otherClasses.length === 0 ? (
@@ -312,7 +314,6 @@ export default function ExistingClassDistribution({
               </fieldset>
               <Button variant="outline" disabled={busy || selectedIds.size < 2} onClick={() => void calculate()}>{busy ? "Working..." : "Preview Distribution"}</Button>
               {selectedIds.size < 2 && <p className="text-sm text-muted-foreground">Choose at least one other class.</p>}
-              {error && <Alert status="error">{error}</Alert>}
               {preview && (
                 <section className="grid gap-3" aria-label="Distribution preview">
                   <div><h3 className="font-bold">Proposed assignments</h3><p>{preview.unassigned_count} eligible unassigned students. No changes have been saved.</p></div>
@@ -324,7 +325,7 @@ export default function ExistingClassDistribution({
                   </div>
                   {imbalance > 1 && <Alert status="info">Existing rosters limit exact balance. Current assignments will remain in place.</Alert>}
                   {customCount > 0 && (
-                    <div className="flex items-center justify-between rounded border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                       <span>{customCount} manual {customCount === 1 ? "adjustment" : "adjustments"} made to proposed distribution.</span>
                       <button
                         type="button"
@@ -336,18 +337,13 @@ export default function ExistingClassDistribution({
                     </div>
                   )}
                   <div className="grid gap-3">
-                    <div className="flex items-start gap-3 rounded-lg border-2 border-black bg-[#fff8d7] p-3 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                      <div className="flex size-7 shrink-0 items-center justify-center rounded bg-black text-[#ffe038]">
-                        <GripVertical className="size-4" />
-                      </div>
-                      <div className="space-y-0.5">
-                        <p className="font-bold text-foreground">
+                    <div className="space-y-1 text-sm text-muted-foreground">
+                        <p>
                           Drag and drop students between sections to customize proposed assignments.
                         </p>
-                        <p className="text-muted-foreground">
+                        <p>
                           Click and hold any student card to drag them into another section. Section student counts and GWA summaries update automatically in real-time.
                         </p>
-                      </div>
                     </div>
                     <DndContext
                       sensors={sensors}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Loader2, Plus, Save, X } from "lucide-react";
-import { Alert } from "@/components/retroui/Alert";
+import { FormMessage } from "@/components/retroui/FormMessage";
 import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/Toast";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -151,13 +151,9 @@ export default function CompetencyModal({
           </div>
         </Dialog.Header>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <section className="flex flex-col gap-4 p-4">
-            {error && (
-              <Alert status="error">
-                <Alert.Description>{error}</Alert.Description>
-              </Alert>
-            )}
+            {error && error !== "Learning competency statement is required." && <FormMessage>{error}</FormMessage>}
 
             <p className="text-sm font-normal text-muted-foreground">
               Define the learning standard used to group lessons and build the Table of Specifications
@@ -188,13 +184,15 @@ export default function CompetencyModal({
 
             <Field label="Competency Statement" isRequired={true}>
               <textarea
-                required
                 rows={3}
                 value={statement}
-                onChange={(e) => setStatement(e.target.value)}
+                onChange={(e) => { setStatement(e.target.value); if (e.target.value.trim() && error === "Learning competency statement is required.") setError(""); }}
+                aria-invalid={error === "Learning competency statement is required."}
+                aria-describedby={error === "Learning competency statement is required." ? "competency-statement-error" : undefined}
                 placeholder="e.g. Translates verbal phrases to mathematical expressions and vice versa."
-                className="w-full resize-none rounded border-2 border-border bg-background px-4 py-2 text-sm shadow-md transition focus:outline-hidden focus:shadow-xs"
+                className="w-full resize-none rounded border-2 border-border bg-background px-4 py-2 font-sans text-base font-normal shadow-md transition focus:outline-hidden focus:shadow-xs aria-[invalid=true]:border-destructive"
               />
+              {error === "Learning competency statement is required." && <FormMessage id="competency-statement-error">{error}</FormMessage>}
             </Field>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">

@@ -205,10 +205,11 @@ export default function AdminInterventions() {
                       <label className="relative">
                         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                         <Input
+                          variant="search"
                           value={search}
                           onChange={(event) => setSearch(event.target.value)}
                           placeholder="Search student, title, or subject..."
-                          className="h-10 w-full border-black pl-9 pr-3"
+                          className="w-full"
                         />
                       </label>
 
@@ -216,7 +217,7 @@ export default function AdminInterventions() {
                         <Select.Trigger className="w-full">
                           <Select.Value placeholder="Class Filter" />
                         </Select.Trigger>
-                        <Select.Content className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                        <Select.Content>
                           <Select.Group>
                             <Select.Item value="All">All Classes</Select.Item>
                             {uniqueClasses.map((className) => (
@@ -232,7 +233,7 @@ export default function AdminInterventions() {
                         <Select.Trigger className="w-full">
                           <Select.Value placeholder="Status Filter" />
                         </Select.Trigger>
-                        <Select.Content className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                        <Select.Content>
                           <Select.Group>
                             <Select.Item value="All">All Statuses</Select.Item>
                             <Select.Item value="ACTIVE">Active</Select.Item>

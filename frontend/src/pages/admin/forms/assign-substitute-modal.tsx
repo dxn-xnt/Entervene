@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Alert } from "@/components/retroui/Alert";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
@@ -20,7 +21,7 @@ import {
   type User,
   type TeacherLoadSummaryItem,
 } from "@/lib/api";
-import { AlertCircle, Calendar, CheckSquare, Clock, Info, Square, Users } from "lucide-react";
+import { Calendar, CheckSquare, Clock, Square, Users } from "lucide-react";
 import { RoleBadge } from "@/components/role-badge";
 
 
@@ -53,6 +54,10 @@ export default function AssignSubstituteModal({
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+  const [validationAttempt, setValidationAttempt] = React.useState(0);
+  const validationMessages = ["Please select the teacher going on leave.", "Please select at least one subject load to cover.", "Please select a substitute teacher.", "Substitute teacher cannot be the same as the original teacher.", "Please select a start date.", "End date cannot be earlier than start date."];
+  const validationError = errorMsg && validationMessages.includes(errorMsg) ? errorMsg : null;
+  const failValidation = (message: string) => { setErrorMsg(message); setValidationAttempt((attempt) => attempt + 1); };
 
   // Load teachers list
   React.useEffect(() => {
@@ -147,6 +152,7 @@ export default function AssignSubstituteModal({
   };
 
   const handleToggleLoad = (loadId: number) => {
+    if (errorMsg === "Please select at least one subject load to cover.") setErrorMsg(null);
     setSelectedLoadIds((prev) =>
       prev.includes(loadId) ? prev.filter((id) => id !== loadId) : [...prev, loadId]
     );
@@ -155,27 +161,27 @@ export default function AssignSubstituteModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOriginalStaffId) {
-      setErrorMsg("Please select the teacher going on leave.");
+      failValidation("Please select the teacher going on leave.");
       return;
     }
     if (selectedLoadIds.length === 0) {
-      setErrorMsg("Please select at least one subject load to cover.");
+      failValidation("Please select at least one subject load to cover.");
       return;
     }
     if (!selectedSubstituteStaffId) {
-      setErrorMsg("Please select a substitute teacher.");
+      failValidation("Please select a substitute teacher.");
       return;
     }
     if (selectedSubstituteStaffId === selectedOriginalStaffId) {
-      setErrorMsg("Substitute teacher cannot be the same as the original teacher.");
+      failValidation("Substitute teacher cannot be the same as the original teacher.");
       return;
     }
     if (!startDate) {
-      setErrorMsg("Please select a start date.");
+      failValidation("Please select a start date.");
       return;
     }
     if (endDate && endDate < startDate) {
-      setErrorMsg("End date cannot be earlier than start date.");
+      failValidation("End date cannot be earlier than start date.");
       return;
     }
 
@@ -195,7 +201,6 @@ export default function AssignSubstituteModal({
       onClose();
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : "Failed to assign substitute.");
-      toast.error({ title: "Failed to assign substitute", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSubmitting(false);
     }
@@ -213,12 +218,7 @@ export default function AssignSubstituteModal({
 
       <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
         <section className="flex flex-col gap-4 p-5">
-          {errorMsg && (
-            <Alert status="error" className="flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-              <Alert.Title className="text-sm font-semibold">{errorMsg}</Alert.Title>
-            </Alert>
-          )}
+          <AdminValidationAlert message={validationError ? null : errorMsg} attempt={validationAttempt} />
 
           {/* 1. Teacher on Leave */}
           <div className="flex flex-col gap-1.5">
@@ -237,10 +237,10 @@ export default function AssignSubstituteModal({
             ) : (
               <Select
                 value={selectedOriginalStaffId}
-                onChange={(e) => setSelectedOriginalStaffId(e.target.value)}
+                onChange={(e) => { setSelectedOriginalStaffId(e.target.value); if (e.target.value) setErrorMsg(null); }}
                 disabled={isLoadingTeachers}
               >
-                <Select.Trigger className="w-full text-sm">
+                <Select.Trigger id="original-teacher" className="w-full" aria-invalid={validationError === "Please select the teacher going on leave."} aria-describedby={validationError === "Please select the teacher going on leave." ? "original-teacher-error" : undefined}>
                   <Select.Value placeholder="Select Teacher on Leave..." />
                 </Select.Trigger>
                 <Select.Content>
@@ -254,11 +254,12 @@ export default function AssignSubstituteModal({
                 </Select.Content>
               </Select>
             )}
+            {validationError === "Please select the teacher going on leave." && <FormMessage id="original-teacher-error">{validationError}</FormMessage>}
           </div>
 
           {/* 2. Select Subject Loads (Whole Program Takeover) */}
           <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                 <span>Teaching Program to Cover</span>
                 {isLoadingLoads && <Loader size="sm" />}
@@ -267,11 +268,11 @@ export default function AssignSubstituteModal({
               {availableLoads.length > 0 && (
                 <Button
                   type="button"
-                  variant="link"
+                  variant="outline"
                   size="sm"
                   autoIcon={false}
                   onClick={handleToggleSelectAll}
-                  className="gap-1 px-0 text-xs font-semibold"
+                  className="h-8 shrink-0 gap-1.5 whitespace-nowrap text-xs font-semibold"
                 >
                   {allAvailableSelected ? (
                     <>
@@ -374,15 +375,16 @@ export default function AssignSubstituteModal({
                 </div>
               )
             ) : (
-              <Card className="p-3 text-xs text-muted-foreground bg-muted/10">
+              <p className="text-sm text-muted-foreground">
                 Select a teacher above to view and assign their teaching program.
-              </Card>
+              </p>
             )}
+            {validationError === "Please select at least one subject load to cover." && <FormMessage>{validationError}</FormMessage>}
           </div>
 
           {/* 3. Select Substitute Teacher (Grouped Dropdown) */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-muted-foreground flex justify-between items-center">
+            <label className="text-xs font-semibold text-foreground flex justify-between items-center">
               <span>Substitute Teacher</span>
               {dedicatedSubs.length > 0 && (
                 <span className="text-xs font-normal text-primary">
@@ -392,10 +394,10 @@ export default function AssignSubstituteModal({
             </label>
             <Select
               value={selectedSubstituteStaffId}
-              onChange={(e) => setSelectedSubstituteStaffId(e.target.value)}
+              onChange={(e) => { setSelectedSubstituteStaffId(e.target.value); if (e.target.value && e.target.value !== selectedOriginalStaffId) setErrorMsg(null); }}
               disabled={isLoadingTeachers}
             >
-              <Select.Trigger className="w-full text-sm">
+              <Select.Trigger id="substitute-teacher" className="w-full" aria-invalid={validationError?.toLowerCase().includes("substitute teacher") ?? false} aria-describedby={validationError?.toLowerCase().includes("substitute teacher") ? "substitute-teacher-error" : undefined}>
                 <Select.Value placeholder="Select Substitute Teacher..." />
               </Select.Trigger>
               <Select.Content>
@@ -425,50 +427,53 @@ export default function AssignSubstituteModal({
                 )}
               </Select.Content>
             </Select>
+            {validationError?.toLowerCase().includes("substitute teacher") && <FormMessage id="substitute-teacher-error">{validationError}</FormMessage>}
             {dedicatedSubs.length === 0 && candidateTeachers.length > 0 && (
-              <Alert status="warning" className="flex items-center gap-2 p-2">
-                <Info className="h-4 w-4 shrink-0" />
-                <Alert.Title className="text-xs font-medium">
+              <Text as="p" className="text-xs text-muted-foreground">
                   No teachers currently have &apos;Substitute&apos; employment status. You may select regular faculty for peer coverage or update a teacher&apos;s status in Users.
-                </Alert.Title>
-              </Alert>
+              </Text>
             )}
           </div>
 
           {/* 4. Dates & Reason */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+              <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                 <Calendar className="h-3 w-3" />
                 <span>Start Date *</span>
               </label>
               <Input
+                id="substitution-start-date"
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => { setStartDate(e.target.value); if (e.target.value) setErrorMsg(null); }}
                 required
+                aria-invalid={validationError === "Please select a start date."}
+                aria-describedby={validationError === "Please select a start date." ? "substitution-start-date-error" : undefined}
               />
+              {validationError === "Please select a start date." && <FormMessage id="substitution-start-date-error">{validationError}</FormMessage>}
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+              <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                 <Calendar className="h-3 w-3" />
                 <span>Expected End Date (Optional)</span>
               </label>
               <Input
+                id="substitution-end-date"
                 type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => { setEndDate(e.target.value); if (!e.target.value || e.target.value >= startDate) setErrorMsg(null); }}
                 min={startDate}
+                aria-invalid={validationError === "End date cannot be earlier than start date."}
+                aria-describedby={validationError === "End date cannot be earlier than start date." ? "substitution-end-date-error" : undefined}
               />
-              <Text as="p" className="text-xs text-muted-foreground">
-                Leave blank for indefinite duration.
-              </Text>
+              {validationError === "End date cannot be earlier than start date." && <FormMessage id="substitution-end-date-error">{validationError}</FormMessage>}
             </div>
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-muted-foreground">
+            <label className="text-xs font-semibold text-foreground">
               Reason / Notes
             </label>
             <Input

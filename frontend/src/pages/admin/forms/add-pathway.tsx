@@ -1,13 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { Alert } from "@/components/retroui/Alert";
+import { FormMessage } from "@/components/retroui/FormMessage";
+import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Button } from "@/components/retroui/Button";
 import { useToast } from "@/components/retroui/Toast";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Text } from "@/components/retroui/Text";
-import { createPathway } from "@/lib/api";
+import { ApiRequestError, createPathway } from "@/lib/api";
 
 interface AddPathwayModalProps {
   onClose?: () => void;
@@ -22,6 +23,7 @@ export default function AddPathwayModal({
   const [pathwayCode, setPathwayCode] = React.useState("");
   const [pathwayName, setPathwayName] = React.useState("");
   const [pathwayError, setPathwayError] = React.useState<string | null>(null);
+  const [validationAttempt, setValidationAttempt] = React.useState(0);
   const [isSaving, setIsSaving] = React.useState(false);
 
   const handleReset = () => {
@@ -36,6 +38,7 @@ export default function AddPathwayModal({
 
     if (!code || !name) {
       setPathwayError("Both pathway code and name are required.");
+      setValidationAttempt((attempt) => attempt + 1);
       return;
     }
 
@@ -50,8 +53,10 @@ export default function AddPathwayModal({
       await onSaved?.();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to create pathway.";
-      setPathwayError(msg);
-      if (!created) toast.error({ title: "Unable to create pathway", description: msg });
+      if (!created && err instanceof ApiRequestError && (err.status === 400 || err.status === 422)) {
+        setPathwayError(msg);
+        setValidationAttempt((attempt) => attempt + 1);
+      } else if (!created) toast.error({ title: "Unable to create pathway", description: msg });
     } finally {
       setIsSaving(false);
     }
@@ -65,24 +70,27 @@ export default function AddPathwayModal({
         </Text>
       </Dialog.Header>
       <section className="flex flex-col gap-4 p-4 text-sm">
-
-        {pathwayError && (
-          <Alert status="error" className="text-sm">
-            {pathwayError}
-          </Alert>
-        )}
+        <AdminValidationAlert
+          message={pathwayError === "Both pathway code and name are required." ? null : pathwayError}
+          attempt={validationAttempt}
+          firstInvalidFieldId={!pathwayCode.trim() ? "new-pathway-code" : "new-pathway-name"}
+        />
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <Text as="p" className="text-sm font-medium">
               Pathway Code
             </Text>
             <Input
+              id="new-pathway-code"
               placeholder="e.g. ict-programming"
               value={pathwayCode}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                setPathwayCode(e.target.value)
-              }
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                setPathwayCode(e.target.value);
+                if (e.target.value.trim() && pathwayName.trim()) setPathwayError(null);
+              }}
               disabled={isSaving}
+              aria-invalid={pathwayError === "Both pathway code and name are required." && !pathwayCode.trim()}
+              aria-describedby={pathwayError === "Both pathway code and name are required." ? "pathway-required-error" : undefined}
             />
           </div>
           <div className="flex flex-col gap-1.5">
@@ -90,15 +98,20 @@ export default function AddPathwayModal({
               Pathway Display Name
             </Text>
             <Input
+              id="new-pathway-name"
               placeholder="e.g. ICT and Computer Programming Related"
               value={pathwayName}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                setPathwayName(e.target.value)
-              }
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                setPathwayName(e.target.value);
+                if (e.target.value.trim() && pathwayCode.trim()) setPathwayError(null);
+              }}
               disabled={isSaving}
+              aria-invalid={pathwayError === "Both pathway code and name are required." && !pathwayName.trim()}
+              aria-describedby={pathwayError === "Both pathway code and name are required." ? "pathway-required-error" : undefined}
             />
           </div>
         </div>
+        {pathwayError === "Both pathway code and name are required." && <FormMessage id="pathway-required-error">{pathwayError}</FormMessage>}
         <Text as="p" className="text-xs text-muted-foreground -mb-2">
           Configure a new Senior High School academic pathway for section and subject assignment
         </Text>

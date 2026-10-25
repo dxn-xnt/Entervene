@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check, CheckCheck, Loader2, Save, Upload, X } from "lucide-react";
 import { Alert } from "@/components/retroui/Alert";
+import { FormMessage } from "@/components/retroui/FormMessage";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { useToast } from "@/components/retroui/Toast";
@@ -195,6 +196,7 @@ export default function CreateLessonModal({
   }, [classLoads, subjectId]);
 
   const toggleClass = (classId: number) => {
+    if (error === "Select at least one class or section.") setError("");
     setClassIds((current) =>
       current.includes(classId)
         ? current.filter((id) => id !== classId)
@@ -295,11 +297,7 @@ export default function CreateLessonModal({
         </Dialog.Header>
 
         <section className="flex flex-col gap-4 p-4">
-          {displayError && (
-            <Alert status="error">
-              <Alert.Description>{displayError}</Alert.Description>
-            </Alert>
-          )}
+          {displayError && !["Lesson name is required.", "Select a subject.", "Learning Competency is required. Please select a competency.", "Select at least one class or section.", "Lesson order must be a positive whole number."].includes(displayError) && <FormMessage>{displayError}</FormMessage>}
 
           <div className="grid gap-4 sm:grid-cols-[1fr_140px]">
             <Field label="Subject" isRequired={true}>
@@ -307,12 +305,15 @@ export default function CreateLessonModal({
                 value={subjectId}
                 onValueChange={(v) => {
                   setSubjectId(v);
+                  if (v && error === "Select a subject.") setError("");
                   setClassIds([]);
                   setCompetencyId("");
                 }}
               >
                 <Select.Trigger
                   id="subject"
+                  aria-invalid={error === "Select a subject."}
+                  aria-describedby={error === "Select a subject." ? "lesson-subject-error" : undefined}
                   disabled={isLoading || isSubmitting}
                   className="w-full min-w-0"
                 >
@@ -329,19 +330,23 @@ export default function CreateLessonModal({
                   ))}
                 </Select.Content>
               </Select>
+              {error === "Select a subject." && <FormMessage id="lesson-subject-error">{error}</FormMessage>}
             </Field>
 
-            <Field label="Lesson order">
+            <Field label="Lesson order" isRequired>
               <Input
                 id="lesson-order"
                 type="number"
                 min="1"
                 step="1"
                 value={orderIndex}
-                onChange={(event) => setOrderIndex(event.target.value)}
+                onChange={(event) => { setOrderIndex(event.target.value); if (Number.isInteger(Number(event.target.value)) && Number(event.target.value) > 0 && error === "Lesson order must be a positive whole number.") setError(""); }}
+                aria-invalid={error === "Lesson order must be a positive whole number."}
+                aria-describedby={error === "Lesson order must be a positive whole number." ? "lesson-order-error" : undefined}
                 disabled={isSubmitting}
                 className="w-full h-10"
               />
+              {error === "Lesson order must be a positive whole number." && <FormMessage id="lesson-order-error">{error}</FormMessage>}
             </Field>
           </div>
 
@@ -354,10 +359,12 @@ export default function CreateLessonModal({
             ) : (
               <Select
                 value={competencyId}
-                onValueChange={(v) => setCompetencyId(v)}
+                onValueChange={(v) => { setCompetencyId(v); if (v && v !== "none" && error.startsWith("Learning Competency is required")) setError(""); }}
               >
                 <Select.Trigger
                   id="competency"
+                  aria-invalid={error.startsWith("Learning Competency is required")}
+                  aria-describedby={error.startsWith("Learning Competency is required") ? "lesson-competency-error" : undefined}
                   disabled={isSubmitting || !subjectId}
                   className="w-full min-w-0"
                 >
@@ -376,17 +383,21 @@ export default function CreateLessonModal({
                 </Select.Content>
               </Select>
             )}
+            {error.startsWith("Learning Competency is required") && <FormMessage id="lesson-competency-error">{error}</FormMessage>}
           </Field>
 
           <Field label="Lesson Name" isRequired={true}>
             <Input
               id="lesson"
               value={title}
-              onChange={(event) => setTitle(event.target.value)}
+              onChange={(event) => { setTitle(event.target.value); if (event.target.value.trim() && error === "Lesson name is required.") setError(""); }}
+              aria-invalid={error === "Lesson name is required."}
+              aria-describedby={error === "Lesson name is required." ? "lesson-name-error" : undefined}
               className="w-full"
               placeholder="e.g. Term 1: Variables and Expressions"
               disabled={isSubmitting}
             />
+            {error === "Lesson name is required." && <FormMessage id="lesson-name-error">{error}</FormMessage>}
           </Field>
 
           <Field label="Lesson Content">
@@ -402,18 +413,19 @@ export default function CreateLessonModal({
           </Field>
 
           <div className="mt-2">
-            <Field label="Assign to sections">
+            <Field label="Assign to sections" isRequired>
               {classesForSubject.length > 0 && (
                 <div className="flex items-center justify-end -mt-8 mb-2">
                   <Button
                     size="sm"
                     className="shadow-none -mt-1"
                     autoIcon={false}
-                    onClick={() =>
+                    onClick={() => {
+                      if (error === "Select at least one class or section.") setError("");
                       setClassIds(
                         classesForSubject.map((load) => load.class_id),
-                      )
-                    }
+                      );
+                    }}
                     disabled={isSubmitting}
                   >
                     <CheckCheck className="size-4 mr-2" />
@@ -485,6 +497,7 @@ export default function CreateLessonModal({
                   </EmptyHeader>
                 </Empty>
               )}
+              {error === "Select at least one class or section." && <FormMessage>{error}</FormMessage>}
             </Field>
           </div>
         </section>

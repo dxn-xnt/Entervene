@@ -217,7 +217,7 @@ export default function QuizAnalysisView({
                         <div className="flex items-center gap-2 text-sm">
                           <span className="font-medium text-gray-600 text-xs">Sort By:</span>
                           <Select value={questionSort} onValueChange={(v) => setQuestionSort(v as any)}>
-                            <Select.Trigger className="h-8 border-2 border-black text-xs font-bold w-36">
+                            <Select.Trigger className="h-8 border-2 border-black w-36">
                               <Select.Value />
                             </Select.Trigger>
                             <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -441,7 +441,7 @@ export default function QuizAnalysisView({
                   <div className="flex items-center gap-2 text-sm">
                     <span className="font-medium text-gray-600">Sort By:</span>
                     <Select value={studentSort} onValueChange={(v) => setStudentSort(v as any)}>
-                      <Select.Trigger className="h-8 bg-white border-2 border-black font-bold w-32">
+                      <Select.Trigger className="h-8 bg-white border-2 border-black w-32">
                         <Select.Value />
                       </Select.Trigger>
                       <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
