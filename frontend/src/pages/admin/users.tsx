@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Select } from "@/components/retroui/Select";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/retroui/Accordion";

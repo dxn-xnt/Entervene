@@ -33,7 +33,7 @@ import { SubjectClassHeader } from "@/components/subject-class-header";
 import { Table } from "@/components/retroui/Table";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Avatar } from "@/components/retroui/Avatar";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
@@ -1014,11 +1014,10 @@ function LessonsTab({
                   })}
                 </div>
               </section>
-              <Dialog.Footer position="fixed">
+              <Dialog.Footer className="mt-0 justify-end">
                 <Button
+                  type="button"
                   variant="outline"
-                  size="sm"
-                  autoIcon={false}
                   onClick={closeCreateWizard}
                 >
                   Cancel
@@ -1687,8 +1686,8 @@ function ClassworkTab({
 
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto -mb-2 justify-between">
-          <div className="flex flex-row gap-2 pb-1 overflow-x-auto">
+        <div className="min-w-0 overflow-x-auto px-1 pt-1 pb-3">
+          <div className="flex w-max min-w-full items-center gap-2">
             <span className="shrink-0 text-sm font-regular text-muted-foreground self-center">
               Type:
             </span>

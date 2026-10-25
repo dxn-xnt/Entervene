@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/student/button";
 import { Badge } from "@/components/retroui/Badge";
 import { useAuth } from "@/context/AuthContext";
 import { Avatar } from "@/components/retroui/Avatar";

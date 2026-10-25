@@ -1,7 +1,8 @@
 import type { DashboardPredictionItem } from "@/lib/prediction-api";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Table } from "@/components/retroui/Table";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { ArrowUpDown, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 
 interface PredictionTableProps {
@@ -18,6 +19,7 @@ interface PredictionTableProps {
   onPageChange: (newOffset: number) => void;
   onRowClick: (predictionId: number) => void;
   currentTerm?: boolean;
+  onClearFilters?: () => void;
 }
 
 const RISK_BADGE_VARIANTS: Record<string, { bg: string; text: string }> = {
@@ -51,7 +53,7 @@ function SortableHeader({
       {label}
       <ArrowUpDown
         size={14}
-        className={isActive ? "text-black stroke-[2.5]" : "text-black/60"}
+        className={isActive ? "text-primary-foreground stroke-[2.5]" : "text-primary-foreground/60"}
       />
       {isActive && (
         <span className="text-xs font-black">
@@ -76,6 +78,7 @@ export default function PredictionTable({
   onPageChange,
   onRowClick,
   currentTerm = false,
+  onClearFilters,
 }: PredictionTableProps) {
   const currentPage = Math.floor(offset / limit) + 1;
   const totalPages = Math.ceil(total / limit) || 1;
@@ -83,10 +86,10 @@ export default function PredictionTable({
 
   return (
     <div className="flex flex-col">
-      <Table className="shadow-none" wrapperClassName="shadow-none hover:shadow-none transition-all mb-2">
-        <Table.Header className="text-black bg-yellow-400">
-          <Table.Row className="border-b-2 border-black bg-yellow-400 hover:bg-yellow-400">
-            <Table.Head className="font-extrabold text-black whitespace-nowrap">
+      <Table wrapperClassName="mb-2 shadow-none hover:shadow-none">
+        <Table.Header className="bg-primary text-primary-foreground">
+          <Table.Row className="border-b-2 border-black bg-primary hover:bg-primary">
+            <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">
               <SortableHeader
                 label="Student"
                 column="student_name"
@@ -96,10 +99,10 @@ export default function PredictionTable({
               />
             </Table.Head>
             {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">LRN</Table.Head> */}
-            {!hideClass && <Table.Head className="font-extrabold text-black whitespace-nowrap">Class</Table.Head>}
-            {!hideSubject && <Table.Head className="font-extrabold text-black whitespace-nowrap">Subject</Table.Head>}
+            {!hideClass && <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">Class</Table.Head>}
+            {!hideSubject && <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">Subject</Table.Head>}
             {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">Term</Table.Head> */}
-            <Table.Head className="font-extrabold text-black whitespace-nowrap">
+            <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">
               <SortableHeader
                 label={currentTerm ? "Projected Term Grade" : "Predicted Grade"}
                 column="predicted_period_grade"
@@ -108,8 +111,8 @@ export default function PredictionTable({
                 onSort={onSort}
               />
             </Table.Head>
-            <Table.Head className="font-extrabold text-black whitespace-nowrap">Risk Level</Table.Head>
-            {!currentTerm && <Table.Head className="font-extrabold text-black whitespace-nowrap">
+            <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">Risk Level</Table.Head>
+            {!currentTerm && <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">
               <SortableHeader
                 label="Risk Score"
                 column="risk_score"
@@ -128,17 +131,16 @@ export default function PredictionTable({
             <Table.Row>
               <Table.Cell
                 colSpan={colSpanCount}
-                className="text-center py-12"
+                className="p-0"
               >
-                <div className="flex flex-col items-center justify-center gap-2">
-                  <div className="size-12 rounded-full bg-yellow-300 border-2 border-black flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                    <Eye className="size-6 text-black" />
-                  </div>
-                  <span className="font-extrabold text-sm text-black uppercase">No prediction results available</span>
-                  <span className="text-xs text-gray-600 font-semibold max-w-sm">
-                    No current-term projections are available for this scope.
-                  </span>
-                </div>
+                <TeacherEmptyState
+                  icon={<Eye />}
+                  title={onClearFilters ? "No predictions match your filters" : "No prediction results available"}
+                  description={onClearFilters ? "Try another search term or clear your filters." : "No current-term projections are available for this scope."}
+                  action={onClearFilters ? { label: "Clear Filters", onClick: onClearFilters } : undefined}
+                  compact
+                  className="rounded-none border-0 bg-transparent shadow-none hover:shadow-none"
+                />
               </Table.Cell>
             </Table.Row>
           ) : (
@@ -221,7 +223,7 @@ export default function PredictionTable({
               onClick={() => onPageChange(Math.max(0, offset - limit))}
               className="disabled:opacity-40 cursor-pointer"
             >
-              <ChevronLeft size={12} className="mr-2 stroke-[2.5]" />
+              <ChevronLeft size={12} className="stroke-[2.5]" />
               Previous
             </Button>
             <span className="text-sm font-semibold text-black px-2.5 py-1 whitespace-nowrap">
@@ -235,7 +237,7 @@ export default function PredictionTable({
               className="disabled:opacity-40 cursor-pointer"
             >
               Next
-              <ChevronRight size={12} className="ml-2 stroke-[2.5]" />
+              <ChevronRight size={12} className="stroke-[2.5]" />
             </Button>
           </div>
         </div>

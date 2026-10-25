@@ -7,7 +7,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";

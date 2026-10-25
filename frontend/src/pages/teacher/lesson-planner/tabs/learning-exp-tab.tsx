@@ -1,6 +1,6 @@
 import React from "react";
 import { Label } from "@/components/retroui/Label";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Badge } from "@/components/retroui/Badge";
 import { Plus, Trash2 } from "lucide-react";
 import type { LessonPlanDraft, FlowStep } from "../use-lesson-planner";

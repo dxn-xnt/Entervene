@@ -1,4 +1,4 @@
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Card as RetroCard } from "@/components/retroui/Card";
 import { Archive, ArrowUpRight, Pencil, RotateCcw } from "lucide-react";
 import { useNavigate } from "react-router-dom";

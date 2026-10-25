@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Badge } from "@/components/retroui/Badge";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";

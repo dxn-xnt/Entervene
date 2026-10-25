@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Accordion } from "@/components/retroui/Accordion";
 import { ArrowUpRight } from "lucide-react";

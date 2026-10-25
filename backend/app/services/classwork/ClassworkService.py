@@ -48,6 +48,7 @@ from app.services.classwork.ClassworkResponseService import (
     resolve_classwork_file_path,
 )
 from app.services.classwork.ClassworkShared import (
+    aware_utc,
     assignment_is_available,
     assignment_is_locked,
     cleanup_saved_files,
@@ -1470,7 +1471,7 @@ def _assignment_response(
         activity_mode=cast(str, getattr(classwork, "activity_mode", "ONLINE")),
         is_graded=cast(bool, getattr(classwork, "is_graded", True)),
         total_points=float(cast(Any, classwork.total_points)) if classwork.total_points else None,
-        due_date=cast(Optional[datetime], assignment.due_date),
+        due_date=aware_utc(cast(Optional[datetime], assignment.due_date)),
         lock_date=cast(Optional[datetime], assignment.lock_date),
         created_at=cast(Optional[datetime], assignment.created_at or classwork.created_at),
         allow_late_submissions=cast(bool, assignment.allow_late_submissions),

@@ -36,7 +36,7 @@ import type {
   TeacherClasswork,
   ClassworkTracking,
 } from "@/types/classwork";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Input } from "@/components/retroui/Input";
 import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
@@ -694,11 +694,10 @@ export default function Classworks() {
                           })}
                         </div>
                       </section>
-                      <Dialog.Footer position="fixed">
+                      <Dialog.Footer className="mt-0 justify-end">
                         <Button
+                          type="button"
                           variant="outline"
-                          size="sm"
-                          autoIcon={false}
                           onClick={closeCreateWizard}
                         >
                           Cancel

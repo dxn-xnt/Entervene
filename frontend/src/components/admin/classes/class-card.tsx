@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ArchiveIcon, EllipsisIcon, PenIcon } from "lucide-react";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { classPathwayLabel } from "@/lib/class-pathway";
 

@@ -1,7 +1,7 @@
 import { Eye } from "lucide-react";
 import AttachmentDisplay from "@/components/attachment-display";
 import { API_URL } from "@/lib/api";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";

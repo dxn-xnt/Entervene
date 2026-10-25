@@ -22,6 +22,7 @@ from app.schemas.lesson_goal import (
     LessonGoalResponse,
     LessonGoalSetRequest,
 )
+from app.services.classwork.ClassworkShared import aware_utc
 from app.services.academic.ContentAuthorizationService import authorize_teacher_content, resolve_content_staff_id
 from app.services.lesson.LessonShared import authorize_lesson_access
 from app.services.classwork.ClassworkAccessService import authorize_classwork_access
@@ -150,7 +151,7 @@ def get_curated_lesson_goal(
                     continue
                 sub = sub_map.get(asgn.classwork_assignment_id) if asgn else None
                 sub_status = sub.status.lower() if sub and sub.status else None
-                due_str = asgn.due_date.isoformat() if asgn and asgn.due_date else None
+                due_str = aware_utc(asgn.due_date).isoformat() if asgn and asgn.due_date else None
 
                 classwork_detail = LessonGoalItemDetailClasswork(
                     classwork_id=it.classwork.classwork_id,

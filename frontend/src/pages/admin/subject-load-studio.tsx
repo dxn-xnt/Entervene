@@ -11,7 +11,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuPortal
 } from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { useToast } from "@/components/retroui/Toast";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
@@ -2726,17 +2726,20 @@ export default function AdminSubjectLoadStudio() {
                                                           className="absolute right-0 mt-1 w-44 bg-white border-2 border-black shadow-[3px_3px_0_#000] p-1 z-50 flex flex-col gap-1 rounded"
                                                           onMouseLeave={() => setOpenRowKey(null)}
                                                         >
-                                                          <button
+                                                          <Button
                                                             type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            autoIcon={false}
                                                             onClick={() => {
                                                               setOpenRowKey(null);
                                                               handleAddSlot(cls.class_id, sub.subject_id);
                                                             }}
-                                                            className="text-[11px] font-bold text-left px-2 py-1 hover:bg-neutral-100 flex items-center gap-1 rounded"
+                                                            className="h-auto justify-start text-[11px] font-bold text-left px-2 py-1 hover:bg-neutral-100 shadow-none hover:translate-y-0"
                                                           >
                                                             <Plus className="size-3 text-primary" />
                                                             <span>+ Add Time Slot</span>
-                                                          </button>
+                                                          </Button>
                                                           <button
                                                             type="button"
                                                             onClick={() => {

@@ -15,7 +15,7 @@ import { commitExistingClassDistribution, previewExistingClassDistribution } fro
 import type { ClassTransferOption, ExistingClassDistributionPreview } from "@/types/adminClasses";
 import { Alert } from "@/components/retroui/Alert";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
 

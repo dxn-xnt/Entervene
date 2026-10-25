@@ -1,6 +1,6 @@
 import React from "react";
 import { Label } from "@/components/retroui/Label";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Input } from "@/components/retroui/Input";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Plus, Trash2, AlertCircle } from "lucide-react";

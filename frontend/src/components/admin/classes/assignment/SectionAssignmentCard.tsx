@@ -7,7 +7,7 @@ import type {
 } from "@/types/adminClasses";
 import GenderStudentTable from "./GenderStudentTable";
 import { assignmentGenderGroup } from "./studentSorting";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 
 export default function SectionAssignmentCard({
   section,
@@ -78,17 +78,21 @@ export default function SectionAssignmentCard({
         </p>
       )}
       {!!students.length && (
-        <button
-          className="flex items-center gap-1 border-t border-black/20 pt-2 text-left text-xs font-semibold"
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          autoIcon={false}
+          className="h-auto w-full justify-start rounded-none border-t border-black/20 px-0 pt-2 pb-0 text-left text-xs font-semibold shadow-none hover:translate-y-0 hover:bg-transparent"
           onClick={() => setExpanded((value) => !value)}
         >
           {expanded ? (
             <ChevronDown className="size-3" />
           ) : (
             <ChevronRight className="size-3" />
-          )}{" "}
+          )}
           {expanded ? "Hide Student Lists" : "Show Student Lists"}
-        </button>
+        </Button>
       )}
       {expanded && (
         <div className="max-h-52 overflow-y-auto pr-1">

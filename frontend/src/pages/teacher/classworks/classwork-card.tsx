@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Archive, Copy, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import {

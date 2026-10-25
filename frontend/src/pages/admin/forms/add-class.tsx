@@ -16,7 +16,7 @@ import { sortAssignmentStudents } from "@/components/admin/classes/assignment/st
 import ImportClassWizard from "@/pages/admin/forms/classes/import-class-wizard";
 import ManualClassWizard from "@/pages/admin/forms/classes/manual-class-wizard";
 import { Dialog } from "@/components/retroui/Dialog";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Text } from "@/components/retroui/Text";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";

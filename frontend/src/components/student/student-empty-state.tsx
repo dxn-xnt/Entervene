@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/student/button";
 import { Card } from "@/components/retroui/Card";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +21,7 @@ export function StudentEmptyState({ icon, title, description, action, className,
         </div>
         <Card.Title className="text-base font-bold tracking-tight">{title}</Card.Title>
         <p className="text-sm/relaxed font-normal text-muted-foreground">{description}</p>
-        {action && <Button size="sm" className="mt-2 gap-1.5" onClick={action.onClick}>{action.label}</Button>}
+        {action && <Button size="sm" className="mt-2" onClick={action.onClick}>{action.label}</Button>}
       </Card.Content>
   );
 

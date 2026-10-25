@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 import { Select } from "@/components/retroui/Select";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { computeTOSShortfall } from "@/lib/tos-shortfall";
 import { buildTOSGenerationRows, tosGenerationErrorMessage } from "@/lib/tos-generation-request";
@@ -1320,11 +1320,13 @@ export function TOSGeneratorScreen({
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-muted-foreground block">Exam Title</label>
                       <Tooltip>
-                        <TooltipTrigger render={<span className="inline-flex"><button
+                        <TooltipTrigger render={<span className="inline-flex"><Button
                           type="button"
+                          variant="link"
+                          size="sm"
                           onClick={handleSuggestTitle}
                           disabled={isSuggestingTitle || !currentSubjectName}
-                          className="flex items-center gap-1 text-[11px] font-black text-purple-600 dark:text-purple-400 hover:underline disabled:opacity-40 cursor-pointer"
+                          className="h-auto p-0 text-[11px] font-black text-purple-600 shadow-none dark:text-purple-400 hover:underline disabled:opacity-40"
                         >
                           {isSuggestingTitle ? (
                             <RefreshCw className="h-3 w-3 animate-spin" />
@@ -1332,7 +1334,7 @@ export function TOSGeneratorScreen({
                             <Sparkles className="h-3 w-3" />
                           )}
                           <span>AI Suggest</span>
-                        </button></span>} />
+                        </Button></span>} />
                         <TooltipContent>Suggest exam title</TooltipContent>
                       </Tooltip>
                     </div>
@@ -1603,11 +1605,13 @@ export function TOSGeneratorScreen({
                                 <div className="flex items-center justify-between mb-1">
                                   <label className="text-[11px] font-bold text-muted-foreground block">Topic Description</label>
                                   <Tooltip>
-                                    <TooltipTrigger render={<span className="inline-flex"><button
+                                    <TooltipTrigger render={<span className="inline-flex"><Button
                                       type="button"
+                                      variant="link"
+                                      size="sm"
                                       onClick={() => handleRefineTopic(idx)}
                                       disabled={refiningCompIdx === idx}
-                                      className="flex items-center gap-1 text-[11px] font-bold text-purple-600 dark:text-purple-400 hover:underline disabled:opacity-50 cursor-pointer"
+                                      className="h-auto p-0 text-[11px] font-bold text-purple-600 shadow-none dark:text-purple-400 hover:underline disabled:opacity-50"
                                     >
                                       {refiningCompIdx === idx ? (
                                         <RefreshCw className="h-3 w-3 animate-spin" />
@@ -1615,7 +1619,7 @@ export function TOSGeneratorScreen({
                                         <Sparkles className="h-3 w-3" />
                                       )}
                                       <span>AI Refine</span>
-                                    </button></span>} />
+                                    </Button></span>} />
                                     <TooltipContent>Refine topic</TooltipContent>
                                   </Tooltip>
                                 </div>

@@ -3,7 +3,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Card } from "@/components/retroui/Card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Dialog } from "@/components/retroui/Dialog";

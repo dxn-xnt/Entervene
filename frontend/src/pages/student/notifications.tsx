@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/student/button";
 import { NotificationCard } from "@/components/notification-card";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";

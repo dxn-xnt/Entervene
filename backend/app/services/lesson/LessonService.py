@@ -15,6 +15,7 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.schemas.Lesson import LessonAssignRequest, LessonCreate, LessonResponse, LessonUpdate
+from app.services.classwork.ClassworkShared import aware_utc
 from app.services.lesson.LessonFileService import files_from_form, resolve_lesson_file_path
 from app.services.lesson.LessonResponseService import build_lesson_response
 from app.services.lesson.LessonShared import (
@@ -149,7 +150,7 @@ def teacher_lesson_linked_classwork(
             "title": classwork.title,
             "classwork_type": classwork.classwork_type,
             "classwork_category": classwork.classwork_category,
-            "due_date": assignment.due_date.isoformat() if assignment.due_date else None,
+            "due_date": aware_utc(assignment.due_date).isoformat() if assignment.due_date else None,
             "created_at": (
                 assignment.created_at.isoformat()
                 if assignment.created_at
@@ -314,7 +315,7 @@ def lesson_classwork_assignments(lesson_id: int, class_id: int, student, db: Ses
             "classwork_type": classwork.classwork_type if classwork else None,
             "classwork_category": classwork.classwork_category if classwork else None,
             "total_points": float(classwork.total_points) if classwork and classwork.total_points else None,
-            "due_date": assignment.due_date.isoformat() if assignment.due_date else None,
+            "due_date": aware_utc(assignment.due_date).isoformat() if assignment.due_date else None,
             "submission_status": display_status,
         })
     return results

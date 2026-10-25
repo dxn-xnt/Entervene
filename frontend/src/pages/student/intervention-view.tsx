@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams, useParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/student/button";
 import { Card } from "@/components/retroui/Card";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Progress } from "@/components/retroui/Progress";
