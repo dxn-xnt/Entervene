@@ -16,10 +16,11 @@ import {
   listMyActiveInterventions,
   listMyResolvedInterventions,
   type StudentPersistentIntervention,
+  type StudentSupportActivity,
 } from "@/lib/student-persistent-interventions-api";
 import IconContainer from "@/components/icon-container";
-import { ClipboardList, History, Shield } from "lucide-react";
-import { formatDate } from "@/lib/formatters";
+import { BookOpen, ClipboardList, History, Shield } from "lucide-react";
+import { formatDateTime } from "@/lib/formatters";
 
 export default function StudentInterventions() {
   const navigate = useNavigate();
@@ -62,43 +63,102 @@ export default function StudentInterventions() {
     };
   }, []);
 
-  // Primary featured reviewer (or default mockup reviewer matching design)
-  const latestReviewer = reviewers[0];
-  const featuredReviewer = {
-    id: latestReviewer?.material_id || null,
-    title: latestReviewer?.title || "Math Review: Strengthening Your Exam Skills",
-    subject: latestReviewer?.subject_name || "Mathematics",
-    date: latestReviewer?.sent_at
-      ? `Shared ${formatDate(latestReviewer.sent_at, {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-      })}`
-      : "Shared Oct 24, 2026 ",
-    intro:
-      "Your written work is going well. This review shows where to focus to lift your exam score.",
-    tags: ["Focus: Exam", "Practise: Algebraic Expressions"],
+
+
+  const renderActivities = (
+    activities: StudentSupportActivity[],
+    emptyPlaceholder?: React.ReactNode
+  ) => {
+    if (activities && activities.length > 0) {
+      return (
+        <div className="space-y-2">
+          <p className="font-semibold text-foreground text-sm">
+            Curated remediation activities:
+          </p>
+          <div className="flex flex-col gap-2">
+            {activities.map((act) => (
+              <ClassworkItemLine
+                key={act.assignment_id}
+                className="border-2! shadow-none!"
+                item={{
+                  classwork_id: act.assignment_id,
+                  title: act.title,
+                  classwork_type: act.classwork_type,
+                }}
+                showPublicationStatus={false}
+                showCategory={false}
+                showType={false}
+                onClick={() =>
+                  navigate(
+                    `/student/classworks/${act.assignment_id}?from=${encodeURIComponent(
+                      window.location.pathname
+                    )}`
+                  )
+                }
+                rightContent={
+                  <div className="flex items-center gap-2">
+                    {act.grade != null && act.total_points != null && (
+                      <span className="text-xs font-bold">
+                        {act.grade}
+                        <span className="font-medium text-muted-foreground text-xs">
+                          {" "}
+                          / {act.total_points}
+                        </span>
+                      </span>
+                    )}
+                    {act.classwork_type && (
+                      <Badge variant="surface" size="sm">
+                        {act.classwork_type === "QUIZ"
+                          ? "Quiz"
+                          : act.classwork_type === "ASSIGNMENT"
+                            ? "Assignment"
+                            : act.classwork_type}
+                      </Badge>
+                    )}
+                    {act.submission_status && (
+                      <Badge
+                        variant={
+                          act.submission_status === "graded" || act.submission_status === "submitted"
+                            ? "solid"
+                            : "outline"
+                        }
+                        size="sm"
+                      >
+                        {act.submission_status === "graded"
+                          ? "Completed"
+                          : act.submission_status === "submitted"
+                            ? "Submitted"
+                            : act.submission_status}
+                      </Badge>
+                    )}
+                  </div>
+                }
+              />
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return emptyPlaceholder ?? null;
   };
 
-  // Active interventions fallback to demo item if empty
-  const activeItems =
-    activeInterventions.length > 0
-      ? activeInterventions
-      : [
-        {
-          intervention_id: 1,
-          status: "ACTIVE" as const,
-          subject_id: 1,
-          subject_name: "Mathematics",
-          class_id: 1,
-          class_name: "Grade 10 - Mathematics",
-          teacher_name: null,
-          activities: [],
-          reviewer_id: latestReviewer?.material_id || null,
-          resolved_at: null,
-          resolution_message: null,
-        },
-      ];
+  const emptyActivitiesPlaceholder = (
+    <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+      <Empty.Content>
+        <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
+          <IconContainer className="bg-primary" size="sm">
+            <ClipboardList className="size-8" />
+          </IconContainer>
+        </Empty.Icon>
+        <Empty.Title className="text-base! font-bold">
+          No practice activities yet
+        </Empty.Title>
+        <Empty.Description className="text-sm text-muted-foreground">
+          Practice activities are on their way. We'll let you know when the first one is ready.
+        </Empty.Description>
+      </Empty.Content>
+    </Empty>
+  );
 
   return (
     <AppLayout>
@@ -116,73 +176,69 @@ export default function StudentInterventions() {
               <div className="w-full flex flex-col gap-4">
 
                 {/* Section 1: New from your teacher */}
-                <Card aria-label="New from your teacher" className="flex flex-col gap-3 p-5">
-                  <h3 className="text-lg sm:text-2xl font-bold text-foreground">
-                    New Support for You
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card className="w-full bg-background border-2 border-border p-4 sm:p-5 shadow-none flex flex-col gap-2 transition-all hover:bg-retro hover:-translate-y-1">
-                      {/* Main Card Title */}
-                      <div className="w-full justify-between flex items-start mb-3 gap-2">
-                        <div className="flex flex-row gap-3 items-start min-w-0">
-                          <IconContainer className="bg-primary shrink-0" size="xl">
-                            <Shield className="text-border" size="36" />
-                          </IconContainer>
-                          <div className="flex flex-col gap-0.5 min-w-0">
-                            <h4
-                              className="text-xl sm:text-2xl font-black text-foreground tracking-tight truncate"
-                              title={featuredReviewer.title}
-                            >
-                              {featuredReviewer.title}
-                            </h4>
-                            <p className="text-sm font-medium text-foreground truncate">{featuredReviewer.subject}</p>
-                          </div>
-                        </div>
-                      </div>
+                {reviewers.length > 0 && (
+                  <Card aria-label="New from your teacher" className="flex flex-col gap-3 p-5">
+                    <h3 className="text-lg sm:text-2xl font-bold text-foreground">
+                      New Support for You
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {reviewers.map((rev) => {
+                        const matchingIntervention =
+                          activeInterventions.find((i) => i.reviewer_id === rev.material_id) ??
+                          resolvedInterventions.find((i) => i.reviewer_id === rev.material_id);
+                        const activities = matchingIntervention?.activities ?? [];
 
-                      {/* Subtext description */}
-                      <p className="text-sm text-foreground font-medium">
-                        {featuredReviewer.intro}
-                      </p>
-
-                      {/* Badges/Pills */}
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        {featuredReviewer.tags.map((tag, idx) => (
-                          <Badge
-                            key={idx}
-                            variant="surface"
-                            size="sm"
+                        return (
+                          <Card
+                            key={rev.material_id}
+                            className="w-full bg-background border-2 border-border p-4 sm:p-5 shadow-none flex flex-col gap-2 transition-all hover:bg-retro hover:-translate-y-1"
                           >
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
+                            {/* Main Card Title */}
+                            <div className="w-full justify-between flex items-start mb-1 gap-2">
+                              <div className="flex flex-row gap-3 items-start min-w-0">
+                                <IconContainer className="bg-primary shrink-0" size="xl">
+                                  <Shield className="text-border" size="36" />
+                                </IconContainer>
+                                <div className="flex flex-col gap-0.5 min-w-0">
+                                  <h4
+                                    className="text-xl sm:text-2xl font-black text-foreground tracking-tight truncate"
+                                    title={rev.title}
+                                  >
+                                    {rev.title}
+                                  </h4>
+                                  <p className="text-sm font-medium text-foreground truncate">{rev.subject_name}</p>
+                                </div>
+                              </div>
+                            </div>
 
-                      {/* Meta line */}
-                      <div className="flex items-center flex-wrap gap-2">
-                        <span className="text-xs sm:text-sm text-muted-foreground">
-                          {featuredReviewer.date}
-                        </span>
-                      </div>
+                            {/* Curated remediation activities if any */}
+                            {renderActivities(activities)}
 
-                      {/* Action button */}
-                      <div className="pt-2">
-                        <Button
-                          onClick={() =>
-                            navigate(
-                              featuredReviewer.id
-                                ? `${routes.student.interventionView}?reviewer=${featuredReviewer.id}`
-                                : routes.student.interventionView
-                            )
-                          }
-                          className="gap-2"
-                        >
-                          Start Reading
-                        </Button>
-                      </div>
-                    </Card>
-                  </div>
-                </Card>
+                            {/* Meta line */}
+                            <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
+                              <span className="text-xs sm:text-sm text-muted-foreground">
+                                {rev.sent_at ? `Shared ${formatDateTime(rev.sent_at)}` : ""}
+                              </span>
+
+                              {/* Action button */}
+                              <Button
+                                size="sm"
+                                autoIcon={false}
+                                onClick={() =>
+                                  navigate(`${routes.student.interventionView}?reviewer=${rev.material_id}`)
+                                }
+                                className="gap-2"
+                              >
+                                <BookOpen className="size-4" />
+                                Start Reading
+                              </Button>
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                )}
 
                 {/* Section 2: Your active support */}
                 <section aria-label="Your active support" className="space-y-3">
@@ -190,136 +246,89 @@ export default function StudentInterventions() {
                     Your Active Support
                   </h3>
 
-                  <div className="space-y-4">
-                    {activeItems.map((item) => (
-                      <Card
-                        key={item.intervention_id}
-                        className="w-full bg-card border-2 border-border p-5 sm:p-6 shadow-md space-y-4"
-                      >
-                        {/* Header line */}
-                        <div className="flex items-start justify-between gap-4">
-                          <h4 className="text-lg sm:text-xl font-bold text-foreground">
-                            {item.subject_name} Support
-                          </h4>
-                          <Badge
-                            variant="surface"
-                            size="sm"
-                          >
-                            Teacher support active
-                          </Badge>
-                        </div>
-
-                        {/* Subtext */}
-                        <p className="text-sm text-muted-foreground">
-                          Your teacher has set up extra help for {item.subject_name}.
-                        </p>
-
-                        {/* Dashed practice notice container */}
-                        {item.activities && item.activities.length > 0 ? (
-                          <div className="space-y-2">
-                            <p className="font-semibold text-foreground text-sm">
-                              Available practice activities:
-                            </p>
-                            <div className="flex flex-col gap-2">
-                              {item.activities.map((act) => (
-                                <ClassworkItemLine
-                                  key={act.assignment_id}
-                                  className="border-2! shadow-none!"
-                                  item={{
-                                    classwork_id: act.assignment_id,
-                                    title: act.title,
-                                    classwork_type: act.classwork_type,
-                                  }}
-                                  showPublicationStatus={false}
-                                  showCategory={false}
-                                  showType={false}
-                                  onClick={() =>
-                                    navigate(
-                                      `/student/classworks/${act.assignment_id}?from=${encodeURIComponent(
-                                        window.location.pathname
-                                      )}`
-                                    )
-                                  }
-                                  rightContent={
-                                    <div className="flex items-center gap-2">
-                                      {act.grade != null && act.total_points != null && (
-                                        <span className="text-xs font-bold">
-                                          {act.grade}
-                                          <span className="font-medium text-muted-foreground text-xs">
-                                            {" "}
-                                            / {act.total_points}
-                                          </span>
-                                        </span>
-                                      )}
-                                      {act.classwork_type && (
-                                        <Badge variant="surface" size="sm">
-                                          {act.classwork_type === "QUIZ"
-                                            ? "Quiz"
-                                            : act.classwork_type === "ASSIGNMENT"
-                                              ? "Assignment"
-                                              : act.classwork_type}
-                                        </Badge>
-                                      )}
-                                      {act.submission_status && (
-                                        <Badge
-                                          variant={
-                                            act.submission_status === "graded" || act.submission_status === "submitted"
-                                              ? "solid"
-                                              : "outline"
-                                          }
-                                          size="sm"
-                                        >
-                                          {act.submission_status === "graded"
-                                            ? "Completed"
-                                            : act.submission_status === "submitted"
-                                              ? "Submitted"
-                                              : act.submission_status}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  }
-                                />
-                              ))}
+                  {activeInterventions.length === 0 ? (
+                    <Empty className="w-full border-2 rounded! border-border bg-card p-6 shadow-md hover:shadow-none">
+                      <Empty.Content>
+                        <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
+                          <IconContainer className="bg-primary" size="sm">
+                            <Shield className="size-8" />
+                          </IconContainer>
+                        </Empty.Icon>
+                        <Empty.Title className="text-base! font-bold">
+                          No active support
+                        </Empty.Title>
+                        <Empty.Description className="text-sm text-muted-foreground">
+                          You don't have any active intervention support right now.
+                        </Empty.Description>
+                      </Empty.Content>
+                    </Empty>
+                  ) : (
+                    <div className="space-y-4">
+                      {activeInterventions.map((item) => (
+                        <Card
+                          key={item.intervention_id}
+                          className="w-full bg-background border-2 border-border p-4 sm:p-5 shadow-none flex flex-col gap-2 transition-all hover:bg-retro hover:-translate-y-1"
+                        >
+                          {/* Main Card Title */}
+                          <div className="w-full justify-between flex items-start mb-1 gap-2">
+                            <div className="flex flex-row gap-3 items-start min-w-0">
+                              <IconContainer className="bg-primary shrink-0" size="xl">
+                                <Shield className="text-border" size="36" />
+                              </IconContainer>
+                              <div className="flex flex-col gap-0.5 min-w-0">
+                                <h4
+                                  className="text-xl sm:text-2xl font-black text-foreground tracking-tight truncate"
+                                  title={`${item.subject_name} Support`}
+                                >
+                                  {item.subject_name} Support
+                                </h4>
+                                <p className="text-sm font-medium text-foreground truncate">
+                                  {item.class_name}
+                                  {item.teacher_name ? ` · ${item.teacher_name}` : ""}
+                                </p>
+                              </div>
                             </div>
+                            <Badge variant="surface" size="sm">
+                              Active
+                            </Badge>
                           </div>
-                        ) : (
-                          <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
-                            <Empty.Content>
-                              <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
-                                <IconContainer className="bg-primary" size="sm">
-                                  <ClipboardList className="size-8" />
-                                </IconContainer>
-                              </Empty.Icon>
-                              <Empty.Title className="text-base! font-bold">
-                                No practice activities yet
-                              </Empty.Title>
-                              <Empty.Description className="text-sm text-muted-foreground">
-                                Practice activities are on their way. We'll let you know when the first one is ready.
-                              </Empty.Description>
-                            </Empty.Content>
-                          </Empty>
-                        )}
 
-                        {/* Action button */}
-                        <div className="pt-1">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() =>
-                              navigate(
-                                item.reviewer_id
-                                  ? `${routes.student.interventionView}?reviewer=${item.reviewer_id}`
-                                  : routes.student.interventionView
-                              )
-                            }
-                            className="gap-2 font-bold"
-                          >
-                            Read the review
-                          </Button>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
+                          {/* Subtext */}
+                          <p className="text-sm text-muted-foreground">
+                            Your teacher has set up extra help for {item.subject_name}.
+                          </p>
+
+                          {/* Curated remediation classwork activities */}
+                          {renderActivities(item.activities, emptyActivitiesPlaceholder)}
+
+                          {/* Meta line */}
+                          <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
+                            <span className="text-xs sm:text-sm text-muted-foreground">
+                              Teacher support active
+                            </span>
+
+                            {/* Action button */}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              autoIcon={false}
+                              onClick={() =>
+                                navigate(
+                                  item.reviewer_id
+                                    ? `${routes.student.interventionView}?reviewer=${item.reviewer_id}`
+                                    : routes.student.interventionView
+                                )
+                              }
+                              className="gap-2"
+                            >
+                              <BookOpen className="size-4" />
+                              Read Review
+                            </Button>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
                 </section>
 
                 {/* Section 3: Past support */}
@@ -345,31 +354,72 @@ export default function StudentInterventions() {
                       </Empty.Content>
                     </Empty>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {resolvedInterventions.map((item) => (
                         <Card
                           key={item.intervention_id}
-                          className="w-full border-2 border-border bg-card p-4 space-y-2"
+                          className="w-full bg-background border-2 border-border p-4 sm:p-5 shadow-none flex flex-col gap-2 transition-all hover:bg-retro hover:-translate-y-1"
                         >
-                          <div className="flex justify-between items-center text-sm">
-                            <span className="font-bold text-foreground">
-                              {item.subject_name} Support
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {item.resolved_at
-                                ? new Date(item.resolved_at).toLocaleDateString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                })
-                                : "Resolved"}
-                            </span>
+                          {/* Main Card Title */}
+                          <div className="w-full justify-between flex items-start mb-1 gap-2">
+                            <div className="flex flex-row gap-3 items-start min-w-0">
+                              <IconContainer className="bg-primary shrink-0" size="xl">
+                                <History className="text-border" size="36" />
+                              </IconContainer>
+                              <div className="flex flex-col gap-0.5 min-w-0">
+                                <h4
+                                  className="text-xl sm:text-2xl font-black text-foreground tracking-tight truncate"
+                                  title={`${item.subject_name} Support`}
+                                >
+                                  {item.subject_name} Support
+                                </h4>
+                                <p className="text-sm font-medium text-foreground truncate">
+                                  {item.class_name}
+                                  {item.teacher_name ? ` · ${item.teacher_name}` : ""}
+                                </p>
+                              </div>
+                            </div>
+                            <Badge variant="surface" size="sm">
+                              Resolved
+                            </Badge>
                           </div>
+
+                          {/* Subtext */}
                           {item.resolution_message && (
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-sm text-muted-foreground">
                               {item.resolution_message}
                             </p>
                           )}
+
+                          {/* Curated remediation classwork activities */}
+                          {renderActivities(item.activities)}
+
+                          {/* Meta line */}
+                          <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
+                            <span className="text-xs sm:text-sm text-muted-foreground">
+                              {item.resolved_at
+                                ? `Resolved ${formatDateTime(item.resolved_at)}`
+                                : "Resolved"}
+                            </span>
+
+                            {/* Action button */}
+                            {item.reviewer_id ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                autoIcon={false}
+                                onClick={() =>
+                                  navigate(
+                                    `${routes.student.interventionView}?reviewer=${item.reviewer_id}`
+                                  )
+                                }
+                                className="gap-2"
+                              >
+                                <BookOpen className="size-4" />
+                                Read Review
+                              </Button>
+                            ) : null}
+                          </div>
                         </Card>
                       ))}
                     </div>
