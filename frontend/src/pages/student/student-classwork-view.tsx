@@ -314,7 +314,9 @@ export default function StudentClassworkView() {
                     onClick={back}
                     className="block max-w-32 cursor-pointer truncate text-muted-foreground sm:max-w-56 md:max-w-72"
                   >
-                    {fromSubject ? detail?.subject_name || "Subject" : sourceLabel}
+                    {fromSubject
+                      ? detail?.subject_name || "Subject"
+                      : sourceLabel}
                   </Breadcrumb.Link>
                 </Breadcrumb.Item>
                 <Breadcrumb.Separator />
@@ -383,7 +385,7 @@ export default function StudentClassworkView() {
                           </Badge>
                         </div>
                         {detail.linked_lessons &&
-                          detail.linked_lessons.length > 0 ? (
+                        detail.linked_lessons.length > 0 ? (
                           <p className="text-sm text-muted-foreground">
                             Linked under{" "}
                             {detail.linked_lessons.length === 1
@@ -427,8 +429,8 @@ export default function StudentClassworkView() {
                       <Badge
                         variant={
                           status === "graded" ||
-                            status === "submitted" ||
-                            status === "completed"
+                          status === "submitted" ||
+                          status === "completed"
                             ? "success"
                             : closed
                               ? "destructive"
@@ -520,7 +522,13 @@ export default function StudentClassworkView() {
                           }
                         />
                       ) : (
-                        <StudentEmptyState embedded icon={<FileText />} title="No files attached" description="Your teacher has not attached files to this classwork." />
+                        <StudentEmptyState
+                          embedded
+                          className="shadow-none"
+                          icon={<FileText />}
+                          title="No files attached"
+                          description="Your teacher has not attached files to this classwork."
+                        />
                       )}
                     </section>
                     <div className="text-sm text-muted-foreground">
@@ -546,7 +554,11 @@ export default function StudentClassworkView() {
                 <Card className="block w-full">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <h2 className="flex items-center gap-2 font-bold">
-                      <IconContainer variant="primary" size="sm" className="size-9 p-0">
+                      <IconContainer
+                        variant="primary"
+                        size="sm"
+                        className="size-9 p-0"
+                      >
                         <FileText size={18} />
                       </IconContainer>
                       {isQuiz
@@ -567,9 +579,9 @@ export default function StudentClassworkView() {
                   </div>
                   {isReading ? (
                     submission ||
-                      status === "completed" ||
-                      status === "submitted" ||
-                      status === "graded" ? (
+                    status === "completed" ||
+                    status === "submitted" ||
+                    status === "graded" ? (
                       <p className="text-sm font-semibold text-success">
                         You have completed this reading material.
                       </p>
@@ -708,11 +720,11 @@ export default function StudentClassworkView() {
           setQuizReviewMode={setQuizReviewMode}
           quizRemainingSeconds={null}
           flaggedQuizQuestionIds={new Set()}
-          toggleQuizFlag={() => { }}
+          toggleQuizFlag={() => {}}
           quizError=""
           isQuizSubmitting={false}
           onExit={() => setShowQuizSummary(false)}
-          onSubmit={() => { }}
+          onSubmit={() => {}}
         />
       )}
     </>

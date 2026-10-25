@@ -36,7 +36,7 @@ import type {
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 function getStatusBadge(status?: string | null, dueDate?: string | null) {
-  if (status === "graded" || status === "submitted") {
+  if (status === "graded" || status === "submitted" || status === "completed") {
     return {
       label: "Done",
       cls: "bg-gray-200 text-gray-600 border border-gray-300",
@@ -46,17 +46,22 @@ function getStatusBadge(status?: string | null, dueDate?: string | null) {
     return { label: "Late", cls: "bg-[#FF4B4B] text-white" };
   }
   if (!dueDate) return null;
-  const diffDays = Math.ceil(
-    (new Date(dueDate).getTime() - Date.now()) / 86_400_000,
-  );
-  if (diffDays < 0)
+  const due = new Date(dueDate);
+  if (Number.isNaN(due.getTime())) return null;
+  if (due.getTime() < Date.now())
     return {
-      label: `${Math.abs(diffDays)} days late`,
+      label: "Past due",
       cls: "bg-[#E47171] text-black",
     };
-  if (diffDays === 0)
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const dueStart = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
+  const calendarDays = Math.round((dueStart - todayStart) / 86_400_000);
+  if (calendarDays === 0)
     return { label: "Due today", cls: "bg-orange-400 text-white" };
-  return { label: `Due in ${diffDays} days`, cls: "bg-[#7ABA78] text-white" };
+  if (calendarDays === 1)
+    return { label: "Due tomorrow", cls: "bg-orange-400 text-white" };
+  return { label: `Due in ${calendarDays} days`, cls: "bg-[#7ABA78] text-white" };
 }
 
 function isReadingType(value?: string | null) {
@@ -658,7 +663,7 @@ export default function SubjectLessonTab({
       cw.submission_status === "missing" ||
       (cw.due_date &&
         new Date(cw.due_date) < new Date() &&
-        !["submitted", "graded"].includes(cw.submission_status ?? "")),
+        !["submitted", "late", "graded", "completed"].includes(cw.submission_status ?? "")),
   );
 
   const sortedLessons = lessons.filter((lesson) =>
@@ -806,7 +811,7 @@ export default function SubjectLessonTab({
 
               <p className="mt-1 text-xs font-medium text-gray-600">
                 {cw.due_date
-                  ? `Scheduled ${fmtDate(cw.due_date)}`
+                  ? `Due ${new Date(cw.due_date).toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}`
                   : "No due date"}
               </p>
             </div>
@@ -935,7 +940,7 @@ export default function SubjectLessonTab({
                           </div>
                           <p className="text-xs font-medium text-gray-600 mt-1">
                             {cw.due_date
-                              ? `Scheduled ${fmtDate(cw.due_date)}`
+                              ? `Due ${new Date(cw.due_date).toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}`
                               : "No due date"}
                             {cw.total_points ? ` • ${cw.total_points} pts` : ""}
                           </p>

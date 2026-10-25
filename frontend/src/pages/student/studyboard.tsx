@@ -36,7 +36,11 @@ import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { GradeOverviewCards } from "@/components/student/grade-overview-cards";
 import { SubjectCard } from "@/components/subject-card";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/retroui/Tooltip";
 import { routes } from "@/../routes";
 import {
   getMyStudyboardMetrics,
@@ -95,9 +99,15 @@ const StoryBoard = () => {
     useStudentOverviewData();
   const { selectedPeriodId } = useAcademicPeriod();
   const [metrics, setMetrics] = useState<StudentStudyboardMetrics | null>(null);
-  const [metricsLoadedPeriod, setMetricsLoadedPeriod] = useState<number | null | "unloaded">("unloaded");
-  const [metricsErrorPeriod, setMetricsErrorPeriod] = useState<number | null | "unloaded">("unloaded");
-  const metricsLoading = metricsLoadedPeriod === "unloaded" || metricsLoadedPeriod !== selectedPeriodId;
+  const [metricsLoadedPeriod, setMetricsLoadedPeriod] = useState<
+    number | null | "unloaded"
+  >("unloaded");
+  const [metricsErrorPeriod, setMetricsErrorPeriod] = useState<
+    number | null | "unloaded"
+  >("unloaded");
+  const metricsLoading =
+    metricsLoadedPeriod === "unloaded" ||
+    metricsLoadedPeriod !== selectedPeriodId;
   const metricsError = metricsErrorPeriod === selectedPeriodId;
   const [isSubjectsExpanded, setIsSubjectsExpanded] = useState(false);
 
@@ -111,7 +121,9 @@ const StoryBoard = () => {
         console.error("Failed to load studyboard metrics", cause);
         if (active) setMetricsErrorPeriod(selectedPeriodId);
       })
-      .finally(() => { if (active) setMetricsLoadedPeriod(selectedPeriodId); });
+      .finally(() => {
+        if (active) setMetricsLoadedPeriod(selectedPeriodId);
+      });
     return () => {
       active = false;
     };
@@ -178,12 +190,12 @@ const StoryBoard = () => {
 
   const readingTotal =
     metrics?.daily_reading_seconds.reduce((sum, value) => sum + value, 0) || 0;
-  const readingDays = (metrics?.daily_reading_seconds || [0, 0, 0, 0, 0, 0, 0]).map(
-    (seconds, index) => ({
-      day: days[index],
-      minutes: Math.round(seconds / 60),
-    }),
-  );
+  const readingDays = (
+    metrics?.daily_reading_seconds || [0, 0, 0, 0, 0, 0, 0]
+  ).map((seconds, index) => ({
+    day: days[index],
+    minutes: Math.round(seconds / 60),
+  }));
   const trend =
     metrics?.grade_trend.map((item) => ({
       label: dayLabel(item.week_start),
@@ -256,7 +268,9 @@ const StoryBoard = () => {
 
   const openTodo = async (item: TodoItem) => {
     if (item.assignment_id) {
-      navigate(`/student/classworks/${item.assignment_id}?from=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+      navigate(
+        `/student/classworks/${item.assignment_id}?from=${encodeURIComponent(window.location.pathname + window.location.search)}`,
+      );
       return;
     }
     let targetClassId = item.class_id;
@@ -326,7 +340,12 @@ const StoryBoard = () => {
                         </Empty.Content>
                       </Empty>
                     ) : subjects.length === 0 ? (
-                      <StudentEmptyState embedded icon={<BookOpen />} title="No subjects this period" description="Your assigned subjects will appear here once enrollment is available." />
+                      <StudentEmptyState
+                        embedded
+                        icon={<BookOpen />}
+                        title="No subjects this period"
+                        description="Your assigned subjects will appear here once enrollment is available."
+                      />
                     ) : (
                       <>
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -383,8 +402,13 @@ const StoryBoard = () => {
 
                   {/* Additional Metric Cards displayed below subjects container */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-12">
-                    <MetricCard title="Average Score" className="sm:col-span-1 xl:col-span-6">
-                      <p className="text-4xl font-black">{overview.average ?? 0}%</p>
+                    <MetricCard
+                      title="Average Score"
+                      className="sm:col-span-1 xl:col-span-6"
+                    >
+                      <p className="text-4xl font-black">
+                        {overview.average ?? 0}%
+                      </p>
                       <Progress
                         value={overview.average ?? 0}
                         className="mt-4"
@@ -395,7 +419,10 @@ const StoryBoard = () => {
                       </p>
                     </MetricCard>
 
-                    <MetricCard title="Assignment Status" className="sm:col-span-1 xl:col-span-6">
+                    <MetricCard
+                      title="Assignment Status"
+                      className="sm:col-span-1 xl:col-span-6"
+                    >
                       <div className="flex flex-1 items-center gap-4">
                         <div
                           className="relative shrink-0"
@@ -450,8 +477,8 @@ const StoryBoard = () => {
                         {duration(readingTotal)}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Cumulative reading time on work recorded this week; daily
-                        study sessions are not tracked
+                        Cumulative reading time on work recorded this week;
+                        daily study sessions are not tracked
                       </p>
                       <div
                         className="mt-3 h-36 min-w-0"
@@ -577,8 +604,21 @@ const StoryBoard = () => {
                         Cumulative reading time on work recorded this week
                       </p>
                       <div className="space-y-3">
-                        {metricsLoading ? <LoadingPanel label="Loading reading time..." /> : metricsError ? <p className="text-sm text-destructive">Unable to load reading time.</p> : (metrics?.subject_reading_seconds || []).length === 0 ? (
-                          <StudentEmptyState embedded icon={<BookOpen />} title="No reading time yet" description="Time spent reading class materials will appear here after you start." />
+                        {metricsLoading ? (
+                          <LoadingPanel label="Loading reading time..." />
+                        ) : metricsError ? (
+                          <p className="text-sm text-destructive">
+                            Unable to load reading time.
+                          </p>
+                        ) : (metrics?.subject_reading_seconds || []).length ===
+                          0 ? (
+                          <StudentEmptyState
+                            embedded
+                            className="shadow-none"
+                            icon={<BookOpen />}
+                            title="No reading time yet"
+                            description="Time spent reading class materials will appear here after you start."
+                          />
                         ) : (
                           metrics!.subject_reading_seconds.map((item) => (
                             <div
@@ -586,7 +626,16 @@ const StoryBoard = () => {
                               className="grid grid-cols-[minmax(0,1fr)_4rem] gap-x-2 gap-y-1 text-xs"
                             >
                               <Tooltip>
-                                <TooltipTrigger render={<span tabIndex={0} className="truncate font-medium">{item.subject}</span>} />
+                                <TooltipTrigger
+                                  render={
+                                    <span
+                                      tabIndex={0}
+                                      className="truncate font-medium"
+                                    >
+                                      {item.subject}
+                                    </span>
+                                  }
+                                />
                                 <TooltipContent>{item.subject}</TooltipContent>
                               </Tooltip>
                               <span className="text-right font-semibold">
@@ -612,14 +661,19 @@ const StoryBoard = () => {
                       </div>
                     </MetricCard>
 
-                    <MetricCard title="On-Time Submissions" className="sm:col-span-1 xl:col-span-6">
+                    <MetricCard
+                      title="On-Time Submissions"
+                      className="sm:col-span-1 xl:col-span-6"
+                    >
                       <div className="flex items-center gap-4">
                         <Progress
                           value={
                             onTimeTotal > 0
                               ? Math.round(
-                                ((metrics?.on_time_count || 0) / onTimeTotal) * 100,
-                              )
+                                  ((metrics?.on_time_count || 0) /
+                                    onTimeTotal) *
+                                    100,
+                                )
                               : 0
                           }
                           variant="circular"
@@ -628,7 +682,8 @@ const StoryBoard = () => {
                         />
                         <div className="text-sm">
                           <p className="font-semibold">
-                            {metrics?.on_time_count || 0} of {onTimeTotal} on time
+                            {metrics?.on_time_count || 0} of {onTimeTotal} on
+                            time
                           </p>
                           <p className="text-muted-foreground">
                             {metrics?.late_submission_count || 0} late
@@ -637,10 +692,15 @@ const StoryBoard = () => {
                       </div>
                     </MetricCard>
 
-                    <MetricCard title="Quiz Accuracy" className="sm:col-span-1 xl:col-span-6">
+                    <MetricCard
+                      title="Quiz Accuracy"
+                      className="sm:col-span-1 xl:col-span-6"
+                    >
                       <p className="text-4xl font-black">
                         {quizCount > 0
-                          ? Math.round(((metrics?.quiz_correct || 0) / quizCount) * 100)
+                          ? Math.round(
+                              ((metrics?.quiz_correct || 0) / quizCount) * 100,
+                            )
                           : 0}
                         %
                       </p>
@@ -654,7 +714,8 @@ const StoryBoard = () => {
                         aria-label={`${metrics?.quiz_correct || 0} correct out of ${quizCount} graded quiz answers`}
                       />
                       <p className="mt-2 text-xs text-muted-foreground">
-                        {metrics?.quiz_correct || 0} correct · {metrics?.quiz_wrong || 0} incorrect
+                        {metrics?.quiz_correct || 0} correct ·{" "}
+                        {metrics?.quiz_wrong || 0} incorrect
                       </p>
                     </MetricCard>
 
@@ -662,50 +723,88 @@ const StoryBoard = () => {
                       title="Attendance"
                       className="sm:col-span-2 xl:col-span-12"
                     >
-                      {metricsLoading ? <LoadingPanel label="Loading attendance..." /> : metricsError ? <p className="text-sm text-destructive">Unable to load attendance.</p> : !metrics?.attendance?.some((day) => day.status !== "no_record") ? (
-                        <StudentEmptyState embedded icon={<Calendar />} title="No attendance recorded yet" description="Your attendance for this week will appear when your school records it." />
-                      ) : <>
-                      <div className="flex items-baseline gap-2">
-                        <p className="text-4xl font-black">
-                          {metrics?.attendance_rate == null
-                            ? "—"
-                            : `${metrics.attendance_rate}%`}
+                      {metricsLoading ? (
+                        <LoadingPanel label="Loading attendance..." />
+                      ) : metricsError ? (
+                        <p className="text-sm text-destructive">
+                          Unable to load attendance.
                         </p>
-                        <span className="text-xs text-muted-foreground">
-                          recorded days this week
-                        </span>
-                      </div>
-                      <div className="mt-4 grid grid-cols-5 gap-1 sm:gap-2">
-                        {metrics?.attendance.map((day, index) => (
-                          <div key={day.date} className="min-w-0 text-center">
-                            <p className="mb-1 text-xs font-semibold">
-                              {days[index]}
+                      ) : !metrics?.attendance?.some(
+                          (day) => day.status !== "no_record",
+                        ) ? (
+                        <StudentEmptyState
+                          embedded
+                          className="shadow-none"
+                          icon={<Calendar />}
+                          title="No attendance recorded yet"
+                          description="Your attendance for this week will appear when your school records it."
+                        />
+                      ) : (
+                        <>
+                          <div className="flex items-baseline gap-2">
+                            <p className="text-4xl font-black">
+                              {metrics?.attendance_rate == null
+                                ? "—"
+                                : `${metrics.attendance_rate}%`}
                             </p>
-                            <Tooltip>
-                              <TooltipTrigger render={<div
-                                tabIndex={0}
-                                aria-label={`${dayLabel(day.date)}: ${attendanceLabel[day.status]}`}
-                                className={`flex min-h-12 items-center justify-center break-words rounded border-2 border-border px-0.5 text-[9px] font-semibold sm:px-1 sm:text-xs ${day.status === "present" ? "bg-primary text-primary-foreground" : day.status === "late" ? "bg-accent text-accent-foreground" : day.status === "absent" ? "bg-destructive text-destructive-foreground" : day.status === "excused" ? "bg-secondary text-secondary-foreground" : "bg-muted text-muted-foreground"}`}
-                              >
-                                {attendanceLabel[day.status]}
-                              </div>} />
-                              <TooltipContent>{dayLabel(day.date)}: {attendanceLabel[day.status]}</TooltipContent>
-                            </Tooltip>
+                            <span className="text-xs text-muted-foreground">
+                              recorded days this week
+                            </span>
                           </div>
-                        ))}
-                      </div>
-                      <p className="mt-3 text-xs text-muted-foreground">
-                        Monday–Friday · Present, late, and excused count as attended
-                      </p>
-                      </>}
+                          <div className="mt-4 grid grid-cols-5 gap-1 sm:gap-2">
+                            {metrics?.attendance.map((day, index) => (
+                              <div
+                                key={day.date}
+                                className="min-w-0 text-center"
+                              >
+                                <p className="mb-1 text-xs font-semibold">
+                                  {days[index]}
+                                </p>
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    render={
+                                      <div
+                                        tabIndex={0}
+                                        aria-label={`${dayLabel(day.date)}: ${attendanceLabel[day.status]}`}
+                                        className={`flex min-h-12 items-center justify-center break-words rounded border-2 border-border px-0.5 text-[9px] font-semibold sm:px-1 sm:text-xs ${day.status === "present" ? "bg-primary text-primary-foreground" : day.status === "late" ? "bg-accent text-accent-foreground" : day.status === "absent" ? "bg-destructive text-destructive-foreground" : day.status === "excused" ? "bg-secondary text-secondary-foreground" : "bg-muted text-muted-foreground"}`}
+                                      >
+                                        {attendanceLabel[day.status]}
+                                      </div>
+                                    }
+                                  />
+                                  <TooltipContent>
+                                    {dayLabel(day.date)}:{" "}
+                                    {attendanceLabel[day.status]}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="mt-3 text-xs text-muted-foreground">
+                            Monday–Friday · Present, late, and excused count as
+                            attended
+                          </p>
+                        </>
+                      )}
                     </MetricCard>
 
                     <MetricCard
                       title="Strengths & Focus Areas"
                       className="sm:col-span-2 xl:col-span-12"
                     >
-                      {isLoading ? <LoadingPanel label="Loading subject scores..." /> : error ? <p className="text-sm text-destructive">Unable to load subject scores.</p> : overview.subjects.length === 0 ? (
-                        <StudentEmptyState embedded icon={<FileText />} title="No released scores yet" description="Subject strengths and focus areas will appear after graded scores are released." />
+                      {isLoading ? (
+                        <LoadingPanel label="Loading subject scores..." />
+                      ) : error ? (
+                        <p className="text-sm text-destructive">
+                          Unable to load subject scores.
+                        </p>
+                      ) : overview.subjects.length === 0 ? (
+                        <StudentEmptyState
+                          embedded
+                          icon={<FileText />}
+                          title="No released scores yet"
+                          description="Subject strengths and focus areas will appear after graded scores are released."
+                        />
                       ) : (
                         <>
                           <p className="mb-4 text-xs text-muted-foreground">
@@ -719,7 +818,9 @@ const StoryBoard = () => {
                               },
                               {
                                 label: "Focus areas",
-                                entries: [...overview.subjects].reverse().slice(0, 3),
+                                entries: [...overview.subjects]
+                                  .reverse()
+                                  .slice(0, 3),
                               },
                             ].map((group) => (
                               <div key={group.label}>
@@ -733,8 +834,19 @@ const StoryBoard = () => {
                                       className="grid grid-cols-[minmax(0,1fr)_3rem] gap-x-2 gap-y-1 text-xs"
                                     >
                                       <Tooltip>
-                                        <TooltipTrigger render={<span tabIndex={0} className="truncate">{item.name}</span>} />
-                                        <TooltipContent>{item.name}</TooltipContent>
+                                        <TooltipTrigger
+                                          render={
+                                            <span
+                                              tabIndex={0}
+                                              className="truncate"
+                                            >
+                                              {item.name}
+                                            </span>
+                                          }
+                                        />
+                                        <TooltipContent>
+                                          {item.name}
+                                        </TooltipContent>
                                       </Tooltip>
                                       <span className="text-right font-semibold">
                                         {item.score}%
@@ -855,12 +967,19 @@ const StoryBoard = () => {
                       ) : error ? (
                         <Empty className="border-none bg-card shadow-none hover:shadow-none">
                           <Empty.Content>
-                            <Empty.Title>Unable to load to-do items</Empty.Title>
+                            <Empty.Title>
+                              Unable to load to-do items
+                            </Empty.Title>
                             <Empty.Description>{error}</Empty.Description>
                           </Empty.Content>
                         </Empty>
                       ) : urgentTodos.length === 0 ? (
-                        <StudentEmptyState embedded icon={<CheckSquare />} title="You're all caught up!" description="You have no pending classwork right now." />
+                        <StudentEmptyState
+                          embedded
+                          icon={<CheckSquare />}
+                          title="You're all caught up!"
+                          description="You have no pending classwork right now."
+                        />
                       ) : (
                         <div className="flex flex-col gap-2.5">
                           {urgentTodos.map((item) => {
