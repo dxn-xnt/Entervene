@@ -13,7 +13,8 @@ import { Select } from "@/components/retroui/Select";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Empty } from "@/components/retroui/Empty";
-import { Activity, Check, Plus, Search } from "lucide-react";
+import ClassworkItemLine from "@/components/item-line/classwork";
+import { Activity, Check, Plus } from "lucide-react";
 import {
   createSupportMaterial,
   generateStudentReviewer,
@@ -35,6 +36,9 @@ import {
   type TeacherInterventionSummary,
   type OriginalExamination,
 } from "@/lib/teacher-interventions-api";
+import { toTitleCase } from "@/lib/formatters";
+import Field from "@/components/admin/classes/fields/Field";
+import IconContainer from "@/components/icon-container";
 
 const date = (value: string) =>
   new Date(value).toLocaleString("en-PH", {
@@ -45,8 +49,8 @@ const date = (value: string) =>
 const methods: Array<{ value: RemediationFormat; label: string; detail: string }> = [
   { value: "QUIZ", label: "Quiz", detail: "Focused practice in the existing Quiz builder" },
   { value: "CLASSWORK", label: "Classwork", detail: "Targeted activity in the existing Classwork creator" },
-  { value: "TOS", label: "TOS blueprint", detail: "Assessment blueprint and export only" },
-  { value: "EXISTING_MATERIAL_ONLY", label: "Materials only", detail: "Planning references only, no new graded assessment" },
+  { value: "TOS", label: "TOS Blueprint", detail: "Assessment blueprint and export only" },
+  { value: "EXISTING_MATERIAL_ONLY", label: "Materials Only", detail: "Planning references only, no new graded assessment" },
 ];
 
 const label = (value: string) =>
@@ -103,10 +107,10 @@ const InterventionSupportMaterials = forwardRef<
     ai_suggestion: null,
   });
   const [reviewerDraft, setReviewerDraft] = useState<ReviewerDraft | null>(null);
-  const [browseAll, setBrowseAll] = useState(false);
-  const [panel, setPanel] = useState<"" | "reviewer" | "materials">("");
-  const [search, setSearch] = useState("");
-  const [kindFilter, setKindFilter] = useState("ALL");
+  const [panel, setPanel] = useState<"" | "reviewer" | "materials" | "classworks">("");
+  const [selectedActivityIds, setSelectedActivityIds] = useState<number[]>([]);
+  const [lessonFilter, setLessonFilter] = useState("ALL");
+  const [sampleChecked, setSampleChecked] = useState(false);
   const [working, setWorking] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -162,7 +166,10 @@ const InterventionSupportMaterials = forwardRef<
     [plan]
   );
   const selectedResources = useMemo(
-    () => resources.filter((item) => selected.has(`${item.kind}:${item.id}`)),
+    () =>
+      resources.filter(
+        (item) => item.kind !== "LESSON" && selected.has(`${item.kind}:${item.id}`)
+      ),
     [resources, selected]
   );
   const precise = resources.filter((item) => item.recommended);
@@ -171,19 +178,145 @@ const InterventionSupportMaterials = forwardRef<
   );
   const manuallySelected = resources.filter(
     (item) =>
+      item.kind !== "LESSON" &&
       selected.has(`${item.kind}:${item.id}`) &&
       !item.recommended &&
       item.match_level !== "SOURCE_ACTIVITY"
   );
-  const visible = resources.filter(
-    (item) =>
-      item.match_level !== "SOURCE_ACTIVITY" &&
-      (browseAll || item.recommended) &&
-      (kindFilter === "ALL" || item.kind === kindFilter) &&
-      `${item.title} ${item.description} ${item.lesson}`
-        .toLowerCase()
-        .includes(search.toLowerCase())
+  const manuallySelectedLessonsList = Array.from(
+    new Set(
+      manuallySelected
+        .flatMap((item) => (item.lesson ? item.lesson.split(",").map((s) => s.trim()) : []))
+        .filter(Boolean)
+    )
   );
+  const manuallySelectedLessons = manuallySelectedLessonsList.join(", ");
+  const NO_LESSON = "__NO_LESSON__";
+  const lessonKey = (item: RemediationResource) => item.lesson?.trim() || NO_LESSON;
+  const materialPool = resources.filter(
+    (item) => item.match_level !== "SOURCE_ACTIVITY" && item.kind !== "LESSON"
+  );
+  const lessonOptions = Array.from(new Set(materialPool.map(lessonKey)));
+  const visible = materialPool.filter(
+    (item) => lessonFilter === "ALL" || lessonKey(item) === lessonFilter
+  );
+  const groupedVisible = Array.from(
+    visible.reduce((groups, item) => {
+      const key = lessonKey(item);
+      groups.set(key, [...(groups.get(key) ?? []), item]);
+      return groups;
+    }, new Map<string, RemediationResource[]>())
+  );
+  const treatmentActivities = useMemo(() => {
+    if (!plan.grade_treatment) return [];
+    const all = detail.diagnosis_snapshot.supporting_activities ?? [];
+    if (plan.grade_treatment === "PRACTICE_ONLY") {
+      return all;
+    }
+    const filtered = all.filter((a) => a.component === plan.grade_treatment);
+    if (
+      plan.grade_treatment === "EXAMINATION" &&
+      filtered.length === 0 &&
+      originalExams.length > 0
+    ) {
+      return originalExams.map((e) => ({
+        classwork_id: e.assignment_id,
+        title: e.title,
+        component: "EXAMINATION",
+        score: e.score,
+        possible_score: e.total_points,
+        percent: e.total_points > 0 ? (e.score / e.total_points) * 100 : 0,
+      }));
+    }
+    return filtered;
+  }, [detail.diagnosis_snapshot.supporting_activities, plan.grade_treatment, originalExams]);
+  const chosenActivities = useMemo(() => {
+    if (!plan.grade_treatment) return [];
+    const selectedSet = new Set(selectedActivityIds);
+    if (plan.grade_treatment === "EXAMINATION" && plan.original_exam_assignment_id != null) {
+      selectedSet.add(plan.original_exam_assignment_id);
+    }
+    const matched: typeof treatmentActivities = [];
+    for (const a of treatmentActivities) {
+      const matchingExam = originalExams.find(
+        (e) => e.title === a.title || e.assignment_id === a.classwork_id
+      );
+      if (
+        selectedSet.has(a.classwork_id) ||
+        (matchingExam && selectedSet.has(matchingExam.assignment_id))
+      ) {
+        matched.push(a);
+      }
+    }
+    if (plan.grade_treatment === "EXAMINATION") {
+      for (const exam of originalExams) {
+        if (selectedSet.has(exam.assignment_id)) {
+          if (!matched.some((m) => m.title === exam.title || m.classwork_id === exam.assignment_id)) {
+            matched.push({
+              classwork_id: exam.assignment_id,
+              title: exam.title,
+              component: "EXAMINATION",
+              score: exam.score,
+              possible_score: exam.total_points,
+              percent: exam.total_points > 0 ? (exam.score / exam.total_points) * 100 : 0,
+            });
+          }
+        }
+      }
+    }
+    return matched;
+  }, [
+    plan.grade_treatment,
+    plan.original_exam_assignment_id,
+    selectedActivityIds,
+    treatmentActivities,
+    originalExams,
+  ]);
+
+  const toggleActivitySelection = (activity: (typeof treatmentActivities)[number]) => {
+    const matchingExam = originalExams.find(
+      (e) => e.title === activity.title || e.assignment_id === activity.classwork_id
+    );
+    const targetId = activity.classwork_id;
+    const examTargetId = matchingExam?.assignment_id ?? targetId;
+
+    setSelectedActivityIds((prev) => {
+      const isAlreadySelected =
+        prev.includes(targetId) ||
+        (matchingExam && prev.includes(matchingExam.assignment_id)) ||
+        (plan.grade_treatment === "EXAMINATION" &&
+          plan.original_exam_assignment_id != null &&
+          (plan.original_exam_assignment_id === targetId ||
+            plan.original_exam_assignment_id === examTargetId));
+
+      let next: number[];
+      if (isAlreadySelected) {
+        next = prev.filter(
+          (id) => id !== targetId && (matchingExam ? id !== matchingExam.assignment_id : true)
+        );
+        if (
+          plan.grade_treatment === "EXAMINATION" &&
+          (plan.original_exam_assignment_id === targetId ||
+            plan.original_exam_assignment_id === examTargetId)
+        ) {
+          const nextExam = originalExams.find((e) => next.includes(e.assignment_id));
+          setPlan((current) => ({
+            ...current,
+            original_exam_assignment_id: nextExam?.assignment_id ?? (next[0] ?? null),
+          }));
+        }
+      } else {
+        next = [...prev, targetId];
+        if (plan.grade_treatment === "EXAMINATION" && !plan.original_exam_assignment_id) {
+          setPlan((current) => ({
+            ...current,
+            original_exam_assignment_id: examTargetId,
+          }));
+        }
+      }
+      return next;
+    });
+  };
   const assigned: NonNullable<RemediationProgress["assigned_remediation"]> =
     progress?.assigned_remediation ??
     progress?.completed_remediation.map((item) => ({
@@ -202,7 +335,9 @@ const InterventionSupportMaterials = forwardRef<
         : plan.teacher_choice
           ? "Preparing Support"
           : "Needs Support";
-  const hasConfiguredSupport = Boolean(plan.teacher_choice || assigned.length > 0);
+  const hasSupportingResources = selectedResources.length > 0 || plan.selected_resources.length > 0;
+  const hasRemediationActivity = assigned.length > 0;
+  const hasConfiguredSupport = Boolean(hasSupportingResources && hasRemediationActivity);
   const focusName = focus?.component
     ? componentLabel(focus.component)
     : "Component unavailable";
@@ -530,6 +665,8 @@ const InterventionSupportMaterials = forwardRef<
                   <div className="flex items-center">
                     {hasConfiguredSupport ? (
                       <Badge variant="solid" size="sm">Configured</Badge>
+                    ) : hasSupportingResources || hasRemediationActivity ? (
+                      <Badge variant="surface" size="sm">Partially Configured</Badge>
                     ) : (
                       <Badge variant="outline" size="sm">Needs Setup</Badge>
                     )}
@@ -651,67 +788,75 @@ const InterventionSupportMaterials = forwardRef<
                   {assigned.length > 0 ? (
                     <div className="flex flex-col gap-2">
                       {assigned.map((item) => (
-                        <Card
-                          key={item.assignment_id}
-                          className="border-2! p-3 text-sm space-y-1.5 w-full"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="font-semibold">{item.title}</span>
-                            <Badge
-                              variant={
-                                item.submission_status === "graded"
-                                  ? "solid"
-                                  : item.is_published === false || item.submission_status === "draft"
-                                    ? "secondary"
-                                    : "outline"
-                              }
-                              size="sm"
-                            >
-                              {item.is_published === false || item.submission_status === "draft"
-                                ? "Draft"
-                                : item.submission_status === "graded"
-                                  ? "Completed"
-                                  : label(item.submission_status || "Awaiting submission")}
-                            </Badge>
-                          </div>
-                          {item.grade != null && item.total_points != null && (
-                            <p className="text-xs text-muted-foreground">
-                              Score: <strong>{item.grade}/{item.total_points}</strong>
-                            </p>
+                        <div key={item.assignment_id} className="flex flex-col gap-1.5">
+                          <ClassworkItemLine
+                            className="border-2! shadow-none!"
+                            size="sm"
+                            item={{
+                              classwork_id: item.classwork_id ?? item.assignment_id,
+                              title: item.title,
+                              classwork_type:
+                                item.classwork_type ??
+                                (plan.teacher_choice === "QUIZ" ? "QUIZ" : "ASSIGNMENT"),
+                            }}
+                            showPublicationStatus={false}
+                            showCategory={false}
+                            showType={false}
+                            rightContent={
+                              <div className="flex items-center gap-2">
+                                {item.grade != null && item.total_points != null && (
+                                  <span className="text-xs font-bold">
+                                    {item.grade}
+                                    <span className="font-medium text-muted-foreground text-xs">
+                                      {" "}
+                                      / {item.total_points}
+                                    </span>
+                                  </span>
+                                )}
+                                <Badge variant="surface" size="sm">
+                                  {item.classwork_type ? label(item.classwork_type) : "Assignment"}
+                                </Badge>
+                                <Badge
+                                  variant={
+                                    item.submission_status === "graded"
+                                      ? "solid"
+                                      : item.is_published === false || item.submission_status === "draft"
+                                        ? "secondary"
+                                        : "outline"
+                                  }
+                                  size="sm"
+                                >
+                                  {item.is_published === false || item.submission_status === "draft"
+                                    ? "Draft"
+                                    : item.submission_status === "graded"
+                                      ? "Completed"
+                                      : label(item.submission_status || "Awaiting submission")}
+                                </Badge>
+                              </div>
+                            }
+                          />
+
+                          {item.original_assignment_id && (
+                            <div className="text-xs text-muted-foreground px-2 py-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                              <span>
+                                Original: {item.original_title} ·{" "}
+                                {componentLabel(item.exam_subtype || "Examination")}
+                              </span>
+                              <span>
+                                Original: {item.original_grade ?? "—"}/{item.total_points ?? "—"}
+                              </span>
+                              <span>
+                                Remedial: {item.grade ?? "Pending"}/{item.total_points ?? "—"}
+                              </span>
+                              <span>
+                                Effective:{" "}
+                                <strong>
+                                  {item.effective_grade ?? "—"}/{item.total_points ?? "—"}
+                                </strong>
+                              </span>
+                            </div>
                           )}
-                          <div className="text-xs text-muted-foreground pt-1 border-t border-border flex flex-wrap gap-x-3 gap-y-0.5">
-                            <span>
-                              Treatment:{" "}
-                              <strong>
-                                {item.is_graded
-                                  ? plan.teacher_choice === "EXISTING_MATERIAL_ONLY"
-                                    ? "Historical grade treatment"
-                                    : `Count as ${componentLabel(item.component)}`
-                                  : "Practice only · No official grade impact"}
-                              </strong>
-                            </span>
-                            {item.original_assignment_id && (
-                              <>
-                                <span>
-                                  Original: {item.original_title} ·{" "}
-                                  {componentLabel(item.exam_subtype || "Examination")}
-                                </span>
-                                <span>
-                                  Original: {item.original_grade ?? "—"}/{item.total_points ?? "—"}
-                                </span>
-                                <span>
-                                  Remedial: {item.grade ?? "Pending"}/{item.total_points ?? "—"}
-                                </span>
-                                <span>
-                                  Effective:{" "}
-                                  <strong>
-                                    {item.effective_grade ?? "—"}/{item.total_points ?? "—"}
-                                  </strong>
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </Card>
+                        </div>
                       ))}
 
                       <Card className="border-2! w-full space-y-1.5 p-3 text-sm border-2 border-border">
@@ -741,8 +886,11 @@ const InterventionSupportMaterials = forwardRef<
                       <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
                         <Empty.Content>
                           <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
-                            <Activity className="size-8" />
+                            <IconContainer className="bg-primary" size="sm">
+                              <Activity className="size-8" />
+                            </IconContainer>
                           </Empty.Icon>
+                          <Empty.Title className="text-base!"></Empty.Title>
                           <Empty.Description className="text-sm text-muted-foreground">
                             No support activity has been recorded yet. Click Adjust Support below to configure learning resources and prepare remediation.
                           </Empty.Description>
@@ -760,7 +908,7 @@ const InterventionSupportMaterials = forwardRef<
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2 text-base">
+                  {/* <div className="flex items-center gap-2 text-base">
                     <span>Student Reviewer:</span>
                     <Badge
                       variant={
@@ -778,16 +926,33 @@ const InterventionSupportMaterials = forwardRef<
                           ? "Private draft"
                           : "Not prepared"}
                     </Badge>
-                  </div>
+                  </div> */}
 
                   <div className="flex flex-col text-base gap-2">
                     <span>Supporting Resources:</span>
                     {selectedResources.length > 0 ? (
-                      <Card className="">
-                        {selectedResources.map((item) => item.title).join(", ")}
-                      </Card>
+                      <div className="flex flex-col gap-2">
+                        {selectedResources.map((item) => (
+                          <ClassworkItemLine
+                            className="border-2! shadow-none!"
+                            key={`${item.kind}:${item.id}`}
+                            item={{
+                              classwork_id: item.id,
+                              title: item.title,
+                              classwork_type: item.classwork_type ?? item.kind,
+                            }}
+                            showPublicationStatus={false}
+                            showCategory={false}
+                          />
+                        ))}
+                      </div>
                     ) : (
-                      <span className="text-muted-foreground">None selected</span>
+                      <Empty className="p-4 md:p-5 rounded!">
+                        <Empty.Content>
+                          <Empty.Title className="text-base!">No supporting resources</Empty.Title>
+                          <Empty.Description className="text-sm">No supporting materials selected for the student to review before the remediation activity.</Empty.Description>
+                        </Empty.Content>
+                      </Empty>
                     )}
                   </div>
                 </Card>
@@ -868,15 +1033,21 @@ const InterventionSupportMaterials = forwardRef<
                 </Button> */}
 
                   <div className="flex flex-col gap-1">
-                    <p className="text-sm font-medium">Related evidence sources:</p>
+                    <p className="text-base font-semibold">Recommended Review Materials</p>
                     <div className="flex flex-col gap-2">
                       {evidenceSources.map((item) => (
-                        <Card
+                        <ClassworkItemLine
                           key={`evidence:${item.kind}:${item.id}`}
-                          className="border-2! p-2.5 px-3 text-sm flex items-center justify-between gap-2 hover:bg-retro"
-                        >
-                          <strong className="font-bold">{item.title}</strong>
-                        </Card>
+                          className="border-2! shadow-none!"
+                          size="sm"
+                          item={{
+                            classwork_id: item.id,
+                            title: item.title,
+                            classwork_type: item.classwork_type ?? item.kind,
+                          }}
+                          showPublicationStatus={false}
+                          showCategory={false}
+                        />
                       ))}
                     </div>
                   </div>
@@ -893,17 +1064,40 @@ const InterventionSupportMaterials = forwardRef<
                   )}
 
                   <div className="flex flex-col gap-1">
-                    <p className="text-sm font-medium">Teacher-selected:</p>
-                    <div className="flex flex-col gap-2">
-                      {manuallySelected.map((item) => (
-                        <Card
-                          key={`manual:${item.kind}:${item.id}`}
-                          className="border-2! p-2.5 px-3 text-sm flex items-center justify-between gap-2 hover:bg-retro"
-                        >
-                          <strong className="font-bold">{item.title}</strong>
-                        </Card>
-                      ))}
-                    </div>
+                    <p className="text-base font-semibold">Teacher Selected Materials</p>
+                    {manuallySelected.length > 0 ? (
+                      <>
+                        <div className="flex flex-col gap-2">
+                          {manuallySelected.map((item) => (
+                            <ClassworkItemLine
+                              size="sm"
+                              key={`manual:${item.kind}:${item.id}`}
+                              className="border-2! shadow-none!"
+                              item={{
+                                classwork_id: item.id,
+                                title: item.title,
+                                classwork_type: item.classwork_type ?? item.kind,
+                              }}
+                              showPublicationStatus={false}
+                              showCategory={false}
+                            />
+                          ))}
+                        </div>
+                        <p className="text-sm text-muted-foreground px-1 -mt-1">
+                          Materials are linked to {manuallySelectedLessons || "no"}{" "}
+                          {manuallySelectedLessonsList.length === 1 ? "lesson" : "lessons"}.
+                        </p>
+                      </>
+                    ) : (
+                      <Empty className="p-4 md:p-5 rounded!">
+                        <Empty.Content>
+                          <Empty.Title className="text-base!">No materials selected</Empty.Title>
+                          <Empty.Description className="text-sm">
+                            No teacher-selected materials added yet. Click Select resources below to pick materials.
+                          </Empty.Description>
+                        </Empty.Content>
+                      </Empty>
+                    )}
                   </div>
 
                   <div className="flex w-full justify-end">
@@ -1065,105 +1259,305 @@ const InterventionSupportMaterials = forwardRef<
                 <Dialog.Content size="md" className="max-h-[85vh]">
                   <Dialog.Header>
                     <Dialog.Title className="text-lg font-bold">
-                      {browseAll ? "All eligible materials" : "Recommended Materials"}
+                      Add Supporting Resources
                     </Dialog.Title>
                   </Dialog.Header>
-                  <div className="flex-1 space-y-3 overflow-y-auto p-5">
-
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <label className="relative min-w-0 flex-1 sm:min-w-48">
-                        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50 z-10" />
-                        <Input
-                          value={search}
-                          onChange={(event) => setSearch(event.target.value)}
-                          placeholder="Search materials..."
-                          className="h-10 w-full border-black pl-9 pr-3"
-                        />
-                      </label>
-
-                      <Select value={kindFilter} onValueChange={(val) => setKindFilter(val)}>
-                        <Select.Trigger className="w-full sm:w-48 h-10">
-                          <Select.Value placeholder="Filter type" />
+                  <div className="flex-1 space-y-3 overflow-y-auto p-4 pr-3">
+                    <Field label="">
+                      <Select value={lessonFilter} onValueChange={(val) => setLessonFilter(val)}>
+                        <Select.Trigger className="w-full h-10">
+                          <Select.Value placeholder="Filter by lesson" />
                         </Select.Trigger>
                         <Select.Content>
-                          <Select.Item value="ALL">All Materials</Select.Item>
-                          <Select.Item value="LESSON">Lessons</Select.Item>
-                          <Select.Item value="CLASSWORK">Classwork & Files</Select.Item>
+                          <Select.Item value="ALL">All Lessons</Select.Item>
+                          {lessonOptions.map((lesson) => (
+                            <Select.Item key={lesson} value={lesson}>
+                              {lesson === NO_LESSON ? "No linked lesson" : lesson}
+                            </Select.Item>
+                          ))}
                         </Select.Content>
                       </Select>
-                    </div>
+                    </Field>
                     {visible.length ? (
-                      <Card className="flex flex-col px-3 min-h-40">
-                        {visible.map((item) => {
-                          const isChecked = selected.has(`${item.kind}:${item.id}`);
-                          return (
-                            <Card
-                              key={`${item.kind}:${item.id}`}
-                              className={`flex items-start gap-3 p-3 transition-colors border-2! cursor-pointer border-2 ${isChecked
-                                ? "border-primary bg-primary"
-                                : "border-border hover:bg-retro"
-                                }`}
-                              onClick={() => !working && toggleResource(item)}
-                            >
-                              <Checkbox
-                                checked={isChecked}
-                                disabled={working}
-                                variant="solid"
-                                className={`mt-0.5 border-black transition-colors ${isChecked ? "bg-black text-white" : "bg-white text-black"
-                                  }`}
-                                onClick={(e) => e.stopPropagation()}
-                                onCheckedChange={() => toggleResource(item)}
-                              />
-                              <div className="space-y-1 min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center justify-between gap-1.5">
-                                  <strong className="text-sm font-bold">{item.title}</strong>
-
-                                  {(item.recommended || item.match_level === "SOURCE_ACTIVITY") && (
-                                    <Badge
-                                      variant={item.recommended ? "secondary" : "outline"}
-                                      size="sm"
-                                    >
-                                      {item.recommended ? "Recommended" : "Related source"}
-                                    </Badge>
-                                  )}
-
-                                </div>
-                                {item.match_reason && (
-                                  <p className="text-xs text-foreground">{item.match_reason}</p>
-                                )}
+                      <div className="flex flex-col gap-4">
+                        <div className="flex flex-col gap-2 mb-2">
+                          <p className="text-base font-semibold">(Recommended Lesson)</p>
+                          <ClassworkItemLine
+                            size="sm"
+                            className={`border-2! shadow-none! ${sampleChecked ? "bg-primary!" : ""}`}
+                            item={{
+                              classwork_id: -1,
+                              title: "Foundations & Guided Review Worksheet",
+                              classwork_type: "ASSIGNMENT",
+                            }}
+                            showPublicationStatus={false}
+                            showCategory={false}
+                            showType={false}
+                            onClick={() => setSampleChecked((prev) => !prev)}
+                            rightContent={
+                              <div className="flex items-center gap-2">
+                                <Badge variant={sampleChecked ? "solid" : "surface"} size="sm">
+                                  Assignment
+                                </Badge>
+                                <Checkbox
+                                  checked={sampleChecked}
+                                  variant="solid"
+                                  className={`border-black transition-colors ${sampleChecked ? "bg-black text-white" : "bg-white text-black"}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onCheckedChange={() => setSampleChecked((prev) => !prev)}
+                                />
                               </div>
-                            </Card>
-                          );
-                        })}
-                      </Card>
+                            }
+                          />
+                          <p className="text-sm text-muted-foreground">
+                            Recommended materials are automatically suggested based on student performance data and diagnostic evidence.
+                          </p>
+                        </div>
+
+
+                        {groupedVisible.map(([lesson, items]) => (
+                          <div key={lesson} className="flex flex-col gap-2">
+                            <p className="text-sm font-bold">
+                              {lesson === NO_LESSON ? "No linked lesson" : lesson}
+                            </p>
+                            {items.map((item) => {
+                              const isChecked = selected.has(`${item.kind}:${item.id}`);
+                              return (
+                                <ClassworkItemLine
+                                  key={`${item.kind}:${item.id}`}
+                                  size="sm"
+                                  className={`border-2! shadow-none! ${isChecked ? "bg-primary!" : ""}`}
+                                  item={{
+                                    classwork_id: item.id,
+                                    title: item.title,
+                                    classwork_type: item.classwork_type ?? item.kind,
+                                  }}
+                                  showPublicationStatus={false}
+                                  showCategory={false}
+                                  showType={false}
+                                  onClick={() => !working && toggleResource(item)}
+                                  rightContent={
+                                    <div className="flex items-center gap-2">
+                                      {(item.recommended || item.match_level === "SOURCE_ACTIVITY") && (
+                                        <Badge
+                                          variant={item.recommended ? "secondary" : "outline"}
+                                          size="sm"
+                                        >
+                                          {item.recommended ? "Recommended" : "Related source"}
+                                        </Badge>
+                                      )}
+                                      <Badge variant={`${isChecked ? "solid" : "surface"}`} size="sm">
+                                        {toTitleCase(item.classwork_type)}
+                                      </Badge>
+
+                                      <Checkbox
+                                        checked={isChecked}
+                                        disabled={working}
+                                        variant="solid"
+                                        className={`border-black transition-colors ${isChecked ? "bg-black text-white" : "bg-white text-black"}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                        onCheckedChange={() => toggleResource(item)}
+                                      />
+                                    </div>
+                                  }
+                                />
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <Empty className="py-6 rounded!">
                         <Empty.Content>
                           <Empty.Description className="max-w-md text-sm">
-                            {browseAll
-                              ? "No eligible materials match this search."
-                              : "No precise learning resources match this evidence. Browse all eligible materials for a teacher-selected reference."}
+                            No eligible materials match this lesson.
                           </Empty.Description>
                         </Empty.Content>
                       </Empty>
                     )}
-
-
-                    <div className="flex flex-wrap w-full justify-end gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-2"
-                        onClick={() => setBrowseAll((current) => !current)}
-                      >
-                        {browseAll
-                          ? "Show recommended materials"
-                          : "Browse eligible materials"}
-                      </Button>
-                    </div>
                   </div>
                   <Dialog.Footer className="mt-0">
                     <Button onClick={() => setPanel("")}>Done</Button>
+                  </Dialog.Footer>
+                </Dialog.Content>
+              </Dialog>
+
+              <Dialog
+                open={panel === "classworks"}
+                onOpenChange={(open) => setPanel(open ? "classworks" : "")}
+              >
+                <Dialog.Content size="md" className="max-h-[85vh]">
+                  <Dialog.Header>
+                    <Dialog.Title className="text-lg font-bold">
+                      Select Targeted Classwork
+                    </Dialog.Title>
+                  </Dialog.Header>
+                  <div className="flex flex-col gap-4 overflow-y-auto p-4 pr-3">
+                    <Card className="flex flex-row border-2! bg-primary p-3 w-full justify-between">
+                      <label className="text-base font-semibold">
+                        Projected Grade
+                      </label>
+                      <Badge variant="outline" size="sm">
+                        93%
+                      </Badge>
+
+                    </Card>
+
+
+                    <div className="flex flex-col gap-1">
+                      <p className="text-base font-semibold">Recommended Target Classworks</p>
+                      <ClassworkItemLine
+                        size="sm"
+
+                        className={`border-2! shadow-none! ${sampleChecked ? "bg-primary!" : ""}`}
+                        item={{
+                          classwork_id: -1,
+                          title: "Foundations & Guided Review Worksheet",
+                          classwork_type: "ASSIGNMENT",
+                        }}
+                        showPublicationStatus={false}
+                        showCategory={false}
+                        showType={false}
+                        onClick={() => setSampleChecked((prev) => !prev)}
+                        rightContent={
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold">
+                              13
+                              <span className="font-medium text-muted-foreground text-xs">
+                                {" "}
+                                / 30
+                              </span>
+                            </span>
+                            <Badge
+                              variant={
+                                sampleChecked ? "solid" : "surface"
+                              }
+                              size="sm"
+                            >
+                              56%
+                            </Badge>
+                            <Checkbox
+                              checked={sampleChecked}
+                              variant="solid"
+                              className={`border-black transition-colors ${sampleChecked ? "bg-black text-white" : "bg-white text-black"}`}
+                              onClick={(e) => e.stopPropagation()}
+                              onCheckedChange={() => setSampleChecked((prev) => !prev)}
+                            />
+                          </div>
+                        }
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        Recommended classwork to improve projected grade.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col gap-1 mb-2">
+                      <p className="text-base font-semibold">Existing Student's Classwork</p>
+                      {treatmentActivities.length > 0 ? (
+                        <div className="flex flex-col gap-2">
+                          {treatmentActivities.map((activity) => {
+                            const resource = resources.find(
+                              (r) =>
+                                r.kind === "CLASSWORK" &&
+                                (r.id === activity.classwork_id || r.title === activity.title)
+                            );
+                            const matchingExam = originalExams.find(
+                              (e) =>
+                                e.title === activity.title ||
+                                e.assignment_id === activity.classwork_id
+                            );
+                            const isSelected =
+                              selectedActivityIds.includes(activity.classwork_id) ||
+                              (matchingExam && selectedActivityIds.includes(matchingExam.assignment_id)) ||
+                              (plan.grade_treatment === "EXAMINATION" &&
+                                matchingExam &&
+                                plan.original_exam_assignment_id === matchingExam.assignment_id);
+
+                            return (
+                              <ClassworkItemLine
+                                key={`modal-cw-${activity.classwork_id}-${activity.title}`}
+                                className={`border-2! shadow-none! transition-all cursor-pointer ${isSelected
+                                  ? "bg-primary!"
+                                  : ""
+                                  }`}
+                                iconClassName={isSelected ? "bg-white" : undefined}
+                                size="sm"
+                                onClick={() => toggleActivitySelection(activity)}
+                                item={{
+                                  classwork_id: activity.classwork_id,
+                                  title: activity.title,
+                                  classwork_type:
+                                    resource?.classwork_type ??
+                                    (activity.component === "EXAMINATION" ? "QUIZ" : "ASSIGNMENT"),
+                                }}
+                                showPublicationStatus={false}
+                                showCategory={false}
+                                showType={false}
+                                rightContent={
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {plan.grade_treatment === "PRACTICE_ONLY" && (
+                                      <Badge variant="outline" size="sm">
+                                        {componentLabel(activity.component)}
+                                      </Badge>
+                                    )}
+                                    <span className="text-xs font-bold">
+                                      {activity.score}
+                                      <span className="font-medium text-muted-foreground text-xs">
+                                        {" "}
+                                        / {activity.possible_score}
+                                      </span>
+                                    </span>
+                                    <Badge
+                                      variant={
+                                        activity.percent >= 80
+                                          ? "success"
+                                          : activity.percent >= 75
+                                            ? "surface"
+                                            : "destructive"
+                                      }
+                                      size="sm"
+                                    >
+                                      {activity.percent.toFixed(1)}%
+                                    </Badge>
+
+                                    <Checkbox
+                                      checked={isSelected}
+                                      variant="solid"
+                                      className={`border-black transition-colors ${isSelected ? "bg-black text-white" : "bg-white text-black"}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      onCheckedChange={() => toggleActivitySelection(activity)}
+                                    />
+                                  </div>
+                                }
+                              />
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+                          <Empty.Content>
+                            <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
+                              <Activity className="size-8" />
+                            </Empty.Icon>
+                            <Empty.Title className="text-sm font-bold">
+                              No classworks available
+                            </Empty.Title>
+                            <Empty.Description className="text-xs text-muted-foreground">
+                              No scored{" "}
+                              {plan.grade_treatment === "PRACTICE_ONLY"
+                                ? "diagnostic"
+                                : componentLabel(plan.grade_treatment).toLowerCase()}{" "}
+                              classworks were found for this student.
+                            </Empty.Description>
+                          </Empty.Content>
+                        </Empty>
+                      )}
+                    </div>
+                  </div>
+                  <Dialog.Footer className="mt-0">
+                    <Button onClick={() => setPanel("")}>
+                      Done
+                    </Button>
                   </Dialog.Footer>
                 </Dialog.Content>
               </Dialog>
@@ -1211,116 +1605,114 @@ const InterventionSupportMaterials = forwardRef<
                     })}
                   </div>
                   <p className="text-sm text-muted-foreground px-1">
-                    Select how you want to deliver remediation. Graded methods allow grade treatment configuration in the next step.
+                    Select how you want to deliver remediation.
                   </p>
+
+                  <div className="flex flex-col gap-1 mt-2">
+                    <Label className="font-bold text-base">
+                      Curated Classwork Activity
+                    </Label>
+                    {assigned.length > 0 ? (
+                      <div className="flex flex-col gap-2">
+                        {assigned.map((item) => (
+                          <ClassworkItemLine
+                            key={item.assignment_id}
+                            className="border-2! shadow-none!"
+                            size="sm"
+                            item={{
+                              classwork_id: item.classwork_id ?? item.assignment_id,
+                              title: item.title,
+                              classwork_type:
+                                item.classwork_type ??
+                                (plan.teacher_choice === "QUIZ" ? "QUIZ" : "ASSIGNMENT"),
+                            }}
+                            showPublicationStatus={false}
+                            showCategory={false}
+                            showType={false}
+                            rightContent={
+                              <div className="flex items-center gap-2">
+                                {item.grade != null && item.total_points != null && (
+                                  <span className="text-xs font-bold">
+                                    {item.grade}
+                                    <span className="font-medium text-muted-foreground text-xs">
+                                      {" "}
+                                      / {item.total_points}
+                                    </span>
+                                  </span>
+                                )}
+                                <Badge variant="surface" size="sm">
+                                  {item.classwork_type ? label(item.classwork_type) : "Assignment"}
+                                </Badge>
+                                {item.submission_status && (
+                                  <Badge
+                                    variant={item.submission_status === "graded" ? "solid" : "outline"}
+                                    size="sm"
+                                  >
+                                    {label(item.submission_status)}
+                                  </Badge>
+                                )}
+                              </div>
+                            }
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+                        <Empty.Content>
+                          <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
+                            <IconContainer className="bg-primary" size="sm">
+                              <Activity className="size-8" />
+                            </IconContainer>
+                          </Empty.Icon>
+                          <Empty.Title className="text-xl! font-bold">
+                            No activity created yet
+                          </Empty.Title>
+                          <Empty.Description className="text-sm whitespace-nowrap text-muted-foreground">
+                            Configure your support method and continue to create the activity
+                          </Empty.Description>
+                        </Empty.Content>
+                      </Empty>
+                    )}
+
+                    {plan.teacher_choice !== "EXISTING_MATERIAL_ONLY" && (
+                      <div className="flex flex-row w-full justify-end mt-2">
+                        <Button disabled={continueDisabled} onClick={openTool} size="sm" className="gap-2">
+                          Continue to{" "}
+                          {plan.teacher_choice === "QUIZ"
+                            ? "Quiz Builder"
+                            : plan.teacher_choice === "CLASSWORK"
+                              ? "Classwork Creator"
+                              : "TOS Generator"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </Card>
               </div>
-
-              {plan.teacher_choice && (
-                <Card className="space-y-3 border-2">
-                  <div className="flex items-center justify-between border-b border-border pb-2">
-                    <h3 className="font-black text-base">Prepared support</h3>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                    <p>Target: <strong>{detail.student_name}</strong></p>
-                    <p>
-                      Support focus: <strong>{focusName}</strong>
-                      <p className="ml-1.5 text-muted-foreground text-sm">({sourceName})</p>
-                    </p>
-                    <p>
-                      Method:{" "}
-                      <Badge variant="outline" size="sm">
-                        {methods.find((item) => item.value === plan.teacher_choice)?.label}
-                      </Badge>
-                    </p>
-                    {isGraded(plan.teacher_choice) && (
-                      <p>
-                        Grade treatment:{" "}
-                        <Badge variant="secondary" size="sm">
-                          {plan.grade_treatment === "PRACTICE_ONLY"
-                            ? "Practice only"
-                            : plan.grade_treatment
-                              ? componentLabel(plan.grade_treatment)
-                              : "Selection required"}
-                        </Badge>
-                      </p>
-                    )}
-                    {plan.grade_treatment === "EXAMINATION" && (
-                      <p className="col-span-full">
-                        Original Exam:{" "}
-                        <strong>
-                          {originalExams.find(
-                            (exam) =>
-                              exam.assignment_id === plan.original_exam_assignment_id
-                          )?.title ?? "Selection required"}
-                        </strong>
-                      </p>
-                    )}
-                    {isGraded(plan.teacher_choice) && (
-                      <p className="col-span-full text-xs text-muted-foreground">
-                        Recipient: <strong>This student only</strong>
-                      </p>
-                    )}
-                  </div>
-                  {plan.teacher_choice === "TOS" && (
-                    <p className="text-xs text-muted-foreground">
-                      TOS is a blueprint/export. It creates no graded student activity.
-                    </p>
-                  )}
-                  {plan.teacher_choice === "EXISTING_MATERIAL_ONLY" && (
-                    <p className="text-xs text-muted-foreground">
-                      Selected materials remain planning references; they are not
-                      privately delivered.
-                    </p>
-                  )}
-                  {plan.teacher_choice !== "EXISTING_MATERIAL_ONLY" && (
-                    <div className="pt-2">
-                      <Button disabled={continueDisabled} onClick={openTool} size="sm" className="gap-2">
-                        Continue to{" "}
-                        {plan.teacher_choice === "QUIZ"
-                          ? "Quiz Builder"
-                          : plan.teacher_choice === "CLASSWORK"
-                            ? "Classwork Creator"
-                            : "TOS Generator"}
-                      </Button>
-                    </div>
-                  )}
-                </Card>
-              )}
 
               {isGraded(plan.teacher_choice) && (
                 <div className="flex flex-col gap-1">
                   <h3 className="font-black text-xl">Grade Treatment</h3>
-                  <Card className="space-y-3 border-2 bg-card">
-                    {focus?.component === "EXAMINATION" && (
-                      <p className="text-xs text-muted-foreground">
-                        Select the student's scored original Examination. Its subtype and
-                        maximum points will be fixed for the remedial assessment.
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Practice only stores completion without changing grades. Written
-                      Work and Performance Task add a new activity in that component.
-                      Remedial Examination replaces the original assessment's effective
-                      score only when higher.
-                    </p>
-                    <div className="space-y-2">
-                      <Label className="font-bold text-sm">
+                  <Card className="flex flex-col gap-3 border-2 bg-card">
+
+                    <div className="flex flex-col gap-1">
+                      <Label className="font-bold text-base">
                         How should this activity be treated?
                       </Label>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className={`grid grid-cols-1 gap-2 ${focus?.component === "EXAMINATION" ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
                         {(["PRACTICE_ONLY", "WRITTEN_WORK", "PERFORMANCE_TASK"] as const).map(
                           (choice) => {
                             const isSelected = plan.grade_treatment === choice;
                             return (
                               <Card
                                 key={choice}
-                                className={`p-2.5 cursor-pointer border-2 transition-all border-2! text-xs font-semibold flex items-center justify-between ${isSelected
+                                className={`p-2.5 cursor-pointer border-2 transition-all border-2! text-sm font-semibold flex items-center justify-between ${isSelected
                                   ? "border-primary bg-primary"
-                                  : "border-border hover:bg-muted/40"
+                                  : "border-border "
                                   }`}
                                 onClick={() => {
                                   if (working) return;
+                                  setSelectedActivityIds([]);
                                   setPlan((current) => ({
                                     ...current,
                                     grade_treatment: choice,
@@ -1330,46 +1722,56 @@ const InterventionSupportMaterials = forwardRef<
                               >
                                 <span>
                                   {choice === "PRACTICE_ONLY"
-                                    ? "Practice only"
+                                    ? "Ungraded Activity"
                                     : componentLabel(choice)}
                                 </span>
-                                {isSelected && (
-                                  <Badge variant="solid" size="sm">
-                                    <Check className="size-3.5 stroke-[3]" />
-                                  </Badge>
-                                )}
+                                <Checkbox
+                                  checked={isSelected}
+                                  variant="solid"
+                                  className={`border-black transition-colors pointer-events-none ${isSelected ? "bg-black text-white" : "bg-white text-black"}`}
+                                />
                               </Card>
                             );
                           }
                         )}
+                        {focus?.component === "EXAMINATION" && (
+                          <Card
+                            className={`p-2.5 cursor-pointer border-2 transition-all border-2! text-sm font-semibold flex items-center justify-between ${plan.grade_treatment === "EXAMINATION"
+                              ? "border-primary bg-primary"
+                              : "border-border "
+                              } ${originalExams.length === 0 ? "opacity-50 pointer-events-none" : ""}`}
+                            onClick={() => {
+                              if (working || originalExams.length === 0) return;
+                              setSelectedActivityIds([]);
+                              setPlan((current) => ({
+                                ...current,
+                                grade_treatment: "EXAMINATION",
+                                original_exam_assignment_id: null,
+                              }));
+                            }}
+                          >
+                            <span>Remedial Exam</span>
+                            <Checkbox
+                              checked={plan.grade_treatment === "EXAMINATION"}
+                              variant="solid"
+                              className={`border-black transition-colors pointer-events-none ${plan.grade_treatment === "EXAMINATION" ? "bg-black text-white" : "bg-white text-black"}`}
+                            />
+                          </Card>
+                        )}
                       </div>
-                      {focus?.component === "EXAMINATION" && (
-                        <Card
-                          className={`p-2.5 cursor-pointer border-2 transition-all text-xs font-semibold flex items-center justify-between ${plan.grade_treatment === "EXAMINATION"
-                            ? "border-primary bg-primary/10"
-                            : "border-border hover:bg-muted/40"
-                            } ${originalExams.length === 0 ? "opacity-50 pointer-events-none" : ""}`}
-                          onClick={() => {
-                            if (working || originalExams.length === 0) return;
-                            setPlan((current) => ({
-                              ...current,
-                              grade_treatment: "EXAMINATION",
-                              original_exam_assignment_id:
-                                (
-                                  originalExams.find(
-                                    (exam) => exam.subtype === focus.exam_subtype
-                                  ) ?? originalExams[0]
-                                )?.assignment_id ?? null,
-                            }));
-                          }}
-                        >
-                          <span>Remedial Examination · Higher score counts</span>
-                          {plan.grade_treatment === "EXAMINATION" && (
-                            <Badge variant="solid" size="sm">
-                              <Check className="size-3.5 stroke-[3]" />
-                            </Badge>
-                          )}
-                        </Card>
+                      {plan.grade_treatment && (
+                        <p className="text-sm text-muted-foreground px-1">
+                          {{
+                            PRACTICE_ONLY:
+                              "Ungraded Activity stores completion without changing grades.",
+                            WRITTEN_WORK:
+                              "Written Work adds a portion of the score to a classwork under the category.",
+                            PERFORMANCE_TASK:
+                              "Performance Task adds a portion of the score to a performance task under the category.",
+                            EXAMINATION:
+                              "Remedial Exam replaces the original assessment's effective score only when higher.",
+                          }[plan.grade_treatment]}
+                        </p>
                       )}
                     </div>
 
@@ -1380,32 +1782,102 @@ const InterventionSupportMaterials = forwardRef<
                       </Alert>
                     )}
 
-                    {plan.grade_treatment === "EXAMINATION" && (
-                      <div className="space-y-1.5 pt-1">
-                        <Label className="text-sm font-bold">Original Examination</Label>
-                        <Select
-                          value={plan.original_exam_assignment_id != null ? String(plan.original_exam_assignment_id) : ""}
-                          onValueChange={(val) => {
-                            if (val) {
-                              setPlan((current) => ({
-                                ...current,
-                                original_exam_assignment_id: Number(val),
-                              }));
-                            }
-                          }}
-                          disabled={working}
-                        >
-                          <Select.Trigger className="w-full h-10">
-                            <Select.Value placeholder="Select original examination..." />
-                          </Select.Trigger>
-                          <Select.Content>
-                            {originalExams.map((exam) => (
-                              <Select.Item key={exam.assignment_id} value={String(exam.assignment_id)}>
-                                {exam.title} · {componentLabel(exam.subtype)} · {exam.score}/{exam.total_points}
-                              </Select.Item>
+                    {plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY" && (
+                      <div className="space-y-2 pt-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-base font-bold">
+                            Targeted {componentLabel(plan.grade_treatment)} {chosenActivities.length > 1 ? "Classworks" : "Classwork"}
+                          </Label>
+                          {chosenActivities.length > 0 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setPanel("classworks")}
+                            >
+                              Reselect Activities
+                            </Button>
+                          )}
+                        </div>
+                        {chosenActivities.length > 0 ? (
+                          <div className="flex flex-col gap-2">
+                            {chosenActivities.map((chosenActivity) => (
+                              <ClassworkItemLine
+                                key={`chosen-cw-${chosenActivity.classwork_id}-${chosenActivity.title}`}
+                                className="border-2! shadow-none!"
+                                size="sm"
+                                item={{
+                                  classwork_id: chosenActivity.classwork_id,
+                                  title: chosenActivity.title,
+                                  classwork_type:
+                                    resources.find(
+                                      (r) =>
+                                        r.kind === "CLASSWORK" &&
+                                        (r.id === chosenActivity.classwork_id || r.title === chosenActivity.title)
+                                    )?.classwork_type ??
+                                    (chosenActivity.component === "EXAMINATION" ? "QUIZ" : "ASSIGNMENT"),
+                                }}
+                                showPublicationStatus={false}
+                                showCategory={false}
+                                showType={false}
+                                rightContent={
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="text-xs font-bold">
+                                      {chosenActivity.score}
+                                      <span className="font-medium text-muted-foreground text-xs">
+                                        {" "}
+                                        / {chosenActivity.possible_score}
+                                      </span>
+                                    </span>
+                                    <Badge
+                                      variant={
+                                        chosenActivity.percent >= 80
+                                          ? "success"
+                                          : chosenActivity.percent >= 75
+                                            ? "surface"
+                                            : "destructive"
+                                      }
+                                      size="sm"
+                                    >
+                                      {chosenActivity.percent.toFixed(1)}%
+                                    </Badge>
+                                    <Badge variant="solid" size="sm">
+                                      Targeted
+                                    </Badge>
+                                  </div>
+                                }
+                              />
                             ))}
-                          </Select.Content>
-                        </Select>
+                          </div>
+                        ) : (
+                          <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+                            <Empty.Content>
+                              <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
+                                <IconContainer className="bg-primary" size={"sm"}>
+                                  <Activity className="size-8" />
+                                </IconContainer>
+                              </Empty.Icon>
+                              <Empty.Title className="text-xl! font-bold">
+                                No classwork selected
+                              </Empty.Title>
+                              <Empty.Description className="text-sm whitespace-nowrap text-muted-foreground">
+                                {treatmentActivities.length > 0
+                                  ? `Select classwork from ${componentLabel(plan.grade_treatment)} to add score to`
+                                  : `No scored ${componentLabel(plan.grade_treatment).toLowerCase()} classworks available for this student`}
+                              </Empty.Description>
+                              {treatmentActivities.length > 0 && (
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => setPanel("classworks")}
+                                  className="mt-1"
+                                >
+                                  <Plus className="size-3.5 mr-1.5" />
+                                  Select Classwork
+                                </Button>
+                              )}
+                            </Empty.Content>
+                          </Empty>
+                        )}
                       </div>
                     )}
 

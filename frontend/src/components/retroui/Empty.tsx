@@ -60,7 +60,7 @@ const EmptyDescription = ({
   ...props
 }: HTMLAttributes<HTMLParagraphElement>) => (
   <p
-    className={cn("text-muted-foreground max-w-[320px]", className)}
+    className={cn("text-muted-foreground", className)}
     {...props}
   />
 );

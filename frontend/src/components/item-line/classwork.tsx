@@ -43,6 +43,9 @@ export interface ClassworkItemLineProps<T extends BaseClassworkItem = TeacherCla
   showTypeBadge?: boolean;
   showCategoryBadge?: boolean;
   rightContent?: React.ReactNode;
+  size?: "default" | "sm";
+  iconClassName?: string;
+  iconContainerClassName?: string;
 }
 
 function ClassworkTypeIcon({
@@ -72,15 +75,19 @@ export const ClassworkItemLine = <T extends BaseClassworkItem = TeacherClasswork
   onOpen,
   onClick,
   className,
+  iconClassName,
+  iconContainerClassName,
   showPublicationStatus = true,
   showType = true,
   showCategory = true,
   showTypeBadge,
   showCategoryBadge,
   rightContent,
+  size = "default",
 }: ClassworkItemLineProps<T>) => {
   const shouldShowType = showTypeBadge ?? showType;
   const shouldShowCategory = showCategoryBadge ?? showCategory;
+  const isSmall = size === "sm";
 
   const dueLabel = useMemo(() => {
     if (item.assignments && item.assignments.length > 0) {
@@ -138,25 +145,30 @@ export const ClassworkItemLine = <T extends BaseClassworkItem = TeacherClasswork
       }
       aria-label={isClickable ? `Open classwork: ${item.title}` : undefined}
       className={cn(
-        "group flex w-full flex-col sm:flex-row sm:items-center justify-between gap-3 border-2 border-black bg-white p-3 shadow-md! transition-all text-left select-none",
+        "group flex w-full flex-col sm:flex-row sm:items-center justify-between border-2 border-black bg-white shadow-md! transition-all text-left select-none",
+        isSmall ? "gap-2 p-2" : "gap-3 p-3",
         isClickable && "cursor-pointer hover:translate-x-1 hover:bg-retro",
         className,
       )}
     >
       {/* Left side: Icon + Title & Subtitle metadata */}
-      <div className="flex items-center gap-3.5 min-w-0 flex-1">
-        <IconContainer variant="primary">
-          <ClassworkTypeIcon type={rawType} size={20} />
+      <div className={cn("flex items-center min-w-0 flex-1", isSmall ? "gap-2.5" : "gap-3.5")}>
+        <IconContainer
+          variant="primary"
+          size={isSmall ? "sm" : "default"}
+          className={cn("rounded!", iconClassName ?? iconContainerClassName)}
+        >
+          <ClassworkTypeIcon type={rawType} size={isSmall ? 16 : 20} />
         </IconContainer>
 
         <div className="flex flex-col gap-1 min-w-0 flex-1">
           <div className="flex items-center gap-2 min-w-0 flex-wrap">
-            <h4 className="text-base sm:text-lg font-bold text-foreground line-clamp-1 break-words">
+            <h4 className={cn("font-bold text-foreground line-clamp-1 break-words", isSmall ? "text-sm" : "text-base sm:text-lg")}>
               {item.title}
             </h4>
           </div>
 
-          <div className="-mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <div className={cn("-mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground", isSmall ? "text-xs" : "text-sm")}>
             {dueLabel ? (
               <span>{dueLabel}</span>
             ) : item.created_at ? (

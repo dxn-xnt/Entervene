@@ -9,7 +9,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Empty } from "@/components/retroui/Empty";
-import { ArrowLeft, SlidersHorizontal } from "lucide-react";
+import { Save, SlidersHorizontal } from "lucide-react";
 import InterventionSupportMaterials, {
   type InterventionSupportMaterialsHandle,
 } from "./intervention-support-materials";
@@ -735,8 +735,8 @@ export default function InterventionModal({
                   "Saving adjustments..."
                 ) : (
                   <>
-                    <ArrowLeft className="size-4 mr-1.5" />
-                    Back to Overview
+                    <Save className="size-4 mr-1.5" />
+                    Save Adjustments
                   </>
                 )
               ) : (
