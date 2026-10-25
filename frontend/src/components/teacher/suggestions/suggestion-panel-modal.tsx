@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bot, Lightbulb, Send } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { useToast } from "@/components/retroui/Toast";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";

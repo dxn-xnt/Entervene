@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Download, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Dialog } from "@/components/retroui/Dialog";
 import {
   getTeacherAdvisoryStudentSF9Data,

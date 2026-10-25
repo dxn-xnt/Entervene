@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Check, CheckCheck, Loader2, Save, Upload, X } from "lucide-react";
 import { Alert } from "@/components/retroui/Alert";
 import { FormMessage } from "@/components/retroui/FormMessage";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";
 import { useToast } from "@/components/retroui/Toast";
 import { Select } from "@/components/retroui/Select";

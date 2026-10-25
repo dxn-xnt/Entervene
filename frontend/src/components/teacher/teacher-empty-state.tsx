@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
@@ -36,6 +36,6 @@ export function TeacherEmptyState({ icon, illustration, title, description, acti
       <EmptyTitle>{title}</EmptyTitle>
       {description && <EmptyDescription className="text-center">{description}</EmptyDescription>}
     </EmptyHeader>
-    {action && <EmptyContent><Button size="sm" className="gap-1.5" onClick={action.onClick}>{action.icon}{action.label}</Button></EmptyContent>}
+    {action && <EmptyContent><Button size="sm" onClick={action.onClick}>{action.icon}{action.label}</Button></EmptyContent>}
   </Empty>;
 }

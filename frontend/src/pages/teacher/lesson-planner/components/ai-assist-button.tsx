@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Sparkles, Loader2, AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/teacher/button";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -101,7 +101,7 @@ export const AIAssistButton: React.FC<AIAssistButtonProps> = ({
         onClick={handleClick}
         disabled={isLoading || disabled}
         className={[
-          "gap-1.5 h-7 text-xs border-violet-300 text-violet-700 hover:bg-violet-50 hover:border-violet-400",
+          "h-7 text-xs border-violet-300 text-violet-700 hover:bg-violet-50 hover:border-violet-400",
           "transition-all duration-200",
           isLoading ? "opacity-70" : "",
         ].join(" ")}

@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Calendar, AlertCircle, ArrowUpRight, BookOpen, CheckCircle } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";

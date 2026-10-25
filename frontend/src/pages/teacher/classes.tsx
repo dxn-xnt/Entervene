@@ -1,6 +1,6 @@
 import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Card } from "@/components/retroui/Card";
 import { ArrowUpRight, BookOpen } from "lucide-react";

@@ -5,7 +5,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Tabs } from "@/components/retroui/Tabs";
 import { Input } from "@/components/retroui/Input";
 import { Card } from "@/components/retroui/Card";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Alert } from "@/components/retroui/Alert";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";

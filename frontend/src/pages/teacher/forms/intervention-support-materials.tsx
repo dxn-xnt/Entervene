@@ -1,7 +1,7 @@
 import { useEffect, useImperativeHandle, useMemo, useState, forwardRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert } from "@/components/retroui/Alert";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { useToast } from "@/components/retroui/Toast";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";

@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Clock, CheckCircle2, ChevronRight, UserX, AlertTriangle } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Badge } from "@/components/retroui/Badge";
 import { Avatar } from "@/components/retroui/Avatar";
 import type { AssignmentTracking, TrackingStudent } from "@/types/classwork";

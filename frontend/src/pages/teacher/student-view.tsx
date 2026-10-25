@@ -4,7 +4,7 @@ import { Avatar } from "@/components/retroui/Avatar";
 import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Progress } from "@/components/retroui/Progress";
 import { Empty } from "@/components/retroui/Empty";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";

@@ -14,7 +14,7 @@ import {
   List,
 } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";

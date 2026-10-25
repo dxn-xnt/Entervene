@@ -21,7 +21,7 @@ import {
   type SectionHealthItem,
 } from "@/lib/api";
 import { formatDate, toTitleCase } from "@/lib/formatters";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";
 import LessonItemLine from "@/components/item-line/lesson";
 import { Select } from "@/components/retroui/Select";

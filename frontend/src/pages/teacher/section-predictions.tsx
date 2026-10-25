@@ -20,7 +20,7 @@ import {
   fetchDashboardFilters,
 } from "@/lib/prediction-api";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import {
   buildCurrentTermDashboard,
   loadAuthorizedCurrentTermPredictions,

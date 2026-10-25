@@ -1,6 +1,6 @@
 import type { DashboardPredictionItem } from "@/lib/prediction-api";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Table } from "@/components/retroui/Table";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { ArrowUpDown, ChevronLeft, ChevronRight, Eye } from "lucide-react";
@@ -223,7 +223,7 @@ export default function PredictionTable({
               onClick={() => onPageChange(Math.max(0, offset - limit))}
               className="disabled:opacity-40 cursor-pointer"
             >
-              <ChevronLeft size={12} className="mr-2 stroke-[2.5]" />
+              <ChevronLeft size={12} className="stroke-[2.5]" />
               Previous
             </Button>
             <span className="text-sm font-semibold text-black px-2.5 py-1 whitespace-nowrap">
@@ -237,7 +237,7 @@ export default function PredictionTable({
               className="disabled:opacity-40 cursor-pointer"
             >
               Next
-              <ChevronRight size={12} className="ml-2 stroke-[2.5]" />
+              <ChevronRight size={12} className="stroke-[2.5]" />
             </Button>
           </div>
         </div>

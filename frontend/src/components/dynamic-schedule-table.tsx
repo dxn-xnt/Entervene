@@ -430,10 +430,10 @@ export function DynamicScheduleTable({
             )}
           </div>
 
-          <Dialog.Footer className="bg-card border-t-2 border-black px-5 py-3 flex justify-end">
+          <Dialog.Footer className="mt-0 justify-end">
             <Button
-              variant="default"
-              size="sm"
+              type="button"
+              variant="outline"
               onClick={() => setSelectedEntry(null)}
             >
               Close
