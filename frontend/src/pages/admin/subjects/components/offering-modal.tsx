@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type React from "react";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";

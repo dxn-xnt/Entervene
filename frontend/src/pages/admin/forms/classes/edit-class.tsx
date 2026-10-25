@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ApiRequestError, getClassDetail, getClassFormOptions, updateClass } from "@/lib/api";
 import type { AdviserOption, ClassDetailResponse, ClassFormOptions, UpdateClassRequest } from "@/types/adminClasses";
 import Field from "@/components/admin/classes/fields/Field";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Dialog } from "@/components/retroui/Dialog";

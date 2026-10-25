@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import type { DistributionMode } from "@/types/adminClasses";
 
 export default function AssignEvenlyConfirmationModal({

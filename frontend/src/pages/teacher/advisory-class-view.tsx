@@ -7,7 +7,7 @@ import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";

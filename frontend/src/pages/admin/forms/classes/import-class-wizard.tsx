@@ -21,7 +21,7 @@ import type {
 } from "@/types/adminClasses";
 import Field from "@/components/admin/classes/fields/Field";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";

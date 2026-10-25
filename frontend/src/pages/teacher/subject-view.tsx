@@ -11,7 +11,7 @@ import {
   getTeacherStudentRoster,
 } from "@/lib/student-record-api";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { SubjectClassHeader } from "@/components/subject-class-header";
@@ -1052,11 +1052,10 @@ export default function SubjectDetails() {
                         })}
                       </div>
                     </section>
-                    <Dialog.Footer position="fixed">
+                    <Dialog.Footer className="mt-0 justify-end">
                       <Button
+                        type="button"
                         variant="outline"
-                        size="sm"
-                        autoIcon={false}
                         onClick={closeCreateWizard}
                       >
                         Cancel

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { Dialog } from "@/components/retroui/Dialog";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Table } from "@/components/retroui/Table";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";

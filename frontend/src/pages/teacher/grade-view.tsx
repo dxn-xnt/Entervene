@@ -8,7 +8,7 @@ import { useParams } from "react-router-dom";
 import { Ellipsis, Plus, Search, Download, Send, CheckCircle2, AlertTriangle, Loader2, RefreshCw, X, ChevronDown, FileSpreadsheet, Calendar, BarChart2 } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Card } from "@/components/retroui/Card";

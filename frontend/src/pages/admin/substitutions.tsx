@@ -1,6 +1,6 @@
 import * as React from "react";
 import AppLayout from "@/layouts/app-layout";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "@/components/retroui/Badge";

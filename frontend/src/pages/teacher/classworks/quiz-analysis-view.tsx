@@ -10,7 +10,7 @@ import { Card } from "@/components/retroui/Card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Badge } from "@/components/retroui/Badge";
 import { Avatar } from "@/components/retroui/Avatar";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 
 const QUIZ_TABS: Array<TabItem<"overview" | "questions" | "students">> = [
   { id: "overview", label: "Overview", icon: BarChart3 },

@@ -1,7 +1,7 @@
 import React from "react";
 import { Card } from "@/components/retroui/Card";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/teacher/button";
 import { Plus, Trash2 } from "lucide-react";
 import type { LessonPlanDraft } from "../use-lesson-planner";
 import { AIAssistButton } from "../components/ai-assist-button";
@@ -140,7 +140,7 @@ export const AssessmentTab: React.FC<AssessmentTabProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={addTask}
-                className="gap-1 border-black bg-white text-xs shadow-none hover:shadow-none"
+                className="border-black bg-white text-xs shadow-none hover:shadow-none"
               >
                 <Plus className="size-3" /> Add Task
               </Button>

@@ -5,7 +5,6 @@ import { OverviewCard } from "@/components/overview-cards";
 import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";
 import { Loader } from "@/components/retroui/Loader";
-import { Button } from "@/components/retroui/Button";
 import { Tabs } from "@/components/retroui/Tabs";
 import { useAuth } from "@/context/AuthContext";
 import DevelopmentCurrentTermPanel from "@/components/predictions/development-current-term-panel";
@@ -308,26 +307,19 @@ function LegacyPredictionsDashboard() {
                       }}
                       onSearchChange={handleSearchChange}
                       onClearAll={handleClearAll}
+                      showClearButton={isFilterActive && (data?.items.length ?? 0) > 0}
                     />
 
                     {isFilterActive ? (
                       /* ── Filtered Predictions View ── */
                       <div className="flex flex-col gap-3">
-                        <div className="flex items-center justify-between py-2 border-b-2 border-black">
+                        <div className="py-2">
                           <div>
-                            <h2 className="text-xl font-black uppercase tracking-tight text-black">Filtered Student Predictions</h2>
+                            <h2 className="font-sans text-xl font-bold text-black">Filtered student predictions</h2>
                             <p className="text-xs text-gray-600 font-semibold">
                               Showing matching predictions for active criteria ({data?.total ?? 0} results)
                             </p>
                           </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleClearAll}
-                            className="border-2 border-black font-bold"
-                          >
-                            Clear Filters
-                          </Button>
                         </div>
 
                         {loading && !data ? (
@@ -346,6 +338,7 @@ function LegacyPredictionsDashboard() {
                             onSort={handleSort}
                             onPageChange={setOffset}
                             onRowClick={handleRowClick}
+                            onClearFilters={handleClearAll}
                           />
                         )}
                       </div>

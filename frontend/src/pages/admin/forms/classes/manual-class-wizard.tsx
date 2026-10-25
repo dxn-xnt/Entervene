@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { getClassFormOptions } from "@/lib/api";
 import type { AdviserOption, ClassFormOptions, ManualClassSetup, ManualSectionDraft } from "@/types/adminClasses";
 import Field from "@/components/admin/classes/fields/Field";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Select } from "@/components/retroui/Select";
 import { Dialog } from "@/components/retroui/Dialog";

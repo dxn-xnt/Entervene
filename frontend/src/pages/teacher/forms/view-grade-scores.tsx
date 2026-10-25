@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Text } from "@/components/retroui/Text";
 import { Table } from "@/components/retroui/Table";

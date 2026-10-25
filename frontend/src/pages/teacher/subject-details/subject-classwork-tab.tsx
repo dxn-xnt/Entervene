@@ -20,7 +20,7 @@ import type {
   TeacherClassLoad,
   TeacherClasswork,
 } from "@/types/classwork";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Select } from "@/components/retroui/Select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { DialogueSelect } from "@/components/dialogue-select";
@@ -508,8 +508,8 @@ export default function SubjectClassworkTab({
 
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto -mb-2 justify-between">
-          <div className="flex flex-row gap-2 pb-1 overflow-x-auto">
+        <div className="min-w-0 overflow-x-auto px-1 pt-1 pb-3">
+          <div className="flex w-max min-w-full items-center gap-2">
             <span className="shrink-0 text-sm font-regular text-muted-foreground self-center">
               Type:
             </span>
@@ -612,7 +612,7 @@ export default function SubjectClassworkTab({
                   })}
                 </div>
               </section>
-              <Dialog.Footer position="fixed">
+              <Dialog.Footer className="mt-0 justify-end">
                 <Button
                   type="button"
                   variant="outline"

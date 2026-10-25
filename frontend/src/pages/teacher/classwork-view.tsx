@@ -25,7 +25,7 @@ import type {
   TeacherSubmissionDetail,
   TrackingStudent,
 } from "@/types/classwork";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { useToast } from "@/components/retroui/Toast";
 import { Table } from "@/components/retroui/Table";
 import { Card } from "@/components/retroui/Card";

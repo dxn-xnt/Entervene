@@ -4,7 +4,7 @@ import React, { useRef, useState } from "react";
 import { Download, FileSpreadsheet, UserPlus, Upload } from "lucide-react";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
@@ -345,14 +345,19 @@ export default function AddUserModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
+  const clearManualValidation = () => {
+    setManualErrors({});
+    setManualApiError(null);
+    setManualValidationAttempt(0);
+  };
+
   const handleClose = () => {
     setStep("choose");
     setForm(EMPTY_FORM);
     setDragOver(false);
     setUploadedFile(null);
     setImportResult(null);
-    setManualErrors({});
-    setManualApiError(null);
+    clearManualValidation();
     setImporting(false);
     onClose();
   };
@@ -710,7 +715,7 @@ export default function AddUserModal({
                     placeholder="John"
                     value={form.firstName}
                     onChange={(e) => handleField("firstName", e.target.value)}
-                    className="w-full bg-background border-2 border-black"
+                    className={cn("w-full bg-background border-2", manualErrors.firstName ? "border-destructive focus:border-destructive" : "border-black")}
                   />
                   <FormMessage id="new-user-first-name-error">{manualErrors.firstName}</FormMessage>
                 </Field>
@@ -722,7 +727,7 @@ export default function AddUserModal({
                     placeholder="Doe"
                     value={form.lastName}
                     onChange={(e) => handleField("lastName", e.target.value)}
-                    className="w-full bg-background border-2 border-black"
+                    className={cn("w-full bg-background border-2", manualErrors.lastName ? "border-destructive focus:border-destructive" : "border-black")}
                   />
                   <FormMessage id="new-user-last-name-error">{manualErrors.lastName}</FormMessage>
                 </Field>
@@ -758,7 +763,7 @@ export default function AddUserModal({
                   placeholder="john@example.com"
                   value={form.email}
                   onChange={(e) => handleField("email", e.target.value)}
-                  className="w-full bg-background border-2 border-black"
+                  className={cn("w-full bg-background border-2", manualErrors.email ? "border-destructive focus:border-destructive" : "border-black")}
                 />
                 <FormMessage id="new-user-email-error">{manualErrors.email}</FormMessage>
               </Field>
@@ -789,7 +794,7 @@ export default function AddUserModal({
                       onChange={(e) =>
                         handleField("contactNumber", e.target.value)
                       }
-                      className="w-full bg-background border-2 border-black"
+                      className={cn("w-full bg-background border-2", manualErrors.contactNumber ? "border-destructive focus:border-destructive" : "border-black")}
                       aria-invalid={!!manualErrors.contactNumber}
                       aria-describedby={manualErrors.contactNumber ? "new-user-contact-number-error" : undefined}
                     />
@@ -817,7 +822,7 @@ export default function AddUserModal({
                     type="date"
                     value={form.dob}
                     onChange={(e) => handleField("dob", e.target.value)}
-                    className="w-full bg-background border-2 border-black"
+                    className={cn("w-full bg-background border-2", manualErrors.dob ? "border-destructive focus:border-destructive" : "border-black")}
                     aria-invalid={!!manualErrors.dob}
                     aria-describedby={manualErrors.dob ? "new-user-dob-error" : undefined}
                   />
@@ -902,7 +907,13 @@ export default function AddUserModal({
             </div>
 
             <Dialog.Footer>
-              <Button variant="outline" onClick={() => setStep("choose")}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  clearManualValidation();
+                  setStep("choose");
+                }}
+              >
                 Back
               </Button>
               <Button

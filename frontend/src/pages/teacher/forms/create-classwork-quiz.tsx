@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { AlertTriangle, ArrowLeft, ArrowRight, FileDown, FileText, Loader2, Pencil, Plus, Sparkles, X } from "lucide-react";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { useToast } from "@/components/retroui/Toast";
 import { Text } from "@/components/retroui/Text";
@@ -180,6 +180,7 @@ export default function CreateClassworkQuizModal({
     );
 
     const useManualQuizBuilder = () => {
+        setCreateError("");
         setQuizImportWarnings([]);
         setCreateStep("details");
     };
@@ -2128,6 +2129,7 @@ export default function CreateClassworkQuizModal({
                                         size="sm"
                                         autoIcon={false}
                                         onClick={() => {
+                                            setCreateError("");
                                             if (createStep === "details") {
                                                 setCreateStep("quiz-source");
                                             } else if (createStep === "quiz") {

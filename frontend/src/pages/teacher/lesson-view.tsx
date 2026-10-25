@@ -9,7 +9,7 @@ import {
 import { toast } from "sonner";
 import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";
 import IconContainer from "@/components/icon-container";
 import {

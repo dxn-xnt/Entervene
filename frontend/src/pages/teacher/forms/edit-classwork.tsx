@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Check, CheckCheck, FileText, Plus, Trash2 } from "lucide-react";
 import Field from "@/components/admin/classes/fields/Field";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";

@@ -7,7 +7,7 @@ import {
   Lightbulb,
   X,
 } from "lucide-react";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { useToast } from "@/components/retroui/Toast";
 import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";

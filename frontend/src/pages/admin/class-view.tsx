@@ -8,7 +8,7 @@ import { Table } from "@/components/retroui/Table";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { useToast } from "@/components/retroui/Toast";
 import { Card as RetroCard } from "@/components/retroui/Card";
 import { Empty } from "@/components/retroui/Empty";

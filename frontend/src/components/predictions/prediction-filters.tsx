@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import type { DashboardFilters, RiskSummary } from "@/lib/prediction-api";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Search, X } from "lucide-react";
 
 interface PredictionFiltersProps {
@@ -227,7 +227,7 @@ export default function PredictionFilters({
             onClick={onClearAll}
             className="h-10 border-2 border-black bg-yellow-300 hover:bg-yellow-400 text-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
           >
-            <X size={14} className="mr-1 stroke-[3]" />
+            <X size={14} className="stroke-[3]" />
             Clear Filters
           </Button>
         )}

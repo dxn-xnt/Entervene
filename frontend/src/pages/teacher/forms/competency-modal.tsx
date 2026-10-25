@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Plus, Save, X } from "lucide-react";
 import { FormMessage } from "@/components/retroui/FormMessage";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { useToast } from "@/components/retroui/Toast";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";

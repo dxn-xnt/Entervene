@@ -1,6 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { Archive, Check, CheckCheck, X } from "lucide-react";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";

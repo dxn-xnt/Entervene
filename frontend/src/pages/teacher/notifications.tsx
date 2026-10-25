@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs } from "@/components/retroui/Tabs";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { NotificationCard } from "@/components/notification-card";
 import { SidebarTrigger } from "@/components/ui/sidebar";

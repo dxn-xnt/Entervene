@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Search } from "lucide-react";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import type { SubjectOfferingPathway, SubjectStatus } from "@/lib/api";

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Skeleton } from "@/components/retroui/Skeleton";
 import { Card } from "@/components/retroui/Card";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Alert } from "@/components/retroui/Alert";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { Badge } from "@/components/retroui/Badge";

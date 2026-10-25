@@ -8,7 +8,7 @@ import AppLayout from "@/layouts/app-layout";
 import { Badge } from "@/components/retroui/Badge";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { useToast } from "@/components/retroui/Toast";
 import { Search, Sparkles, CheckCircle2, XCircle, Archive, Shield, Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";

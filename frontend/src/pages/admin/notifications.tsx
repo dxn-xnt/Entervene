@@ -3,7 +3,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { NotificationCard } from "@/components/notification-card";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/admin/button";
 import { AlertTriangle, Bell, FileCheck, Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";

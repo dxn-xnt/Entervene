@@ -23,7 +23,7 @@ import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { Alert } from "@/components/retroui/Alert";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/student/button";
 import { useToast } from "@/components/retroui/Toast";
 import { QuizTextAnswerInput, QuizTextAnswerSummary } from "@/components/quiz/student-quiz-answer";
 import { API_URL, apiFetch } from "@/lib/api";
@@ -219,20 +219,27 @@ function statusBadge(
   };
 }
 
-function dueBadge(dueDate?: string) {
+function dueBadge(dueDate?: string, submissionStatus?: string | null) {
   if (!dueDate) return null;
-  const diffDays = Math.ceil(
-    (new Date(dueDate).getTime() - Date.now()) / 86_400_000,
-  );
-  if (diffDays < 0)
+  if (["submitted", "late", "graded", "completed"].includes(submissionStatus?.toLowerCase() ?? "")) return null;
+  const due = new Date(dueDate);
+  if (Number.isNaN(due.getTime())) return null;
+  const remaining = due.getTime() - Date.now();
+  if (remaining < 0)
     return {
-      label: `${Math.abs(diffDays)} days late`,
+      label: "Past due",
       variant: "destructive" as const,
       cls: "",
     };
-  if (diffDays === 0)
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const dueStart = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
+  const calendarDays = Math.round((dueStart - todayStart) / 86_400_000);
+  if (calendarDays === 0)
     return { label: "Due today", variant: "outline" as const, cls: "bg-orange-100 text-orange-800" };
-  return { label: `Due in ${diffDays} days`, variant: "success" as const, cls: "" };
+  if (calendarDays === 1)
+    return { label: "Due tomorrow", variant: "outline" as const, cls: "bg-orange-100 text-orange-800" };
+  return { label: `Due in ${calendarDays} days`, variant: "success" as const, cls: "" };
 }
 
 function statusLabel(status?: string | null) {
@@ -258,7 +265,7 @@ function formatExamTimer(remainingSeconds: number | null) {
 }
 
 function urgencyScore(cw: ClassworkAssignment, submission?: Submission) {
-  if (submission?.status === "graded" || submission?.status === "submitted")
+  if (["graded", "submitted", "late", "completed"].includes(submission?.status?.toLowerCase() ?? cw.submission_status?.toLowerCase() ?? ""))
     return Number.MAX_SAFE_INTEGER;
   if (!cw.due_date) return Number.MAX_SAFE_INTEGER - 1;
   return new Date(cw.due_date).getTime();
@@ -693,11 +700,6 @@ export default function SubjectClassworkTab({
     }
   };
 
-  const formatDate = (dateString?: string): string => {
-    if (!dateString) return "No due date";
-    return new Date(dateString).toLocaleDateString();
-  };
-
   const formatDateTime = (dateString?: string): string => {
     if (!dateString) return "the unlock time";
     return new Date(dateString).toLocaleString();
@@ -1119,7 +1121,7 @@ export default function SubjectClassworkTab({
             cw.is_locked,
             cw.classwork_type,
           );
-          const deadline = dueBadge(cw.due_date);
+          const deadline = dueBadge(cw.due_date, submission?.status ?? cw.submission_status);
           const Icon = classworkIcon(cw.classwork_type);
           const isItemLoading = detailLoadingId === cw.classwork_assignment_id;
 
@@ -1151,7 +1153,7 @@ export default function SubjectClassworkTab({
                     <p className="mt-2 text-left text-xs text-gray-600">
                       {[
                         cw.classwork_type,
-                        formatDate(cw.due_date),
+                        cw.due_date ? `Due ${formatDateTime(cw.due_date)}` : "No due date",
                         cw.total_points ? `${cw.total_points} pts` : null,
                       ]
                         .filter(Boolean)

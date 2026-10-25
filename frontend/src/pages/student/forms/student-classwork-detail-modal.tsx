@@ -9,7 +9,7 @@ import {
   Paperclip,
 } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/student/button";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
 import IconContainer from "@/components/icon-container";
