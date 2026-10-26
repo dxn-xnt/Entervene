@@ -563,17 +563,17 @@ const InterventionSupportMaterials = forwardRef<
         selected_resources: plan.selected_resources,
         ...(plan.grade_treatment === "EXAMINATION"
           ? {
-              original_exam_assignment_id:
-                plan.original_exam_assignment_id ??
-                (selectedActivityIds.length > 0 ? selectedActivityIds[0] : null),
-            }
+            original_exam_assignment_id:
+              plan.original_exam_assignment_id ??
+              (selectedActivityIds.length > 0 ? selectedActivityIds[0] : null),
+          }
           : {}),
         ...(plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY"
           ? {
-              target_assignment_ids: selectedActivityIds,
-              score_adjustment_cap:
-                parsedCap !== undefined && Number.isFinite(parsedCap) ? parsedCap : 75,
-            }
+            target_assignment_ids: selectedActivityIds,
+            score_adjustment_cap:
+              parsedCap !== undefined && Number.isFinite(parsedCap) ? parsedCap : 75,
+          }
           : {}),
       });
       setPlan(result.plan);
@@ -663,16 +663,16 @@ const InterventionSupportMaterials = forwardRef<
           selected_resources: plan.selected_resources,
           ...(plan.grade_treatment === "EXAMINATION"
             ? {
-                original_exam_assignment_id:
-                  plan.original_exam_assignment_id ??
-                  (selectedActivityIds.length > 0 ? selectedActivityIds[0] : null),
-              }
+              original_exam_assignment_id:
+                plan.original_exam_assignment_id ??
+                (selectedActivityIds.length > 0 ? selectedActivityIds[0] : null),
+            }
             : {}),
           ...(plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY"
             ? {
-                target_assignment_ids: selectedActivityIds,
-                score_adjustment_cap: Number.isFinite(parsedCap) ? parsedCap : 75,
-              }
+              target_assignment_ids: selectedActivityIds,
+              score_adjustment_cap: Number.isFinite(parsedCap) ? parsedCap : 75,
+            }
             : {}),
         });
         setResources(saved.resources);
@@ -1331,8 +1331,8 @@ const InterventionSupportMaterials = forwardRef<
                             />
                           ))}
                         </div>
-                        <p className="text-sm text-muted-foreground px-1 -mt-1">
-                          Materials are linked to {manuallySelectedLessons || "no"}{" "}
+                        <p className="text-sm text-muted-foreground px-1">
+                          Materials are linked to <span className="hover:text-foreground font-medium">{manuallySelectedLessons || "no"}{" "}</span>
                           {manuallySelectedLessonsList.length === 1 ? "lesson" : "lessons"}.
                         </p>
                       </>
@@ -1575,56 +1575,60 @@ const InterventionSupportMaterials = forwardRef<
                         )}
 
 
-                        {groupedVisible.map(([lesson, items]) => (
-                          <div key={lesson} className="flex flex-col gap-2">
-                            <p className="text-sm font-bold">
-                              {lesson === NO_LESSON ? "No linked lesson" : lesson}
-                            </p>
-                            {items.map((item) => {
-                              const isChecked = selected.has(`${item.kind}:${item.id}`);
-                              return (
-                                <ClassworkItemLine
-                                  key={`${item.kind}:${item.id}`}
-                                  size="sm"
-                                  className={`border-2! shadow-none! ${isChecked ? "bg-primary!" : ""}`}
-                                  item={{
-                                    classwork_id: item.id,
-                                    title: item.title,
-                                    classwork_type: item.classwork_type ?? item.kind,
-                                  }}
-                                  showPublicationStatus={false}
-                                  showCategory={false}
-                                  showType={false}
-                                  onClick={() => !working && toggleResource(item)}
-                                  rightContent={
-                                    <div className="flex items-center gap-2">
-                                      {(item.recommended || item.match_level === "SOURCE_ACTIVITY") && (
-                                        <Badge
-                                          variant={item.recommended ? "secondary" : "outline"}
-                                          size="sm"
-                                        >
-                                          {item.recommended ? "Recommended" : "Related source"}
+                        {groupedVisible.map(([lesson, items]) => {
+                          const classworks = items.filter((item) => item.kind !== "LESSON");
+                          if (classworks.length === 0) return null;
+                          return (
+                            <div key={lesson} className="flex flex-col gap-2">
+                              <p className="text-sm font-bold">
+                                {lesson === NO_LESSON ? "No linked lesson" : lesson}
+                              </p>
+                              {classworks.map((item) => {
+                                const isChecked = selected.has(`${item.kind}:${item.id}`);
+                                return (
+                                  <ClassworkItemLine
+                                    key={`${item.kind}:${item.id}`}
+                                    size="sm"
+                                    className={`border-2! shadow-none! ${isChecked ? "bg-primary!" : ""}`}
+                                    item={{
+                                      classwork_id: item.id,
+                                      title: item.title,
+                                      classwork_type: item.classwork_type ?? item.kind,
+                                    }}
+                                    showPublicationStatus={false}
+                                    showCategory={false}
+                                    showType={false}
+                                    onClick={() => !working && toggleResource(item)}
+                                    rightContent={
+                                      <div className="flex items-center gap-2">
+                                        {(item.recommended || item.match_level === "SOURCE_ACTIVITY") && (
+                                          <Badge
+                                            variant={item.recommended ? "secondary" : "outline"}
+                                            size="sm"
+                                          >
+                                            {item.recommended ? "Recommended" : "Related source"}
+                                          </Badge>
+                                        )}
+                                        <Badge variant={`${isChecked ? "solid" : "surface"}`} size="sm">
+                                          {toTitleCase(item.classwork_type ?? item.kind)}
                                         </Badge>
-                                      )}
-                                      <Badge variant={`${isChecked ? "solid" : "surface"}`} size="sm">
-                                        {toTitleCase(item.classwork_type ?? item.kind)}
-                                      </Badge>
 
-                                      <Checkbox
-                                        checked={isChecked}
-                                        disabled={working}
-                                        variant="solid"
-                                        className={`border-black transition-colors ${isChecked ? "bg-black text-white" : "bg-white text-black"}`}
-                                        onClick={(e) => e.stopPropagation()}
-                                        onCheckedChange={() => toggleResource(item)}
-                                      />
-                                    </div>
-                                  }
-                                />
-                              );
-                            })}
-                          </div>
-                        ))}
+                                        <Checkbox
+                                          checked={isChecked}
+                                          disabled={working}
+                                          variant="solid"
+                                          className={`border-black transition-colors ${isChecked ? "bg-black text-white" : "bg-white text-black"}`}
+                                          onClick={(e) => e.stopPropagation()}
+                                          onCheckedChange={() => toggleResource(item)}
+                                        />
+                                      </div>
+                                    }
+                                  />
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
                       <Empty className="py-6 rounded!">
@@ -1684,11 +1688,10 @@ const InterventionSupportMaterials = forwardRef<
                                     setCapInput(String(preset));
                                     setCapError(null);
                                   }}
-                                  className={`px-2 py-0.5 text-xs font-bold rounded border-2 transition-all ${
-                                    isPreset
-                                      ? "bg-primary text-primary-foreground border-black"
-                                      : "bg-background text-foreground border-border hover:border-black"
-                                  }`}
+                                  className={`px-2 py-0.5 text-xs font-bold rounded border-2 transition-all ${isPreset
+                                    ? "bg-primary text-primary-foreground border-black"
+                                    : "bg-background text-foreground border-border hover:border-black"
+                                    }`}
                                 >
                                   {preset}%
                                 </button>

@@ -34,7 +34,6 @@ import { LoadingPanel } from "@/components/loading-panel";
 import { Empty } from "@/components/retroui/Empty";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { GradeOverviewCards } from "@/components/student/grade-overview-cards";
 import { SubjectCard } from "@/components/subject-card";
 import {
   Tooltip,
@@ -49,6 +48,7 @@ import {
 } from "@/lib/api";
 import { useStudentOverviewData } from "@/hooks/use-student-overview-data";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import IconContainer from "@/components/icon-container";
 
 const INITIAL_SUBJECTS_LIMIT = 4;
 const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -90,6 +90,74 @@ function MetricCard({
         {children}
       </Card.Content>
     </Card>
+  );
+}
+
+function computeCompletion(todos: TodoItem[]) {
+  const total = todos.length;
+  const completed = todos.filter((todo) =>
+    todo.is_submitted || todo.status === "completed" || todo.grade !== null
+  ).length;
+  return { total, completed, rate: total > 0 ? Math.round((completed / total) * 100) : 0 };
+}
+
+function computeSubjectPerformance(todos: TodoItem[]) {
+  const buckets: Record<string, { subject: string; subjectId: number; earned: number; possible: number }> = {};
+  todos.forEach((todo) => {
+    if (todo.grade === null || !todo.total_points || todo.is_graded === false || todo.type?.toUpperCase() === "READING") return;
+    const bucket = buckets[todo.subject_id] ?? {
+      subject: todo.subject,
+      subjectId: todo.subject_id,
+      earned: 0,
+      possible: 0,
+    };
+    bucket.earned += todo.grade;
+    bucket.possible += todo.total_points;
+    buckets[todo.subject_id] = bucket;
+  });
+  return Object.values(buckets)
+    .map((bucket) => ({ ...bucket, score: Math.round((bucket.earned / bucket.possible) * 100) }))
+    .sort((a, b) => b.score - a.score);
+}
+
+export function GradeOverviewCards({ todos, isLoading, error }: {
+  todos: TodoItem[];
+  isLoading: boolean;
+  error: string | null;
+}) {
+  if (isLoading) return <LoadingPanel label="Loading grade overview..." />;
+  if (error) {
+    return (
+      <Empty>
+        <Empty.Content>
+          <Empty.Title>Unable to load grade overview</Empty.Title>
+          <Empty.Description>{error}</Empty.Description>
+        </Empty.Content>
+      </Empty>
+    );
+  }
+
+  return (
+    <section aria-labelledby="grade-overview-heading" className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {/* <Card className="w-full">
+          <Card.Header><Card.Title>Completion Rate</Card.Title></Card.Header>
+          <Card.Content>
+            <div className="flex items-center gap-3">
+              <Progress
+                value={completion.rate}
+                className="flex-1 size-25"
+                variant="circular"
+                aria-label={`Completion rate: ${completion.rate}%`}
+              />
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">{completion.completed} of {completion.total} activities done</p>
+          </Card.Content>
+        </Card> */}
+
+
+      </div>
+    </section>
   );
 }
 
@@ -187,6 +255,12 @@ const StoryBoard = () => {
       deadlines,
     };
   }, [todos]);
+
+  const subjectPerformance = useMemo(
+    () => computeSubjectPerformance(todos),
+    [todos],
+  );
+  const weakestSubject = subjectPerformance.at(-1);
 
   const readingTotal =
     metrics?.daily_reading_seconds.reduce((sum, value) => sum + value, 0) || 0;
@@ -402,24 +476,7 @@ const StoryBoard = () => {
 
                   {/* Additional Metric Cards displayed below subjects container */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-12">
-                    <MetricCard
-                      title="Average Score"
-                      className="sm:col-span-1 xl:col-span-6"
-                    >
-                      <p className="text-4xl font-black">
-                        {overview.average ?? 0}%
-                      </p>
-                      <Progress
-                        value={overview.average ?? 0}
-                        className="mt-4"
-                        aria-label={`Average score ${overview.average ?? 0}%`}
-                      />
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Across {overview.gradedCount} graded activities
-                      </p>
-                    </MetricCard>
-
-                    <MetricCard
+                    {/* <MetricCard
                       title="Assignment Status"
                       className="sm:col-span-1 xl:col-span-6"
                     >
@@ -467,9 +524,9 @@ const StoryBoard = () => {
                           </span>
                         </div>
                       </div>
-                    </MetricCard>
+                    </MetricCard> */}
 
-                    <MetricCard
+                    {/* <MetricCard
                       title="Study Time This Week"
                       className="sm:col-span-2 xl:col-span-12"
                     >
@@ -529,9 +586,9 @@ const StoryBoard = () => {
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
-                    </MetricCard>
+                    </MetricCard> */}
 
-                    <MetricCard
+                    {/* <MetricCard
                       title="Grade Trend"
                       className="sm:col-span-2 xl:col-span-7"
                     >
@@ -594,11 +651,11 @@ const StoryBoard = () => {
                           </LineChart>
                         </ResponsiveContainer>
                       </div>
-                    </MetricCard>
+                    </MetricCard> */}
 
                     <MetricCard
                       title="Time per Subject"
-                      className="sm:col-span-2 xl:col-span-5"
+                      className="sm:col-span-2 xl:col-span-6"
                     >
                       <p className="mb-3 text-xs text-muted-foreground">
                         Cumulative reading time on work recorded this week
@@ -670,10 +727,10 @@ const StoryBoard = () => {
                           value={
                             onTimeTotal > 0
                               ? Math.round(
-                                  ((metrics?.on_time_count || 0) /
-                                    onTimeTotal) *
-                                    100,
-                                )
+                                ((metrics?.on_time_count || 0) /
+                                  onTimeTotal) *
+                                100,
+                              )
                               : 0
                           }
                           variant="circular"
@@ -693,33 +750,6 @@ const StoryBoard = () => {
                     </MetricCard>
 
                     <MetricCard
-                      title="Quiz Accuracy"
-                      className="sm:col-span-1 xl:col-span-6"
-                    >
-                      <p className="text-4xl font-black">
-                        {quizCount > 0
-                          ? Math.round(
-                              ((metrics?.quiz_correct || 0) / quizCount) * 100,
-                            )
-                          : 0}
-                        %
-                      </p>
-                      <Progress
-                        value={
-                          quizCount > 0
-                            ? ((metrics?.quiz_correct || 0) / quizCount) * 100
-                            : 0
-                        }
-                        className="mt-4"
-                        aria-label={`${metrics?.quiz_correct || 0} correct out of ${quizCount} graded quiz answers`}
-                      />
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        {metrics?.quiz_correct || 0} correct ·{" "}
-                        {metrics?.quiz_wrong || 0} incorrect
-                      </p>
-                    </MetricCard>
-
-                    <MetricCard
                       title="Attendance"
                       className="sm:col-span-2 xl:col-span-12"
                     >
@@ -730,8 +760,8 @@ const StoryBoard = () => {
                           Unable to load attendance.
                         </p>
                       ) : !metrics?.attendance?.some(
-                          (day) => day.status !== "no_record",
-                        ) ? (
+                        (day) => day.status !== "no_record",
+                      ) ? (
                         <StudentEmptyState
                           embedded
                           className="shadow-none"
@@ -865,12 +895,47 @@ const StoryBoard = () => {
                         </>
                       )}
                     </MetricCard>
+
+                    <Card className="flex flex-col w-full min-h-64">
+                      <Card.Header>
+                        <Card.Title className="text-2xl">Subject Performance</Card.Title>
+                      </Card.Header>
+                      <Card.Content className="flex flex-1 flex-col w-full">
+                        {subjectPerformance.length === 0 ? (
+                          <StudentEmptyState
+                            embedded
+                            className="shadow-none"
+                            icon={<FileText />}
+                            title="No graded classwork yet"
+                            description="Scores will appear here as your teachers grade your submissions."
+                          />
+                        ) : (
+                          <div className="flex flex-1 flex-col justify-between">
+                            <div className="flex flex-col gap-2">
+                              {subjectPerformance.map((item) => <div key={item.subjectId} className="flex items-center gap-2">
+                                <span className="w-20 truncate text-sm" title={item.subject}>{item.subject}</span>
+                                <Progress
+                                  value={Math.min(100, Math.max(0, item.score))}
+                                  className="h-3 flex-1"
+                                  aria-label={`${item.subject} score: ${item.score}%`}
+                                />
+                                <span className="text-right text-sm font-semibold">{item.score}%</span>
+                              </div>)}
+                            </div>
+
+                            <div className="flex pt-4 mt-auto">
+                              {weakestSubject && <p className="text-sm text-muted-foreground">Recommended Attention: <span className="font-bold">{weakestSubject.subject}</span></p>}
+                            </div>
+                          </div>
+                        )}
+                      </Card.Content>
+                    </Card>
                   </div>
                 </div>
 
                 {/* Right column: Week Streak + To do Card */}
                 <div className="flex w-full min-w-0 flex-col gap-4 xl:col-span-1">
-                  <Card className="block w-full border-border bg-white shadow-md hover:shadow-none">
+                  {/* <Card className="block w-full border-border bg-white shadow-md hover:shadow-none">
                     <Card.Content className="">
                       <div className="flex flex-col gap-1">
                         <div className="flex flex-row gap-2 items-center">
@@ -941,7 +1006,7 @@ const StoryBoard = () => {
                         </div>
                       </div>
                     </Card.Content>
-                  </Card>
+                  </Card> */}
 
                   <Card className="block w-full border-border bg-white shadow-md hover:shadow-none">
                     <Card.Content>
@@ -1002,12 +1067,15 @@ const StoryBoard = () => {
                                 }}
                                 role="button"
                                 tabIndex={0}
-                                className="flex w-full cursor-pointer shadow-none items-center gap-3 border-border bg-background p-3 hover:-translate-y-1 hover:bg-accent! hover:text-foreground!"
+                                className="flex w-full cursor-pointer shadow-none items-center gap-3 border-border bg-background p-2.5 hover:-translate-y-1 hover:bg-retro hover:text-foreground!"
                               >
-                                <IconComponent
-                                  size={20}
-                                  className="shrink-0 text-black/70"
-                                />
+                                <IconContainer className="bg-primary" size="sm">
+                                  <IconComponent
+                                    size={14}
+                                    className="shrink-0"
+                                  />
+                                </IconContainer>
+
                                 <div className="min-w-0 flex-1">
                                   <p className="truncate font-semibold text-sm">
                                     {item.title}

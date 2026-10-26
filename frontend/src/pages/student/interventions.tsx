@@ -19,7 +19,7 @@ import {
   type StudentSupportActivity,
 } from "@/lib/student-persistent-interventions-api";
 import IconContainer from "@/components/icon-container";
-import { BookOpen, ClipboardList, History, Shield } from "lucide-react";
+import { BookOpen, ClipboardList, Shield } from "lucide-react";
 import { formatDate } from "@/lib/formatters";
 
 export default function StudentInterventions() {
@@ -132,13 +132,9 @@ export default function StudentInterventions() {
   };
 
   const emptyActivitiesPlaceholder = (
-    <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+    <Empty className="w-full border-2 rounded! border-border bg-background p-3! shadow-none hover:shadow-none">
       <Empty.Content>
-        <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
-          <IconContainer className="bg-primary" size="sm">
-            <ClipboardList className="size-8" />
-          </IconContainer>
-        </Empty.Icon>
+
         <Empty.Title className="text-base! font-bold">
           No practice activities yet
         </Empty.Title>
@@ -166,7 +162,7 @@ export default function StudentInterventions() {
 
                 {/* Section 1: New from your teacher */}
                 {reviewers.length > 0 && (
-                  <Card aria-label="New from your teacher" className="flex flex-col gap-3 p-5">
+                  <Card aria-label="New from your teacher" className="flex flex-col gap-3 p-5 bg-primary">
                     <h3 className="text-lg sm:text-2xl font-bold text-foreground">
                       New Support for You
                     </h3>
@@ -201,7 +197,7 @@ export default function StudentInterventions() {
                             </div>
 
                             {/* Curated remediation activities if any */}
-                            {renderActivities(activities)}
+                            {renderActivities(activities, emptyActivitiesPlaceholder)}
 
                             {/* Meta line */}
                             <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
@@ -305,8 +301,8 @@ export default function StudentInterventions() {
                               onClick={() =>
                                 navigate(
                                   item.reviewer_id
-                                    ? `${routes.student.interventionView}?reviewer=${item.reviewer_id}`
-                                    : routes.student.interventionView
+                                    ? `${routes.student.interventionView}?intervention=${item.intervention_id}&reviewer=${item.reviewer_id}`
+                                    : `${routes.student.interventionView}?intervention=${item.intervention_id}`
                                 )
                               }
                               className="gap-2"
@@ -400,7 +396,7 @@ export default function StudentInterventions() {
                                 autoIcon={false}
                                 onClick={() =>
                                   navigate(
-                                    `${routes.student.interventionView}?reviewer=${item.reviewer_id}`
+                                    `${routes.student.interventionView}?intervention=${item.intervention_id}&reviewer=${item.reviewer_id}`
                                   )
                                 }
                                 className="gap-2"

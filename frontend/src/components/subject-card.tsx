@@ -200,15 +200,16 @@ export function SubjectCard({
             </div>
           </div>
         ) : (
-          <div className="flex w-full min-w-0 flex-col items-start gap-2">
-            {hasPending && (
-              <Badge size="sm" variant="surface" className="max-w-full">
-                {pendingCount} {pendingCount === 1 ? "Pending Classwork" : "Pending Classworks"}
-              </Badge>
-            )}
-            <p className="w-full min-w-0 break-words text-xl font-bold sm:text-2xl">
+          <div className="flex w-full min-w-0 flex-row items-center justify-between gap-2">
+            <p className="w-full min-w-0 break-words text-xl font-bold sm:text-2xl truncate">
               {title}
             </p>
+            {hasPending && (
+              <Badge size="sm" variant="surface" className="h-fit max-w-full whitespace-nowrap">
+                {pendingCount} Pending
+              </Badge>
+            )}
+
           </div>
         )}
 
@@ -220,7 +221,6 @@ export function SubjectCard({
           </div>
           <div className="flex flex-row items-center gap-2">
             <Progress className="w-full" value={completionRate} />
-            {!isTeacher && <p className="text-xs font-bold shrink-0">{completionRate}%</p>}
           </div>
         </div>
 
