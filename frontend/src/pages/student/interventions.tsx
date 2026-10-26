@@ -20,7 +20,7 @@ import {
 } from "@/lib/student-persistent-interventions-api";
 import IconContainer from "@/components/icon-container";
 import { BookOpen, ClipboardList, History, Shield } from "lucide-react";
-import { formatDateTime } from "@/lib/formatters";
+import { formatDate } from "@/lib/formatters";
 
 export default function StudentInterventions() {
   const navigate = useNavigate();
@@ -63,8 +63,6 @@ export default function StudentInterventions() {
     };
   }, []);
 
-
-
   const renderActivities = (
     activities: StudentSupportActivity[],
     emptyPlaceholder?: React.ReactNode
@@ -72,8 +70,8 @@ export default function StudentInterventions() {
     if (activities && activities.length > 0) {
       return (
         <div className="space-y-2">
-          <p className="font-semibold text-foreground text-sm">
-            Curated remediation activities:
+          <p className="font-semibold text-foreground text-base">
+            Curated Remediation Activities
           </p>
           <div className="flex flex-col gap-2">
             {activities.map((act) => (
@@ -97,16 +95,7 @@ export default function StudentInterventions() {
                 }
                 rightContent={
                   <div className="flex items-center gap-2">
-                    {act.grade != null && act.total_points != null && (
-                      <span className="text-xs font-bold">
-                        {act.grade}
-                        <span className="font-medium text-muted-foreground text-xs">
-                          {" "}
-                          / {act.total_points}
-                        </span>
-                      </span>
-                    )}
-                    {act.classwork_type && (
+                    {/* {act.classwork_type && (
                       <Badge variant="surface" size="sm">
                         {act.classwork_type === "QUIZ"
                           ? "Quiz"
@@ -114,7 +103,7 @@ export default function StudentInterventions() {
                             ? "Assignment"
                             : act.classwork_type}
                       </Badge>
-                    )}
+                    )} */}
                     {act.submission_status && (
                       <Badge
                         variant={
@@ -217,7 +206,7 @@ export default function StudentInterventions() {
                             {/* Meta line */}
                             <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
                               <span className="text-xs sm:text-sm text-muted-foreground">
-                                {rev.sent_at ? `Shared ${formatDateTime(rev.sent_at)}` : ""}
+                                {rev.sent_at ? `Shared ${formatDate(rev.sent_at)}` : ""}
                               </span>
 
                               {/* Action button */}
@@ -263,7 +252,7 @@ export default function StudentInterventions() {
                       </Empty.Content>
                     </Empty>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="grid grid-cols-2">
                       {activeInterventions.map((item) => (
                         <Card
                           key={item.intervention_id}
@@ -283,8 +272,7 @@ export default function StudentInterventions() {
                                   {item.subject_name} Support
                                 </h4>
                                 <p className="text-sm font-medium text-foreground truncate">
-                                  {item.class_name}
-                                  {item.teacher_name ? ` · ${item.teacher_name}` : ""}
+                                  {item.teacher_name ? ` ${item.teacher_name}` : ""}
                                 </p>
                               </div>
                             </div>
@@ -304,7 +292,9 @@ export default function StudentInterventions() {
                           {/* Meta line */}
                           <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
                             <span className="text-xs sm:text-sm text-muted-foreground">
-                              Teacher support active
+                              {item.activated_at
+                                ? `Started ${formatDate(item.activated_at)}`
+                                : "Teacher support active"}
                             </span>
 
                             {/* Action button */}
@@ -333,8 +323,8 @@ export default function StudentInterventions() {
 
                 {/* Section 3: Past support */}
                 <section aria-label="Past support" className="space-y-3 pb-8">
-                  <h3 className="text-base sm:text-lg font-bold text-foreground">
-                    Past support
+                  <h3 className="text-2xl font-bold text-foreground">
+                    Past Support
                   </h3>
 
                   {resolvedInterventions.length === 0 ? (
@@ -342,7 +332,7 @@ export default function StudentInterventions() {
                       <Empty.Content>
                         <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
                           <IconContainer className="bg-primary" size="sm">
-                            <History className="size-8" />
+                            <Shield className="size-8" />
                           </IconContainer>
                         </Empty.Icon>
                         <Empty.Title className="text-base! font-bold">
@@ -354,7 +344,7 @@ export default function StudentInterventions() {
                       </Empty.Content>
                     </Empty>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="grid grid-cols-2">
                       {resolvedInterventions.map((item) => (
                         <Card
                           key={item.intervention_id}
@@ -364,7 +354,7 @@ export default function StudentInterventions() {
                           <div className="w-full justify-between flex items-start mb-1 gap-2">
                             <div className="flex flex-row gap-3 items-start min-w-0">
                               <IconContainer className="bg-primary shrink-0" size="xl">
-                                <History className="text-border" size="36" />
+                                <Shield className="text-border" size="36" />
                               </IconContainer>
                               <div className="flex flex-col gap-0.5 min-w-0">
                                 <h4
@@ -374,7 +364,7 @@ export default function StudentInterventions() {
                                   {item.subject_name} Support
                                 </h4>
                                 <p className="text-sm font-medium text-foreground truncate">
-                                  {item.class_name}
+                                  {item.subject_name}
                                   {item.teacher_name ? ` · ${item.teacher_name}` : ""}
                                 </p>
                               </div>
@@ -398,7 +388,7 @@ export default function StudentInterventions() {
                           <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
                             <span className="text-xs sm:text-sm text-muted-foreground">
                               {item.resolved_at
-                                ? `Resolved ${formatDateTime(item.resolved_at)}`
+                                ? `Resolved ${formatDate(item.resolved_at)}`
                                 : "Resolved"}
                             </span>
 

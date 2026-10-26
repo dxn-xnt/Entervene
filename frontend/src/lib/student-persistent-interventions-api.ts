@@ -19,6 +19,7 @@ export interface StudentPersistentIntervention {
   teacher_name: string | null;
   activities: StudentSupportActivity[];
   reviewer_id: number | null;
+  activated_at?: string | null;
   resolved_at: string | null;
   resolution_message: string | null;
 }

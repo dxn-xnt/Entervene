@@ -23,6 +23,7 @@ def _summary(db: Session, row: Intervention, student_id) -> StudentPersistentInt
             teacher_name=f"{row.activated_by.first_name} {row.activated_by.last_name}" if row.activated_by else None,
             activities=[StudentSupportActivity(**item) for item in targeted_activities(db, row, student_view=True)],
             reviewer_id=reviewer.material_id if reviewer else None,
+            activated_at=row.activated_at,
             resolved_at=row.resolved_at,
             resolution_message=("Your progress reached the goal for this support."
                                 if row.resolution_reason == "IMPROVED_PREDICTION" else "This support has ended."),
@@ -61,6 +62,7 @@ def _summary(db: Session, row: Intervention, student_id) -> StudentPersistentInt
         class_id=row.class_id, class_name=row.class_.section_name,
         teacher_name=f"{teacher.first_name} {teacher.last_name}" if teacher else None,
         activities=activities, reviewer_id=reviewer[0] if reviewer else None,
+        activated_at=row.activated_at,
     )
 
 

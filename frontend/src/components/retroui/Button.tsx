@@ -6,7 +6,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { Slot } from "@radix-ui/react-slot";
 import {
   Archive, ArrowLeft, ArrowRight, ArrowRightLeft, Calendar, Check,
-  CheckSquare, ClipboardCheck, Copy, Download, Eye, FileUp, Filter,
+  CheckSquare, ClipboardCheck, Copy, Download, ExternalLink, Eye, FileUp, Filter,
   KeyRound, LogIn, Pencil, Plus, RefreshCw, RotateCcw, Save, Send,
   Sparkles, Trash2, Upload, UserPlus, X, type LucideIcon,
 } from "lucide-react";
@@ -85,7 +85,7 @@ function semanticButtonIcon(label: string): LucideIcon | null {
   if (/reset/.test(text)) return RotateCcw;
   if (/save|saving|draft/.test(text)) return Save;
   if (/edit|adjust/.test(text)) return Pencil;
-  if (/view|details|results|classmates|review/.test(text)) return Eye;
+  if (/view|details|results|classmates|review/.test(text)) return ExternalLink;
   if (/download|export/.test(text)) return Download;
   if (/upload|replace file|select files/.test(text)) return Upload;
   if (/import|validat.*csv/.test(text)) return FileUp;
