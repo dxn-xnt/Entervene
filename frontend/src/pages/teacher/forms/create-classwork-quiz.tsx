@@ -50,6 +50,7 @@ import type {
 } from "@/lib/teacher-interventions-api";
 import { Badge } from "@/components/retroui/Badge";
 import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
+import { RemediationTeacherGuidanceBanner } from "./remediation-teacher-guidance-banner";
 
 interface CreateClassworkQuizModalProps {
     selectedType: ClassworkKind;
@@ -943,6 +944,17 @@ export default function CreateClassworkQuizModal({
                                         )}
                                     </div>
                                 )}
+                                {remediationDraft && remediationTarget && (
+                                    <RemediationTeacherGuidanceBanner
+                                        remediationTarget={remediationTarget}
+                                        remediationFocus={remediationFocus}
+                                        remediationGradeTreatment={remediationGradeTreatment}
+                                        remediationOriginalExam={remediationOriginalExam}
+                                        selectedOriginalTarget={selectedOriginalTarget}
+                                        remediationReferences={remediationReferences}
+                                        className="mb-1"
+                                    />
+                                )}
                                 <Field label="Subject" isRequired>
                                     <Select
                                         value={draft.subject_id}
@@ -993,6 +1005,11 @@ export default function CreateClassworkQuizModal({
 
 
                                 <Field label="Instructions">
+                                    {remediationDraft && (
+                                        <p className="text-xs text-muted-foreground -mt-1 mb-1">
+                                            Student Instructions (Visible to student): Provide guidance or instructions for {remediationTarget?.student_name ?? "the student"}.
+                                        </p>
+                                    )}
                                     <textarea
                                         value={draft.instructions}
                                         onChange={(event) =>
@@ -1900,26 +1917,35 @@ export default function CreateClassworkQuizModal({
                                 </div>
 
                                 <Field label="Assign to sections" isRequired>
-                                    <div className="mb-2 flex items-center justify-between">
-                                        {remediationTarget && <p className="rounded border p-2 text-xs">Remedial assignment for <strong>{remediationTarget.student_name}</strong> in {remediationTarget.class_name}. Only this student will receive this quiz.</p>}
-                                        {remediationFocus && <p className="rounded border p-2 text-xs">Evidence focus: {focusGuidance(remediationFocus)}{remediationGradeTreatment === "EXAMINATION" && remediationOriginalExam ? ` Original ${remediationOriginalExam.title} fixes the subtype and ${remediationOriginalExam.total_points} possible points.` : ""}{isGradedWWPT && selectedOriginalTarget ? ` Target: ${selectedOriginalTarget.title} (${selectedOriginalTarget.max_points} pts).` : ""}</p>}
-                                        <div className="flex-1" />
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => {
-                                                setCreateError("");
-                                                setSelectedClassIds(
-                                                    selectedSubjectLoads.map((load) => load.class_id),
-                                                );
-                                            }}
-                                            disabled={isCreating || Boolean(remediationTarget) || selectedSubjectLoads.length === 0}
-                                            className="px-2 py-1 text-xs border border-black rounded shadow-xs"
-                                        >
-                                            Select all
-                                        </Button>
-                                    </div>
+                                    {remediationTarget ? (
+                                        <div className="mb-3 rounded border-2 border-black bg-muted/30 p-3 space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-sm font-bold">Single-Student Remedial Assignment</span>
+                                                <Badge variant="solid" size="sm">Individual Recipient</Badge>
+                                            </div>
+                                            <p className="text-xs text-foreground">
+                                                This quiz is exclusively assigned to <strong>{remediationTarget.student_name}</strong> in section <strong>{remediationTarget.class_name}</strong>. Other students will not receive or see this quiz.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="mb-2 flex items-center justify-end">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                    setCreateError("");
+                                                    setSelectedClassIds(
+                                                        selectedSubjectLoads.map((load) => load.class_id),
+                                                    );
+                                                }}
+                                                disabled={isCreating || selectedSubjectLoads.length === 0}
+                                                className="px-2 py-1 text-xs border border-black rounded shadow-xs"
+                                            >
+                                                Select all
+                                            </Button>
+                                        </div>
+                                    )}
 
                                     <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
                                         {selectedSubjectLoads.map((load) => {

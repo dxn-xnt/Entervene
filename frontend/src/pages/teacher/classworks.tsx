@@ -259,8 +259,7 @@ export default function Classworks() {
           }
           setRemediationReferences(
             workspace.resources.filter(
-              (item) =>
-                item.recommended && selected.has(`${item.kind}:${item.id}`),
+              (item) => selected.has(`${item.kind}:${item.id}`),
             ),
           );
         }
@@ -850,6 +849,7 @@ export default function Classworks() {
                       remediationOriginalExam={remediationOriginalExam}
                       remediationOriginalTargets={remediationOriginalTargets}
                       initialTargetAssignmentId={initialTargetAssignmentId}
+                      remediationReferences={remediationReferences}
                       onClose={closeCreateWizard}
                       onSuccess={async () => {
                         await Promise.all([loadClassworks(), refetchClasses()]);

@@ -13,6 +13,7 @@ from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.models.intervention.Intervention import Intervention
+from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.services.intervention.InterventionCandidateService import OPEN_STATUSES, sync_intervention_for_persisted_prediction
 from app.services.prediction.CurrentPeriodFeatureBuilderService import build_current_period_features_from_records
 from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME
@@ -70,11 +71,21 @@ def reconcile_existing_candidate(db: Session, prediction_id: int, *, apply: bool
         grade = float(raw) if not isinstance(raw, bool) else math.nan
     except (TypeError, ValueError, OverflowError):
         grade = math.nan
-    if not math.isfinite(grade) or not 0 <= grade < 85:
-        return "not_candidate_grade"
     period = db.get(AcademicPeriod, row.source_period_id)
     if period is None or not period.is_active:
         return "inactive_period"
+    threshold_val = 85.0
+    try:
+        res = require_subject_passing_threshold(
+            db,
+            academic_year_id=period.academic_year_id,
+            subject_id=row.subject_id,
+        )
+        threshold_val = float(res.threshold)
+    except Exception:
+        pass
+    if not math.isfinite(grade) or not 0 <= grade < threshold_val:
+        return "not_candidate_grade"
     finalized = db.query(StudentPeriodGrade.period_grade_id).filter_by(
         student_id=row.student_id, class_id=row.class_id, subject_id=row.subject_id,
         academic_period_id=row.source_period_id, is_finalized=True,

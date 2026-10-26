@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from "react";
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/teacher/button";
@@ -26,6 +26,8 @@ import {
   saveRemediationPlan,
   generateRemediationAdvisory,
   previewScoreAdjustment,
+  projectSubjectGrade,
+  type SubjectGradeProjectionResponse,
   type ClassworkScorePreview,
   type RemediationFormat,
   type RemediationPlan,
@@ -39,6 +41,7 @@ import {
   type TeacherInterventionSummary,
   type OriginalExamination,
 } from "@/lib/teacher-interventions-api";
+import { SubjectGradeProjectionCard } from "./subject-grade-projection-card";
 import { toTitleCase } from "@/lib/formatters";
 import Field from "@/components/admin/classes/fields/Field";
 import IconContainer from "@/components/icon-container";
@@ -72,6 +75,18 @@ const componentLabel = (value: string | null | undefined) =>
 
 const isGraded = (choice: RemediationFormat | null) =>
   choice === "QUIZ" || choice === "CLASSWORK";
+
+const validateCap = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return "Score adjustment cap is required.";
+  const parsed = Number(trimmed);
+  if (Number.isNaN(parsed)) return "Cap must be a valid number.";
+  if (parsed < 0) return "Cap cannot be negative.";
+  if (parsed >= 100) {
+    return "Full Replacement (100%) is not permitted under remediation policy. Cap must be less than 100%.";
+  }
+  return null;
+};
 
 const isInstructionalResource = (item: RemediationResource) =>
   item.kind === "CLASSWORK" &&
@@ -184,6 +199,11 @@ const InterventionSupportMaterials = forwardRef<
   const [capInput, setCapInput] = useState<string>("75");
   const [capError, setCapError] = useState<string | null>(null);
   const [scorePreviews, setScorePreviews] = useState<ClassworkScorePreview[]>([]);
+  const [projectionResponse, setProjectionResponse] = useState<SubjectGradeProjectionResponse | null>(null);
+  const [projectionLoading, setProjectionLoading] = useState(false);
+  const [projectionError, setProjectionError] = useState<string | null>(null);
+  const projectionRequestRef = useRef(0);
+  const lastRequestedKey = useRef("");
   const [recommendationPreviewReady, setRecommendationPreviewReady] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [working, setWorking] = useState(false);
@@ -193,24 +213,6 @@ const InterventionSupportMaterials = forwardRef<
   const advisoryAttemptedRef = useRef<Set<number>>(new Set());
   const advisoryInFlightRef = useRef<Set<number>>(new Set());
   const previousPageRef = useRef(page);
-
-  const validateCap = (value: string): string | null => {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return "Score adjustment cap is required.";
-    }
-    const parsed = Number(trimmed);
-    if (Number.isNaN(parsed)) {
-      return "Cap must be a valid number.";
-    }
-    if (parsed < 0) {
-      return "Cap cannot be negative.";
-    }
-    if (parsed >= 100) {
-      return "Full Replacement (100%) is not permitted under remediation policy. Cap must be less than 100%.";
-    }
-    return null;
-  };
 
   const setNotice = (message: string) => {
     if (message) toast.success({ title: message });
@@ -536,7 +538,13 @@ const InterventionSupportMaterials = forwardRef<
   }, [plan.original_exam_assignment_id, scorePreviews, selectedActivityIds]);
 
   const recommendedAssignmentId = useMemo(() => {
-    if (!recommendationPreviewReady || plan.grade_treatment === "PRACTICE_ONLY") {
+    if (plan.grade_treatment === "PRACTICE_ONLY") {
+      return null;
+    }
+    if (projectionResponse?.recommended_target_assignment_id != null) {
+      return projectionResponse.recommended_target_assignment_id;
+    }
+    if (!recommendationPreviewReady) {
       return null;
     }
     const eligibleIds = new Set(
@@ -560,10 +568,86 @@ const InterventionSupportMaterials = forwardRef<
   }, [
     originalExams,
     plan.grade_treatment,
+    projectionResponse?.recommended_target_assignment_id,
     recommendationPreviewReady,
     scorePreviews,
     treatmentActivities,
   ]);
+
+  const fetchProjection = useCallback((targetIds?: number[], force = false) => {
+    if (
+      !plan.grade_treatment ||
+      plan.grade_treatment === "PRACTICE_ONLY" ||
+      plan.grade_treatment === "EXAMINATION"
+    ) {
+      setProjectionResponse(null);
+      setProjectionError(null);
+      setProjectionLoading(false);
+      lastRequestedKey.current = "";
+      return;
+    }
+
+    const currentCapError = validateCap(capInput);
+    const parsedCap = Number(capInput);
+    const effectiveCap = !currentCapError && Number.isFinite(parsedCap) ? parsedCap : (plan.score_adjustment_cap ?? 75);
+
+    const ids = targetIds ?? selectedActivityIds;
+    const reqKey = `${interventionId}:${plan.grade_treatment}:${effectiveCap}:${ids.slice().sort().join(",")}`;
+    if (!force && reqKey === lastRequestedKey.current) {
+      return;
+    }
+    lastRequestedKey.current = reqKey;
+    const reqId = ++projectionRequestRef.current;
+    setProjectionLoading(true);
+    setProjectionError(null);
+
+    projectSubjectGrade(interventionId, {
+      target_assignment_ids: ids,
+      score_adjustment_cap: effectiveCap,
+    })
+      .then((res) => {
+        if (reqId === projectionRequestRef.current) {
+          setProjectionResponse(res);
+        }
+      })
+      .catch((err) => {
+        if (reqId === projectionRequestRef.current) {
+          lastRequestedKey.current = "";
+          setProjectionError(
+            err instanceof Error ? err.message : "Unable to load subject grade projection."
+          );
+        }
+      })
+      .finally(() => {
+        if (reqId === projectionRequestRef.current) {
+          setProjectionLoading(false);
+        }
+      });
+  }, [capInput, interventionId, plan.grade_treatment, plan.score_adjustment_cap, selectedActivityIds]);
+
+  useEffect(() => {
+    if (
+      !plan.grade_treatment ||
+      plan.grade_treatment === "PRACTICE_ONLY" ||
+      plan.grade_treatment === "EXAMINATION"
+    ) {
+      setProjectionResponse(null);
+      setProjectionError(null);
+      setProjectionLoading(false);
+      lastRequestedKey.current = "";
+      return;
+    }
+
+    const currentCapError = validateCap(capInput);
+    const parsedCap = Number(capInput);
+    const effectiveCap = !currentCapError && Number.isFinite(parsedCap) ? parsedCap : (plan.score_adjustment_cap ?? 75);
+
+    const reqKey = `${interventionId}:${plan.grade_treatment}:${effectiveCap}:${selectedActivityIds.slice().sort().join(",")}`;
+    if (reqKey === lastRequestedKey.current) {
+      return;
+    }
+    fetchProjection();
+  }, [capInput, fetchProjection, interventionId, plan.grade_treatment, plan.score_adjustment_cap, selectedActivityIds]);
 
   useEffect(() => {
     if (
@@ -747,6 +831,7 @@ const InterventionSupportMaterials = forwardRef<
         setCapInput(String(result.plan.score_adjustment_cap));
         setCapError(null);
       }
+      fetchProjection(result.plan.target_assignment_ids ?? selectedActivityIds, true);
       toast.success({ title: "Adjustments saved successfully." });
       return true;
     } catch (cause) {
@@ -818,7 +903,9 @@ const InterventionSupportMaterials = forwardRef<
     if (isGraded(plan.teacher_choice)) {
       params.set(
         "instructions",
-        "Review the Intervention evidence and selected planning references. Assign this activity only to the named student."
+        plan.teacher_choice === "QUIZ"
+          ? "Please review the referenced study materials and complete this practice quiz to reinforce your understanding and recover points."
+          : "Please review the referenced reading materials and complete the tasks described in this activity to demonstrate your understanding."
       );
     }
     navigate(
@@ -1698,19 +1785,21 @@ const InterventionSupportMaterials = forwardRef<
                     </Dialog.Title>
                   </Dialog.Header>
                   <div className="flex flex-col gap-4 overflow-y-auto p-4 pr-3">
-                    <Card className="flex flex-col gap-1 border-2! bg-card p-3 w-full">
-                      <div className="flex flex-row items-center justify-between">
-                        <Label className="text-base font-semibold">
-                          Projected Grade Preview
-                        </Label>
-                        <Badge variant="outline" size="sm">
-                          Unavailable
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Preview is pending official backend grade calculation. Subject grade projections are not calculated in-browser.
-                      </p>
-                    </Card>
+                    <SubjectGradeProjectionCard
+                      projection={projectionResponse}
+                      loading={projectionLoading}
+                      error={projectionError}
+                      selectedTargetIds={selectedActivityIds}
+                      capPercentage={
+                        projectionResponse?.target_projections?.[0]?.cap_percentage ??
+                        projectionResponse?.eligible_target_gains?.[0]?.cap_percentage ??
+                        plan.score_adjustment_cap ??
+                        75
+                      }
+                      rawPreviews={selectedScorePreviews}
+                      gradeTreatment={plan.grade_treatment}
+                      onRetry={() => fetchProjection(undefined, true)}
+                    />
 
                     {plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY" && (
                       <div className="flex flex-col gap-2 p-3 rounded border-2 border-border bg-card">
@@ -1761,11 +1850,27 @@ const InterventionSupportMaterials = forwardRef<
                             Default: 75% · Prohibits 100% full replacement
                           </span>
                         </div>
-                        {capError && (
+                        {capError ? (
                           <p className="text-xs text-destructive font-medium" role="alert">
                             {capError}
                           </p>
-                        )}
+                        ) : Number.isFinite(parseFloat(capInput)) &&
+                          parseFloat(capInput) !==
+                            Number(
+                              projectionResponse?.target_projections?.[0]?.cap_percentage ??
+                              projectionResponse?.eligible_target_gains?.[0]?.cap_percentage ??
+                              plan.score_adjustment_cap ??
+                              75
+                            ) ? (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Unsaved cap change ({capInput}%). The projection above reflects the saved{" "}
+                            {projectionResponse?.target_projections?.[0]?.cap_percentage ??
+                              projectionResponse?.eligible_target_gains?.[0]?.cap_percentage ??
+                              plan.score_adjustment_cap ??
+                              75}
+                            % cap until adjustments are saved.
+                          </p>
+                        ) : null}
                       </div>
                     )}
 

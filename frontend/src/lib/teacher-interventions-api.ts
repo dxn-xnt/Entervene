@@ -27,6 +27,7 @@ export interface TeacherInterventionSummary {
     external_assessment_detail_status?: string;
     covered_competencies_for_teacher_review_count?: number;
   };
+  passing_threshold?: number | null;
 }
 
 export interface DiagnosisSnapshot {
@@ -202,6 +203,99 @@ export const previewScoreAdjustment = (
   }
 ) => read<ScoreAdjustmentPreviewResponse>(`${base}/${id}/remediation/score-preview`, "POST", payload);
 
+export interface ProjectionUnavailableReason {
+  code: string;
+  message: string;
+  assignment_id?: number | null;
+}
+
+export interface PassingThresholdPolicy {
+  academic_year_id: number;
+  subject_id?: number | null;
+  grading_template_id?: number | null;
+  source: string;
+  policy_version?: string | null;
+  revision?: number | null;
+  captured_at?: string | null;
+}
+
+export interface EligibleTargetGain {
+  assignment_id: number;
+  title: string;
+  component: "WRITTEN_WORK" | "PERFORMANCE_TASK";
+  original_score: number;
+  current_effective_score: number;
+  max_points: number;
+  cap_percentage: number;
+  maximum_hypothetical_effective_score: number;
+  possible_score_gain: number;
+}
+
+export interface TargetProjection {
+  assignment_id: number;
+  title?: string | null;
+  component?: "WRITTEN_WORK" | "PERFORMANCE_TASK" | null;
+  original_score?: number | null;
+  current_effective_score?: number | null;
+  max_points?: number | null;
+  cap_percentage?: number | null;
+  maximum_hypothetical_effective_score?: number | null;
+  possible_score_gain?: number | null;
+  applied: boolean;
+  projected_initial_grade?: number | null;
+  projected_subject_grade?: number | null;
+  step_subject_grade_improvement?: number | null;
+  possible_grade_improvement?: number | null;
+  reaches_passing_threshold?: boolean | null;
+  unavailable_reasons: ProjectionUnavailableReason[];
+}
+
+export interface AIMidtermTargetEstimate {
+  assignment_id: number;
+  maximum_hypothetical_effective_score: number;
+  hypothetical_predicted_term_grade: number;
+  step_estimated_difference: number;
+  estimated_difference_from_baseline: number;
+}
+
+export interface AIMidtermWhatIf {
+  status: "AVAILABLE" | "UNAVAILABLE";
+  estimate_kind: "AI_MIDTERM_WHAT_IF_ESTIMATE";
+  is_official_grade: false;
+  is_guaranteed: false;
+  model_version_id?: number | null;
+  model_name?: string | null;
+  prediction_purpose: "CURRENT_TERM_FINAL_GRADE_PROJECTION";
+  evidence_basis: "LIVE_ACTUAL_EVIDENCE_WITH_EPHEMERAL_CAPPED_WW_PT_OVERRIDES";
+  baseline_predicted_term_grade?: number | null;
+  readiness: Record<string, unknown>;
+  target_estimates: AIMidtermTargetEstimate[];
+  unavailable_reasons: ProjectionUnavailableReason[];
+  limitations: string[];
+}
+
+export interface SubjectGradeProjectionResponse {
+  status: "AVAILABLE" | "UNAVAILABLE" | "FINALIZED";
+  grade_representation: "TRANSMUTED_TERM_GRADE" | "FINAL_PERIOD_GRADE";
+  current_initial_grade?: number | null;
+  current_subject_grade?: number | null;
+  passing_threshold?: number | null;
+  passing_threshold_policy?: PassingThresholdPolicy | null;
+  current_reaches_passing_threshold?: boolean | null;
+  target_projections: TargetProjection[];
+  eligible_target_gains: EligibleTargetGain[];
+  additional_eligible_targets_have_positive_improvement: boolean;
+  recommended_target_assignment_id?: number | null;
+  assumptions: string[];
+  unavailable_reasons: ProjectionUnavailableReason[];
+  ai_midterm_what_if: AIMidtermWhatIf;
+}
+
+export const projectSubjectGrade = (
+  id: number,
+  payload: { target_assignment_ids: number[]; score_adjustment_cap?: number }
+) => read<SubjectGradeProjectionResponse>(`${base}/${id}/remediation/subject-grade-projection`, "POST", payload);
+
 export function matchingCandidate(prediction: DevelopmentCurrentTermListItem, candidates: TeacherInterventionSummary[]): TeacherInterventionSummary | undefined {
   return candidates.find((candidate) => candidate.status === "CANDIDATE"
     && candidate.student_id === prediction.student_id
@@ -211,5 +305,5 @@ export function matchingCandidate(prediction: DevelopmentCurrentTermListItem, ca
     && candidate.source_prediction_revision <= prediction.revision
     && prediction.readiness_status === "READY"
     && prediction.projected_final_term_grade !== null
-    && prediction.projected_final_term_grade < 85);
+    && prediction.projected_final_term_grade < (candidate.passing_threshold ?? 85));
 }

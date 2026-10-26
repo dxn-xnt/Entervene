@@ -249,7 +249,7 @@ it("locks attempts to 1, matches target points, and submits original_classwork_a
   fireEvent.click(screen.getByRole("button", { name: /Create manually/i }));
 
   // Displays original target and Recommended badge
-  expect(screen.getByText("Original Seatwork 1")).toBeTruthy();
+  expect(screen.getAllByText("Original Seatwork 1").length).toBeGreaterThanOrEqual(1);
   expect(screen.getByText("Recommended")).toBeTruthy();
 
   // Total points locked to target max points (1)

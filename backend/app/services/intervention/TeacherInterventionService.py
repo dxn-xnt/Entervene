@@ -9,10 +9,12 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.Config import settings
+from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.StudentCLass import StudentClass
 from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.models.intervention.Intervention import Intervention
+from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.schemas.TeacherIntervention import (
     TeacherInterventionDetail, TeacherInterventionList, TeacherInterventionSummary, TeacherResolvedInterventionDetail,
 )
@@ -57,6 +59,18 @@ def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
     source = _source(db, row)
     diagnosis = row.diagnosis_snapshot if isinstance(row.diagnosis_snapshot, dict) else {}
     grade = source.evidence_snapshot.get("projected_final_term_grade_raw") if isinstance(source.evidence_snapshot, dict) else None
+    threshold_val = None
+    try:
+        period = row.academic_period or db.get(AcademicPeriod, row.academic_period_id)
+        if period is not None:
+            res = require_subject_passing_threshold(
+                db,
+                academic_year_id=period.academic_year_id,
+                subject_id=row.subject_id,
+            )
+            threshold_val = float(res.threshold)
+    except Exception:
+        threshold_val = None
     return TeacherInterventionSummary(
         intervention_id=row.intervention_id,
         student_id=row.student_id,
@@ -79,6 +93,7 @@ def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
             "external_assessment_detail_status": diagnosis.get("external_assessment_detail_status"),
             "covered_competencies_for_teacher_review_count": len(diagnosis.get("covered_competencies_for_teacher_review") or []),
         },
+        passing_threshold=threshold_val,
     )
 
 
@@ -207,12 +222,19 @@ def activate_teacher_candidate(db: Session, staff_id: str, intervention_id: int)
         if not math.isfinite(grade):
             outcome["error"] = "Current corrected prediction grade is invalid"
             return
-        if grade >= 85:
+        period = transaction.get(AcademicPeriod, scope[3])
+        threshold_resolution = require_subject_passing_threshold(
+            transaction,
+            academic_year_id=period.academic_year_id if period else None,
+            subject_id=scope[2],
+        )
+        passing_threshold = float(threshold_resolution.threshold)
+        if grade >= passing_threshold:
             sync_intervention_for_persisted_prediction(
                 transaction, latest, student_id=scope[0], class_id=scope[1],
                 subject_id=scope[2], academic_period_id=scope[3],
             )
-            outcome["error"] = "Current prediction improved to at least 85"
+            outcome["error"] = f"Current prediction improved to at least {passing_threshold:g}"
             return
         row.status = "ACTIVE"
         row.activated_at = datetime.now(timezone.utc)
