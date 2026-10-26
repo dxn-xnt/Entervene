@@ -33,24 +33,29 @@ def test_plan_requires_active_scope_and_validates_selected_resources(candidate_c
                  created_by_staff_id=_staff(ctx), is_published=False)
     other = Lesson(title="Private other teacher", subject_id=ctx["subject"].subject_id,
                    created_by_staff_id=_other_staff(ctx).staff_id, is_published=False)
-    reading = Classwork(title="Uploaded reading", classwork_type="READING",
+    reading = Classwork(title="Uploaded reading", classwork_type="READING", is_graded=False,
                         subject_id=ctx["subject"].subject_id, created_by_staff_id=_staff(ctx))
     db.add_all([own, other, reading]); db.commit()
     listing = get_workspace(db, _staff(ctx), _id(ctx))["resources"]
     labels = {(r["kind"], r["title"]) for r in listing}
-    assert ("LESSON", "Owned review") in labels
+    # Lessons are excluded from supporting resources; only non-graded readings are included
+    assert ("LESSON", "Owned review") not in labels
     assert ("CLASSWORK", "Uploaded reading") in labels
     assert ("LESSON", "Private other teacher") not in labels
     assert all(r["ai_read"] == "METADATA_ONLY" for r in listing)
     assert next(r for r in listing if r["title"] == "Uploaded reading")["access"] == "PLANNING_ONLY"
-    with pytest.raises(HTTPException) as denied:
+    with pytest.raises(HTTPException) as denied_lesson:
+        save_plan(db, _staff(ctx), _id(ctx), PlanUpdate(
+            teacher_choice="QUIZ", selected_resources=[{"kind": "LESSON", "id": own.lesson_id}]))
+    assert denied_lesson.value.status_code == 422
+    with pytest.raises(HTTPException) as denied_other:
         save_plan(db, _staff(ctx), _id(ctx), PlanUpdate(
             teacher_choice="QUIZ", selected_resources=[{"kind": "LESSON", "id": other.lesson_id}]))
-    assert denied.value.status_code == 422
+    assert denied_other.value.status_code == 422
     saved = save_plan(db, _staff(ctx), _id(ctx), PlanUpdate(
-        teacher_choice="CLASSWORK", selected_resources=[{"kind": "LESSON", "id": own.lesson_id}]))
+        teacher_choice="CLASSWORK", selected_resources=[{"kind": "CLASSWORK", "id": reading.classwork_id}]))
     assert saved["plan"]["teacher_choice"] == "CLASSWORK"
-    assert saved["plan"]["selected_resources"] == [{"kind": "LESSON", "id": own.lesson_id}]
+    assert saved["plan"]["selected_resources"] == [{"kind": "CLASSWORK", "id": reading.classwork_id}]
     assert db.get(Intervention, _id(ctx)).status == "ACTIVE"
     assert db.query(ClassworkAssignment).filter_by(classwork_id=reading.classwork_id).count() == 0
     with pytest.raises(HTTPException) as other_teacher:
@@ -70,7 +75,7 @@ def test_advisory_uses_provider_and_keeps_teacher_choice(candidate_context, monk
     monkeypatch.setattr(settings, "groq_api_key", "test-key")
     async def fake(prompt, system_prompt, **kwargs):
         assert actor.get() == _staff(ctx)
-        assert "METADATA_ONLY" not in prompt or "selected_material_metadata" in prompt
+        assert set(json.loads(prompt)) == {"evidence", "deterministic_focus"}
         assert kwargs["json_output"] is True
         return json.dumps({"recommended_format": "QUIZ", "reason": "Focused practice may support the measured component."})
     monkeypatch.setattr("app.services.ai.Provider.generate_text", fake)
@@ -87,9 +92,9 @@ def test_advisory_uses_provider_and_keeps_teacher_choice(candidate_context, monk
 def test_changing_selected_resources_invalidates_saved_advisory(candidate_context):
     ctx = candidate_context; db = ctx["db"]
     _activate(ctx)
-    own = Lesson(title="Owned review", subject_id=ctx["subject"].subject_id,
-                 created_by_staff_id=_staff(ctx), is_published=False)
-    db.add(own); db.commit()
+    reading = Classwork(title="Reading review", classwork_type="READING", is_graded=False,
+                        subject_id=ctx["subject"].subject_id, created_by_staff_id=_staff(ctx))
+    db.add(reading); db.commit()
     row = db.get(Intervention, _id(ctx))
     row.remediation_plan = {
         "teacher_choice": "CLASSWORK",
@@ -101,11 +106,11 @@ def test_changing_selected_resources_invalidates_saved_advisory(candidate_contex
 
     saved = save_plan(db, _staff(ctx), _id(ctx), PlanUpdate(
         teacher_choice="CLASSWORK",
-        selected_resources=[{"kind": "LESSON", "id": own.lesson_id}],
+        selected_resources=[{"kind": "CLASSWORK", "id": reading.classwork_id}],
     ))
 
     assert saved["plan"]["teacher_choice"] == "CLASSWORK"
-    assert saved["plan"]["selected_resources"] == [{"kind": "LESSON", "id": own.lesson_id}]
+    assert saved["plan"]["selected_resources"] == [{"kind": "CLASSWORK", "id": reading.classwork_id}]
     assert saved["plan"]["ai_suggestion"] is None
 
 
@@ -128,6 +133,26 @@ def test_advisory_rejects_unverified_weakness_claim(candidate_context, monkeypat
         asyncio.run(generate_advisory(ctx["db"], _staff(ctx), _id(ctx)))
     assert exc.value.status_code == 502
     assert ctx["db"].get(Intervention, _id(ctx)).remediation_plan is None
+
+
+def test_advisory_allows_verified_component_level_method_reason(candidate_context, monkeypatch):
+    ctx = candidate_context; _activate(ctx)
+    monkeypatch.setattr(settings, "groq_api_key", "test-key")
+    focus = get_workspace(ctx["db"], _staff(ctx), _id(ctx))["focus"]
+    assert focus["component"] is not None
+    component = focus["component"].replace("_", " ").title()
+
+    async def component_only(*_args, **_kwargs):
+        return json.dumps({
+            "recommended_format": "CLASSWORK",
+            "reason": f"Structured practice supports the verified weakest {component} grading component.",
+        })
+
+    monkeypatch.setattr("app.services.ai.Provider.generate_text", component_only)
+    result = asyncio.run(generate_advisory(ctx["db"], _staff(ctx), _id(ctx)))
+
+    assert result["plan"]["ai_suggestion"]["recommended_format"] == "CLASSWORK"
+    assert result["plan"]["teacher_choice"] is None
 
 
 def test_advisory_cannot_invent_exam_subtype(candidate_context, monkeypatch):
@@ -209,22 +234,49 @@ def test_resources_includes_lessons_and_readings_and_excludes_graded_assessments
     res_list = get_workspace(db, staff_id, _id(ctx))["resources"]
     res_titles = {r["title"]: r for r in res_list}
 
-    # Lessons and readings are present
-    assert "Matching Lesson Review" in res_titles
-    assert res_titles["Matching Lesson Review"]["kind"] == "LESSON"
-    assert res_titles["Matching Lesson Review"]["is_graded"] is False
-    if focus_comp_id:
-        assert res_titles["Matching Lesson Review"]["recommended"] is True
+    # Lessons are excluded from study resources; only non-graded readings are included
+    assert "Matching Lesson Review" not in res_titles
 
     assert "Instructional Reading Handout" in res_titles
     assert res_titles["Instructional Reading Handout"]["kind"] == "CLASSWORK"
+    assert res_titles["Instructional Reading Handout"]["classwork_type"] == "READING"
     assert res_titles["Instructional Reading Handout"]["is_graded"] is False
 
     # Graded quiz and assignment are NOT included as study resources
     assert "Chapter 1 Graded Quiz" not in res_titles
     assert "Graded Performance Homework" not in res_titles
 
-    # Selecting the lesson and saving succeeds
+    # Legacy selections (including historical lesson references) remain untouched until the teacher explicitly saves.
+    legacy_resources = [
+        {"kind": "LESSON", "id": 7},
+        {"kind": "CLASSWORK", "id": 6},
+        {"kind": "CLASSWORK", "id": 4},
+        {"kind": "CLASSWORK", "id": 13},
+    ]
+    row = db.get(Intervention, _id(ctx))
+    row.remediation_plan = {
+        "teacher_choice": "CLASSWORK",
+        "grade_treatment": "PRACTICE_ONLY",
+        "selected_resources": legacy_resources,
+    }
+    db.commit()
+    assert get_workspace(db, staff_id, _id(ctx))["plan"]["selected_resources"] == legacy_resources
+
+    # Attempting to save new Lesson selection must be rejected with 422
+    with pytest.raises(HTTPException) as lesson_rejected:
+        save_plan(
+            db,
+            staff_id,
+            _id(ctx),
+            PlanUpdate(
+                teacher_choice="CLASSWORK",
+                grade_treatment="PRACTICE_ONLY",
+                selected_resources=[{"kind": "LESSON", "id": matching_lesson.lesson_id}],
+            ),
+        )
+    assert lesson_rejected.value.status_code == 422
+
+    # Explicitly saving current eligible reading selections replaces stale references.
     saved = save_plan(
         db,
         staff_id,
@@ -232,7 +284,47 @@ def test_resources_includes_lessons_and_readings_and_excludes_graded_assessments
         PlanUpdate(
             teacher_choice="CLASSWORK",
             grade_treatment="PRACTICE_ONLY",
-            selected_resources=[{"kind": "LESSON", "id": matching_lesson.lesson_id}],
+            selected_resources=[
+                {"kind": "CLASSWORK", "id": reading.classwork_id},
+            ],
         ),
     )
-    assert saved["plan"]["selected_resources"] == [{"kind": "LESSON", "id": matching_lesson.lesson_id}]
+    expected_resources = [
+        {"kind": "CLASSWORK", "id": reading.classwork_id},
+    ]
+    assert saved["plan"]["selected_resources"] == expected_resources
+    assert get_workspace(db, staff_id, _id(ctx))["plan"]["selected_resources"] == expected_resources
+
+
+def test_plan_rejects_evidence_only_and_graded_resources(candidate_context):
+    ctx = candidate_context
+    db = ctx["db"]
+    _activate(ctx)
+
+    invalid_resources = [
+        {
+            "kind": "CLASSWORK", "id": 5, "classwork_type": "ACTIVITY",
+            "is_graded": True, "match_level": "SOURCE_ACTIVITY",
+        },
+        {
+            "kind": "CLASSWORK", "id": 4, "classwork_type": "QUIZ",
+            "is_graded": True, "match_level": "COMPETENCY",
+        },
+    ]
+    for invalid in invalid_resources:
+        with patch(
+            "app.services.intervention.InterventionRemediationService.resources",
+            return_value=[invalid],
+        ):
+            with pytest.raises(HTTPException) as denied:
+                save_plan(
+                    db,
+                    _staff(ctx),
+                    _id(ctx),
+                    PlanUpdate(
+                        teacher_choice="EXISTING_MATERIAL_ONLY",
+                        selected_resources=[{"kind": invalid["kind"], "id": invalid["id"]}],
+                    ),
+                )
+        assert denied.value.status_code == 422
+        assert denied.value.detail == "Selected material is unavailable in this teaching scope"

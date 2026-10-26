@@ -26,6 +26,8 @@ from app.services.grading.ExaminationCalculator import (
     ExaminationObservation,
     compute_examination_component,
 )
+from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
+from app.services.grading.RemedialClassworkResolver import resolve_student_classwork_scores
 from app.services.student_record.StudentRecordService import resolve_subject_grading_weights
 from app.services.grading.RemedialExamination import effective_exam_scores
 
@@ -264,13 +266,56 @@ def build_current_period_features_from_records(
     domain_warnings: list[dict[str, Any]] = []
 
     rows, unresolved = _classwork_rows(db, student_id, class_id, subject_id, source_period_id, cutoff_at)
+    exam_rows = [
+        (asgn, cw, sub, unres) for asgn, cw, sub, unres in rows
+        if getattr(cw, "classwork_category", None) == "EXAMS"
+        or getattr(cw, "exam_subtype", None) is not None
+        or getattr(asgn, "original_exam_assignment_id", None) is not None
+    ]
     effective_exams = effective_exam_scores(
-        [assignment for assignment, _, _, _ in rows],
+        [assignment for assignment, _, _, _ in exam_rows],
         {assignment.classwork_assignment_id: _to_float(submission.grade) if submission and submission.grade is not None else None
-         for assignment, _, submission, _ in rows if assignment.recipient_student_id in (None, student_id)},
+         for assignment, _, submission, _ in exam_rows if assignment.recipient_student_id in (None, student_id)},
     )
+
+    asgn_ids = [assignment.classwork_assignment_id for assignment, _, _, _ in rows]
+    links: list[RemediationAssignmentLink] = []
+    if asgn_ids:
+        links = (
+            db.query(RemediationAssignmentLink)
+            .filter(
+                RemediationAssignmentLink.student_id == student_id,
+                (
+                    RemediationAssignmentLink.original_assignment_id.in_(asgn_ids)
+                    | RemediationAssignmentLink.remediation_assignment_id.in_(asgn_ids)
+                ),
+            )
+            .all()
+        )
+    if cutoff_at is not None:
+        cutoff_utc = _as_utc(cutoff_at)
+        links = [
+            link for link in links
+            if link.created_at is None or _as_utc(link.created_at) <= cutoff_utc
+        ]
+
+    resolved_cw = resolve_student_classwork_scores(
+        student_id=student_id,
+        assignments=[assignment for assignment, _, _, _ in rows],
+        submissions={
+            assignment.classwork_assignment_id: submission
+            for assignment, _, submission, _ in rows
+            if submission is not None
+        },
+        links=links,
+    )
+
     for _assignment, classwork, submission, is_unresolved in rows:
-        if _assignment.recipient_student_id not in (None, student_id) or _assignment.original_exam_assignment_id is not None:
+        if (
+            _assignment.recipient_student_id not in (None, student_id)
+            or _assignment.original_exam_assignment_id is not None
+            or _assignment.classwork_assignment_id in resolved_cw.remedial_assignment_ids
+        ):
             continue
         component = classify_classwork_component(
             classwork.classwork_type,
@@ -281,8 +326,12 @@ def build_current_period_features_from_records(
             domain_warnings.append({"code": "UNRESOLVED_SUBMISSION", "classwork_id": classwork.classwork_id})
             continue
         score = _to_float(submission.grade) if submission and submission.grade is not None else None
-        if _assignment.classwork_assignment_id in effective_exams:
-            score = effective_exams[_assignment.classwork_assignment_id]
+        if component in (CanonicalGradingComponent.WRITTEN_WORK, CanonicalGradingComponent.PERFORMANCE_TASK):
+            if _assignment.classwork_assignment_id in resolved_cw.effective_scores_float:
+                score = resolved_cw.effective_scores_float[_assignment.classwork_assignment_id]
+        else:
+            if _assignment.classwork_assignment_id in effective_exams:
+                score = effective_exams[_assignment.classwork_assignment_id]
         possible = _to_float(classwork.total_points)
         if component == CanonicalGradingComponent.WRITTEN_WORK:
             _add_score(accumulators["ww"], score, possible)
@@ -428,6 +477,24 @@ def build_current_period_features_from_records(
         "domain_warnings": domain_warnings,
         "evidence_summary": {
             "cutoff_at": cutoff_at.isoformat() if cutoff_at else None,
+            "remedial_classworks": [
+                {
+                    "original_assignment_id": audit.original_assignment_id,
+                    "remediation_assignment_id": audit.remediation_assignment_id,
+                    "component": audit.component,
+                    "score_adjustment_cap": float(audit.score_adjustment_cap),
+                    "original_score": float(audit.original_raw_score) if audit.original_raw_score is not None else None,
+                    "remediation_score": float(audit.remediation_raw_score) if audit.remediation_raw_score is not None else None,
+                    "effective_score": float(audit.effective_score) if audit.effective_score is not None else None,
+                    "total_points": float(audit.max_points) if audit.max_points is not None else None,
+                    "cap_score": float(audit.cap_score) if audit.cap_score is not None else None,
+                    "was_adjusted": audit.was_adjusted,
+                    "was_capped": audit.was_capped,
+                    "is_completed": audit.is_completed,
+                    "status": audit.status,
+                }
+                for audit in resolved_cw.audit_records
+            ],
             "examination": {
                 "examination_percent": exam_result.examination_percent if exam_observations else qa.percent if qa.count else None,
                 "subtype_percentages": exam_result.subtype_percentages,

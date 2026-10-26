@@ -33,7 +33,7 @@ export interface DiagnosisSnapshot {
   evidence_cutoff_at?: string;
   weakest_supported_components?: string[];
   components?: Record<string, { evidence_state: string; percent: number | null; model_observation_count?: number }>;
-  supporting_activities?: Array<{ classwork_id: number; title: string; component: string; score: number; possible_score: number; percent: number }>;
+  supporting_activities?: Array<{ classwork_id: number; classwork_assignment_id?: number; title: string; component: string; score: number; possible_score: number; percent: number }>;
   lowest_supported_competencies?: Array<{ competency_id: number; competency_code: string; competency_statement: string; percent: number; score: number; possible_score: number; supporting_scores: Array<{ source_type: string; activity_title: string; quiz_question_id?: number; lesson_title?: string; score?: number; possible_score?: number }> }>;
   manual_assessment_coverage?: Array<{ classwork_id: number; title: string; component: string; score: number; possible_score: number; percent: number; in_weakest_supported_component?: boolean; covered_lessons: Array<{ lesson_id: number; title: string }>; covered_competencies: Array<{ competency_id: number; competency_code: string; competency_statement: string }>; score_scope: string; coverage_provenance: string }>;
   covered_competencies_for_teacher_review?: Array<{ competency_id: number; competency_code: string; competency_statement: string; ranking_status: string; assessment_classwork_ids: number[] }>;
@@ -156,6 +156,16 @@ export interface RemediationPlan {
   ai_suggestion: null | { recommended_format: RemediationFormat; reason: string; focus: Array<{ competency: string }>; evidence_used: Record<string, unknown> };
 }
 export interface OriginalExamination { assignment_id: number; title: string; subtype: "SUMMATIVE_1" | "SUMMATIVE_2" | "TERM_EXAM"; score: number; total_points: number }
+export interface RemediationClassworkTarget {
+  assignment_id: number;
+  classwork_id: number;
+  title: string;
+  component: "WRITTEN_WORK" | "PERFORMANCE_TASK";
+  original_score: number | null;
+  max_points: number;
+  percent?: number | null;
+  is_recommended?: boolean;
+}
 export interface ClassworkScorePreview {
   assignment_id: number;
   title?: string | null;

@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from app.models.academic.StudentCLass import StudentClass
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
 from app.models.intervention.Intervention import Intervention
 from app.models.notifications.Notification import Notification
 from app.models.auth.UserAccount import UserAccount
@@ -20,6 +21,7 @@ from app.services.intervention.InterventionRemediationService import PlanUpdate,
 from tests.test_classwork_submission_authorization import authz_context, _act_as, _bearer
 from tests.test_classwork_submission_authorization import _valid_quiz_payload
 from tests.test_intervention_support_materials import _activate
+from tests.test_remediation_target_persistence import _make_classwork_target
 from tests.test_teacher_intervention_review import candidate_context, _id, _staff
 from tests.test_current_period_live_feature_builder import current_period_context
 from tests.test_quiz_attempt_api import quiz_attempt_context
@@ -82,8 +84,13 @@ def test_intervention_publication_scope_and_retry(candidate_context):
     with pytest.raises(HTTPException) as missing_treatment:
         asyncio.run(create_classwork_wizard_record(**kwargs))
     assert missing_treatment.value.status_code == 400
-    save_plan(db, _staff(c), _id(c), PlanUpdate(teacher_choice="CLASSWORK", grade_treatment="WRITTEN_WORK"))
+    target = _make_classwork_target(c, "Original Target", points=10.0, score=5.0)
+    save_plan(db, _staff(c), _id(c), PlanUpdate(
+        teacher_choice="CLASSWORK", grade_treatment="WRITTEN_WORK",
+        target_assignment_ids=[target.classwork_assignment_id],
+    ))
     kwargs["classwork_category"] = "PERFORMANCE_TASK"
+    kwargs["original_classwork_assignment_id"] = target.classwork_assignment_id
     with pytest.raises(HTTPException) as treatment_error:
         asyncio.run(create_classwork_wizard_record(**kwargs))
     assert treatment_error.value.status_code == 400
@@ -99,11 +106,12 @@ def test_intervention_publication_scope_and_retry(candidate_context):
     assert db.query(Classwork).count() == before + 1
     with pytest.raises(HTTPException) as locked_plan:
         save_plan(db, _staff(c), _id(c), PlanUpdate(
-            teacher_choice="CLASSWORK", grade_treatment="PERFORMANCE_TASK",
+            teacher_choice="CLASSWORK", grade_treatment="PRACTICE_ONLY",
         ))
     assert locked_plan.value.status_code == 409
     unchanged = save_plan(db, _staff(c), _id(c), PlanUpdate(
         teacher_choice="CLASSWORK", grade_treatment="WRITTEN_WORK",
+        target_assignment_ids=[target.classwork_assignment_id],
     ))
     assert unchanged["plan"]["grade_treatment"] == "WRITTEN_WORK"
     kwargs["class_ids"] = json.dumps([c["class"].class_id + 1])
@@ -130,14 +138,20 @@ def test_intervention_quiz_uses_existing_builder(candidate_context):
     account = UserAccount(user_id=uuid4(), email=f"remediation-{uuid4().hex[:8]}@example.test", password_hash="test")
     db.add(account); db.flush(); c["student"].user_id = account.user_id; db.commit()
     _activate(c)
-    save_plan(db, _staff(c), _id(c), PlanUpdate(teacher_choice="QUIZ", grade_treatment="WRITTEN_WORK"))
+    target = _make_classwork_target(c, "Original Quiz Target", points=10.0, score=5.0)
+    save_plan(db, _staff(c), _id(c), PlanUpdate(
+        teacher_choice="QUIZ", grade_treatment="WRITTEN_WORK",
+        target_assignment_ids=[target.classwork_assignment_id],
+    ))
     result = asyncio.run(create_classwork_wizard_record(
         title="Targeted quiz", classwork_type="QUIZ", subject_id=c["subject"].subject_id,
         description=None, instructions="Practice", classwork_category="WRITTEN_WORK", total_points=10,
         is_published=True, class_ids=json.dumps([c["class"].class_id]), academic_period_id=c["period"].academic_period_id,
         lesson_ids="[]", due_date=None, lock_date=None, allow_late_submissions=False, max_attempts=1,
         quiz_payload=json.dumps(_valid_quiz_payload()), rubric_payload=None, files=None,
-        intervention_id=_id(c), remediation_request_id=uuid4(), current_user={"sub": str(c["staff"].user_id), "role": "teacher"},
+        intervention_id=_id(c), remediation_request_id=uuid4(),
+        original_classwork_assignment_id=target.classwork_assignment_id,
+        current_user={"sub": str(c["staff"].user_id), "role": "teacher"},
         staff_id=_staff(c), db=db,
     ))
     assignment = db.query(ClassworkAssignment).filter_by(classwork_id=result.classwork_id).one()
@@ -148,10 +162,253 @@ def test_intervention_quiz_uses_existing_builder(candidate_context):
     assert any("additional" in n.body for n in notices)
 
 
+def test_authoring_rejects_legacy_treatment_outside_verified_focus(candidate_context):
+    c = candidate_context; db = c["db"]
+    _activate(c)
+    row = db.get(Intervention, _id(c))
+    row.remediation_plan = {
+        "teacher_choice": "CLASSWORK",
+        "grade_treatment": "PERFORMANCE_TASK",
+        "selected_resources": [],
+    }
+    db.commit()
+    before = db.query(Classwork).count()
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(create_classwork_wizard_record(
+            title="Legacy mismatched task", classwork_type="ASSIGNMENT",
+            subject_id=c["subject"].subject_id, description=None,
+            instructions="Practice", classwork_category="PERFORMANCE_TASK",
+            total_points=10, is_published=True,
+            class_ids=json.dumps([c["class"].class_id]),
+            academic_period_id=c["period"].academic_period_id,
+            lesson_ids="[]", due_date=None, lock_date=None,
+            allow_late_submissions=False, max_attempts=None, quiz_payload=None,
+            rubric_payload=None, files=None, intervention_id=_id(c),
+            remediation_request_id=uuid4(),
+            current_user={"sub": str(c["staff"].user_id), "role": "teacher"},
+            staff_id=_staff(c), db=db,
+        ))
+
+    assert exc.value.status_code == 400
+    assert "verified intervention focus" in exc.value.detail
+    assert db.query(Classwork).count() == before
+    db.refresh(row)
+    assert row.remediation_plan["grade_treatment"] == "PERFORMANCE_TASK"
+
+
+def _linked_classwork_kwargs(c, request_id, original_assignment_id):
+    return dict(
+        title="Linked written remediation", classwork_type="ASSIGNMENT",
+        subject_id=c["subject"].subject_id, description=None,
+        instructions="Complete the remediation", classwork_category="WRITTEN_WORK",
+        total_points=20, is_published=True,
+        class_ids=json.dumps([c["class"].class_id]),
+        academic_period_id=c["period"].academic_period_id,
+        lesson_ids="[]", due_date=None, lock_date=None,
+        allow_late_submissions=False, max_attempts=None, quiz_payload=None,
+        rubric_payload=None, files=None, intervention_id=_id(c),
+        remediation_request_id=request_id,
+        original_classwork_assignment_id=original_assignment_id,
+        current_user={"sub": str(c["staff"].user_id), "role": "teacher"},
+        staff_id=_staff(c), db=c["db"],
+    )
+
+
+def test_ww_remediation_link_is_auditable_and_preserves_raw_scores(candidate_context):
+    c = candidate_context; db = c["db"]
+    _activate(c)
+    original = _make_classwork_target(c, "Original Written Work", score=10.0)
+    save_plan(db, _staff(c), _id(c), PlanUpdate(
+        teacher_choice="CLASSWORK", grade_treatment="WRITTEN_WORK",
+        target_assignment_ids=[original.classwork_assignment_id],
+    ))
+
+    created = asyncio.run(create_classwork_wizard_record(
+        **_linked_classwork_kwargs(c, uuid4(), original.classwork_assignment_id)
+    ))
+    remediation = db.query(ClassworkAssignment).filter_by(classwork_id=created.classwork_id).one()
+    link = db.query(RemediationAssignmentLink).one()
+
+    assert link.source_intervention_id == _id(c)
+    assert link.remediation_assignment_id == remediation.classwork_assignment_id
+    assert link.original_assignment_id == original.classwork_assignment_id
+    assert link.student_id == c["student"].student_id
+    assert link.component == "WRITTEN_WORK"
+    assert remediation.original_exam_assignment_id is None
+
+    from app.models.submissions.StudentSubmission import StudentSubmission
+    original_submission = db.query(StudentSubmission).filter_by(
+        classwork_assignment_id=original.classwork_assignment_id,
+        student_id=c["student"].student_id,
+    ).one()
+    db.add(StudentSubmission(
+        classwork_assignment_id=remediation.classwork_assignment_id,
+        student_id=c["student"].student_id, grade=8, status="graded",
+    ))
+    db.commit()
+    db.refresh(original_submission)
+    assert float(original_submission.grade) == 10.0
+    assert {
+        row.classwork_assignment_id: float(row.grade)
+        for row in db.query(StudentSubmission).filter_by(student_id=c["student"].student_id).all()
+        if row.classwork_assignment_id in {
+            original.classwork_assignment_id, remediation.classwork_assignment_id,
+        }
+    } == {
+        original.classwork_assignment_id: 10.0,
+        remediation.classwork_assignment_id: 8.0,
+    }
+
+    from app.services.intervention.RemediationAssignmentLinkService import create_remediation_assignment_link
+    assert create_remediation_assignment_link(
+        db, intervention=db.get(Intervention, _id(c)),
+        remediation_assignment=remediation,
+        original_assignment_id=original.classwork_assignment_id,
+        component="WRITTEN_WORK", staff_id=_staff(c),
+    ).remediation_link_id == link.remediation_link_id
+    assert db.query(RemediationAssignmentLink).count() == 1
+
+
+def test_performance_task_remediation_link_uses_same_isolated_foundation(candidate_context):
+    c = candidate_context; db = c["db"]
+    _activate(c)
+    row = db.get(Intervention, _id(c))
+    row.diagnosis_snapshot = {
+        **row.diagnosis_snapshot,
+        "weakest_supported_components": ["PERFORMANCE_TASK"],
+    }
+    db.commit()
+    original = _make_classwork_target(
+        c, "Original Performance Task", category="PERFORMANCE_TASK", score=12.0,
+    )
+    save_plan(db, _staff(c), _id(c), PlanUpdate(
+        teacher_choice="CLASSWORK", grade_treatment="PERFORMANCE_TASK",
+        target_assignment_ids=[original.classwork_assignment_id],
+    ))
+    kwargs = _linked_classwork_kwargs(c, uuid4(), original.classwork_assignment_id)
+    kwargs.update(
+        title="Linked performance remediation",
+        classwork_category="PERFORMANCE_TASK",
+    )
+
+    created = asyncio.run(create_classwork_wizard_record(**kwargs))
+    remediation = db.query(ClassworkAssignment).filter_by(classwork_id=created.classwork_id).one()
+    link = db.query(RemediationAssignmentLink).one()
+    assert link.component == "PERFORMANCE_TASK"
+    assert link.original_assignment_id == original.classwork_assignment_id
+    assert link.remediation_assignment_id == remediation.classwork_assignment_id
+    assert remediation.original_exam_assignment_id is None
+
+
+def test_ww_link_allows_individual_target_from_multi_target_plan_and_rolls_back_on_unselected(candidate_context):
+    c = candidate_context; db = c["db"]
+    _activate(c)
+    first = _make_classwork_target(c, "Original WW 1", score=10.0)
+    second = _make_classwork_target(c, "Original WW 2", score=12.0)
+    third = _make_classwork_target(c, "Original WW 3", score=14.0)
+    save_plan(db, _staff(c), _id(c), PlanUpdate(
+        teacher_choice="CLASSWORK", grade_treatment="WRITTEN_WORK",
+        target_assignment_ids=[first.classwork_assignment_id, second.classwork_assignment_id],
+    ))
+    before = db.query(Classwork).count()
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(create_classwork_wizard_record(
+            **_linked_classwork_kwargs(c, uuid4(), third.classwork_assignment_id)
+        ))
+
+    assert exc.value.status_code == 400
+    assert "not in the intervention plan's saved targets" in exc.value.detail
+    assert db.query(Classwork).count() == before
+    assert db.query(RemediationAssignmentLink).count() == 0
+
+    created = asyncio.run(create_classwork_wizard_record(
+        **_linked_classwork_kwargs(c, uuid4(), first.classwork_assignment_id)
+    ))
+    remediation = db.query(ClassworkAssignment).filter_by(classwork_id=created.classwork_id).one()
+    link = db.query(RemediationAssignmentLink).one()
+    assert link.original_assignment_id == first.classwork_assignment_id
+    assert link.remediation_assignment_id == remediation.classwork_assignment_id
+
+
+def test_ww_link_rejects_cross_category_and_finalized_period(candidate_context):
+    c = candidate_context; db = c["db"]
+    _activate(c)
+    performance = _make_classwork_target(
+        c, "Original Performance Task", category="PERFORMANCE_TASK", score=10.0,
+    )
+    row = db.get(Intervention, _id(c))
+    row.remediation_plan = {
+        "teacher_choice": "CLASSWORK", "grade_treatment": "WRITTEN_WORK",
+        "target_assignment_ids": [performance.classwork_assignment_id],
+        "selected_resources": [],
+    }
+    db.commit()
+    with pytest.raises(HTTPException) as cross_category:
+        asyncio.run(create_classwork_wizard_record(
+            **_linked_classwork_kwargs(c, uuid4(), performance.classwork_assignment_id)
+        ))
+    assert cross_category.value.status_code == 400
+    assert "same grading category" in cross_category.value.detail
+
+    written = _make_classwork_target(c, "Finalized Original WW", score=10.0)
+    row.remediation_plan = {
+        **row.remediation_plan,
+        "target_assignment_ids": [written.classwork_assignment_id],
+    }
+    from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
+    db.add(StudentPeriodGrade(
+        student_id=c["student"].student_id, class_id=c["class"].class_id,
+        subject_id=c["subject"].subject_id,
+        academic_period_id=c["period"].academic_period_id,
+        final_period_grade=80, is_finalized=True,
+    ))
+    db.commit()
+    with pytest.raises(HTTPException) as finalized:
+        asyncio.run(create_classwork_wizard_record(
+            **_linked_classwork_kwargs(c, uuid4(), written.classwork_assignment_id)
+        ))
+    assert finalized.value.status_code == 409
+    assert db.query(RemediationAssignmentLink).count() == 0
+
+
+def test_one_remediation_attempt_cannot_link_to_multiple_originals(candidate_context):
+    c = candidate_context; db = c["db"]
+    _activate(c)
+    first = _make_classwork_target(c, "First Original", score=10.0)
+    second = _make_classwork_target(c, "Second Original", score=11.0)
+    save_plan(db, _staff(c), _id(c), PlanUpdate(
+        teacher_choice="CLASSWORK", grade_treatment="WRITTEN_WORK",
+        target_assignment_ids=[first.classwork_assignment_id],
+    ))
+    created = asyncio.run(create_classwork_wizard_record(
+        **_linked_classwork_kwargs(c, uuid4(), first.classwork_assignment_id)
+    ))
+    remediation = db.query(ClassworkAssignment).filter_by(classwork_id=created.classwork_id).one()
+    row = db.get(Intervention, _id(c))
+    row.remediation_plan = {**row.remediation_plan, "target_assignment_ids": [second.classwork_assignment_id]}
+    db.commit()
+
+    from app.services.intervention.RemediationAssignmentLinkService import create_remediation_assignment_link
+    with pytest.raises(HTTPException) as duplicate:
+        create_remediation_assignment_link(
+            db, intervention=row, remediation_assignment=remediation,
+            original_assignment_id=second.classwork_assignment_id,
+            component="WRITTEN_WORK", staff_id=_staff(c),
+        )
+    assert duplicate.value.status_code == 409
+    assert db.query(RemediationAssignmentLink).one().original_assignment_id == first.classwork_assignment_id
+
+
 def test_targeted_draft_requires_explicit_publication(candidate_context):
     c = candidate_context; db = c["db"]
     _activate(c)
-    save_plan(db, _staff(c), _id(c), PlanUpdate(teacher_choice="CLASSWORK", grade_treatment="WRITTEN_WORK"))
+    target = _make_classwork_target(c, "Original Draft Target", points=10.0, score=5.0)
+    save_plan(db, _staff(c), _id(c), PlanUpdate(
+        teacher_choice="CLASSWORK", grade_treatment="WRITTEN_WORK",
+        target_assignment_ids=[target.classwork_assignment_id],
+    ))
     identity = {"sub": str(c["staff"].user_id), "role": "teacher"}
     result = asyncio.run(create_classwork_wizard_record(
         title="Draft practice", classwork_type="ASSIGNMENT", subject_id=c["subject"].subject_id,
@@ -159,6 +416,7 @@ def test_targeted_draft_requires_explicit_publication(candidate_context):
         is_published=False, class_ids=json.dumps([c["class"].class_id]), academic_period_id=c["period"].academic_period_id,
         lesson_ids="[]", due_date=None, lock_date=None, allow_late_submissions=False, max_attempts=None,
         quiz_payload=None, rubric_payload=None, files=None, intervention_id=_id(c), remediation_request_id=uuid4(),
+        original_classwork_assignment_id=target.classwork_assignment_id,
         current_user=identity, staff_id=_staff(c), db=db,
     ))
     assignment = db.query(ClassworkAssignment).filter_by(classwork_id=result.classwork_id).one()
@@ -195,3 +453,158 @@ def test_targeted_quiz_attempt_rejects_classmate(quiz_attempt_context):
     assert c["client"].post(f"/api/v1/quizzes/assignment/{aid}/submit", json={"answers": []}).status_code == 404
     analysis = build_teacher_quiz_analysis(db, "T-QUIZ", c["classwork"].classwork_id)
     assert analysis.total_students == 1
+
+
+def test_quiz_creator_produces_valid_link_and_enforces_one_attempt(candidate_context):
+    c = candidate_context; db = c["db"]
+    account = UserAccount(user_id=uuid4(), email=f"rem-quiz-{uuid4().hex[:8]}@example.test", password_hash="test")
+    db.add(account); db.flush(); c["student"].user_id = account.user_id; db.commit()
+    _activate(c)
+    target = _make_classwork_target(c, "Original Target WW", points=10.0, score=4.0)
+    save_plan(db, _staff(c), _id(c), PlanUpdate(
+        teacher_choice="QUIZ", grade_treatment="WRITTEN_WORK",
+        target_assignment_ids=[target.classwork_assignment_id],
+    ))
+
+    # Reject more than 1 attempt
+    with pytest.raises(HTTPException) as multi_attempt_err:
+        asyncio.run(create_classwork_wizard_record(
+            title="Remedial Quiz 2 attempts", classwork_type="QUIZ", subject_id=c["subject"].subject_id,
+            description=None, instructions="Practice", classwork_category="WRITTEN_WORK", total_points=10,
+            is_published=True, class_ids=json.dumps([c["class"].class_id]), academic_period_id=c["period"].academic_period_id,
+            lesson_ids="[]", due_date=None, lock_date=None, allow_late_submissions=False, max_attempts=2,
+            quiz_payload=json.dumps(_valid_quiz_payload()), rubric_payload=None, files=None,
+            intervention_id=_id(c), remediation_request_id=uuid4(),
+            original_classwork_assignment_id=target.classwork_assignment_id,
+            current_user={"sub": str(c["staff"].user_id), "role": "teacher"},
+            staff_id=_staff(c), db=db,
+        ))
+    assert multi_attempt_err.value.status_code == 400
+    assert "one attempt" in multi_attempt_err.value.detail.lower()
+
+    # Exactly 1 attempt succeeds and creates link
+    result = asyncio.run(create_classwork_wizard_record(
+        title="Remedial Quiz 1 attempt", classwork_type="QUIZ", subject_id=c["subject"].subject_id,
+        description=None, instructions="Practice", classwork_category="WRITTEN_WORK", total_points=10,
+        is_published=True, class_ids=json.dumps([c["class"].class_id]), academic_period_id=c["period"].academic_period_id,
+        lesson_ids="[]", due_date=None, lock_date=None, allow_late_submissions=False, max_attempts=1,
+        quiz_payload=json.dumps(_valid_quiz_payload()), rubric_payload=None, files=None,
+        intervention_id=_id(c), remediation_request_id=uuid4(),
+        original_classwork_assignment_id=target.classwork_assignment_id,
+        current_user={"sub": str(c["staff"].user_id), "role": "teacher"},
+        staff_id=_staff(c), db=db,
+    ))
+    link = db.query(RemediationAssignmentLink).filter_by(
+        original_assignment_id=target.classwork_assignment_id
+    ).one()
+    assert link.source_intervention_id == _id(c)
+    assert link.student_id == c["student"].student_id
+    assert link.component == "WRITTEN_WORK"
+
+
+def test_graded_remediation_rejects_missing_or_forged_original_id(candidate_context):
+    c = candidate_context; db = c["db"]
+    _activate(c)
+    target = _make_classwork_target(c, "Original Target", points=20.0, score=10.0)
+    save_plan(db, _staff(c), _id(c), PlanUpdate(
+        teacher_choice="CLASSWORK", grade_treatment="WRITTEN_WORK",
+        target_assignment_ids=[target.classwork_assignment_id],
+    ))
+
+    # Missing original_classwork_assignment_id
+    with pytest.raises(HTTPException) as missing_err:
+        asyncio.run(create_classwork_wizard_record(
+            **_linked_classwork_kwargs(c, uuid4(), None)
+        ))
+    assert missing_err.value.status_code == 400
+    assert "select the original classwork assignment" in missing_err.value.detail.lower()
+
+    # Forged ID (not in intervention plan)
+    with pytest.raises(HTTPException) as forged_err:
+        asyncio.run(create_classwork_wizard_record(
+            **_linked_classwork_kwargs(c, uuid4(), 999999)
+        ))
+    assert forged_err.value.status_code == 400
+    assert "not in the intervention plan's saved targets" in forged_err.value.detail.lower()
+
+
+def test_graded_remediation_rejects_mismatched_maximum_points_and_rolls_back(candidate_context):
+    c = candidate_context; db = c["db"]
+    _activate(c)
+    target = _make_classwork_target(c, "Original 20pt Target", points=20.0, score=10.0)
+    save_plan(db, _staff(c), _id(c), PlanUpdate(
+        teacher_choice="CLASSWORK", grade_treatment="WRITTEN_WORK",
+        target_assignment_ids=[target.classwork_assignment_id],
+    ))
+    before_classworks = db.query(Classwork).count()
+    before_assignments = db.query(ClassworkAssignment).count()
+    before_links = db.query(RemediationAssignmentLink).count()
+
+    # Total points = 15 != 20
+    kwargs = _linked_classwork_kwargs(c, uuid4(), target.classwork_assignment_id)
+    kwargs["total_points"] = 15
+
+    with pytest.raises(HTTPException) as mismatch_err:
+        asyncio.run(create_classwork_wizard_record(**kwargs))
+    assert mismatch_err.value.status_code == 400
+    assert "equal the original classwork" in mismatch_err.value.detail.lower()
+
+    # Assert transactional rollback: no orphaned classwork or link
+    assert db.query(Classwork).count() == before_classworks
+    assert db.query(ClassworkAssignment).count() == before_assignments
+    assert db.query(RemediationAssignmentLink).count() == before_links
+
+
+def test_practice_only_and_examination_remain_unaffected(candidate_context):
+    c = candidate_context; db = c["db"]
+    _activate(c)
+
+    # PRACTICE_ONLY requires NO original link and creates NO link
+    save_plan(db, _staff(c), _id(c), PlanUpdate(
+        teacher_choice="CLASSWORK", grade_treatment="PRACTICE_ONLY",
+    ))
+    prac = asyncio.run(create_classwork_wizard_record(
+        title="Practice task", classwork_type="ASSIGNMENT", subject_id=c["subject"].subject_id,
+        description=None, instructions="Practice", classwork_category=None, total_points=10,
+        is_published=True, class_ids=json.dumps([c["class"].class_id]), academic_period_id=c["period"].academic_period_id,
+        lesson_ids="[]", due_date=None, lock_date=None, allow_late_submissions=False, max_attempts=None,
+        quiz_payload=None, rubric_payload=None, files=None, intervention_id=_id(c), remediation_request_id=uuid4(),
+        current_user={"sub": str(c["staff"].user_id), "role": "teacher"}, staff_id=_staff(c), db=db,
+    ))
+    assert prac.classwork_id is not None
+    assert db.query(RemediationAssignmentLink).count() == 0
+
+
+def test_intervention_progress_reflects_linked_activity_history(candidate_context):
+    c = candidate_context; db = c["db"]
+    _activate(c)
+    target = _make_classwork_target(c, "Original Progress Target", points=20.0, score=10.0)
+    save_plan(db, _staff(c), _id(c), PlanUpdate(
+        teacher_choice="CLASSWORK", grade_treatment="WRITTEN_WORK",
+        target_assignment_ids=[target.classwork_assignment_id],
+    ))
+    created = asyncio.run(create_classwork_wizard_record(
+        **_linked_classwork_kwargs(c, uuid4(), target.classwork_assignment_id)
+    ))
+    remediation_assignment = db.query(ClassworkAssignment).filter_by(classwork_id=created.classwork_id).one()
+
+    # Add student submission on remediation
+    from app.models.submissions.StudentSubmission import StudentSubmission
+    db.add(StudentSubmission(
+        classwork_assignment_id=remediation_assignment.classwork_assignment_id,
+        student_id=c["student"].student_id, grade=18.0, status="graded",
+    ))
+    db.commit()
+
+    from app.services.intervention.InterventionRemediationService import progress
+    intervention_row = db.get(Intervention, _id(c))
+    prog = progress(db, intervention_row)
+    assert len(prog["assigned_remediation"]) == 1
+    act = prog["assigned_remediation"][0]
+    assert act["assignment_id"] == remediation_assignment.classwork_assignment_id
+    assert act["original_assignment_id"] == target.classwork_assignment_id
+    assert act["original_title"] == "Original Progress Target"
+    assert act["original_grade"] == 10.0
+    assert act["grade"] == 18.0
+    # Adjusted cap is 75% of 20 = 15.0; min(18, 15) = 15.0
+    assert act["effective_grade"] == 15.0

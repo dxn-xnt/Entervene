@@ -44,7 +44,7 @@ function openFrozenEvidence(modal: HTMLElement) {
 }
 async function openSupportPlan(modal: HTMLElement) {
   fireEvent.click(within(modal).getByRole("button", { name: "Adjust Support" }));
-  await within(modal).findByText("Recommended Support");
+  await within(modal).findByText("Supporting Resources");
 }
 beforeEach(() => { api.list.mockResolvedValue({ items: [candidate], total: 1 }); api.detail.mockResolvedValue(detail); api.activate.mockResolvedValue(activeDetail); api.activeList.mockResolvedValue({ items: [], total: 0 }); api.activeDetail.mockResolvedValue(activeDetail); api.resolvedList.mockResolvedValue({ items: [], total: 0 }); api.materials.mockResolvedValue({ items: [], total: 0 }); api.workspace.mockResolvedValue({ plan: { teacher_choice: null, grade_treatment: null, selected_resources: [], ai_suggestion: null }, resources: [], focus: { basis: "FROZEN_TRIGGER_DIAGNOSIS", evidence_level: "SCORED_COMPETENCY", component: "WRITTEN_WORK", exam_subtype: null, competency_ids: [2], competencies: [{ id: 2, label: "Add fractions" }], lesson_ids: [], lessons: [], source_classwork_ids: [], topics: [], question_evidence: [], coverage_is_context_only: false }, progress: { triggering_projection: 74, latest_projection: 74, latest_revision: 2, completed_remediation: [], assigned_remediation: [], status: "ACTIVE", status_reason: "Latest projected final grade remains below 85." } }); api.advisory.mockResolvedValue({ plan: { teacher_choice: null, grade_treatment: null, selected_resources: [], ai_suggestion: { recommended_format: "QUIZ", reason: "Focused practice may help.", focus: [], evidence_used: {} } }, resources: [] }); });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
@@ -238,37 +238,47 @@ describe("teacher active intervention review", () => {
   it("selects scoped materials and lets the teacher override AI advice", async () => {
     const resource = { kind: "CLASSWORK", id: 4, title: "Fractions guide", description: "Practice guide", lesson: "Fractions",
       topic: "Fractions", attachments: [], access: "PLANNING_ONLY", ai_read: "METADATA_ONLY", recommended: true,
+      classwork_type: "READING", is_graded: false,
       match_reason: "Matched lesson: Fractions", match_level: "LESSON", match_rank: 80 };
     const initial = { teacher_choice: null, selected_resources: [], ai_suggestion: null };
     api.workspace.mockResolvedValue({ plan: initial, resources: [resource] });
-    api.savePlan.mockImplementation(async (_id, plan) => ({ plan: { ...plan, ai_suggestion: api.advisory.mock.calls.length ? { recommended_format: "QUIZ", reason: "Focused practice may help.", focus: [], evidence_used: {} } : null }, resources: [resource] }));
+    api.savePlan.mockImplementation(async (_id, plan) => ({ plan: { ...plan, ai_suggestion: { recommended_format: "QUIZ", reason: "Focused practice may help.", focus: [], evidence_used: {} } }, resources: [resource] }));
     api.advisory.mockResolvedValue({ plan: { teacher_choice: null, selected_resources: [{ kind: "CLASSWORK", id: 4 }], ai_suggestion: { recommended_format: "QUIZ", reason: "Focused practice may help.", focus: [], evidence_used: {} } }, resources: [resource] });
     mount("/teacher/interventions?active=12");
     const sheet = await screen.findByRole("dialog");
     await openSupportPlan(sheet);
+    await waitFor(() => expect(api.advisory).toHaveBeenCalledWith(12));
+    expect(await within(sheet).findByText(/Focused practice may help/)).toBeTruthy();
+    expect(within(within(sheet).getByText("Quiz").closest(".cursor-pointer") as HTMLElement).getByText("Recommended")).toBeTruthy();
     fireEvent.click(await within(sheet).findByRole("button", { name: "Select resources" }));
     const resourcesDialog = await screen.findByRole("dialog", { name: "Add Supporting Resources" });
     fireEvent.click(within(resourcesDialog).getAllByRole("checkbox").at(-1) as HTMLElement);
     fireEvent.click(within(resourcesDialog).getByRole("button", { name: "Done" }));
-    fireEvent.click(within(sheet).getByRole("button", { name: "Get AI recommendation" }));
-    await waitFor(() => expect(api.advisory).toHaveBeenCalledWith(12));
-    expect(await within(sheet).findByText(/Focused practice may help/)).toBeTruthy();
-    expect(within(within(sheet).getByText("Quiz").closest(".cursor-pointer") as HTMLElement).getByText("Recommended")).toBeTruthy();
     fireEvent.click(within(sheet).getByText("Classwork").closest(".cursor-pointer") as HTMLElement);
-    expect(within(within(sheet).getByText("Classwork").closest(".cursor-pointer") as HTMLElement).getByText("Selected")).toBeTruthy();
+    expect(within(within(sheet).getByText("Classwork").closest(".cursor-pointer") as HTMLElement).queryByText("Selected")).toBeNull();
     fireEvent.click(within(sheet).getByRole("button", { name: "Save Adjustments" }));
     await waitFor(() => expect(api.savePlan).toHaveBeenLastCalledWith(12, { teacher_choice: "CLASSWORK", grade_treatment: "PRACTICE_ONLY", selected_resources: [{ kind: "CLASSWORK", id: 4 }] }));
   });
   it("shows current progress separately from frozen evidence and recommends only matched materials", async () => {
-    const base = { kind: "CLASSWORK", description: "", lesson: "", topic: "", attachments: [], access: "PLANNING_ONLY", ai_read: "METADATA_ONLY" };
+    const base = { kind: "CLASSWORK", classwork_type: "READING", is_graded: false, description: "", lesson: "", topic: "", attachments: [], access: "PLANNING_ONLY", ai_read: "METADATA_ONLY" };
     api.workspace.mockResolvedValue({
-      plan: { teacher_choice: "QUIZ", grade_treatment: null, selected_resources: [], ai_suggestion: null },
+      plan: {
+        teacher_choice: "QUIZ",
+        grade_treatment: null,
+        selected_resources: [],
+        ai_suggestion: {
+          recommended_format: "QUIZ",
+          reason: "Focused practice may help.",
+          focus: [],
+          evidence_used: {},
+        },
+      },
       focus: { basis: "FROZEN_TRIGGER_DIAGNOSIS", evidence_level: "COMPONENT_ONLY", component: "EXAMINATION", exam_subtype: "TERM_EXAM", exam_subtype_requires_confirmation: false,
         lesson_ids: [], lessons: [], competency_ids: [], competencies: [], topics: [], source_classwork_ids: [10], question_evidence: [], coverage_is_context_only: false },
       progress: { triggering_projection: 84.0167, latest_projection: 83.9926, latest_revision: 6, status: "ACTIVE",
         status_reason: "Latest projected final grade remains below 85.", completed_remediation: [{ title: "Practice Quiz", assignment_id: 12, grade: 10, total_points: 10 }],
         assigned_remediation: [{ title: "Practice Quiz", assignment_id: 12, grade: 10, total_points: 10, component: "WRITTEN_WORK", is_graded: true, submission_status: "graded" }] },
-      resources: [{ ...base, id: 10, title: "Term Exam", recommended: false, match_rank: 60, match_level: "SOURCE_ACTIVITY", match_reason: "Source activity metadata; file contents were not analyzed" },
+      resources: [{ ...base, id: 10, title: "Term Exam", classwork_type: "EXAMINATION", is_graded: true, recommended: false, match_rank: 60, match_level: "SOURCE_ACTIVITY", match_reason: "Source activity metadata; file contents were not analyzed" },
         { ...base, id: 11, title: "Unrelated Geometry", recommended: false, match_rank: 0, match_level: null, match_reason: null }],
     });
     mount("/teacher/interventions?active=12");
@@ -280,7 +290,9 @@ describe("teacher active intervention review", () => {
     expect(within(sheet).getByText("Completed")).toBeTruthy();
     expect(within(sheet).getAllByText("Monitoring")).toHaveLength(2);
     await openSupportPlan(sheet);
-    expect(within(sheet).getByText("Term Exam")).toBeTruthy();
+    expect(within(sheet).queryByText("Term Exam")).toBeNull();
+    expect(within(sheet).getAllByText("Unrelated Geometry")).toHaveLength(1);
+    expect(within(sheet).queryByText("Teacher selected")).toBeNull();
     fireEvent.click(within(sheet).getByRole("button", { name: "Select resources" }));
     const resourcesDialog = await screen.findByRole("dialog", { name: "Add Supporting Resources" });
     expect(within(resourcesDialog).queryByText("Term Exam")).toBeNull();
@@ -317,7 +329,7 @@ describe("teacher active intervention review", () => {
     ["CLASSWORK", "Existing Classwork page"],
     ["TOS", "Existing TOS page"],
   ])("opens the existing %s authoring path", async (choice, destination) => {
-    const workspace = { plan: { teacher_choice: choice, grade_treatment: choice === "TOS" ? null : "WRITTEN_WORK", selected_resources: [], ai_suggestion: null }, resources: [], focus: { component: "WRITTEN_WORK", evidence_level: "COMPONENT_ONLY", competency_ids: [], lessons: [], competencies: [], exam_subtype: null }, progress: { triggering_projection: 74, latest_projection: 74, completed_remediation: [], assigned_remediation: [], status_reason: "Latest projected final grade remains below 85." } };
+    const workspace = { plan: { teacher_choice: choice, grade_treatment: choice === "TOS" ? null : "WRITTEN_WORK", target_assignment_ids: choice === "TOS" ? [] : [101], selected_resources: [], ai_suggestion: null }, resources: [], focus: { component: "WRITTEN_WORK", evidence_level: "COMPONENT_ONLY", competency_ids: [], lessons: [], competencies: [], exam_subtype: null }, progress: { triggering_projection: 74, latest_projection: 74, completed_remediation: [], assigned_remediation: [], status_reason: "Latest projected final grade remains below 85." } };
     api.workspace.mockResolvedValue(workspace);
     api.savePlan.mockImplementation(async (_id: number, body: Record<string, unknown>) => ({ ...workspace, plan: { ...workspace.plan, ...body } }));
     mount("/teacher/interventions?active=12");
@@ -326,7 +338,8 @@ describe("teacher active intervention review", () => {
     const selectedMethod = within(sheet)
       .getByText(choice === "QUIZ" ? "Quiz" : choice === "CLASSWORK" ? "Classwork" : "TOS Blueprint")
       .closest(".cursor-pointer") as HTMLElement;
-    expect(within(selectedMethod).getByText("Selected")).toBeTruthy();
+    expect(selectedMethod.getAttribute("aria-checked")).toBe("true");
+    expect(within(selectedMethod).queryByText("Selected")).toBeNull();
     fireEvent.click(within(sheet).getByRole("button", { name: /Continue to/ }));
     expect(await screen.findByText(destination)).toBeTruthy();
   });

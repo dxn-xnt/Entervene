@@ -16,8 +16,11 @@ from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.services.grading.RemedialClassworkResolver import resolve_student_classwork_scores
+from app.services.grading.RemedialExamination import effective_exam_scores
 
 
 COMPONENT_FEATURES = {
@@ -138,7 +141,7 @@ def _classwork_rows(
     class_id: int,
     subject_id: int,
     source_period_id: int,
-) -> tuple[list[tuple[ClassworkAssignment, Classwork, StudentSubmission | None, bool]], bool]:
+) -> tuple[list[tuple[ClassworkAssignment, Classwork, StudentSubmission | None, bool]], bool, dict[int, float], list[Any]]:
     from app.models.classwork.Classwork import Classwork
     from app.models.classwork.ClassworkAssignment import ClassworkAssignment
     from app.models.submissions.StudentSubmission import StudentSubmission
@@ -185,12 +188,66 @@ def _classwork_rows(
     grouped: dict[int, list[StudentSubmission]] = {}
     for submission in submissions:
         grouped.setdefault(submission.classwork_assignment_id, []).append(submission)
+
+    links = (
+        db.query(RemediationAssignmentLink)
+        .filter(
+            RemediationAssignmentLink.student_id == student_id,
+            (
+                RemediationAssignmentLink.original_assignment_id.in_(assignment_ids)
+                | RemediationAssignmentLink.remediation_assignment_id.in_(assignment_ids)
+            ),
+        )
+        .all()
+    ) if assignment_ids else []
+
+    submissions_dict = {}
+    for assignment, _ in assignments:
+        candidates = grouped.get(assignment.classwork_assignment_id, [])
+        sub = _select_submission(candidates)
+        if sub is not None:
+            submissions_dict[assignment.classwork_assignment_id] = sub
+
+    resolved = resolve_student_classwork_scores(
+        student_id=student_id,
+        assignments=[assignment for assignment, _ in assignments],
+        submissions=submissions_dict,
+        links=links,
+    )
+    exam_assignments = [
+        assignment for assignment, classwork in assignments
+        if getattr(classwork, "classwork_category", None) == "EXAMS"
+        or getattr(classwork, "exam_subtype", None) is not None
+        or getattr(assignment, "original_exam_assignment_id", None) is not None
+    ]
+    effective_exams = effective_exam_scores(
+        exam_assignments,
+        {
+            assignment.classwork_assignment_id: _to_float(submissions_dict[assignment.classwork_assignment_id].grade)
+            if assignment.classwork_assignment_id in submissions_dict and submissions_dict[assignment.classwork_assignment_id].grade is not None
+            else None
+            for assignment in exam_assignments
+            if assignment.recipient_student_id in (None, student_id)
+        },
+    )
+    effective_scores: dict[int, float] = {**resolved.effective_scores_float}
+    for asgn_id, exam_score in effective_exams.items():
+        if exam_score is not None:
+            effective_scores[asgn_id] = exam_score
+
     selected: list[tuple[ClassworkAssignment, Classwork, StudentSubmission | None, bool]] = []
     for assignment, classwork in assignments:
+        if assignment.recipient_student_id not in (None, student_id):
+            continue
+        if (
+            assignment.original_exam_assignment_id is not None
+            or assignment.classwork_assignment_id in resolved.remedial_assignment_ids
+        ):
+            continue
         candidates = grouped.get(assignment.classwork_assignment_id, [])
         selected_submission = _select_submission(candidates)
         selected.append((assignment, classwork, selected_submission, bool(candidates and selected_submission is None)))
-    return selected, legacy_exists
+    return selected, legacy_exists, effective_scores, resolved.audit_records
 
 
 def _submission_timestamp(submission: StudentSubmission) -> datetime | None:
@@ -225,6 +282,8 @@ def _select_submission(submissions: list[StudentSubmission]) -> StudentSubmissio
 
 def _classwork_metrics(
     rows: list[tuple[ClassworkAssignment, Classwork, StudentSubmission | None, bool]],
+    effective_scores: dict[int, float] | None = None,
+    remedial_audit_records: list[Any] | None = None,
 ) -> tuple[dict[str, float | None], dict[str, Any]]:
     earned = {component: Decimal("0") for component in COMPONENT_FEATURES}
     possible = {component: Decimal("0") for component in COMPONENT_FEATURES}
@@ -253,7 +312,12 @@ def _classwork_metrics(
         if submission and submission.grade is not None and classwork.total_points is not None:
             graded += 1
             possible[component] += Decimal(str(classwork.total_points))
-            earned[component] += Decimal(str(submission.grade))
+            eff_score = (
+                effective_scores.get(assignment.classwork_assignment_id)
+                if effective_scores and assignment.classwork_assignment_id in effective_scores and effective_scores[assignment.classwork_assignment_id] is not None
+                else submission.grade
+            )
+            earned[component] += Decimal(str(eff_score))
         if assignment.due_date is not None:
             due_total += 1
             if submission is None:
@@ -297,11 +361,33 @@ def _classwork_metrics(
                 "total_points": _to_float(classwork.total_points),
                 "selected_submission_id": submission.submission_id if submission else None,
                 "selected_submission_status": submission.status if submission else None,
-                "selected_submission_grade": _to_float(submission.grade) if submission and submission.grade is not None else None,
+                "selected_submission_grade": (
+                    _to_float(effective_scores.get(assignment.classwork_assignment_id))
+                    if effective_scores and assignment.classwork_assignment_id in effective_scores and effective_scores[assignment.classwork_assignment_id] is not None
+                    else (_to_float(submission.grade) if submission and submission.grade is not None else None)
+                ),
                 "selected_submission_at": submission.submitted_at.isoformat() if submission and submission.submitted_at else None,
                 "selection_state": "UNRESOLVED" if submission_unresolved else "AVAILABLE",
             }
             for assignment, classwork, submission, submission_unresolved in rows
+        ],
+        "remedial_classworks": [
+            {
+                "original_assignment_id": audit.original_assignment_id,
+                "remediation_assignment_id": audit.remediation_assignment_id,
+                "component": audit.component,
+                "score_adjustment_cap": float(audit.score_adjustment_cap),
+                "original_score": float(audit.original_raw_score) if audit.original_raw_score is not None else None,
+                "remediation_score": float(audit.remediation_raw_score) if audit.remediation_raw_score is not None else None,
+                "effective_score": float(audit.effective_score) if audit.effective_score is not None else None,
+                "total_points": float(audit.max_points) if audit.max_points is not None else None,
+                "cap_score": float(audit.cap_score) if audit.cap_score is not None else None,
+                "was_adjusted": audit.was_adjusted,
+                "was_capped": audit.was_capped,
+                "is_completed": audit.is_completed,
+                "status": audit.status,
+            }
+            for audit in (remedial_audit_records or [])
         ],
     }
 
@@ -630,10 +716,10 @@ def build_prediction_features_from_records(
     warnings: list[str] = []
     assessment_rows = _assessment_rows(db, student_id, class_id, subject_id, source_period_id)
     assessment_components, assessment_summary = _assessment_component_observations(assessment_rows)
-    classwork_rows, legacy_classwork_exists = _classwork_rows(
+    classwork_rows, legacy_classwork_exists, effective_scores, remedial_audits = _classwork_rows(
         db, student_id, class_id, subject_id, source_period_id
     )
-    classwork_components, classwork_summary = _classwork_metrics(classwork_rows)
+    classwork_components, classwork_summary = _classwork_metrics(classwork_rows, effective_scores, remedial_audits)
 
     # Activity completion/coverage are classwork-only in Stage 3A. Assessment
     # rows remain a separate score observation because no cross-source identity

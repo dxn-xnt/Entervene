@@ -248,18 +248,21 @@ def adviser_send_context():
         class_id=class_.class_id,
         academic_period_id=period.academic_period_id,
         assigned_by_staff_id=teacher.staff_id,
+        is_published=True,
     )
     ca_pt = ClassworkAssignment(
         classwork_id=cw_pt.classwork_id,
         class_id=class_.class_id,
         academic_period_id=period.academic_period_id,
         assigned_by_staff_id=teacher.staff_id,
+        is_published=True,
     )
     ca_qa = ClassworkAssignment(
         classwork_id=cw_qa.classwork_id,
         class_id=class_.class_id,
         academic_period_id=period.academic_period_id,
         assigned_by_staff_id=teacher.staff_id,
+        is_published=True,
     )
     db.add_all([ca_ww, ca_pt, ca_qa])
     db.flush()
