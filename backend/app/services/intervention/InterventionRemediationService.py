@@ -31,6 +31,23 @@ from app.services.grading.RemediationScoreAdjuster import (
 )
 
 FORMATS = {"QUIZ", "TOS", "CLASSWORK", "EXISTING_MATERIAL_ONLY"}
+GRADED_TREATMENTS = {"WRITTEN_WORK", "PERFORMANCE_TASK", "EXAMINATION"}
+
+
+def _validate_grade_treatment_focus(row: Intervention, treatment: str | None) -> None:
+    if treatment not in GRADED_TREATMENTS:
+        return
+    component = build_remediation_focus(row)["component"]
+    if component is None:
+        raise HTTPException(
+            422,
+            "Graded remediation requires one verified weakest grading component",
+        )
+    if treatment != component:
+        raise HTTPException(
+            422,
+            f"Grade treatment must match the verified {component.replace('_', ' ').title()} intervention focus",
+        )
 
 
 class ResourceRef(BaseModel):
@@ -55,6 +72,39 @@ class Advisory(BaseModel):
     reason: str = Field(min_length=10, max_length=400)
 
 
+_WEAKNESS_CLAIM_RE = re.compile(
+    r"\b(weak\w*|struggl\w*|poor|deficit|failed|low.perform\w*|needs? reinforcement)\b"
+)
+
+
+def _validate_advisory_reason(advice: Advisory, grounding: dict, focus: dict) -> None:
+    """Keep method advice bounded by the frozen diagnostic evidence."""
+    reason = advice.reason.lower()
+    component = focus.get("component")
+    scrubbed = reason
+    if component:
+        component_label = re.escape(component.replace("_", " ").lower())
+        allowed_component_phrases = (
+            rf"\b(?:the\s+)?(?:verified\s+)?weakest\s+(?:supported\s+)?(?:{component_label}\s+)?(?:grading\s+)?component\b",
+            rf"\b{component_label}\s+(?:is|as)\s+(?:the\s+)?(?:verified\s+)?weakest\s+(?:grading\s+)?component\b",
+        )
+        for pattern in allowed_component_phrases:
+            scrubbed = re.sub(pattern, " verified component ", scrubbed)
+    if _WEAKNESS_CLAIM_RE.search(scrubbed):
+        raise HTTPException(502, "AI returned an unsupported weakness claim")
+
+    measured = {
+        str(item["competency"]).strip().lower()
+        for item in grounding["measured_scored_competencies"]
+        if item.get("competency")
+    }
+    for coverage in grounding["unranked_manual_coverage_context"]:
+        for topic in coverage["covered_competencies"] + coverage["covered_lessons"]:
+            normalized = str(topic).strip().lower()
+            if normalized and normalized not in measured and normalized in reason:
+                raise HTTPException(502, "AI named unscored coverage as an advisory focus")
+
+
 def _row(db: Session, staff_id: str, intervention_id: int) -> Intervention:
     row = db.get(Intervention, intervention_id)
     if row is None or not _eligible_scope(db, staff_id, row):
@@ -67,40 +117,16 @@ def _row(db: Session, staff_id: str, intervention_id: int) -> Intervention:
 def resources(db: Session, row: Intervention, staff_id: str) -> list[dict]:
     result = []
     focus = build_remediation_focus(row)
-    focus_competencies = set(focus["competency_ids"])
-    focus_lessons = set(focus["lesson_ids"])
-    source_ids = set(focus["source_classwork_ids"])
-    lessons = db.query(Lesson).filter(
-        Lesson.subject_id == row.subject_id,
-        Lesson.created_by_staff_id == staff_id,
-        Lesson.is_archived == False,
-    ).order_by(Lesson.title).all()
-    for lesson in lessons:
-        assignments = db.query(LessonAssignment).filter_by(lesson_id=lesson.lesson_id).all()
-        if assignments and not any(a.class_id == row.class_id for a in assignments):
-            continue
-        accessible = bool(lesson.is_published and any(
-            a.class_id == row.class_id and a.is_published for a in assignments
-        ))
-        competency_match = lesson.competency_id in focus_competencies
-        lesson_match = lesson.lesson_id in focus_lessons
-        context = focus["evidence_level"] == "ACTIVITY_COVERAGE"
-        result.append({"kind": "LESSON", "id": lesson.lesson_id, "title": lesson.title,
-                       "description": (lesson.description or "")[:240], "lesson": lesson.title,
-                       "topic": lesson.title, "attachments": [],
-                       "access": "ALREADY_ACCESSIBLE" if accessible else "PLANNING_ONLY",
-                       "ai_read": "METADATA_ONLY",
-                       "recommended": bool(competency_match or lesson_match),
-                       "match_reason": (f"Matched {'covered competency metadata' if context else 'competency metadata'}: {lesson.competency.statement}" if competency_match
-                                        else f"Matched {'covered lesson metadata' if context else 'lesson'}: {lesson.title}" if lesson_match else None),
-                       "match_level": ("COMPETENCY" if competency_match else "LESSON" if lesson_match else None),
-                       "match_rank": (100 if competency_match else 80 if lesson_match else 0),
-                       "is_graded": False})
+
+    # Supporting Resources are genuine, non-graded READING classworks only (Lessons are not supporting resources).
     classworks = db.query(Classwork).filter(
         Classwork.subject_id == row.subject_id,
         Classwork.created_by_staff_id == staff_id,
         Classwork.is_archived == False,
+        Classwork.classwork_type == "READING",
+        Classwork.is_graded == False,
     ).order_by(Classwork.title).all()
+
     for cw in classworks:
         assignments = db.query(ClassworkAssignment).filter_by(classwork_id=cw.classwork_id).all()
         if assignments and not any(a.class_id == row.class_id and a.academic_period_id == row.academic_period_id for a in assignments):
@@ -119,43 +145,55 @@ def resources(db: Session, row: Intervention, staff_id: str) -> list[dict]:
                 linked_lessons.add(coverage.lesson_id)
         matched_competency = next((item for item in focus["competencies"] if item["id"] in linked_competencies), None)
         matched_lesson = next((item for item in focus["lessons"] if item["id"] in linked_lessons), None)
-        source_match = cw.classwork_id in source_ids
 
-        # Instructional material check: only non-graded materials (READING or is_graded=False)
-        is_instructional = (cw.classwork_type == "READING") or (not cw.is_graded)
-
-        # Graded assessments (QUIZ, ASSIGNMENT, ACTIVITY with is_graded=True) must NOT be recommended as study materials.
-        # If a graded classwork was a source activity, it can be kept with match_level="SOURCE_ACTIVITY" and recommended=False for diagnostic evidence.
-        # Otherwise, non-instructional graded classworks are excluded from resources altogether.
-        if not is_instructional and not source_match:
-            continue
-
-        if is_instructional:
-            reason = (f"Matched competency metadata: {matched_competency['label']}" if matched_competency and focus["evidence_level"] != "ACTIVITY_COVERAGE"
-                      else f"Matched covered competency metadata: {matched_competency['label']}" if matched_competency
-                      else f"Matched lesson: {matched_lesson['title']}" if matched_lesson and focus["evidence_level"] != "ACTIVITY_COVERAGE"
-                      else f"Matched covered lesson metadata: {matched_lesson['title']}" if matched_lesson
-                      else "Source activity metadata; file contents were not analyzed" if source_match else None)
-            rank = 100 if matched_competency else 80 if matched_lesson else 60 if source_match else 0
-            recommended = rank >= 80
-            match_level = ("COMPETENCY" if matched_competency else "LESSON" if matched_lesson else "SOURCE_ACTIVITY" if source_match else None)
+        if matched_competency:
+            reason = (f"Matched competency metadata: {matched_competency['label']}"
+                      if focus["evidence_level"] != "ACTIVITY_COVERAGE"
+                      else f"Matched covered competency metadata: {matched_competency['label']}")
+            rank = 100
+            recommended = True
+            match_level = "COMPETENCY"
+        elif matched_lesson:
+            reason = (f"Matched lesson: {matched_lesson['title']}"
+                      if focus["evidence_level"] != "ACTIVITY_COVERAGE"
+                      else f"Matched covered lesson metadata: {matched_lesson['title']}")
+            rank = 80
+            recommended = True
+            match_level = "LESSON"
         else:
-            reason = "Source activity metadata; file contents were not analyzed"
-            rank = 60
+            reason = None
+            rank = 0
             recommended = False
-            match_level = "SOURCE_ACTIVITY"
+            match_level = None
 
-        result.append({"kind": "CLASSWORK", "id": cw.classwork_id, "title": cw.title,
-                       "description": (cw.description or "")[:240],
-                       "classwork_type": cw.classwork_type,
-                       "lesson": ", ".join(lesson.title for lesson in cw.lessons[:4]),
-                       "topic": cw.title, "attachments": [a.file_name for a in cw.attachments],
-                       "access": "ALREADY_ACCESSIBLE" if accessible else "PLANNING_ONLY",
-                       "ai_read": "METADATA_ONLY", "recommended": recommended,
-                       "match_reason": reason, "match_level": match_level,
-                       "match_rank": rank,
-                       "is_graded": bool(cw.is_graded)})
+        result.append({
+            "kind": "CLASSWORK",
+            "id": cw.classwork_id,
+            "title": cw.title,
+            "description": (cw.description or "")[:240],
+            "classwork_type": "READING",
+            "lesson": ", ".join(lesson.title for lesson in cw.lessons[:4]),
+            "topic": cw.title,
+            "attachments": [a.file_name for a in cw.attachments],
+            "access": "ALREADY_ACCESSIBLE" if accessible else "PLANNING_ONLY",
+            "ai_read": "METADATA_ONLY",
+            "recommended": recommended,
+            "match_reason": reason,
+            "match_level": match_level,
+            "match_rank": rank,
+            "is_graded": False,
+        })
     return sorted(result, key=lambda item: (-item["match_rank"], item["title"]))
+
+
+def _is_selectable_resource(resource: dict) -> bool:
+    if resource.get("match_level") == "SOURCE_ACTIVITY":
+        return False
+    return (
+        resource.get("kind") == "CLASSWORK"
+        and resource.get("classwork_type") == "READING"
+        and not resource.get("is_graded", True)
+    )
 
 
 def progress(db: Session, row: Intervention) -> dict:
@@ -183,6 +221,8 @@ def progress(db: Session, row: Intervention) -> dict:
         ).order_by(StudentSubmission.submission_id.desc()).first()
         original_result = None
         effective_result = None
+        original_assignment_id = assignment.original_exam_assignment_id
+        original = None
         if assignment.original_exam_assignment_id is not None:
             original = db.get(ClassworkAssignment, assignment.original_exam_assignment_id)
             original_submission = db.query(StudentSubmission).filter_by(
@@ -193,12 +233,36 @@ def progress(db: Session, row: Intervention) -> dict:
                 from app.services.grading.RemedialExamination import effective_exam_score_for_change
                 effective_result = effective_exam_score_for_change(db, assignment, row.student_id,
                     float(submission.grade) if submission and submission.grade is not None else None)
+        else:
+            from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
+            link = db.query(RemediationAssignmentLink).filter_by(
+                remediation_assignment_id=assignment.classwork_assignment_id
+            ).first()
+            if link is not None:
+                original_assignment_id = link.original_assignment_id
+                original = db.get(ClassworkAssignment, link.original_assignment_id)
+                original_submission = db.query(StudentSubmission).filter_by(
+                    classwork_assignment_id=link.original_assignment_id, student_id=row.student_id,
+                ).order_by(StudentSubmission.submission_id.desc()).first() if original else None
+                original_result = float(original_submission.grade) if original_submission and original_submission.grade is not None else None
+                rem_grade = float(submission.grade) if submission and submission.grade is not None else None
+                if original_result is not None and rem_grade is not None and original and original.classwork and original.classwork.total_points:
+                    from app.services.grading.RemediationScoreAdjuster import adjust_remediation_score
+                    adj = adjust_remediation_score(
+                        original_score=original_result,
+                        remediation_score=rem_grade,
+                        max_points=float(original.classwork.total_points),
+                        cap_percentage=link.score_adjustment_cap,
+                    )
+                    effective_result = float(adj.effective_score)
+                elif original_result is not None:
+                    effective_result = original_result
         assigned.append({"title": work.title, "assignment_id": assignment.classwork_assignment_id,
                          "classwork_id": work.classwork_id,
                          "classwork_type": work.classwork_type,
-                         "original_assignment_id": assignment.original_exam_assignment_id,
+                         "original_assignment_id": original_assignment_id,
                          "exam_subtype": work.exam_subtype,
-                         "original_title": original.classwork.title if assignment.original_exam_assignment_id is not None and original else None,
+                         "original_title": original.classwork.title if original and original.classwork else None,
                          "original_grade": original_result,
                          "effective_grade": effective_result,
                          "component": work.classwork_category,
@@ -289,6 +353,12 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
                            if body.teacher_choice in {"QUIZ", "CLASSWORK"} else None)
 
     current_plan = dict(row.remediation_plan or {})
+    existing_activity = db.query(ClassworkAssignment.classwork_assignment_id).filter_by(
+        source_intervention_id=row.intervention_id,
+        recipient_student_id=row.student_id,
+    ).first()
+    if not existing_activity:
+        _validate_grade_treatment_focus(row, requested_treatment)
 
     # Check duplicate target classwork assignment IDs
     if body.target_assignment_ids is not None:
@@ -307,6 +377,9 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
     # Resolve target assignment IDs and requested exam ID
     if body.target_assignment_ids is not None:
         target_ids = list(body.target_assignment_ids)
+    elif requested_treatment in (None, "PRACTICE_ONLY"):
+        # An explicit save to ungraded/non-activity support reconciles stale graded targets.
+        target_ids = []
     else:
         target_ids = list(current_plan.get("target_assignment_ids", []))
 
@@ -321,7 +394,7 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
     if requested_treatment in (None, "PRACTICE_ONLY") and target_ids:
         raise HTTPException(422, "Target classwork assignments can only be set for graded remediation treatments")
 
-    if requested_treatment in {"WRITTEN_WORK", "PERFORMANCE_TASK", "EXAMINATION"} and target_ids:
+    if requested_treatment in GRADED_TREATMENTS and target_ids:
         # Check period finalized state
         finalized = db.query(StudentPeriodGrade.period_grade_id).filter_by(
             student_id=row.student_id,
@@ -332,9 +405,6 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
         ).first()
         if finalized:
             raise HTTPException(409, "The period grade is finalized; cannot target classworks in a finalized period")
-
-        if requested_treatment == "EXAMINATION" and build_remediation_focus(row)["component"] != "EXAMINATION":
-            raise HTTPException(422, "The Intervention does not have Examination as its support focus")
 
         for target_id in target_ids:
             target_assignment = db.get(ClassworkAssignment, target_id)
@@ -394,23 +464,30 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
         }:
             raise HTTPException(422, "Select a scored original Examination in this student scope")
 
-    existing_activity = db.query(ClassworkAssignment.classwork_assignment_id).filter_by(
-        source_intervention_id=row.intervention_id,
-        recipient_student_id=row.student_id,
-    ).first()
     current_treatment = current_plan.get("grade_treatment")
     if current_plan.get("teacher_choice") in {"QUIZ", "CLASSWORK"} and current_treatment is None:
         current_treatment = "PRACTICE_ONLY"
-    if existing_activity and (
-        body.teacher_choice != current_plan.get("teacher_choice")
-        or requested_treatment != current_treatment
-        or requested_exam_id != current_plan.get("original_exam_assignment_id")
-        or (body.target_assignment_ids is not None and target_ids != current_plan.get("target_assignment_ids", []))
-        or (body.score_adjustment_cap is not None and resolved_cap != current_plan.get("score_adjustment_cap", float(DEFAULT_REMEDIATION_CAP_PERCENTAGE)))
-    ):
-        raise HTTPException(409, "Remediation format, grade treatment, and targeted classworks cannot change after a targeted activity is created")
+    if existing_activity:
+        current_targets = list(current_plan.get("target_assignment_ids", []))
+        targets_modified = (
+            body.target_assignment_ids is not None
+            and target_ids[:len(current_targets)] != current_targets
+        )
+        if (
+            body.teacher_choice != current_plan.get("teacher_choice")
+            or requested_treatment != current_treatment
+            or requested_exam_id != current_plan.get("original_exam_assignment_id")
+            or targets_modified
+            or (body.score_adjustment_cap is not None and resolved_cap != current_plan.get("score_adjustment_cap", float(DEFAULT_REMEDIATION_CAP_PERCENTAGE)))
+        ):
+            raise HTTPException(409, "Remediation format, grade treatment, and targeted classworks cannot change after a targeted activity is created")
+    _validate_grade_treatment_focus(row, requested_treatment)
 
-    available = {(r["kind"], r["id"]) for r in resources(db, row, staff_id)}
+    available = {
+        (resource["kind"], resource["id"])
+        for resource in resources(db, row, staff_id)
+        if _is_selectable_resource(resource)
+    }
     selected = [(ref.kind, ref.id) for ref in body.selected_resources]
     if len(set(selected)) != len(selected) or any(item not in available for item in selected):
         raise HTTPException(422, "Selected material is unavailable in this teaching scope")
@@ -443,20 +520,18 @@ async def generate_advisory(db: Session, staff_id: str, intervention_id: int) ->
     if not settings.groq_api_key:
         raise HTTPException(503, "Groq is not configured for remediation advice")
     grounding = build_grounding(row, _source(db, row))
-    selected = {(r.get("kind"), r.get("id")) for r in (row.remediation_plan or {}).get("selected_resources", [])}
-    material_context = [{"title": r["title"], "type": r["kind"], "lesson": r["lesson"],
-                         "description": r["description"], "content_access": "METADATA_ONLY",
-                         "match_reason": r["match_reason"]}
-                        for r in resources(db, row, staff_id) if (r["kind"], r["id"]) in selected]
     system = ("You advise a teacher on a remediation FORMAT. Return only JSON with recommended_format and reason. "
               "Format is one of QUIZ, TOS, CLASSWORK, EXISTING_MATERIAL_ONLY. Advisory only. "
               "Use only the supplied facts. Question scores support missed concepts; scored competencies support measured weakness. "
               "Activity totals plus coverage allow review suggestions but never prove each covered topic weak. "
-              "Component-only evidence supports only component-level advice. Materials are metadata only and never prove weakness. "
+              "Component-only evidence supports only component-level advice. "
               "TOS is a planning/export tool. No examination slot or subtype may be selected. "
-              "Keep reason short and format-level; do not name any topic or competency in the reason.")
-    raw = await Provider.generate_text(json.dumps({"evidence": grounding, "deterministic_focus": build_remediation_focus(row),
-                                         "selected_material_metadata": material_context}),
+              "Keep reason short and format-level. Refer only to the verified grading component and evidence level. "
+              "Do not name a lesson or competency unless it appears under measured_scored_competencies. "
+              "When evidence is coverage-only or component-only, do not claim a topic weakness. "
+              "Prefer neutral wording such as 'supports the verified Performance Task focus'.")
+    focus = build_remediation_focus(row)
+    raw = await Provider.generate_text(json.dumps({"evidence": grounding, "deterministic_focus": focus}),
                                        system, json_output=True, max_tokens=350)
     try:
         candidate = raw.strip()
@@ -467,19 +542,16 @@ async def generate_advisory(db: Session, staff_id: str, intervention_id: int) ->
         raise HTTPException(502, "AI returned an invalid remediation advisory") from None
     if advice.recommended_format not in FORMATS:
         raise HTTPException(502, "AI returned an unsupported remediation format")
-    if re.search(r"\b(weak\w*|struggl\w*|poor|deficit|failed)\b", advice.reason.lower()):
-        raise HTTPException(502, "AI returned an unsupported weakness claim")
-    measured = {str(item["competency"]).lower() for item in grounding["measured_scored_competencies"]}
-    for coverage in grounding["unranked_manual_coverage_context"]:
-        for topic in coverage["covered_competencies"] + coverage["covered_lessons"]:
-            if topic and topic.lower() not in measured and topic.lower() in advice.reason.lower():
-                raise HTTPException(502, "AI named unscored coverage as an advisory focus")
+    _validate_advisory_reason(advice, grounding, focus)
     db.refresh(row)
     if row.status != "ACTIVE" or not _eligible_scope(db, staff_id, row):
         raise HTTPException(409, "Intervention scope changed while preparing advice")
     plan = dict(row.remediation_plan or {})
-    plan["ai_suggestion"] = {**advice.model_dump(), "focus": grounding["measured_scored_competencies"],
-                             "evidence_used": _basis(row), "selected_materials_are_metadata_only": True}
+    plan["ai_suggestion"] = {
+        **advice.model_dump(),
+        "focus": grounding["measured_scored_competencies"],
+        "evidence_used": _basis(row),
+    }
     plan.setdefault("teacher_choice", None)
     plan.setdefault("selected_resources", [])
     plan["evidence_basis"] = _basis(row)

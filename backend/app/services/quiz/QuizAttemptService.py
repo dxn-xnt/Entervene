@@ -299,8 +299,15 @@ def _submission_for(db: Session, student: Student, assignment_id: int) -> Studen
 
 
 def _max_attempts(db: Session, assignment: ClassworkAssignment, classwork: Classwork) -> int:
+    if assignment.original_exam_assignment_id is not None or assignment.source_intervention_id is not None:
+        return 1
+    from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
+    if db.query(RemediationAssignmentLink.remediation_link_id).filter_by(
+        remediation_assignment_id=assignment.classwork_assignment_id
+    ).first() is not None:
+        return 1
     setting = db.query(QuizSetting).filter(QuizSetting.classwork_id == classwork.classwork_id).first()
-    return assignment.max_attempts or setting.max_attempts or 1
+    return assignment.max_attempts or (setting.max_attempts if setting else None) or 1
 
 
 def _ordered_quiz_questions(quiz: Quiz) -> list[QuizQuestion]:

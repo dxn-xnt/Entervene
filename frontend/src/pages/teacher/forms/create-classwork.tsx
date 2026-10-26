@@ -10,6 +10,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { FormMessage } from "@/components/retroui/FormMessage";
+import { Badge } from "@/components/retroui/Badge";
 import { useToast } from "@/components/retroui/Toast";
 import { Switch } from "@/components/retroui/Switch";
 import { apiFetch } from "@/lib/api";
@@ -31,8 +32,19 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { ActivityRubricEditor } from "@/components/activity-rubric-editor";
 import { activityRubricMaximum, defaultActivityRubric, validateActivityRubric } from "@/lib/classwork-utils";
 import type { ActivityRubricLevel } from "@/types/classwork";
-import type { TeacherInterventionDetail, RemediationFocus, OriginalExamination } from "@/lib/teacher-interventions-api";
+import type { TeacherInterventionDetail, RemediationFocus, OriginalExamination, RemediationClassworkTarget } from "@/lib/teacher-interventions-api";
 import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
+
+function scaleRubricToMaxPoints(levels: ActivityRubricLevel[], targetPoints: number): ActivityRubricLevel[] {
+  if (levels.length === 0) return levels;
+  const currentMax = Math.max(...levels.map((l) => l.points));
+  if (currentMax === targetPoints) return levels;
+  const factor = currentMax > 0 ? targetPoints / currentMax : 1;
+  return levels.map((l) => ({
+    ...l,
+    points: Math.round(l.points * factor * 10) / 10,
+  }));
+}
 
 interface CreateClassworkModalProps {
   selectedType: ClassworkKind;
@@ -48,6 +60,8 @@ interface CreateClassworkModalProps {
   remediationFocus?: RemediationFocus | null;
   remediationGradeTreatment?: "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | null;
   remediationOriginalExam?: OriginalExamination | null;
+  remediationOriginalTargets?: RemediationClassworkTarget[];
+  initialTargetAssignmentId?: number | null;
   onClose: () => void;
   onSuccess: () => void;
   onBack: () => void;
@@ -67,11 +81,25 @@ export default function CreateClassworkModal({
   remediationFocus = null,
   remediationGradeTreatment = null,
   remediationOriginalExam = null,
+  remediationOriginalTargets = [],
+  initialTargetAssignmentId = null,
   onClose,
   onSuccess,
   onBack,
 }: CreateClassworkModalProps) {
   const [createStep, setCreateStep] = useState<"details" | "assign">("details");
+  const [selectedTargetId, setSelectedTargetId] = useState<number | null>(() => {
+    if (initialTargetAssignmentId && remediationOriginalTargets.some((t) => t.assignment_id === initialTargetAssignmentId)) {
+      return initialTargetAssignmentId;
+    }
+    const rec = remediationOriginalTargets.find((t) => t.is_recommended);
+    return rec?.assignment_id ?? remediationOriginalTargets[0]?.assignment_id ?? null;
+  });
+
+  const selectedOriginalTarget = useMemo(() => {
+    return remediationOriginalTargets.find((t) => t.assignment_id === selectedTargetId) ?? null;
+  }, [remediationOriginalTargets, selectedTargetId]);
+
   const [draft, setDraft] = useState<CreateDraft>(() => {
     const preferredId =
       initialSubjectId && subjects.some((s) => String(s.id) === String(initialSubjectId))
@@ -79,6 +107,11 @@ export default function CreateClassworkModal({
         : subjects[0]
           ? String(subjects[0].id)
           : "";
+    const targetPoints = remediationOriginalExam
+      ? String(remediationOriginalExam.total_points)
+      : (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") && remediationOriginalTargets.length
+        ? String((remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId) ?? remediationOriginalTargets[0]).max_points)
+        : emptyClassworkDraft.total_points;
     return {
       ...emptyClassworkDraft,
       title: initialTitle || "",
@@ -86,7 +119,7 @@ export default function CreateClassworkModal({
       is_published: remediationDraft ? false : emptyClassworkDraft.is_published,
       classwork_category: remediationDraft ? (remediationGradeTreatment === "PRACTICE_ONLY" ? "" : remediationGradeTreatment === "EXAMINATION" ? "QUARTERLY_ASSESSMENT" : remediationGradeTreatment || "") : categoryFromFocus(null),
       exam_subtype: remediationOriginalExam?.subtype ?? "",
-      total_points: remediationOriginalExam ? String(remediationOriginalExam.total_points) : emptyClassworkDraft.total_points,
+      total_points: targetPoints,
       subject_id: preferredId,
     };
   });
@@ -110,9 +143,18 @@ export default function CreateClassworkModal({
   const [isLessonLoading, setIsLessonLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [validationError, setValidationError] = useState("");
-  const [rubricLevels, setRubricLevels] = useState<ActivityRubricLevel[]>(() =>
-    defaultActivityRubric.map((level) => ({ ...level })),
-  );
+  const [rubricLevels, setRubricLevels] = useState<ActivityRubricLevel[]>(() => {
+    const defaultLevels = defaultActivityRubric.map((level) => ({ ...level }));
+    if (
+      remediationDraft &&
+      (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") &&
+      remediationOriginalTargets.length
+    ) {
+      const target = remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId) ?? remediationOriginalTargets[0];
+      return scaleRubricToMaxPoints(defaultLevels, target.max_points);
+    }
+    return defaultLevels;
+  });
 
   const setFormError = (msg: string) => {
     toast.error({ title: msg });
@@ -187,6 +229,15 @@ export default function CreateClassworkModal({
     if (!draft.title.trim()) return "Topic title is required.";
     if (remediationDraft && (draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && !draft.exam_subtype) return "Choose an Examination sub-type explicitly.";
     if (remediationGradeTreatment === "EXAMINATION" && (!remediationOriginalExam || draft.exam_subtype !== remediationOriginalExam.subtype || Number(draft.total_points) !== remediationOriginalExam.total_points)) return "Remedial Examination must match the original subtype and maximum points.";
+    if (remediationDraft && (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK")) {
+      if (!selectedOriginalTarget) return "Select the original classwork to link this remediation activity.";
+      const targetMaxPoints = selectedOriginalTarget.max_points;
+      const hasRubric = selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT";
+      const totalPoints = hasRubric ? activityRubricMaximum(rubricLevels) : Number(draft.total_points);
+      if (Math.abs(totalPoints - targetMaxPoints) > 0.001) {
+        return `Remedial classwork points (${totalPoints}) must equal the original classwork maximum points (${targetMaxPoints}).`;
+      }
+    }
     if (!isReadingType(selectedType)) {
       const hasRubric = selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT";
       if (hasRubric) {
@@ -355,7 +406,11 @@ export default function CreateClassworkModal({
       if (remediationTarget) {
         formData.append("intervention_id", String(remediationTarget.intervention_id));
         formData.append("remediation_request_id", remediationRequestId);
-        if (remediationOriginalExam && remediationGradeTreatment === "EXAMINATION") formData.append("original_exam_assignment_id", String(remediationOriginalExam.assignment_id));
+        if (remediationOriginalExam && remediationGradeTreatment === "EXAMINATION") {
+          formData.append("original_exam_assignment_id", String(remediationOriginalExam.assignment_id));
+        } else if (selectedOriginalTarget && (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK")) {
+          formData.append("original_classwork_assignment_id", String(selectedOriginalTarget.assignment_id));
+        }
       }
       formData.append("lesson_ids", JSON.stringify(selectedLessonIds));
       if (draft.due_date) {
@@ -526,6 +581,67 @@ export default function CreateClassworkModal({
                 </Select>
               </Field>
 
+              {remediationDraft && (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") && (
+                <Field label="Targeted Original Classwork" isRequired={true}>
+                  {remediationOriginalTargets && remediationOriginalTargets.length > 1 ? (
+                    <Select
+                      value={selectedTargetId ? String(selectedTargetId) : ""}
+                      onValueChange={(val) => {
+                        const nextId = Number(val);
+                        setSelectedTargetId(nextId);
+                        const target = remediationOriginalTargets.find((t) => t.assignment_id === nextId);
+                        if (target) {
+                          setDraft((cur) => ({ ...cur, total_points: String(target.max_points) }));
+                          if (selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT") {
+                            setRubricLevels((levels) => scaleRubricToMaxPoints(levels, target.max_points));
+                          }
+                        }
+                        setValidationError("");
+                      }}
+                      disabled={isCreating}
+                    >
+                      <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
+                        <Select.Value placeholder="Select target classwork assignment" />
+                      </Select.Trigger>
+                      <Select.Content className="border-2 border-black rounded bg-white">
+                        <Select.Group>
+                          {remediationOriginalTargets.map((target) => (
+                            <Select.Item key={target.assignment_id} value={String(target.assignment_id)}>
+                              {target.title} ({target.original_score ?? 0}/{target.max_points} pts)
+                              {target.is_recommended ? " — Recommended" : ""}
+                            </Select.Item>
+                          ))}
+                        </Select.Group>
+                      </Select.Content>
+                    </Select>
+                  ) : null}
+                  {selectedOriginalTarget ? (
+                    <div className="flex items-center justify-between p-3 bg-muted/40 rounded border-2 border-border mt-1">
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold">{selectedOriginalTarget.title}</span>
+                          {selectedOriginalTarget.is_recommended && (
+                            <Badge variant="secondary" size="sm">
+                              Recommended
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          Original score: {selectedOriginalTarget.original_score ?? 0} / {selectedOriginalTarget.max_points} points · Required maximum: {selectedOriginalTarget.max_points} points
+                        </span>
+                      </div>
+                      <Badge variant="surface" size="sm">
+                        {selectedOriginalTarget.component === "WRITTEN_WORK" ? "Written Work" : "Performance Task"}
+                      </Badge>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-destructive font-medium" role="alert">
+                      Please select a target original classwork assignment.
+                    </p>
+                  )}
+                </Field>
+              )}
+
               <Field label="Topic Title" isRequired={true}>
                 <Input
                   value={draft.title}
@@ -643,7 +759,7 @@ export default function CreateClassworkModal({
                           total_points: event.target.value,
                         }))
                       }
-                      disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
+                      disabled={isCreating || remediationGradeTreatment === "EXAMINATION" || remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK"}
                       className="w-full bg-white border-2 border-black rounded shadow-md"
                     />
                   </Field>}
@@ -654,6 +770,7 @@ export default function CreateClassworkModal({
                 <p className="rounded border p-3 text-sm">
                   Evidence focus: {focusGuidance(remediationFocus)}
                   {remediationGradeTreatment === "EXAMINATION" && remediationOriginalExam ? ` Original ${remediationOriginalExam.title}: ${remediationOriginalExam.score}/${remediationOriginalExam.total_points}. The higher result will count.` : ""}
+                  {(remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") && selectedOriginalTarget ? ` Original ${selectedOriginalTarget.title}: ${selectedOriginalTarget.original_score ?? 0}/${selectedOriginalTarget.max_points}. Linked score will adjust effective grade under the plan cap.` : ""}
                   {remediationDraft && remediationGradeTreatment === "PRACTICE_ONLY" && " Practice only: completion and score do not affect official grades or predictions."}
                 </p>
               )}

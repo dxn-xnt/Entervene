@@ -95,6 +95,13 @@ def _academic_scope(db: Session):
     level = AcademicLevel(level_name="Grade 10", grade_level=10)
     db.add_all([year, level])
     db.flush()
+    template = GradingTemplate(
+        template_name="Natural 20-50-30",
+        passing_threshold=Decimal("75"),
+        status="active",
+    )
+    db.add(template)
+    db.flush()
     period = AcademicPeriod(period_name="Term 2", period_type="TERM", period_sequence=2, total_periods_in_year=3,
         period_progress_ratio=Decimal("0.6667"), start_date=date(2026, 9, 1), end_date=date(2026, 11, 30),
         academic_year_id=year.academic_year_id, is_active=True)
@@ -102,7 +109,7 @@ def _academic_scope(db: Session):
     student = Student(student_id=uuid4(), student_lrn="300000000202", first_name="Natural", last_name="Student",
         academic_level_id=level.academic_level_id)
     subject = Subject(subject_name="Mathematics 10", subject_codename="MATH10", academic_level_id=level.academic_level_id,
-        is_core=True, status="active")
+        grading_template_id=template.grading_template_id, is_core=True, status="active")
     class_ = Class(section_name="Natural Trace", academic_year_id=year.academic_year_id,
         academic_level_id=level.academic_level_id, academic_period=period, adviser=teacher)
     class_.period_template_group = "JHS_45MIN"
@@ -112,16 +119,11 @@ def _academic_scope(db: Session):
         academic_year_id=year.academic_year_id, enrollment_status="enrolled"))
     db.add(SubjectLoad(staff_id=teacher.staff_id, subject_id=subject.subject_id, class_id=class_.class_id,
         academic_period_id=period.academic_period_id, status="published", is_active_version=True))
-    template = GradingTemplate(template_name="Natural 20-50-30", academic_level_id=level.academic_level_id,
-        subject_id=subject.subject_id, status="active")
-    db.add(template)
-    db.flush()
     db.add_all([
         GradingTemplateComponent(grading_template_id=template.grading_template_id, component_name="Written Works", weight=Decimal("20"), display_order=1),
         GradingTemplateComponent(grading_template_id=template.grading_template_id, component_name="Performance Tasks", weight=Decimal("50"), display_order=2),
         GradingTemplateComponent(grading_template_id=template.grading_template_id, component_name="Quarterly Assessment", weight=Decimal("30"), display_order=3),
     ])
-    subject.default_grading_template = str(template.grading_template_id)
     competency = Competency(competency_code="NAT-RATIO", statement="Solve ratios", subject_id=subject.subject_id,
         academic_period_id=period.academic_period_id, created_by_staff_id=teacher.staff_id)
     db.add(competency)
@@ -301,25 +303,11 @@ def test_grade_commit_naturally_creates_candidate_with_scored_exam_competency(is
         }))
         repeated_assignment = db.query(ClassworkAssignment).filter_by(classwork_id=repeated.classwork_id).one()
         assert repeated_assignment.original_exam_assignment_id == exam.classwork_assignment_id
-        save_plan(db, teacher_id, candidate.intervention_id,
-            PlanUpdate(teacher_choice="CLASSWORK", grade_treatment="EXAMINATION",
-                       original_exam_assignment_id=summative_2.classwork_assignment_id))
-        with pytest.raises(HTTPException) as stale_selection:
-            asyncio.run(create_classwork_wizard_record(**{**create_args, "remediation_request_id": uuid4()}))
-        assert stale_selection.value.status_code == 400
-        lower_created = asyncio.run(create_classwork_wizard_record(**{
-            **create_args, "title": "Summative 2 remedial", "exam_subtype": "SUMMATIVE_2",
-            "original_exam_assignment_id": summative_2.classwork_assignment_id,
-            "remediation_request_id": uuid4(),
-        }))
-        lower_remedial = db.query(ClassworkAssignment).filter_by(classwork_id=lower_created.classwork_id).one()
-        lower_attempt = StudentSubmission(student_id=student.student_id,
-            classwork_assignment_id=lower_remedial.classwork_assignment_id, status="submitted")
-        db.add(lower_attempt)
-        db.commit()
-        revisions_before = db.query(DevelopmentCurrentTermPrediction).count()
-        grade_student_submission(lower_attempt.submission_id, GradeRequest(grade=2), teacher_id, db)
-        assert db.query(DevelopmentCurrentTermPrediction).count() == revisions_before
+        with pytest.raises(HTTPException) as locked_target:
+            save_plan(db, teacher_id, candidate.intervention_id,
+                PlanUpdate(teacher_choice="CLASSWORK", grade_treatment="EXAMINATION",
+                           original_exam_assignment_id=summative_2.classwork_assignment_id))
+        assert locked_target.value.status_code == 409
         attempt = StudentSubmission(student_id=student.student_id,
             classwork_assignment_id=remedial.classwork_assignment_id, status="submitted")
         db.add(attempt)
@@ -349,8 +337,6 @@ def test_grade_commit_naturally_creates_candidate_with_scored_exam_competency(is
         assert student_row.remedial_exams[0]["effective_score"] == 9
         assert student_row.remedial_exams[1]["remedial_score"] == 9
         assert student_row.remedial_exams[1]["effective_score"] == 9
-        assert student_row.remedial_exams[2]["remedial_score"] == 2
-        assert student_row.remedial_exams[2]["effective_score"] == 4
         latest = db.query(DevelopmentCurrentTermPrediction).order_by(
             DevelopmentCurrentTermPrediction.revision.desc()).first()
         projected = latest.evidence_snapshot["projected_final_term_grade_raw"]

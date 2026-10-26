@@ -24,6 +24,7 @@ from app.schemas.Activity import (
 )
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
+from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
 
 
 def _verify_teacher_scope(
@@ -224,6 +225,7 @@ def bulk_update_activity_scores(
     for item in payload.scores:
         if (enrolled_ids is not None and item.student_id not in enrolled_ids) or not assignment_allows_student(assignment, item.student_id):
             raise HTTPException(status_code=403, detail="Student is not assigned to this activity")
+        ensure_remedial_period_open(db, assignment, item.student_id)
 
     # Validate each score input before modifying database
     for item in payload.scores:
@@ -282,7 +284,10 @@ def bulk_update_activity_scores(
     changed_students = {
         UUID(student_id)
         for student_id, original in original_grades.items()
-        if (sub_map[student_id].grade if student_id in sub_map else None) != original
+        if effective_grade_changed(
+            db, assignment, UUID(student_id), original,
+            sub_map[student_id].grade if student_id in sub_map else None,
+        )
     }
     if classwork.is_graded:
         refresh_after_committed_grade_change(

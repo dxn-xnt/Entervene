@@ -41,7 +41,14 @@ import {
 } from "../classworks/quiz-question-rules";
 import { exportQuizPdf, exportQuizDocx } from "@/lib/quiz-export";
 import AIQuizGeneratorModal from "./ai-quiz-generator-modal";
-import type { TeacherInterventionDetail, RemediationFocus, RemediationResource, OriginalExamination } from "@/lib/teacher-interventions-api";
+import type {
+    TeacherInterventionDetail,
+    RemediationFocus,
+    RemediationResource,
+    OriginalExamination,
+    RemediationClassworkTarget,
+} from "@/lib/teacher-interventions-api";
+import { Badge } from "@/components/retroui/Badge";
 import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
 
 interface CreateClassworkQuizModalProps {
@@ -58,6 +65,8 @@ interface CreateClassworkQuizModalProps {
     remediationFocus?: RemediationFocus | null;
     remediationGradeTreatment?: "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | null;
     remediationOriginalExam?: OriginalExamination | null;
+    remediationOriginalTargets?: RemediationClassworkTarget[];
+    initialTargetAssignmentId?: number | null;
     remediationReferences?: RemediationResource[];
     onClose: () => void;
     onSuccess: () => void;
@@ -78,6 +87,8 @@ export default function CreateClassworkQuizModal({
     remediationFocus = null,
     remediationGradeTreatment = null,
     remediationOriginalExam = null,
+    remediationOriginalTargets = [],
+    initialTargetAssignmentId = null,
     remediationReferences = [],
     onClose,
     onSuccess,
@@ -89,6 +100,26 @@ export default function CreateClassworkQuizModal({
         "quiz-source" | "details" | "quiz" | "assign"
     >("quiz-source");
 
+    const isGradedWWPT = remediationDraft && (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK");
+
+    const [selectedTargetId, setSelectedTargetId] = useState<number | null>(() => {
+        if (initialTargetAssignmentId) return initialTargetAssignmentId;
+        if (remediationOriginalTargets && remediationOriginalTargets.length > 0) {
+            const rec = remediationOriginalTargets.find((t) => t.is_recommended);
+            return rec ? rec.assignment_id : remediationOriginalTargets[0].assignment_id;
+        }
+        return null;
+    });
+
+    const selectedOriginalTarget = useMemo(() => {
+        if (!remediationOriginalTargets || remediationOriginalTargets.length === 0) return null;
+        return (
+            remediationOriginalTargets.find((t) => t.assignment_id === selectedTargetId) ||
+            remediationOriginalTargets[0] ||
+            null
+        );
+    }, [remediationOriginalTargets, selectedTargetId]);
+
     const [draft, setDraft] = useState<CreateDraft>(() => {
         const preferredId =
             initialSubjectId && subjects.some((s) => String(s.id) === String(initialSubjectId))
@@ -96,6 +127,15 @@ export default function CreateClassworkQuizModal({
                 : subjects[0]
                     ? String(subjects[0].id)
                     : "";
+        const defaultTotalPoints = remediationOriginalExam
+            ? String(remediationOriginalExam.total_points)
+            : (isGradedWWPT && remediationOriginalTargets && remediationOriginalTargets.length > 0)
+                ? String((remediationOriginalTargets.find((t) => t.assignment_id === initialTargetAssignmentId) || remediationOriginalTargets.find((t) => t.is_recommended) || remediationOriginalTargets[0]).max_points)
+                : emptyClassworkDraft.total_points;
+        const defaultAttempts = (remediationGradeTreatment === "EXAMINATION" || isGradedWWPT)
+            ? "1"
+            : emptyClassworkDraft.max_attempts;
+
         return {
             ...emptyClassworkDraft,
             title: initialTitle || "",
@@ -103,8 +143,8 @@ export default function CreateClassworkQuizModal({
             is_published: remediationDraft ? false : emptyClassworkDraft.is_published,
             classwork_category: remediationDraft ? (remediationGradeTreatment === "PRACTICE_ONLY" ? "" : remediationGradeTreatment === "EXAMINATION" ? "QUARTERLY_ASSESSMENT" : remediationGradeTreatment || "") : categoryFromFocus(null),
             exam_subtype: remediationOriginalExam?.subtype ?? "",
-            total_points: remediationOriginalExam ? String(remediationOriginalExam.total_points) : emptyClassworkDraft.total_points,
-            max_attempts: remediationGradeTreatment === "EXAMINATION" ? "1" : emptyClassworkDraft.max_attempts,
+            total_points: defaultTotalPoints,
+            max_attempts: defaultAttempts,
             subject_id: preferredId,
         };
     });
@@ -117,8 +157,12 @@ export default function CreateClassworkQuizModal({
     const [quizQuestions, setQuizQuestions] = useState<QuizQuestionDraft[]>([
         createEmptyQuizQuestion(1),
     ]);
-    const [quizSettings, setQuizSettings] =
-        useState<QuizSettingsDraft>(defaultQuizSettings);
+    const [quizSettings, setQuizSettings] = useState<QuizSettingsDraft>(() => ({
+        ...defaultQuizSettings,
+        max_attempts: (remediationGradeTreatment === "EXAMINATION" || isGradedWWPT)
+            ? "1"
+            : defaultQuizSettings.max_attempts,
+    }));
     const [quizImportWarnings, setQuizImportWarnings] = useState<string[]>([]);
     const [isImportingQuiz, setIsImportingQuiz] = useState(false);
     const [isAIModalOpen, setIsAIModalOpen] = useState(false);
@@ -231,12 +275,16 @@ export default function CreateClassworkQuizModal({
                 ...current,
                 title: current.title || preview.title || "",
                 instructions: current.instructions,
-                total_points: remediationOriginalExam ? String(remediationOriginalExam.total_points) : String(
-                    importedQuestions.reduce(
-                        (sum, q) => sum + Number(q.points || 0),
-                        0,
-                    ) || current.total_points,
-                ),
+                total_points: remediationOriginalExam
+                    ? String(remediationOriginalExam.total_points)
+                    : isGradedWWPT && selectedOriginalTarget
+                        ? String(selectedOriginalTarget.max_points)
+                        : String(
+                            importedQuestions.reduce(
+                                (sum, q) => sum + Number(q.points || 0),
+                                0,
+                            ) || current.total_points,
+                        ),
             }));
             setCreateStep("details");
         } catch (err) {
@@ -396,6 +444,15 @@ export default function CreateClassworkQuizModal({
         if (!draft.title.trim()) return "Topic title is required.";
         if ((draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && !draft.exam_subtype) return "Choose an Examination sub-type explicitly.";
         if (remediationGradeTreatment === "EXAMINATION" && (!remediationOriginalExam || draft.exam_subtype !== remediationOriginalExam.subtype || Number(draft.total_points) !== remediationOriginalExam.total_points || Number(draft.max_attempts) !== 1)) return "Remedial Examination must match the original subtype and maximum points, with one quiz attempt.";
+        if (isGradedWWPT) {
+            if (!selectedOriginalTarget) return "Select the original classwork to link this remediation activity.";
+            if (Number(draft.total_points) !== selectedOriginalTarget.max_points) {
+                return `Remedial quiz points (${Number(draft.total_points)}) must equal the original classwork maximum points (${selectedOriginalTarget.max_points}).`;
+            }
+            if (Number(draft.max_attempts) !== 1) {
+                return "Graded remediation quiz must allow exactly one attempt.";
+            }
+        }
         const points = Number(draft.total_points);
         if (!Number.isFinite(points) || points <= 0) {
             return "Total points must be greater than zero.";
@@ -428,6 +485,9 @@ export default function CreateClassworkQuizModal({
         const attempts = Number(quizSettings.max_attempts || draft.max_attempts);
         if (!Number.isInteger(attempts) || attempts <= 0) {
             return "Allowed quiz attempts must be a positive whole number.";
+        }
+        if (isGradedWWPT && attempts !== 1) {
+            return "Graded remediation quiz must allow exactly one attempt.";
         }
         if (
             quizSettings.summary_release_mode === "SCHEDULED" &&
@@ -707,6 +767,9 @@ export default function CreateClassworkQuizModal({
                 formData.append("intervention_id", String(remediationTarget.intervention_id));
                 formData.append("remediation_request_id", remediationRequestId);
                 if (remediationOriginalExam && remediationGradeTreatment === "EXAMINATION") formData.append("original_exam_assignment_id", String(remediationOriginalExam.assignment_id));
+                if (selectedOriginalTarget && isGradedWWPT) {
+                    formData.append("original_classwork_assignment_id", String(selectedOriginalTarget.assignment_id));
+                }
             }
             formData.append("lesson_ids", JSON.stringify(selectedLessonIds));
             if (draft.due_date) {
@@ -1017,6 +1080,64 @@ export default function CreateClassworkQuizModal({
                                         </Field>
                                     )}
 
+                                    {isGradedWWPT && (
+                                        <Field label="Targeted Original Classwork" isRequired={true}>
+                                            {remediationOriginalTargets && remediationOriginalTargets.length > 1 ? (
+                                                <Select
+                                                    value={selectedTargetId ? String(selectedTargetId) : ""}
+                                                    onValueChange={(val) => {
+                                                        const nextId = Number(val);
+                                                        setSelectedTargetId(nextId);
+                                                        const target = remediationOriginalTargets.find((t) => t.assignment_id === nextId);
+                                                        if (target) {
+                                                            setDraft((cur) => ({ ...cur, total_points: String(target.max_points) }));
+                                                        }
+                                                        setCreateError("");
+                                                    }}
+                                                    disabled={isCreating}
+                                                >
+                                                    <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
+                                                        <Select.Value placeholder="Select target classwork assignment" />
+                                                    </Select.Trigger>
+                                                    <Select.Content className="border-2 border-black rounded bg-white">
+                                                        <Select.Group>
+                                                            {remediationOriginalTargets.map((target) => (
+                                                                <Select.Item key={target.assignment_id} value={String(target.assignment_id)}>
+                                                                    {target.title} ({target.original_score ?? 0}/{target.max_points} pts)
+                                                                    {target.is_recommended ? " — Recommended" : ""}
+                                                                </Select.Item>
+                                                            ))}
+                                                        </Select.Group>
+                                                    </Select.Content>
+                                                </Select>
+                                            ) : null}
+                                            {selectedOriginalTarget ? (
+                                                <div className="flex items-center justify-between p-3 bg-muted/40 rounded border-2 border-border mt-1">
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm font-bold">{selectedOriginalTarget.title}</span>
+                                                            {selectedOriginalTarget.is_recommended && (
+                                                                <Badge variant="secondary" size="sm">
+                                                                    Recommended
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-xs text-muted-foreground">
+                                                            Original score: {selectedOriginalTarget.original_score ?? 0} / {selectedOriginalTarget.max_points} points · Required maximum: {selectedOriginalTarget.max_points} points
+                                                        </span>
+                                                    </div>
+                                                    <Badge variant="surface" size="sm">
+                                                        {selectedOriginalTarget.component === "WRITTEN_WORK" ? "Written Work" : "Performance Task"}
+                                                    </Badge>
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs text-destructive font-medium" role="alert">
+                                                    Please select a target original classwork assignment.
+                                                </p>
+                                            )}
+                                        </Field>
+                                    )}
+
                                     <Field label="Total points" isRequired>
                                         <Input
                                             type="number"
@@ -1034,7 +1155,7 @@ export default function CreateClassworkQuizModal({
                                             }}
                                             aria-invalid={createError === "Total points must be greater than zero."}
                                             aria-describedby={createError === "Total points must be greater than zero." ? "quiz-total-points-error" : undefined}
-                                            disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
+                                            disabled={isCreating || remediationGradeTreatment === "EXAMINATION" || isGradedWWPT}
                                             className="w-full shadow-none"
                                         />
                                         {createError === "Total points must be greater than zero." && <FormMessage id="quiz-total-points-error">{createError}</FormMessage>}
@@ -1044,6 +1165,7 @@ export default function CreateClassworkQuizModal({
                                     <p className="rounded border p-3 text-sm">
                                         Evidence focus: {focusGuidance(remediationFocus)}
                                         {remediationGradeTreatment === "EXAMINATION" && remediationOriginalExam ? ` Original ${remediationOriginalExam.title}: ${remediationOriginalExam.score}/${remediationOriginalExam.total_points}. The higher result will count.` : ""}
+                                        {isGradedWWPT && selectedOriginalTarget ? ` Linked to ${selectedOriginalTarget.title} (${selectedOriginalTarget.original_score ?? 0}/${selectedOriginalTarget.max_points} pts). Effective score will be adjusted.` : ""}
                                         {remediationDraft && remediationGradeTreatment === "PRACTICE_ONLY" && " Practice only: completion and score do not affect official grades or predictions."}
                                     </p>
                                 )}
@@ -1541,7 +1663,7 @@ export default function CreateClassworkQuizModal({
                                                     max_attempts: event.target.value,
                                                 }));
                                             }}
-                                            disabled={isCreating || remediationGradeTreatment === "EXAMINATION"}
+                                            disabled={isCreating || remediationGradeTreatment === "EXAMINATION" || isGradedWWPT}
                                             className="w-full bg-white border-2 border-black rounded shadow-none"
                                         />
                                     </Field>
@@ -1780,7 +1902,7 @@ export default function CreateClassworkQuizModal({
                                 <Field label="Assign to sections" isRequired>
                                     <div className="mb-2 flex items-center justify-between">
                                         {remediationTarget && <p className="rounded border p-2 text-xs">Remedial assignment for <strong>{remediationTarget.student_name}</strong> in {remediationTarget.class_name}. Only this student will receive this quiz.</p>}
-                                        {remediationFocus && <p className="rounded border p-2 text-xs">Evidence focus: {focusGuidance(remediationFocus)}{remediationGradeTreatment === "EXAMINATION" && remediationOriginalExam ? ` Original ${remediationOriginalExam.title} fixes the subtype and ${remediationOriginalExam.total_points} possible points.` : ""}</p>}
+                                        {remediationFocus && <p className="rounded border p-2 text-xs">Evidence focus: {focusGuidance(remediationFocus)}{remediationGradeTreatment === "EXAMINATION" && remediationOriginalExam ? ` Original ${remediationOriginalExam.title} fixes the subtype and ${remediationOriginalExam.total_points} possible points.` : ""}{isGradedWWPT && selectedOriginalTarget ? ` Target: ${selectedOriginalTarget.title} (${selectedOriginalTarget.max_points} pts).` : ""}</p>}
                                         <div className="flex-1" />
                                         <Button
                                             type="button"
@@ -2230,12 +2352,16 @@ export default function CreateClassworkQuizModal({
                             ...current,
                             title: current.title?.trim() ? current.title : (synthesizedTitle || current.title),
                             subject_id: chosenSubjectId ? String(chosenSubjectId) : current.subject_id,
-                            total_points: remediationOriginalExam ? String(remediationOriginalExam.total_points) : String(
-                                questions.reduce(
-                                    (sum, q) => sum + Number(q.points || 0),
-                                    0,
-                                ) || current.total_points,
-                            ),
+                            total_points: remediationOriginalExam
+                                ? String(remediationOriginalExam.total_points)
+                                : isGradedWWPT && selectedOriginalTarget
+                                    ? String(selectedOriginalTarget.max_points)
+                                    : String(
+                                        questions.reduce(
+                                            (sum, q) => sum + Number(q.points || 0),
+                                            0,
+                                        ) || current.total_points,
+                                    ),
                         }));
                         if (associatedLessonIds && associatedLessonIds.length > 0) {
                             setSelectedLessonIds(associatedLessonIds);

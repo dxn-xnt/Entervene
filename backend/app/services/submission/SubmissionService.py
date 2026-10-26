@@ -184,6 +184,7 @@ def assert_student_can_modify_submission(
     if not classwork or classwork.is_archived:
         raise HTTPException(status_code=404, detail="Classwork not found")
     require_assignment_recipient(assignment, student)
+    ensure_remedial_period_open(db, assignment, student.student_id)
     enrollment = db.query(StudentClass).filter(
         StudentClass.student_id == student.student_id,
         StudentClass.class_id == assignment.class_id,
@@ -244,6 +245,7 @@ async def submit_student_work(
     if not classwork or classwork.is_archived:
         raise HTTPException(status_code=404, detail="Classwork not found")
     require_assignment_recipient(assignment, student)
+    ensure_remedial_period_open(db, assignment, student.student_id)
     enrollment = db.query(StudentClass).filter(
         StudentClass.student_id == student.student_id,
         StudentClass.class_id == assignment.class_id,
@@ -369,6 +371,7 @@ def complete_reading_assignment(
     if not classwork or classwork.is_archived:
         raise HTTPException(status_code=404, detail="Classwork not found")
     require_assignment_recipient(assignment, student)
+    ensure_remedial_period_open(db, assignment, student.student_id)
     enrollment = db.query(StudentClass).filter(
         StudentClass.student_id == student.student_id,
         StudentClass.class_id == assignment.class_id,
