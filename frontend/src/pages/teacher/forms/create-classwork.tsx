@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, ArrowRight, FileText, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, FileText, Plus, Sparkles, Trash2, X } from "lucide-react";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
@@ -32,8 +32,9 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { ActivityRubricEditor } from "@/components/activity-rubric-editor";
 import { activityRubricMaximum, defaultActivityRubric, validateActivityRubric } from "@/lib/classwork-utils";
 import type { ActivityRubricLevel } from "@/types/classwork";
-import type { TeacherInterventionDetail, RemediationFocus, OriginalExamination, RemediationClassworkTarget } from "@/lib/teacher-interventions-api";
+import type { TeacherInterventionDetail, RemediationFocus, OriginalExamination, RemediationClassworkTarget, RemediationResource } from "@/lib/teacher-interventions-api";
 import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
+import { RemediationTeacherGuidanceBanner } from "./remediation-teacher-guidance-banner";
 
 function scaleRubricToMaxPoints(levels: ActivityRubricLevel[], targetPoints: number): ActivityRubricLevel[] {
   if (levels.length === 0) return levels;
@@ -62,6 +63,7 @@ interface CreateClassworkModalProps {
   remediationOriginalExam?: OriginalExamination | null;
   remediationOriginalTargets?: RemediationClassworkTarget[];
   initialTargetAssignmentId?: number | null;
+  remediationReferences?: RemediationResource[];
   onClose: () => void;
   onSuccess: () => void;
   onBack: () => void;
@@ -83,6 +85,7 @@ export default function CreateClassworkModal({
   remediationOriginalExam = null,
   remediationOriginalTargets = [],
   initialTargetAssignmentId = null,
+  remediationReferences = [],
   onClose,
   onSuccess,
   onBack,
@@ -508,6 +511,18 @@ export default function CreateClassworkModal({
           )}
           {createStep === "details" && (
             <div className="grid gap-3">
+              {remediationDraft && remediationTarget && (
+                <RemediationTeacherGuidanceBanner
+                  remediationTarget={remediationTarget}
+                  remediationFocus={remediationFocus}
+                  remediationGradeTreatment={remediationGradeTreatment}
+                  remediationOriginalExam={remediationOriginalExam}
+                  selectedOriginalTarget={selectedOriginalTarget}
+                  remediationReferences={remediationReferences}
+                  className="mb-1"
+                />
+              )}
+
               <Field label="Subject">
                 <Select
                   value={draft.subject_id}
@@ -664,6 +679,11 @@ export default function CreateClassworkModal({
               </Field>
 
               <Field label="Instructions">
+                {remediationDraft && (
+                  <p className="text-xs text-muted-foreground -mt-1 mb-1">
+                    Student Instructions (Visible to student): Specify what the student needs to read, answer, or submit for this remedial task.
+                  </p>
+                )}
                 <textarea
                   value={draft.instructions}
                   onChange={(event) =>
@@ -766,20 +786,16 @@ export default function CreateClassworkModal({
                 </div>
               )}
 
-              {remediationFocus && !isReadingType(selectedType) && (
-                <p className="rounded border p-3 text-sm">
-                  Evidence focus: {focusGuidance(remediationFocus)}
-                  {remediationGradeTreatment === "EXAMINATION" && remediationOriginalExam ? ` Original ${remediationOriginalExam.title}: ${remediationOriginalExam.score}/${remediationOriginalExam.total_points}. The higher result will count.` : ""}
-                  {(remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") && selectedOriginalTarget ? ` Original ${selectedOriginalTarget.title}: ${selectedOriginalTarget.original_score ?? 0}/${selectedOriginalTarget.max_points}. Linked score will adjust effective grade under the plan cap.` : ""}
-                  {remediationDraft && remediationGradeTreatment === "PRACTICE_ONLY" && " Practice only: completion and score do not affect official grades or predictions."}
-                </p>
-              )}
-
-              <Field label="Upload Material">
+              <Field label={remediationDraft ? "Upload Material (Optional)" : "Upload Material"}>
+                {remediationDraft && (
+                  <p className="text-xs text-muted-foreground -mt-1 mb-2">
+                    Optional. Selected reading materials from your plan are already available to the student; attach files only if you have new prompts or worksheets.
+                  </p>
+                )}
                 {materials.length === 0 ? (
                   <Empty className="shadow-md rounded! hover:shadow-none transition-shadow">
                     <EmptyHeader>
-                      <EmptyTitle>No Materials Added</EmptyTitle>
+                      <EmptyTitle>{remediationDraft ? "No Additional Files Attached" : "No Materials Added"}</EmptyTitle>
                       <EmptyDescription className="flex flex-col -gap-3 text-center whitespace-nowrap">
                         <span className="font-semibold">
                           Max 10mb
@@ -799,7 +815,7 @@ export default function CreateClassworkModal({
                       >
                         <label>
                           <Plus size={14} className="mr-1" />
-                          Add Materials
+                          {remediationDraft ? "Attach Optional Files" : "Add Materials"}
                           <input
                             type="file"
                             multiple
@@ -974,25 +990,34 @@ export default function CreateClassworkModal({
 
               <div className="mt-4">
                 <Field label="Assign to sections">
-                  <div className="mb-2 flex items-center justify-between">
-                    {remediationTarget && <p className="rounded border p-2 text-xs">Remedial assignment for <strong>{remediationTarget.student_name}</strong> in {remediationTarget.class_name}. Only this student will receive this activity.</p>}
-                    {remediationFocus && <p className="rounded border p-2 text-xs">Evidence focus: {focusGuidance(remediationFocus)}{remediationFocus.component === "EXAMINATION" ? " Remedial Examination publication is blocked; choose another grading component for a graded activity." : ""}</p>}
-                    <div className="flex-1" />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setSelectedClassIds(
-                          selectedSubjectLoads.map((load) => load.class_id),
-                        )
-                      }
-                      disabled={isCreating || Boolean(remediationTarget) || selectedSubjectLoads.length === 0}
-                      className="px-2 py-1 text-xs border border-black rounded shadow-xs"
-                    >
-                      Select all
-                    </Button>
-                  </div>
+                  {remediationTarget ? (
+                    <div className="mb-3 rounded border-2 border-black bg-muted/30 p-3 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold">Single-Student Remedial Assignment</span>
+                        <Badge variant="solid" size="sm">Individual Recipient</Badge>
+                      </div>
+                      <p className="text-xs text-foreground">
+                        This activity is exclusively assigned to <strong>{remediationTarget.student_name}</strong> in section <strong>{remediationTarget.class_name}</strong>. Other students will not receive or see this assignment.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mb-2 flex items-center justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setSelectedClassIds(
+                            selectedSubjectLoads.map((load) => load.class_id),
+                          )
+                        }
+                        disabled={isCreating || selectedSubjectLoads.length === 0}
+                        className="px-2 py-1 text-xs border border-black rounded shadow-xs"
+                      >
+                        Select all
+                      </Button>
+                    </div>
+                  )}
 
                   <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
                     {selectedSubjectLoads.map((load) => {

@@ -10,8 +10,8 @@ export function supportedRemediationCompetencies<T extends { competency_id: numb
 }
 
 export function focusGuidance(focus: RemediationFocus): string {
-  const lessons = focus.lessons.map((lesson) => lesson.title).filter(Boolean);
-  const competencies = focus.competencies.map((item) => item.label).filter(Boolean);
+  const lessons = (focus.lessons || []).map((lesson) => lesson.title).filter(Boolean);
+  const competencies = (focus.competencies || []).map((item) => item.label).filter(Boolean);
   if (focus.evidence_level === "QUESTION_SCORE" || focus.evidence_level === "SCORED_COMPETENCY") {
     return [...competencies, ...lessons].join("; ") || "Use the saved scored evidence.";
   }

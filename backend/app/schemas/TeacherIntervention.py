@@ -26,6 +26,7 @@ class TeacherInterventionSummary(BaseModel):
     resolved_at: datetime | None = None
     resolution_reason: str | None = None
     diagnosis_summary: dict[str, Any]
+    passing_threshold: float | None = None
 
 
 class TeacherInterventionDetail(TeacherInterventionSummary):

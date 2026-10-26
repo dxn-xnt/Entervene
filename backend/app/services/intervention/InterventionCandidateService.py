@@ -8,9 +8,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.models.intervention.Intervention import Intervention
+from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.services.intervention.InterventionDiagnosisService import build_candidate_diagnosis
 from app.services.intervention.InterventionNotificationService import stage_intervention_notification
 from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME
@@ -77,6 +79,16 @@ def sync_intervention_for_persisted_prediction(
     if latest is None or latest.prediction_id != prediction.prediction_id:
         raise ValueError("Intervention source prediction is not the latest revision.")
 
+    period = db.get(AcademicPeriod, academic_period_id)
+    if period is None:
+        raise ValueError("Academic period not found.")
+    threshold_resolution = require_subject_passing_threshold(
+        db,
+        academic_year_id=period.academic_year_id,
+        subject_id=subject_id,
+    )
+    passing_threshold = float(threshold_resolution.threshold)
+
     open_intervention = db.query(Intervention).filter_by(
         student_id=student_id,
         class_id=class_id,
@@ -84,7 +96,7 @@ def sync_intervention_for_persisted_prediction(
         academic_period_id=academic_period_id,
     ).filter(Intervention.status.in_(OPEN_STATUSES)).with_for_update().one_or_none()
 
-    if grade >= 85:
+    if grade >= passing_threshold:
         if open_intervention is not None:
             open_intervention.status = "RESOLVED"
             open_intervention.resolution_reason = IMPROVED_PREDICTION

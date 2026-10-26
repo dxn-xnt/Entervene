@@ -1,6 +1,7 @@
 """Teacher-private preparation; references never grant student access."""
 import json
 import re
+from decimal import Decimal
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -12,11 +13,15 @@ from app.models.academic.LessonAssignment import LessonAssignment
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkCoverage import ClassworkCoverage
+from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
+from app.models.ai.AIModelVersion import AIModelVersion
+from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.services.classwork.ClassworkShared import assignment_is_available, assignment_is_locked
 from app.models.intervention.Intervention import Intervention
+from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.services.ai import Provider
 from app.services.intervention.InterventionReviewerGenerationService import build_grounding
 from app.services.intervention.InterventionSupportMaterialService import _basis
@@ -29,6 +34,8 @@ from app.services.grading.RemediationScoreAdjuster import (
     adjust_remediation_score,
     validate_cap_percentage,
 )
+from app.services.grading.SubjectGradeProjectionService import calculate_subject_grade_projection
+from app.services.grading.MidtermRemediationProjectionService import calculate_ai_midterm_what_if
 
 FORMATS = {"QUIZ", "TOS", "CLASSWORK", "EXISTING_MATERIAL_ONLY"}
 GRADED_TREATMENTS = {"WRITTEN_WORK", "PERFORMANCE_TASK", "EXAMINATION"}
@@ -275,12 +282,24 @@ def progress(db: Session, row: Intervention) -> dict:
             completed.append({"title": work.title, "assignment_id": assignment.classwork_assignment_id,
                               "grade": float(submission.grade) if submission.grade is not None and work.show_scores else None,
                               "total_points": float(work.total_points) if work.total_points is not None and work.show_scores else None})
+    period = db.get(AcademicPeriod, row.academic_period_id)
+    threshold_val = 85.0
+    try:
+        if period:
+            res = require_subject_passing_threshold(
+                db,
+                academic_year_id=period.academic_year_id,
+                subject_id=row.subject_id,
+            )
+            threshold_val = float(res.threshold)
+    except Exception:
+        pass
     return {"triggering_projection": float(source_grade if source_grade is not None else source.predicted_period_grade),
             "latest_projection": float(latest_grade) if latest_grade is not None else None,
             "latest_revision": latest.revision if ready else None,
             "completed_remediation": completed,
             "assigned_remediation": assigned,
-            "status_reason": ("Latest projected final grade remains below 85." if latest_grade is not None and float(latest_grade) < 85
+            "status_reason": (f"Latest projected final grade remains below {threshold_val:g}." if latest_grade is not None and float(latest_grade) < threshold_val
                               else "Latest valid projection is unavailable." if latest_grade is None
                               else "Current status is awaiting reconciliation."),
             "status": row.status}
@@ -314,6 +333,114 @@ def get_workspace(db: Session, staff_id: str, intervention_id: int) -> dict:
             "original_exams": original_exams(db, row),
             "progress": progress(db, row),
             "score_previews": preview_data.get("previews", [])}
+
+
+def project_subject_grade(
+    db: Session,
+    staff_id: str,
+    intervention_id: int,
+    target_assignment_ids: list[int],
+    score_adjustment_cap: Decimal | float | None = None,
+) -> dict:
+    """Authorize and calculate a preview without selecting or persisting targets."""
+    with db.no_autoflush:
+        row = _row(db, staff_id, intervention_id)
+        if len(set(target_assignment_ids)) != len(target_assignment_ids):
+            raise HTTPException(status_code=422, detail={
+                "code": "DUPLICATE_PROJECTION_TARGETS",
+                "message": "Each original assignment may appear only once in a projection request.",
+            })
+
+        focus = build_remediation_focus(row)
+        expected_components = {
+            "WRITTEN_WORK": CanonicalGradingComponent.WRITTEN_WORK,
+            "PERFORMANCE_TASK": CanonicalGradingComponent.PERFORMANCE_TASK,
+        }
+        expected_component = expected_components.get(focus.get("component"))
+        if target_assignment_ids and expected_component is None:
+            raise HTTPException(status_code=422, detail={
+                "code": "PROJECTION_COMPONENT_UNSUPPORTED",
+                "message": "Subject-grade target projection requires a verified Written Work or Performance Task focus.",
+            })
+
+        invalid: list[dict] = []
+        for assignment_id in target_assignment_ids:
+            assignment = db.get(ClassworkAssignment, assignment_id)
+            work = assignment.classwork if assignment is not None else None
+            code = None
+            message = None
+            if assignment is None or work is None:
+                code, message = "TARGET_NOT_FOUND", "Target assignment was not found."
+            elif (
+                assignment.class_id != row.class_id
+                or assignment.academic_period_id != row.academic_period_id
+                or work.subject_id != row.subject_id
+            ):
+                code, message = "TARGET_OUTSIDE_INTERVENTION_SCOPE", "Target assignment is outside the intervention class, subject, or period."
+            elif assignment.recipient_student_id not in (None, row.student_id):
+                code, message = "TARGET_OUTSIDE_STUDENT_SCOPE", "Target assignment belongs to another student."
+            elif assignment.source_intervention_id is not None or assignment.original_exam_assignment_id is not None:
+                code, message = "TARGET_IS_REMEDIATION", "A remediation activity cannot be used as an original target."
+            elif work.is_archived or not work.is_graded:
+                code, message = "TARGET_UNAVAILABLE", "Target assignment is archived or is not graded."
+            elif work.total_points is None or work.total_points <= 0:
+                code, message = "TARGET_INVALID_MAX_POINTS", "Target assignment must have positive maximum points."
+            else:
+                component = classify_classwork_component(
+                    work.classwork_type, work.classwork_category, work.exam_subtype,
+                )
+                if component != expected_component:
+                    code, message = "TARGET_COMPONENT_MISMATCH", "Target assignment does not match the intervention's diagnosed grading component."
+                elif db.query(RemediationAssignmentLink.remediation_link_id).filter_by(
+                    original_assignment_id=assignment_id,
+                    student_id=row.student_id,
+                ).first() is not None:
+                    code, message = "TARGET_ALREADY_REMEDIATED", "This original assignment already has a remediation activity for the student."
+                elif db.query(StudentSubmission.submission_id).filter_by(
+                    classwork_assignment_id=assignment_id,
+                    student_id=row.student_id,
+                ).filter(StudentSubmission.grade.isnot(None)).first() is None:
+                    code, message = "TARGET_ORIGINAL_UNSCORED", "Target assignment needs a recorded original score."
+            if code is not None:
+                invalid.append({"assignment_id": assignment_id, "code": code, "message": message})
+
+        if invalid:
+            raise HTTPException(status_code=422, detail={
+                "code": "INVALID_PROJECTION_TARGETS",
+                "message": "One or more projection targets are not eligible.",
+                "reasons": invalid,
+            })
+
+        plan = row.remediation_plan if isinstance(row.remediation_plan, dict) else {}
+        authoritative_cap = (
+            score_adjustment_cap
+            if score_adjustment_cap is not None
+            else plan.get("score_adjustment_cap", DEFAULT_REMEDIATION_CAP_PERCENTAGE)
+        )
+        authoritative = calculate_subject_grade_projection(
+            db,
+            staff_id=staff_id,
+            student_id=row.student_id,
+            class_id=row.class_id,
+            subject_id=row.subject_id,
+            academic_period_id=row.academic_period_id,
+            target_assignment_ids=target_assignment_ids,
+            cap_percentage=authoritative_cap,
+            eligible_components={expected_component} if expected_component is not None else set(),
+        )
+        source = _source(db, row)
+        version = db.get(AIModelVersion, source.model_version_id)
+        authoritative["ai_midterm_what_if"] = calculate_ai_midterm_what_if(
+            db,
+            student_id=row.student_id,
+            class_id=row.class_id,
+            subject_id=row.subject_id,
+            academic_period_id=row.academic_period_id,
+            model_version_id=source.model_version_id if version is not None else None,
+            model_name=version.model_name if version is not None else None,
+            target_projections=authoritative["target_projections"],
+        )
+        return authoritative
 
 
 def original_exams(db: Session, row: Intervention) -> list[dict]:

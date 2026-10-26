@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 from uuid import UUID
 
 import joblib
@@ -243,7 +244,18 @@ def build_current_period_features_from_records(
     source_period_id: int,
     *,
     cutoff_at: datetime | None = None,
+    hypothetical_ww_pt_scores: Mapping[int, float] | None = None,
 ) -> dict[str, Any]:
+    """Build the normal live feature vector, with optional ephemeral WW/PT scores.
+
+    Overrides are deliberately restricted to scored, original WW/PT assignments in
+    this exact evidence scope. They change only earned-score aggregates; activity
+    counts, possible points, Examination evidence, and persisted rows are untouched.
+    """
+    overrides = {int(key): float(value) for key, value in (hypothetical_ww_pt_scores or {}).items()}
+    if any(not math.isfinite(value) or value < 0 for value in overrides.values()):
+        raise ValueError("Hypothetical WW/PT scores must be finite and non-negative.")
+    applied_override_ids: set[int] = set()
     student = db.get(Student, student_id)
     class_ = db.get(Class, class_id)
     subject = db.get(Subject, subject_id)
@@ -333,6 +345,19 @@ def build_current_period_features_from_records(
             if _assignment.classwork_assignment_id in effective_exams:
                 score = effective_exams[_assignment.classwork_assignment_id]
         possible = _to_float(classwork.total_points)
+        assignment_id = _assignment.classwork_assignment_id
+        if assignment_id in overrides:
+            if component not in (
+                CanonicalGradingComponent.WRITTEN_WORK,
+                CanonicalGradingComponent.PERFORMANCE_TASK,
+            ):
+                raise ValueError("Hypothetical scores may only adjust Written Work or Performance Task originals.")
+            if score is None or possible is None or possible <= 0:
+                raise ValueError("Hypothetical scores require an existing scored assignment with positive maximum points.")
+            if overrides[assignment_id] > possible:
+                raise ValueError("Hypothetical WW/PT scores cannot exceed the assignment maximum points.")
+            score = overrides[assignment_id]
+            applied_override_ids.add(assignment_id)
         if component == CanonicalGradingComponent.WRITTEN_WORK:
             _add_score(accumulators["ww"], score, possible)
         elif component == CanonicalGradingComponent.PERFORMANCE_TASK:
@@ -352,6 +377,13 @@ def build_current_period_features_from_records(
                 )
             else:
                 _add_score(plain_qa, score, possible)
+
+    unused_override_ids = set(overrides) - applied_override_ids
+    if unused_override_ids:
+        raise ValueError(
+            "Hypothetical WW/PT score assignments are outside the eligible evidence scope: "
+            + ", ".join(str(value) for value in sorted(unused_override_ids))
+        )
 
     exam_result = compute_examination_component(exam_observations, require_complete_for_percent=True)
     domain_warnings.extend(exam_result.warnings)
