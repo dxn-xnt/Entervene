@@ -49,7 +49,7 @@ it("submits the selected lesson on an Examination quiz question", async () => {
   fireEvent.click(screen.getByRole("button", { name: /Create manually/i }));
   fireEvent.change(screen.getByPlaceholderText("Introduction to Programming Quiz"), { target: { value: "Summative ratios" } });
   fireEvent.click(screen.getByRole("button", { name: "Exams" }));
-  fireEvent.click(screen.getByRole("button", { name: "Summative 1 (30%)" }));
+  fireEvent.click(screen.getByText(/Summative 1/i));
   fireEvent.change(screen.getByText("Total points").parentElement!.querySelector("input")!, { target: { value: "1" } });
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   fireEvent.change(screen.getByPlaceholderText("Which of the following is the primary function of a CPU?"), { target: { value: "What is a ratio?" } });
@@ -57,10 +57,9 @@ it("submits the selected lesson on an Examination quiz question", async () => {
   fireEvent.change(screen.getByPlaceholderText("Choice 2"), { target: { value: "A calendar" } });
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   fireEvent.click(screen.getByRole("button", { name: "Sapphire" }));
-  fireEvent.click(await screen.findByRole("button", { name: /Variables.*Published lesson/i }));
-  // The single-lesson auto-prefill should have mapped Q1 already; the label now uses the "Q1:" prefix.
-  const select = (await screen.findByLabelText(/Q1: What is a ratio\?/i)) as HTMLSelectElement;
-  fireEvent.change(select, { target: { value: "42" } });
+  const lessonButton = (await screen.findByText("Variables")).closest("button")!;
+  fireEvent.click(lessonButton);
+  fireEvent.click(await screen.findByRole("button", { name: "Variables" }));
   fireEvent.click(screen.getByRole("button", { name: "Assign" }));
 
   await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());
@@ -85,7 +84,7 @@ it("requires an explicit Examination subtype before leaving quiz details", async
   fireEvent.click(screen.getByRole("button", { name: "Exams" }));
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   expect(screen.getByText("Choose an Examination sub-type explicitly.")).toBeTruthy();
-  expect(screen.getByText("Step 2 of 4")).toBeTruthy();
+  expect(screen.getByText("Step 1 of 3")).toBeTruthy();
 });
 
 it("displays 'Needs answer key' badge and blocks assign step when a question is unkeyed", async () => {
@@ -128,24 +127,24 @@ it("displays 'Needs answer key' badge and blocks assign step when a question is 
   const file = new File(["dummy"], "quiz.txt", { type: "text/plain" });
   fireEvent.change(fileInput, { target: { files: [file] } });
 
-  await waitFor(() => expect(screen.getByText("Step 2 of 4")).toBeTruthy());
+  await waitFor(() => expect(screen.getByText("Step 1 of 3")).toBeTruthy());
 
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
-  expect(screen.getByText("Step 3 of 4")).toBeTruthy();
+  expect(screen.getByText("Step 2 of 3")).toBeTruthy();
 
   expect(screen.getByText("⚠️ Needs answer key")).toBeTruthy();
   expect(screen.getByText("Select the correct choice below")).toBeTruthy();
 
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   expect(screen.getByText("Question 1 needs exactly one correct answer.")).toBeTruthy();
-  expect(screen.getByText("Step 3 of 4")).toBeTruthy();
+  expect(screen.getByText("Step 2 of 3")).toBeTruthy();
 
   const radios = screen.getAllByRole("radio");
   fireEvent.click(radios[1]);
   expect(screen.queryByText("⚠️ Needs answer key")).toBeNull();
 
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
-  expect(screen.getByText("Step 4 of 4")).toBeTruthy();
+  expect(screen.getByText("Step 3 of 3")).toBeTruthy();
 });
 
 it("does not block valid questions for True/False and Short Answer items", async () => {
@@ -196,14 +195,90 @@ it("does not block valid questions for True/False and Short Answer items", async
   const file = new File(["dummy"], "quiz.txt", { type: "text/plain" });
   fireEvent.change(fileInput, { target: { files: [file] } });
 
-  await waitFor(() => expect(screen.getByText("Step 2 of 4")).toBeTruthy());
+  await waitFor(() => expect(screen.getByText("Step 1 of 3")).toBeTruthy());
 
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
-  expect(screen.getByText("Step 3 of 4")).toBeTruthy();
+  expect(screen.getByText("Step 2 of 3")).toBeTruthy();
 
   expect(screen.queryByText("⚠️ Needs answer key")).toBeNull();
 
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
-  expect(screen.getByText("Step 4 of 4")).toBeTruthy();
+  expect(screen.getByText("Step 3 of 3")).toBeTruthy();
+});
+
+it("locks attempts to 1, matches target points, and submits original_classwork_assignment_id for graded WW remediation quiz", async () => {
+  api.fetch.mockImplementation(async (path: string) => {
+    if (path.includes("/lessons/my-class/")) return { ok: true, json: async () => [{ lesson_id: 42, title: "Fractions", subject_id: 5, is_published: true, is_draft: false, show_scores: true }] };
+    return { ok: true, json: async () => ({}) };
+  });
+  const onSuccess = vi.fn();
+  const target = {
+    assignment_id: 201,
+    classwork_id: 101,
+    title: "Original Seatwork 1",
+    component: "WRITTEN_WORK" as const,
+    original_score: 8,
+    max_points: 1,
+    is_recommended: true,
+  };
+
+  render(<CreateClassworkQuizModal
+    selectedType="QUIZ"
+    subjects={[{ id: 5, name: "Mathematics" }]}
+    loads={[{ subject_load_id: 9, subject_id: 5, subject_name: "Mathematics", class_id: 7, section_name: "Sapphire", academic_period_id: 3 }]}
+    remediationDraft={true}
+    remediationGradeTreatment="WRITTEN_WORK"
+    remediationTarget={{
+      intervention_id: 99,
+      student_id: "s-1",
+      student_name: "John Doe",
+      class_id: 7,
+      class_name: "Sapphire",
+      subject_id: 5,
+      subject_name: "Mathematics",
+      current_risk_level: "HIGH",
+      status: "ACTIVE",
+    } as any}
+    remediationOriginalTargets={[target]}
+    initialTargetAssignmentId={201}
+    onClose={vi.fn()}
+    onSuccess={onSuccess}
+    onBack={vi.fn()}
+  />);
+
+  fireEvent.click(screen.getByRole("button", { name: /Create manually/i }));
+
+  // Displays original target and Recommended badge
+  expect(screen.getAllByText("Original Seatwork 1").length).toBeGreaterThanOrEqual(1);
+  expect(screen.getByText("Recommended")).toBeTruthy();
+
+  // Total points locked to target max points (1)
+  const pointsInput = screen.getByText("Total points").parentElement!.querySelector("input")!;
+  expect(pointsInput.value).toBe("1");
+  expect(pointsInput.disabled).toBe(true);
+
+  fireEvent.change(screen.getByPlaceholderText("Introduction to Programming Quiz"), { target: { value: "Remedial Quiz 1" } });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+  // Question builder with 1 point question
+  fireEvent.change(screen.getByPlaceholderText("Which of the following is the primary function of a CPU?"), { target: { value: "What is 1/2 + 1/2?" } });
+  fireEvent.change(screen.getByPlaceholderText("Choice 1"), { target: { value: "1" } });
+  fireEvent.change(screen.getByPlaceholderText("Choice 2"), { target: { value: "2" } });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+  // Assign step
+  const fractionsButton = (await screen.findByText("Fractions")).closest("button")!;
+  fireEvent.click(fractionsButton);
+  fireEvent.click(await screen.findByRole("button", { name: "Fractions" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save Draft" }));
+
+  await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());
+  const call = api.fetch.mock.calls.find(([path, options]) => path === "/api/v1/classwork-assignments/with-assignments" && options?.method === "POST");
+  expect(call).toBeTruthy();
+  const form = call![1].body as FormData;
+  expect(form.get("classwork_category")).toBe("WRITTEN_WORK");
+  expect(form.get("original_classwork_assignment_id")).toBe("201");
+  expect(form.get("intervention_id")).toBe("99");
+  expect(form.get("max_attempts")).toBe("1");
 });
 

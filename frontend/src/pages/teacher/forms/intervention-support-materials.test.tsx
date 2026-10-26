@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   savePlan: vi.fn(),
   advisory: vi.fn(),
   previewScore: vi.fn(),
+  projectGrade: vi.fn(),
 }));
 
 vi.mock("@/lib/teacher-interventions-api", async (original) => ({
@@ -27,6 +28,7 @@ vi.mock("@/lib/teacher-interventions-api", async (original) => ({
   saveRemediationPlan: api.savePlan,
   generateRemediationAdvisory: api.advisory,
   previewScoreAdjustment: api.previewScore,
+  projectSubjectGrade: api.projectGrade,
 }));
 
 const detail = {
@@ -114,47 +116,62 @@ describe("teacher remediation recommendation", () => {
         },
       },
     });
+    api.projectGrade.mockResolvedValue({
+      status: "UNAVAILABLE",
+      grade_representation: "TRANSMUTED_TERM_GRADE",
+      current_subject_grade: null,
+      passing_threshold: 75,
+      target_projections: [],
+      eligible_target_gains: [],
+      additional_eligible_targets_have_positive_improvement: false,
+      recommended_target_assignment_id: null,
+      assumptions: [],
+      unavailable_reasons: [{ code: "INCOMPLETE_EXAMINATION_EVIDENCE", message: "Incomplete examination evidence." }],
+      ai_midterm_what_if: {
+        status: "UNAVAILABLE",
+        estimate_kind: "AI_MIDTERM_WHAT_IF_ESTIMATE",
+        is_official_grade: false,
+        is_guaranteed: false,
+        baseline_predicted_term_grade: null,
+        readiness: {},
+        target_estimates: [],
+        unavailable_reasons: [{ code: "INSUFFICIENT_EVIDENCE", message: "Insufficient activities." }],
+        limitations: [],
+      },
+    });
   });
 
   afterEach(cleanup);
 
-  it("marks and auto-selects a valid recommendation without replacing a manual choice", async () => {
+  it("automatically displays exactly one Recommended badge and keeps teacher selection independent", async () => {
     render(
       <MemoryRouter>
         <InterventionSupportMaterials detail={detail} page="plan" />
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Get AI recommendation" }));
     await waitFor(() => expect(api.advisory).toHaveBeenCalledWith(12));
-    expect(api.savePlan).toHaveBeenCalledWith(12, {
-      teacher_choice: null,
-      grade_treatment: null,
-      selected_resources: [],
-    });
-    expect(api.savePlan.mock.invocationCallOrder[0]).toBeLessThan(
-      api.advisory.mock.invocationCallOrder[0]
-    );
+    expect(screen.queryByRole("button", { name: /AI recommendation/i })).toBeNull();
 
-    const quizCard = screen.getByText("Quiz").closest(".cursor-pointer");
+    const methodGroup = screen.getByRole("radiogroup", { name: "Remediation activity method" });
+    const quizCard = within(methodGroup).getByText("Quiz").closest(".cursor-pointer");
     expect(quizCard).not.toBeNull();
-    expect(within(quizCard as HTMLElement).getByText("Recommended")).toBeTruthy();
-    expect(within(quizCard as HTMLElement).getByText("Selected")).toBeTruthy();
-    expect(screen.queryByText("AI Advisory")).toBeNull();
-
-    const classworkCard = screen.getByText("Classwork").closest(".cursor-pointer");
-    fireEvent.click(classworkCard as HTMLElement);
-    fireEvent.click(screen.getByRole("button", { name: "Refresh AI recommendation" }));
-    await waitFor(() => expect(api.advisory).toHaveBeenCalledTimes(2));
-    expect(api.savePlan).toHaveBeenLastCalledWith(12, {
-      teacher_choice: "CLASSWORK",
-      grade_treatment: "PRACTICE_ONLY",
-      selected_resources: [],
-    });
-
-    expect(within(classworkCard as HTMLElement).getByText("Selected")).toBeTruthy();
+    expect(await within(quizCard as HTMLElement).findByText("Recommended")).toBeTruthy();
+    expect(within(methodGroup).getAllByText("Recommended")).toHaveLength(1);
+    expect(api.advisory).toHaveBeenCalledTimes(1);
     expect(within(quizCard as HTMLElement).queryByText("Selected")).toBeNull();
+
+    const classworkCard = within(methodGroup).getByText("Classwork").closest(".cursor-pointer");
+    fireEvent.click(classworkCard as HTMLElement);
+
+    expect(classworkCard?.getAttribute("aria-checked")).toBe("true");
+    expect(within(methodGroup).queryByText("Selected")).toBeNull();
     expect(within(quizCard as HTMLElement).getByText("Recommended")).toBeTruthy();
+
+    fireEvent.click(quizCard as HTMLElement);
+    expect(quizCard?.getAttribute("aria-checked")).toBe("true");
+    expect(within(quizCard as HTMLElement).getByText("Recommended")).toBeTruthy();
+    expect(within(methodGroup).queryByText("Selected")).toBeNull();
   });
 
   it("shows an inline fallback when AI advice is unavailable", async () => {
@@ -165,15 +182,13 @@ describe("teacher remediation recommendation", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Get AI recommendation" }));
-
     expect((await screen.findByRole("status")).textContent).toContain(
       "Recommendation service is temporarily unavailable."
     );
     expect(screen.queryByText("Recommended")).toBeNull();
   });
 
-  it("restores a valid saved recommendation as an AI-selected choice", async () => {
+  it("displays a saved recommendation without making another advisory request", async () => {
     api.workspace.mockResolvedValue({
       ...workspace,
       plan: {
@@ -194,8 +209,48 @@ describe("teacher remediation recommendation", () => {
 
     const tosCard = (await screen.findByText("TOS Blueprint")).closest(".cursor-pointer");
     expect(within(tosCard as HTMLElement).getByText("Recommended")).toBeTruthy();
-    expect(within(tosCard as HTMLElement).getByText("Selected")).toBeTruthy();
+    expect(within(tosCard as HTMLElement).queryByText("Selected")).toBeNull();
     expect(api.advisory).not.toHaveBeenCalled();
+  });
+
+  it("retries a failed recommendation when Adjust Support is reopened", async () => {
+    api.advisory
+      .mockRejectedValueOnce(new Error("Recommendation service is temporarily unavailable."))
+      .mockResolvedValueOnce({
+        ...workspace,
+        plan: {
+          ...workspace.plan,
+          ai_suggestion: {
+            recommended_format: "CLASSWORK",
+            reason: "Targeted classwork supports the verified evidence.",
+            focus: [],
+            evidence_used: {},
+          },
+        },
+      });
+    const view = render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detail} page="plan" />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findByRole("status")).textContent).toContain(
+      "Recommendation service is temporarily unavailable."
+    );
+    view.rerender(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detail} page="overview" />
+      </MemoryRouter>
+    );
+    view.rerender(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detail} page="plan" />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(api.advisory).toHaveBeenCalledTimes(2));
+    const classworkCard = screen.getByText("Classwork").closest(".cursor-pointer");
+    expect(await within(classworkCard as HTMLElement).findByText("Recommended")).toBeTruthy();
   });
 });
 
@@ -211,6 +266,7 @@ describe("teacher intervention persistence integration", () => {
       supporting_activities: [
         {
           classwork_id: 101,
+          classwork_assignment_id: 101,
           title: "Worksheet 1",
           component: "WRITTEN_WORK",
           score: 10,
@@ -219,6 +275,7 @@ describe("teacher intervention persistence integration", () => {
         },
         {
           classwork_id: 102,
+          classwork_assignment_id: 102,
           title: "Worksheet 2",
           component: "WRITTEN_WORK",
           score: 8,
@@ -227,6 +284,7 @@ describe("teacher intervention persistence integration", () => {
         },
         {
           classwork_id: 201,
+          classwork_assignment_id: 201,
           title: "Performance Task 1",
           component: "PERFORMANCE_TASK",
           score: 12,
@@ -235,6 +293,33 @@ describe("teacher intervention persistence integration", () => {
         },
       ],
     },
+  };
+
+  const mockItemBasedPreviews = () => {
+    api.previewScore.mockImplementation(async (_id, req) => ({
+      score_adjustment_cap: req.score_adjustment_cap,
+      previews: (req.items ?? []).map((item: {
+        assignment_id: number;
+        original_score: number;
+        max_points: number;
+        title: string;
+      }) => {
+        const maximum = (item.max_points * req.score_adjustment_cap) / 100;
+        const adjusted = Math.max(item.original_score, maximum);
+        return {
+          assignment_id: item.assignment_id,
+          title: item.title,
+          original_score: item.original_score,
+          max_points: item.max_points,
+          cap_percentage: req.score_adjustment_cap,
+          max_adjusted_score: adjusted,
+          possible_gain: adjusted - item.original_score,
+          was_adjusted: adjusted > item.original_score,
+          was_capped: adjusted === maximum,
+        };
+      }),
+      disclaimer: "Hypothetical maximum only",
+    }));
   };
 
   beforeEach(() => {
@@ -253,7 +338,30 @@ describe("teacher intervention persistence integration", () => {
       ...workspace,
       plan: { ...workspace.plan, ...plan, ai_suggestion: null },
     }));
-    api.previewScore.mockImplementation(async (id, req) => {
+    api.projectGrade.mockResolvedValue({
+      status: "UNAVAILABLE",
+      grade_representation: "TRANSMUTED_TERM_GRADE",
+      current_subject_grade: null,
+      passing_threshold: 75,
+      target_projections: [],
+      eligible_target_gains: [],
+      additional_eligible_targets_have_positive_improvement: false,
+      recommended_target_assignment_id: null,
+      assumptions: [],
+      unavailable_reasons: [{ code: "INCOMPLETE_EXAMINATION_EVIDENCE", message: "Incomplete examination evidence." }],
+      ai_midterm_what_if: {
+        status: "UNAVAILABLE",
+        estimate_kind: "AI_MIDTERM_WHAT_IF_ESTIMATE",
+        is_official_grade: false,
+        is_guaranteed: false,
+        baseline_predicted_term_grade: null,
+        readiness: {},
+        target_estimates: [],
+        unavailable_reasons: [{ code: "INSUFFICIENT_EVIDENCE", message: "Insufficient activities." }],
+        limitations: [],
+      },
+    });
+    api.previewScore.mockImplementation(async (_id, req) => {
       const cap = req.score_adjustment_cap ?? 75;
       return {
         score_adjustment_cap: cap,
@@ -308,7 +416,7 @@ describe("teacher intervention persistence integration", () => {
     const dialog = await screen.findByRole("dialog", { name: "Select Targeted Classwork" });
 
     expect(within(dialog).queryByText("93%")).toBeNull();
-    expect(within(dialog).getByText("Projected Grade Preview")).toBeTruthy();
+    expect(within(dialog).getByText("Projected Grade")).toBeTruthy();
     expect(within(dialog).getByText("Unavailable")).toBeTruthy();
 
     const capInput = within(dialog).getByLabelText(/Score Adjustment Cap/i) as HTMLInputElement;
@@ -392,7 +500,7 @@ describe("teacher intervention persistence integration", () => {
     expect(api.savePlan).not.toHaveBeenCalled();
   });
 
-  it("preserves category restrictions when switching grade treatment", async () => {
+  it("shows only the verified Written Work treatment and targets", async () => {
     render(
       <MemoryRouter>
         <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
@@ -407,18 +515,171 @@ describe("teacher intervention persistence integration", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
 
     expect(screen.getByText("Worksheet 1")).toBeTruthy();
+    expect(screen.queryByText("Performance Task")).toBeNull();
+    expect(within(dialog).queryByText("Performance Task 1")).toBeNull();
+  });
 
-    const ptCard = screen.getByText("Performance Task").closest(".cursor-pointer");
-    fireEvent.click(ptCard as HTMLElement);
+  it("shows only the verified Performance Task treatment and targets", async () => {
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      focus: { ...workspace.focus, component: "PERFORMANCE_TASK" },
+      plan: {
+        teacher_choice: "CLASSWORK",
+        grade_treatment: "PERFORMANCE_TASK",
+        selected_resources: [],
+        ai_suggestion: null,
+      },
+    });
 
-    expect(screen.queryByText("Worksheet 1")).toBeNull();
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("How should this activity be treated?");
+    expect(
+      screen.getAllByText("Performance Task").some((item) =>
+        Boolean(item.closest(".cursor-pointer"))
+      )
+    ).toBe(true);
+    expect(screen.queryByText("Written Work")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Select Classwork" }));
-    const ptDialog = await screen.findByRole("dialog", { name: "Select Targeted Classwork" });
+    const dialog = await screen.findByRole("dialog", { name: "Select Targeted Classwork" });
+    expect(within(dialog).getByText("Performance Task 1")).toBeTruthy();
+    expect(within(dialog).queryByText("Worksheet 1")).toBeNull();
+    expect(within(dialog).queryByText("Worksheet 2")).toBeNull();
+  });
 
-    expect(within(ptDialog).getByText("Performance Task 1")).toBeTruthy();
-    expect(within(ptDialog).queryByText("Worksheet 1")).toBeNull();
-    expect(within(ptDialog).queryByText("Worksheet 2")).toBeNull();
+  it("reconciles a legacy graded selection locally when focus is ambiguous", async () => {
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      focus: { ...workspace.focus, component: null },
+      plan: {
+        teacher_choice: "CLASSWORK",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        selected_resources: [],
+        ai_suggestion: null,
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/No single verified weakest grading component/)).toBeTruthy();
+    expect(screen.getByText("Ungraded Activity")).toBeTruthy();
+    expect(screen.queryByText("Written Work")).toBeNull();
+    expect(screen.queryByText("Performance Task")).toBeNull();
+    expect(screen.queryByText("Worksheet 1")).toBeNull();
+    expect(api.savePlan).not.toHaveBeenCalled();
+  });
+
+  it("recommends the eligible focused target with the greatest positive gain without selecting it", async () => {
+    mockItemBasedPreviews();
+    const ptDetail: TeacherInterventionDetail = {
+      ...detailWithClassworks,
+      diagnosis_snapshot: {
+        ...detailWithClassworks.diagnosis_snapshot,
+        weakest_supported_components: ["PERFORMANCE_TASK"],
+        supporting_activities: [
+          { classwork_id: 301, classwork_assignment_id: 3001, title: "PT 1", component: "PERFORMANCE_TASK", score: 31, possible_score: 40, percent: 77.5 },
+          { classwork_id: 302, classwork_assignment_id: 3002, title: "PT 2", component: "PERFORMANCE_TASK", score: 30, possible_score: 40, percent: 75 },
+          { classwork_id: 303, classwork_assignment_id: 3003, title: "PT 3", component: "PERFORMANCE_TASK", score: 10, possible_score: 40, percent: 25 },
+        ],
+      },
+    };
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      focus: { ...workspace.focus, component: "PERFORMANCE_TASK" },
+      plan: { ...workspace.plan, teacher_choice: "CLASSWORK", grade_treatment: "PERFORMANCE_TASK" },
+    });
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={ptDetail} page="plan" />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Select Classwork" }));
+    const dialog = await screen.findByRole("dialog", { name: "Select Targeted Classwork" });
+    const pt1Row = within(dialog).getByText("PT 1").closest(".cursor-pointer") as HTMLElement;
+    const pt3Row = within(dialog).getByText("PT 3").closest(".cursor-pointer") as HTMLElement;
+    expect(await within(pt3Row).findByText("Recommended")).toBeTruthy();
+    expect(api.previewScore).toHaveBeenCalledWith(12, expect.objectContaining({
+      target_assignment_ids: [3001, 3002, 3003],
+      score_adjustment_cap: 75,
+    }));
+    expect(within(pt1Row).queryByText("Recommended")).toBeNull();
+    expect(within(pt3Row).getByRole("checkbox").getAttribute("data-state")).toBe("unchecked");
+
+    fireEvent.click(pt1Row);
+    expect(within(pt1Row).getByRole("checkbox").getAttribute("data-state")).toBe("checked");
+    expect(within(pt3Row).getByText("Recommended")).toBeTruthy();
+    expect(within(pt3Row).getByRole("checkbox").getAttribute("data-state")).toBe("unchecked");
+  });
+
+  it("recalculates the recommendation when the adjustment cap changes", async () => {
+    mockItemBasedPreviews();
+    const capDetail: TeacherInterventionDetail = {
+      ...detailWithClassworks,
+      diagnosis_snapshot: {
+        ...detailWithClassworks.diagnosis_snapshot,
+        supporting_activities: [
+          { classwork_id: 401, classwork_assignment_id: 4001, title: "Large Written Work", component: "WRITTEN_WORK", score: 70, possible_score: 100, percent: 70 },
+          { classwork_id: 402, classwork_assignment_id: 4002, title: "Short Written Work", component: "WRITTEN_WORK", score: 20, possible_score: 40, percent: 50 },
+        ],
+      },
+    };
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={capDetail} page="plan" />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Select Classwork" }));
+    const dialog = await screen.findByRole("dialog", { name: "Select Targeted Classwork" });
+    const largeRow = within(dialog).getByText("Large Written Work").closest(".cursor-pointer") as HTMLElement;
+    const shortRow = within(dialog).getByText("Short Written Work").closest(".cursor-pointer") as HTMLElement;
+    expect(await within(shortRow).findByText("Recommended")).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "85%" }));
+    expect(await within(largeRow).findByText("Recommended")).toBeTruthy();
+    expect(within(shortRow).queryByText("Recommended")).toBeNull();
+    expect(api.previewScore).toHaveBeenLastCalledWith(12, expect.objectContaining({
+      target_assignment_ids: [4001, 4002],
+      score_adjustment_cap: 85,
+    }));
+  });
+
+  it("does not recommend a target when every eligible preview has zero gain", async () => {
+    mockItemBasedPreviews();
+    const zeroGainDetail: TeacherInterventionDetail = {
+      ...detailWithClassworks,
+      diagnosis_snapshot: {
+        ...detailWithClassworks.diagnosis_snapshot,
+        supporting_activities: [
+          { classwork_id: 501, classwork_assignment_id: 5001, title: "High Score 1", component: "WRITTEN_WORK", score: 19, possible_score: 20, percent: 95 },
+          { classwork_id: 502, classwork_assignment_id: 5002, title: "High Score 2", component: "WRITTEN_WORK", score: 18, possible_score: 20, percent: 90 },
+        ],
+      },
+    };
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={zeroGainDetail} page="plan" />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Select Classwork" }));
+    const dialog = await screen.findByRole("dialog", { name: "Select Targeted Classwork" });
+    await waitFor(() => expect(api.previewScore).toHaveBeenCalled());
+    expect(within(dialog).queryByText("Recommended")).toBeNull();
   });
 
   it("handles save errors gracefully without losing selections", async () => {
@@ -447,7 +708,17 @@ describe("teacher intervention persistence integration", () => {
     expect(screen.getByText("Worksheet 1")).toBeTruthy();
   });
 
-  it("displays checked recommended supporting resources under Teacher Selected Materials instead of No materials selected", async () => {
+  it("displays each recommended Reading once and tracks teacher selection independently", async () => {
+    const recommendedReading = {
+      id: 501,
+      kind: "CLASSWORK" as const,
+      classwork_type: "READING",
+      title: "Algebra Foundation Drills",
+      recommended: true,
+      match_level: "SCORED_COMPETENCY" as const,
+      lesson: "Algebra Basics",
+      is_graded: false,
+    };
     api.workspace.mockResolvedValue({
       ...workspace,
       plan: {
@@ -456,17 +727,7 @@ describe("teacher intervention persistence integration", () => {
         selected_resources: [],
         ai_suggestion: null,
       },
-      resources: [
-        {
-          id: 501,
-          kind: "LESSON",
-          title: "Algebra Foundation Drills",
-          recommended: true,
-          match_level: "SCORED_COMPETENCY",
-          lesson: "Algebra Basics",
-          is_graded: false,
-        },
-      ],
+      resources: [recommendedReading, { ...recommendedReading }],
     });
 
     render(
@@ -475,26 +736,80 @@ describe("teacher intervention persistence integration", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("No materials selected")).toBeTruthy();
+    const mainReading = await screen.findByText("Algebra Foundation Drills");
+    expect(mainReading).toBeTruthy();
+    expect(screen.getAllByText("Algebra Foundation Drills")).toHaveLength(1);
+    expect(screen.queryByText("Teacher selected")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Select resources" }));
     const dialog = await screen.findByRole("dialog", { name: "Add Supporting Resources" });
 
     const drillMatches = within(dialog).getAllByText("Algebra Foundation Drills");
-    expect(drillMatches.length).toBeGreaterThan(0);
-    expect(within(dialog).getAllByText("Recommended").length).toBeGreaterThan(0);
+    expect(drillMatches).toHaveLength(1);
+    expect(within(dialog).getAllByText("Recommended")).toHaveLength(1);
 
     fireEvent.click(drillMatches[0].closest(".cursor-pointer") as HTMLElement);
     fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
 
-    expect(screen.queryByText("No materials selected")).toBeNull();
-    expect(screen.getByText("Algebra Foundation Drills")).toBeTruthy();
-    expect(
-      screen.getByText((content) => content.includes("Materials are linked to") && content.includes("Algebra Basics"))
-    ).toBeTruthy();
+    expect(screen.getAllByText("Algebra Foundation Drills")).toHaveLength(1);
+    expect(screen.getByText("Teacher selected")).toBeTruthy();
   });
 
-  it("excludes graded quizzes and assignments from study-material recommendations and pool while including lessons and readings", async () => {
+  it("reconciles duplicate canonical Reading references before save and reopen", async () => {
+    const reading = {
+      id: 511,
+      kind: "CLASSWORK" as const,
+      classwork_type: "READING",
+      title: "Canonical Statistics Reading",
+      recommended: true,
+      match_level: "COMPETENCY" as const,
+      lesson: "Statistics",
+      is_graded: false,
+    };
+    const duplicateWorkspace = {
+      ...workspace,
+      plan: {
+        ...workspace.plan,
+        teacher_choice: "EXISTING_MATERIAL_ONLY" as const,
+        selected_resources: [
+          { kind: "CLASSWORK" as const, id: reading.id },
+          { kind: "CLASSWORK" as const, id: reading.id },
+        ],
+      },
+      resources: [reading, { ...reading }],
+    };
+    api.workspace.mockResolvedValue(duplicateWorkspace);
+    api.savePlan.mockImplementation(async (_id, savedPlan) => ({
+      ...duplicateWorkspace,
+      plan: { ...duplicateWorkspace.plan, ...savedPlan },
+    }));
+    const ref = createRef<InterventionSupportMaterialsHandle>();
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials ref={ref} detail={detail} page="plan" />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(reading.title)).toBeTruthy();
+    expect(screen.getAllByText(reading.title)).toHaveLength(1);
+    expect(screen.getByText("Teacher selected")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select resources" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Supporting Resources" });
+    expect(within(dialog).getAllByText(reading.title)).toHaveLength(1);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+
+    expect(await ref.current?.saveAdjustments()).toBe(true);
+    expect(api.savePlan).toHaveBeenCalledWith(
+      12,
+      expect.objectContaining({
+        selected_resources: [{ kind: "CLASSWORK", id: reading.id }],
+      })
+    );
+  });
+
+  it("excludes graded quizzes, assignments, and curriculum lessons from study-material recommendations and pool while including only non-graded readings", async () => {
     api.workspace.mockResolvedValue({
       ...workspace,
       plan: {
@@ -555,15 +870,238 @@ describe("teacher intervention persistence integration", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Select resources" }));
     const dialog = await screen.findByRole("dialog", { name: "Add Supporting Resources" });
 
-    // Graded quiz and assignment must NOT appear in the study-material selection dialog
+    // Graded quiz, assignment, and curriculum lessons must NOT appear in the study-material selection dialog
     expect(within(dialog).queryByText("Chapter 3 Quiz")).toBeNull();
     expect(within(dialog).queryByText("Homework Assignment 2")).toBeNull();
+    expect(within(dialog).queryByText("Linear Equations Lesson")).toBeNull();
 
-    // Instructional lesson and non-graded reading MUST appear
-    expect(within(dialog).getAllByText("Linear Equations Lesson").length).toBeGreaterThan(0);
-    expect(within(dialog).getAllByText("Study Guide Reading").length).toBeGreaterThan(0);
-    expect(within(dialog).getAllByText("Lesson").length).toBeGreaterThan(0);
+    // Only eligible non-graded reading MUST appear
+    expect(within(dialog).getAllByText("Study Guide Reading")).toHaveLength(1);
     expect(within(dialog).getAllByText("Reading").length).toBeGreaterThan(0);
+    expect(within(dialog).queryByText("Lesson")).toBeNull();
+  });
+
+  it("automatically displays only recommended eligible readings and excludes lessons and graded activities", async () => {
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      plan: {
+        teacher_choice: "EXISTING_MATERIAL_ONLY",
+        grade_treatment: null,
+        selected_resources: [{ kind: "LESSON", id: 704 }],
+        ai_suggestion: null,
+      },
+      resources: [
+        {
+          id: 701,
+          kind: "LESSON",
+          title: "Recommended Fractions Lesson",
+          recommended: true,
+          match_level: "COMPETENCY",
+          lesson: "Fractions",
+          is_graded: false,
+        },
+        {
+          id: 702,
+          kind: "CLASSWORK",
+          classwork_type: "READING",
+          title: "Recommended Fractions Reading",
+          recommended: true,
+          match_level: "LESSON",
+          lesson: "Fractions",
+          is_graded: false,
+        },
+        {
+          id: 703,
+          kind: "CLASSWORK",
+          classwork_type: "ACTIVITY",
+          title: "Graded PT Diagnostic Source",
+          recommended: false,
+          match_level: "SOURCE_ACTIVITY",
+          lesson: "Fractions",
+          is_graded: true,
+        },
+        {
+          id: 704,
+          kind: "LESSON",
+          title: "Teacher Selected Supplemental Lesson",
+          recommended: false,
+          match_level: null,
+          lesson: "Supplemental Fractions",
+          is_graded: false,
+        },
+        {
+          id: 705,
+          kind: "CLASSWORK",
+          classwork_type: "QUIZ",
+          title: "Incorrectly Flagged Graded Quiz",
+          recommended: true,
+          match_level: "COMPETENCY",
+          lesson: "Fractions",
+          is_graded: true,
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detail} page="plan" />
+      </MemoryRouter>
+    );
+
+    // Lessons must NOT be shown as supporting resources
+    expect(screen.queryByText("Recommended Fractions Lesson")).toBeNull();
+    // Non-graded readings MUST be shown
+    const readingRow = (await screen.findByText("Recommended Fractions Reading")).closest(".group");
+    expect(readingRow).not.toBeNull();
+    expect(within(readingRow as HTMLElement).getByText("Recommended")).toBeTruthy();
+    expect(screen.queryByText("Graded PT Diagnostic Source")).toBeNull();
+    expect(screen.queryByText("Incorrectly Flagged Graded Quiz")).toBeNull();
+    // Teacher selected lesson is not an eligible reading, so it does not appear
+    expect(screen.queryByText("Teacher Selected Supplemental Lesson")).toBeNull();
+    expect(screen.queryByText("Teacher selected")).toBeNull();
+  });
+
+  it("shows the supporting-readings empty state when no eligible instructional material exists", async () => {
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      resources: [
+        {
+          id: 801,
+          kind: "CLASSWORK",
+          classwork_type: "ACTIVITY",
+          title: "PT Diagnostic Evidence Only",
+          recommended: false,
+          match_level: "SOURCE_ACTIVITY",
+          lesson: "Statistics",
+          is_graded: true,
+        },
+        {
+          id: 802,
+          kind: "LESSON",
+          title: "Unmatched Optional Lesson",
+          recommended: false,
+          match_level: null,
+          lesson: "Optional Review",
+          is_graded: false,
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detail} page="plan" />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("No supporting readings")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "No eligible Reading is available in this teaching scope."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText("PT Diagnostic Evidence Only")).toBeNull();
+    expect(screen.queryByText("Unmatched Optional Lesson")).toBeNull();
+  });
+
+  it("drops intervention 7 legacy references, saves a reading, and restores it after reopening", async () => {
+    const reading = {
+      id: 3,
+      kind: "CLASSWORK" as const,
+      classwork_type: "READING",
+      title: "DEMO - Budget Mathematics and Financial Modeling",
+      description: "Budget review",
+      lesson: "DEMO - Budget Mathematics and Financial Modeling",
+      topic: "Budget Mathematics",
+      attachments: [],
+      access: "PLANNING_ONLY" as const,
+      ai_read: "METADATA_ONLY" as const,
+      recommended: true,
+      match_reason: "Matched covered competency metadata",
+      match_level: "COMPETENCY" as const,
+      match_rank: 100,
+      is_graded: false,
+    };
+    const evidenceSource = (id: number, title: string) => ({
+      id,
+      kind: "CLASSWORK" as const,
+      title,
+      description: "Diagnostic evidence",
+      lesson: "Budget Mathematics",
+      topic: title,
+      attachments: [],
+      classwork_type: "ACTIVITY",
+      access: "ALREADY_ACCESSIBLE" as const,
+      ai_read: "METADATA_ONLY" as const,
+      recommended: false,
+      match_reason: "Source activity metadata; file contents were not analyzed",
+      match_level: "SOURCE_ACTIVITY" as const,
+      match_rank: 60,
+      is_graded: true,
+    });
+    const legacyWorkspace: RemediationWorkspace = {
+      ...workspace,
+      plan: {
+        teacher_choice: "CLASSWORK",
+        grade_treatment: "PRACTICE_ONLY",
+        selected_resources: [
+          { kind: "CLASSWORK", id: 5 },
+          { kind: "CLASSWORK", id: 6 },
+          { kind: "CLASSWORK", id: 4 },
+          { kind: "CLASSWORK", id: 13 },
+        ],
+        ai_suggestion: null,
+      },
+      resources: [
+        reading,
+        evidenceSource(5, "DEMO - PT 1 - Budget Mathematics"),
+        evidenceSource(6, "DEMO - PT 2 - Equation Modeling"),
+      ],
+    };
+    const savedWorkspace: RemediationWorkspace = {
+      ...legacyWorkspace,
+      plan: {
+        ...legacyWorkspace.plan,
+        selected_resources: [{ kind: "CLASSWORK", id: reading.id }],
+      },
+    };
+    api.workspace.mockResolvedValue(legacyWorkspace);
+    api.savePlan.mockResolvedValue(savedWorkspace);
+    const ref = createRef<InterventionSupportMaterialsHandle>();
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials ref={ref} detail={detail} page="plan" />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(reading.title)).toBeTruthy();
+    expect(screen.queryByText("Teacher selected")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Select resources" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Supporting Resources" });
+    fireEvent.click(
+      within(dialog)
+        .getAllByText(reading.title)[0]
+        .closest(".cursor-pointer") as HTMLElement
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+
+    expect(await ref.current?.saveAdjustments()).toBe(true);
+    expect(api.savePlan).toHaveBeenCalledWith(12, {
+      teacher_choice: "CLASSWORK",
+      grade_treatment: "PRACTICE_ONLY",
+      selected_resources: [{ kind: "CLASSWORK", id: reading.id }],
+    });
+
+    cleanup();
+    api.workspace.mockResolvedValue(savedWorkspace);
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detail} page="overview" />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(reading.title)).toBeTruthy();
+    expect(screen.queryByText("No supporting resources")).toBeNull();
   });
 
   it("displays original score, max achievable adjusted score, and possible score gain based on cap, updating dynamically", async () => {
@@ -596,6 +1134,10 @@ describe("teacher intervention persistence integration", () => {
     await waitFor(() => {
       expect(within(dialog).getByText("16/20")).toBeTruthy();
       expect(within(dialog).getByText("+6")).toBeTruthy();
+      expect(api.projectGrade).toHaveBeenCalledWith(12, {
+        target_assignment_ids: [101],
+        score_adjustment_cap: 80,
+      });
     });
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
@@ -612,7 +1154,7 @@ describe("teacher intervention persistence integration", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Reselect Activities" }));
     const reDialog = await screen.findByRole("dialog", { name: "Select Targeted Classwork" });
-    expect(within(reDialog).getByText("Projected Grade Preview")).toBeTruthy();
+    expect(within(reDialog).getByText("Projected Grade")).toBeTruthy();
     expect(within(reDialog).getByText("Unavailable")).toBeTruthy();
   });
 
@@ -697,7 +1239,7 @@ describe("teacher intervention persistence integration", () => {
 
     // When preview is unavailable, must NOT show original score (10/20) as calculated adjusted max or +0
     await screen.findByText("Worksheet 1");
-    expect(screen.getByText("Unavailable")).toBeTruthy();
+    expect((await screen.findAllByText("Unavailable")).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("—")).toBeTruthy();
     expect(screen.queryByText("+0")).toBeNull();
 
@@ -737,6 +1279,275 @@ describe("teacher intervention persistence integration", () => {
       expect(screen.getByText("17/20")).toBeTruthy();
       expect(screen.getByText("+7")).toBeTruthy();
     });
+  });
+
+  it("recommends a target from projection API without auto-selecting it, preserving teacher control", async () => {
+    api.projectGrade.mockResolvedValue({
+      status: "AVAILABLE",
+      grade_representation: "TRANSMUTED_TERM_GRADE",
+      current_subject_grade: 74.0,
+      passing_threshold: 75.0,
+      target_projections: [],
+      eligible_target_gains: [],
+      additional_eligible_targets_have_positive_improvement: true,
+      recommended_target_assignment_id: 102,
+      assumptions: [],
+      unavailable_reasons: [],
+      ai_midterm_what_if: {
+        status: "UNAVAILABLE",
+        estimate_kind: "AI_MIDTERM_WHAT_IF_ESTIMATE",
+        is_official_grade: false,
+        is_guaranteed: false,
+        baseline_predicted_term_grade: null,
+        readiness: {},
+        target_estimates: [],
+        unavailable_reasons: [],
+        limitations: [],
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("75% Cap");
+    fireEvent.click(screen.getByRole("button", { name: "Select Classwork" }));
+    const dialog = await screen.findByRole("dialog", { name: "Select Targeted Classwork" });
+
+    // Worksheet 2 should display the Recommended badge
+    await waitFor(() => {
+      const ws2 = within(dialog).getByText("Worksheet 2").closest(".cursor-pointer");
+      expect(ws2).not.toBeNull();
+      expect(within(ws2 as HTMLElement).getByText("Recommended")).toBeTruthy();
+    });
+
+    // But Worksheet 2 must NOT be checked automatically!
+    const ws2Row = within(dialog).getByText("Worksheet 2").closest(".cursor-pointer");
+    const ws2Checkbox = within(ws2Row as HTMLElement).getByRole("checkbox");
+    expect(ws2Checkbox.getAttribute("data-state")).not.toBe("checked");
+
+    // Teacher can manually choose Worksheet 1 instead (teacher override)
+    const ws1Row = within(dialog).getByText("Worksheet 1").closest(".cursor-pointer");
+    fireEvent.click(ws1Row as HTMLElement);
+
+    const ws1Checkbox = within(ws1Row as HTMLElement).getByRole("checkbox");
+    expect(ws1Checkbox.getAttribute("data-state")).toBe("checked");
+  });
+
+  it("dynamically recalculates subject grade projection when teacher changes targets", async () => {
+    const emptyProjection = {
+        status: "AVAILABLE",
+        grade_representation: "TRANSMUTED_TERM_GRADE",
+        current_subject_grade: 74.0,
+        passing_threshold: 75.0,
+        target_projections: [],
+        eligible_target_gains: [],
+        additional_eligible_targets_have_positive_improvement: true,
+        recommended_target_assignment_id: 101,
+        assumptions: [],
+        unavailable_reasons: [],
+        ai_midterm_what_if: {
+          status: "UNAVAILABLE",
+          estimate_kind: "AI_MIDTERM_WHAT_IF_ESTIMATE",
+          is_official_grade: false,
+          is_guaranteed: false,
+          baseline_predicted_term_grade: null,
+          readiness: {},
+          target_estimates: [],
+          unavailable_reasons: [],
+          limitations: [],
+        },
+      };
+    const selectedProjection = {
+        status: "AVAILABLE",
+        grade_representation: "TRANSMUTED_TERM_GRADE",
+        current_subject_grade: 74.0,
+        passing_threshold: 75.0,
+        target_projections: [
+          {
+            assignment_id: 101,
+            title: "Worksheet 1",
+            component: "WRITTEN_WORK",
+            original_score: 10,
+            current_effective_score: 10,
+            max_points: 20,
+            cap_percentage: 75,
+            maximum_hypothetical_effective_score: 15,
+            possible_score_gain: 5,
+            applied: true,
+            projected_initial_grade: 72.0,
+            projected_subject_grade: 78.0,
+            step_subject_grade_improvement: 4.0,
+            possible_grade_improvement: 4.0,
+            reaches_passing_threshold: true,
+            unavailable_reasons: [],
+          },
+        ],
+        eligible_target_gains: [],
+        additional_eligible_targets_have_positive_improvement: true,
+        recommended_target_assignment_id: 102,
+        assumptions: [],
+        unavailable_reasons: [],
+        ai_midterm_what_if: {
+          status: "UNAVAILABLE",
+          estimate_kind: "AI_MIDTERM_WHAT_IF_ESTIMATE",
+          is_official_grade: false,
+          is_guaranteed: false,
+          baseline_predicted_term_grade: null,
+          readiness: {},
+          target_estimates: [],
+          unavailable_reasons: [],
+          limitations: [],
+        },
+      };
+    api.projectGrade.mockImplementation(async (_id, payload) =>
+      payload.target_assignment_ids.length > 0 ? selectedProjection : emptyProjection
+    );
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("75% Cap");
+    fireEvent.click(screen.getByRole("button", { name: "Select Classwork" }));
+    const dialog = await screen.findByRole("dialog", { name: "Select Targeted Classwork" });
+
+    // Initially target is not selected, select Worksheet 1
+    const ws1Row = within(dialog).getByText("Worksheet 1").closest(".cursor-pointer");
+    fireEvent.click(ws1Row as HTMLElement);
+
+    await waitFor(() => {
+      expect(api.projectGrade).toHaveBeenCalledWith(12, {
+        target_assignment_ids: [101],
+        score_adjustment_cap: 75,
+      });
+      expect(within(dialog).getByText("78.0%")).toBeTruthy();
+      expect(within(dialog).getByText("+4.0%")).toBeTruthy();
+      expect(within(dialog).getByText("Reaches Passing")).toBeTruthy();
+    });
+  });
+
+  it("Task 4.8D.1 regression: AI midterm what-if renders Provisional AI Estimate without old placeholder and handles unsaved caps", async () => {
+    const aiProjection = {
+      status: "UNAVAILABLE",
+      grade_representation: "TRANSMUTED_TERM_GRADE",
+      current_subject_grade: null,
+      passing_threshold: 87.0,
+      target_projections: [
+        {
+          assignment_id: 101,
+          title: "Worksheet 1",
+          component: "WRITTEN_WORK",
+          original_score: 10,
+          current_effective_score: 10,
+          max_points: 20,
+          cap_percentage: 75,
+          maximum_hypothetical_effective_score: 15,
+          possible_score_gain: 5,
+          applied: true,
+          projected_initial_grade: null,
+          projected_subject_grade: null,
+          step_subject_grade_improvement: null,
+          possible_grade_improvement: null,
+          reaches_passing_threshold: null,
+          unavailable_reasons: [],
+        },
+      ],
+      eligible_target_gains: [
+        {
+          assignment_id: 101,
+          title: "Worksheet 1",
+          component: "WRITTEN_WORK",
+          original_score: 10,
+          current_effective_score: 10,
+          max_points: 20,
+          cap_percentage: 75,
+          maximum_hypothetical_effective_score: 15,
+          possible_score_gain: 5,
+        },
+      ],
+      additional_eligible_targets_have_positive_improvement: false,
+      recommended_target_assignment_id: 101,
+      assumptions: [],
+      unavailable_reasons: [
+        {
+          code: "INCOMPLETE_EXAMINATION_EVIDENCE",
+          message: "Examination evidence is incomplete for official transmuted grade calculation.",
+        },
+      ],
+      ai_midterm_what_if: {
+        status: "AVAILABLE",
+        estimate_kind: "AI_MIDTERM_WHAT_IF_ESTIMATE",
+        is_official_grade: false,
+        is_guaranteed: false,
+        model_name: "midterm-grade-xgb-v1",
+        prediction_purpose: "CURRENT_TERM_FINAL_GRADE_PROJECTION",
+        evidence_basis: "LIVE_ACTUAL_EVIDENCE_WITH_EPHEMERAL_CAPPED_WW_PT_OVERRIDES",
+        baseline_predicted_term_grade: 84.6,
+        readiness: { ready: true },
+        target_estimates: [
+          {
+            assignment_id: 101,
+            maximum_hypothetical_effective_score: 15.0,
+            hypothetical_predicted_term_grade: 86.6,
+            step_estimated_difference: 2.0,
+            estimated_difference_from_baseline: 2.0,
+          },
+        ],
+        unavailable_reasons: [],
+        limitations: [],
+      },
+    };
+
+    api.projectGrade.mockResolvedValue(aiProjection);
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("75% Cap");
+    fireEvent.click(screen.getByRole("button", { name: "Select Classwork" }));
+    const dialog = await screen.findByRole("dialog", { name: "Select Targeted Classwork" });
+
+    // Select Worksheet 1
+    const ws1Row = within(dialog).getByText("Worksheet 1").closest(".cursor-pointer");
+    fireEvent.click(ws1Row as HTMLElement);
+
+    await waitFor(() => {
+      // 1. Shows Provisional AI Estimate badge
+      expect(within(dialog).getByText("Provisional AI Estimate")).toBeTruthy();
+      // 2. Shows baseline prediction
+      expect(within(dialog).getAllByText("84.6%").length).toBeGreaterThanOrEqual(1);
+      // 3. Shows hypothetical prediction after capped remediation
+      expect(within(dialog).getByText("86.6%")).toBeTruthy();
+      // 4. Shows estimated grade difference
+      expect(within(dialog).getByText("+2.0%")).toBeTruthy();
+      // 5. Explicitly disclaims that results are exploratory and not guaranteed
+      expect(
+        within(dialog).getByText(/not an official grade or guaranteed result/i)
+      ).toBeTruthy();
+      // 6. Proves old placeholder is NOT rendered
+      expect(
+        within(dialog).queryByText(/Preview is pending official backend grade calculation/i)
+      ).toBeNull();
+      expect(
+        within(dialog).queryByText(/Subject grade projections are not calculated in-browser/i)
+      ).toBeNull();
+    });
+
+    // 7. Verify displayed cap matches the API cap (75%), and unsaved cap edit warns teacher
+    expect(within(dialog).getAllByText("75% Cap").length).toBeGreaterThanOrEqual(1);
+    const capInput = within(dialog).getByLabelText("Score Adjustment Cap (%)");
+    fireEvent.change(capInput, { target: { value: "85" } });
+    expect(
+      within(dialog).getByText(/Unsaved cap change \(85%\)\. The projection above reflects the saved 75% cap/i)
+    ).toBeTruthy();
   });
 });
 

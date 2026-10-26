@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 from uuid import UUID
 
 import joblib
@@ -26,6 +27,8 @@ from app.services.grading.ExaminationCalculator import (
     ExaminationObservation,
     compute_examination_component,
 )
+from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
+from app.services.grading.RemedialClassworkResolver import resolve_student_classwork_scores
 from app.services.student_record.StudentRecordService import resolve_subject_grading_weights
 from app.services.grading.RemedialExamination import effective_exam_scores
 
@@ -241,7 +244,18 @@ def build_current_period_features_from_records(
     source_period_id: int,
     *,
     cutoff_at: datetime | None = None,
+    hypothetical_ww_pt_scores: Mapping[int, float] | None = None,
 ) -> dict[str, Any]:
+    """Build the normal live feature vector, with optional ephemeral WW/PT scores.
+
+    Overrides are deliberately restricted to scored, original WW/PT assignments in
+    this exact evidence scope. They change only earned-score aggregates; activity
+    counts, possible points, Examination evidence, and persisted rows are untouched.
+    """
+    overrides = {int(key): float(value) for key, value in (hypothetical_ww_pt_scores or {}).items()}
+    if any(not math.isfinite(value) or value < 0 for value in overrides.values()):
+        raise ValueError("Hypothetical WW/PT scores must be finite and non-negative.")
+    applied_override_ids: set[int] = set()
     student = db.get(Student, student_id)
     class_ = db.get(Class, class_id)
     subject = db.get(Subject, subject_id)
@@ -264,13 +278,56 @@ def build_current_period_features_from_records(
     domain_warnings: list[dict[str, Any]] = []
 
     rows, unresolved = _classwork_rows(db, student_id, class_id, subject_id, source_period_id, cutoff_at)
+    exam_rows = [
+        (asgn, cw, sub, unres) for asgn, cw, sub, unres in rows
+        if getattr(cw, "classwork_category", None) == "EXAMS"
+        or getattr(cw, "exam_subtype", None) is not None
+        or getattr(asgn, "original_exam_assignment_id", None) is not None
+    ]
     effective_exams = effective_exam_scores(
-        [assignment for assignment, _, _, _ in rows],
+        [assignment for assignment, _, _, _ in exam_rows],
         {assignment.classwork_assignment_id: _to_float(submission.grade) if submission and submission.grade is not None else None
-         for assignment, _, submission, _ in rows if assignment.recipient_student_id in (None, student_id)},
+         for assignment, _, submission, _ in exam_rows if assignment.recipient_student_id in (None, student_id)},
     )
+
+    asgn_ids = [assignment.classwork_assignment_id for assignment, _, _, _ in rows]
+    links: list[RemediationAssignmentLink] = []
+    if asgn_ids:
+        links = (
+            db.query(RemediationAssignmentLink)
+            .filter(
+                RemediationAssignmentLink.student_id == student_id,
+                (
+                    RemediationAssignmentLink.original_assignment_id.in_(asgn_ids)
+                    | RemediationAssignmentLink.remediation_assignment_id.in_(asgn_ids)
+                ),
+            )
+            .all()
+        )
+    if cutoff_at is not None:
+        cutoff_utc = _as_utc(cutoff_at)
+        links = [
+            link for link in links
+            if link.created_at is None or _as_utc(link.created_at) <= cutoff_utc
+        ]
+
+    resolved_cw = resolve_student_classwork_scores(
+        student_id=student_id,
+        assignments=[assignment for assignment, _, _, _ in rows],
+        submissions={
+            assignment.classwork_assignment_id: submission
+            for assignment, _, submission, _ in rows
+            if submission is not None
+        },
+        links=links,
+    )
+
     for _assignment, classwork, submission, is_unresolved in rows:
-        if _assignment.recipient_student_id not in (None, student_id) or _assignment.original_exam_assignment_id is not None:
+        if (
+            _assignment.recipient_student_id not in (None, student_id)
+            or _assignment.original_exam_assignment_id is not None
+            or _assignment.classwork_assignment_id in resolved_cw.remedial_assignment_ids
+        ):
             continue
         component = classify_classwork_component(
             classwork.classwork_type,
@@ -281,9 +338,26 @@ def build_current_period_features_from_records(
             domain_warnings.append({"code": "UNRESOLVED_SUBMISSION", "classwork_id": classwork.classwork_id})
             continue
         score = _to_float(submission.grade) if submission and submission.grade is not None else None
-        if _assignment.classwork_assignment_id in effective_exams:
-            score = effective_exams[_assignment.classwork_assignment_id]
+        if component in (CanonicalGradingComponent.WRITTEN_WORK, CanonicalGradingComponent.PERFORMANCE_TASK):
+            if _assignment.classwork_assignment_id in resolved_cw.effective_scores_float:
+                score = resolved_cw.effective_scores_float[_assignment.classwork_assignment_id]
+        else:
+            if _assignment.classwork_assignment_id in effective_exams:
+                score = effective_exams[_assignment.classwork_assignment_id]
         possible = _to_float(classwork.total_points)
+        assignment_id = _assignment.classwork_assignment_id
+        if assignment_id in overrides:
+            if component not in (
+                CanonicalGradingComponent.WRITTEN_WORK,
+                CanonicalGradingComponent.PERFORMANCE_TASK,
+            ):
+                raise ValueError("Hypothetical scores may only adjust Written Work or Performance Task originals.")
+            if score is None or possible is None or possible <= 0:
+                raise ValueError("Hypothetical scores require an existing scored assignment with positive maximum points.")
+            if overrides[assignment_id] > possible:
+                raise ValueError("Hypothetical WW/PT scores cannot exceed the assignment maximum points.")
+            score = overrides[assignment_id]
+            applied_override_ids.add(assignment_id)
         if component == CanonicalGradingComponent.WRITTEN_WORK:
             _add_score(accumulators["ww"], score, possible)
         elif component == CanonicalGradingComponent.PERFORMANCE_TASK:
@@ -303,6 +377,13 @@ def build_current_period_features_from_records(
                 )
             else:
                 _add_score(plain_qa, score, possible)
+
+    unused_override_ids = set(overrides) - applied_override_ids
+    if unused_override_ids:
+        raise ValueError(
+            "Hypothetical WW/PT score assignments are outside the eligible evidence scope: "
+            + ", ".join(str(value) for value in sorted(unused_override_ids))
+        )
 
     exam_result = compute_examination_component(exam_observations, require_complete_for_percent=True)
     domain_warnings.extend(exam_result.warnings)
@@ -428,6 +509,24 @@ def build_current_period_features_from_records(
         "domain_warnings": domain_warnings,
         "evidence_summary": {
             "cutoff_at": cutoff_at.isoformat() if cutoff_at else None,
+            "remedial_classworks": [
+                {
+                    "original_assignment_id": audit.original_assignment_id,
+                    "remediation_assignment_id": audit.remediation_assignment_id,
+                    "component": audit.component,
+                    "score_adjustment_cap": float(audit.score_adjustment_cap),
+                    "original_score": float(audit.original_raw_score) if audit.original_raw_score is not None else None,
+                    "remediation_score": float(audit.remediation_raw_score) if audit.remediation_raw_score is not None else None,
+                    "effective_score": float(audit.effective_score) if audit.effective_score is not None else None,
+                    "total_points": float(audit.max_points) if audit.max_points is not None else None,
+                    "cap_score": float(audit.cap_score) if audit.cap_score is not None else None,
+                    "was_adjusted": audit.was_adjusted,
+                    "was_capped": audit.was_capped,
+                    "is_completed": audit.is_completed,
+                    "status": audit.status,
+                }
+                for audit in resolved_cw.audit_records
+            ],
             "examination": {
                 "examination_percent": exam_result.examination_percent if exam_observations else qa.percent if qa.count else None,
                 "subtype_percentages": exam_result.subtype_percentages,

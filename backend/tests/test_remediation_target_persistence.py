@@ -89,6 +89,15 @@ def _make_classwork_target(
     return assignment
 
 
+def _set_focus(ctx, *components: str) -> None:
+    row = ctx["db"].get(Intervention, _id(ctx))
+    row.diagnosis_snapshot = {
+        **(row.diagnosis_snapshot or {}),
+        "weakest_supported_components": list(components),
+    }
+    ctx["db"].commit()
+
+
 def test_persist_single_and_multiple_target_assignments_with_default_cap(candidate_context):
     ctx = candidate_context; db = ctx["db"]; _activate(ctx)
 
@@ -132,6 +141,7 @@ def test_persist_single_and_multiple_target_assignments_with_default_cap(candida
 
 def test_persist_teacher_selected_adjustment_cap(candidate_context):
     ctx = candidate_context; db = ctx["db"]; _activate(ctx)
+    _set_focus(ctx, "PERFORMANCE_TASK")
     a1 = _make_classwork_target(ctx, "Task 1", category="PERFORMANCE_TASK", score=14.0)
 
     saved = save_plan(
@@ -147,6 +157,76 @@ def test_persist_teacher_selected_adjustment_cap(candidate_context):
 
     workspace = get_workspace(db, _staff(ctx), _id(ctx))
     assert workspace["plan"]["score_adjustment_cap"] == 85.0
+
+
+def test_reject_graded_treatment_outside_verified_focus(candidate_context):
+    ctx = candidate_context; db = ctx["db"]; _activate(ctx)
+    target = _make_classwork_target(ctx, "Forged Task", category="PERFORMANCE_TASK")
+
+    with pytest.raises(HTTPException) as exc:
+        save_plan(
+            db, _staff(ctx), _id(ctx),
+            PlanUpdate(
+                teacher_choice="CLASSWORK",
+                grade_treatment="PERFORMANCE_TASK",
+                target_assignment_ids=[target.classwork_assignment_id],
+            ),
+        )
+
+    assert exc.value.status_code == 422
+    assert "verified Written Work intervention focus" in exc.value.detail
+
+
+def test_missing_or_ambiguous_focus_allows_only_ungraded_treatment(candidate_context):
+    ctx = candidate_context; db = ctx["db"]; _activate(ctx)
+
+    for components in ((), ("WRITTEN_WORK", "PERFORMANCE_TASK")):
+        _set_focus(ctx, *components)
+        with pytest.raises(HTTPException) as exc:
+            save_plan(
+                db, _staff(ctx), _id(ctx),
+                PlanUpdate(teacher_choice="QUIZ", grade_treatment="WRITTEN_WORK"),
+            )
+        assert exc.value.status_code == 422
+        assert "one verified weakest grading component" in exc.value.detail
+
+    saved = save_plan(
+        db, _staff(ctx), _id(ctx),
+        PlanUpdate(teacher_choice="QUIZ", grade_treatment="PRACTICE_ONLY"),
+    )
+    assert saved["plan"]["grade_treatment"] == "PRACTICE_ONLY"
+
+
+def test_legacy_cross_focus_plan_is_read_without_automatic_mutation(candidate_context):
+    ctx = candidate_context; db = ctx["db"]; _activate(ctx)
+    row = db.get(Intervention, _id(ctx))
+    row.remediation_plan = {
+        "teacher_choice": "CLASSWORK",
+        "grade_treatment": "PERFORMANCE_TASK",
+        "target_assignment_ids": [9876],
+        "selected_resources": [],
+    }
+    db.commit()
+
+    workspace = get_workspace(db, _staff(ctx), _id(ctx))
+    assert workspace["plan"]["grade_treatment"] == "PERFORMANCE_TASK"
+    assert workspace["plan"]["target_assignment_ids"] == [9876]
+
+    with pytest.raises(HTTPException):
+        save_plan(
+            db, _staff(ctx), _id(ctx),
+            PlanUpdate(teacher_choice="CLASSWORK", grade_treatment="PERFORMANCE_TASK"),
+        )
+    db.refresh(row)
+    assert row.remediation_plan["grade_treatment"] == "PERFORMANCE_TASK"
+    assert row.remediation_plan["target_assignment_ids"] == [9876]
+
+    reconciled = save_plan(
+        db, _staff(ctx), _id(ctx),
+        PlanUpdate(teacher_choice="CLASSWORK", grade_treatment="PRACTICE_ONLY"),
+    )
+    assert reconciled["plan"]["grade_treatment"] == "PRACTICE_ONLY"
+    assert reconciled["plan"]["target_assignment_ids"] == []
 
 
 def test_reject_100_percent_cap_in_plan_update(candidate_context):

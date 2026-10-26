@@ -2,11 +2,13 @@
 
 from sqlalchemy.orm import Session
 
+from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.intervention.Intervention import Intervention
 from app.models.intervention.InterventionSupportMaterial import InterventionSupportMaterial
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
 from app.services.grading.RemedialExamination import effective_exam_score_for_change
 
 
@@ -27,8 +29,21 @@ def resolution_projection(db: Session, row: Intervention) -> float | None:
     value = prediction.evidence_snapshot.get("projected_final_term_grade_raw")
     if not isinstance(readiness, dict) or readiness.get("status") != "READY" or not isinstance(value, (int, float)) or isinstance(value, bool):
         return None
-    if row.resolution_reason == "IMPROVED_PREDICTION" and float(value) < 85:
-        return None
+    if row.resolution_reason == "IMPROVED_PREDICTION":
+        threshold_val = 85.0
+        try:
+            period = db.get(AcademicPeriod, row.academic_period_id)
+            if period:
+                res = require_subject_passing_threshold(
+                    db,
+                    academic_year_id=period.academic_year_id,
+                    subject_id=row.subject_id,
+                )
+                threshold_val = float(res.threshold)
+        except Exception:
+            pass
+        if float(value) < threshold_val:
+            return None
     return float(value)
 
 

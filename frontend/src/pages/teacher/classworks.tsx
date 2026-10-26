@@ -54,6 +54,7 @@ import {
   type RemediationFocus,
   type RemediationResource,
   type OriginalExamination,
+  type RemediationClassworkTarget,
 } from "@/lib/teacher-interventions-api";
 
 const tabs: Array<TabItem<TabId>> = [
@@ -121,6 +122,12 @@ export default function Classworks() {
   >(null);
   const [remediationOriginalExam, setRemediationOriginalExam] =
     useState<OriginalExamination | null>(null);
+  const [remediationOriginalTargets, setRemediationOriginalTargets] = useState<
+    RemediationClassworkTarget[]
+  >([]);
+  const [initialTargetAssignmentId, setInitialTargetAssignmentId] = useState<
+    number | null
+  >(null);
   const [remediationReferences, setRemediationReferences] = useState<
     RemediationResource[]
   >([]);
@@ -136,6 +143,8 @@ export default function Classworks() {
     setRemediationFocus(null);
     setRemediationGradeTreatment(null);
     setRemediationOriginalExam(null);
+    setRemediationOriginalTargets([]);
+    setInitialTargetAssignmentId(null);
     setRemediationReferences([]);
     let live = true;
     void Promise.all([
@@ -174,10 +183,83 @@ export default function Classworks() {
             }
             setRemediationOriginalExam(original);
           }
+          if (
+            workspace.plan.grade_treatment === "WRITTEN_WORK" ||
+            workspace.plan.grade_treatment === "PERFORMANCE_TASK"
+          ) {
+            const targetIds = workspace.plan.target_assignment_ids || [];
+            if (targetIds.length === 0) {
+              setRemediationError(
+                "No target classwork assignments saved in the intervention plan. Return to the Intervention to select a target."
+              );
+              return;
+            }
+
+            const candidates = (workspace.score_previews || [])
+              .filter(
+                (p) =>
+                  targetIds.includes(p.assignment_id) &&
+                  Number.isFinite(p.possible_gain) &&
+                  p.possible_gain > 0
+              )
+              .sort(
+                (a, b) =>
+                  b.possible_gain - a.possible_gain ||
+                  a.assignment_id - b.assignment_id
+              );
+            const recommendedId = candidates[0]?.assignment_id ?? null;
+
+            const resolvedTargets: RemediationClassworkTarget[] = targetIds.map(
+              (targetId) => {
+                const preview = (workspace.score_previews || []).find(
+                  (p) => p.assignment_id === targetId
+                );
+                const act = (
+                  detail.diagnosis_snapshot.supporting_activities || []
+                ).find((a) =>
+                  a.classwork_assignment_id != null
+                    ? a.classwork_assignment_id === targetId
+                    : a.classwork_id === targetId
+                );
+                const maxPoints =
+                  preview?.max_points ?? act?.possible_score ?? 0;
+                const origScore = preview?.original_score ?? act?.score ?? null;
+                return {
+                  assignment_id: targetId,
+                  classwork_id: act?.classwork_id ?? targetId,
+                  title:
+                    preview?.title ?? act?.title ?? `Target Assignment #${targetId}`,
+                  component:
+                    (act?.component as "WRITTEN_WORK" | "PERFORMANCE_TASK") ??
+                    (workspace.plan.grade_treatment as
+                      | "WRITTEN_WORK"
+                      | "PERFORMANCE_TASK"),
+                  original_score: origScore,
+                  max_points: maxPoints,
+                  percent:
+                    act?.percent ??
+                    (maxPoints > 0 && origScore != null
+                      ? (origScore / maxPoints) * 100
+                      : null),
+                  is_recommended: targetId === recommendedId,
+                };
+              }
+            );
+
+            setRemediationOriginalTargets(resolvedTargets);
+
+            const urlTargetId = Number(
+              routeParams.get("original_classwork_assignment_id")
+            );
+            if (urlTargetId && targetIds.includes(urlTargetId)) {
+              setInitialTargetAssignmentId(urlTargetId);
+            } else {
+              setInitialTargetAssignmentId(recommendedId ?? targetIds[0]);
+            }
+          }
           setRemediationReferences(
             workspace.resources.filter(
-              (item) =>
-                item.recommended && selected.has(`${item.kind}:${item.id}`),
+              (item) => selected.has(`${item.kind}:${item.id}`),
             ),
           );
         }
@@ -735,6 +817,8 @@ export default function Classworks() {
                       remediationFocus={remediationFocus}
                       remediationGradeTreatment={remediationGradeTreatment}
                       remediationOriginalExam={remediationOriginalExam}
+                      remediationOriginalTargets={remediationOriginalTargets}
+                      initialTargetAssignmentId={initialTargetAssignmentId}
                       remediationReferences={remediationReferences}
                       onClose={closeCreateWizard}
                       onSuccess={async () => {
@@ -763,6 +847,9 @@ export default function Classworks() {
                       remediationFocus={remediationFocus}
                       remediationGradeTreatment={remediationGradeTreatment}
                       remediationOriginalExam={remediationOriginalExam}
+                      remediationOriginalTargets={remediationOriginalTargets}
+                      initialTargetAssignmentId={initialTargetAssignmentId}
+                      remediationReferences={remediationReferences}
                       onClose={closeCreateWizard}
                       onSuccess={async () => {
                         await Promise.all([loadClassworks(), refetchClasses()]);

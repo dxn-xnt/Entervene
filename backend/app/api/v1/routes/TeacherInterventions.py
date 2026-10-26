@@ -11,6 +11,7 @@ from app.db.Session import get_db
 from app.models.auth.Role import Role
 from app.models.auth.UserRoles import UserRoles
 from app.schemas.TeacherIntervention import TeacherInterventionDetail, TeacherInterventionList, TeacherResolvedInterventionDetail
+from app.schemas.SubjectGradeProjection import SubjectGradeProjectionRequest, SubjectGradeProjectionResponse
 from app.schemas.InterventionSupportMaterial import MaterialCreate, MaterialList, MaterialRead, MaterialUpdate
 from app.services.intervention.TeacherInterventionService import (
     activate_teacher_candidate, get_teacher_active, get_teacher_candidate,
@@ -24,7 +25,8 @@ from app.services.intervention.InterventionReviewerGenerationService import gene
 from app.services.intervention.InterventionReviewerDeliveryService import send_reviewer
 from app.services.ai.UsageGuard import actor
 from app.services.intervention.InterventionRemediationService import (
-    PlanUpdate, generate_advisory, get_workspace, preview_score_adjustment, save_plan,
+    PlanUpdate, generate_advisory, get_workspace, preview_score_adjustment,
+    project_subject_grade, save_plan,
 )
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -116,6 +118,26 @@ def preview_score_adjustment_endpoint(
         cap_percentage=body.score_adjustment_cap,
         target_assignment_ids=body.target_assignment_ids,
         items=[item.model_dump() for item in body.items],
+    )
+
+
+@router.post(
+    "/{intervention_id}/remediation/subject-grade-projection",
+    response_model=SubjectGradeProjectionResponse,
+)
+def project_subject_grade_endpoint(
+    intervention_id: int,
+    body: SubjectGradeProjectionRequest,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return project_subject_grade(
+        db=db,
+        staff_id=staff_id,
+        intervention_id=intervention_id,
+        target_assignment_ids=body.target_assignment_ids,
+        score_adjustment_cap=body.score_adjustment_cap,
     )
 
 

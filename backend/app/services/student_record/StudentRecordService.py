@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
@@ -23,6 +23,7 @@ from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
 from app.models.academic.GradeSubmissionLog import GradeSubmissionLog
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.people.AcademicStaff import AcademicStaff
@@ -43,6 +44,11 @@ from app.services.grading.ExaminationCalculator import (
 )
 from app.services.grading.PassingThresholdReader import (
     read_passing_threshold_context_or_422, require_subject_passing_threshold,
+)
+from app.services.grading.RemedialClassworkResolver import (
+    RemedialClassworkAudit,
+    ResolvedClassworkScores,
+    resolve_student_classwork_scores,
 )
 from app.services.grading.RemedialExamination import effective_exam_scores
 from app.schemas.StudentRecord import (
@@ -231,12 +237,39 @@ def teacher_student_roster(
     students = _roster(db, scope)
     assignments = _classwork_assignments(db, scope)
     submissions_by_student = _submissions_by_student(db, assignments)
+    asgn_ids = [a.classwork_assignment_id for a in assignments]
+    student_ids = [s.student_id for s in students]
+    links: list[RemediationAssignmentLink] = []
+    if asgn_ids and student_ids:
+        links = (
+            db.query(RemediationAssignmentLink)
+            .filter(
+                RemediationAssignmentLink.student_id.in_(student_ids),
+                (
+                    RemediationAssignmentLink.original_assignment_id.in_(asgn_ids)
+                    | RemediationAssignmentLink.remediation_assignment_id.in_(asgn_ids)
+                ),
+            )
+            .all()
+        )
     return StudentRecordRosterResponse(
         scope=_scope_out(scope),
         students=[
             _roster_row(
                 student,
-                _metrics_for_student(db, scope, student, assignments, submissions_by_student.get(student.student_id, {})),
+                _metrics_for_student(
+                    db,
+                    scope,
+                    student,
+                    assignments,
+                    submissions_by_student.get(student.student_id, {}),
+                    resolved_scores=resolve_student_classwork_scores(
+                        student_id=student.student_id,
+                        assignments=assignments,
+                        submissions=submissions_by_student.get(student.student_id, {}),
+                        links=links,
+                    ),
+                ),
             )
             for student in students
         ],
@@ -255,7 +288,95 @@ def teacher_student_record_detail(
     student = _scoped_student(db, scope, student_id)
     assignments = _classwork_assignments(db, scope)
     submissions = _submissions_by_student(db, assignments).get(student.student_id, {})
-    metrics = _metrics_for_student(db, scope, student, assignments, submissions)
+    asgn_ids = [a.classwork_assignment_id for a in assignments]
+    links: list[RemediationAssignmentLink] = []
+    if asgn_ids:
+        links = (
+            db.query(RemediationAssignmentLink)
+            .filter(
+                RemediationAssignmentLink.student_id == student.student_id,
+                (
+                    RemediationAssignmentLink.original_assignment_id.in_(asgn_ids)
+                    | RemediationAssignmentLink.remediation_assignment_id.in_(asgn_ids)
+                ),
+            )
+            .all()
+        )
+    resolved = resolve_student_classwork_scores(
+        student_id=student.student_id,
+        assignments=assignments,
+        submissions=submissions,
+        links=links,
+    )
+    metrics = _metrics_for_student(
+        db,
+        scope,
+        student,
+        assignments,
+        submissions,
+        resolved_scores=resolved,
+    )
+    official_assignments = [
+        assignment for assignment in assignments
+        if _assignment_applies_to_student(assignment, student)
+        and assignment.classwork_assignment_id not in resolved.remedial_assignment_ids
+        and assignment.original_exam_assignment_id is None
+    ]
+    classwork_results = []
+    for assignment in official_assignments:
+        sub = submissions.get(assignment.classwork_assignment_id)
+        audit = resolved.audits_by_original_id.get(assignment.classwork_assignment_id)
+        effective_score = resolved.effective_scores_float.get(assignment.classwork_assignment_id)
+        rem_dict = None
+        if audit is not None:
+            rem_asgn = next((a for a in assignments if a.classwork_assignment_id == audit.remediation_assignment_id), None)
+            rem_dict = {
+                "remediation_link_id": audit.remediation_link_id,
+                "source_intervention_id": audit.source_intervention_id,
+                "remediation_assignment_id": audit.remediation_assignment_id,
+                "remediation_title": rem_asgn.classwork.title if rem_asgn and rem_asgn.classwork else "Remediation",
+                "score_adjustment_cap": float(audit.score_adjustment_cap),
+                "original_raw_score": float(audit.original_raw_score) if audit.original_raw_score is not None else None,
+                "remediation_raw_score": float(audit.remediation_raw_score) if audit.remediation_raw_score is not None else None,
+                "effective_score": float(audit.effective_score) if audit.effective_score is not None else None,
+                "cap_score": float(audit.cap_score) if audit.cap_score is not None else None,
+                "was_adjusted": audit.was_adjusted,
+                "was_capped": audit.was_capped,
+                "is_completed": audit.is_completed,
+                "status": audit.status,
+            }
+        classwork_results.append(
+            _classwork_result(
+                assignment,
+                sub,
+                effective_score=effective_score,
+                remediation=rem_dict,
+            )
+        )
+
+    remediations_list = [
+        {
+            "remediation_link_id": audit.remediation_link_id,
+            "source_intervention_id": audit.source_intervention_id,
+            "original_assignment_id": audit.original_assignment_id,
+            "original_title": next((a.classwork.title for a in assignments if a.classwork_assignment_id == audit.original_assignment_id), "Classwork"),
+            "remediation_assignment_id": audit.remediation_assignment_id,
+            "remediation_title": next((a.classwork.title for a in assignments if a.classwork_assignment_id == audit.remediation_assignment_id), "Remediation"),
+            "component": audit.component,
+            "score_adjustment_cap": float(audit.score_adjustment_cap),
+            "original_score": float(audit.original_raw_score) if audit.original_raw_score is not None else None,
+            "remediation_score": float(audit.remediation_raw_score) if audit.remediation_raw_score is not None else None,
+            "effective_score": float(audit.effective_score) if audit.effective_score is not None else None,
+            "total_points": float(audit.max_points) if audit.max_points is not None else None,
+            "cap_score": float(audit.cap_score) if audit.cap_score is not None else None,
+            "was_adjusted": audit.was_adjusted,
+            "was_capped": audit.was_capped,
+            "is_completed": audit.is_completed,
+            "status": audit.status,
+        }
+        for audit in resolved.audit_records
+    ]
+
     return StudentRecordDetailResponse(
         student=StudentRecordProfile(
             student_id=str(student.student_id),
@@ -269,10 +390,8 @@ def teacher_student_record_detail(
         ),
         scope=_scope_out(scope),
         summary=StudentRecordSummary(**metrics.__dict__),
-        classwork_results=[
-            _classwork_result(assignment, submissions.get(assignment.classwork_assignment_id))
-            for assignment in assignments
-        ],
+        classwork_results=classwork_results,
+        remediations=remediations_list,
     )
 
 
@@ -292,6 +411,23 @@ def teacher_student_gradebook(
     students = _roster(db, scope)
     assignments = _classwork_assignments(db, scope)
     submissions_by_student = _submissions_by_student(db, assignments)
+    asgn_ids = [a.classwork_assignment_id for a in assignments]
+    student_ids = [s.student_id for s in students]
+
+    links: list[RemediationAssignmentLink] = []
+    if asgn_ids and student_ids:
+        links = (
+            db.query(RemediationAssignmentLink)
+            .filter(
+                RemediationAssignmentLink.student_id.in_(student_ids),
+                (
+                    RemediationAssignmentLink.original_assignment_id.in_(asgn_ids)
+                    | RemediationAssignmentLink.remediation_assignment_id.in_(asgn_ids)
+                ),
+            )
+            .all()
+        )
+    all_remedial_ww_pt_asgn_ids = frozenset(link.remediation_assignment_id for link in links)
 
     written_headers: list[ClassworkCategoryHeader] = []
     performance_headers: list[ClassworkCategoryHeader] = []
@@ -305,6 +441,9 @@ def teacher_student_gradebook(
     for assignment in assignments:
         cw = assignment.classwork
         if not getattr(cw, "is_graded", True) or (getattr(cw, "classwork_type", "") or "").upper() == READING_TYPE:
+            continue
+        # Exclude linked WW/PT remediation activities from independent official gradebook columns
+        if assignment.classwork_assignment_id in all_remedial_ww_pt_asgn_ids:
             continue
         cat_key = _categorize_assignment(assignment)
         header = ClassworkCategoryHeader(
@@ -356,6 +495,13 @@ def teacher_student_gradebook(
 
     for student in students:
         student_subs = submissions_by_student.get(student.student_id, {})
+        resolved = resolve_student_classwork_scores(
+            student_id=student.student_id,
+            assignments=assignments,
+            submissions=student_subs,
+            links=links,
+        )
+
         exam_scores = effective_exam_scores(
             [*quarterly_assignments, *remedial_exam_assignments],
             {assignment.classwork_assignment_id: _extract_score(student_subs, assignment.classwork_assignment_id)
@@ -364,11 +510,21 @@ def teacher_student_gradebook(
         )
 
         written_scores = [
-            _extract_score(student_subs, asgn.classwork_assignment_id) if _assignment_applies_to_student(asgn, student) else None
+            (
+                resolved.effective_scores_float.get(asgn.classwork_assignment_id)
+                if asgn.classwork_assignment_id in resolved.effective_scores_float
+                else _extract_score(student_subs, asgn.classwork_assignment_id)
+            )
+            if _assignment_applies_to_student(asgn, student) else None
             for asgn in written_assignments
         ]
         performance_scores = [
-            _extract_score(student_subs, asgn.classwork_assignment_id) if _assignment_applies_to_student(asgn, student) else None
+            (
+                resolved.effective_scores_float.get(asgn.classwork_assignment_id)
+                if asgn.classwork_assignment_id in resolved.effective_scores_float
+                else _extract_score(student_subs, asgn.classwork_assignment_id)
+            )
+            if _assignment_applies_to_student(asgn, student) else None
             for asgn in performance_assignments
         ]
         quarterly_scores = [
@@ -401,7 +557,7 @@ def teacher_student_gradebook(
             tg = float(pg.transmuted_grade) if pg.transmuted_grade is not None else tg
 
         # Prefer finalized official grade if available
-        metrics = _metrics_for_student(db, scope, student, assignments, student_subs)
+        metrics = _metrics_for_student(db, scope, student, assignments, student_subs, resolved_scores=resolved)
         if metrics.official_period_grade is not None:
             display_total = str(round(metrics.official_period_grade, 1))
             grade_for_descriptor = metrics.official_period_grade
@@ -422,6 +578,31 @@ def teacher_student_gradebook(
             if staff_rec:
                 finalized_by_name = _staff_full_name(staff_rec)
 
+        remedial_classworks_data = [
+            {
+                "remediation_link_id": audit.remediation_link_id,
+                "source_intervention_id": audit.source_intervention_id,
+                "original_assignment_id": audit.original_assignment_id,
+                "original_title": next((item.classwork.title for item in assignments
+                                        if item.classwork_assignment_id == audit.original_assignment_id), "Classwork"),
+                "remediation_assignment_id": audit.remediation_assignment_id,
+                "remediation_title": next((item.classwork.title for item in assignments
+                                           if item.classwork_assignment_id == audit.remediation_assignment_id), "Remediation"),
+                "component": audit.component,
+                "score_adjustment_cap": float(audit.score_adjustment_cap),
+                "original_score": float(audit.original_raw_score) if audit.original_raw_score is not None else None,
+                "remediation_score": float(audit.remediation_raw_score) if audit.remediation_raw_score is not None else None,
+                "effective_score": float(audit.effective_score) if audit.effective_score is not None else None,
+                "total_points": float(audit.max_points) if audit.max_points is not None else None,
+                "cap_score": float(audit.cap_score) if audit.cap_score is not None else None,
+                "was_adjusted": audit.was_adjusted,
+                "was_capped": audit.was_capped,
+                "is_completed": audit.is_completed,
+                "status": audit.status,
+            }
+            for audit in resolved.audit_records
+        ]
+
         student_rows.append(
             StudentGradebookRow(
                 student_id=str(student.student_id),
@@ -441,6 +622,7 @@ def teacher_student_gradebook(
                     "effective_score": exam_scores.get(asgn.original_exam_assignment_id),
                     "total_points": float(asgn.classwork.total_points or 0),
                 } for asgn in remedial_exam_assignments if asgn.recipient_student_id == student.student_id],
+                remedial_classworks=remedial_classworks_data,
                 ps_written=ps_ww,
                 ps_performance=ps_pt,
                 ps_quarterly=ps_qa,
@@ -788,13 +970,51 @@ def _compute_student_period_components(
     quarterly_assignments: list[ClassworkAssignment],
     submissions_by_student: dict[UUID, dict[int, StudentSubmission]],
     weights: GradingWeights,
+    resolved_scores: ResolvedClassworkScores | None = None,
+    db: Session | None = None,
 ) -> dict[str, Any]:
     student_subs = submissions_by_student.get(student.student_id, {})
+    all_cw_asgns = [*written_assignments, *performance_assignments]
+
+    if resolved_scores is None:
+        session = db or object_session(student)
+        asgn_ids = [a.classwork_assignment_id for a in all_cw_asgns]
+        if session is not None and asgn_ids:
+            links = (
+                session.query(RemediationAssignmentLink)
+                .filter(
+                    RemediationAssignmentLink.student_id == student.student_id,
+                    (
+                        RemediationAssignmentLink.original_assignment_id.in_(asgn_ids)
+                        | RemediationAssignmentLink.remediation_assignment_id.in_(asgn_ids)
+                    ),
+                )
+                .all()
+            )
+            if links:
+                resolved_scores = resolve_student_classwork_scores(
+                    student_id=student.student_id,
+                    assignments=all_cw_asgns,
+                    submissions=student_subs,
+                    links=links,
+                )
+
+    remedial_ids = resolved_scores.remedial_assignment_ids if resolved_scores else frozenset()
+
     # Filter assignments, not just score values: an inapplicable maximum must
-    # never dilute this learner's WW/PT or Examination denominator.
-    written_assignments = [a for a in written_assignments if _assignment_applies_to_student(a, student)]
-    performance_assignments = [a for a in performance_assignments if _assignment_applies_to_student(a, student)]
-    quarterly_assignments = [a for a in quarterly_assignments if _assignment_applies_to_student(a, student)]
+    # never dilute this learner's WW/PT or Examination denominator. Exclude linked remediation activities.
+    written_assignments = [
+        a for a in written_assignments
+        if _assignment_applies_to_student(a, student) and a.classwork_assignment_id not in remedial_ids
+    ]
+    performance_assignments = [
+        a for a in performance_assignments
+        if _assignment_applies_to_student(a, student) and a.classwork_assignment_id not in remedial_ids
+    ]
+    quarterly_assignments = [
+        a for a in quarterly_assignments
+        if _assignment_applies_to_student(a, student)
+    ]
 
     def _extract_score(subs: dict, asgn_id: int) -> float | None:
         sub = subs.get(asgn_id)
@@ -803,11 +1023,19 @@ def _compute_student_period_components(
         return None
 
     written_scores = [
-        _extract_score(student_subs, asgn.classwork_assignment_id)
+        (
+            resolved_scores.effective_scores_float.get(asgn.classwork_assignment_id)
+            if resolved_scores and asgn.classwork_assignment_id in resolved_scores.effective_scores_float
+            else _extract_score(student_subs, asgn.classwork_assignment_id)
+        )
         for asgn in written_assignments
     ]
     performance_scores = [
-        _extract_score(student_subs, asgn.classwork_assignment_id)
+        (
+            resolved_scores.effective_scores_float.get(asgn.classwork_assignment_id)
+            if resolved_scores and asgn.classwork_assignment_id in resolved_scores.effective_scores_float
+            else _extract_score(student_subs, asgn.classwork_assignment_id)
+        )
         for asgn in performance_assignments
     ]
     effective = effective_exam_scores(
@@ -828,8 +1056,9 @@ def _compute_student_period_components(
         "written_scores": written_scores,
         "performance_scores": performance_scores,
         "quarterly_scores": quarterly_scores,
+        "remedial_classworks": resolved_scores.audit_records if resolved_scores else [],
         # Evidence follows the exact assignment/score pairs used above. Remedial
-        # exams contribute through their original's effective score, not twice.
+        # classwork and exams contribute through their original's effective score, not twice.
         "item_evidence": {
             "written_work": list(zip(written_assignments, written_scores)),
             "performance_task": list(zip(performance_assignments, performance_scores)),
@@ -1012,10 +1241,32 @@ def send_student_grade_to_adviser(
         academic_level_id=getattr(scope.class_, "academic_level_id", None),
     )
 
+    asgn_ids = [a.classwork_assignment_id for a in assignments]
+    links: list[RemediationAssignmentLink] = []
+    if asgn_ids:
+        links = (
+            db.query(RemediationAssignmentLink)
+            .filter(
+                RemediationAssignmentLink.student_id == student.student_id,
+                (
+                    RemediationAssignmentLink.original_assignment_id.in_(asgn_ids)
+                    | RemediationAssignmentLink.remediation_assignment_id.in_(asgn_ids)
+                ),
+            )
+            .all()
+        )
+    resolved = resolve_student_classwork_scores(
+        student_id=student.student_id,
+        assignments=assignments,
+        submissions=submissions_by_student.get(student.student_id, {}),
+        links=links,
+    )
+
     comp_res = _compute_student_period_components(
         student,
         written_assignments, performance_assignments, quarterly_assignments,
         submissions_by_student, weights,
+        resolved_scores=resolved,
     )
 
     ig = comp_res["initial_grade"]
@@ -1266,14 +1517,38 @@ def bulk_send_grades_to_adviser(
     modified_pg_ids: list[int] = []
     policy_context = None
 
+    asgn_ids = [a.classwork_assignment_id for a in assignments]
+    student_ids = [s.student_id for s in students]
+    links: list[RemediationAssignmentLink] = []
+    if asgn_ids and student_ids:
+        links = (
+            db.query(RemediationAssignmentLink)
+            .filter(
+                RemediationAssignmentLink.student_id.in_(student_ids),
+                (
+                    RemediationAssignmentLink.original_assignment_id.in_(asgn_ids)
+                    | RemediationAssignmentLink.remediation_assignment_id.in_(asgn_ids)
+                ),
+            )
+            .all()
+        )
+
     for student in students:
         sname = _student_name(student)
         sid_str = str(student.student_id)
+
+        resolved = resolve_student_classwork_scores(
+            student_id=student.student_id,
+            assignments=assignments,
+            submissions=submissions_by_student.get(student.student_id, {}),
+            links=links,
+        )
 
         comp_res = _compute_student_period_components(
             student,
             written_assignments, performance_assignments, quarterly_assignments,
             submissions_by_student, weights,
+            resolved_scores=resolved,
         )
 
         ig = comp_res["initial_grade"]
@@ -1622,9 +1897,42 @@ def _metrics_for_student(
     student: Student,
     assignments: list[ClassworkAssignment],
     submissions: dict[int, StudentSubmission],
+    resolved_scores: ResolvedClassworkScores | None = None,
 ) -> Metrics:
+    if resolved_scores is None:
+        asgn_ids = [a.classwork_assignment_id for a in assignments]
+        if asgn_ids:
+            links = (
+                db.query(RemediationAssignmentLink)
+                .filter(
+                    RemediationAssignmentLink.student_id == student.student_id,
+                    (
+                        RemediationAssignmentLink.original_assignment_id.in_(asgn_ids)
+                        | RemediationAssignmentLink.remediation_assignment_id.in_(asgn_ids)
+                    ),
+                )
+                .all()
+            )
+            if links:
+                resolved_scores = resolve_student_classwork_scores(
+                    student_id=student.student_id,
+                    assignments=assignments,
+                    submissions=submissions,
+                    links=links,
+                )
+
+    remedial_ids = resolved_scores.remedial_assignment_ids if resolved_scores else frozenset()
+
     official_grade = _official_period_grade(db, scope, student)
-    assigned_count = sum(assignment.recipient_student_id is None or assignment.recipient_student_id == student.student_id for assignment in assignments)
+    # Only official, non-remedial assignments count towards assigned deliverables
+    assigned_count = sum(
+        (assignment.recipient_student_id is None or assignment.recipient_student_id == student.student_id)
+        and assignment.classwork_assignment_id not in remedial_ids
+        and assignment.original_exam_assignment_id is None
+        and getattr(assignment.classwork, "is_graded", True)
+        and (getattr(assignment.classwork, "classwork_type", "") or "").upper() != READING_TYPE
+        for assignment in assignments
+    )
     submitted_count = 0
     missing_count = 0
     late_count = 0
@@ -1648,13 +1956,12 @@ def _metrics_for_student(
         cw = assignment.classwork
         if not getattr(cw, "is_graded", True) or (getattr(cw, "classwork_type", "") or "").upper() == READING_TYPE:
             continue
+        # Linked remediation activities must not count as additional deliverables or denominators
+        if assignment.classwork_assignment_id in remedial_ids or assignment.original_exam_assignment_id is not None:
+            continue
+
         submission = submissions.get(assignment.classwork_assignment_id)
         status = _status_for_assignment(assignment, submission, now)
-        has_score = (
-            submission is not None
-            and submission.grade is not None
-            and assignment.classwork.total_points is not None
-        )
         if status in COMPLETED_STATUSES:
             submitted_count += 1
         if status == "missing":
@@ -1664,10 +1971,17 @@ def _metrics_for_student(
         # Quiz submissions can be auto-scored before their status is marked as graded.
         if submission is not None and submission.grade is not None and assignment.classwork.total_points is not None:
             graded_count += 1
-            if assignment.original_exam_assignment_id is None:
+            cat_key = _categorize_assignment(assignment)
+            if cat_key == "quarterlyAssessment":
                 official_score = effective_exams.get(assignment.classwork_assignment_id, float(submission.grade))
-                earned += Decimal(str(official_score))
-                possible += Decimal(str(assignment.classwork.total_points))
+            else:
+                if resolved_scores and assignment.classwork_assignment_id in resolved_scores.effective_scores_float:
+                    res_val = resolved_scores.effective_scores_float.get(assignment.classwork_assignment_id)
+                    official_score = res_val if res_val is not None else float(submission.grade)
+                else:
+                    official_score = float(submission.grade)
+            earned += Decimal(str(official_score))
+            possible += Decimal(str(assignment.classwork.total_points))
         elif status in {"submitted", "late", GRADED_STATUS}:
             ungraded_count += 1
 
@@ -1742,6 +2056,8 @@ def _as_aware(value: datetime | None) -> datetime | None:
 def _classwork_result(
     assignment: ClassworkAssignment,
     submission: StudentSubmission | None,
+    effective_score: float | None = None,
+    remediation: dict | None = None,
 ) -> StudentClassworkResult:
     status = _status_for_assignment(assignment, submission, datetime.now(timezone.utc))
     total_points = (
@@ -1749,7 +2065,8 @@ def _classwork_result(
         if assignment.classwork.total_points is not None
         else None
     )
-    score = float(submission.grade) if submission and submission.grade is not None else None
+    raw_score = float(submission.grade) if submission and submission.grade is not None else None
+    score = effective_score if effective_score is not None else raw_score
     return StudentClassworkResult(
         classwork_id=assignment.classwork.classwork_id,
         assignment_id=assignment.classwork_assignment_id,
@@ -1763,6 +2080,9 @@ def _classwork_result(
         percentage=round((score / total_points) * 100, 2) if score is not None and total_points else None,
         submitted_at=submission.submitted_at if submission else None,
         graded_at=submission.graded_at if submission else None,
+        raw_score=raw_score,
+        effective_score=effective_score,
+        remediation=remediation,
     )
 
 

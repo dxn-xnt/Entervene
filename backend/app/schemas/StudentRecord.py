@@ -78,6 +78,9 @@ class StudentClassworkResult(BaseModel):
     percentage: Optional[float] = None
     submitted_at: Optional[datetime] = None
     graded_at: Optional[datetime] = None
+    raw_score: Optional[float] = None
+    effective_score: Optional[float] = None
+    remediation: Optional[dict] = None
 
 
 class StudentRecordDetailResponse(BaseModel):
@@ -85,6 +88,7 @@ class StudentRecordDetailResponse(BaseModel):
     scope: StudentRecordScope
     summary: StudentRecordSummary
     classwork_results: list[StudentClassworkResult]
+    remediations: list[dict] = []
 
 
 class StudentRecordPeriodOption(BaseModel):
@@ -149,6 +153,7 @@ class StudentGradebookRow(BaseModel):
     quarterlyAssessment: list[Optional[float]] = []
     exams: list[Optional[float]] = []
     remedial_exams: list[dict] = []
+    remedial_classworks: list[dict] = []
     # Per-category Percentage Scores (PS = sum_scores / max_possible * 100)
     ps_written: Optional[float] = None
     ps_performance: Optional[float] = None

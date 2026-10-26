@@ -253,6 +253,7 @@ async def create_classwork_wizard_record(
     intervention_id: int | None = None,
     remediation_request_id: UUID | None = None,
     original_exam_assignment_id: int | None = None,
+    original_classwork_assignment_id: int | None = None,
     current_user: dict | None = None,
     staff_id: str,
     db: Session,
@@ -327,13 +328,24 @@ async def create_classwork_wizard_record(
         treatment = (intervention.remediation_plan or {}).get("grade_treatment")
         if treatment not in {"PRACTICE_ONLY", "WRITTEN_WORK", "PERFORMANCE_TASK", "EXAMINATION"}:
             raise HTTPException(status_code=400, detail="Select and save the remediation grade treatment before creating support")
+        if treatment in {"WRITTEN_WORK", "PERFORMANCE_TASK", "EXAMINATION"}:
+            from app.services.intervention.InterventionRemediationFocusService import build_remediation_focus
+            focus_component = build_remediation_focus(intervention)["component"]
+            if focus_component is None:
+                raise HTTPException(status_code=400, detail="Graded remediation requires one verified weakest grading component")
+            if treatment != focus_component:
+                raise HTTPException(status_code=400, detail="Remediation grade treatment must match the verified intervention focus")
         expected_category = "QUARTERLY_ASSESSMENT" if treatment == "EXAMINATION" else treatment
         if (treatment == "PRACTICE_ONLY" and classwork_category is not None) or (treatment != "PRACTICE_ONLY" and classwork_category != expected_category):
             raise HTTPException(status_code=400, detail="Remediation grade treatment does not match the saved choice")
+        if treatment in {"WRITTEN_WORK", "PERFORMANCE_TASK"}:
+            if original_classwork_assignment_id is None:
+                raise HTTPException(status_code=400, detail="Select the original classwork assignment to link this remediation activity")
+            if is_quiz_type(normalized_type) and max_attempts != 1:
+                raise HTTPException(status_code=400, detail="Remedial classwork quiz permits one attempt per activity")
+        elif original_classwork_assignment_id is not None:
+            raise HTTPException(status_code=400, detail="Original classwork linkage is available only for WW/PT remediation")
         if treatment == "EXAMINATION":
-            from app.services.intervention.InterventionRemediationFocusService import build_remediation_focus
-            if build_remediation_focus(intervention)["component"] != "EXAMINATION":
-                raise HTTPException(status_code=400, detail="Intervention Examination focus is required")
             from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
             from app.models.submissions.StudentSubmission import StudentSubmission
             from app.services.grading.ExaminationCalculator import EXAM_SUBTYPES, categorize_exam_subtype
@@ -377,8 +389,23 @@ async def create_classwork_wizard_record(
         if prior:
             if prior.source_intervention_id != intervention_id or prior.assigned_by_staff_id != staff_id:
                 raise HTTPException(status_code=409, detail="Remediation request was already used")
+            if original_classwork_assignment_id is not None:
+                from app.services.intervention.RemediationAssignmentLinkService import create_remediation_assignment_link
+                create_remediation_assignment_link(
+                    db,
+                    intervention=intervention,
+                    remediation_assignment=prior,
+                    original_assignment_id=original_classwork_assignment_id,
+                    component=treatment,
+                    staff_id=staff_id,
+                )
+                db.commit()
             return build_classwork_response(prior.classwork)
-    elif remediation_request_id is not None or original_exam_assignment_id is not None:
+    elif (
+        remediation_request_id is not None
+        or original_exam_assignment_id is not None
+        or original_classwork_assignment_id is not None
+    ):
         raise HTTPException(status_code=400, detail="Intervention is required for a remediation request")
 
     saved_paths: list[str] = []
@@ -433,6 +460,17 @@ async def create_classwork_wizard_record(
             db.add(ClassworkAttachment(classwork_id=classwork.classwork_id, **info))
 
         db.flush()
+
+        if intervention and original_classwork_assignment_id is not None:
+            from app.services.intervention.RemediationAssignmentLinkService import create_remediation_assignment_link
+            create_remediation_assignment_link(
+                db,
+                intervention=intervention,
+                remediation_assignment=created_assignments[0],
+                original_assignment_id=original_classwork_assignment_id,
+                component=treatment,
+                staff_id=staff_id,
+            )
 
         if is_reading_type(normalized_type):
             classwork.total_points = None

@@ -5,3 +5,4 @@ from .ClassworkLesson import ClassworkLesson
 from .ClassworkCoverage import ClassworkCoverage
 from .ActivityRubricLevel import ActivityRubricLevel
 from .RubricTemplate import RubricTemplate
+from .RemediationAssignmentLink import RemediationAssignmentLink

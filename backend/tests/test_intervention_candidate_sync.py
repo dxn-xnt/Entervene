@@ -10,6 +10,7 @@ from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.Subject import Subject
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
+from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.intervention.Intervention import Intervention
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.intervention.InterventionCandidateService import sync_intervention_for_persisted_prediction
@@ -43,8 +44,8 @@ def _interventions(ctx):
     return ctx["db"].query(Intervention).order_by(Intervention.intervention_id).all()
 
 
-@pytest.mark.parametrize("grade,expected", [(84, 1), (74, 1), (84.999, 1), (85, 0), (88, 0)])
-def test_boundary_creates_candidate_only_below_85(current_period_context, monkeypatch, grade, expected):
+@pytest.mark.parametrize("grade,expected", [(84.65, 1), (85.44, 1), (86.999, 1), (87.0, 0), (88.84, 0)])
+def test_boundary_creates_candidate_only_below_passing_threshold(current_period_context, monkeypatch, grade, expected):
     ctx = current_period_context
     model_id = _setup(ctx, monkeypatch, [grade])
     result = _run(ctx, model_id)
@@ -121,8 +122,7 @@ def test_separate_subjects_have_separate_candidates(current_period_context, monk
     ctx["db"].add(second_subject)
     ctx["db"].flush()
     template = GradingTemplate(
-        template_name="English 20-50-30", academic_level_id=ctx["level"].academic_level_id,
-        subject_id=second_subject.subject_id, status="active",
+        template_name="English 20-50-30", passing_threshold=87.0, status="active",
     )
     ctx["db"].add(template)
     ctx["db"].flush()
@@ -132,7 +132,7 @@ def test_separate_subjects_have_separate_candidates(current_period_context, monk
             ("Written Works", "20"), ("Performance Tasks", "50"), ("Quarterly Assessment", "30"),
         ), start=1)
     ])
-    second_subject.default_grading_template = str(template.grading_template_id)
+    second_subject.grading_template_id = template.grading_template_id
     ctx["db"].commit()
     ctx["subject"] = second_subject
     _make_ready(ctx)
@@ -200,3 +200,119 @@ def test_production_does_not_synchronize_interventions(current_period_context, m
     result = _run(ctx, model_id)
     assert result["persisted"] is True
     assert _interventions(ctx) == []
+
+
+def test_task_4_8d_2_passing_policy_consistency_across_students_and_scenarios(current_period_context, monkeypatch):
+    """Task 4.8D.2: Verify scenarios at 84.65, 85.44, 87.0, and 88.84.
+
+    1. Subject with passing threshold 87.0 (Mathematics 9 policy):
+       - 84.65: below 87.0 -> candidate created, fails passing
+       - 85.44: below 87.0 -> candidate created, fails passing (reveals old hardcoded 85 bug)
+       - 87.0: reaches 87.0 -> passing, no candidate created
+       - 88.84: reaches 87.0 -> passing, no candidate created
+    2. Multi-student consistency in the same subject/year:
+       - Every student in Mathematics 9 is judged against threshold 87.0.
+    3. Independent AI risk classifications:
+       - 84.65 -> MODERATE_RISK (AI risk band < 85)
+       - 85.44 -> NEEDS_MONITORING (AI risk band 85-<90)
+       - 87.0 -> NEEDS_MONITORING (AI risk band 85-<90)
+       - 88.84 -> NEEDS_MONITORING (AI risk band 85-<90)
+       Risk bands remain preserved as pure ML features.
+    """
+    from uuid import uuid4
+    from app.models.people.Student import Student
+    from app.models.academic.StudentCLass import StudentClass
+    from app.services.prediction.DevelopmentCurrentTermRiskService import assess_development_current_term_intervention
+    from app.services.prediction.DevelopmentCurrentTermPredictionService import STATUS_DEVELOPMENT_PREDICTION_AVAILABLE
+
+    ctx = current_period_context
+    assert float(ctx["template"].passing_threshold) == 87.0
+
+    def _risk(g):
+        return assess_development_current_term_intervention(
+            {"status": STATUS_DEVELOPMENT_PREDICTION_AVAILABLE, "projected_final_term_grade": g}
+        )["intervention_level"]
+
+    # 1. Verify AI risk bands are independent of subject threshold
+    assert _risk(84.65) == "MODERATE_RISK"
+    assert _risk(85.44) == "NEEDS_MONITORING"
+    assert _risk(87.0) == "NEEDS_MONITORING"
+    assert _risk(88.84) == "NEEDS_MONITORING"
+
+    # 2. Verify student A at 84.65 -> creates candidate
+    model_id = _setup(ctx, monkeypatch, [84.65])
+    _run(ctx, model_id)
+    rows = _interventions(ctx)
+    assert len(rows) == 1
+    assert rows[0].status == "CANDIDATE"
+
+    # 3. If student A improves to 85.44, threshold 87.0 is NOT met -> intervention stays open
+    monkeypatch.setattr(scorer, "score_development_current_term", lambda *_args, **_kwargs: 85.44)
+    add_activity(ctx, "PERFORMANCE_TASK", 18, 20)
+    _run(ctx, model_id)
+    rows = _interventions(ctx)
+    assert len(rows) == 1
+    assert rows[0].status == "CANDIDATE"  # Still below 87.0!
+
+    # 4. If student A improves to 87.0, threshold is met -> intervention RESOLVES
+    monkeypatch.setattr(scorer, "score_development_current_term", lambda *_args, **_kwargs: 87.0)
+    add_activity(ctx, "WRITTEN_WORK", 9, 10)
+    _run(ctx, model_id)
+    rows = _interventions(ctx)
+    assert len(rows) == 1
+    assert rows[0].status == "RESOLVED"
+    assert rows[0].resolution_reason == "IMPROVED_PREDICTION"
+
+    # 5. Student B (different student in same subject/year) at 85.44 -> creates candidate
+    student_b = Student(
+        student_id=uuid4(), student_lrn="100000000099", first_name="Student", last_name="B",
+        academic_level_id=ctx["level"].academic_level_id,
+    )
+    ctx["db"].add(student_b)
+    ctx["db"].add(StudentClass(
+        student_id=student_b.student_id, class_id=ctx["class"].class_id,
+        academic_year_id=ctx["class"].academic_year_id, enrollment_status="enrolled",
+    ))
+    ctx["db"].flush()
+    ctx["student"] = student_b
+    for ca in ctx["db"].query(ClassworkAssignment).filter_by(class_id=ctx["class"].class_id).all():
+        ctx["db"].add(StudentSubmission(
+            student_id=student_b.student_id,
+            classwork_assignment_id=ca.classwork_assignment_id,
+            status="graded",
+            grade=Decimal("15"),
+        ))
+    ctx["db"].commit()
+    monkeypatch.setattr(scorer, "score_development_current_term", lambda *_args, **_kwargs: 85.44)
+    res_b = _run(ctx, model_id)
+    assert res_b["persisted"] is True, f"res_b failed: {res_b}"
+    rows_b = ctx["db"].query(Intervention).filter_by(student_id=student_b.student_id).all()
+    assert len(rows_b) == 1
+    assert rows_b[0].status == "CANDIDATE"
+
+    # 6. Student C at 88.84 -> reaches threshold 87.0, no candidate created
+    student_c = Student(
+        student_id=uuid4(), student_lrn="100000000098", first_name="Student", last_name="C",
+        academic_level_id=ctx["level"].academic_level_id,
+    )
+    ctx["db"].add(student_c)
+    ctx["db"].add(StudentClass(
+        student_id=student_c.student_id, class_id=ctx["class"].class_id,
+        academic_year_id=ctx["class"].academic_year_id, enrollment_status="enrolled",
+    ))
+    ctx["db"].flush()
+    ctx["student"] = student_c
+    for ca in ctx["db"].query(ClassworkAssignment).filter_by(class_id=ctx["class"].class_id).all():
+        ctx["db"].add(StudentSubmission(
+            student_id=student_c.student_id,
+            classwork_assignment_id=ca.classwork_assignment_id,
+            status="graded",
+            grade=Decimal("15"),
+        ))
+    ctx["db"].commit()
+    monkeypatch.setattr(scorer, "score_development_current_term", lambda *_args, **_kwargs: 88.84)
+    res_c = _run(ctx, model_id)
+    assert res_c["persisted"] is True, f"res_c failed: {res_c}"
+    rows_c = ctx["db"].query(Intervention).filter_by(student_id=student_c.student_id).all()
+    assert len(rows_c) == 0
+

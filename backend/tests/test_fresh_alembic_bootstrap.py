@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.db.Session import engine as configured_engine
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
 from app.services.AcademicPeriodService import create_or_update_academic_periods
 
 
@@ -42,6 +43,7 @@ def test_empty_postgres_database_upgrades_to_head():
         with admin.connect() as connection:
             connection.execute(text(f'CREATE DATABASE "{name}"'))
             created = True
+        print(f"Disposable PostgreSQL migration database: {name}")
 
         target_url = source.set(database=name)
         target = create_engine(target_url)
@@ -61,6 +63,7 @@ def test_empty_postgres_database_upgrades_to_head():
             "user_account", "user_roles", "student", "academic_staff", "classwork",
             "classwork_assignment", "student_submission", "ai_model_version",
             "development_current_term_prediction", "intervention", "intervention_support_material",
+            "remediation_assignment_link",
         } <= set(inspector.get_table_names())
         def references(table):
             return {
@@ -83,6 +86,37 @@ def test_empty_postgres_database_upgrades_to_head():
             constraint["name"] for constraint in inspector.get_foreign_keys("classwork_assignment") + inspector.get_check_constraints("classwork_assignment")
         }
         assert "ix_remedial_original_exam" in {index["name"] for index in inspector.get_indexes("classwork_assignment")}
+        assert {
+            (("remediation_assignment_id",), "classwork_assignment"),
+            (("original_assignment_id",), "classwork_assignment"),
+            (("source_intervention_id",), "intervention"),
+            (("student_id",), "student"),
+            (("created_by_staff_id",), "academic_staff"),
+        } <= references("remediation_assignment_link")
+        link_columns = {column["name"]: column for column in inspector.get_columns("remediation_assignment_link")}
+        assert set(link_columns) == {
+            "remediation_link_id", "source_intervention_id", "remediation_assignment_id",
+            "original_assignment_id", "student_id", "component", "score_adjustment_cap",
+            "created_by_staff_id", "created_at",
+        }
+        assert link_columns["score_adjustment_cap"]["nullable"] is False
+        assert "75" in str(link_columns["score_adjustment_cap"]["default"])
+        link_unique = {constraint["name"] for constraint in inspector.get_unique_constraints("remediation_assignment_link")}
+        assert {"uq_remediation_link_attempt", "uq_remediation_link_original_student"} <= link_unique
+        link_checks = {constraint["name"] for constraint in inspector.get_check_constraints("remediation_assignment_link")}
+        assert {
+            "ck_remediation_link_distinct_assignments",
+            "ck_remediation_link_component",
+            "ck_remediation_link_cap_range",
+        } <= link_checks
+        link_indexes = {index["name"] for index in inspector.get_indexes("remediation_assignment_link")}
+        assert {"ix_remediation_link_original", "ix_remediation_link_intervention"} <= link_indexes
+        model_constraints = {
+            constraint.name for constraint in RemediationAssignmentLink.__table__.constraints
+            if constraint.name
+        }
+        assert link_unique | link_checks <= model_constraints
+        assert {index.name for index in RemediationAssignmentLink.__table__.indexes} <= link_indexes
         updated_at = next(column for column in inspector.get_columns("academic_period") if column["name"] == "updated_at")
         assert updated_at["nullable"] is False
         assert updated_at["default"] is None
@@ -106,6 +140,22 @@ def test_empty_postgres_database_upgrades_to_head():
             assert periods[0].end_date == date(2027, 10, 1)
             db.refresh(period)
             assert period.updated_at is not None
+
+        subprocess.run(
+            [sys.executable, "-m", "alembic", "downgrade", "20261022_passing_policy_audit"],
+            cwd=BACKEND_DIR, env=environment, check=True, capture_output=True, text=True,
+        )
+        assert "remediation_assignment_link" not in inspect(target).get_table_names()
+        with target.connect() as connection:
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "20261022_passing_policy_audit"
+
+        subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=BACKEND_DIR, env=environment, check=True, capture_output=True, text=True,
+        )
+        assert "remediation_assignment_link" in inspect(target).get_table_names()
+        with target.connect() as connection:
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == head
 
     finally:
         if target is not None:
