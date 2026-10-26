@@ -993,7 +993,9 @@ export default function CreateClassworkModal({
               </div>
 
               <div className="mt-4">
-                <Field label="Assign to sections">
+
+
+                <Field label="Assign to sections" isRequired>
                   {remediationTarget ? (
                     <div className="mb-3 rounded border-2 border-black bg-muted/30 p-3 space-y-1">
                       <div className="flex items-center justify-between">
@@ -1006,44 +1008,31 @@ export default function CreateClassworkModal({
                     </div>
                   ) : (
                     <div className="mb-2 flex items-center justify-end">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setSelectedClassIds(
-                            selectedSubjectLoads.map((load) => load.class_id),
-                          )
-                        }
-                        disabled={isCreating || selectedSubjectLoads.length === 0}
-                        className="px-2 py-1 text-xs border border-black rounded shadow-xs"
-                      >
-                        Select all
-                      </Button>
+                      {selectedSubjectLoads.length > 0 && (
+                        <div className="flex items-center justify-end -mt-8 mb-2">
+                          <Button
+                            size="sm"
+                            className="shadow-none -mt-1"
+                            autoIcon={false}
+                            onClick={() => {
+                              if (validationError === "Select at least one section to assign this classwork.") {
+                                setValidationError("");
+                              }
+                              setSelectedClassIds(
+                                selectedSubjectLoads.map((load) => load.class_id),
+                              );
+                            }}
+                            disabled={isCreating || Boolean(remediationTarget)}
+                          >
+                            <CheckCheck className="size-4 mr-2" />
+                            Select All
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
-                <Field label="Assign to sections" isRequired>
-                  {selectedSubjectLoads.length > 0 && (
-                    <div className="flex items-center justify-end -mt-8 mb-2">
-                      <Button
-                        size="sm"
-                        className="shadow-none -mt-1"
-                        autoIcon={false}
-                        onClick={() => {
-                          if (validationError === "Select at least one section to assign this classwork.") {
-                            setValidationError("");
-                          }
-                          setSelectedClassIds(
-                            selectedSubjectLoads.map((load) => load.class_id),
-                          );
-                        }}
-                        disabled={isCreating || Boolean(remediationTarget)}
-                      >
-                        <CheckCheck className="size-4 mr-2" />
-                        Select All
-                      </Button>
-                    </div>
-                  )}
+
+
 
                   {selectedSubjectLoads.length > 0 ? (
                     <Card className="-mt-1 grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
