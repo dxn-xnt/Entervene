@@ -769,7 +769,7 @@ export default function SubjectClassworkTab({
                     : "Hidden"
                   : formatExamTimer(quizRemainingSeconds)}
               </p>
-              <p className="text-xs font-semibold text-gray-700">
+              <p className="text-sm font-semibold text-gray-700">
                 {isSummaryMode ? "score" : "time left"}
               </p>
             </div>
@@ -805,7 +805,7 @@ export default function SubjectClassworkTab({
               {isSummaryMode ? (
                 <div className="mt-4">
                   <p className="text-sm font-semibold">Quiz Summary</p>
-                  <p className="text-xs text-gray-600">
+                  <p className="text-sm text-gray-600">
                     Review your recorded answers and item scores.
                   </p>
                 </div>
@@ -819,7 +819,7 @@ export default function SubjectClassworkTab({
                         setQuizCurrentIndex(index);
                         setQuizReviewMode(false);
                       }}
-                      className={`relative h-8 min-w-8 rounded border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${index === quizCurrentIndex
+                      className={`relative h-8 min-w-8 rounded border-black px-2 text-sm font-bold shadow-md hover:shadow-none ${index === quizCurrentIndex
                         ? "bg-white"
                         : hasQuizAnswer(question)
                           ? "bg-[#F6E9B2]"
@@ -863,7 +863,7 @@ export default function SubjectClassworkTab({
                             ? question.points_awarded >= question.points ? "success" : question.points_awarded <= 0 ? "destructive" : "outline"
                             : "outline"}
                           size="sm"
-                          className="shrink-0 text-xs font-bold"
+                          className="shrink-0 text-sm font-bold"
                         >
                           {selectedClasswork.show_scores
                             ? `${question.points_awarded ?? 0}/${question.points} pts`
@@ -890,7 +890,7 @@ export default function SubjectClassworkTab({
                                   <span className="min-w-0 break-words">
                                     {option.option_text}
                                   </span>
-                                  <span className="text-xs font-bold">
+                                  <span className="text-sm font-bold">
                                     {isCorrect && isSelected
                                       ? "Your answer / Correct answer"
                                       : isCorrect
@@ -904,7 +904,7 @@ export default function SubjectClassworkTab({
                             );
                           })}
                           {!selectedOption && (
-                            <p className="text-xs font-semibold text-red-700">
+                            <p className="text-sm font-semibold text-red-700">
                               No answer recorded.
                             </p>
                           )}
@@ -939,7 +939,7 @@ export default function SubjectClassworkTab({
                       <span className="font-semibold">
                         Question {index + 1}
                       </span>
-                      <Badge variant="outline" size="sm" className="rounded border border-gray-300 text-[11px] font-semibold">
+                      <Badge variant="outline" size="sm" className="rounded border border-gray-300 text-sm font-semibold">
                         {hasQuizAnswer(question)
                           ? "Answer Recorded"
                           : "No Answer"}
@@ -968,7 +968,7 @@ export default function SubjectClassworkTab({
                     onClick={() =>
                       toggleQuizFlag(currentQuestion.quiz_question_id)
                     }
-                    className={`rounded border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${flaggedQuizQuestionIds.has(
+                    className={`rounded border-black px-4 py-2 text-sm font-bold shadow-md hover:shadow-none ${flaggedQuizQuestionIds.has(
                       currentQuestion.quiz_question_id,
                     )
                       ? "bg-[#F6E9B2]"
@@ -1150,7 +1150,7 @@ export default function SubjectClassworkTab({
                       </span>
                     </div>
 
-                    <p className="mt-2 text-left text-xs text-gray-600">
+                    <p className="mt-2 text-left text-sm text-gray-600">
                       {[
                         cw.classwork_type,
                         cw.due_date ? `Due ${formatDateTime(cw.due_date)}` : "No due date",
@@ -1300,7 +1300,7 @@ export default function SubjectClassworkTab({
                                 className="block w-full border-black bg-white p-3.5 shadow-none hover:shadow-none"
                               >
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs font-bold uppercase text-gray-500">
+                                  <span className="text-sm font-bold uppercase text-gray-500">
                                     Lesson:
                                   </span>
                                   <p className="text-sm font-extrabold text-black">
@@ -1308,7 +1308,7 @@ export default function SubjectClassworkTab({
                                   </p>
                                 </div>
                                 {lesson.description && (
-                                  <div className="mt-1 flex items-start gap-2 text-xs">
+                                  <div className="mt-1 flex items-start gap-2 text-sm">
                                     <span className="shrink-0 font-bold uppercase text-gray-500">
                                       Topic:
                                     </span>
@@ -1322,7 +1322,7 @@ export default function SubjectClassworkTab({
                                 {lesson.readings &&
                                   lesson.readings.length > 0 && (
                                     <div className="mt-3 border-t border-black/10 pt-2.5">
-                                      <div className="mb-1.5 flex items-center gap-1 text-[11px] font-bold uppercase text-gray-600">
+                                      <div className="mb-1.5 flex items-center gap-1 text-sm font-bold uppercase text-gray-600">
                                         <BookOpen
                                           size={13}
                                           className="text-black"
@@ -1336,7 +1336,7 @@ export default function SubjectClassworkTab({
                                         {lesson.readings.map((reading) => (
                                           <div
                                             key={reading.classwork_id}
-                                            className="flex items-center gap-2 border border-black/15 bg-[#F6E9B2]/40 px-2.5 py-1.5 text-xs"
+                                            className="flex items-center gap-2 border border-black/15 bg-[#F6E9B2]/40 px-2.5 py-1.5 text-sm"
                                           >
                                             <BookOpen
                                               size={13}
@@ -1346,7 +1346,7 @@ export default function SubjectClassworkTab({
                                               {reading.title}
                                             </span>
                                             {reading.description && (
-                                              <span className="text-gray-600 truncate text-[11px]">
+                                              <span className="text-gray-600 truncate text-sm">
                                                 — {reading.description}
                                               </span>
                                             )}
@@ -1360,7 +1360,7 @@ export default function SubjectClassworkTab({
                                 {lesson.attachments &&
                                   lesson.attachments.length > 0 && (
                                     <div className="mt-3 border-t border-black/10 pt-2.5">
-                                      <div className="mb-1.5 flex items-center gap-1 text-[11px] font-bold uppercase text-gray-600">
+                                      <div className="mb-1.5 flex items-center gap-1 text-sm font-bold uppercase text-gray-600">
                                         <Paperclip
                                           size={13}
                                           className="text-black"
@@ -1486,7 +1486,7 @@ export default function SubjectClassworkTab({
                                   {selectedQuizAttempt.max_attempts}
                                 </span>
                               </div>
-                              <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-gray-600">
+                              <div className="mt-2 flex flex-wrap gap-2 text-sm font-semibold text-gray-600">
                                 <span>
                                   {selectedQuizAttempt.questions.length}{" "}
                                   questions
@@ -1515,7 +1515,7 @@ export default function SubjectClassworkTab({
                                         0}
                                     </>
                                   ) : (
-                                    <span className="rounded-full bg-gray-200 px-2 py-1 text-xs text-gray-700">
+                                    <span className="rounded-full bg-gray-200 px-2 py-1 text-sm text-gray-700">
                                       Score hidden
                                     </span>
                                   )}
@@ -1526,7 +1526,7 @@ export default function SubjectClassworkTab({
                             {selectedQuizAttempt.status !== "pending" ? (
                               <div className="space-y-2">
                                 {selectedQuizAttempt.summary_message ? (
-                                  <div className="w-full rounded border border-black bg-white px-3 py-2 text-xs font-semibold text-gray-700">
+                                  <div className="w-full rounded border border-black bg-white px-3 py-2 text-sm font-semibold text-gray-700">
                                     {selectedQuizAttempt.summary_release_at
                                       ? `Your quiz has been submitted successfully. Your quiz summary will be available on ${formatDateTime(selectedQuizAttempt.summary_release_at)}.`
                                       : selectedQuizAttempt.summary_message}

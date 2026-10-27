@@ -506,16 +506,6 @@ export default function CreateLessonModal({
           <Button
             type="button"
             variant="outline"
-            onClick={handleClose}
-            disabled={isSubmitting}
-            className="gap-2"
-          >
-            <X className="size-4" />
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
             onClick={() => submitLesson(false)}
             disabled={isSubmitting}
             className="gap-2"

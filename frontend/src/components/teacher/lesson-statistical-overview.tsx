@@ -2,6 +2,10 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { Card } from "@/components/retroui/Card";
+import { Badge } from "@/components/retroui/Badge";
+import { Progress } from "@/components/retroui/Progress";
+import { OverviewCard } from "@/components/overview-cards";
 import { apiFetch } from "@/lib/api";
 import type { LinkedClasswork } from "@/pages/teacher/subject-details/types";
 
@@ -350,181 +354,103 @@ export default function LessonStatisticalOverview({
         };
     }, [trackingList, linkedClassworks]);
 
-    const circumference = 2 * Math.PI * 38; // ~238.76
-    const strokeDashoffset = circumference * (1 - stats.completionRate / 100);
-
     return (
         <section
             aria-label="Lesson Statistical Overviews"
             className={cn("flex flex-col gap-3 sm:gap-4", className)}
         >
-            {/* ── Top Row: KPI Cards & Submission Status ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4">
-                {/* ── Left Column: Lesson Completion & Average Score (Image 1) ── */}
-                <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                    {/* Lesson Completion Card */}
-                    <div className="flex flex-col justify-between rounded-xl border border-neutral-700/80 bg-[#161618] p-4 sm:p-5 shadow-md">
-                        <span className="text-sm font-bold text-white tracking-tight">
-                            Lesson Completion
-                        </span>
-                        <div className="my-2.5">
-                            <span className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-                                {stats.completionRate}%
-                            </span>
+            <div className="grid min-w-0 grid-cols-1 items-stretch gap-3 [&_h3]:text-2xl [&_p]:text-xs sm:grid-cols-3 sm:[&_h3]:text-3xl sm:[&_p]:text-sm">
+                <OverviewCard
+                    title="Lesson Completion"
+                    count={`${stats.completionRate}%`}
+                    statDescription={`${stats.completedStudents} of ${stats.totalStudents} students have finished all classworks`}
+                    progressValue={stats.completionRate}
+                    descriptionAtBottom
+                />
+                <OverviewCard
+                    title="Average Score"
+                    count={`${stats.averageScore}%`}
+                    stat={`${stats.scoreDelta >= 0 ? "▲" : "▼"} ${Math.abs(stats.scoreDelta)} pts`}
+                    statDescription="vs. Term 1 class average"
+                    trend={stats.scoreDelta >= 0 ? "up" : "down"}
+                    progressValue={stats.averageScore}
+                    descriptionAtBottom
+                />
+                <Card className="@container/card flex min-w-0 flex-col transition-all duration-200">
+                    <Card.Header>
+                        <Card.Description className="text-xl font-bold text-foreground/90">Classwork Submission Status</Card.Description>
+                    </Card.Header>
+                    <Card.Content className="flex flex-1 flex-col gap-3">
+                        <Card.Title className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">{stats.completionRate}%</Card.Title>
+                        <Progress value={stats.completionRate} className="h-2" aria-label={`Classwork completion: ${stats.completionRate}%`} />
+                        <div className="mt-auto flex flex-wrap gap-1.5 pt-1">
+                            <Badge variant="success" size="sm">Submitted · {stats.submittedCount}</Badge>
+                            <Badge variant="outline" size="sm" className="bg-white text-black">Pending · {stats.pendingCount}</Badge>
+                            <Badge variant="destructive" size="sm">Late · {stats.lateCount}</Badge>
                         </div>
-                        <p className="text-xs text-neutral-400 font-medium leading-relaxed">
-                            <strong className="text-white font-bold">
-                                {stats.completedStudents} of {stats.totalStudents} students
-                            </strong>{" "}
-                            have finished all classworks
-                        </p>
-                    </div>
-
-                    {/* Average Score Card */}
-                    <div className="flex flex-col justify-between rounded-xl border border-neutral-700/80 bg-[#161618] p-4 sm:p-5 shadow-md">
-                        <span className="text-sm font-bold text-white tracking-tight">
-                            Average Score
-                        </span>
-                        <div className="my-2.5">
-                            <span className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-                                {stats.averageScore}%
-                            </span>
-                        </div>
-                        <p className="text-xs text-neutral-400 font-medium flex items-center gap-1.5 leading-relaxed">
-                            <span className="text-[#34D399] font-bold">
-                                ▲ {stats.scoreDelta} pts
-                            </span>
-                            <span>vs. Term 1 class average</span>
-                        </p>
-                    </div>
-                </div>
-
-                {/* ── Right Column: Classwork Submission Status (Image 2) ── */}
-                <div className="lg:col-span-5 rounded-xl border border-neutral-700/80 bg-[#161618] p-4 sm:p-5 shadow-md flex flex-col justify-between">
-                    <span className="text-sm font-bold text-white tracking-tight mb-3">
-                        Classwork Submission Status
-                    </span>
-                    <div className="flex items-center gap-6 sm:gap-8 flex-1">
-                        {/* Donut Chart */}
-                        <div className="relative flex items-center justify-center shrink-0 w-24 h-24 sm:w-26 sm:h-26">
-                            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                                {/* Track circle */}
-                                <circle
-                                    cx="50"
-                                    cy="50"
-                                    r="38"
-                                    className="stroke-[#27272A]"
-                                    strokeWidth="11"
-                                    fill="transparent"
-                                />
-                                {/* Progress arc */}
-                                <circle
-                                    cx="50"
-                                    cy="50"
-                                    r="38"
-                                    stroke="#FACC15"
-                                    strokeWidth="11"
-                                    fill="transparent"
-                                    strokeDasharray={circumference}
-                                    strokeDashoffset={strokeDashoffset}
-                                    strokeLinecap="round"
-                                    className="transition-all duration-700 ease-out"
-                                />
-                            </svg>
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <span className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-                                    {stats.completionRate}%
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Legend */}
-                        <div className="flex flex-col justify-center gap-2">
-                            <div className="flex items-center gap-2.5">
-                                <span className="w-3 h-3 rounded-xs bg-[#4ADE80] shrink-0" />
-                                <span className="text-xs sm:text-sm font-semibold text-white/95">
-                                    Submitted · {stats.submittedCount}
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-2.5">
-                                <span className="w-3 h-3 rounded-xs bg-[#FACC15] shrink-0" />
-                                <span className="text-xs sm:text-sm font-semibold text-white/95">
-                                    Pending · {stats.pendingCount}
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-2.5">
-                                <span className="w-3 h-3 rounded-xs bg-[#F87171] shrink-0" />
-                                <span className="text-xs sm:text-sm font-semibold text-white/95">
-                                    Late · {stats.lateCount}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                    </Card.Content>
+                </Card>
             </div>
 
             {/* ── Bottom Row: Students Needing Support & Top Scorers (Images 3 & 4) ── */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                 {/* ── Students needing support (Image 3) ── */}
-                <div className="rounded-xl border border-neutral-700/80 bg-[#161618] p-4 sm:p-5 shadow-md flex flex-col justify-between">
-                    <span className="text-sm font-bold text-white tracking-tight mb-3">
-                        Students needing support
-                    </span>
-                    <div className="space-y-2">
+                <Card className="min-w-0">
+                    <Card.Header>
+                        <Card.Description className="text-xl font-bold text-foreground/90">Students needing support</Card.Description>
+                    </Card.Header>
+                    <Card.Content className="space-y-2">
                         {stats.supportStudents.map((student) => (
                             <div
                                 key={student.id}
-                                className="flex items-center justify-between rounded-lg border border-neutral-700/60 bg-[#222226]/50 px-3 py-2.5 sm:px-3.5 transition-colors hover:border-neutral-600"
+                                className="flex items-center justify-between rounded border border-border bg-background px-3 py-2.5 sm:px-3.5"
                             >
                                 <div className="min-w-0 flex-1 pr-2">
-                                    <p className="text-xs sm:text-sm font-bold text-white truncate">
+                                    <p className="text-xs sm:text-sm font-bold text-foreground truncate">
                                         {student.name}
                                     </p>
-                                    <p className="text-[11px] sm:text-xs text-neutral-400 font-medium truncate mt-0.5">
+                                    <p className="text-[11px] sm:text-xs text-muted-foreground font-medium truncate mt-0.5">
                                         {student.subtitle}
                                     </p>
                                 </div>
-                                <span
-                                    className={cn(
-                                        "shrink-0 rounded-full px-3 py-0.5 text-xs font-bold border select-none",
-                                        student.badgeType === "Flag"
-                                            ? "border-[#EF4444] bg-[#EF4444]/20 text-[#F87171]"
-                                            : "border-[#F59E0B] bg-[#F59E0B]/20 text-[#FACC15]"
-                                    )}
+                                <Badge
+                                    variant={student.badgeType === "Flag" ? "destructive" : "outline"}
+                                    size="sm"
+                                    className={student.badgeType === "Pending" ? "bg-white text-black" : undefined}
                                 >
                                     {student.badgeType}
-                                </span>
+                                </Badge>
                             </div>
                         ))}
-                    </div>
-                </div>
+                    </Card.Content>
+                </Card>
 
                 {/* ── Top scorers (Image 4) ── */}
-                <div className="rounded-xl border border-neutral-700/80 bg-[#161618] p-4 sm:p-5 shadow-md flex flex-col justify-between">
-                    <span className="text-sm font-bold text-white tracking-tight mb-3">
-                        Top scorers
-                    </span>
-                    <div className="space-y-2">
+                <Card className="min-w-0">
+                    <Card.Header>
+                        <Card.Description className="text-xl font-bold text-foreground/90">Top scorers</Card.Description>
+                    </Card.Header>
+                    <Card.Content className="space-y-2">
                         {stats.topScorers.map((student) => (
                             <div
                                 key={student.id}
-                                className="flex items-center justify-between rounded-lg border border-neutral-700/60 bg-[#222226]/50 px-3 py-2.5 sm:px-3.5 transition-colors hover:border-neutral-600"
+                                className="flex items-center justify-between rounded border border-border bg-background px-3 py-2.5 sm:px-3.5"
                             >
                                 <div className="min-w-0 flex-1 pr-2">
-                                    <p className="text-xs sm:text-sm font-bold text-white truncate">
+                                    <p className="text-xs sm:text-sm font-bold text-foreground truncate">
                                         {student.name}
                                     </p>
-                                    <p className="text-[11px] sm:text-xs text-neutral-400 font-medium truncate mt-0.5">
+                                    <p className="text-[11px] sm:text-xs text-muted-foreground font-medium truncate mt-0.5">
                                         {student.subtitle}
                                     </p>
                                 </div>
-                                <span className="shrink-0 rounded-full px-3 py-0.5 text-xs font-bold border border-[#10B981] bg-[#10B981]/20 text-[#34D399] select-none">
+                                <Badge variant="success" size="sm">
                                     {student.scorePct}%
-                                </span>
+                                </Badge>
                             </div>
                         ))}
-                    </div>
-                </div>
+                    </Card.Content>
+                </Card>
             </div>
         </section>
     );

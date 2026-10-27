@@ -375,7 +375,7 @@ const StoryBoard = () => {
                                 onClick={() =>
                                   setIsSubjectsExpanded((prev) => !prev)
                                 }
-                                className="border-2 border-border shadow-none text-xs font-bold px-3 py-1.5 h-auto rounded bg-primary text-black hover:bg-primary/90"
+                                className="border-2 border-border shadow-none text-sm font-bold px-3 py-1.5 h-auto rounded bg-primary text-black hover:bg-primary/90"
                               >
                                 {isSubjectsExpanded
                                   ? "Show less"
@@ -414,7 +414,7 @@ const StoryBoard = () => {
                         className="mt-4"
                         aria-label={`Average score ${overview.average ?? 0}%`}
                       />
-                      <p className="mt-2 text-xs text-muted-foreground">
+                      <p className="mt-2 text-sm text-muted-foreground">
                         Across {overview.gradedCount} graded activities
                       </p>
                     </MetricCard>
@@ -476,7 +476,7 @@ const StoryBoard = () => {
                       <p className="text-4xl font-black">
                         {duration(readingTotal)}
                       </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
+                      <p className="mt-1 text-sm text-muted-foreground">
                         Cumulative reading time on work recorded this week;
                         daily study sessions are not tracked
                       </p>
@@ -535,7 +535,7 @@ const StoryBoard = () => {
                       title="Grade Trend"
                       className="sm:col-span-2 xl:col-span-7"
                     >
-                      <p className="mb-3 text-xs text-muted-foreground">
+                      <p className="mb-3 text-sm text-muted-foreground">
                         Weekly average of released graded classwork
                       </p>
                       <div
@@ -600,7 +600,7 @@ const StoryBoard = () => {
                       title="Time per Subject"
                       className="sm:col-span-2 xl:col-span-5"
                     >
-                      <p className="mb-3 text-xs text-muted-foreground">
+                      <p className="mb-3 text-sm text-muted-foreground">
                         Cumulative reading time on work recorded this week
                       </p>
                       <div className="space-y-3">
@@ -623,7 +623,7 @@ const StoryBoard = () => {
                           metrics!.subject_reading_seconds.map((item) => (
                             <div
                               key={item.subject}
-                              className="grid grid-cols-[minmax(0,1fr)_4rem] gap-x-2 gap-y-1 text-xs"
+                              className="grid grid-cols-[minmax(0,1fr)_4rem] gap-x-2 gap-y-1 text-sm"
                             >
                               <Tooltip>
                                 <TooltipTrigger
@@ -713,7 +713,7 @@ const StoryBoard = () => {
                         className="mt-4"
                         aria-label={`${metrics?.quiz_correct || 0} correct out of ${quizCount} graded quiz answers`}
                       />
-                      <p className="mt-2 text-xs text-muted-foreground">
+                      <p className="mt-2 text-sm text-muted-foreground">
                         {metrics?.quiz_correct || 0} correct ·{" "}
                         {metrics?.quiz_wrong || 0} incorrect
                       </p>
@@ -747,7 +747,7 @@ const StoryBoard = () => {
                                 ? "—"
                                 : `${metrics.attendance_rate}%`}
                             </p>
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-sm text-muted-foreground">
                               recorded days this week
                             </span>
                           </div>
@@ -757,7 +757,7 @@ const StoryBoard = () => {
                                 key={day.date}
                                 className="min-w-0 text-center"
                               >
-                                <p className="mb-1 text-xs font-semibold">
+                                <p className="mb-1 text-sm font-semibold">
                                   {days[index]}
                                 </p>
                                 <Tooltip>
@@ -766,7 +766,7 @@ const StoryBoard = () => {
                                       <div
                                         tabIndex={0}
                                         aria-label={`${dayLabel(day.date)}: ${attendanceLabel[day.status]}`}
-                                        className={`flex min-h-12 items-center justify-center break-words rounded border-2 border-border px-0.5 text-[9px] font-semibold sm:px-1 sm:text-xs ${day.status === "present" ? "bg-primary text-primary-foreground" : day.status === "late" ? "bg-accent text-accent-foreground" : day.status === "absent" ? "bg-destructive text-destructive-foreground" : day.status === "excused" ? "bg-secondary text-secondary-foreground" : "bg-muted text-muted-foreground"}`}
+                                        className={`flex min-h-12 items-center justify-center break-words rounded border-2 border-border px-0.5 text-sm font-semibold sm:px-1 ${day.status === "present" ? "bg-primary text-primary-foreground" : day.status === "late" ? "bg-accent text-accent-foreground" : day.status === "absent" ? "bg-destructive text-destructive-foreground" : day.status === "excused" ? "bg-secondary text-secondary-foreground" : "bg-muted text-muted-foreground"}`}
                                       >
                                         {attendanceLabel[day.status]}
                                       </div>
@@ -780,7 +780,7 @@ const StoryBoard = () => {
                               </div>
                             ))}
                           </div>
-                          <p className="mt-3 text-xs text-muted-foreground">
+                          <p className="mt-3 text-sm text-muted-foreground">
                             Monday–Friday · Present, late, and excused count as
                             attended
                           </p>
@@ -807,7 +807,7 @@ const StoryBoard = () => {
                         />
                       ) : (
                         <>
-                          <p className="mb-4 text-xs text-muted-foreground">
+                          <p className="mb-4 text-sm text-muted-foreground">
                             Based on released graded classwork by subject
                           </p>
                           <div className="grid gap-5 sm:grid-cols-2">
@@ -831,7 +831,7 @@ const StoryBoard = () => {
                                   {group.entries.map((item) => (
                                     <div
                                       key={item.name}
-                                      className="grid grid-cols-[minmax(0,1fr)_3rem] gap-x-2 gap-y-1 text-xs"
+                                      className="grid grid-cols-[minmax(0,1fr)_3rem] gap-x-2 gap-y-1 text-sm"
                                     >
                                       <Tooltip>
                                         <TooltipTrigger
@@ -1012,15 +1012,15 @@ const StoryBoard = () => {
                                   <p className="truncate font-semibold text-sm">
                                     {item.title}
                                   </p>
-                                  <p className="truncate text-xs text-muted-foreground">
+                                  <p className="truncate text-sm text-muted-foreground">
                                     {item.subject} · {item.deadline}
                                   </p>
                                 </div>
                                 {item.status === "pastdue" && (
                                   <Badge
-                                    variant="solid"
+                                    variant="destructive"
                                     size="sm"
-                                    className="shrink-0 rounded bg-destructive px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700"
+                                    className="shrink-0"
                                   >
                                     Past Due
                                   </Badge>

@@ -66,7 +66,7 @@ export function GradeOverviewCards({ todos, isLoading, error }: {
                 aria-label={`Completion rate: ${completion.rate}%`}
               />
             </div>
-            <p className="mt-3 text-xs text-muted-foreground">{completion.completed} of {completion.total} activities done</p>
+            <p className="mt-3 text-sm text-muted-foreground">{completion.completed} of {completion.total} activities done</p>
           </Card.Content>
         </Card>
 
@@ -76,16 +76,16 @@ export function GradeOverviewCards({ todos, isLoading, error }: {
             {subjectPerformance.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No graded classwork yet</p> : <>
               <div className="flex flex-col gap-2">
                 {subjectPerformance.map((item) => <div key={item.subjectId} className="flex items-center gap-2">
-                  <span className="w-20 truncate text-[10px]" title={item.subject}>{item.subject}</span>
+                  <span className="w-20 truncate text-sm text-muted-foreground" title={item.subject}>{item.subject}</span>
                   <Progress
                     value={Math.min(100, Math.max(0, item.score))}
                     className="h-3 flex-1"
                     aria-label={`${item.subject} score: ${item.score}%`}
                   />
-                  <span className="w-8 text-right text-[10px] font-semibold">{item.score}%</span>
+                  <span className="w-8 text-right text-sm font-semibold">{item.score}%</span>
                 </div>)}
               </div>
-              {weakestSubject && <p className="mt-3 text-[10px] text-muted-foreground">Recommended Attention: <span className="font-bold">{weakestSubject.subject}</span></p>}
+              {weakestSubject && <p className="mt-3 text-sm text-muted-foreground">Recommended Attention: <span className="font-bold">{weakestSubject.subject}</span></p>}
             </>}
           </Card.Content>
         </Card>
