@@ -28,6 +28,23 @@ from app.services.intervention.InterventionRemediationService import (
     PlanUpdate, generate_advisory, get_workspace, preview_score_adjustment,
     project_subject_grade, save_plan,
 )
+from app.schemas.RemediationDraft import (
+    RemediationAssessmentCreateRequest,
+    RemediationAssessmentCreateResult,
+    RemediationDraft,
+    RemediationDraftGenerationRequest,
+    RemediationDraftPreflightRequest,
+    RemediationPublicationPreflightResult,
+)
+from app.services.intervention.InterventionRemediationAssessmentCreationService import (
+    create_remediation_assessment,
+)
+from app.services.intervention.InterventionRemediationDraftGenerationService import (
+    generate_remediation_draft,
+)
+from app.services.intervention.InterventionRemediationDraftPreflightService import (
+    preflight_remediation_draft,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -86,6 +103,80 @@ async def generate_remediation_endpoint(
         return await generate_advisory(db, staff_id, intervention_id)
     finally:
         actor.reset(token)
+
+
+@router.post(
+    "/{intervention_id}/remediation/generate-draft",
+    response_model=RemediationDraft,
+)
+@router.post(
+    "/{intervention_id}/remediation/draft",
+    response_model=RemediationDraft,
+    include_in_schema=False,
+)
+async def generate_remediation_draft_endpoint(
+    intervention_id: int,
+    body: RemediationDraftGenerationRequest,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    token = actor.set(staff_id)
+    try:
+        return await generate_remediation_draft(
+            db=db,
+            staff_id=staff_id,
+            intervention_id=intervention_id,
+            request=body,
+        )
+    finally:
+        actor.reset(token)
+
+
+@router.post(
+    "/{intervention_id}/remediation/preflight",
+    response_model=RemediationPublicationPreflightResult,
+)
+def preflight_remediation_draft_endpoint(
+    intervention_id: int,
+    body: RemediationDraftPreflightRequest,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    token = actor.set(staff_id)
+    try:
+        raw_draft = body.draft if body.draft is not None else body.model_dump()
+        return preflight_remediation_draft(
+            db=db,
+            staff_id=staff_id,
+            intervention_id=intervention_id,
+            draft_input=raw_draft,
+            require_readings=body.validation_stage == "PUBLICATION",
+        )
+    finally:
+        actor.reset(token)
+
+
+@router.post(
+    "/{intervention_id}/remediation/assessment",
+    response_model=RemediationAssessmentCreateResult,
+    status_code=201,
+)
+def create_remediation_assessment_endpoint(
+    intervention_id: int,
+    body: RemediationAssessmentCreateRequest,
+    _teacher: dict = Depends(require_intervention_teacher),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return create_remediation_assessment(
+        db,
+        staff_id=staff_id,
+        intervention_id=intervention_id,
+        remediation_request_id=body.remediation_request_id,
+        draft_input=body.draft,
+    )
 
 
 class ScorePreviewItem(BaseModel):

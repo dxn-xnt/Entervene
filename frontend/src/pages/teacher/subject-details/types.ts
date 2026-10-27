@@ -44,7 +44,11 @@ export type Lesson = {
   competency_code?: string | null;
   competency_statement?: string | null;
   attachments: LessonAttachment[];
+  delivery?: LessonDeliveryRecord | null;
+  is_taught?: boolean;
 };
+
+export type { LessonDeliveryRecord } from "@/lib/lesson-delivery-api";
 
 export type LessonDraft = {
   title: string;

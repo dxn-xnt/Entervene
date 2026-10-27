@@ -42,6 +42,7 @@ from app.api.v1.routes.TOS import router as tos_router
 from app.api.v1.routes.TeacherSubstitutions import router as teacher_substitutions_router
 from app.api.v1.routes.Analytics import router as analytics_router
 from app.api.v1.routes.LessonGoals import router as lesson_goals_router
+from app.api.v1.routes.LessonDeliveries import router as lesson_deliveries_router
 from app.api.v1.routes.ContentCloning import router as content_cloning_router
 from contextlib import asynccontextmanager
 from starlette.concurrency import run_in_threadpool
@@ -138,6 +139,7 @@ app.include_router(tos_router,            prefix="/api/v1/tos",             tags
 app.include_router(teacher_substitutions_router, prefix="/api/v1/substitutions", tags=["Teacher Substitutions"])
 app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["Analytics"])
 app.include_router(lesson_goals_router, prefix="/api/v1/lesson-goals", tags=["Lesson Goals"])
+app.include_router(lesson_deliveries_router, prefix="/api/v1/lesson-deliveries", tags=["Lesson Deliveries"])
 app.include_router(
     content_cloning_router,
     prefix="/api/v1/content-cloning",

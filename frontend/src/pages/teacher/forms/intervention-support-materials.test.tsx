@@ -4,9 +4,12 @@ import { createRef } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type {
-  RemediationWorkspace,
-  TeacherInterventionDetail,
+import {
+  InterventionApiError,
+  type RemediationQuizDraft,
+  type RemediationClassworkDraft,
+  type RemediationWorkspace,
+  type TeacherInterventionDetail,
 } from "@/lib/teacher-interventions-api";
 import InterventionSupportMaterials, {
   type InterventionSupportMaterialsHandle,
@@ -19,6 +22,9 @@ const api = vi.hoisted(() => ({
   advisory: vi.fn(),
   previewScore: vi.fn(),
   projectGrade: vi.fn(),
+  generateDraft: vi.fn(),
+  preflightDraft: vi.fn(),
+  createAssessment: vi.fn(),
 }));
 
 vi.mock("@/lib/teacher-interventions-api", async (original) => ({
@@ -29,6 +35,9 @@ vi.mock("@/lib/teacher-interventions-api", async (original) => ({
   generateRemediationAdvisory: api.advisory,
   previewScoreAdjustment: api.previewScore,
   projectSubjectGrade: api.projectGrade,
+  generateRemediationDraft: api.generateDraft,
+  preflightRemediationDraft: api.preflightDraft,
+  createRemediationAssessment: api.createAssessment,
 }));
 
 const detail = {
@@ -110,6 +119,7 @@ describe("teacher remediation recommendation", () => {
         ...workspace.plan,
         ai_suggestion: {
           recommended_format: "QUIZ",
+          recommended_grade_treatment: "WRITTEN_WORK",
           reason: "Focused practice may support the measured component.",
           focus: [],
           evidence_used: {},
@@ -188,13 +198,14 @@ describe("teacher remediation recommendation", () => {
     expect(screen.queryByText("Recommended")).toBeNull();
   });
 
-  it("displays a saved recommendation without making another advisory request", async () => {
+  it("does not present a saved TOS suggestion as assignable AI remediation", async () => {
     api.workspace.mockResolvedValue({
       ...workspace,
       plan: {
         ...workspace.plan,
         ai_suggestion: {
           recommended_format: "TOS",
+          recommended_grade_treatment: null,
           reason: "A blueprint may support focused planning.",
           focus: [],
           evidence_used: {},
@@ -208,9 +219,11 @@ describe("teacher remediation recommendation", () => {
     );
 
     const tosCard = (await screen.findByText("TOS Blueprint")).closest(".cursor-pointer");
-    expect(within(tosCard as HTMLElement).getByText("Recommended")).toBeTruthy();
-    expect(within(tosCard as HTMLElement).queryByText("Selected")).toBeNull();
-    expect(api.advisory).not.toHaveBeenCalled();
+    expect(within(tosCard as HTMLElement).queryByText("Recommended")).toBeNull();
+    expect(within(tosCard as HTMLElement).getByText(/Teacher planning and export only/i)).toBeTruthy();
+    await waitFor(() => expect(api.advisory).toHaveBeenCalledWith(12));
+    const quizCard = screen.getByText("Quiz").closest(".cursor-pointer");
+    expect(await within(quizCard as HTMLElement).findByText("Recommended")).toBeTruthy();
   });
 
   it("retries a failed recommendation when Adjust Support is reopened", async () => {
@@ -222,6 +235,7 @@ describe("teacher remediation recommendation", () => {
           ...workspace.plan,
           ai_suggestion: {
             recommended_format: "CLASSWORK",
+            recommended_grade_treatment: "WRITTEN_WORK",
             reason: "Targeted classwork supports the verified evidence.",
             focus: [],
             evidence_used: {},
@@ -338,6 +352,19 @@ describe("teacher intervention persistence integration", () => {
       ...workspace,
       plan: { ...workspace.plan, ...plan, ai_suggestion: null },
     }));
+    api.advisory.mockResolvedValue({
+      ...workspace,
+      plan: {
+        ...workspace.plan,
+        ai_suggestion: {
+          recommended_format: "QUIZ",
+          recommended_grade_treatment: "WRITTEN_WORK",
+          reason: "Focused practice may support the measured component.",
+          focus: [],
+          evidence_used: {},
+        },
+      },
+    });
     api.projectGrade.mockResolvedValue({
       status: "UNAVAILABLE",
       grade_representation: "TRANSMUTED_TERM_GRADE",
@@ -1548,6 +1575,982 @@ describe("teacher intervention persistence integration", () => {
     expect(
       within(dialog).getByText(/Unsaved cap change \(85%\)\. The projection above reflects the saved 75% cap/i)
     ).toBeTruthy();
+  });
+});
+
+const detailWithClassworks: TeacherInterventionDetail = {
+    ...detail,
+    diagnosis_snapshot: {
+      weakest_supported_components: ["WRITTEN_WORK"],
+      components: {
+        WRITTEN_WORK: { evidence_state: "AVAILABLE", percent: 61 },
+      },
+      supporting_activities: [
+        {
+          classwork_id: 101,
+          classwork_assignment_id: 101,
+          title: "Worksheet 1",
+          component: "WRITTEN_WORK",
+          score: 10,
+          possible_score: 20,
+          percent: 50,
+        },
+      ],
+    },
+  };
+
+  const sampleReading = {
+    id: 501,
+    kind: "CLASSWORK" as const,
+    classwork_type: "READING",
+    title: "Linear Functions Guide",
+    recommended: true,
+    match_level: "COMPETENCY" as const,
+    lesson: "Linear Functions",
+    is_graded: false,
+  };
+
+  const mockQuizDraft: RemediationQuizDraft = {
+    draft_format: "QUIZ",
+    target_component: "WRITTEN_WORK",
+    grade_treatment: "WRITTEN_WORK",
+    title: "Mathematics Linear Equations Practice",
+    instructions: "Complete the following practice quiz to reinforce key concepts.",
+    total_points: 20,
+    duration_minutes: 25,
+    questions: [
+      {
+        question_text: "What is the slope of the line passing through (2, 3) and (4, 7)?",
+        question_type: "MULTIPLE_CHOICE",
+        points: 10,
+        display_order: 1,
+        difficulty_level: "MEDIUM",
+        targeted_competency_id: 101,
+        targeted_lesson_id: 42,
+        options: [
+          { option_text: "2", option_order: 1 },
+          { option_text: "1/2", option_order: 2 },
+          { option_text: "4", option_order: 3 },
+          { option_text: "-2", option_order: 4 },
+        ],
+        teacher_answer_key: {
+          correct_answer: "2",
+          explanation: "Slope formula m = (y2 - y1) / (x2 - x1) = (7 - 3) / (4 - 2) = 2.",
+          scoring_guide: "Full credit for selecting 2.",
+        },
+      },
+      {
+        question_text: "The graph of a linear equation is a straight line.",
+        question_type: "TRUE_FALSE",
+        points: 10,
+        display_order: 2,
+        difficulty_level: "EASY",
+        targeted_competency_id: 101,
+        targeted_lesson_id: 42,
+        options: [
+          { option_text: "True", option_order: 1 },
+          { option_text: "False", option_order: 2 },
+        ],
+        teacher_answer_key: {
+          correct_answer: "True",
+          explanation: "A first-degree polynomial always produces a straight line.",
+        },
+      },
+    ],
+  };
+
+  const mockClassworkDraft: RemediationClassworkDraft = {
+    draft_format: "CLASSWORK",
+    target_component: "WRITTEN_WORK",
+    grade_treatment: "WRITTEN_WORK",
+    title: "Linear Equations Modeling Activity",
+    description: "Hands-on application of slope and y-intercept modeling.",
+    student_instructions: "Follow each task step carefully and submit your final work as a PDF document.",
+    total_points: 20,
+    activity_mode: "ONLINE",
+    tasks: [
+      {
+        task_number: 1,
+        title: "Rate of Change Construction",
+        instructions: "Determine the unit rate from the given dataset.",
+        targeted_competency_id: 101,
+        targeted_lesson_id: 42,
+      },
+    ],
+    deliverables: [
+      {
+        deliverable_name: "Analysis Report",
+        deliverable_type: "DOCUMENT",
+        description: "PDF analysis report containing calculations.",
+      },
+    ],
+    supported_upload_formats: [".pdf", ".docx"],
+    rubric_levels: [
+      {
+        level_name: "Exemplary",
+        description: "Demonstrates thorough understanding with no errors.",
+        points: 20,
+        display_order: 0,
+      },
+      {
+        level_name: "Developing",
+        description: "Shows partial understanding with minor calculation errors.",
+        points: 10,
+        display_order: 1,
+      },
+    ],
+    teacher_guide: {
+      exemplar_or_expected_response: "Unit rate is 15 dollars/hr. Initial fee is 25 dollars.",
+      evaluation_notes: "Award full credit if rate is derived from two distinct data points.",
+      common_misconceptions: ["Inverting change in x and change in y."],
+    },
+  };
+
+describe("PR 2D.1: Teacher AI Remediation Entry Point", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.materials.mockResolvedValue({ items: [], total: 0 });
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      plan: {
+        teacher_choice: "QUIZ",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        score_adjustment_cap: 75,
+        selected_resources: [{ kind: "CLASSWORK", id: 501 }],
+        ai_suggestion: null,
+      },
+      resources: [sampleReading],
+      focus: {
+        ...workspace.focus,
+        lesson_ids: [42],
+        competency_ids: [101],
+        question_evidence: [{ quiz_question_id: 999, score: 0, possible_score: 5 }],
+      },
+    });
+    api.savePlan.mockImplementation(async (_id, savedPlan) => ({
+      ...workspace,
+      plan: {
+        ...workspace.plan,
+        ...savedPlan,
+        teacher_choice: savedPlan.teacher_choice ?? "QUIZ",
+        grade_treatment: savedPlan.grade_treatment ?? "WRITTEN_WORK",
+      },
+      resources: [sampleReading],
+    }));
+    api.projectGrade.mockResolvedValue({
+      status: "UNAVAILABLE",
+      grade_representation: "TRANSMUTED_TERM_GRADE",
+      current_subject_grade: null,
+      passing_threshold: 75,
+      target_projections: [],
+      eligible_target_gains: [],
+      additional_eligible_targets_have_positive_improvement: false,
+      recommended_target_assignment_id: null,
+      assumptions: [],
+      unavailable_reasons: [],
+      ai_midterm_what_if: {
+        status: "UNAVAILABLE",
+        estimate_kind: "AI_MIDTERM_WHAT_IF_ESTIMATE",
+        is_official_grade: false,
+        is_guaranteed: false,
+        baseline_predicted_term_grade: null,
+        readiness: {},
+        target_estimates: [],
+        unavailable_reasons: [],
+        limitations: [],
+      },
+    });
+    api.previewScore.mockImplementation(async (_id, req) => ({
+      score_adjustment_cap: req.score_adjustment_cap ?? 75,
+      previews: [
+        {
+          assignment_id: 101,
+          title: "Worksheet 1",
+          original_score: 10,
+          max_points: 20,
+          cap_percentage: 75,
+          max_adjusted_score: 15,
+          possible_gain: 5,
+          was_adjusted: true,
+          was_capped: true,
+        },
+      ],
+      disclaimer: "Hypothetical maximum only",
+    }));
+  });
+
+  afterEach(cleanup);
+
+  it("renders 'Generate with AI' beside manual creation button for QUIZ and CLASSWORK, but not for EXISTING_MATERIAL_ONLY", async () => {
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    // QUIZ: both Generate with AI and Continue to Quiz Builder appear
+    await screen.findAllByText("75% Cap");
+    expect(screen.getByRole("button", { name: /Generate with AI/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Continue to Quiz Builder/i })).toBeTruthy();
+
+    // Select CLASSWORK
+    fireEvent.click(screen.getByText("Classwork").closest(".cursor-pointer") as HTMLElement);
+    expect(screen.getByRole("button", { name: /Generate with AI/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Continue to Classwork Creator/i })).toBeTruthy();
+
+    // Select EXISTING_MATERIAL_ONLY
+    fireEvent.click(screen.getByText("Materials Only").closest(".cursor-pointer") as HTMLElement);
+    expect(screen.queryByRole("button", { name: /Generate with AI/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Continue to/i })).toBeNull();
+  });
+
+  it("submits the verified request payload to generateRemediationDraft and displays loading state", async () => {
+    let resolveDraft: (val: RemediationQuizDraft) => void = () => {};
+    const draftPromise = new Promise<RemediationQuizDraft>((resolve) => {
+      resolveDraft = resolve;
+    });
+    api.generateDraft.mockReturnValue(draftPromise);
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+    const aiButton = screen.getByRole("button", { name: /Generate with AI/i });
+    fireEvent.click(aiButton);
+
+    // Verified API payload
+    await waitFor(() => {
+      expect(api.generateDraft).toHaveBeenCalledWith(
+        12,
+        expect.objectContaining({
+          draft_format: "QUIZ",
+          target_component: "WRITTEN_WORK",
+          grade_treatment: "WRITTEN_WORK",
+          item_count: 5,
+          total_points: 20,
+          selected_reading_ids: [501],
+          selected_lesson_ids: [42],
+          selected_competency_ids: [101],
+          selected_quiz_question_ids: [999],
+        })
+      );
+    });
+
+    // Loading preview dialog appears with generating message
+    const dialog = await screen.findByRole("dialog", { name: /AI Remediation Draft Preview/i });
+    expect(within(dialog).getByText(/Generating Remediation Draft…/i)).toBeTruthy();
+
+    // Resolve draft
+    resolveDraft(mockQuizDraft);
+    await waitFor(() => {
+      expect(within(dialog).queryByText(/Generating Remediation Draft…/i)).toBeNull();
+      expect(within(dialog).getByText("Mathematics Linear Equations Practice")).toBeTruthy();
+    });
+  });
+
+  it("previews complete Quiz draft with question mode toggle, student questions, and separate teacher answer keys", async () => {
+    api.generateDraft.mockResolvedValue(mockQuizDraft);
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+    fireEvent.click(screen.getByRole("button", { name: /Generate with AI/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /AI Remediation Draft Preview/i });
+
+    // Mode Toggle: Generate New Targeted Questions (Supported) vs Reuse Original Questions (Unsupported)
+    expect(within(dialog).getByText("Generate New Targeted Questions")).toBeTruthy();
+    expect(within(dialog).getByText("Supported")).toBeTruthy();
+    expect(within(dialog).getByText("Reuse Original Questions")).toBeTruthy();
+    expect(within(dialog).getByText("Unsupported")).toBeTruthy();
+    expect(within(dialog).getByText(/Backend assessment service does not support verbatim question extraction/i)).toBeTruthy();
+
+    // Student Instructions and Questions
+    expect(within(dialog).getByText(/Complete the following practice quiz to reinforce key concepts/i)).toBeTruthy();
+    expect(within(dialog).getByText("What is the slope of the line passing through (2, 3) and (4, 7)?")).toBeTruthy();
+    expect(within(dialog).getByText("The graph of a linear equation is a straight line.")).toBeTruthy();
+
+    // Separate Teacher Answer Key
+    expect(within(dialog).getByText("Teacher-Only Answer Key & Explanations")).toBeTruthy();
+    expect(within(dialog).getAllByText("Teacher Eyes Only").length).toBeGreaterThanOrEqual(1);
+    expect(within(dialog).getByText("Item 1 Answer Key")).toBeTruthy();
+    expect(within(dialog).getByText("Slope formula m = (y2 - y1) / (x2 - x1) = (7 - 3) / (4 - 2) = 2.")).toBeTruthy();
+
+    // Disclaimer
+    expect(within(dialog).getByText("Teacher Review Only")).toBeTruthy();
+    expect(within(dialog).getByText("Unsaved Draft")).toBeTruthy();
+  });
+
+  it("previews complete Classwork/PT draft with tasks, instructions, deliverables, upload formats, rubric, and separate teacher guide", async () => {
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      plan: {
+        teacher_choice: "CLASSWORK",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        score_adjustment_cap: 75,
+        selected_resources: [],
+        ai_suggestion: null,
+      },
+      resources: [],
+      focus: {
+        ...workspace.focus,
+        lesson_ids: [42],
+        competency_ids: [101],
+      },
+    });
+
+    api.generateDraft.mockResolvedValue(mockClassworkDraft);
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+    fireEvent.click(screen.getByRole("button", { name: /Generate with AI/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /AI Remediation Draft Preview/i });
+
+    // Overview & Instructions
+    expect(within(dialog).getByText("Linear Equations Modeling Activity")).toBeTruthy();
+    expect(within(dialog).getByText("Hands-on application of slope and y-intercept modeling.")).toBeTruthy();
+    expect(within(dialog).getByText(/Follow each task step carefully and submit your final work as a PDF document/i)).toBeTruthy();
+
+    // Step-by-step Tasks
+    expect(within(dialog).getByText("Task 1")).toBeTruthy();
+    expect(within(dialog).getByText("Rate of Change Construction")).toBeTruthy();
+    expect(within(dialog).getByText(/Determine the unit rate from the given dataset/i)).toBeTruthy();
+
+    // Deliverables & Upload Formats
+    expect(within(dialog).getByText("Analysis Report")).toBeTruthy();
+    expect(within(dialog).getByText("DOCUMENT")).toBeTruthy();
+    expect(within(dialog).getByText(".pdf")).toBeTruthy();
+    expect(within(dialog).getByText(".docx")).toBeTruthy();
+
+    // Rubric
+    expect(within(dialog).getByText("Exemplary")).toBeTruthy();
+    expect(within(dialog).getByText("Developing")).toBeTruthy();
+    expect(within(dialog).getByText("20 pts")).toBeTruthy();
+    expect(within(dialog).getByText("10 pts")).toBeTruthy();
+
+    // Teacher Guide Separately
+    expect(within(dialog).getByText("Teacher Evaluation Guide")).toBeTruthy();
+    expect(within(dialog).getByText(/Unit rate is 15 dollars\/hr/i)).toBeTruthy();
+    expect(within(dialog).getByText(/Award full credit if rate is derived from two distinct data points/i)).toBeTruthy();
+    expect(within(dialog).getByText(/Inverting change in x and change in y/i)).toBeTruthy();
+  });
+
+  it("gracefully handles Groq rate limit (429) errors, displaying clear error message while preserving teacher selections and manual authoring", async () => {
+    api.generateDraft.mockRejectedValue(
+      new InterventionApiError(429, "Rate limit reached. Please wait 60 seconds.")
+    );
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+    fireEvent.click(screen.getByRole("button", { name: /Generate with AI/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /AI Remediation Draft Preview/i });
+
+    // Rate limit message shown
+    expect(
+      within(dialog).getByText(/AI generation rate limit reached \(Groq free tier\)/i)
+    ).toBeTruthy();
+
+    // Teacher selections and manual authoring preserved
+    expect(within(dialog).getByText(/All your selected targets, readings, and manual authoring options remain preserved/i)).toBeTruthy();
+
+    // Dismiss dialog
+    fireEvent.click(within(dialog).getByRole("button", { name: "Dismiss" }));
+
+    // Main page still has 75% Cap and Continue to Quiz Builder active
+    expect(screen.getAllByText("75% Cap").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("button", { name: /Continue to Quiz Builder/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Generate with AI/i })).toBeTruthy();
+  });
+});
+
+describe("PR 2D.2A: Teacher AI Draft Editing & Cap Integrity", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.materials.mockResolvedValue({ items: [], total: 0 });
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      plan: {
+        teacher_choice: "QUIZ",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        score_adjustment_cap: 75,
+        selected_resources: [{ kind: "CLASSWORK", id: 501 }],
+        ai_suggestion: null,
+      },
+      resources: [sampleReading],
+      focus: {
+        ...workspace.focus,
+        lesson_ids: [42],
+        competency_ids: [101],
+        question_evidence: [{ quiz_question_id: 999, score: 0, possible_score: 5 }],
+      },
+    });
+    api.savePlan.mockImplementation(async (_id, savedPlan) => ({
+      ...workspace,
+      plan: {
+        ...workspace.plan,
+        ...savedPlan,
+        teacher_choice: savedPlan.teacher_choice ?? "QUIZ",
+        grade_treatment: savedPlan.grade_treatment ?? "WRITTEN_WORK",
+      },
+      resources: [sampleReading],
+    }));
+    api.projectGrade.mockResolvedValue({
+      status: "UNAVAILABLE",
+      grade_representation: "TRANSMUTED_TERM_GRADE",
+      current_subject_grade: null,
+      passing_threshold: 75,
+      target_projections: [],
+      eligible_target_gains: [],
+      additional_eligible_targets_have_positive_improvement: false,
+      recommended_target_assignment_id: null,
+      assumptions: [],
+      unavailable_reasons: [],
+      ai_midterm_what_if: {
+        status: "UNAVAILABLE",
+        estimate_kind: "AI_MIDTERM_WHAT_IF_ESTIMATE",
+        is_official_grade: false,
+        is_guaranteed: false,
+        baseline_predicted_term_grade: null,
+        readiness: {},
+        target_estimates: [],
+        unavailable_reasons: [],
+        limitations: [],
+      },
+    });
+    api.previewScore.mockImplementation(async (_id, req) => ({
+      score_adjustment_cap: req.score_adjustment_cap ?? 75,
+      previews: [
+        {
+          assignment_id: 101,
+          title: "Worksheet 1",
+          original_score: 10,
+          max_points: 20,
+          cap_percentage: req.score_adjustment_cap ?? 75,
+          max_adjusted_score: 15,
+          possible_gain: 5,
+          was_adjusted: true,
+          was_capped: true,
+        },
+      ],
+      disclaimer: "Hypothetical maximum only",
+    }));
+  });
+
+  afterEach(cleanup);
+
+  it("displays original target assignment, current grade treatment, and saved adjustment cap in preview banner", async () => {
+    api.generateDraft.mockResolvedValue(mockQuizDraft);
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+    fireEvent.click(screen.getByRole("button", { name: /Generate with AI/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /AI Remediation Draft Preview/i });
+
+    // Context banner checks
+    expect(within(dialog).getByText("Academic Treatment & Score Adjustment Context")).toBeTruthy();
+    expect(within(dialog).getByText("Worksheet 1 (20 pts)")).toBeTruthy();
+    expect(within(dialog).getAllByText("Written Work").length).toBeGreaterThanOrEqual(1);
+    expect(within(dialog).getByText(/Capped at 75% of original max points. The AI draft does not alter your cap./i)).toBeTruthy();
+  });
+
+  it("allows teacher to edit Quiz draft title, instructions, questions, points, options, and answer keys, recalculating total points", async () => {
+    api.generateDraft.mockResolvedValue(mockQuizDraft);
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+    fireEvent.click(screen.getByRole("button", { name: /Generate with AI/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /AI Remediation Draft Preview/i });
+
+    // Initial total points
+    expect(within(dialog).getByText("20 Total Points")).toBeTruthy();
+    expect(within(dialog).getByText("Draft Complete")).toBeTruthy();
+
+    // Enter Edit Mode
+    fireEvent.click(within(dialog).getAllByRole("button", { name: /Edit Draft/i })[0]);
+
+    // Edit title
+    const titleInput = within(dialog).getByLabelText("Remediation Title");
+    fireEvent.change(titleInput, { target: { value: "Linear Equations Mastery Practice" } });
+
+    // Edit points for Item 1 from 10 to 14 (expect total to become 14 + 10 = 24)
+    const pointsInputs = within(dialog).getAllByLabelText("Points:");
+    fireEvent.change(pointsInputs[0], { target: { value: "14" } });
+    expect(within(dialog).getByText("24 Total Points")).toBeTruthy();
+
+    // Edit Question prompt
+    const promptTextareas = within(dialog).getAllByLabelText("Question Prompt");
+    fireEvent.change(promptTextareas[0], { target: { value: "Updated prompt: Calculate slope between points." } });
+
+    // Edit correct answer and explanation in Teacher Eyes Only section
+    const correctAnswerInputs = within(dialog).getAllByLabelText("Correct Answer");
+    fireEvent.change(correctAnswerInputs[0], { target: { value: "m = 2" } });
+
+    const explanationTextareas = within(dialog).getAllByLabelText("Explanation");
+    fireEvent.change(explanationTextareas[0], { target: { value: "Updated explanation: m = (7-3)/(4-2) = 2." } });
+
+    // Exit Edit Mode back to Preview
+    fireEvent.click(within(dialog).getAllByRole("button", { name: /Done Editing/i })[0]);
+
+    // Verify preview displays updated content
+    expect(within(dialog).getByText("Linear Equations Mastery Practice")).toBeTruthy();
+    expect(within(dialog).getByText("24 Total Points")).toBeTruthy();
+    expect(within(dialog).getByText("14 points")).toBeTruthy();
+    expect(within(dialog).getByText("Updated prompt: Calculate slope between points.")).toBeTruthy();
+    expect(within(dialog).getByText("m = 2")).toBeTruthy();
+    expect(within(dialog).getByText("Updated explanation: m = (7-3)/(4-2) = 2.")).toBeTruthy();
+  });
+
+  it("allows teacher to edit Classwork draft overview, tasks, deliverables, rubric points, and evaluation guide", async () => {
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      plan: {
+        teacher_choice: "CLASSWORK",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        score_adjustment_cap: 75,
+        selected_resources: [],
+        ai_suggestion: null,
+      },
+      resources: [],
+      focus: {
+        ...workspace.focus,
+        lesson_ids: [42],
+        competency_ids: [101],
+      },
+    });
+
+    api.generateDraft.mockResolvedValue(mockClassworkDraft);
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+    fireEvent.click(screen.getByRole("button", { name: /Generate with AI/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /AI Remediation Draft Preview/i });
+
+    // Enter Edit Mode
+    fireEvent.click(within(dialog).getAllByRole("button", { name: /Edit Draft/i })[0]);
+
+    // Edit Activity Overview
+    const overviewTextarea = within(dialog).getByDisplayValue("Hands-on application of slope and y-intercept modeling.");
+    fireEvent.change(overviewTextarea, { target: { value: "Custom modeling lab overview for linear systems." } });
+
+    // Edit Task 1 title
+    const task1Input = within(dialog).getByDisplayValue("Rate of Change Construction");
+    fireEvent.change(task1Input, { target: { value: "Task 1: Calculate Experimental Rates" } });
+
+    // Edit Rubric level 1 points from 20 to 25
+    const rubricPoints = within(dialog).getByDisplayValue("20");
+    fireEvent.change(rubricPoints, { target: { value: "25" } });
+    expect(within(dialog).getByText("25 Total Points")).toBeTruthy();
+
+    // Edit Teacher Evaluation Guide exemplar
+    const exemplarTextarea = within(dialog).getByDisplayValue("Unit rate is 15 dollars/hr. Initial fee is 25 dollars.");
+    fireEvent.change(exemplarTextarea, { target: { value: "Verified rate is 15 dollars/hr." } });
+
+    // Switch back to Preview
+    fireEvent.click(within(dialog).getAllByRole("button", { name: /Done Editing/i })[0]);
+
+    // Verify preview displays updated content
+    expect(within(dialog).getByText("Custom modeling lab overview for linear systems.")).toBeTruthy();
+    expect(within(dialog).getByText("Task 1: Calculate Experimental Rates")).toBeTruthy();
+    expect(within(dialog).getByText("25 pts")).toBeTruthy();
+    expect(within(dialog).getByText("Verified rate is 15 dollars/hr.")).toBeTruthy();
+  });
+
+  it("dynamically validates completeness when required fields are cleared and restored", async () => {
+    api.generateDraft.mockResolvedValue(mockQuizDraft);
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+    fireEvent.click(screen.getByRole("button", { name: /Generate with AI/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /AI Remediation Draft Preview/i });
+    expect(within(dialog).getByText("Draft Complete")).toBeTruthy();
+
+    // Enter Edit Mode
+    fireEvent.click(within(dialog).getAllByRole("button", { name: /Edit Draft/i })[0]);
+
+    // Clear Question 1 prompt
+    const promptTextareas = within(dialog).getAllByLabelText("Question Prompt");
+    fireEvent.change(promptTextareas[0], { target: { value: "   " } });
+
+    // Validation changes to Incomplete and warning alert appears
+    expect(within(dialog).getByText(/1 Incomplete Field/i)).toBeTruthy();
+    expect(within(dialog).getByText(/Item 1: Question prompt is required/i)).toBeTruthy();
+
+    // Restore Question 1 prompt
+    fireEvent.change(promptTextareas[0], { target: { value: "What is the slope of the line?" } });
+
+    // Validated badge returns
+    expect(within(dialog).getByText("Draft Complete")).toBeTruthy();
+    expect(within(dialog).queryByText(/1 Incomplete Field/i)).toBeNull();
+  });
+
+  it("maintains cap integrity and prevents invalid cap (100% full replacement) from generating", async () => {
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+
+    // Open Select Targeted Classwork modal to edit cap
+    fireEvent.click(screen.getByRole("button", { name: "Reselect Activities" }));
+    const selectCwDialog = await screen.findByRole("dialog", { name: "Select Targeted Classwork" });
+
+    // Set invalid 100% cap
+    const capInput = within(selectCwDialog).getByLabelText(/Score Adjustment Cap/i);
+    fireEvent.change(capInput, { target: { value: "100" } });
+    fireEvent.click(within(selectCwDialog).getByRole("button", { name: "Done" }));
+
+    // Click Generate with AI
+    fireEvent.click(screen.getByRole("button", { name: /Generate with AI/i }));
+
+    // Generation API should NOT be called due to invalid cap error
+    expect(api.generateDraft).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: /AI Remediation Draft Preview/i })).toBeNull();
+  });
+
+  it("does not prematurely persist or save draft edits to the backend", async () => {
+    api.generateDraft.mockResolvedValue(mockQuizDraft);
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+    fireEvent.click(screen.getByRole("button", { name: /Generate with AI/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /AI Remediation Draft Preview/i });
+
+    // Enter Edit Mode and make edits
+    fireEvent.click(within(dialog).getAllByRole("button", { name: /Edit Draft/i })[0]);
+    const titleInput = within(dialog).getByLabelText("Remediation Title");
+    fireEvent.change(titleInput, { target: { value: "Modified Draft Name" } });
+
+    // Close preview
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close Preview" }));
+
+    // api.savePlan was called ONLY once (before draft generation to save teacher plan adjustments),
+    // and never with the draft contents itself
+    expect(api.savePlan).toHaveBeenCalledTimes(1);
+    expect(api.savePlan).toHaveBeenCalledWith(
+      12,
+      expect.not.objectContaining({ questions: expect.anything() })
+    );
+  });
+});
+
+describe("PR 2D.2B.3: Save AI remediation draft", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.materials.mockResolvedValue({ items: [], total: 0 });
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      plan: {
+        teacher_choice: "QUIZ",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        score_adjustment_cap: 75,
+        selected_resources: [{ kind: "CLASSWORK", id: 501 }],
+        ai_suggestion: null,
+      },
+      resources: [sampleReading],
+      focus: {
+        ...workspace.focus,
+        lesson_ids: [42],
+        competency_ids: [101],
+        question_evidence: [{ quiz_question_id: 999, score: 0, possible_score: 5 }],
+      },
+    });
+    api.savePlan.mockImplementation(async (_id, savedPlan) => ({
+      ...workspace,
+      plan: {
+        ...workspace.plan,
+        ...savedPlan,
+        teacher_choice: "QUIZ",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        score_adjustment_cap: 75,
+      },
+      resources: [sampleReading],
+      focus: workspace.focus,
+      progress: workspace.progress,
+      original_exams: [],
+    }));
+    api.generateDraft.mockResolvedValue(mockQuizDraft);
+    api.preflightDraft.mockResolvedValue({
+      is_valid: true,
+      draft_format: "QUIZ",
+      target_component: "WRITTEN_WORK",
+      grade_treatment: "WRITTEN_WORK",
+      total_points: 20,
+      authoritative_cap: 75,
+      target_assignment_ids: [101],
+      reading_prerequisites: [
+        { reading_classwork_id: 501, reading_assignment_id: 5001, display_order: 1 },
+      ],
+    });
+    api.createAssessment.mockResolvedValue({
+      remediation_request_id: "00000000-0000-4000-8000-000000000001",
+      intervention_id: 12,
+      classwork_id: 900,
+      classwork_assignment_id: 901,
+      quiz_id: 902,
+      draft_format: "QUIZ",
+      grade_treatment: "WRITTEN_WORK",
+      is_published: false,
+    });
+    api.previewScore.mockResolvedValue({
+      score_adjustment_cap: 75,
+      previews: [{
+        assignment_id: 101,
+        title: "Worksheet 1",
+        original_score: 10,
+        max_points: 20,
+        max_adjusted_score: 15,
+        possible_gain: 5,
+        cap_percentage: 75,
+        was_adjusted: true,
+        was_capped: true,
+      }],
+      disclaimer: "Hypothetical maximum only",
+    });
+    api.projectGrade.mockResolvedValue({
+      status: "UNAVAILABLE",
+      grade_representation: "TRANSMUTED_TERM_GRADE",
+      target_projections: [],
+      eligible_target_gains: [],
+      additional_eligible_targets_have_positive_improvement: false,
+      assumptions: [],
+      unavailable_reasons: [],
+      ai_midterm_what_if: { status: "UNAVAILABLE", target_estimates: [], unavailable_reasons: [], limitations: [] },
+    });
+  });
+
+  afterEach(cleanup);
+
+  it("preflights and saves the reviewed draft once as unpublished", async () => {
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+    fireEvent.click(screen.getByRole("button", { name: /Generate with AI/i }));
+    const dialog = await screen.findByRole("dialog", { name: /AI Remediation Draft Preview/i });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save Assessment Draft" }));
+
+    await waitFor(() => expect(api.createAssessment).toHaveBeenCalledTimes(1));
+    expect(api.preflightDraft).toHaveBeenCalledWith(12, mockQuizDraft);
+    expect(api.preflightDraft.mock.invocationCallOrder[0]).toBeLessThan(
+      api.createAssessment.mock.invocationCallOrder[0]
+    );
+    expect(api.createAssessment).toHaveBeenCalledWith(
+      12,
+      expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      mockQuizDraft
+    );
+    expect(await within(dialog).findByText("Assessment draft saved")).toBeTruthy();
+    expect(within(dialog).getByText("Saved Unpublished")).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Open Saved Assessment" })).toBeTruthy();
+    expect(within(dialog).queryByRole("button", { name: "Save Assessment Draft" })).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close Preview" }));
+    expect(await screen.findByText(mockQuizDraft.title)).toBeTruthy();
+    expect(screen.getByText("20 points")).toBeTruthy();
+    expect(screen.getByText("Unpublished")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "View Assessment" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit Assessment" })).toBeTruthy();
+    expect(screen.queryByText("No activity created yet")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Generate with AI/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Continue to Quiz Builder/i })).toBeNull();
+  });
+
+  it("reopens a persisted unpublished assessment from workspace progress", async () => {
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      plan: {
+        teacher_choice: "QUIZ",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        score_adjustment_cap: 75,
+        selected_resources: [{ kind: "CLASSWORK", id: 501 }],
+        ai_suggestion: null,
+      },
+      resources: [sampleReading],
+      progress: {
+        ...workspace.progress,
+        assigned_remediation: [{
+          title: mockQuizDraft.title,
+          assignment_id: 901,
+          classwork_id: 900,
+          classwork_type: "QUIZ",
+          is_published: false,
+          component: "WRITTEN_WORK",
+          is_graded: true,
+          submission_status: "draft",
+          grade: null,
+          total_points: 20,
+          original_assignment_id: 101,
+          original_title: "Worksheet 1",
+        }],
+      },
+    });
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(mockQuizDraft.title)).toBeTruthy();
+    expect(screen.getByText("Draft")).toBeTruthy();
+    expect(screen.getByText("Unpublished")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "View Assessment" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit Assessment" })).toBeTruthy();
+    expect(screen.queryByText("No activity created yet")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Generate with AI/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Continue to Quiz Builder/i })).toBeNull();
+  });
+
+  it("shows the backend point-matching failure and does not create an assessment", async () => {
+    api.preflightDraft.mockRejectedValue(
+      new InterventionApiError(
+        422,
+        "Remedial draft total points (24) must equal original classwork maximum points (20)"
+      )
+    );
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+    fireEvent.click(screen.getByRole("button", { name: /Generate with AI/i }));
+    const dialog = await screen.findByRole("dialog", { name: /AI Remediation Draft Preview/i });
+    fireEvent.click(within(dialog).getAllByRole("button", { name: /Edit Draft/i })[0]);
+    fireEvent.change(within(dialog).getAllByLabelText("Points:")[0], { target: { value: "14" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save Assessment Draft" }));
+
+    expect(await within(dialog).findByText(/24.*must equal.*20/i)).toBeTruthy();
+    expect(api.createAssessment).not.toHaveBeenCalled();
+    expect(within(dialog).getByText("24 Total Points")).toBeTruthy();
+  });
+
+  it("reuses the idempotency key when retrying an uncertain save", async () => {
+    api.createAssessment
+      .mockRejectedValueOnce(new Error("Connection interrupted while saving."))
+      .mockResolvedValueOnce({
+        remediation_request_id: "00000000-0000-4000-8000-000000000001",
+        intervention_id: 12,
+        classwork_id: 900,
+        classwork_assignment_id: 901,
+        quiz_id: 902,
+        draft_format: "QUIZ",
+        grade_treatment: "WRITTEN_WORK",
+        is_published: false,
+      });
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+    fireEvent.click(screen.getByRole("button", { name: /Generate with AI/i }));
+    const dialog = await screen.findByRole("dialog", { name: /AI Remediation Draft Preview/i });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save Assessment Draft" }));
+    expect(await within(dialog).findByText("Connection interrupted while saving.")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save Assessment Draft" }));
+
+    await waitFor(() => expect(api.createAssessment).toHaveBeenCalledTimes(2));
+    expect(api.createAssessment.mock.calls[0][1]).toBe(api.createAssessment.mock.calls[1][1]);
+    expect(await within(dialog).findByText("Saved Unpublished")).toBeTruthy();
+  });
+
+  it("requests the original target maximum instead of silently generating a 20-point graded draft", async () => {
+    const fortyPointDetail: TeacherInterventionDetail = {
+      ...detailWithClassworks,
+      diagnosis_snapshot: {
+        ...detailWithClassworks.diagnosis_snapshot,
+        supporting_activities: [{
+          classwork_id: 101,
+          classwork_assignment_id: 101,
+          title: "Forty Point Worksheet",
+          component: "WRITTEN_WORK",
+          score: 20,
+          possible_score: 40,
+          percent: 50,
+        }],
+      },
+    };
+    api.previewScore.mockResolvedValue({
+      score_adjustment_cap: 75,
+      previews: [{ assignment_id: 101, title: "Forty Point Worksheet", original_score: 20, max_points: 40, max_adjusted_score: 30, possible_gain: 10, cap_percentage: 75, was_adjusted: true, was_capped: true }],
+      disclaimer: "Hypothetical maximum only",
+    });
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={fortyPointDetail} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+    await waitFor(() => expect(api.previewScore).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: /Generate with AI/i }));
+
+    await waitFor(() => expect(api.generateDraft).toHaveBeenCalledWith(
+      12,
+      expect.objectContaining({ total_points: 40 })
+    ));
   });
 });
 

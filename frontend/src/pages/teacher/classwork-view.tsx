@@ -6,8 +6,8 @@ import {
   BookOpen,
   CheckSquare,
 } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AttachmentDisplay from "@/components/attachment-display";
 import { API_URL, apiFetch } from "@/lib/api";
 import { Badge } from "@/components/retroui/Badge";
@@ -90,6 +90,7 @@ export default function ClassworkView({
 }: ClassworkViewProps = {}) {
   const toast = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const params = useParams<{ classworkId: string }>();
   const isStandalone = !classwork;
 
@@ -112,6 +113,7 @@ export default function ClassworkView({
   const [isArchiving, setIsArchiving] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const editDeepLinkHandledRef = useRef(false);
   const [statusFilter, setStatusFilter] = useState<
     "all" | "on_time" | "late" | "missing"
   >("all");
@@ -181,6 +183,18 @@ export default function ClassworkView({
   useEffect(() => {
     setSelectedAssignmentId("all");
   }, [selected?.classwork_id]);
+
+  useEffect(() => {
+    const requestsEdit = new URLSearchParams(location.search).get("edit") === "1";
+    if (!requestsEdit) {
+      editDeepLinkHandledRef.current = false;
+      return;
+    }
+    if (selected && !editDeepLinkHandledRef.current) {
+      editDeepLinkHandledRef.current = true;
+      setShowEditModal(true);
+    }
+  }, [location.search, selected]);
 
   const loadTrackingAndAnalysis = useCallback(async () => {
     if (!selected) return;
@@ -820,7 +834,7 @@ export default function ClassworkView({
                       Instructions
                     </Card.Title>
                     <Card className=" shadow-none w-full p-2">
-                      <p className="text-sm px-2">
+                      <p className="whitespace-pre-wrap break-words text-sm px-2">
                         {selected.instructions ||
                           selected.description ||
                           "No instructions provided."}

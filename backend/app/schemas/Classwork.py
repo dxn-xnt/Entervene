@@ -2,6 +2,7 @@
 from pydantic import BaseModel, Field, model_validator
 from typing import Optional
 from datetime import datetime
+from uuid import UUID
 
 
 class ActivityRubricLevelInput(BaseModel):
@@ -119,6 +120,9 @@ class CwAssignmentRow(BaseModel):
     is_published: bool
     show_scores: bool
     is_locked: Optional[bool] = False
+    recipient_student_id: Optional[UUID] = None
+    recipient_student_name: Optional[str] = None
+    source_intervention_id: Optional[int] = None
 
 
 class ClassworkResponse(BaseModel):

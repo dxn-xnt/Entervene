@@ -65,6 +65,14 @@ import LessonItemLine, {
   type LessonItem,
   type LinkedClassworkItem,
 } from "@/components/item-line/lesson";
+import { Alert } from "@/components/retroui/Alert";
+import {
+  fetchClassSubjectDeliveries,
+  confirmLessonDelivery,
+  correctLessonDelivery,
+  type LessonDeliveryRecord,
+} from "@/lib/lesson-delivery-api";
+import LessonDeliveryCorrectionModal from "./forms/lesson-delivery-correction-modal";
 import {
   getTeacherRecordPeriods,
   getTeacherStudentRecordDetail,
@@ -428,7 +436,16 @@ function LessonsTab({
   const [lessonSort, setLessonSort] = useState<
     "order" | "newest" | "oldest" | "title"
   >("order");
-
+  const [deliveriesByLessonId, setDeliveriesByLessonId] = useState<
+    Record<number, LessonDeliveryRecord>
+  >({});
+  const [deliveryLoadingLessonId, setDeliveryLoadingLessonId] = useState<
+    number | null
+  >(null);
+  const [deliveryError, setDeliveryError] = useState("");
+  const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
+  const [correctionTargetLesson, setCorrectionTargetLesson] =
+    useState<LessonItem | null>(null);
 
   useEffect(() => {
     if (
@@ -493,6 +510,22 @@ function LessonsTab({
       null
     );
   }, [detail.subject_loads, selectedSubjectId]);
+
+  const subjectLoad = useMemo(() => {
+    return loads.find(
+      (load) =>
+        load.class_id === Number(detail.class_id) &&
+        load.subject_id === Number(selectedSubjectId),
+    );
+  }, [detail.class_id, loads, selectedSubjectId]);
+
+  const effectivePeriodId = useMemo(() => {
+    if (selectedPeriodId) return Number(selectedPeriodId);
+    const active = periods.find((p) => p.is_active);
+    if (active) return active.id;
+    if (periods.length > 0) return periods[0].id;
+    return subjectLoad?.academic_period_id || null;
+  }, [selectedPeriodId, periods, subjectLoad?.academic_period_id]);
 
   useEffect(() => {
     if (initialSubjectId) {
@@ -583,6 +616,128 @@ function LessonsTab({
   useEffect(() => {
     void loadCuratedGoals();
   }, [loadCuratedGoals]);
+
+  const loadDeliveries = useCallback(async () => {
+    if (!detail.class_id || !selectedSubjectId || !effectivePeriodId) return;
+    try {
+      const records = await fetchClassSubjectDeliveries(
+        Number(detail.class_id),
+        Number(selectedSubjectId),
+        effectivePeriodId,
+      );
+      const map: Record<number, LessonDeliveryRecord> = {};
+      records.forEach((rec) => {
+        if (rec.is_active) {
+          map[rec.lesson_id] = rec;
+        }
+      });
+      setDeliveriesByLessonId(map);
+    } catch (err) {
+      console.warn("Failed to load lesson delivery records:", err);
+    }
+  }, [detail.class_id, selectedSubjectId, effectivePeriodId]);
+
+  useEffect(() => {
+    void loadDeliveries();
+  }, [loadDeliveries]);
+
+  const handleConfirmDelivery = async (lesson: LessonItem) => {
+    if (!detail.class_id || !selectedSubjectId || !effectivePeriodId) {
+      setDeliveryError(
+        "Academic period context is missing. Please select an academic term.",
+      );
+      return;
+    }
+    setDeliveryLoadingLessonId(lesson.lesson_id);
+    setDeliveryError("");
+    try {
+      const delivery = await confirmLessonDelivery({
+        lesson_id: lesson.lesson_id,
+        class_id: Number(detail.class_id),
+        subject_id: Number(selectedSubjectId),
+        academic_period_id: effectivePeriodId,
+      });
+      setDeliveriesByLessonId((prev) => ({
+        ...prev,
+        [lesson.lesson_id]: delivery,
+      }));
+      setLessons((prev) =>
+        prev.map((l) =>
+          l.lesson_id === lesson.lesson_id
+            ? { ...l, delivery, is_taught: true }
+            : l,
+        ),
+      );
+      if (
+        activeLessonDetail &&
+        activeLessonDetail.lesson_id === lesson.lesson_id
+      ) {
+        setActiveLessonDetail((prev) =>
+          prev ? { ...prev, delivery, is_taught: true } : null,
+        );
+      }
+      toast.success({
+        title: `Lesson "${lesson.title}" confirmed as taught.`,
+      });
+    } catch (err) {
+      setDeliveryError(
+        err instanceof Error
+          ? err.message
+          : "Failed to confirm lesson delivery.",
+      );
+    } finally {
+      setDeliveryLoadingLessonId(null);
+    }
+  };
+
+  const openCorrectionDialog = (lesson: LessonItem) => {
+    setCorrectionTargetLesson(lesson);
+    setIsCorrectionModalOpen(true);
+  };
+
+  const handleConfirmCorrection = async (
+    deliveryId: number,
+    reason: string,
+  ) => {
+    if (!correctionTargetLesson) return;
+    const lessonId = correctionTargetLesson.lesson_id;
+    setDeliveryLoadingLessonId(lessonId);
+    setDeliveryError("");
+    try {
+      await correctLessonDelivery(deliveryId, { reason });
+      setDeliveriesByLessonId((prev) => {
+        const next = { ...prev };
+        delete next[lessonId];
+        return next;
+      });
+      setLessons((prev) =>
+        prev.map((l) =>
+          l.lesson_id === lessonId
+            ? { ...l, delivery: null, is_taught: false }
+            : l,
+        ),
+      );
+      if (activeLessonDetail && activeLessonDetail.lesson_id === lessonId) {
+        setActiveLessonDetail((prev) =>
+          prev ? { ...prev, delivery: null, is_taught: false } : null,
+        );
+      }
+      toast.success({
+        title: `Delivery confirmation for "${correctionTargetLesson.title}" has been corrected.`,
+      });
+      setIsCorrectionModalOpen(false);
+      setCorrectionTargetLesson(null);
+    } catch (err) {
+      setDeliveryError(
+        err instanceof Error
+          ? err.message
+          : "Failed to correct lesson delivery.",
+      );
+      throw err;
+    } finally {
+      setDeliveryLoadingLessonId(null);
+    }
+  };
 
   const loadLessonClassworks = async (lessonId: number) => {
     setLoadingClassworkId(lessonId);
@@ -827,6 +982,9 @@ function LessonsTab({
     const isExpanded = expandedLessonId === lesson.lesson_id;
     const classworks = linkedClassworks[lesson.lesson_id] || [];
     const isLoadingCw = loadingClassworkId === lesson.lesson_id;
+    const delivery =
+      deliveriesByLessonId[lesson.lesson_id] || lesson.delivery || null;
+    const isDelivered = Boolean(lesson.is_taught || delivery?.is_active);
 
     return (
       <LessonItemLine
@@ -839,6 +997,11 @@ function LessonsTab({
         onOpenLessonDetail={openLessonDetail}
         onOpenClassworkDetail={openClassworkDetail}
         onOpenClassworkForm={openClassworkForm}
+        delivery={delivery}
+        isDelivered={isDelivered}
+        isDeliveryLoading={deliveryLoadingLessonId === lesson.lesson_id}
+        onConfirmDelivery={handleConfirmDelivery}
+        onOpenCorrectionDialog={openCorrectionDialog}
       />
     );
   };
@@ -848,6 +1011,15 @@ function LessonsTab({
       {activeLessonDetail ? (
         /* ── Dedicated Full-Screen Lesson Detail View ── */
         <div className="flex flex-col flex-1 min-w-0 w-full animate-in fade-in-50 duration-200">
+          {deliveryError && (
+            <Alert
+              status="error"
+              onClose={() => setDeliveryError("")}
+              className="mx-3 mt-3 sm:mx-4 md:mx-6"
+            >
+              <Alert.Description>{deliveryError}</Alert.Description>
+            </Alert>
+          )}
           <TeacherLessonDetailScreen
             lesson={activeLessonDetail as any}
             subjectName={currentSubjectLoad?.subject_name || "Subject"}
@@ -873,6 +1045,20 @@ function LessonsTab({
             isLoadingClasswork={
               loadingClassworkId === activeLessonDetail.lesson_id
             }
+            delivery={
+              deliveriesByLessonId[activeLessonDetail.lesson_id] ||
+              activeLessonDetail.delivery ||
+              null
+            }
+            isDelivered={Boolean(
+              activeLessonDetail.is_taught ||
+                deliveriesByLessonId[activeLessonDetail.lesson_id]?.is_active,
+            )}
+            isDeliveryLoading={
+              deliveryLoadingLessonId === activeLessonDetail.lesson_id
+            }
+            onConfirmDelivery={handleConfirmDelivery}
+            onOpenCorrectionDialog={openCorrectionDialog}
           />
         </div>
       ) : (
@@ -937,6 +1123,17 @@ function LessonsTab({
                   </div>
                 </div>
               </div>
+
+              {/* Delivery error alert */}
+              {deliveryError && (
+                <Alert
+                  status="error"
+                  onClose={() => setDeliveryError("")}
+                  className="mb-2"
+                >
+                  <Alert.Description>{deliveryError}</Alert.Description>
+                </Alert>
+              )}
 
               {/* Lessons List */}
               {lessonsError ? (
@@ -1190,6 +1387,28 @@ function LessonsTab({
           onSaved={(updated) => {
             setCuratedGoals(updated.items || []);
           }}
+        />
+      )}
+
+      {correctionTargetLesson && (
+        <LessonDeliveryCorrectionModal
+          open={isCorrectionModalOpen}
+          onOpenChange={(open) => {
+            setIsCorrectionModalOpen(open);
+            if (!open) setCorrectionTargetLesson(null);
+          }}
+          lessonTitle={correctionTargetLesson.title}
+          deliveryId={
+            deliveriesByLessonId[correctionTargetLesson.lesson_id]?.delivery_id ||
+            correctionTargetLesson.delivery?.delivery_id ||
+            0
+          }
+          deliveredAt={
+            deliveriesByLessonId[correctionTargetLesson.lesson_id]?.delivered_at ||
+            correctionTargetLesson.delivery?.delivered_at ||
+            null
+          }
+          onConfirmCorrection={handleConfirmCorrection}
         />
       )}
     </>

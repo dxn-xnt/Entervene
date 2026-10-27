@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.academic.Lesson import Lesson
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.quiz.Question import Question
 from app.models.quiz.QuestionOption import QuestionOption
 from app.models.quiz.Quiz import Quiz
@@ -344,6 +345,12 @@ def _readiness_errors(classwork: Classwork, quiz: Quiz | None) -> list[str]:
 
 
 def _lesson_belongs_to_classwork(db: Session, classwork: Classwork, lesson_id: int) -> bool:
+    linked = db.query(ClassworkLesson).filter_by(
+        classwork_id=classwork.classwork_id,
+        lesson_id=lesson_id,
+    ).first()
+    if linked is not None:
+        return True
     return db.query(Lesson).filter(
         Lesson.lesson_id == lesson_id,
         Lesson.subject_id == classwork.subject_id,

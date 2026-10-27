@@ -65,7 +65,16 @@ async function read<T>(path: string, method = "GET", body?: unknown): Promise<T>
   const response = await apiFetch(path, { method, ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new InterventionApiError(response.status, typeof body.detail === "string" ? body.detail : "Unable to complete the request. Please try again.");
+    const detail = body.detail;
+    const message = typeof detail === "string"
+      ? detail
+      : Array.isArray(detail)
+        ? detail.map((item: { loc?: Array<string | number>; msg?: string }) => {
+          const field = (item.loc ?? []).filter((part) => part !== "body").join(".");
+          return field ? `${field}: ${item.msg ?? "Validation error"}` : (item.msg ?? "Validation error");
+        }).join("; ")
+        : "Unable to complete the request. Please try again.";
+    throw new InterventionApiError(response.status, message);
   }
   return response.json() as Promise<T>;
 }
@@ -122,6 +131,7 @@ export const generateStudentReviewer = (id: number, materialId: number) => read<
 export const sendStudentReviewer = (id: number, materialId: number) => read<SupportMaterial>(`${base}/${id}/materials/${materialId}/send`, "POST");
 
 export type RemediationFormat = "QUIZ" | "TOS" | "CLASSWORK" | "EXISTING_MATERIAL_ONLY";
+export type RemediationGradeTreatment = "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION";
 export interface RemediationResource {
   kind: "LESSON" | "CLASSWORK"; id: number; title: string; description: string;
   lesson: string; topic: string; attachments: string[]; classwork_type?: string;
@@ -149,12 +159,12 @@ export interface RemediationProgress {
 }
 export interface RemediationPlan {
   teacher_choice: RemediationFormat | null;
-  grade_treatment?: "PRACTICE_ONLY" | "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | null;
+  grade_treatment?: RemediationGradeTreatment | null;
   original_exam_assignment_id?: number | null;
   target_assignment_ids?: number[];
   score_adjustment_cap?: number;
   selected_resources: Array<{ kind: "LESSON" | "CLASSWORK"; id: number }>;
-  ai_suggestion: null | { recommended_format: RemediationFormat; reason: string; focus: Array<{ competency: string }>; evidence_used: Record<string, unknown> };
+  ai_suggestion: null | { recommended_format: RemediationFormat; recommended_grade_treatment?: RemediationGradeTreatment | null; reason: string; focus: Array<{ competency: string }>; evidence_used: Record<string, unknown> };
 }
 export interface OriginalExamination { assignment_id: number; title: string; subtype: "SUMMATIVE_1" | "SUMMATIVE_2" | "TERM_EXAM"; score: number; total_points: number }
 export interface RemediationClassworkTarget {
@@ -307,3 +317,150 @@ export function matchingCandidate(prediction: DevelopmentCurrentTermListItem, ca
     && prediction.projected_final_term_grade !== null
     && prediction.projected_final_term_grade < (candidate.passing_threshold ?? 85));
 }
+
+export interface RemediationDraftGenerationRequest {
+  draft_format: "QUIZ" | "CLASSWORK";
+  target_component: "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION";
+  grade_treatment: "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION" | "PRACTICE_ONLY";
+  exam_subtype?: "SUMMATIVE_1" | "SUMMATIVE_2" | "TERM_EXAM" | null;
+  item_count?: number;
+  total_points?: number;
+  activity_mode?: "ONLINE" | "MANUAL";
+  selected_lesson_ids?: number[] | null;
+  selected_competency_ids?: number[] | null;
+  selected_quiz_question_ids?: number[] | null;
+  selected_reading_ids?: number[] | null;
+  custom_teacher_instructions?: string | null;
+}
+
+export interface RemediationQuizOptionDraft {
+  option_text: string;
+  option_order: number;
+}
+
+export interface RemediationTeacherAnswerKey {
+  correct_answer: string;
+  explanation: string;
+  scoring_guide?: string | null;
+}
+
+export interface RemediationQuizQuestionDraft {
+  question_text: string;
+  question_type: "MULTIPLE_CHOICE" | "TRUE_FALSE" | "IDENTIFICATION" | "SHORT_ANSWER";
+  points: number;
+  display_order: number;
+  difficulty_level?: "EASY" | "MEDIUM" | "HARD" | null;
+  targeted_competency_id: number;
+  targeted_lesson_id: number;
+  targeted_quiz_question_id?: number | null;
+  options: RemediationQuizOptionDraft[];
+  teacher_answer_key: RemediationTeacherAnswerKey;
+}
+
+export interface RemediationQuizDraft {
+  draft_format: "QUIZ";
+  target_component: "WRITTEN_WORK" | "EXAMINATION";
+  grade_treatment: "WRITTEN_WORK" | "EXAMINATION" | "PRACTICE_ONLY";
+  exam_subtype?: "SUMMATIVE_1" | "SUMMATIVE_2" | "TERM_EXAM" | null;
+  title: string;
+  instructions: string;
+  total_points: number;
+  duration_minutes?: number | null;
+  settings?: Record<string, unknown>;
+  questions: RemediationQuizQuestionDraft[];
+}
+
+export interface RemediationTaskDraft {
+  task_number: number;
+  title: string;
+  instructions: string;
+  targeted_competency_id: number;
+  targeted_lesson_id: number;
+}
+
+export interface RemediationDeliverableDraft {
+  deliverable_name: string;
+  deliverable_type: "DOCUMENT" | "SPREADSHEET" | "PRESENTATION" | "IMAGE" | "PDF" | "AUDIO" | "VIDEO" | "CODE" | "WRITTEN_REPORT";
+  description: string;
+}
+
+export interface RemediationRubricLevelDraft {
+  level_name: string;
+  description: string;
+  points: number;
+  display_order: number;
+}
+
+export interface RemediationTeacherClassworkGuide {
+  exemplar_or_expected_response: string;
+  evaluation_notes: string;
+  common_misconceptions: string[];
+}
+
+export interface RemediationClassworkDraft {
+  draft_format: "CLASSWORK";
+  target_component: "WRITTEN_WORK" | "PERFORMANCE_TASK";
+  grade_treatment: "WRITTEN_WORK" | "PERFORMANCE_TASK" | "PRACTICE_ONLY";
+  title: string;
+  description: string;
+  student_instructions: string;
+  total_points: number;
+  activity_mode: "ONLINE" | "MANUAL";
+  tasks: RemediationTaskDraft[];
+  deliverables: RemediationDeliverableDraft[];
+  supported_upload_formats: string[];
+  rubric_levels: RemediationRubricLevelDraft[];
+  teacher_guide: RemediationTeacherClassworkGuide;
+}
+
+export type RemediationGeneratedDraft = RemediationQuizDraft | RemediationClassworkDraft;
+
+export const generateRemediationDraft = (
+  id: number,
+  payload: RemediationDraftGenerationRequest
+) => read<RemediationGeneratedDraft>(`${base}/${id}/remediation/draft`, "POST", payload);
+
+export interface RemediationDraftPreflightResult {
+  is_valid: boolean;
+  draft_format: "QUIZ" | "CLASSWORK";
+  target_component: "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION";
+  grade_treatment: RemediationGradeTreatment;
+  total_points: number;
+  authoritative_cap: number;
+  target_assignment_ids: number[];
+  reading_prerequisites: Array<{
+    reading_classwork_id: number;
+    reading_assignment_id: number;
+    display_order: number;
+  }>;
+}
+
+export interface RemediationAssessmentCreateResult {
+  remediation_request_id: string;
+  intervention_id: number;
+  classwork_id: number;
+  classwork_assignment_id: number;
+  quiz_id?: number | null;
+  draft_format: "QUIZ" | "CLASSWORK";
+  grade_treatment: RemediationGradeTreatment;
+  is_published: false;
+}
+
+export const preflightRemediationDraft = (
+  id: number,
+  draft: RemediationGeneratedDraft
+) => read<RemediationDraftPreflightResult>(
+  `${base}/${id}/remediation/preflight`,
+  "POST",
+  { draft, validation_stage: "SAVE_DRAFT" }
+);
+
+export const createRemediationAssessment = (
+  id: number,
+  remediationRequestId: string,
+  draft: RemediationGeneratedDraft
+) => read<RemediationAssessmentCreateResult>(
+  `${base}/${id}/remediation/assessment`,
+  "POST",
+  { remediation_request_id: remediationRequestId, draft }
+);
