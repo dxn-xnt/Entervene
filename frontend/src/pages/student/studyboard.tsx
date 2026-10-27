@@ -403,7 +403,7 @@ const StoryBoard = () => {
                   />
 
                   {/* Enrolled Subjects Container */}
-                  <Card className="flex w-full min-w-0 flex-col gap-3">
+                  <Card className="flex w-full min-w-0 flex-col gap-3 -mt-4">
                     {isLoading ? (
                       <LoadingPanel label="Loading subjects..." />
                     ) : error ? (

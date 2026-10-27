@@ -4,10 +4,10 @@ import { studentClassworkPath } from "@/lib/student-classwork-navigation";
 import {
   BookOpen,
   ClipboardList,
-  ChevronRight,
-  FileText,
   GraduationCap,
 } from "lucide-react";
+import LessonItemLine from "@/components/item-line/lesson";
+import ClassworkItemLine from "@/components/item-line/classwork";
 import { StudentLessonDetailScreen } from "@/pages/student/lesson-view";
 import { apiFetch, getLessonGoals, getStudentTodos, type LessonGoalItemResponse, type TodoItem } from "@/lib/api";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
@@ -72,22 +72,7 @@ function isQuizType(value?: string | null) {
   return value?.toUpperCase() === "QUIZ";
 }
 
-function ClassworkIcon({
-  type,
-  size = 16,
-}: {
-  type?: string | null;
-  size?: number;
-}) {
-  switch (type?.toLowerCase()) {
-    case "quiz":
-      return <ClipboardList size={size} />;
-    case "assignment":
-      return <BookOpen size={size} />;
-    default:
-      return <FileText size={size} />;
-  }
-}
+
 
 function fmtDate(dateStr?: string | null) {
   if (!dateStr) return "";
@@ -479,9 +464,9 @@ export default function SubjectLessonTab({
       setSelectedClasswork((prev) =>
         prev
           ? {
-              ...prev,
-              submission_status: attempt.status,
-            }
+            ...prev,
+            submission_status: attempt.status,
+          }
           : null,
       );
       updateClassworkStatus(
@@ -618,9 +603,9 @@ export default function SubjectLessonTab({
       setSelectedClasswork((prev) =>
         prev
           ? {
-              ...prev,
-              submission_status: sub.status,
-            }
+            ...prev,
+            submission_status: sub.status,
+          }
           : null,
       );
       updateClassworkStatus(assignmentId, sub.status);
@@ -704,52 +689,37 @@ export default function SubjectLessonTab({
 
   const renderStudentLessonItem = (lesson: Lesson) => {
     return (
-      <div
+      <LessonItemLine
         key={lesson.lesson_id}
-        className="w-full overflow-hidden rounded border-2 border-black bg-primary shadow-md transition-all hover:translate-x-1"
         id={`student-lesson-${lesson.lesson_id}`}
+        lesson={lesson}
+        isExpanded={expandedId === lesson.lesson_id}
+        onToggle={() => toggleLesson(lesson.lesson_id)}
+        onOpenLessonDetail={() => void openLessonDetail(lesson)}
+        showPublicationStatus={false}
+        badge={
+          lesson.attachments.length > 0 ? (
+            <Badge
+              variant="secondary"
+              size="sm"
+              className="rounded border border-black bg-success px-2 py-0.5 text-sm font-bold text-black"
+            >
+              {lesson.attachments.length} material{lesson.attachments.length === 1 ? "" : "s"}
+            </Badge>
+          ) : null
+        }
+        subtitle={
+          lesson.updated_at
+            ? `Updated ${fmtDate(lesson.updated_at)}`
+            : lesson.created_at
+              ? `Created ${fmtDate(lesson.created_at)}`
+              : ""
+        }
       >
-        <div className="flex items-stretch">
-          <button
-            type="button"
-            onClick={() => void openLessonDetail(lesson)}
-            className="min-w-0 flex-1 cursor-pointer p-4 text-left"
-          >
-            <span className="flex flex-wrap items-center justify-between gap-2 pr-2">
-              <span className="text-xl font-semibold leading-tight hover:underline sm:text-2xl">{lesson.title}</span>
-              <span className="flex flex-wrap items-center gap-2">
-                {lesson.attachments.length > 0 && (
-                  <Badge variant="secondary" size="sm" className="rounded border border-black bg-success px-2 py-0.5 text-sm font-bold text-black">
-                    {lesson.attachments.length} material{lesson.attachments.length === 1 ? "" : "s"}
-                  </Badge>
-                )}
-              </span>
-            </span>
-            <span className="mt-1 block text-sm text-foreground">
-              {lesson.description ||
-                (lesson.updated_at
-                  ? `Updated ${fmtDate(lesson.updated_at)}`
-                  : lesson.created_at
-                    ? `Created ${fmtDate(lesson.created_at)}`
-                    : "")}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => toggleLesson(lesson.lesson_id)}
-            aria-label={`${expandedId === lesson.lesson_id ? "Collapse" : "Expand"} ${lesson.title} classwork`}
-            aria-expanded={expandedId === lesson.lesson_id}
-            className="flex w-10 shrink-0 cursor-pointer items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            <ChevronRight className={`size-4 transition-transform ${expandedId === lesson.lesson_id ? "rotate-90" : ""}`} aria-hidden="true" />
-          </button>
+        <div className="flex flex-col gap-2">
+          {renderLessonClassworkCards(lesson, true)}
         </div>
-        {expandedId === lesson.lesson_id && (
-          <div className="flex flex-col gap-2 border-t-2 border-black bg-white p-3">
-            {renderLessonClassworkCards(lesson, true)}
-          </div>
-        )}
-      </div>
+      </LessonItemLine>
     );
   };
 
@@ -794,41 +764,36 @@ export default function SubjectLessonTab({
       const badge = getStatusBadge(cw.submission_status, cw.due_date);
       const isLoading = detailLoadingId === cw.classwork_assignment_id;
       return (
-        <Card
+        <ClassworkItemLine
           key={cw.classwork_assignment_id}
+          className={nested ? "shadow-none! hover:shadow-none!" : ""}
+          item={{
+            classwork_id: cw.classwork_id,
+            title: cw.title,
+            classwork_type: cw.classwork_type,
+            classwork_category: cw.classwork_category,
+            due_date: cw.due_date,
+            total_points: cw.total_points,
+          }}
+          subtitle={
+            cw.due_date
+              ? `Due ${new Date(cw.due_date).toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}`
+              : "No due date"
+          }
+          showPublicationStatus={false}
+          showCategory={false}
+          showType={true}
           onClick={() => !isLoading && openClassworkDetail(cw)}
-          className={`block w-full cursor-pointer border-black ${nested ? "shadow-none hover:shadow-none" : ""}`}
-        >
-          <Card.Content className="flex items-center justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <ClassworkIcon type={cw.classwork_type} size={22} />
-
-                <Card.Title className="mb-0 truncate text-base">
-                  {cw.title}
-                </Card.Title>
-              </div>
-
-              <p className="mt-1 text-sm font-medium text-gray-600">
-                {cw.due_date
-                  ? `Due ${new Date(cw.due_date).toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}`
-                  : "No due date"}
-              </p>
-            </div>
-
-            <div className="flex shrink-0 items-center gap-2">
+          rightContent={
+            <>
               {badge && (
-                <Badge variant="secondary" size="sm" className={badge.cls}>
+                <Badge variant="solid" size="sm">
                   {badge.label}
                 </Badge>
               )}
-
-              {isLoading && (
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-              )}
-            </div>
-          </Card.Content>
-        </Card>
+            </>
+          }
+        />
       );
     });
   };
@@ -999,7 +964,13 @@ export default function SubjectLessonTab({
                 </div>
 
                 <div className="space-y-3">
-                  {sortedLessons.length === 0 ? <StudentEmptyState icon={<BookOpen />} title="No lessons match this filter" description="Choose another lesson or clear the filter to see all lessons." action={{ label: "Clear filter", onClick: () => setLessonFilter("all") }} /> : sortedLessons.map(renderStudentLessonItem)}
+                  {sortedLessons.length === 0 ?
+                    <StudentEmptyState icon={<BookOpen />} title="No lessons match this filter" description="Choose another lesson or clear the filter to see all lessons."
+                      action={{
+                        label: "Clear filter",
+                        onClick: () => setLessonFilter("all")
+                      }} /> :
+                    sortedLessons.map(renderStudentLessonItem)}
                 </div>
               </div>
 

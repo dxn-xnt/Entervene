@@ -24,7 +24,7 @@ export function studentClassworkSourceLabel(returnPath: string): string {
   }
   if (pathname.startsWith("/student/grades")) return "Grades";
   if (pathname.startsWith("/student/studyboard")) return "Study Board";
-  if (pathname.startsWith("/student/interventions")) return "Interventions";
+  if (pathname.startsWith("/student/interventions")) return "Study Support";
   return "Subjects";
 }
 

@@ -6,6 +6,7 @@ import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/student/button";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
+import { Progress } from "@/components/retroui/Progress";
 import { useToast } from "@/components/retroui/Toast";
 import ClassworkItemLine from "@/components/item-line/classwork";
 import { routes } from "@/../routes";
@@ -23,6 +24,10 @@ import {
   type StudentSupportActivity,
 } from "@/lib/student-persistent-interventions-api";
 import { markInterventionViewed } from "@/lib/interventions-api";
+import { BookOpen, LockKeyhole, ChevronDown, ChevronUp } from "lucide-react";
+import { formatDate } from "@/lib/formatters";
+import { cn } from "@/lib/utils";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
 
 export default function StudentInterventionView() {
   const navigate = useNavigate();
@@ -39,6 +44,7 @@ export default function StudentInterventionView() {
   const [reviewer, setReviewer] = useState<StudentReviewerDetail | null>(null);
   const [isRead, setIsRead] = useState(false);
   const [activities, setActivities] = useState<StudentSupportActivity[]>([]);
+  const [isContentExpanded, setIsContentExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,6 +171,56 @@ export default function StudentInterventionView() {
       : "Your teacher has prepared additional study support for this subject.");
   const body = reviewer?.body?.trim() ?? "";
 
+  const allReadings =
+    intervention?.required_readings && intervention.required_readings.length > 0
+      ? intervention.required_readings
+      : Array.from(
+        new Map(
+          (activities ?? [])
+            .flatMap((act) => act.readings ?? [])
+            .map((r) => [r.assignment_id, r])
+        ).values()
+      );
+  const orderedReadings = [...allReadings].sort((left, right) => left.order - right.order);
+
+  const preparation =
+    intervention?.preparation ??
+    (activities ?? []).find((act) => act.preparation)?.preparation ??
+    (orderedReadings.length > 0
+      ? {
+        completed_count: orderedReadings.filter((r) => r.review_status === "REVIEWED").length,
+        required_count: orderedReadings.length,
+      }
+      : null);
+
+  const isReadinessSatisfied = preparation
+    ? "is_satisfied" in preparation
+      ? preparation.is_satisfied
+      : preparation.completed_count >= preparation.required_count
+    : true;
+
+  const isHistorical =
+    (activities ?? []).length > 0 &&
+    activities.every((act) => act.access_state === "HISTORICAL");
+
+  const totalReadings = orderedReadings.length;
+  const reviewedReadings = orderedReadings.filter((r) => r.review_status === "REVIEWED").length;
+  const readingPercentage = totalReadings > 0 ? Math.round((reviewedReadings / totalReadings) * 100) : 100;
+
+  const totalActivities = activities.length;
+  const completedActivities = activities.filter((a) =>
+    ["submitted", "graded", "completed"].includes(a.submission_status?.toLowerCase() ?? "")
+  ).length;
+  const activityPercentage = totalActivities > 0 ? Math.round((completedActivities / totalActivities) * 100) : 0;
+
+  const totalTasks = totalReadings + totalActivities;
+  const completedTasks = reviewedReadings + completedActivities;
+  const overallPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+  const gradedActivities = activities.filter((a) => a.grade != null && a.total_points != null);
+  const earnedPoints = gradedActivities.reduce((acc, a) => acc + (a.grade ?? 0), 0);
+  const maxPoints = gradedActivities.reduce((acc, a) => acc + (a.total_points ?? 0), 0);
+
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-clip">
@@ -177,7 +233,7 @@ export default function StudentInterventionView() {
                   <Breadcrumb.Item>
                     <Breadcrumb.Link
                       onClick={() => navigate(routes.student.interventions)}
-                      className="cursor-pointer tracking-normal hover:text-foreground"
+                      className="cursor-pointer hover:text-foreground"
                     >
                       Study Support
                     </Breadcrumb.Link>
@@ -194,112 +250,344 @@ export default function StudentInterventionView() {
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-6 border-t-2 border-border px-3 py-4 sm:px-4 sm:py-4 md:px-6">
               <div className="mx-auto w-full flex flex-col gap-4">
-                {/* Yellow Header Banner Card */}
-                <div className="flex flex-col gap-2">
-                  <Card className="w-full flex flex-col gap-1 bg-primary border-2 border-border p-3 sm:p-4 shadow-md">
-                    <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
-                      {title}
-                    </h1>
-                    <p className="text-sm font-medium text-foreground">
-                      {subjectName}
-                      {teacherName ? ` · ${teacherName}` : ""}
+                {/* Hero Support Information Card */}
+                <Card className="w-full flex flex-col gap-3 bg-primary border-2 border-border p-3 sm:p-4 shadow-md">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground truncate">
+                        {title}
+                      </h1>
+                      <p className="text-base text-foreground font-medium">
+                        Assigned by {teacherName ? teacherName : "Teacher"}
+                      </p>
+                    </div>
+                    {intervention?.status && (
+                      <Badge variant="solid">
+                        {intervention.status === "RESOLVED" ? "Resolved" : "Active"}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {(intervention?.activated_at || intervention?.resolved_at) && (
+                    <p className="text-sm text-foreground/85">
+                      {intervention.resolved_at
+                        ? `Resolved ${formatDate(intervention.resolved_at)}`
+                        : intervention.activated_at
+                          ? `Started ${formatDate(intervention.activated_at)}`
+                          : ""}
                     </p>
-                  </Card>
+                  )}
 
                   {/* Introduction paragraph */}
                   {introduction && (
-                    <p className="text-sm px-1 text-muted-foreground font-normal">
+                    <p className="text-sm text-foreground font-normal">
                       {introduction}
                     </p>
                   )}
-                </div>
 
-                {/* Supporting material from the teacher */}
-                {body && (
-                  <Card
-                    aria-label="Supporting material"
-                    className="w-full border-2 border-border bg-card p-4 sm:p-5 flex flex-col gap-3"
-                  >
-                    <h2 className="text-base sm:text-lg font-bold text-foreground">
-                      Supporting Material
-                    </h2>
-                    <div className="whitespace-pre-wrap text-sm text-foreground leading-relaxed">
-                      {body}
+                  {/* Supporting material from the teacher */}
+                  {body && (
+                    <div className="flex flex-col gap-1.5 pt-1">
+                      <span className="text-sm font-bold text-foreground">Supporting Material</span>
+                      <Card
+                        className={cn(
+                          "min-w-0 shadow-none relative transition-all duration-200 px-4 py-3 bg-card border-2 border-border",
+                          !isContentExpanded && body.length > 250 && "max-h-32 overflow-hidden"
+                        )}
+                      >
+                        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
+                          {body}
+                        </p>
+                        {!isContentExpanded && body.length > 250 && (
+                          <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent pointer-events-none" />
+                        )}
+                      </Card>
+                      {body.length > 250 && (
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            variant="link"
+                            size="sm"
+                            onClick={() => setIsContentExpanded((prev) => !prev)}
+                            className="text-foreground p-0 text-sm gap-1 shadow-none"
+                          >
+                            {isContentExpanded ? (
+                              <>
+                                Show less
+                                <ChevronUp className="size-3.5" />
+                              </>
+                            ) : (
+                              <>
+                                See more
+                                <ChevronDown className="size-3.5" />
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                  </Card>
-                )}
+                  )}
 
-                {/* Curated remediation activities */}
-                {activities.length > 0 && (
-                  <Card
-                    aria-label="Curated activities"
-                    className="w-full border-2 border-border bg-card p-4 sm:p-5 flex flex-col gap-3"
-                  >
-                    <h2 className="text-base sm:text-lg font-bold text-foreground">
-                      Curated Activities
-                    </h2>
-                    <div className="flex flex-col gap-2">
-                      {activities.map((act) => (
-                        <ClassworkItemLine
-                          key={act.assignment_id}
-                          className="border-2! shadow-none!"
-                          item={{
-                            classwork_id: act.assignment_id,
-                            title: act.title,
-                            classwork_type: act.classwork_type,
-                          }}
-                          showPublicationStatus={false}
-                          showCategory={false}
-                          showType={false}
-                          onClick={() =>
-                            navigate(
-                              `/student/classworks/${act.assignment_id}?from=${encodeURIComponent(
-                                window.location.pathname + window.location.search
-                              )}`
-                            )
-                          }
-                          rightContent={
-                            act.submission_status ? (
-                              <Badge
-                                variant={
-                                  act.submission_status === "graded" ||
-                                    act.submission_status === "submitted"
-                                    ? "solid"
-                                    : "outline"
+                  {/* Resolution message if resolved */}
+                  {intervention?.resolution_message && (
+                    <div className="flex flex-col gap-1 pt-1">
+                      <span className="text-sm font-bold text-foreground">Teacher Resolution Note</span>
+                      <Card className="min-w-0 shadow-none px-4 py-3 bg-card border-2 border-border">
+                        <p className="text-sm leading-relaxed text-foreground">
+                          {intervention.resolution_message}
+                        </p>
+                      </Card>
+                    </div>
+                  )}
+                </Card>
+
+                <div className="grid grid-cols-1 lg:grid-cols-20 gap-4 items-start">
+                  {/* ── Main Section ── */}
+                  <main className="lg:col-span-14 flex flex-col gap-4 min-w-0">
+
+                    {/* Review Activity */}
+                    {orderedReadings.length > 0 && (
+                      <Card
+                        aria-label="Review activity"
+                        className="w-full border-2 border-border bg-card p-4 sm:p-5 flex flex-col gap-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h2 className="text-base sm:text-lg font-bold text-foreground">
+                            Review Activity
+                          </h2>
+                          {preparation && (
+                            <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                              <BookOpen className="size-4 shrink-0" />
+                              {preparation.completed_count} of {preparation.required_count}{" "}
+                              reviewed
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                          {orderedReadings.map((reading) => {
+                            const isReviewed = reading.review_status === "REVIEWED";
+                            return (
+                              <ClassworkItemLine
+                                key={reading.assignment_id}
+                                className="border-2! shadow-none!"
+                                item={{
+                                  classwork_id: reading.classwork_id,
+                                  title: reading.title,
+                                  classwork_type: "READING",
+                                }}
+                                onClick={
+                                  !isHistorical
+                                    ? () =>
+                                      navigate(
+                                        `/student/classworks/${reading.assignment_id}?from=${encodeURIComponent(
+                                          window.location.pathname + window.location.search
+                                        )}`
+                                      )
+                                    : undefined
                                 }
-                                size="sm"
-                              >
-                                {act.submission_status === "graded"
-                                  ? "Completed"
-                                  : act.submission_status === "submitted"
-                                    ? "Submitted"
-                                    : act.submission_status}
-                              </Badge>
-                            ) : undefined
-                          }
-                        />
-                      ))}
-                    </div>
-                  </Card>
-                )}
+                                showPublicationStatus={false}
+                                showCategory={false}
+                                showType={false}
+                                rightContent={
+                                  <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                                    <Badge
+                                      variant={isReviewed ? "success" : "outline"}
+                                      size="sm"
+                                      className="gap-1"
+                                    >
+                                      {isReviewed ? "Reviewed" : "Review Required"}
+                                    </Badge>
+                                  </div>
+                                }
+                              />
+                            );
+                          })}
+                        </div>
+                      </Card>
+                    )}
 
-                {/* Action buttons */}
-                <div className="flex flex-wrap items-center gap-3 pt-2 pb-8">
-                  <Button
-                    type="button"
-                    onClick={handleMarkAsRead}
-                    className="font-bold"
-                  >
-                    {isRead ? "Marked as read ✓" : "Mark as read"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => navigate(routes.student.interventions)}
-                    className="font-bold"
-                  >
-                    Back to support
-                  </Button>
+                    {/* Curated remediation activities */}
+                    {activities.length > 0 && (
+                      <Card
+                        aria-label="Curated activities"
+                        className="w-full border-2 border-border bg-card p-4 sm:p-5 flex flex-col gap-3"
+                      >
+                        <h2 className="text-base sm:text-lg font-bold text-foreground">
+                          Curated Remediation Activities
+                        </h2>
+                        <div className="flex flex-col gap-3">
+                          {activities.map((act) => {
+                            const preparationBlocked = act.preparation?.state === "BLOCKED";
+                            const actHistorical = act.access_state === "HISTORICAL";
+                            const locked = act.access_state === "PREPARATION_REQUIRED";
+                            const finished = ["submitted", "graded", "completed"].includes(
+                              act.submission_status?.toLowerCase() ?? ""
+                            );
+
+                            return (
+                              <div key={act.assignment_id} className="space-y-1">
+                                <ClassworkItemLine
+                                  className="border-2! shadow-none!"
+                                  item={{
+                                    classwork_id: act.assignment_id,
+                                    title: act.title,
+                                    classwork_type: act.classwork_type,
+                                  }}
+                                  onClick={
+                                    !actHistorical && !locked && !preparationBlocked
+                                      ? () =>
+                                        navigate(
+                                          `/student/classworks/${act.assignment_id}?from=${encodeURIComponent(
+                                            window.location.pathname + window.location.search
+                                          )}`
+                                        )
+                                      : undefined
+                                  }
+                                  showPublicationStatus={false}
+                                  showCategory={false}
+                                  showType={false}
+                                  rightContent={
+                                    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                                      {act.grade != null && act.total_points != null && (
+                                        <Badge variant="outline" size="sm">
+                                          Score: {act.grade}/{act.total_points}
+                                        </Badge>
+                                      )}
+                                      {act.submission_status && (
+                                        <Badge
+                                          variant={finished ? "solid" : "outline"}
+                                          size="sm"
+                                          className="capitalize"
+                                        >
+                                          {act.submission_status === "graded"
+                                            ? "Completed"
+                                            : act.submission_status === "submitted"
+                                              ? "Submitted"
+                                              : act.submission_status}
+                                        </Badge>
+                                      )}
+                                      <Badge
+                                        variant={actHistorical ? "default" : locked ? "outline" : "success"}
+                                        size="sm"
+                                        className="gap-1"
+                                      >
+                                        {actHistorical ? "Unavailable" : locked ? "Locked" : "Ready"}
+                                      </Badge>
+                                    </div>
+                                  }
+                                />
+
+                                {preparationBlocked ? (
+                                  <p className="text-xs sm:text-sm text-muted-foreground px-1">
+                                    Some required readings are unavailable. Your teacher needs to update this activity before you can continue.
+                                  </p>
+                                ) : locked ? (
+                                  <p className="flex items-center gap-1.5 text-xs sm:text-sm text-muted-foreground px-1">
+                                    <LockKeyhole className="size-3.5 shrink-0" />
+                                    Complete all Supporting Readings before opening this activity.
+                                  </p>
+                                ) : actHistorical ? (
+                                  <p className="text-xs sm:text-sm text-muted-foreground px-1">
+                                    {act.prerequisite_message || "This activity is no longer available."}
+                                  </p>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </Card>
+                    )}
+
+                    {/* Empty state if neither review readings nor curated activities exist */}
+                    {orderedReadings.length === 0 && activities.length === 0 && (
+                      <StudentEmptyState
+                        icon={<BookOpen className="size-6" />}
+                        title="No activities assigned yet"
+                        description="Your teacher hasn't assigned any remediation readings or activities for this support plan yet."
+                      />
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="flex flex-wrap items-center gap-3 pt-2 pb-8">
+                      <Button
+                        type="button"
+                        onClick={handleMarkAsRead}
+                        className="font-bold"
+                      >
+                        {isRead ? "Marked as read ✓" : "Mark as read"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => navigate(routes.student.interventions)}
+                        className="font-bold"
+                      >
+                        Back to support
+                      </Button>
+                    </div>
+                  </main>
+
+                  {/* ── Aside (Right: Stat Cards) ── */}
+                  <aside aria-label="Support Statistics" className="lg:col-span-6 flex flex-col gap-4 min-w-0">
+                    {/* Overall Progress Card */}
+                    <Card className="flex flex-col p-4 gap-3 border-2 border-border shadow-md">
+                      <div className="flex justify-between items-center">
+                        <Card.Description className="text-lg sm:text-xl font-bold text-foreground">
+                          Support Progress
+                        </Card.Description>
+                        <Badge variant="surface" size="sm">
+                          {totalTasks > 0 ? `${overallPercentage}%` : "--"}
+                        </Badge>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex justify-between items-center text-sm font-semibold">
+                          <span>Overall Completion</span>
+                          <span className="text-muted-foreground text-xs sm:text-sm">
+                            {completedTasks} of {totalTasks} done
+                          </span>
+                        </div>
+                        <Progress value={overallPercentage} className="h-2.5" />
+                      </div>
+
+                      {totalReadings > 0 && (
+                        <div className="flex flex-col gap-1.5 pt-1">
+                          <div className="flex justify-between items-center text-xs font-semibold text-muted-foreground">
+                            <span>Supporting Readings</span>
+                            <span>{reviewedReadings}/{totalReadings} reviewed</span>
+                          </div>
+                          <Progress value={readingPercentage} className="h-2" />
+                        </div>
+                      )}
+
+                      {totalActivities > 0 && (
+                        <div className="flex flex-col gap-1.5 pt-1">
+                          <div className="flex justify-between items-center text-xs font-semibold text-muted-foreground">
+                            <span>Remediation Activities</span>
+                            <span>{completedActivities}/{totalActivities} completed</span>
+                          </div>
+                          <Progress value={activityPercentage} className="h-2" />
+                        </div>
+                      )}
+
+                      <div className="mt-auto flex flex-wrap gap-2 pt-2 border-t border-border">
+                        <Badge variant={overallPercentage === 100 && totalTasks > 0 ? "success" : "surface"} size="sm">
+                          {completedTasks} Finished
+                        </Badge>
+                        {totalTasks - completedTasks > 0 && (
+                          <Badge variant="outline" size="sm">
+                            {totalTasks - completedTasks} Remaining
+                          </Badge>
+                        )}
+                        {maxPoints > 0 && (
+                          <Badge variant="outline" size="sm">
+                            Score: {earnedPoints}/{maxPoints}
+                          </Badge>
+                        )}
+                      </div>
+                    </Card>
+                  </aside>
                 </div>
               </div>
             </div>

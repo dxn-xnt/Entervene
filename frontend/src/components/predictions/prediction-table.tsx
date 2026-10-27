@@ -86,7 +86,7 @@ export default function PredictionTable({
 
   return (
     <div className="flex flex-col">
-      <Table wrapperClassName="mb-2 shadow-none hover:shadow-none">
+      <Table wrapperClassName="mb-2 hover:shadow-none transition-all">
         <Table.Header className="bg-primary text-primary-foreground">
           <Table.Row className="border-b-2 border-black bg-primary hover:bg-primary">
             <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">
@@ -101,18 +101,8 @@ export default function PredictionTable({
             {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">LRN</Table.Head> */}
             {!hideClass && <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">Class</Table.Head>}
             {!hideSubject && <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">Subject</Table.Head>}
-            {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">Term</Table.Head> */}
-            <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">
-              <SortableHeader
-                label={currentTerm ? "Projected Term Grade" : "Predicted Grade"}
-                column="predicted_period_grade"
-                sortBy={sortBy}
-                sortOrder={sortOrder}
-                onSort={onSort}
-              />
-            </Table.Head>
-            <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">Risk Level</Table.Head>
-            {!currentTerm && <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">
+            <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap text-center">Risk Level</Table.Head>
+            {!currentTerm && <Table.Head className="font-extrabold text-foreground text-right">
               <SortableHeader
                 label="Risk Score"
                 column="risk_score"
@@ -121,6 +111,17 @@ export default function PredictionTable({
                 onSort={onSort}
               />
             </Table.Head>}
+            {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">Term</Table.Head> */}
+            <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap text-right">
+              <SortableHeader
+                label={currentTerm ? "Projected Grade" : "Predicted Grade"}
+                column="predicted_period_grade"
+                sortBy={sortBy}
+                sortOrder={sortOrder}
+                onSort={onSort}
+              />
+            </Table.Head>
+
             {/* <Table.Head className="w-16">
 
             </Table.Head> */}
@@ -164,16 +165,7 @@ export default function PredictionTable({
                   </Table.Cell> */}
                   {!hideClass && <Table.Cell className="font-normal whitespace-nowrap">{item.class_name}</Table.Cell>}
                   {!hideSubject && <Table.Cell className="font-normal whitespace-nowrap">{item.subject_name}</Table.Cell>}
-                  {/* <Table.Cell className="font-normal whitespace-nowrap">{item.term_label}</Table.Cell> */}
-                  <Table.Cell className="font-black text-base whitespace-nowrap">
-                    {currentTerm && item.historical_projection ? <div>
-                      {item.official_final_grade != null && <p>Final Grade: {item.official_final_grade.toFixed(2)}</p>}
-                      <p className="text-xs font-normal">Earlier projection: {item.predicted_period_grade?.toFixed(2) ?? "Not available"}</p>
-                    </div> : item.risk_level === "INSUFFICIENT_DATA" || item.predicted_period_grade === null
-                      ? "—"
-                      : item.predicted_period_grade.toFixed(2)}
-                  </Table.Cell>
-                  <Table.Cell className="whitespace-nowrap">
+                  <Table.Cell className="whitespace-nowrap text-center">
                     <Badge
                       size="sm"
                       variant="surface"
@@ -182,6 +174,16 @@ export default function PredictionTable({
                       {currentTerm && item.historical_projection ? "Historical projection" : riskMeta.text}
                     </Badge>
                   </Table.Cell>
+                  {/* <Table.Cell className="font-normal whitespace-nowrap">{item.term_label}</Table.Cell> */}
+                  <Table.Cell className="font-black text-base whitespace-nowrap text-right">
+                    {currentTerm && item.historical_projection ? <div>
+                      {item.official_final_grade != null && <p>Final Grade: {item.official_final_grade.toFixed(2)}</p>}
+                      <p className="text-xs font-normal">Earlier projection: {item.predicted_period_grade?.toFixed(2) ?? "Not available"}</p>
+                    </div> : item.risk_level === "INSUFFICIENT_DATA" || item.predicted_period_grade === null
+                      ? "—"
+                      : item.predicted_period_grade.toFixed(2)}
+                  </Table.Cell>
+
                   {!currentTerm && <Table.Cell className="font-bold text-gray-900 whitespace-nowrap">
                     {item.risk_level === "INSUFFICIENT_DATA" || item.risk_score === null
                       ? "—"

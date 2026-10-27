@@ -42,11 +42,13 @@ export function AICreditsWidget() {
   return (
     <div className="px-3 pb-2" aria-label="AI credits remaining">
       <div className="flex items-center gap-2 mb-1.5">
-        <Sparkles className="size-3.5 text-amber-500 shrink-0" />
         <span className="text-xs font-semibold tracking-tight">
-          AI: {remaining}/{usage.daily_limit}
+          AI Usage
         </span>
-        <span className="text-[10px] text-muted-foreground ml-auto">
+        <span className="text-xs text-muted-foreground ml-auto">
+          <span className="mr-1 text-foreground font-medium">
+            {remaining}
+          </span>
           {remaining === 0 ? "resets daily" : "credits left"}
         </span>
       </div>

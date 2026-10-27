@@ -75,6 +75,16 @@ export interface LessonItemLineProps<TLesson extends LessonItem = LessonItem> {
   className?: string;
   /** Show the retro drop shadow on the lesson card. Defaults to true. */
   withShadow?: boolean;
+  /** Whether to show publication status badge (Published/Draft). Defaults to true. */
+  showPublicationStatus?: boolean;
+  /** Custom badge to display next to the title (e.g. materials count) */
+  badge?: React.ReactNode;
+  /** Subtitle or date text to display below the title */
+  subtitle?: React.ReactNode;
+  /** Custom children to render in accordion content */
+  children?: React.ReactNode;
+  /** Optional HTML id for the root element */
+  id?: string;
 }
 
 
@@ -91,11 +101,17 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
   onArchiveLesson,
   className,
   withShadow = true,
+  showPublicationStatus = true,
+  badge,
+  subtitle,
+  children,
+  id,
 }: LessonItemLineProps<TLesson>) => {
   const hasActions = Boolean(onOpenLessonManager || onArchiveLesson);
 
   const accordionContent = (
     <Accordion
+      id={id}
       value={isExpanded ? [String(lesson.lesson_id)] : []}
       onValueChange={() => onToggle?.()}
       className={cn("w-full shadow-none", className)}
@@ -131,15 +147,24 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
                 {lesson.title}
               </h4>
               <div className="flex flex-row items-center gap-2 -mr-1 shrink-0">
-                <Badge
-                  variant={lesson.is_published ? "solid" : "default"}
-                  size="sm"
-                  className="shrink-0 text-xs font-bold"
-                >
-                  {lesson.is_published ? "Published" : "Draft"}
-                </Badge>
+                {badge !== undefined ? (
+                  badge
+                ) : showPublicationStatus ? (
+                  <Badge
+                    variant={lesson.is_published ? "solid" : "default"}
+                    size="sm"
+                    className="shrink-0 text-xs font-bold"
+                  >
+                    {lesson.is_published ? "Published" : "Draft"}
+                  </Badge>
+                ) : null}
               </div>
             </div>
+            {subtitle && (
+              <span className="mt-1 block text-sm text-foreground">
+                {subtitle}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
@@ -169,52 +194,60 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
         </div>
 
         <Accordion.Content className="p-3 border-t-2 border-black bg-white space-y-2">
-          {lesson.description && (
-            <p className="text-xs font-normal text-muted-foreground break-words line-clamp-2 pb-1">
-              {lesson.description}
-            </p>
-          )}
-
-          {isLoadingClassworks ? (
-            <LoadingPanel label="Loading classworks..." />
-          ) : classworks.length === 0 ? (
-            <Empty className="border-2 bg-white p-6 shadow-none bg-retro">
-              <EmptyHeader>
-                <EmptyMedia>
-                  <div className="flex size-9 items-center justify-center border-2 border-black bg-primary">
-                    <ClipboardList className="size-4.5 text-black" />
-                  </div>
-                </EmptyMedia>
-                <EmptyTitle className="text-sm font-bold">No classworks yet</EmptyTitle>
-                <EmptyDescription className="text-xs">
-                  No classworks assigned to this lesson yet.
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
+          {children !== undefined ? (
+            children
           ) : (
-            classworks.map((cw) => (
-              <ClassworkItemLine
-                key={cw.classwork_assignment_id}
-                item={cw}
-                onOpen={onOpenClassworkDetail}
-                className="shadow-none!"
-                showCategoryBadge={false}
-                showPublicationStatus={false}
-              />
-            ))
+            <>
+              {lesson.description && (
+                <p className="text-xs font-normal text-muted-foreground break-words line-clamp-2 pb-1">
+                  {lesson.description}
+                </p>
+              )}
+
+              {isLoadingClassworks ? (
+                <LoadingPanel label="Loading classworks..." />
+              ) : classworks.length === 0 ? (
+                <Empty className="border-2 bg-white p-6 shadow-none bg-retro">
+                  <EmptyHeader>
+                    <EmptyMedia>
+                      <div className="flex size-9 items-center justify-center border-2 border-black bg-primary">
+                        <ClipboardList className="size-4.5 text-black" />
+                      </div>
+                    </EmptyMedia>
+                    <EmptyTitle className="text-sm font-bold">No classworks yet</EmptyTitle>
+                    <EmptyDescription className="text-xs">
+                      No classworks assigned to this lesson yet.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                classworks.map((cw) => (
+                  <ClassworkItemLine
+                    key={cw.classwork_assignment_id}
+                    item={cw}
+                    onOpen={onOpenClassworkDetail}
+                    className="shadow-none!"
+                    showCategoryBadge={false}
+                    showPublicationStatus={false}
+                  />
+                ))
+              )}
+              {onOpenClassworkForm && (
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={() => onOpenClassworkForm?.(lesson)}
+                    className="h-8"
+                  >
+                    <Plus size={14} className="mr-1.5" />
+                    Add Classwork
+                  </Button>
+                </div>
+              )}
+            </>
           )}
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              onClick={() => onOpenClassworkForm?.(lesson)}
-              className="h-8"
-            >
-              <Plus size={14} className="mr-1.5" />
-              Add Classwork
-            </Button>
-          </div>
         </Accordion.Content>
       </Accordion.Item>
     </Accordion>
