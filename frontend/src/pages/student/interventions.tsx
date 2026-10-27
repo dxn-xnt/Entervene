@@ -30,7 +30,7 @@ import {
   Shield,
   Timer,
 } from "lucide-react";
-import { formatDateTime } from "@/lib/formatters";
+import { formatDate } from "@/lib/formatters";
 
 export default function StudentInterventions() {
   const navigate = useNavigate();
@@ -114,7 +114,7 @@ export default function StudentInterventions() {
               const finished = ["submitted", "graded", "completed"].includes(
                 activity.submission_status?.toLowerCase() ?? ""
               );
-              const orderedReadings = [...activity.readings].sort(
+              const orderedReadings = [...(activity.readings ?? [])].sort(
                 (left, right) => left.order - right.order
               );
 
@@ -297,7 +297,7 @@ export default function StudentInterventions() {
                     <h3 className="text-lg sm:text-2xl font-bold text-foreground">
                       New Support for You
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-4">
                       {reviewers.map((rev) => {
                         const matchingIntervention =
                           activeInterventions.find((i) => i.reviewer_id === rev.material_id) ??
@@ -371,7 +371,7 @@ export default function StudentInterventions() {
                       description="You don't have any active intervention support right now."
                     />
                   ) : (
-                    <div className="grid grid-cols-2">
+                    <div className="flex flex-col gap-4">
                       {activeInterventions.map((item) => (
                         <Card
                           key={item.intervention_id}
@@ -455,7 +455,7 @@ export default function StudentInterventions() {
                       description="Finished support will be saved here so you can look back on it."
                     />
                   ) : (
-                    <div className="grid grid-cols-2">
+                    <div className="flex flex-col gap-4">
                       {resolvedInterventions.map((item) => (
                         <Card
                           key={item.intervention_id}

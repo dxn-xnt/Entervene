@@ -15,6 +15,7 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
 from app.models.intervention.Intervention import Intervention
 from app.models.people.Student import Student
+from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.grading.ComponentMapper import CanonicalGradingComponent, classify_classwork_component
 from app.services.intervention.InterventionRemediationFocusService import build_remediation_focus
@@ -220,6 +221,78 @@ def test_already_remediated_original_is_not_offered_again(candidate_context):
     )
     ctx["db"].add(work)
     ctx["db"].flush()
+    source = _source(ctx["db"], ctx["candidate"])
+    pred = DevelopmentCurrentTermPrediction(
+        student_id=ctx["student"].student_id,
+        class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        source_period_id=ctx["next_period"].academic_period_id,
+        target_period_id=ctx["next_period"].academic_period_id,
+        model_version_id=source.model_version_id,
+        revision=2,
+        predicted_period_grade=Decimal("80"),
+        intervention_level="NEEDS_MONITORING",
+        intervention_basis="fixture-only",
+        evidence_snapshot={},
+    )
+    ctx["db"].add(pred)
+    ctx["db"].flush()
+    prior = Intervention(
+        student_id=ctx["student"].student_id,
+        class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        academic_period_id=ctx["next_period"].academic_period_id,
+        source_prediction_id=pred.prediction_id,
+        status="CANDIDATE",
+        diagnosis_snapshot=ctx["candidate"].diagnosis_snapshot,
+    )
+    ctx["db"].add(prior)
+    ctx["db"].flush()
+    remediation = ClassworkAssignment(
+        classwork_id=work.classwork_id,
+        class_id=ctx["class"].class_id,
+        academic_period_id=ctx["period"].academic_period_id,
+        assigned_by_staff_id=ctx["staff"].staff_id,
+        recipient_student_id=ctx["student"].student_id,
+        source_intervention_id=prior.intervention_id,
+        remediation_request_id=uuid4(),
+    )
+    ctx["db"].add(remediation)
+    ctx["db"].flush()
+    ctx["db"].add(RemediationAssignmentLink(
+        source_intervention_id=prior.intervention_id,
+        remediation_assignment_id=remediation.classwork_assignment_id,
+        original_assignment_id=original.classwork_assignment_id,
+        student_id=ctx["student"].student_id,
+        component=build_remediation_focus(ctx["candidate"])["component"],
+        score_adjustment_cap=Decimal("75"),
+        created_by_staff_id=ctx["staff"].staff_id,
+    ))
+    ctx["db"].commit()
+
+    response = _http(ctx).post(_path(ctx), json={
+        "target_assignment_ids": [original.classwork_assignment_id],
+    })
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["reasons"][0]["code"] == "TARGET_ALREADY_REMEDIATED"
+
+
+def test_intervention_can_project_its_own_linked_targets(candidate_context):
+    ctx = candidate_context
+    _activate(ctx)
+    original = _focused_targets(ctx)[0]
+    work = Classwork(
+        title="Own remediation activity",
+        classwork_type=original.classwork.classwork_type,
+        classwork_category=original.classwork.classwork_category,
+        total_points=original.classwork.total_points,
+        is_graded=True,
+        subject_id=ctx["subject"].subject_id,
+        created_by_staff_id=ctx["staff"].staff_id,
+    )
+    ctx["db"].add(work)
+    ctx["db"].flush()
     remediation = ClassworkAssignment(
         classwork_id=work.classwork_id,
         class_id=ctx["class"].class_id,
@@ -246,8 +319,8 @@ def test_already_remediated_original_is_not_offered_again(candidate_context):
         "target_assignment_ids": [original.classwork_assignment_id],
     })
 
-    assert response.status_code == 422
-    assert response.json()["detail"]["reasons"][0]["code"] == "TARGET_ALREADY_REMEDIATED"
+    assert response.status_code == 200, response.text
+    assert response.json()["target_projections"][0]["applied"] is True
 
 
 def test_student_class_subject_and_period_isolation(candidate_context):
