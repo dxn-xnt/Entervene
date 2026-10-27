@@ -72,6 +72,7 @@ def test_exact_student_sees_only_active_safe_support(candidate_context):
     assert detail.status_code == 200
     data = detail.json()
     assert data["status"] == "ACTIVE" and data["subject_name"] == ctx["subject"].subject_name
+    assert data["activated_at"] is not None
     assert data["activities"][0]["assignment_id"] == assignment.classwork_assignment_id
     assert data["activities"][0]["grade"] == 10 and data["activities"][0]["total_points"] == 10
     assert data["reviewer_id"] is None

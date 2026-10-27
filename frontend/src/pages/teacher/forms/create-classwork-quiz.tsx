@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, FileDown, FileText, Loader2, Pencil, Plus, Sparkles, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCheck, FileDown, FileText, Loader2, Pencil, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { useToast } from "@/components/retroui/Toast";
@@ -14,6 +14,8 @@ import { FormMessage } from "@/components/retroui/FormMessage";
 import { Switch } from "@/components/retroui/Switch";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import Field from "@/components/admin/classes/fields/Field";
+import { Card } from "@/components/retroui/Card";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { apiFetch } from "@/lib/api";
 import {
     emptyClassworkDraft,
@@ -1917,6 +1919,27 @@ export default function CreateClassworkQuizModal({
                                 </div>
 
                                 <Field label="Assign to sections" isRequired>
+                                    {selectedSubjectLoads.length > 0 && (
+                                        <div className="flex items-center justify-end -mt-8 mb-2">
+                                            <Button
+                                                size="sm"
+                                                className="shadow-none -mt-1"
+                                                autoIcon={false}
+                                                onClick={() => {
+                                                    if (createError === "Select at least one section to assign this quiz.") {
+                                                        setCreateError("");
+                                                    }
+                                                    setSelectedClassIds(
+                                                        selectedSubjectLoads.map((load) => load.class_id),
+                                                    );
+                                                }}
+                                                disabled={isCreating || Boolean(remediationTarget)}
+                                            >
+                                                <CheckCheck className="size-4 mr-2" />
+                                                Select All
+                                            </Button>
+                                        </div>
+                                    )}
                                     {remediationTarget ? (
                                         <div className="mb-3 rounded border-2 border-black bg-muted/30 p-3 space-y-1">
                                             <div className="flex items-center justify-between">
@@ -1947,29 +1970,82 @@ export default function CreateClassworkQuizModal({
                                         </div>
                                     )}
 
-                                    <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
-                                        {selectedSubjectLoads.map((load) => {
-                                            const isSelected = selectedClassIds.includes(load.class_id);
-                                            return (
-                                                <button
-                                                    key={load.subject_load_id}
-                                                    type="button"
-                                                    onClick={() => toggleClass(load.class_id)}
-                                                    disabled={isCreating || Boolean(remediationTarget)}
-                                                    className={`rounded border-2 border-black px-3 py-2 text-xs font-bold text-center cursor-pointer transition shadow-md hover:translate-y-0.5 active:translate-y-1 ${isSelected ? "bg-[#7ABA78]" : "bg-white"
-                                                        }`}
-                                                >
-                                                    {load.section_name}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                    {selectedSubjectLoads.length === 0 && (
-                                        <p className="rounded border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
-                                            No active sections are assigned to this subject.
+                                    {selectedSubjectLoads.length > 0 ? (
+                                        <Card className="-mt-1 grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                                            {selectedSubjectLoads.map((load) => {
+                                                const isSelected = selectedClassIds.includes(load.class_id);
+                                                return (
+                                                    <button
+                                                        key={load.subject_load_id}
+                                                        type="button"
+                                                        onClick={() => toggleClass(load.class_id)}
+                                                        disabled={isCreating || Boolean(remediationTarget)}
+                                                        className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isSelected
+                                                            ? "bg-primary text-black"
+                                                            : "bg-white text-black hover:bg-accent"
+                                                            }`}
+                                                    >
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="flex items-center justify-between">
+                                                                <p className="font-bold text-base truncate">
+                                                                    {load.section_name}
+                                                                </p>
+                                                                <div
+                                                                    className={`flex size-5 shrink-0 items-center justify-center rounded border-2 border-black transition-colors ${isSelected ? "bg-black text-white" : "bg-white text-transparent"
+                                                                        }`}
+                                                                >
+                                                                    <Check className="size-3.5 stroke-[3]" />
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="mt-1 flex items-center justify-between w-full">
+                                                                <p
+                                                                    className={`text-xs font-medium ${isSelected
+                                                                        ? "text-foreground"
+                                                                        : "text-muted-foreground"
+                                                                        }`}
+                                                                >
+                                                                    {load.grade_level || "Active Section"}
+                                                                </p>
+                                                                {typeof load.student_count === "number" && (
+                                                                    <p
+                                                                        className={`text-xs font-medium ${isSelected
+                                                                            ? "text-foreground"
+                                                                            : "text-muted-foreground"
+                                                                            }`}
+                                                                    >
+                                                                        {load.student_count} {load.student_count === 1 ? "student" : "students"}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </Card>
+                                    ) : (
+                                        <Empty className="shadow-md hover:shadow-none transition-shadow">
+                                            <EmptyHeader>
+                                                <EmptyTitle>No Sections Found</EmptyTitle>
+                                                <EmptyDescription className="text-center">
+                                                    No active sections are assigned to this subject.
+                                                </EmptyDescription>
+                                            </EmptyHeader>
+                                        </Empty>
+                                    )}
+                                    {remediationTarget && (
+                                        <p className="mt-2 rounded border p-2 text-xs">
+                                            Remedial assignment for <strong>{remediationTarget.student_name}</strong> in {remediationTarget.class_name}. Only this student will receive this quiz.
                                         </p>
                                     )}
-                                    {createError === "Select at least one section to assign this quiz." && <FormMessage>{createError}</FormMessage>}
+                                    {remediationFocus && (
+                                        <p className="mt-2 rounded border p-2 text-xs">
+                                            Evidence focus: {focusGuidance(remediationFocus)}{remediationGradeTreatment === "EXAMINATION" && remediationOriginalExam ? ` Original ${remediationOriginalExam.title} fixes the subtype and ${remediationOriginalExam.total_points} possible points.` : ""}
+                                        </p>
+                                    )}
+                                    {createError === "Select at least one section to assign this quiz." && (
+                                        <FormMessage>{createError}</FormMessage>
+                                    )}
                                 </Field>
 
                                 <Field label="Link under lesson (Coverage)" isRequired>

@@ -5,24 +5,24 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/student/button";
 import { Card } from "@/components/retroui/Card";
-import { Checkbox } from "@/components/retroui/Checkbox";
-import { Progress } from "@/components/retroui/Progress";
+import { Badge } from "@/components/retroui/Badge";
 import { useToast } from "@/components/retroui/Toast";
+import ClassworkItemLine from "@/components/item-line/classwork";
 import { routes } from "@/../routes";
 import {
   getMyReviewer,
   listMyReviewers,
   type StudentReviewerDetail,
 } from "@/lib/student-intervention-reviewers-api";
+import {
+  getMyActiveIntervention,
+  getMyResolvedIntervention,
+  listMyActiveInterventions,
+  listMyResolvedInterventions,
+  type StudentPersistentIntervention,
+  type StudentSupportActivity,
+} from "@/lib/student-persistent-interventions-api";
 import { markInterventionViewed } from "@/lib/interventions-api";
-
-interface TopicPerformance {
-  title: string;
-  scoreText: string;
-  percent: number;
-  comment: string;
-  isNeedsAttention?: boolean;
-}
 
 export default function StudentInterventionView() {
   const navigate = useNavigate();
@@ -30,48 +30,115 @@ export default function StudentInterventionView() {
   const routeParams = useParams();
   const toast = useToast();
 
+  const interventionIdParam = params.get("intervention");
+  const interventionId = interventionIdParam && /^\d+$/.test(interventionIdParam) ? Number(interventionIdParam) : null;
   const reviewerIdParam = params.get("reviewer") || routeParams.id;
   const reviewerId = reviewerIdParam && /^\d+$/.test(reviewerIdParam) ? Number(reviewerIdParam) : null;
 
+  const [intervention, setIntervention] = useState<StudentPersistentIntervention | null>(null);
   const [reviewer, setReviewer] = useState<StudentReviewerDetail | null>(null);
   const [isRead, setIsRead] = useState(false);
-  const [checkedItems, setCheckedItems] = useState<Record<number, boolean>>({});
+  const [activities, setActivities] = useState<StudentSupportActivity[]>([]);
 
   useEffect(() => {
     let cancelled = false;
 
-    const loadReviewer = async () => {
-      try {
-        if (reviewerId) {
-          const data = await getMyReviewer(reviewerId);
-          if (!cancelled) setReviewer(data);
-        } else {
-          // Fetch latest reviewer if available
+    const loadData = async () => {
+      let resolvedReviewerId = reviewerId;
+      let matchedIntervention: StudentPersistentIntervention | null = null;
+
+      // 1. If intervention ID is given, load the intervention directly
+      if (interventionId) {
+        try {
+          matchedIntervention = await getMyActiveIntervention(interventionId);
+        } catch {
+          try {
+            matchedIntervention = await getMyResolvedIntervention(interventionId);
+          } catch (err) {
+            console.warn("Unable to load intervention by ID", err);
+          }
+        }
+      }
+
+      // 2. If no intervention ID, but reviewerId is given or discovered later,
+      // or if neither is given, try finding the active intervention or reviewer
+      if (!matchedIntervention && !resolvedReviewerId) {
+        try {
+          const activeList = await listMyActiveInterventions();
+          if (activeList.items.length > 0) {
+            matchedIntervention = activeList.items[0];
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (matchedIntervention) {
+        if (!cancelled) {
+          setIntervention(matchedIntervention);
+          setActivities(matchedIntervention.activities || []);
+        }
+        if (!resolvedReviewerId && matchedIntervention.reviewer_id) {
+          resolvedReviewerId = matchedIntervention.reviewer_id;
+        }
+      }
+
+      // 3. Load reviewer if available
+      if (resolvedReviewerId) {
+        try {
+          const revData = await getMyReviewer(resolvedReviewerId);
+          if (!cancelled) setReviewer(revData);
+        } catch (err) {
+          console.warn("Unable to load reviewer", err);
+        }
+      } else if (!matchedIntervention) {
+        try {
           const list = await listMyReviewers();
           if (!cancelled && list.items.length > 0) {
             const first = await getMyReviewer(list.items[0].material_id);
             if (!cancelled) setReviewer(first);
           }
+        } catch (err) {
+          console.warn("Using preset review content", err);
         }
-      } catch (err) {
-        // Fall back gracefully to preset review content
-        console.warn("Using preset review content", err);
       }
     };
 
-    void loadReviewer();
+    void loadData();
 
     return () => {
       cancelled = true;
     };
-  }, [reviewerId]);
+  }, [interventionId, reviewerId]);
 
-  const toggleCheck = (index: number) => {
-    setCheckedItems((prev) => ({
-      ...prev,
-      [index]: !prev[index],
-    }));
-  };
+  // Curated activities fallback if only reviewer was loaded directly
+  useEffect(() => {
+    if (activities.length > 0 || !reviewer?.material_id) return;
+    let cancelled = false;
+
+    const loadActivities = async () => {
+      const [active, resolved] = await Promise.allSettled([
+        listMyActiveInterventions(),
+        listMyResolvedInterventions(),
+      ]);
+      if (cancelled) return;
+      const items = [
+        ...(active.status === "fulfilled" ? active.value.items : []),
+        ...(resolved.status === "fulfilled" ? resolved.value.items : []),
+      ];
+      const match = items.find((item) => item.reviewer_id === reviewer.material_id);
+      if (match) {
+        setIntervention(match);
+        setActivities(match.activities ?? []);
+      }
+    };
+
+    void loadActivities();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reviewer?.material_id, activities.length]);
 
   const handleMarkAsRead = async () => {
     setIsRead(true);
@@ -88,47 +155,15 @@ export default function StudentInterventionView() {
     });
   };
 
-  // Content values with dynamic fallback to design mockup
-  const subjectName = reviewer?.subject_name || "Mathematics";
-  const title = reviewer?.title || "Strengthening Your Exam Skills";
+  const subjectName = intervention?.subject_name || reviewer?.subject_name || "Study Support";
+  const title = reviewer?.title || (intervention ? `${intervention.subject_name} Support` : "Study Support");
+  const teacherName = intervention?.teacher_name;
   const introduction =
     reviewer?.introduction ||
-    "You’ve shown solid progress in written work and performance tasks. The exam is where you can grow the most. This review covers exam strategies, practice ideas and a quick checklist.";
-
-  const checklistItems = [
-    "Practise simplifying algebraic expressions",
-    "Review the negative-number rules",
-    "Try a few more word problems",
-    "Practise simplifying fractions in equations",
-  ];
-
-  const topics: TopicPerformance[] = [
-    {
-      title: "Number Sense",
-      scoreText: "16/20",
-      percent: 80,
-      comment: "Good foundation. Practise more word problems.",
-    },
-    {
-      title: "Integer Operations",
-      scoreText: "16.4/20",
-      percent: 82,
-      comment: "Strong. Review negative-number rules.",
-    },
-    {
-      title: "Rational Numbers",
-      scoreText: "16.8/20",
-      percent: 84,
-      comment: "Solid. Work on simplifying fractions in equations.",
-    },
-    {
-      title: "Algebraic Expressions",
-      scoreText: "9/20",
-      percent: 45,
-      comment: "Focus on simplifying.",
-      isNeedsAttention: true,
-    },
-  ];
+    (intervention
+      ? `Your teacher has set up extra help for ${intervention.subject_name}.`
+      : "Your teacher has prepared additional study support for this subject.");
+  const body = reviewer?.body?.trim() ?? "";
 
   return (
     <AppLayout>
@@ -167,68 +202,86 @@ export default function StudentInterventionView() {
                     </h1>
                     <p className="text-sm font-medium text-foreground">
                       {subjectName}
+                      {teacherName ? ` · ${teacherName}` : ""}
                     </p>
                   </Card>
 
                   {/* Introduction paragraph */}
-                  <p className="text-sm px-1 text-muted-foreground font-normal">
-                    {introduction}
-                  </p>
+                  {introduction && (
+                    <p className="text-sm px-1 text-muted-foreground font-normal">
+                      {introduction}
+                    </p>
+                  )}
                 </div>
 
-                {/* Custom Reviewer Body (if teacher provided extra body notes)
-                {reviewer?.body && reviewer.body.trim().length > 0 && !reviewer.body.includes("Try one yourself") && (
-                  <Card className="w-full border-2 border-border bg-card p-5 sm:p-6 shadow-md space-y-2">
-                    <h3 className="font-bold text-foreground text-sm uppercase tracking-wide">
-                      Teacher Notes
-                    </h3>
-                    <div className="whitespace-pre-wrap text-sm text-muted-foreground leading-relaxed font-mono bg-muted/40 p-3 rounded border border-border">
-                      {reviewer.body}
+                {/* Supporting material from the teacher */}
+                {body && (
+                  <Card
+                    aria-label="Supporting material"
+                    className="w-full border-2 border-border bg-card p-4 sm:p-5 flex flex-col gap-3"
+                  >
+                    <h2 className="text-base sm:text-lg font-bold text-foreground">
+                      Supporting Material
+                    </h2>
+                    <div className="whitespace-pre-wrap text-sm text-foreground leading-relaxed">
+                      {body}
                     </div>
                   </Card>
-                )} */}
+                )}
 
-                {/* Lesson Mastery */}
-                <Card
-                  aria-label="Topics from your written work"
-                  className="w-full border-2 border-border bg-card p-4 sm:p-5 flex flex-col gap-3"
-                >
-                  <h2 className="text-base sm:text-lg font-bold text-foreground">
-                    Lesson Mastery
-                  </h2>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {topics.map((t, idx) => (
-                      <div
-                        key={idx}
-                        className={`rounded border-2 p-4 space-y-2.5 ${t.isNeedsAttention
-                          ? "border-amber-500 bg-amber-500/10"
-                          : "border-border bg-card"
-                          }`}
-                      >
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="font-bold text-foreground">{t.title}</span>
-                          <span className="font-semibold text-muted-foreground">{t.scoreText}</span>
-                        </div>
-                        <Progress
-                          value={t.percent}
-                          indicatorClassName={t.isNeedsAttention ? "bg-amber-600 dark:bg-amber-500" : "bg-foreground"}
+                {/* Curated remediation activities */}
+                {activities.length > 0 && (
+                  <Card
+                    aria-label="Curated activities"
+                    className="w-full border-2 border-border bg-card p-4 sm:p-5 flex flex-col gap-3"
+                  >
+                    <h2 className="text-base sm:text-lg font-bold text-foreground">
+                      Curated Activities
+                    </h2>
+                    <div className="flex flex-col gap-2">
+                      {activities.map((act) => (
+                        <ClassworkItemLine
+                          key={act.assignment_id}
+                          className="border-2! shadow-none!"
+                          item={{
+                            classwork_id: act.assignment_id,
+                            title: act.title,
+                            classwork_type: act.classwork_type,
+                          }}
+                          showPublicationStatus={false}
+                          showCategory={false}
+                          showType={false}
+                          onClick={() =>
+                            navigate(
+                              `/student/classworks/${act.assignment_id}?from=${encodeURIComponent(
+                                window.location.pathname + window.location.search
+                              )}`
+                            )
+                          }
+                          rightContent={
+                            act.submission_status ? (
+                              <Badge
+                                variant={
+                                  act.submission_status === "graded" ||
+                                    act.submission_status === "submitted"
+                                    ? "solid"
+                                    : "outline"
+                                }
+                                size="sm"
+                              >
+                                {act.submission_status === "graded"
+                                  ? "Completed"
+                                  : act.submission_status === "submitted"
+                                    ? "Submitted"
+                                    : act.submission_status}
+                              </Badge>
+                            ) : undefined
+                          }
                         />
-                        <p
-                          className={`text-sm ${t.isNeedsAttention
-                            ? "text-amber-800 dark:text-amber-300"
-                            : "text-muted-foreground"
-                            }`}
-                        >
-                          {t.isNeedsAttention && (
-                            <span className="font-bold">Needs attention. </span>
-                          )}
-                          {t.comment}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
+                      ))}
+                    </div>
+                  </Card>
+                )}
 
                 {/* Action buttons */}
                 <div className="flex flex-wrap items-center gap-3 pt-2 pb-8">

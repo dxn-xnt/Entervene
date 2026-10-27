@@ -806,17 +806,17 @@ const InterventionSupportMaterials = forwardRef<
         selected_resources: reconcileSelectedResources(plan.selected_resources, resources),
         ...(plan.grade_treatment === "EXAMINATION"
           ? {
-              original_exam_assignment_id:
-                plan.original_exam_assignment_id ??
-                (selectedActivityIds.length > 0 ? selectedActivityIds[0] : null),
-            }
+            original_exam_assignment_id:
+              plan.original_exam_assignment_id ??
+              (selectedActivityIds.length > 0 ? selectedActivityIds[0] : null),
+          }
           : {}),
         ...(plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY"
           ? {
-              target_assignment_ids: selectedActivityIds,
-              score_adjustment_cap:
-                parsedCap !== undefined && Number.isFinite(parsedCap) ? parsedCap : 75,
-            }
+            target_assignment_ids: selectedActivityIds,
+            score_adjustment_cap:
+              parsedCap !== undefined && Number.isFinite(parsedCap) ? parsedCap : 75,
+          }
           : {}),
       });
       if (!result.plan.ai_suggestion) {
@@ -911,6 +911,86 @@ const InterventionSupportMaterials = forwardRef<
     navigate(
       `${plan.teacher_choice === "TOS" ? "/teacher/tos" : "/teacher/classworks"}?${params.toString()}`
     );
+  };
+
+  const requestAdvisory = () => {
+    const manualChoice = choiceOrigin.current === "manual";
+    let requestingAdvice = false;
+    setWorking(true);
+    setAdvisoryError(null);
+    void (async () => {
+      try {
+        const parsedCap = parseFloat(capInput);
+        const saved = await saveRemediationPlan(interventionId, {
+          teacher_choice: plan.teacher_choice,
+          grade_treatment: plan.grade_treatment ?? null,
+          selected_resources: plan.selected_resources,
+          ...(plan.grade_treatment === "EXAMINATION"
+            ? {
+              original_exam_assignment_id:
+                plan.original_exam_assignment_id ??
+                (selectedActivityIds.length > 0 ? selectedActivityIds[0] : null),
+            }
+            : {}),
+          ...(plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY"
+            ? {
+              target_assignment_ids: selectedActivityIds,
+              score_adjustment_cap: Number.isFinite(parsedCap) ? parsedCap : 75,
+            }
+            : {}),
+        });
+        setResources(saved.resources);
+        requestingAdvice = true;
+        const result = await generateRemediationAdvisory(interventionId);
+        const recommendation = methods.find(
+          (method) => method.value === result.plan.ai_suggestion?.recommended_format
+        );
+        if (!recommendation || !result.plan.ai_suggestion) {
+          setPlan({ ...result.plan, ai_suggestion: null });
+          setAdvisoryError("No supported remediation recommendation is available right now.");
+          return;
+        }
+
+        if (manualChoice) {
+          setPlan({
+            ...result.plan,
+            teacher_choice: saved.plan.teacher_choice,
+            grade_treatment: saved.plan.grade_treatment,
+            original_exam_assignment_id: saved.plan.original_exam_assignment_id,
+            target_assignment_ids: saved.plan.target_assignment_ids ?? selectedActivityIds,
+            score_adjustment_cap:
+              saved.plan.score_adjustment_cap ??
+              (Number.isFinite(parsedCap) ? parsedCap : 75),
+          });
+        } else {
+          choiceOrigin.current = "ai";
+          setPlan({
+            ...result.plan,
+            teacher_choice: recommendation.value,
+            grade_treatment: isGraded(recommendation.value)
+              ? (saved.plan.grade_treatment ?? "PRACTICE_ONLY")
+              : null,
+            original_exam_assignment_id: isGraded(recommendation.value)
+              ? saved.plan.original_exam_assignment_id
+              : null,
+            target_assignment_ids: saved.plan.target_assignment_ids ?? selectedActivityIds,
+            score_adjustment_cap:
+              saved.plan.score_adjustment_cap ??
+              (Number.isFinite(parsedCap) ? parsedCap : 75),
+          });
+        }
+        setNotice("AI recommendation ready. Teacher choice remains final.");
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : undefined;
+        if (requestingAdvice) setAdvisoryError(message ?? "AI recommendation is unavailable right now.");
+        toast.error({
+          title: requestingAdvice ? "AI recommendation unavailable" : "Unable to save current resources",
+          description: message,
+        });
+      } finally {
+        setWorking(false);
+      }
+    })();
   };
 
   const createReviewer = () =>
@@ -1138,7 +1218,7 @@ const InterventionSupportMaterials = forwardRef<
 
                           const treatmentLabel = item.is_graded
                             ? item.component
-                              ? `Count as ${componentLabel(item.component)}`
+                              ? `${componentLabel(item.component)}`
                               : "Graded"
                             : "Practice only · No official grade impact";
 
@@ -1162,7 +1242,7 @@ const InterventionSupportMaterials = forwardRef<
                                 Method: <strong>{methodLabel}</strong>
                               </p>
                               <p>
-                                Grade treatment: <strong>{treatmentLabel}</strong>
+                                Grade Treatment: <strong>{treatmentLabel}</strong>
                               </p>
                               {item.original_assignment_id && examLabel && (
                                 <p className="col-span-full">
@@ -1241,7 +1321,6 @@ const InterventionSupportMaterials = forwardRef<
                         <div key={item.assignment_id} className="flex flex-col gap-1.5">
                           <ClassworkItemLine
                             className="border-2! shadow-none!"
-                            size="sm"
                             item={{
                               classwork_id: item.classwork_id ?? item.assignment_id,
                               title: item.title,
@@ -1287,7 +1366,7 @@ const InterventionSupportMaterials = forwardRef<
                           />
 
                           {item.original_assignment_id && (
-                            <div className="text-xs text-muted-foreground px-2 py-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                            <div className="text-sm text-muted-foreground px-2 py-1 flex flex-wrap gap-x-3 gap-y-0.5">
                               <span>
                                 Original: {item.original_title} ·{" "}
                                 {componentLabel(item.exam_subtype || "Examination")}
@@ -1323,13 +1402,14 @@ const InterventionSupportMaterials = forwardRef<
                             <strong>{progress?.latest_projection?.toFixed(2) ?? "Unavailable"}</strong>
                           </p>
                         </div>
-                        <p className="text-xs text-muted-foreground pt-1 border-t border-border">
-                          {progress?.completed_remediation.length
-                            ? "The student completed the support activity. "
-                            : ""}
-                          {progress?.status_reason} Completion alone does not resolve the Intervention.
-                        </p>
+
                       </Card>
+                      <p className="text-xs text-muted-foreground px-2">
+                        {progress?.completed_remediation.length
+                          ? "The student completed the support activity. "
+                          : ""}
+                        {progress?.status_reason} Completion alone does not resolve the Intervention.
+                      </p>
                     </div>
                   ) : (
                     <div className="flex flex-col gap-1">
@@ -1384,6 +1464,7 @@ const InterventionSupportMaterials = forwardRef<
                       <div className="flex flex-col gap-2">
                         {selectedResources.map((item) => (
                           <ClassworkItemLine
+                            size="sm"
                             className="border-2! shadow-none!"
                             key={`${item.kind}:${item.id}`}
                             item={{
@@ -1458,13 +1539,8 @@ const InterventionSupportMaterials = forwardRef<
                                 rightContent={
                                   <div className="flex items-center gap-1.5">
                                     {item.recommended && (
-                                      <Badge variant="secondary" size="sm">
-                                        Recommended
-                                      </Badge>
-                                    )}
-                                    {isChecked && (
                                       <Badge variant="solid" size="sm">
-                                        Teacher selected
+                                        Recommended
                                       </Badge>
                                     )}
                                   </div>
@@ -1473,7 +1549,7 @@ const InterventionSupportMaterials = forwardRef<
                             );
                           })}
                         </div>
-                        <p className="text-sm text-muted-foreground px-1 -mt-1">
+                        <p className="text-sm text-muted-foreground px-1">
                           {materialPool.length} eligible {materialPool.length === 1 ? "reading" : "readings"};{" "}
                           {selectedResources.length} teacher selected.
                         </p>
@@ -1818,11 +1894,10 @@ const InterventionSupportMaterials = forwardRef<
                                     setCapInput(String(preset));
                                     setCapError(null);
                                   }}
-                                  className={`px-2 py-0.5 text-xs font-bold rounded border-2 transition-all ${
-                                    isPreset
-                                      ? "bg-primary text-primary-foreground border-black"
-                                      : "bg-background text-foreground border-border hover:border-black"
-                                  }`}
+                                  className={`px-2 py-0.5 text-xs font-bold rounded border-2 transition-all ${isPreset
+                                    ? "bg-primary text-primary-foreground border-black"
+                                    : "bg-background text-foreground border-border hover:border-black"
+                                    }`}
                                 >
                                   {preset}%
                                 </button>
@@ -1856,12 +1931,12 @@ const InterventionSupportMaterials = forwardRef<
                           </p>
                         ) : Number.isFinite(parseFloat(capInput)) &&
                           parseFloat(capInput) !==
-                            Number(
-                              projectionResponse?.target_projections?.[0]?.cap_percentage ??
-                              projectionResponse?.eligible_target_gains?.[0]?.cap_percentage ??
-                              plan.score_adjustment_cap ??
-                              75
-                            ) ? (
+                          Number(
+                            projectionResponse?.target_projections?.[0]?.cap_percentage ??
+                            projectionResponse?.eligible_target_gains?.[0]?.cap_percentage ??
+                            plan.score_adjustment_cap ??
+                            75
+                          ) ? (
                           <p className="text-xs text-muted-foreground mt-0.5">
                             Unsaved cap change ({capInput}%). The projection above reflects the saved{" "}
                             {projectionResponse?.target_projections?.[0]?.cap_percentage ??
@@ -2079,8 +2154,8 @@ const InterventionSupportMaterials = forwardRef<
                 <h3 className="font-black">Remediation Activity</h3>
                 <Card className="flex flex-col gap-2">
                   <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-                    <p className="text-sm text-muted-foreground">
-                      Select how you want to deliver remediation.
+                    <p className="font-bold text-base">
+                      How do you want to deliver remediation?
                     </p>
                   </div>
                   <div
@@ -2125,7 +2200,7 @@ const InterventionSupportMaterials = forwardRef<
                             <span className="font-bold text-base">{method.label}</span>
                             <div className="flex items-center gap-1.5">
                               {isAiRecommended && (
-                                <Badge variant="secondary" size="sm">Recommended</Badge>
+                                <Badge variant="solid" size="sm">Recommended</Badge>
                               )}
                             </div>
                           </div>
@@ -2140,12 +2215,8 @@ const InterventionSupportMaterials = forwardRef<
                     })}
                   </div>
                   {plan.ai_suggestion && (
-                    <div className="px-1 text-sm">
+                    <div className="px-1 text-sm text-muted-foreground">
                       <p>{plan.ai_suggestion.reason}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Format advice only. Diagnosis and grade treatment come from saved
-                        evidence and teacher choice.
-                      </p>
                     </div>
                   )}
                   {advisoryError && (
@@ -2333,21 +2404,21 @@ const InterventionSupportMaterials = forwardRef<
                     </div>
 
                     {focus?.component === "EXAMINATION" && originalExams.length === 0 && (
-                      <Alert status="warning">
+                      <p className="text-sm text-destructive px-1">
                         No scored original Examination is available for this student and
                         period.
-                      </Alert>
+                      </p>
                     )}
 
                     {plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY" && (
-                      <div className="space-y-2 pt-2">
-                        <div className="flex items-center justify-between">
+                      <div className="space-y-3 pt-2">
+                        <div className="flex items-end justify-between">
                           <div className="flex items-center gap-2">
                             <Label className="text-base font-bold">
                               Targeted {componentLabel(plan.grade_treatment)} {chosenActivities.length > 1 ? "Classworks" : "Classwork"}
                             </Label>
-                            <Badge variant={capError ? "destructive" : "outline"} size="sm">
-                              {capError ? "Invalid Cap" : `${capInput ? capInput : "75"}% Cap`}
+                            <Badge variant={capError ? "destructive" : "surface"} size="sm">
+                              {capError ? "Invalid Cap" : `${capInput ? capInput : "75"}%`}
                             </Badge>
                           </div>
                           {chosenActivities.length > 0 && (
@@ -2371,51 +2442,51 @@ const InterventionSupportMaterials = forwardRef<
                                   (p.title != null && p.title === chosenActivity.title)
                               );
                               return (
-                                <div
+                                <Card
                                   key={`chosen-cw-${chosenActivity.classwork_id}-${chosenActivity.title}`}
-                                  className="flex flex-col gap-2 p-2.5 rounded border-2 border-border bg-card"
+                                  className="flex flex-col gap-2 p-3 rounded border-2! border-border rounded! bg-card"
                                 >
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                      <span className="text-sm font-bold">{chosenActivity.title}</span>
+                                      <span className="text-base font-bold">{chosenActivity.title}</span>
                                       <Badge variant="solid" size="sm">
                                         Targeted
                                       </Badge>
                                     </div>
-                                    <Badge variant="outline" size="sm">
+                                    <Badge variant="surface" size="sm">
                                       {componentLabel(chosenActivity.component)}
                                     </Badge>
                                   </div>
-                                  <div className="grid grid-cols-3 gap-2 py-1.5 text-center bg-muted/40 rounded border">
-                                    <div>
-                                      <p className="text-[11px] text-muted-foreground font-semibold">Original</p>
-                                      <p className="text-sm font-bold">
+                                  <div className="grid grid-cols-3 gap-2 py-1.5 text-center bg-retro rounded! border-2">
+                                    <div className="flex flex-col gap-0.5">
+                                      <p className="text-xs text-muted-foreground font-medium">Original</p>
+                                      <p className="text-base font-bold">
                                         {preview
                                           ? `${preview.original_score}/${preview.max_points}`
                                           : `${chosenActivity.score}/${chosenActivity.possible_score}`}
                                       </p>
                                     </div>
-                                    <div>
-                                      <p className="text-[11px] text-muted-foreground font-semibold">Max. adjusted</p>
-                                      <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                                    <div className="flex flex-col gap-0.5">
+                                      <p className="text-xs text-muted-foreground font-medium">Maximum adjusted</p>
+                                      <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
                                         {preview
                                           ? `${preview.max_adjusted_score}/${preview.max_points}`
                                           : (previewLoading ? "Calculating..." : "Unavailable")}
                                       </p>
                                     </div>
-                                    <div>
-                                      <p className="text-[11px] text-muted-foreground font-semibold">Possible gain</p>
-                                      <p className="text-sm font-bold">
+                                    <div className="flex flex-col gap-0.5">
+                                      <p className="text-xs text-muted-foreground font-medium">Possible gain</p>
+                                      <p className="text-base font-bold">
                                         {preview
                                           ? `+${preview.possible_gain > 0 ? preview.possible_gain : 0}`
                                           : (previewLoading ? "..." : "—")}
                                       </p>
                                     </div>
                                   </div>
-                                  <p className="text-[11px] text-muted-foreground">
+                                  <p className="text-sm text-muted-foreground">
                                     Hypothetical maximum only · Not an actual awarded grade
                                   </p>
-                                </div>
+                                </Card>
                               );
                             })}
                           </div>
