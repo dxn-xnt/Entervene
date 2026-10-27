@@ -7,7 +7,6 @@ import { Button } from "@/components/student/button";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Progress } from "@/components/retroui/Progress";
-import { useToast } from "@/components/retroui/Toast";
 import ClassworkItemLine from "@/components/item-line/classwork";
 import { routes } from "@/../routes";
 import {
@@ -23,8 +22,16 @@ import {
   type StudentPersistentIntervention,
   type StudentSupportActivity,
 } from "@/lib/student-persistent-interventions-api";
-import { markInterventionViewed } from "@/lib/interventions-api";
-import { BookOpen, LockKeyhole, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  BookOpen,
+  LockKeyhole,
+  ChevronDown,
+  ChevronUp,
+  Frown as FaceSlightlyFrowning,
+  Meh as FaceNeutral,
+  Smile as FaceSlightlySmiling,
+} from "lucide-react";
+import { apiFetch } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
@@ -33,7 +40,6 @@ export default function StudentInterventionView() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const routeParams = useParams();
-  const toast = useToast();
 
   const interventionIdParam = params.get("intervention");
   const interventionId = interventionIdParam && /^\d+$/.test(interventionIdParam) ? Number(interventionIdParam) : null;
@@ -42,9 +48,9 @@ export default function StudentInterventionView() {
 
   const [intervention, setIntervention] = useState<StudentPersistentIntervention | null>(null);
   const [reviewer, setReviewer] = useState<StudentReviewerDetail | null>(null);
-  const [isRead, setIsRead] = useState(false);
   const [activities, setActivities] = useState<StudentSupportActivity[]>([]);
   const [isContentExpanded, setIsContentExpanded] = useState(false);
+  const [targetLesson, setTargetLesson] = useState<{ lesson_id: number; title: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +92,25 @@ export default function StudentInterventionView() {
         }
         if (!resolvedReviewerId && matchedIntervention.reviewer_id) {
           resolvedReviewerId = matchedIntervention.reviewer_id;
+        }
+        if (matchedIntervention.class_id && matchedIntervention.subject_id) {
+          try {
+            const lessonRes = await apiFetch(
+              `/api/v1/lessons/class/${matchedIntervention.class_id}/subject/${matchedIntervention.subject_id}`
+            );
+            if (lessonRes.ok) {
+              const lessonsList: Array<{ lesson_id: number; title: string }> = await lessonRes.json();
+              if (lessonsList && lessonsList.length > 0 && !cancelled) {
+                const matchedLesson = lessonsList.find((l) =>
+                  matchedIntervention?.subject_name &&
+                  l.title.toLowerCase().includes(matchedIntervention.subject_name.toLowerCase())
+                ) || lessonsList[0];
+                setTargetLesson(matchedLesson);
+              }
+            }
+          } catch {
+            // graceful fallback
+          }
         }
       }
 
@@ -136,6 +161,25 @@ export default function StudentInterventionView() {
       if (match) {
         setIntervention(match);
         setActivities(match.activities ?? []);
+        if (match.class_id && match.subject_id) {
+          try {
+            const lessonRes = await apiFetch(
+              `/api/v1/lessons/class/${match.class_id}/subject/${match.subject_id}`
+            );
+            if (lessonRes.ok) {
+              const lessonsList: Array<{ lesson_id: number; title: string }> = await lessonRes.json();
+              if (lessonsList && lessonsList.length > 0 && !cancelled) {
+                const matchedLesson = lessonsList.find((l) =>
+                  match.subject_name &&
+                  l.title.toLowerCase().includes(match.subject_name.toLowerCase())
+                ) || lessonsList[0];
+                setTargetLesson(matchedLesson);
+              }
+            }
+          } catch {
+            // graceful fallback
+          }
+        }
       }
     };
 
@@ -146,30 +190,15 @@ export default function StudentInterventionView() {
     };
   }, [reviewer?.material_id, activities.length]);
 
-  const handleMarkAsRead = async () => {
-    setIsRead(true);
-    if (reviewer?.material_id) {
-      try {
-        await markInterventionViewed(reviewer.material_id);
-      } catch {
-        // non-blocking
-      }
-    }
-    toast.success({
-      title: "Marked as read",
-      description: "Great work staying on top of your study support!",
-    });
-  };
-
   const subjectName = intervention?.subject_name || reviewer?.subject_name || "Study Support";
   const title = reviewer?.title || (intervention ? `${intervention.subject_name} Support` : "Study Support");
   const teacherName = intervention?.teacher_name;
-  const introduction =
-    reviewer?.introduction ||
-    (intervention
-      ? `Your teacher has set up extra help for ${intervention.subject_name}.`
-      : "Your teacher has prepared additional study support for this subject.");
   const body = reviewer?.body?.trim() ?? "";
+
+  const derivedLessonName = reviewer?.title
+    ? reviewer.title.replace(/\s*(Reviewer|Support|Material|Help)$/i, "").trim() || reviewer.title
+    : `${subjectName} Target Topic`;
+  const targetLessonTitle = targetLesson?.title || derivedLessonName;
 
   const allReadings =
     intervention?.required_readings && intervention.required_readings.length > 0
@@ -193,11 +222,6 @@ export default function StudentInterventionView() {
       }
       : null);
 
-  const isReadinessSatisfied = preparation
-    ? "is_satisfied" in preparation
-      ? preparation.is_satisfied
-      : preparation.completed_count >= preparation.required_count
-    : true;
 
   const isHistorical =
     (activities ?? []).length > 0 &&
@@ -220,6 +244,37 @@ export default function StudentInterventionView() {
   const gradedActivities = activities.filter((a) => a.grade != null && a.total_points != null);
   const earnedPoints = gradedActivities.reduce((acc, a) => acc + (a.grade ?? 0), 0);
   const maxPoints = gradedActivities.reduce((acc, a) => acc + (a.total_points ?? 0), 0);
+
+  const isResolved = intervention?.status === "RESOLVED";
+  const currentMastery = isResolved || overallPercentage === 100
+    ? {
+      label: "Outstanding",
+      badgeLabel: "Mastered",
+      badgeVariant: "success" as const,
+      colorClass: "text-success dark:text-success",
+      bgClass: "bg-retro bg-success/20 border-border",
+      icon: FaceSlightlySmiling,
+      description: "Difficulty overcome! You've strengthened your understanding in this target lesson.",
+    }
+    : overallPercentage >= 50
+      ? {
+        label: "Moderate",
+        badgeLabel: "Improving",
+        badgeVariant: "solid" as const,
+        colorClass: "text-amber-600 dark:text-amber-400",
+        bgClass: "bg-retro bg-amber-500/10 border-border",
+        icon: FaceNeutral,
+        description: "Making steady progress! You're actively addressing the difficulty in this target lesson.",
+      }
+      : {
+        label: "Low",
+        badgeLabel: "Needs Practice",
+        badgeVariant: "destructive" as const,
+        colorClass: "text-destructive",
+        bgClass: "bg-retro bg-destructive/10 border-border",
+        icon: FaceSlightlyFrowning,
+        description: "Identified difficulty in this target lesson. Complete review readings and activities to build mastery.",
+      };
 
   return (
     <AppLayout>
@@ -257,10 +312,11 @@ export default function StudentInterventionView() {
                       <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground truncate">
                         {title}
                       </h1>
-                      <p className="text-base text-foreground font-medium">
+                      <p className="text-base text-foreground">
                         Assigned by {teacherName ? teacherName : "Teacher"}
                       </p>
                     </div>
+
                     {intervention?.status && (
                       <Badge variant="solid">
                         {intervention.status === "RESOLVED" ? "Resolved" : "Active"}
@@ -269,19 +325,12 @@ export default function StudentInterventionView() {
                   </div>
 
                   {(intervention?.activated_at || intervention?.resolved_at) && (
-                    <p className="text-sm text-foreground/85">
+                    <p className="text-sm text-foreground -mt-1">
                       {intervention.resolved_at
                         ? `Resolved ${formatDate(intervention.resolved_at)}`
                         : intervention.activated_at
                           ? `Started ${formatDate(intervention.activated_at)}`
                           : ""}
-                    </p>
-                  )}
-
-                  {/* Introduction paragraph */}
-                  {introduction && (
-                    <p className="text-sm text-foreground font-normal">
-                      {introduction}
                     </p>
                   )}
 
@@ -382,7 +431,7 @@ export default function StudentInterventionView() {
                                       navigate(
                                         `/student/classworks/${reading.assignment_id}?from=${encodeURIComponent(
                                           window.location.pathname + window.location.search
-                                        )}`
+                                        )}&support_title=${encodeURIComponent(title)}`
                                       )
                                     : undefined
                                 }
@@ -392,7 +441,7 @@ export default function StudentInterventionView() {
                                 rightContent={
                                   <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                                     <Badge
-                                      variant={isReviewed ? "success" : "outline"}
+                                      variant={isReviewed ? "surface" : "solid"}
                                       size="sm"
                                       className="gap-1"
                                     >
@@ -404,6 +453,9 @@ export default function StudentInterventionView() {
                             );
                           })}
                         </div>
+                        <p className="text-xs sm:text-sm text-muted-foreground px-1 -mt-1">
+                          Complete all review activities before proceeding to the curated remediation activities.
+                        </p>
                       </Card>
                     )}
 
@@ -414,7 +466,7 @@ export default function StudentInterventionView() {
                         className="w-full border-2 border-border bg-card p-4 sm:p-5 flex flex-col gap-3"
                       >
                         <h2 className="text-base sm:text-lg font-bold text-foreground">
-                          Curated Remediation Activities
+                          Curated Remediation Activity
                         </h2>
                         <div className="flex flex-col gap-3">
                           {activities.map((act) => {
@@ -440,7 +492,7 @@ export default function StudentInterventionView() {
                                         navigate(
                                           `/student/classworks/${act.assignment_id}?from=${encodeURIComponent(
                                             window.location.pathname + window.location.search
-                                          )}`
+                                          )}&support_title=${encodeURIComponent(title)}`
                                         )
                                       : undefined
                                   }
@@ -468,7 +520,7 @@ export default function StudentInterventionView() {
                                         </Badge>
                                       )}
                                       <Badge
-                                        variant={actHistorical ? "default" : locked ? "outline" : "success"}
+                                        variant={actHistorical ? "default" : locked ? "solid" : "surface"}
                                         size="sm"
                                         className="gap-1"
                                       >
@@ -496,6 +548,11 @@ export default function StudentInterventionView() {
                             );
                           })}
                         </div>
+
+                        <p className="text-xs sm:text-sm text-muted-foreground px-1 -mt-1">
+                          For additional help or resources, please contact your teacher.
+                        </p>
+
                       </Card>
                     )}
 
@@ -507,29 +564,47 @@ export default function StudentInterventionView() {
                         description="Your teacher hasn't assigned any remediation readings or activities for this support plan yet."
                       />
                     )}
-
-                    {/* Action buttons */}
-                    <div className="flex flex-wrap items-center gap-3 pt-2 pb-8">
-                      <Button
-                        type="button"
-                        onClick={handleMarkAsRead}
-                        className="font-bold"
-                      >
-                        {isRead ? "Marked as read ✓" : "Mark as read"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => navigate(routes.student.interventions)}
-                        className="font-bold"
-                      >
-                        Back to support
-                      </Button>
-                    </div>
                   </main>
 
                   {/* ── Aside (Right: Stat Cards) ── */}
                   <aside aria-label="Support Statistics" className="lg:col-span-6 flex flex-col gap-4 min-w-0">
+                    {/* Target Lesson & Mastery Card */}
+                    <Card className="@container/card bg-primary flex min-w-0 flex-col p-4 gap-3 border-2 border-border shadow-md">
+                      <div className="flex justify-between items-center gap-2">
+                        <Card.Description className="text-lg sm:text-xl font-bold text-foreground">
+                          Target Lesson
+                        </Card.Description>
+                        <Badge variant={currentMastery.badgeVariant} size="sm">
+                          {currentMastery.badgeLabel}
+                        </Badge>
+                      </div>
+
+                      <Card className="flex flex-col gap-1 shadow-none">
+                        <div className="flex flex-col">
+                          <h3 className="font-bold text-base text-foreground">
+                            {targetLessonTitle}
+                          </h3>
+                        </div>
+
+                        <Card
+                          className={cn(
+                            "shadow-none items-center flex flex-col p-3.5 select-none transition-all duration-150 border-2 mt-0.5",
+                            currentMastery.bgClass,
+                          )}
+                        >
+                          <currentMastery.icon className={cn("size-8 transition-colors", currentMastery.colorClass)} />
+                          <p className={cn("text-base font-bold text-center mt-1", currentMastery.colorClass)}>
+                            {currentMastery.label} Mastery
+                          </p>
+                        </Card>
+
+                        <p className="text-xs text-muted-foreground mt-1 px-1">
+                          {currentMastery.description}
+                        </p>
+                      </Card>
+
+                    </Card>
+
                     {/* Overall Progress Card */}
                     <Card className="flex flex-col p-4 gap-3 border-2 border-border shadow-md">
                       <div className="flex justify-between items-center">
@@ -544,7 +619,7 @@ export default function StudentInterventionView() {
                       <div className="flex flex-col gap-1.5">
                         <div className="flex justify-between items-center text-sm font-semibold">
                           <span>Overall Completion</span>
-                          <span className="text-muted-foreground text-xs sm:text-sm">
+                          <span className="text-foreground text-xs sm:text-sm">
                             {completedTasks} of {totalTasks} done
                           </span>
                         </div>
@@ -553,7 +628,7 @@ export default function StudentInterventionView() {
 
                       {totalReadings > 0 && (
                         <div className="flex flex-col gap-1.5 pt-1">
-                          <div className="flex justify-between items-center text-xs font-semibold text-muted-foreground">
+                          <div className="flex justify-between items-center text-sm font-semibold text-foreground">
                             <span>Supporting Readings</span>
                             <span>{reviewedReadings}/{totalReadings} reviewed</span>
                           </div>
@@ -563,7 +638,7 @@ export default function StudentInterventionView() {
 
                       {totalActivities > 0 && (
                         <div className="flex flex-col gap-1.5 pt-1">
-                          <div className="flex justify-between items-center text-xs font-semibold text-muted-foreground">
+                          <div className="flex justify-between items-center text-sm font-semibold text-foreground">
                             <span>Remediation Activities</span>
                             <span>{completedActivities}/{totalActivities} completed</span>
                           </div>
@@ -571,7 +646,7 @@ export default function StudentInterventionView() {
                         </div>
                       )}
 
-                      <div className="mt-auto flex flex-wrap gap-2 pt-2 border-t border-border">
+                      <div className="mt-auto flex flex-wrap gap-2">
                         <Badge variant={overallPercentage === 100 && totalTasks > 0 ? "success" : "surface"} size="sm">
                           {completedTasks} Finished
                         </Badge>

@@ -215,6 +215,13 @@ export default function StudentClassworkView() {
   );
   const sourceLabel = studentClassworkSourceLabel(returnPath);
   const fromSubject = returnPath.startsWith("/student/subjects/");
+  const fromInterventionView =
+    returnPath.startsWith(routes.student.interventionView) ||
+    returnPath.startsWith("/student/interventions/view");
+  const interventionViewLabel =
+    searchParams.get("support_title") ||
+    searchParams.get("title") ||
+    (detail?.subject_name ? `${detail.subject_name} Support` : "Support Details");
   const quizLink = quizPathWithContext(
     routes.student.quizView.replace(":assignmentId", String(assignmentId)),
     `?from=${encodeURIComponent(`${location.pathname}${location.search}`)}`,
@@ -388,6 +395,19 @@ export default function StudentClassworkView() {
                     <Breadcrumb.Separator />
                   </>
                 )}
+                {fromInterventionView && (
+                  <>
+                    <Breadcrumb.Item className="shrink-0">
+                      <Breadcrumb.Link
+                        onClick={() => navigate(routes.student.interventions)}
+                        className="cursor-pointer text-muted-foreground"
+                      >
+                        Study Support
+                      </Breadcrumb.Link>
+                    </Breadcrumb.Item>
+                    <Breadcrumb.Separator />
+                  </>
+                )}
                 <Breadcrumb.Item>
                   <Breadcrumb.Link
                     onClick={back}
@@ -395,7 +415,9 @@ export default function StudentClassworkView() {
                   >
                     {fromSubject
                       ? detail?.subject_name || "Subject"
-                      : sourceLabel}
+                      : fromInterventionView
+                        ? interventionViewLabel
+                        : sourceLabel}
                   </Breadcrumb.Link>
                 </Breadcrumb.Item>
                 <Breadcrumb.Separator />
@@ -523,14 +545,16 @@ export default function StudentClassworkView() {
                           status === "graded" ||
                             status === "submitted" ||
                             status === "completed"
-                            ? "success"
+                            ? "surface"
                             : closed
                               ? "destructive"
                               : "outline"
                         }
                         size="md"
                       >
-                        {closed && !submission ? "Closed" : statusLabel(status)}
+                        {closed && !submission
+                          ? "Closed"
+                          : formatToTitleCase(statusLabel(status))}
                       </Badge>
                     </div>
                   </div>
@@ -549,12 +573,12 @@ export default function StudentClassworkView() {
                       detail.linked_lessons.length > 0 && (
                         <div className="flex flex-col gap-2">
                           <h2 className="font-bold text-lg">Learning Materials</h2>
-                          <Card className="block w-full shadow-none">
+                          <Card className="block p-0 border-none w-full shadow-none">
                             <div className="space-y-3">
                               {detail.linked_lessons.map((lesson) => (
                                 <Card
                                   key={lesson.lesson_id}
-                                  className="block w-full p-3 shadow-none"
+                                  className="block w-full p-3 bg-primary shadow-none"
                                 >
                                   <button
                                     type="button"
@@ -565,20 +589,14 @@ export default function StudentClassworkView() {
                                   </button>
                                   {lesson.readings &&
                                     lesson.readings.length > 0 && (
-                                      <div className="mt-3 space-y-2">
-                                        <p className="flex items-center gap-2 text-sm font-semibold">
-                                          <BookOpen size={16} />
-                                          Reading Materials
-                                        </p>
+                                      <div className="mt-2 space-y-2">
                                         {lesson.readings.map((reading) => (
                                           <ClassworkItemLine
                                             key={reading.classwork_id}
-                                            size="sm"
                                             className="border-2! shadow-none!"
                                             item={{
                                               classwork_id: reading.classwork_id,
                                               title: reading.title,
-                                              description: reading.description,
                                               classwork_type: "READING",
                                             }}
                                             showPublicationStatus={false}

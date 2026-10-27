@@ -38,7 +38,7 @@ import type {
 function getStatusBadge(status?: string | null, dueDate?: string | null) {
   if (status === "graded" || status === "submitted" || status === "completed") {
     return {
-      label: "Done",
+      label: "Submitted",
       cls: "bg-gray-200 text-gray-600 border border-gray-300",
     };
   }

@@ -256,4 +256,15 @@ describe("StudentClassworkView reading review and intervention integration", () 
     fireEvent.click(subjectButton);
     expect(await screen.findByTestId("subject-detail-page")).toBeTruthy();
   });
+
+  it("renders breadcrumbs hierarchy Study Support -> Intervention Title -> Classwork when coming from intervention view", async () => {
+    mount(
+      "/student/classworks/16?from=%2Fstudent%2Finterventions%2Fview%3Fintervention%3D7&support_title=Physics%20Support"
+    );
+
+    expect(await screen.findByRole("heading", { name: "Kinematics Reference Guide" })).toBeTruthy();
+    expect(screen.getByText("Study Support")).toBeTruthy();
+    expect(screen.getByText("Physics Support")).toBeTruthy();
+    expect(screen.getAllByText("Kinematics Reference Guide").length).toBeGreaterThanOrEqual(2);
+  });
 });
