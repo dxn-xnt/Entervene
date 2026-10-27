@@ -14,12 +14,14 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.Competency import Competency
 from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAssignment import LessonAssignment
+from app.models.academic.Subject import Subject
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.cloning.ContentCloning import (
     ContentCloneOperation, ContentShareEvent, ContentSharePackage,
     ContentShareRequest,
 )
+from app.models.people.AcademicStaff import AcademicStaff
 from app.models.quiz.Question import Question
 from app.models.quiz.Quiz import Quiz
 from app.models.quiz.QuizQuestion import QuizQuestion
@@ -255,7 +257,7 @@ def _run_copy(
             request.responded_at = now
             request.open_request_key = None
         db.add(ContentShareEvent(
-            request_id=request.request_id if request else None,
+            request=request,
             operation_id=operation.operation_id,
             actor_staff_id=operation.actor_staff_id,
             event_type="PACKAGE_ACCEPTED" if request else "SELF_CLONE_COMPLETED",
@@ -263,6 +265,22 @@ def _run_copy(
             to_status="ACCEPTED" if request else "SUCCEEDED",
             safe_metadata={"counts": counts},
         ))
+        if request is not None:
+            owner_staff = db.get(AcademicStaff, request.source_owner_staff_id)
+            requester_staff = db.get(AcademicStaff, operation.actor_staff_id)
+            subject = db.get(Subject, request.subject_id)
+            if owner_staff and owner_staff.user_id:
+                from app.services.cloning.ContentCloningNotification import stage_cloning_notification, staff_name
+                req_name = staff_name(requester_staff)
+                sub_name = subject.subject_name if subject else "materials"
+                stage_cloning_notification(
+                    db,
+                    user_id=owner_staff.user_id,
+                    notification_type="repost_accepted",
+                    title=f"Materials Accepted: {sub_name}",
+                    body=f"{req_name} accepted and cloned your materials.",
+                    action_url=f"/teacher/requests?box=incoming&request_id={request.request_id}",
+                )
         db.commit()
         return operation
     except Exception as exc:

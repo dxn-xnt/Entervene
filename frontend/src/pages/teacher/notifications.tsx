@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/To
 import { NotificationCard } from "@/components/notification-card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
-import { Bell, Megaphone, FileCheck, AlertTriangle, Loader2 } from "lucide-react";
+import { Bell, Megaphone, FileCheck, AlertTriangle, Loader2, Repeat } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { routes } from "@/../routes";
@@ -19,6 +19,7 @@ import {
 
 const tabs = [
   { id: "all", label: "All", icon: Bell },
+  { id: "repost", label: "Repost Requests", icon: Repeat },
   { id: "announcements", label: "Announcements", icon: Megaphone },
   { id: "submissions", label: "Submissions", icon: FileCheck },
   { id: "interventions", label: "Interventions", icon: AlertTriangle },
@@ -98,12 +99,18 @@ const Notifications = () => {
       return;
     }
 
+    if (item.notification_type.startsWith("repost_")) {
+      navigate(routes.teacher.requests || "/teacher/requests");
+      return;
+    }
+
     // Default fallback for submissions / classworks
     navigate(routes.teacher.classworks);
   };
 
   const filteredNotifications = notifications.filter((n) => {
     if (activeTab === "all") return true;
+    if (activeTab === "repost") return n.notification_type.startsWith("repost_");
     if (activeTab === "announcements") return n.notification_type === "announcement";
     if (activeTab === "submissions") return n.notification_type === "submission_graded" || n.notification_type === "assignment_due";
     if (activeTab === "interventions") return n.notification_type === "risk_alert" || n.notification_type === "intervention_candidate" || n.notification_type === "intervention_resolved";
