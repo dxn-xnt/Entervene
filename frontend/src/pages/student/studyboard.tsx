@@ -896,7 +896,7 @@ const StoryBoard = () => {
                       )}
                     </MetricCard>
 
-                    <Card className="flex flex-col w-full min-h-64">
+                    <Card className="flex flex-col w-full min-h-64 sm:col-span-2 xl:col-span-6">
                       <Card.Header>
                         <Card.Title className="text-2xl">Subject Performance</Card.Title>
                       </Card.Header>

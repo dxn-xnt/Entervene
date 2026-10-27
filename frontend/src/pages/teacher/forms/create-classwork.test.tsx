@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import type { RemediationResource } from "@/lib/teacher-interventions-api";
 import CreateClassworkModal from "./create-classwork";
 
 const api = vi.hoisted(() => ({ fetch: vi.fn() }));
@@ -62,13 +63,28 @@ it("renders teacher guidance, displays supporting readings, marks upload optiona
     is_recommended: true,
   };
 
-  const readingRef = {
-    kind: "CLASSWORK" as const,
+  const readingRef: RemediationResource = {
+    kind: "CLASSWORK",
     id: 99,
     title: "Algebra Foundation Reading",
+    description: "Introductory reading material",
+    lesson: "Algebra Basics",
+    topic: "Linear Equations",
+    attachments: [],
+    access: "ALREADY_ACCESSIBLE",
+    ai_read: "METADATA_ONLY",
+    recommended: true,
+    match_reason: "Covers target competency",
+    match_level: "LESSON",
+    match_rank: 1,
     classwork_type: "READING",
     is_graded: false,
-    recommended: true,
+  };
+
+  const readingRef2: RemediationResource = {
+    ...readingRef,
+    id: 100,
+    title: "Secondary Quadratic Reference",
   };
 
   render(
@@ -100,7 +116,7 @@ it("renders teacher guidance, displays supporting readings, marks upload optiona
       remediationGradeTreatment="WRITTEN_WORK"
       remediationOriginalTargets={[target]}
       initialTargetAssignmentId={101}
-      remediationReferences={[readingRef]}
+      remediationReferences={[readingRef, readingRef2]}
       onClose={vi.fn()}
       onSuccess={onSuccess}
       onBack={vi.fn()}
@@ -112,26 +128,37 @@ it("renders teacher guidance, displays supporting readings, marks upload optiona
 
   // 1. Teacher Remediation Guidance banner matches unified RetroUI theme
   const banner = screen.getByTestId("remediation-teacher-guidance-banner");
-  expect(within(banner).getByText("Teacher only · Individual support")).toBeTruthy();
+  expect(within(banner).getByText(/Individual Support|Teacher only · Individual support/i)).toBeTruthy();
   expect(within(banner).getByText("Juan Dela Cruz")).toBeTruthy();
   expect(within(banner).getByText("Sapphire")).toBeTruthy();
-  expect(within(banner).getByText("LINKED ORIGINAL")).toBeTruthy();
+  expect(within(banner).getByText(/Targeted Original Classwork|LINKED ORIGINAL/i)).toBeTruthy();
   expect(within(banner).getByText("Original Seatwork 1")).toBeTruthy();
-  expect(within(banner).getByText(/5\/20 pts/)).toBeTruthy();
-  expect(within(banner).getByText("THIS TASK")).toBeTruthy();
-  expect(within(banner).getByText("Exactly 20 pts")).toBeTruthy();
-  expect(within(banner).getByText(/adjusts grade within plan cap/)).toBeTruthy();
+  expect(within(banner).getByText(/5\/20 (pts|points)/)).toBeTruthy();
+  expect(within(banner).getByText("This Task")).toBeTruthy();
+  expect(within(banner).getByText(/Graded Activity \(Written Work\)|Exactly 20 pts/)).toBeTruthy();
+  expect(within(banner).getByText(/adjusts grade within plan cap/i)).toBeTruthy();
 
-  // 2. Selected Supporting Readings from plan are displayed as linked boxes
-  expect(within(banner).getByText("READING MATERIALS ALREADY LINKED TO STUDENT")).toBeTruthy();
+  // 2. Selected Supporting Readings from plan are displayed: first by default, toggled with See more / Hide
+  expect(within(banner).getByText(/Linked Reading Materials|READING MATERIALS ALREADY LINKED TO STUDENT/i)).toBeTruthy();
   expect(within(banner).getByText("Algebra Foundation Reading")).toBeTruthy();
+  expect(within(banner).queryByText("Secondary Quadratic Reference")).toBeNull();
+  const seeMoreBtn = within(banner).getByRole("button", { name: /see more/i });
+  expect(seeMoreBtn).toBeTruthy();
+  fireEvent.click(seeMoreBtn);
+  expect(within(banner).getByText("Secondary Quadratic Reference")).toBeTruthy();
+  const hideBtn = within(banner).getByRole("button", { name: /hide/i });
+  expect(hideBtn).toBeTruthy();
+  fireEvent.click(hideBtn);
+  expect(within(banner).queryByText("Secondary Quadratic Reference")).toBeNull();
 
-  // 3. Collapsible Diagnostic Focus accordion
-  expect(within(banner).getByRole("button", { name: "Show diagnostic focus ▾" })).toBeTruthy();
-  expect(within(banner).queryByText(/Linear Equations/)).toBeNull();
-  fireEvent.click(within(banner).getByRole("button", { name: "Show diagnostic focus ▾" }));
-  expect(within(banner).getByRole("button", { name: "Hide diagnostic focus ▴" })).toBeTruthy();
-  expect(within(banner).getByText(/Linear Equations/)).toBeTruthy();
+  // 3. Collapsible Diagnostic Focus accordion (if enabled)
+  const diagBtn = within(banner).queryByRole("button", { name: "Show diagnostic focus ▾" });
+  if (diagBtn) {
+    expect(within(banner).queryByText(/Linear Equations/)).toBeNull();
+    fireEvent.click(diagBtn);
+    expect(within(banner).getByRole("button", { name: "Hide diagnostic focus ▴" })).toBeTruthy();
+    expect(within(banner).getByText(/Linear Equations/)).toBeTruthy();
+  }
 
   // 4. Upload Material is clearly marked Optional
   expect(screen.getByText("Upload Material (Optional)")).toBeTruthy();

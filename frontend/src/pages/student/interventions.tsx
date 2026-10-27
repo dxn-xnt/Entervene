@@ -19,7 +19,7 @@ import {
   type StudentSupportActivity,
 } from "@/lib/student-persistent-interventions-api";
 import IconContainer from "@/components/icon-container";
-import { BookOpen, ClipboardList, Shield } from "lucide-react";
+import { BookOpen, Shield } from "lucide-react";
 import { formatDate } from "@/lib/formatters";
 
 export default function StudentInterventions() {

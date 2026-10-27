@@ -742,7 +742,7 @@ export default function ClassworkView({
 
                         <div className="gap-3">
                           {(Boolean(selected.linked_lessons?.length) || Boolean(selected.subject_name)) && (
-                            <p className="font-normal text-sm text-muted-foreground">
+                            <p className="font-normal text-sm text-muted-foreground line-clamp-2 break-words">
                               {selected.linked_lessons && selected.linked_lessons.length > 0 ? (
                                 <>
                                   Linked under {selected.linked_lessons.length === 1 ? "lesson" : "lessons"}{" "}
@@ -789,22 +789,22 @@ export default function ClassworkView({
                       </div>
 
                     </Card.Title>
-                    <div className="flex flex-wrap items-center gap-2 px-2">
+                    <div className="flex flex-row items-center gap-2 px-2 whitespace-nowrap">
                       {!isReadingType(selected.classwork_type) && selected.classwork_category && (
                         <Badge
                           variant="outline"
                           size="md"
-                          className="w-fit"
+                          className="w-fit whitespace-nowrap"
                         >
                           {toTitleCase(selected.classwork_category)}
                         </Badge>
                       )}
 
-                      <Badge variant="solid" size="md">
+                      <Badge variant="solid" size="md" className="whitespace-nowrap">
                         {selected.is_published ? "Published" : "Draft"}
                       </Badge>
                       {selected.is_locked && (
-                        <Badge variant="outline" size="sm" className="bg-white">
+                        <Badge variant="outline" size="sm" className="bg-white whitespace-nowrap">
                           Locked
                         </Badge>
                       )}
