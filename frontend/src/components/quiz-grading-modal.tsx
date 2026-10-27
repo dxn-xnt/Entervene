@@ -8,7 +8,7 @@ import { apiFetch } from "@/lib/api";
 import type { TeacherQuizSubmissionDetail } from "@/pages/teacher/classworks/quiz-builder-types";
 import { Card } from "./retroui/Card";
 import { SegmentedControl } from "@/components/retroui/SegmentedControl";
-import { formatDate, toTitleCase } from "@/lib/formatters";
+import { formatDate, formatToTitleCase } from "@/lib/formatters";
 import { Avatar } from "@/components/retroui/Avatar";
 
 interface QuizGradingModalProps {
@@ -421,7 +421,7 @@ export default function QuizGradingModal({
                     className="text-sm"
                     variant={detail.needs_grading ? "default" : "solid"}
                   >
-                    {detail.needs_grading ? "Needs Grading" : toTitleCase(detail.status)}
+                    {detail.needs_grading ? "Needs Grading" : formatToTitleCase(detail.status)}
                   </Badge>
                 </div>
                 <div>

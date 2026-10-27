@@ -42,7 +42,7 @@ import {
   type OriginalExamination,
 } from "@/lib/teacher-interventions-api";
 import { SubjectGradeProjectionCard } from "./subject-grade-projection-card";
-import { toTitleCase } from "@/lib/formatters";
+import { formatToTitleCase } from "@/lib/formatters";
 import Field from "@/components/admin/classes/fields/Field";
 import IconContainer from "@/components/icon-container";
 
@@ -1769,7 +1769,7 @@ const InterventionSupportMaterials = forwardRef<
                                         Recommended
                                       </Badge>
                                       <Badge variant={isChecked ? "solid" : "surface"} size="sm">
-                                        {toTitleCase(item.classwork_type ?? item.kind)}
+                                        {formatToTitleCase(item.classwork_type ?? item.kind)}
                                       </Badge>
                                       <Checkbox
                                         checked={isChecked}
@@ -1815,7 +1815,7 @@ const InterventionSupportMaterials = forwardRef<
                                   rightContent={
                                     <div className="flex items-center gap-2">
                                       <Badge variant={`${isChecked ? "solid" : "surface"}`} size="sm">
-                                        {toTitleCase(item.classwork_type ?? item.kind)}
+                                        {formatToTitleCase(item.classwork_type ?? item.kind)}
                                       </Badge>
 
                                       <Checkbox

@@ -20,7 +20,7 @@ import {
   type TeacherDashboardHealthResponse,
   type SectionHealthItem,
 } from "@/lib/api";
-import { formatDate, toTitleCase } from "@/lib/formatters";
+import { formatDate, formatToTitleCase } from "@/lib/formatters";
 import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";
 import LessonItemLine from "@/components/item-line/lesson";
@@ -295,7 +295,7 @@ export default function SubjectLessonList({
                         {classwork.title}
                       </p>
                       <p className="text-xs font-medium text-gray-700">
-                        {toTitleCase(classwork.classwork_type, "Exam")}
+                        {formatToTitleCase(classwork.classwork_type, "Exam")}
                         {classwork.due_date
                           ? ` | Due ${formatDate(classwork.due_date)}`
                           : ""}
@@ -438,85 +438,86 @@ export default function SubjectLessonList({
                     <ContextMenu.Trigger className="block w-full">
                       <Card className="flex flex-col">
                         {/* ── Competency Header ── */}
-                        <Card.Header className="flex flex-row items-center justify-between gap-3 px-1 mb-0">
+                        <Card.Header className="flex flex-row items-start justify-between gap-3 px-1 mb-0">
                           <div className="flex flex-col gap-1 min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2 min-w-0">
+                            <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
                               <Card.Title className="text-base text-lg font-bold text-black break-words line-clamp-2">
                                 {comp.competency_code || comp.statement}
                               </Card.Title>
 
-
+                              <div className="flex items-center gap-2 shrink-0">
+                                <Badge
+                                  variant="surface"
+                                  size="sm"
+                                >
+                                  {compClassworkCount}{" "}
+                                  {compClassworkCount === 1 ? "classwork" : "classworks"}
+                                </Badge>
+                                {(openCompetencyForm || onArchiveCompetency) && (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        type="button"
+                                        variant="secondary"
+                                        size="icon"
+                                        className="p-1 shadow-none"
+                                        aria-label="Competency options"
+                                      >
+                                        <MoreVertical size={14} />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                      align="end"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="border-2 border-black bg-white min-w-[180px] p-1 rounded font-semibold text-xs z-50"
+                                    >
+                                      {onAddLessonToCompetency && (
+                                        <DropdownMenuItem
+                                          onClick={() => onAddLessonToCompetency(comp.competency_id)}
+                                          className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-yellow-100"
+                                        >
+                                          <Plus size={14} />
+                                          Add Lesson
+                                        </DropdownMenuItem>
+                                      )}
+                                      {openCompetencyForm && (
+                                        <DropdownMenuItem
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openCompetencyForm(comp);
+                                          }}
+                                          className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-yellow-100"
+                                        >
+                                          <Pencil size={14} />
+                                          <span>Edit Competency</span>
+                                        </DropdownMenuItem>
+                                      )}
+                                      {onArchiveCompetency && (
+                                        <DropdownMenuItem
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onArchiveCompetency(comp.competency_id);
+                                          }}
+                                          className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-red-50 hover:text-red-700"
+                                        >
+                                          <ArchiveIcon size={14} />
+                                          <span>Archive Competency</span>
+                                        </DropdownMenuItem>
+                                      )}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                )}
+                              </div>
                             </div>
+
                             {comp.competency_code && comp.statement && (
-                              <p className="text-xs text-muted-foreground break-words line-clamp-2">
+                              <p className="text-sm text-muted-foreground break-words line-clamp-2">
                                 {comp.statement}
                               </p>
                             )}
                           </div>
 
-                          <div className="flex items-center gap-2 shrink-0">
-                            <Badge
-                              variant="surface"
-                              size="sm"
-                            >
-                              {compClassworkCount}{" "}
-                              {compClassworkCount === 1 ? "classwork" : "classworks"}
-                            </Badge>
-                            {(openCompetencyForm || onArchiveCompetency) && (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    type="button"
-                                    variant="secondary"
-                                    size="icon"
-                                    className="p-1 shadow-none"
-                                    aria-label="Competency options"
-                                  >
-                                    <MoreVertical size={14} />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent
-                                  align="end"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="border-2 border-black bg-white min-w-[180px] p-1 rounded font-semibold text-xs z-50"
-                                >
-                                  {onAddLessonToCompetency && (
-                                    <DropdownMenuItem
-                                      onClick={() => onAddLessonToCompetency(comp.competency_id)}
-                                      className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-yellow-100"
-                                    >
-                                      <Plus size={14} />
-                                      Add Lesson
-                                    </DropdownMenuItem>
-                                  )}
-                                  {openCompetencyForm && (
-                                    <DropdownMenuItem
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        openCompetencyForm(comp);
-                                      }}
-                                      className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-yellow-100"
-                                    >
-                                      <Pencil size={14} />
-                                      <span>Edit Competency</span>
-                                    </DropdownMenuItem>
-                                  )}
-                                  {onArchiveCompetency && (
-                                    <DropdownMenuItem
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onArchiveCompetency(comp.competency_id);
-                                      }}
-                                      className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-red-50 hover:text-red-700"
-                                    >
-                                      <ArchiveIcon size={14} />
-                                      <span>Archive Competency</span>
-                                    </DropdownMenuItem>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                          </div>
+
                         </Card.Header>
 
                         {/* ── Competency Lessons ── */}

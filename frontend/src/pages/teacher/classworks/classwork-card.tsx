@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { apiFetch } from "@/lib/api";
 import { formatDate, isQuizType } from "@/lib/classwork-utils";
-import { toTitleCase } from "@/lib/formatters";
+import { formatToTitleCase } from "@/lib/formatters";
 import type { ClassworkTracking, TeacherClasswork } from "@/types/classwork";
 import EditClassworkModal from "../forms/edit-classwork";
 
@@ -331,7 +331,7 @@ export default function ClassworkCard({
                       )}
                       {showClassworkType && item.classwork_type && (
                         <Badge variant="secondary" size="sm">
-                          {toTitleCase(item.classwork_type)}
+                          {formatToTitleCase(item.classwork_type)}
                         </Badge>
                       )}
                       <Badge variant={item.is_published ? "solid" : "default"} size="sm">
