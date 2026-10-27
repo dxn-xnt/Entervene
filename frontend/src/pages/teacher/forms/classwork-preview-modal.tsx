@@ -333,7 +333,7 @@ export default function ClassworkDetailModal({
               </div>
 
               <div className="space-y-4">
-                <Card className="w-full shadow-none bg-primary">
+                <Card className="w-full bg-card">
                   <Card.Content className="space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <Card.Title className="text-lg font-bold">
@@ -365,15 +365,14 @@ export default function ClassworkDetailModal({
                       </div>
                       <Progress
                         value={submissionRate}
-                        className="w-full h-3 border-2 border-black bg-gray-100"
-                        indicatorClassName="bg-black"
+                        className="w-full h-3"
                       />
                     </div>
 
                     {/* Grading Completion Progress */}
                     {needsGrading && (
                       <div className="space-y-1.5">
-                        <div className="flex justify-between items-center text-xs font-bold text-gray-800">
+                        <div className="flex justify-between items-center text-sm text-foreground">
                           <span>Grading Completion</span>
                           <span>
                             {trackingLoading && !activeTracking
@@ -385,22 +384,20 @@ export default function ClassworkDetailModal({
                         </div>
                         <Progress
                           value={gradingRate}
-                          className="w-full h-3 border-2 border-black bg-gray-100"
-                          indicatorClassName="bg-black"
+                          className="w-full h-3"
                         />
                       </div>
                     )}
 
                     <Button
                       autoIcon={false}
-                      variant="secondary"
                       size="sm"
                       onClick={() =>
                         navigate(
                           `/teacher/classworks/${selectedClasswork.classwork_id}`,
                         )
                       }
-                      className="w-full shadow-none rounded!"
+                      className="w-full"
                     >
                       {isReading ? "Open Reading Workspace" : "Open Submissions Workspace"}
                     </Button>
