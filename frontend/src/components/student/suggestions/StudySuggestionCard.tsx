@@ -41,14 +41,14 @@ export default function StudySuggestionCard({
           <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-xl font-bold text-gray-900">{suggestion.title}</h3>
-              <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${priorityStyles[suggestion.priority]}`}>
+              <span className={`rounded-full border px-2.5 py-1 text-sm font-bold ${priorityStyles[suggestion.priority]}`}>
                 {suggestion.priority.toLowerCase()} priority
               </span>
-              <span className="rounded-full border border-gray-300 bg-white px-2.5 py-1 text-xs font-bold text-gray-700">
+              <span className="rounded-full border border-gray-300 bg-white px-2.5 py-1 text-sm font-bold text-gray-700">
                 {suggestion.is_viewed ? "Viewed" : "New"}
               </span>
               {isCompleted ? (
-                <span className="rounded-full border border-green-300 bg-green-100 px-2.5 py-1 text-xs font-bold text-green-800">
+                <span className="rounded-full border border-green-300 bg-green-100 px-2.5 py-1 text-sm font-bold text-green-800">
                   Completed
                 </span>
               ) : null}
@@ -63,7 +63,7 @@ export default function StudySuggestionCard({
             )}
 
             <div className="rounded border border-gray-300 bg-[#FFFBEE] p-3">
-              <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Linked resource</p>
+              <p className="text-sm font-bold uppercase tracking-wide text-gray-500">Linked resource</p>
               <p className="mt-1 font-bold text-gray-900">{resource.title}</p>
               <p className="text-sm text-gray-600">
                 {resource.resource_type === "LESSON" ? "Lesson" : `Classwork${resource.classwork_type ? ` - ${resource.classwork_type}` : ""}`}

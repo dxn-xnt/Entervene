@@ -98,9 +98,9 @@ export default function StudentInterventions() {
                 rightContent={
                   <div className="flex items-center gap-2">
                     {act.grade != null && act.total_points != null && (
-                      <span className="text-xs font-bold">
+                      <span className="text-sm font-bold">
                         {act.grade}
-                        <span className="font-medium text-muted-foreground text-xs">
+                        <span className="font-medium text-muted-foreground text-sm">
                           {" "}
                           / {act.total_points}
                         </span>
@@ -216,7 +216,7 @@ export default function StudentInterventions() {
 
                             {/* Meta line */}
                             <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
-                              <span className="text-xs sm:text-sm text-muted-foreground">
+                              <span className="text-sm text-muted-foreground">
                                 {rev.sent_at ? `Shared ${formatDateTime(rev.sent_at)}` : ""}
                               </span>
 
@@ -303,7 +303,7 @@ export default function StudentInterventions() {
 
                           {/* Meta line */}
                           <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
-                            <span className="text-xs sm:text-sm text-muted-foreground">
+                            <span className="text-sm text-muted-foreground">
                               Teacher support active
                             </span>
 
@@ -396,7 +396,7 @@ export default function StudentInterventions() {
 
                           {/* Meta line */}
                           <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
-                            <span className="text-xs sm:text-sm text-muted-foreground">
+                            <span className="text-sm text-muted-foreground">
                               {item.resolved_at
                                 ? `Resolved ${formatDateTime(item.resolved_at)}`
                                 : "Resolved"}

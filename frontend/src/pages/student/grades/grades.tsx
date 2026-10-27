@@ -56,7 +56,7 @@ const Grades = () => {
                       </div>
                       <div className="shrink-0 text-right">
                         <Card.Description>{getGradedCount(subject.subject_id)}</Card.Description>
-                        <p className="text-xs text-muted-foreground">Graded Classwork</p>
+                        <p className="text-sm text-muted-foreground">Graded Classwork</p>
                       </div>
                     </Card.Content>
                   </Card>} />

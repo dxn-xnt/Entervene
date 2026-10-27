@@ -146,10 +146,10 @@ export default function StudentTodoView() {
                         </p>
                       </div>
                       <div className="flex flex-col items-center border-2 border-black rounded px-3 py-1 shrink-0">
-                        <span className="text-xs text-black/60">
+                        <span className="text-sm text-black/60">
                           Mastery level
                         </span>
-                        <span className="text-xs font-semibold">
+                        <span className="text-sm font-semibold">
                           {masteryEmoji[topic.mastery]} {topic.mastery}
                         </span>
                       </div>
@@ -166,7 +166,7 @@ export default function StudentTodoView() {
                             <div className="relative w-28 h-20 shrink-0 rounded overflow-hidden border-2 border-black bg-gray-50 flex items-center justify-center">
                               <Icon size={28} className="text-black/40" />
                               <span
-                                className={`absolute bottom-1 left-1 text-[10px] font-semibold px-1 rounded ${typeStyles[res.type]}`}
+                                className={`absolute bottom-1 left-1 text-sm font-semibold px-1 rounded ${typeStyles[res.type]}`}
                               >
                                 {res.type}
                               </span>
@@ -175,10 +175,10 @@ export default function StudentTodoView() {
                               <p className="font-semibold text-sm">
                                 {res.title}
                               </p>
-                              <p className="text-xs text-black/60">
+                              <p className="text-sm text-black/60">
                                 by {res.author}
                               </p>
-                              <p className="text-xs italic text-black/50 line-clamp-2">
+                              <p className="text-sm italic text-black/50 line-clamp-2">
                                 {res.description}
                               </p>
                             </div>

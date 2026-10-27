@@ -719,13 +719,13 @@ export default function SubjectLessonTab({
               <span className="text-xl font-semibold leading-tight hover:underline sm:text-2xl">{lesson.title}</span>
               <span className="flex flex-wrap items-center gap-2">
                 {lesson.attachments.length > 0 && (
-                  <Badge variant="secondary" size="sm" className="rounded border border-black bg-success px-2 py-0.5 text-[10px] font-bold text-black">
+                  <Badge variant="secondary" size="sm" className="rounded border border-black bg-success px-2 py-0.5 text-sm font-bold text-black">
                     {lesson.attachments.length} material{lesson.attachments.length === 1 ? "" : "s"}
                   </Badge>
                 )}
               </span>
             </span>
-            <span className="mt-1 block text-xs text-foreground">
+            <span className="mt-1 block text-sm text-foreground">
               {lesson.description ||
                 (lesson.updated_at
                   ? `Updated ${fmtDate(lesson.updated_at)}`
@@ -781,7 +781,7 @@ export default function SubjectLessonTab({
                 </div>
               </EmptyMedia>
               <EmptyTitle className="text-sm font-bold">No classwork for this lesson yet</EmptyTitle>
-              <EmptyDescription className="text-xs">Related activities will appear when your teacher publishes them.</EmptyDescription>
+              <EmptyDescription className="text-sm">Related activities will appear when your teacher publishes them.</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
@@ -809,7 +809,7 @@ export default function SubjectLessonTab({
                 </Card.Title>
               </div>
 
-              <p className="mt-1 text-xs font-medium text-gray-600">
+              <p className="mt-1 text-sm font-medium text-gray-600">
                 {cw.due_date
                   ? `Due ${new Date(cw.due_date).toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}`
                   : "No due date"}
@@ -894,7 +894,7 @@ export default function SubjectLessonTab({
                     <h3 className="text-xl font-bold tracking-tight text-black">
                       Exams
                     </h3>
-                    <p className="text-xs font-medium text-gray-600">
+                    <p className="text-sm font-medium text-gray-600">
                       Periodical exams and summative assessments for this
                       subject.
                     </p>
@@ -902,7 +902,7 @@ export default function SubjectLessonTab({
                 </div>
                 <Badge
                   variant="secondary"
-                  className="px-3 py-1 text-xs font-bold shadow-sm"
+                  className="px-3 py-1 text-sm font-bold shadow-sm"
                 >
                   {quarterlyAssessments.length}{" "}
                   {quarterlyAssessments.length === 1 ? "Exam" : "Exams"}
@@ -934,11 +934,11 @@ export default function SubjectLessonTab({
                             <h4 className="font-bold text-sm md:text-base leading-tight line-clamp-2 break-words [overflow-wrap:anywhere]">
                               {cw.title}
                             </h4>
-                            <span className="rounded-full border border-black bg-[#7ABA78] px-2.5 py-0.5 text-[10px] font-bold text-white shrink-0">
+                            <span className="rounded-full border border-black bg-[#7ABA78] px-2.5 py-0.5 text-sm font-bold text-white shrink-0">
                               Exam
                             </span>
                           </div>
-                          <p className="text-xs font-medium text-gray-600 mt-1">
+                          <p className="text-sm font-medium text-gray-600 mt-1">
                             {cw.due_date
                               ? `Due ${new Date(cw.due_date).toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}`
                               : "No due date"}
@@ -950,7 +950,7 @@ export default function SubjectLessonTab({
                       <div className="flex items-center gap-3 shrink-0">
                         {badge && (
                           <span
-                            className={`rounded-full border px-3 py-1 text-xs font-bold ${badge.cls}`}
+                            className={`rounded-full border px-3 py-1 text-sm font-bold ${badge.cls}`}
                           >
                             {badge.label}
                           </span>

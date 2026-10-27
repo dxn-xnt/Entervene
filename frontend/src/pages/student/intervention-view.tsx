@@ -165,7 +165,7 @@ export default function StudentInterventionView() {
                     <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
                       {title}
                     </h1>
-                    <p className="text-xs sm:text-sm font-medium text-foreground">
+                    <p className="text-sm font-medium text-foreground">
                       {subjectName}
                     </p>
                   </Card>
@@ -215,7 +215,7 @@ export default function StudentInterventionView() {
                           indicatorClassName={t.isNeedsAttention ? "bg-amber-600 dark:bg-amber-500" : "bg-foreground"}
                         />
                         <p
-                          className={`text-xs ${t.isNeedsAttention
+                          className={`text-sm ${t.isNeedsAttention
                             ? "text-amber-800 dark:text-amber-300"
                             : "text-muted-foreground"
                             }`}
