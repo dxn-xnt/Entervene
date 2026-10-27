@@ -9,6 +9,7 @@ import {
   Plus,
   RotateCcw,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
@@ -69,7 +70,11 @@ export interface LinkedClassworkItem {
 }
 
 export interface LessonItemLineProps<TLesson extends LessonItem = LessonItem> {
+  id?: string;
   lesson: TLesson;
+  subtitle?: ReactNode;
+  badge?: ReactNode;
+  children?: ReactNode;
   isExpanded?: boolean;
   onToggle?: () => void;
   classworks?: LinkedClassworkItem[];
@@ -80,6 +85,7 @@ export interface LessonItemLineProps<TLesson extends LessonItem = LessonItem> {
   onOpenLessonManager?: (lesson: TLesson) => void;
   onArchiveLesson?: (lesson: TLesson) => void;
   className?: string;
+  showPublicationStatus?: boolean;
   /** Show the retro drop shadow on the lesson card. Defaults to true. */
   withShadow?: boolean;
   // Delivery status & actions
@@ -92,7 +98,11 @@ export interface LessonItemLineProps<TLesson extends LessonItem = LessonItem> {
 
 
 export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
+  id,
   lesson,
+  subtitle,
+  badge,
+  children,
   isExpanded = false,
   onToggle,
   classworks = [],
@@ -103,6 +113,7 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
   onOpenLessonManager,
   onArchiveLesson,
   className,
+  showPublicationStatus = true,
   withShadow = true,
   delivery,
   isDelivered,
@@ -120,10 +131,11 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
       onConfirmDelivery ||
       onOpenCorrectionDialog,
   );
+  const accordionId = id ?? `lesson-${lesson.lesson_id}`;
 
   const accordionContent = (
     <Accordion
-      id={id}
+      id={accordionId}
       value={isExpanded ? [String(lesson.lesson_id)] : []}
       onValueChange={() => onToggle?.()}
       className={cn("w-full shadow-none", className)}
@@ -159,14 +171,17 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
                 {lesson.title}
               </h4>
               <div className="flex flex-row items-center gap-2 -mr-1 shrink-0">
-                <Badge
-                  variant={lesson.is_published ? "solid" : "default"}
-                  size="sm"
-                  className="shrink-0 text-xs font-bold"
-                  data-testid={`badge-published-${lesson.lesson_id}`}
-                >
-                  {lesson.is_published ? "Published" : "Draft"}
-                </Badge>
+                {showPublicationStatus && (
+                  <Badge
+                    variant={lesson.is_published ? "solid" : "default"}
+                    size="sm"
+                    className="shrink-0 text-xs font-bold"
+                    data-testid={`badge-published-${lesson.lesson_id}`}
+                  >
+                    {lesson.is_published ? "Published" : "Draft"}
+                  </Badge>
+                )}
+                {badge}
                 <Badge
                   variant={isTaught ? "success" : "outline"}
                   size="sm"
@@ -246,87 +261,91 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
                 </p>
               )}
 
-          {isLoadingClassworks ? (
-            <LoadingPanel label="Loading classworks..." />
-          ) : classworks.length === 0 ? (
-            <Empty className="border-2 bg-white p-6 shadow-none bg-retro">
-              <EmptyHeader>
-                <EmptyMedia>
-                  <div className="flex size-9 items-center justify-center border-2 border-black bg-primary">
-                    <ClipboardList className="size-4.5 text-black" />
-                  </div>
-                </EmptyMedia>
-                <EmptyTitle className="text-sm font-bold">No classworks yet</EmptyTitle>
-                <EmptyDescription className="text-xs">
-                  No classworks assigned to this lesson yet.
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            classworks.map((cw) => (
-              <ClassworkItemLine
-                key={cw.classwork_assignment_id}
-                item={cw}
-                onOpen={onOpenClassworkDetail}
-                className="shadow-none!"
-                showCategoryBadge={false}
-                showPublicationStatus={false}
-              />
-            ))
-          )}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-dashed border-gray-200 mt-2">
-            <div className="flex items-center gap-2">
-              {!isTaught && onConfirmDelivery && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={isDeliveryLoading}
-                  onClick={() => void onConfirmDelivery(lesson)}
-                  className="h-8 gap-1.5"
-                  data-testid={`mark-taught-btn-${lesson.lesson_id}`}
-                >
-                  {isDeliveryLoading ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <CheckCircle2 size={14} />
+              {isLoadingClassworks ? (
+                <LoadingPanel label="Loading classworks..." />
+              ) : classworks.length === 0 ? (
+                <Empty className="border-2 bg-white p-6 shadow-none bg-retro">
+                  <EmptyHeader>
+                    <EmptyMedia>
+                      <div className="flex size-9 items-center justify-center border-2 border-black bg-primary">
+                        <ClipboardList className="size-4.5 text-black" />
+                      </div>
+                    </EmptyMedia>
+                    <EmptyTitle className="text-sm font-bold">No classworks yet</EmptyTitle>
+                    <EmptyDescription className="text-xs">
+                      No classworks assigned to this lesson yet.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                classworks.map((cw) => (
+                  <ClassworkItemLine
+                    key={cw.classwork_assignment_id}
+                    item={cw}
+                    onOpen={onOpenClassworkDetail}
+                    className="shadow-none!"
+                    showCategoryBadge={false}
+                    showPublicationStatus={false}
+                  />
+                ))
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-dashed border-gray-200 mt-2">
+                <div className="flex items-center gap-2">
+                  {!isTaught && onConfirmDelivery && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={isDeliveryLoading}
+                      onClick={() => void onConfirmDelivery(lesson)}
+                      className="h-8 gap-1.5"
+                      data-testid={`mark-taught-btn-${lesson.lesson_id}`}
+                    >
+                      {isDeliveryLoading ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <CheckCircle2 size={14} />
+                      )}
+                      <span>Mark as Taught</span>
+                    </Button>
                   )}
-                  <span>Mark as Taught</span>
-                </Button>
-              )}
-              {isTaught && onOpenCorrectionDialog && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={isDeliveryLoading}
-                  onClick={() => onOpenCorrectionDialog(lesson)}
-                  className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                  data-testid={`correct-delivery-btn-${lesson.lesson_id}`}
-                >
-                  <RotateCcw size={13} />
-                  <span>Correct Confirmation</span>
-                </Button>
-              )}
-              {isTaught && activeDelivery?.delivered_at && (
-                <span className="text-[11px] text-muted-foreground hidden sm:inline">
-                  Confirmed taught {formatDate(activeDelivery.delivered_at)}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                onClick={() => onOpenClassworkForm?.(lesson)}
-                className="h-8"
-              >
-                <Plus size={14} className="mr-1.5" />
-                Add Classwork
-              </Button>
-            </div>
-          </div>
+                  {isTaught && onOpenCorrectionDialog && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isDeliveryLoading}
+                      onClick={() => onOpenCorrectionDialog(lesson)}
+                      className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                      data-testid={`correct-delivery-btn-${lesson.lesson_id}`}
+                    >
+                      <RotateCcw size={13} />
+                      <span>Correct Confirmation</span>
+                    </Button>
+                  )}
+                  {isTaught && activeDelivery?.delivered_at && (
+                    <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                      Confirmed taught {formatDate(activeDelivery.delivered_at)}
+                    </span>
+                  )}
+                </div>
+                {onOpenClassworkForm && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      onClick={() => onOpenClassworkForm(lesson)}
+                      className="h-8"
+                    >
+                      <Plus size={14} className="mr-1.5" />
+                      Add Classwork
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </Accordion.Content>
       </Accordion.Item>
     </Accordion>
