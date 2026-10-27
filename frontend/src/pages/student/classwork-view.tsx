@@ -34,6 +34,7 @@ import AttachmentDisplay from "@/components/attachment-display";
 import SubmissionForm from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
+import ClassworkItemLine from "@/components/item-line/classwork";
 import StudentQuizFullscreen from "./forms/student-quiz-fullscreen";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { useToast } from "@/components/retroui/Toast";
@@ -49,7 +50,7 @@ import {
 } from "@/lib/student-classwork-navigation";
 import { quizPathWithContext } from "@/lib/student-quiz-navigation";
 import { isDisplayableSubmission } from "@/lib/student-submission";
-import { formatDateTime } from "@/lib/formatters";
+import { formatDateTime, formatToTitleCase } from "@/lib/formatters";
 import { routes } from "@/../routes";
 import type { ClassworkDetail, Submission } from "./subjects-view/types";
 import type { ActivityRubricLevel } from "@/types/classwork";
@@ -214,11 +215,36 @@ export default function StudentClassworkView() {
   );
   const sourceLabel = studentClassworkSourceLabel(returnPath);
   const fromSubject = returnPath.startsWith("/student/subjects/");
+  const fromInterventionView =
+    returnPath.startsWith(routes.student.interventionView) ||
+    returnPath.startsWith("/student/interventions/view");
+  const interventionViewLabel =
+    searchParams.get("support_title") ||
+    searchParams.get("title") ||
+    (detail?.subject_name ? `${detail.subject_name} Support` : "Support Details");
   const quizLink = quizPathWithContext(
     routes.student.quizView.replace(":assignmentId", String(assignmentId)),
     `?from=${encodeURIComponent(`${location.pathname}${location.search}`)}`,
   );
   const back = () => navigate(returnPath);
+  const navigateToSubject = () => {
+    if (detail?.class_id && detail?.subject_id) {
+      navigate(
+        routes.student.subjectDetail
+          .replace(":classId", String(detail.class_id))
+          .replace(":subjectId", String(detail.subject_id)),
+      );
+    }
+  };
+  const navigateToLesson = (lessonId: number) => {
+    if (detail?.class_id && detail?.subject_id) {
+      navigate(
+        `${routes.student.subjectDetail
+          .replace(":classId", String(detail.class_id))
+          .replace(":subjectId", String(detail.subject_id))}?tab=lessons&lessonId=${lessonId}`,
+      );
+    }
+  };
   const dueDate = detail?.due_date ? new Date(detail.due_date) : null;
   const overdue = Boolean(dueDate && Date.now() > dueDate.getTime());
   const closed = Boolean(
@@ -369,6 +395,19 @@ export default function StudentClassworkView() {
                     <Breadcrumb.Separator />
                   </>
                 )}
+                {fromInterventionView && (
+                  <>
+                    <Breadcrumb.Item className="shrink-0">
+                      <Breadcrumb.Link
+                        onClick={() => navigate(routes.student.interventions)}
+                        className="cursor-pointer text-muted-foreground"
+                      >
+                        Study Support
+                      </Breadcrumb.Link>
+                    </Breadcrumb.Item>
+                    <Breadcrumb.Separator />
+                  </>
+                )}
                 <Breadcrumb.Item>
                   <Breadcrumb.Link
                     onClick={back}
@@ -376,7 +415,9 @@ export default function StudentClassworkView() {
                   >
                     {fromSubject
                       ? detail?.subject_name || "Subject"
-                      : sourceLabel}
+                      : fromInterventionView
+                        ? interventionViewLabel
+                        : sourceLabel}
                   </Breadcrumb.Link>
                 </Breadcrumb.Item>
                 <Breadcrumb.Separator />
@@ -431,7 +472,7 @@ export default function StudentClassworkView() {
                       >
                         <ClassworkTypeIcon type={detail.classwork_type} />
                       </IconContainer>
-                      <div className="min-w-0 space-y-2">
+                      <div className="min-w-0 flex flex-col gap-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h1 className="break-words text-2xl font-bold sm:text-3xl">
                             {detail.title}
@@ -439,67 +480,81 @@ export default function StudentClassworkView() {
                           <Badge
                             variant="secondary"
                             size="sm"
-                            className="capitalize"
                           >
-                            {detail.classwork_type || "Classwork"}
+                            {formatToTitleCase(detail.classwork_type) || "Classwork"}
                           </Badge>
                         </div>
                         {detail.linked_lessons &&
-                        detail.linked_lessons.length > 0 ? (
+                          detail.linked_lessons.length > 0 ? (
                           <p className="text-sm text-muted-foreground">
                             Linked under{" "}
                             {detail.linked_lessons.length === 1
                               ? "lesson"
                               : "lessons"}{" "}
-                            <span className="font-semibold text-foreground">
-                              {detail.linked_lessons
-                                .map((lesson) => lesson.title)
-                                .join(", ")}
-                            </span>
+                            {detail.linked_lessons.map((lesson, idx) => (
+                              <span key={lesson.lesson_id}>
+                                {idx > 0 && ", "}
+                                <button
+                                  type="button"
+                                  onClick={() => navigateToLesson(lesson.lesson_id)}
+                                  className="cursor-pointer font-semibold text-foreground hover:underline"
+                                >
+                                  {lesson.title}
+                                </button>
+                              </span>
+                            ))}
                             {detail.subject_name && (
                               <>
                                 {" "}
                                 in{" "}
-                                <span className="font-semibold text-foreground">
+                                <button
+                                  type="button"
+                                  onClick={navigateToSubject}
+                                  className="cursor-pointer font-semibold text-foreground hover:underline"
+                                >
                                   {detail.subject_name}
-                                </span>
+                                </button>
                               </>
                             )}
                           </p>
                         ) : detail.subject_name ? (
                           <p className="text-sm text-muted-foreground">
                             Subject:{" "}
-                            <span className="font-semibold text-foreground">
+                            <button
+                              type="button"
+                              onClick={navigateToSubject}
+                              className="cursor-pointer font-semibold text-foreground hover:underline"
+                            >
                               {detail.subject_name}
-                            </span>
+                            </button>
                           </p>
                         ) : null}
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-row whitespace-nowrap items-center gap-2">
                       {detail.classwork_category && (
                         <Badge
                           variant="outline"
                           size="md"
-                          className="capitalize"
                         >
-                          {detail.classwork_category.replaceAll("_", " ")}
+                          {formatToTitleCase(detail.classwork_category)}
                         </Badge>
                       )}
                       <Badge
                         variant={
                           status === "graded" ||
-                          status === "submitted" ||
-                          status === "completed"
-                            ? "success"
+                            status === "submitted" ||
+                            status === "completed"
+                            ? "surface"
                             : closed
                               ? "destructive"
                               : "outline"
                         }
                         size="md"
-                        className="capitalize"
                       >
-                        {closed && !submission ? "Closed" : statusLabel(status)}
+                        {closed && !submission
+                          ? "Closed"
+                          : formatToTitleCase(statusLabel(status))}
                       </Badge>
                     </div>
                   </div>
@@ -516,60 +571,59 @@ export default function StudentClassworkView() {
                     </section>
                     {detail.linked_lessons &&
                       detail.linked_lessons.length > 0 && (
-                        <Card className="block w-full shadow-none">
-                          <h2 className="font-bold">Learning materials</h2>
-                          <div className="mt-3 space-y-3">
-                            {detail.linked_lessons.map((lesson) => (
-                              <Card
-                                key={lesson.lesson_id}
-                                className="block w-full p-3 shadow-none"
-                              >
-                                <p className="font-semibold">{lesson.title}</p>
-                                {lesson.description && (
-                                  <p className="text-sm text-muted-foreground">
-                                    {lesson.description}
-                                  </p>
-                                )}
-                                {lesson.readings &&
-                                  lesson.readings.length > 0 && (
-                                    <div className="mt-3 space-y-2">
-                                      <p className="flex items-center gap-2 text-sm font-semibold">
-                                        <BookOpen size={16} />
-                                        Reading materials
-                                      </p>
-                                      {lesson.readings.map((reading) => (
-                                        <div
-                                          key={reading.classwork_id}
-                                          className="rounded-md border border-border p-2 text-sm"
-                                        >
-                                          <p className="font-semibold">
-                                            {reading.title}
-                                          </p>
-                                          {reading.description && (
-                                            <p className="text-muted-foreground">
-                                              {reading.description}
-                                            </p>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                {lesson.attachments &&
-                                  lesson.attachments.length > 0 && (
-                                    <div className="mt-3">
-                                      <AttachmentDisplay
-                                        attachments={lesson.attachments}
-                                        type="lesson"
-                                        downloadUrl={(id) =>
-                                          `${API_URL}/api/v1/lessons/${lesson.lesson_id}/attachments/${id}/download`
-                                        }
-                                      />
-                                    </div>
-                                  )}
-                              </Card>
-                            ))}
-                          </div>
-                        </Card>
+                        <div className="flex flex-col gap-2">
+                          <h2 className="font-bold text-lg">Learning Materials</h2>
+                          <Card className="block p-0 border-none w-full shadow-none">
+                            <div className="space-y-3">
+                              {detail.linked_lessons.map((lesson) => (
+                                <Card
+                                  key={lesson.lesson_id}
+                                  className="block w-full p-3 bg-primary shadow-none"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => navigateToLesson(lesson.lesson_id)}
+                                    className="cursor-pointer text-left font-semibold text-foreground hover:underline"
+                                  >
+                                    {lesson.title}
+                                  </button>
+                                  {lesson.readings &&
+                                    lesson.readings.length > 0 && (
+                                      <div className="mt-2 space-y-2">
+                                        {lesson.readings.map((reading) => (
+                                          <ClassworkItemLine
+                                            key={reading.classwork_id}
+                                            className="border-2! shadow-none!"
+                                            item={{
+                                              classwork_id: reading.classwork_id,
+                                              title: reading.title,
+                                              classwork_type: "READING",
+                                            }}
+                                            showPublicationStatus={false}
+                                            showCategory={false}
+                                            showType={true}
+                                            onClick={() => navigateToLesson(lesson.lesson_id)}
+                                          />
+                                        ))}
+                                      </div>
+                                    )}
+                                  {lesson.attachments &&
+                                    lesson.attachments.length > 0 && (
+                                      <div className="mt-3">
+                                        <AttachmentDisplay
+                                          attachments={lesson.attachments}
+                                          type="lesson"
+                                          downloadUrl={(id) =>
+                                            `${API_URL}/api/v1/lessons/${lesson.lesson_id}/attachments/${id}/download`
+                                          }
+                                        />
+                                      </div>
+                                    )}
+                                </Card>
+                              ))}
+                            </div>
+                          </Card>
+                        </div>
                       )}
                     <section className="space-y-2">
                       <h2 className="text-lg font-bold">Attached Files</h2>
@@ -591,6 +645,15 @@ export default function StudentClassworkView() {
                         />
                       )}
                     </section>
+
+                    {detail.rubric_levels &&
+                      detail.rubric_levels.length > 0 && (
+                        <RubricsScoreBoard
+                          totalPoints={detail.total_points}
+                          rubricLevels={detail.rubric_levels}
+                        />
+                      )}
+
                     <div className="text-sm text-muted-foreground">
                       <p>
                         {dueDate
@@ -601,13 +664,6 @@ export default function StudentClassworkView() {
                         <p>Locks {formatDateTime(detail.lock_date)}</p>
                       )}
                     </div>
-                    {detail.rubric_levels &&
-                      detail.rubric_levels.length > 0 && (
-                        <RubricsScoreBoard
-                          totalPoints={detail.total_points}
-                          rubricLevels={detail.rubric_levels}
-                        />
-                      )}
                   </div>
                 </Card>
 
@@ -708,9 +764,9 @@ export default function StudentClassworkView() {
                   </div>
                   {isReading ? (
                     submission ||
-                    status === "completed" ||
-                    status === "submitted" ||
-                    status === "graded" ? (
+                      status === "completed" ||
+                      status === "submitted" ||
+                      status === "graded" ? (
                       <p className="text-sm font-semibold text-success">
                         You have completed this reading material.
                       </p>
@@ -849,11 +905,11 @@ export default function StudentClassworkView() {
           setQuizReviewMode={setQuizReviewMode}
           quizRemainingSeconds={null}
           flaggedQuizQuestionIds={new Set()}
-          toggleQuizFlag={() => {}}
+          toggleQuizFlag={() => { }}
           quizError=""
           isQuizSubmitting={false}
           onExit={() => setShowQuizSummary(false)}
-          onSubmit={() => {}}
+          onSubmit={() => { }}
         />
       )}
     </>

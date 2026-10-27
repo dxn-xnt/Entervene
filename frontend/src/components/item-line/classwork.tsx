@@ -16,6 +16,7 @@ import type { ClassworkTracking, TeacherClasswork } from "@/types/classwork";
 export interface BaseClassworkItem {
   classwork_id: number;
   title: string;
+  description?: string | null;
   classwork_type?: string | null;
   type?: string | null;
   classwork_category?: string | null;
@@ -33,6 +34,7 @@ export interface BaseClassworkItem {
 
 export interface ClassworkItemLineProps<T extends BaseClassworkItem = TeacherClasswork> {
   item: T;
+  subtitle?: React.ReactNode;
   tracking?: ClassworkTracking;
   onOpen?: (item: T) => void;
   onClick?: () => void;
@@ -71,6 +73,7 @@ function ClassworkTypeIcon({
 
 export const ClassworkItemLine = <T extends BaseClassworkItem = TeacherClasswork>({
   item,
+  subtitle,
   tracking,
   onOpen,
   onClick,
@@ -169,10 +172,14 @@ export const ClassworkItemLine = <T extends BaseClassworkItem = TeacherClasswork
           </div>
 
           <div className={cn("-mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground", isSmall ? "text-xs" : "text-sm")}>
-            {dueLabel ? (
+            {subtitle ? (
+              <span>{subtitle}</span>
+            ) : dueLabel ? (
               <span>{dueLabel}</span>
             ) : item.created_at ? (
               <span>Created {formatDate(item.created_at)}</span>
+            ) : item.description ? (
+              <span className="line-clamp-2">{item.description}</span>
             ) : null}
           </div>
         </div>

@@ -123,6 +123,7 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
 
   const accordionContent = (
     <Accordion
+      id={id}
       value={isExpanded ? [String(lesson.lesson_id)] : []}
       onValueChange={() => onToggle?.()}
       className={cn("w-full shadow-none", className)}
@@ -201,6 +202,11 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
                 )}
               </div>
             </div>
+            {subtitle && (
+              <span className="mt-1 block text-sm text-foreground">
+                {subtitle}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
@@ -230,11 +236,15 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
         </div>
 
         <Accordion.Content className="p-3 border-t-2 border-black bg-white space-y-2">
-          {lesson.description && (
-            <p className="text-xs font-normal text-muted-foreground break-words line-clamp-2 pb-1">
-              {lesson.description}
-            </p>
-          )}
+          {children !== undefined ? (
+            children
+          ) : (
+            <>
+              {lesson.description && (
+                <p className="text-xs font-normal text-muted-foreground break-words line-clamp-2 pb-1">
+                  {lesson.description}
+                </p>
+              )}
 
           {isLoadingClassworks ? (
             <LoadingPanel label="Loading classworks..." />

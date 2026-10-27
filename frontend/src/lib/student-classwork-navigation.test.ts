@@ -20,6 +20,7 @@ describe("student classwork navigation", () => {
     expect(studentClassworkSourceLabel("/student/todo")).toBe("To Do");
     expect(studentClassworkSourceLabel("/student/subjects/3/8?tab=classwork&search=quiz")).toBe("Classwork");
     expect(studentClassworkSourceLabel("/student/subjects/3/8?tab=lessons")).toBe("Lessons");
+    expect(studentClassworkSourceLabel("/student/interventions")).toBe("Study Support");
   });
 
   it("keeps the originating sidebar item active on a classwork detail route", () => {

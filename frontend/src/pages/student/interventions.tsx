@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Button } from "@/components/student/button";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
@@ -18,17 +17,16 @@ import {
   listMyResolvedInterventions,
   type StudentPersistentIntervention,
   type StudentSupportActivity,
+  type StudentRequiredReading,
+  type StudentPreparationProgress,
 } from "@/lib/student-persistent-interventions-api";
-import IconContainer from "@/components/icon-container";
+import InterventionCard from "@/components/intervention-card";
 import {
   BookOpen,
-  CheckCircle2,
   ClipboardList,
-  ExternalLink,
   History,
   LockKeyhole,
   Shield,
-  Timer,
 } from "lucide-react";
 import { formatDate } from "@/lib/formatters";
 
@@ -88,8 +86,6 @@ export default function StudentInterventions() {
     };
   }, []);
 
-
-
   const classworkLink = (assignmentId: number, interventionId?: number) =>
     `/student/classworks/${assignmentId}?from=${encodeURIComponent(
       window.location.pathname
@@ -98,171 +94,192 @@ export default function StudentInterventions() {
   const renderActivities = (
     activities: StudentSupportActivity[],
     emptyPlaceholder?: React.ReactNode,
-    interventionId?: number
+    interventionId?: number,
+    interventionReadings?: StudentRequiredReading[],
+    interventionPreparation?: StudentPreparationProgress | null
   ) => {
-    if (activities && activities.length > 0) {
-      return (
-        <div className="space-y-2">
-          <p className="font-semibold text-foreground text-base">
-            Curated Remediation Activities
-          </p>
-          <div className="flex flex-col gap-3">
-            {activities.map((activity) => {
-              const preparationBlocked = activity.preparation?.state === "BLOCKED";
-              const historical = activity.access_state === "HISTORICAL";
-              const locked = activity.access_state === "PREPARATION_REQUIRED";
-              const finished = ["submitted", "graded", "completed"].includes(
-                activity.submission_status?.toLowerCase() ?? ""
-              );
-              const orderedReadings = [...(activity.readings ?? [])].sort(
-                (left, right) => left.order - right.order
-              );
+    const allReadings =
+      interventionReadings && interventionReadings.length > 0
+        ? interventionReadings
+        : Array.from(
+          new Map(
+            (activities ?? [])
+              .flatMap((act) => act.readings ?? [])
+              .map((r) => [r.assignment_id, r])
+          ).values()
+        );
+    const orderedReadings = [...allReadings].sort(
+      (left, right) => left.order - right.order
+    );
 
-              return (
-                <Card
-                  key={activity.assignment_id}
-                  className="w-full space-y-4 border-2 border-border bg-card p-3 shadow-none sm:p-4"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h4 className="break-words text-base font-bold sm:text-lg">
-                        {activity.title}
-                      </h4>
-                      <p className="text-sm text-muted-foreground">
-                        {activity.classwork_type === "QUIZ"
-                          ? "Quiz"
-                          : activity.classwork_type === "ASSIGNMENT"
-                            ? "Assignment"
-                            : activity.classwork_type}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {activity.grade != null && activity.total_points != null && (
-                        <Badge variant="outline" size="sm">
-                          Score: {activity.grade}/{activity.total_points}
-                        </Badge>
-                      )}
-                      {activity.submission_status && (
-                        <Badge variant={finished ? "solid" : "outline"} size="sm" className="capitalize">
-                          {activity.submission_status === "graded"
-                            ? "Completed"
-                            : activity.submission_status === "submitted"
-                              ? "Submitted"
-                              : activity.submission_status}
-                        </Badge>
-                      )}
-                      <Badge
-                        variant={historical ? "default" : locked ? "outline" : "success"}
-                        size="sm"
-                        className="gap-1"
-                      >
-                        {historical ? (
-                          <History className="size-3.5" />
-                        ) : locked ? (
-                          <LockKeyhole className="size-3.5" />
-                        ) : (
-                          <CheckCircle2 className="size-3.5" />
-                        )}
-                        {historical ? "Unavailable" : locked ? "Locked" : "Ready"}
-                      </Badge>
-                    </div>
-                  </div>
+    const preparation =
+      interventionPreparation ??
+      (activities ?? []).find((act) => act.preparation)?.preparation ??
+      (orderedReadings.length > 0
+        ? {
+          completed_count: orderedReadings.filter((r) => r.review_status === "REVIEWED").length,
+          required_count: orderedReadings.length,
+        }
+        : null);
 
-                  {activity.preparation && (
-                    <div className="flex items-center gap-2 text-sm font-semibold">
-                      <BookOpen className="size-4 shrink-0" />
-                      {activity.preparation.completed_count} of {activity.preparation.required_count}{" "}
-                      reviewed
-                    </div>
-                  )}
+    const isHistorical =
+      (activities ?? []).length > 0 &&
+      activities.every((act) => act.access_state === "HISTORICAL");
 
-                  {orderedReadings.length > 0 && (
-                    <div className="space-y-2" aria-label={`Required readings for ${activity.title}`}>
-                      <p className="text-sm font-bold">Required Supporting Readings</p>
-                      {orderedReadings.map((reading) => {
-                        const isReviewed = reading.review_status === "REVIEWED";
-                        return (
-                          <ClassworkItemLine
-                            key={reading.assignment_id}
-                            size="sm"
-                            className="border-2! shadow-none!"
-                            item={{
-                              classwork_id: reading.classwork_id,
-                              title: reading.title,
-                              classwork_type: "READING",
-                            }}
-                            showPublicationStatus={false}
-                            showCategory={false}
-                            showType={false}
-                            rightContent={
-                              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                                <Badge
-                                  variant={isReviewed ? "success" : "outline"}
-                                  size="sm"
-                                  className="gap-1"
-                                >
-                                  {isReviewed ? (
-                                    <CheckCircle2 className="size-3.5" />
-                                  ) : (
-                                    <Timer className="size-3.5" />
-                                  )}
-                                  {isReviewed ? "Reviewed" : "Review Required"}
-                                </Badge>
-                                {!historical && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    autoIcon={false}
-                                    className="gap-2"
-                                    aria-label={`Open reading: ${reading.title}`}
-                                    onClick={() => navigate(classworkLink(reading.assignment_id, interventionId))}
-                                  >
-                                    <ExternalLink className="size-4" />
-                                    Open Reading
-                                  </Button>
-                                )}
-                              </div>
-                            }
-                          />
-                        );
-                      })}
-                    </div>
-                  )}
+    const hasActivities = activities && activities.length > 0;
+    const hasReadings = orderedReadings.length > 0;
 
-                  {preparationBlocked ? (
-                    <Alert status="warning">
-                      Some required readings are unavailable. Your teacher needs to update this activity before you can continue.
-                    </Alert>
-                  ) : locked ? (
-                    <p className="flex items-start gap-2 text-sm text-muted-foreground">
-                      <LockKeyhole className="mt-0.5 size-4 shrink-0" />
-                      Complete all Supporting Readings before opening this activity.
-                    </p>
-                  ) : historical ? (
-                    <p className="text-sm text-muted-foreground">
-                      {activity.prerequisite_message || "This activity is no longer available."}
-                    </p>
-                  ) : (
-                    <div className="flex justify-end">
-                      <Button
-                        size="sm"
-                        autoIcon={false}
-                        className="gap-2"
-                        onClick={() => navigate(classworkLink(activity.assignment_id, interventionId))}
-                      >
-                        <ExternalLink className="size-4" />
-                        {finished ? "View Activity" : "Start Activity"}
-                      </Button>
-                    </div>
-                  )}
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      );
+    if (!hasActivities && !hasReadings) {
+      return emptyPlaceholder ?? null;
     }
-    return emptyPlaceholder ?? null;
+
+    return (
+      <div className="space-y-4">
+        {/* Section: Review Activity */}
+        {hasReadings && (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-semibold text-foreground text-base">
+                Review Activity
+              </p>
+              {preparation && (
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <BookOpen className="size-4 shrink-0" />
+                  {preparation.completed_count} of {preparation.required_count}{" "}
+                  reviewed
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              {orderedReadings.map((reading) => {
+                const isReviewed = reading.review_status === "REVIEWED";
+                return (
+                  <ClassworkItemLine
+                    key={reading.assignment_id}
+                    size="sm"
+                    className="border-2! shadow-none!"
+                    item={{
+                      classwork_id: reading.classwork_id,
+                      title: reading.title,
+                      classwork_type: "READING",
+                    }}
+                    onClick={
+                      !isHistorical
+                        ? () =>
+                          navigate(
+                            classworkLink(reading.assignment_id, interventionId)
+                          )
+                        : undefined
+                    }
+                    showPublicationStatus={false}
+                    showCategory={false}
+                    showType={false}
+                    rightContent={
+                      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                        <Badge
+                          variant={isReviewed ? "success" : "outline"}
+                          size="sm"
+                          className="gap-1"
+                        >
+                          {isReviewed ? "Reviewed" : "Review Required"}
+                        </Badge>
+                      </div>
+                    }
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Section: Curated Remediation Activities */}
+        {hasActivities ? (
+          <div className="space-y-2">
+            <p className="font-semibold text-foreground text-base">
+              Curated Remediation Activities
+            </p>
+            <div className="flex flex-col gap-3">
+              {activities.map((activity) => {
+                const preparationBlocked = activity.preparation?.state === "BLOCKED";
+                const historical = activity.access_state === "HISTORICAL";
+                const locked = activity.access_state === "PREPARATION_REQUIRED";
+                const finished = ["submitted", "graded", "completed"].includes(
+                  activity.submission_status?.toLowerCase() ?? ""
+                );
+
+                return (
+                  <div key={activity.assignment_id} className="space-y-1">
+                    <ClassworkItemLine
+                      className="border-2! shadow-none!"
+                      item={{
+                        classwork_id: activity.assignment_id,
+                        title: activity.title,
+                        classwork_type: activity.classwork_type,
+                      }}
+                      onClick={
+                        !historical && !locked && !preparationBlocked
+                          ? () => navigate(classworkLink(activity.assignment_id, interventionId))
+                          : undefined
+                      }
+                      showPublicationStatus={false}
+                      showCategory={false}
+                      showType={false}
+                      rightContent={
+                        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                          {activity.grade != null && activity.total_points != null && (
+                            <Badge variant="outline" size="sm">
+                              Score: {activity.grade}/{activity.total_points}
+                            </Badge>
+                          )}
+                          {activity.submission_status && (
+                            <Badge
+                              variant={finished ? "solid" : "outline"}
+                              size="sm"
+                              className="capitalize"
+                            >
+                              {activity.submission_status === "graded"
+                                ? "Completed"
+                                : activity.submission_status === "submitted"
+                                  ? "Submitted"
+                                  : activity.submission_status}
+                            </Badge>
+                          )}
+                          <Badge
+                            variant={historical ? "default" : locked ? "outline" : "success"}
+                            size="sm"
+                            className="gap-1"
+                          >
+                            {historical ? "Unavailable" : locked ? "Locked" : "Ready"}
+                          </Badge>
+                        </div>
+                      }
+                    />
+
+                    {preparationBlocked ? (
+                      <p className="text-xs sm:text-sm text-muted-foreground px-1">
+                        Some required readings are unavailable. Your teacher needs to update this activity before you can continue.
+                      </p>
+                    ) : locked ? (
+                      <p className="flex items-center gap-1.5 text-xs sm:text-sm text-muted-foreground px-1">
+                        <LockKeyhole className="size-3.5 shrink-0" />
+                        Complete all Supporting Readings before opening this activity.
+                      </p>
+                    ) : historical ? (
+                      <p className="text-xs sm:text-sm text-muted-foreground px-1">
+                        {activity.prerequisite_message || "This activity is no longer available."}
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          emptyPlaceholder ?? null
+        )}
+      </div>
+    );
   };
 
   const emptyActivitiesPlaceholder = (
@@ -282,7 +299,7 @@ export default function StudentInterventions() {
           <div className="flex flex-1 flex-col">
             <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <SidebarTrigger className="shrink-0 md:hidden" />
-              <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
+              <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                 Study Support
               </h1>
             </header>
@@ -305,51 +322,25 @@ export default function StudentInterventions() {
                         const activities = matchingIntervention?.activities ?? [];
 
                         return (
-                          <Card
+                          <InterventionCard
                             key={rev.material_id}
-                            className="w-full bg-background border-2 border-border p-4 sm:p-5 shadow-none flex flex-col gap-2 transition-all hover:bg-retro hover:-translate-y-1"
+                            category="new"
+                            title={rev.title}
+                            subtitle={rev.subject_name}
+                            metaText={rev.sent_at ? `Shared ${formatDate(rev.sent_at)}` : ""}
+                            actionLabel="Start Reading"
+                            onAction={() =>
+                              navigate(`${routes.student.interventionView}?reviewer=${rev.material_id}`)
+                            }
                           >
-                            {/* Main Card Title */}
-                            <div className="w-full justify-between flex items-start mb-1 gap-2">
-                              <div className="flex flex-row gap-3 items-start min-w-0">
-                                <IconContainer className="bg-primary shrink-0" size="xl">
-                                  <Shield className="text-border" size="36" />
-                                </IconContainer>
-                                <div className="flex flex-col gap-0.5 min-w-0">
-                                  <h4
-                                    className="text-xl sm:text-2xl font-black text-foreground tracking-tight truncate"
-                                    title={rev.title}
-                                  >
-                                    {rev.title}
-                                  </h4>
-                                  <p className="text-sm font-medium text-foreground truncate">{rev.subject_name}</p>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Curated remediation activities if any */}
-                            {renderActivities(activities, undefined, matchingIntervention?.intervention_id)}
-
-                            {/* Meta line */}
-                            <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
-                              <span className="text-xs sm:text-sm text-muted-foreground">
-                                {rev.sent_at ? `Shared ${formatDate(rev.sent_at)}` : ""}
-                              </span>
-
-                              {/* Action button */}
-                              <Button
-                                size="sm"
-                                autoIcon={false}
-                                onClick={() =>
-                                  navigate(`${routes.student.interventionView}?reviewer=${rev.material_id}`)
-                                }
-                                className="gap-2"
-                              >
-                                <BookOpen className="size-4" />
-                                Start Reading
-                              </Button>
-                            </div>
-                          </Card>
+                            {renderActivities(
+                              activities,
+                              undefined,
+                              matchingIntervention?.intervention_id,
+                              matchingIntervention?.required_readings,
+                              matchingIntervention?.preparation
+                            )}
+                          </InterventionCard>
                         );
                       })}
                     </div>
@@ -373,68 +364,34 @@ export default function StudentInterventions() {
                   ) : (
                     <div className="flex flex-col gap-4">
                       {activeInterventions.map((item) => (
-                        <Card
+                        <InterventionCard
                           key={item.intervention_id}
-                          className="w-full bg-background border-2 border-border p-4 sm:p-5 shadow-none flex flex-col gap-2 transition-all hover:bg-retro hover:-translate-y-1"
+                          category="active"
+                          title={`${item.subject_name} Support`}
+                          subtitle={item.teacher_name ? ` ${item.teacher_name}` : undefined}
+                          description={`Your teacher has set up extra help for ${item.subject_name}.`}
+                          metaText={
+                            item.activated_at
+                              ? `Started ${formatDate(item.activated_at)}`
+                              : "Teacher support active"
+                          }
+                          actionLabel="Read Review"
+                          onAction={() =>
+                            navigate(
+                              item.reviewer_id
+                                ? `${routes.student.interventionView}?intervention=${item.intervention_id}&reviewer=${item.reviewer_id}`
+                                : `${routes.student.interventionView}?intervention=${item.intervention_id}`
+                            )
+                          }
                         >
-                          {/* Main Card Title */}
-                          <div className="w-full justify-between flex items-start mb-1 gap-2">
-                            <div className="flex flex-row gap-3 items-start min-w-0">
-                              <IconContainer className="bg-primary shrink-0" size="xl">
-                                <Shield className="text-border" size="36" />
-                              </IconContainer>
-                              <div className="flex flex-col gap-0.5 min-w-0">
-                                <h4
-                                  className="text-xl sm:text-2xl font-black text-foreground tracking-tight truncate"
-                                  title={`${item.subject_name} Support`}
-                                >
-                                  {item.subject_name} Support
-                                </h4>
-                                <p className="text-sm font-medium text-foreground truncate">
-                                  {item.teacher_name ? ` ${item.teacher_name}` : ""}
-                                </p>
-                              </div>
-                            </div>
-                            <Badge variant="surface" size="sm">
-                              Active
-                            </Badge>
-                          </div>
-
-                          {/* Subtext */}
-                          <p className="text-sm text-muted-foreground">
-                            Your teacher has set up extra help for {item.subject_name}.
-                          </p>
-
-                          {/* Curated remediation classwork activities */}
-                          {renderActivities(item.activities, emptyActivitiesPlaceholder, item.intervention_id)}
-
-                          {/* Meta line */}
-                          <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
-                            <span className="text-xs sm:text-sm text-muted-foreground">
-                              {item.activated_at
-                                ? `Started ${formatDate(item.activated_at)}`
-                                : "Teacher support active"}
-                            </span>
-
-                            {/* Action button */}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              autoIcon={false}
-                              onClick={() =>
-                                navigate(
-                                  item.reviewer_id
-                                    ? `${routes.student.interventionView}?intervention=${item.intervention_id}&reviewer=${item.reviewer_id}`
-                                    : `${routes.student.interventionView}?intervention=${item.intervention_id}`
-                                )
-                              }
-                              className="gap-2"
-                            >
-                              <BookOpen className="size-4" />
-                              Read Review
-                            </Button>
-                          </div>
-                        </Card>
+                          {renderActivities(
+                            item.activities,
+                            emptyActivitiesPlaceholder,
+                            item.intervention_id,
+                            item.required_readings,
+                            item.preparation
+                          )}
+                        </InterventionCard>
                       ))}
                     </div>
                   )}
@@ -457,71 +414,39 @@ export default function StudentInterventions() {
                   ) : (
                     <div className="flex flex-col gap-4">
                       {resolvedInterventions.map((item) => (
-                        <Card
+                        <InterventionCard
                           key={item.intervention_id}
-                          className="w-full bg-background border-2 border-border p-4 sm:p-5 shadow-none flex flex-col gap-2 transition-all hover:bg-retro hover:-translate-y-1"
+                          category="resolved"
+                          title={`${item.subject_name} Support`}
+                          subtitle={
+                            item.teacher_name
+                              ? `${item.subject_name} · ${item.teacher_name}`
+                              : item.subject_name
+                          }
+                          description={item.resolution_message}
+                          metaText={
+                            item.resolved_at
+                              ? `Resolved ${formatDate(item.resolved_at)}`
+                              : "Resolved"
+                          }
+                          actionLabel={item.reviewer_id ? "Read Review" : undefined}
+                          onAction={
+                            item.reviewer_id
+                              ? () =>
+                                navigate(
+                                  `${routes.student.interventionView}?intervention=${item.intervention_id}&reviewer=${item.reviewer_id}`
+                                )
+                              : undefined
+                          }
                         >
-                          {/* Main Card Title */}
-                          <div className="w-full justify-between flex items-start mb-1 gap-2">
-                            <div className="flex flex-row gap-3 items-start min-w-0">
-                              <IconContainer className="bg-primary shrink-0" size="xl">
-                                <Shield className="text-border" size="36" />
-                              </IconContainer>
-                              <div className="flex flex-col gap-0.5 min-w-0">
-                                <h4
-                                  className="text-xl sm:text-2xl font-black text-foreground tracking-tight truncate"
-                                  title={`${item.subject_name} Support`}
-                                >
-                                  {item.subject_name} Support
-                                </h4>
-                                <p className="text-sm font-medium text-foreground truncate">
-                                  {item.subject_name}
-                                  {item.teacher_name ? ` · ${item.teacher_name}` : ""}
-                                </p>
-                              </div>
-                            </div>
-                            <Badge variant="surface" size="sm">
-                              Resolved
-                            </Badge>
-                          </div>
-
-                          {/* Subtext */}
-                          {item.resolution_message && (
-                            <p className="text-sm text-muted-foreground">
-                              {item.resolution_message}
-                            </p>
+                          {renderActivities(
+                            item.activities,
+                            undefined,
+                            item.intervention_id,
+                            item.required_readings,
+                            item.preparation
                           )}
-
-                          {/* Curated remediation classwork activities */}
-                          {renderActivities(item.activities, undefined, item.intervention_id)}
-
-                          {/* Meta line */}
-                          <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
-                            <span className="text-sm text-muted-foreground">
-                              {item.resolved_at
-                                ? `Resolved ${formatDate(item.resolved_at)}`
-                                : "Resolved"}
-                            </span>
-
-                            {/* Action button */}
-                            {item.reviewer_id ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                autoIcon={false}
-                                onClick={() =>
-                                  navigate(
-                                    `${routes.student.interventionView}?intervention=${item.intervention_id}&reviewer=${item.reviewer_id}`
-                                  )
-                                }
-                                className="gap-2"
-                              >
-                                <BookOpen className="size-4" />
-                                Read Review
-                              </Button>
-                            ) : null}
-                          </div>
-                        </Card>
+                        </InterventionCard>
                       ))}
                     </div>
                   )}

@@ -83,7 +83,7 @@ class AIMidtermTargetEstimateRead(BaseModel):
 
 
 class AIMidtermWhatIfRead(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
     status: Literal["AVAILABLE", "UNAVAILABLE"]
     estimate_kind: Literal["AI_MIDTERM_WHAT_IF_ESTIMATE"]

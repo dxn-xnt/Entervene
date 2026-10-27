@@ -24,12 +24,14 @@ export function studentClassworkSourceLabel(returnPath: string): string {
   }
   if (pathname.startsWith("/student/grades")) return "Grades";
   if (pathname.startsWith("/student/studyboard")) return "Study Board";
-  if (pathname.startsWith("/student/interventions")) return "Interventions";
+  if (pathname.startsWith("/student/interventions")) return "Study Support";
   return "Subjects";
 }
 
 export function studentClassworkSidebarPath(pathname: string, search: string): string {
   if (!pathname.startsWith("/student/classworks/")) return pathname;
   const from = new URLSearchParams(search).get("from");
-  return studentClassworkReturnPath(from).split("?")[0];
+  const path = studentClassworkReturnPath(from).split("?")[0];
+  if (path.startsWith("/student/interventions")) return routes.student.interventions;
+  return path;
 }

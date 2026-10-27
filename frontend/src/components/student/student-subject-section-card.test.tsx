@@ -56,6 +56,7 @@ describe("StudentSubjectSectionCard", () => {
     expect(html).toContain("Mara Santos");
     expect(html).toContain("Your Classwork Completion");
     expect(html).toContain("50%");
+    expect(html).toContain("1 Pending");
     expect(html).toContain("Problem Solving Practice");
     expect(html).not.toContain("Previous Quiz");
   });

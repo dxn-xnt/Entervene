@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, Link, useSearchParams, Navigate } from "react-router-dom";
+import { BookOpen } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
+import { Progress } from "@/components/retroui/Progress";
+import { Empty } from "@/components/retroui/Empty";
+import IconContainer from "@/components/icon-container";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
@@ -19,6 +23,10 @@ import {
   fetchDashboardAtRisk,
   fetchDashboardFilters,
 } from "@/lib/prediction-api";
+import {
+  getTeacherDashboardHealth,
+  type TeacherDashboardHealthResponse,
+} from "@/lib/api";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/teacher/button";
 import {
@@ -507,6 +515,51 @@ function TeacherCurrentTermSectionPredictions() {
     };
   }, [resolvedClassId, routeSubjectId, grade, selectedPeriodId]);
 
+  const [healthData, setHealthData] = useState<TeacherDashboardHealthResponse | null>(null);
+  const [isHealthLoading, setIsHealthLoading] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const effectiveSubjectId = routeSubjectId ?? assignedScopes[0]?.subject_id;
+    if (!effectiveSubjectId) return;
+
+    const loadHealth = async () => {
+      setIsHealthLoading(true);
+      try {
+        const res = await getTeacherDashboardHealth({
+          subject_id: effectiveSubjectId,
+          academic_period_id: selectedPeriodId ?? undefined,
+        });
+        if (isMounted) {
+          setHealthData(res);
+        }
+      } catch (err) {
+        console.warn("Failed to load health in section prediction:", err);
+      } finally {
+        if (isMounted) setIsHealthLoading(false);
+      }
+    };
+
+    void loadHealth();
+    return () => {
+      isMounted = false;
+    };
+  }, [routeSubjectId, assignedScopes, selectedPeriodId]);
+
+  const lessonPerformance = isHealthLoading ? undefined : healthData?.details?.lesson_performance;
+  const lessonSubject = useMemo(() => {
+    if (!lessonPerformance?.subjects.length) return undefined;
+    const targetId = routeSubjectId ?? assignedScopes[0]?.subject_id;
+    if (targetId != null) {
+      const match = lessonPerformance.subjects.find((s) => s.subject_id === targetId);
+      if (match) return match;
+    }
+    return lessonPerformance.subjects[0];
+  }, [lessonPerformance, routeSubjectId, assignedScopes]);
+
+  const emptyLessonMessage = (message: string) =>
+    isHealthLoading ? "Loading lesson performance..." : message;
+
   // Handle legacy route navigation
   if (!isSubjectRoute) {
     if (loading) {
@@ -600,6 +653,7 @@ function TeacherCurrentTermSectionPredictions() {
   }
 
   const matchingScope = assignedScopes.find((s) => s.subject_id === routeSubjectId);
+  const targetSubjectId = routeSubjectId ?? matchingScope?.subject_id ?? rows[0]?.subject_id;
   const subjectDisplayName = matchingScope
     ? formatSubjectDisplayName(matchingScope.subject_name, matchingScope.grade_level)
     : rows[0]
@@ -628,7 +682,15 @@ function TeacherCurrentTermSectionPredictions() {
               <Breadcrumb.Separator />
               <Breadcrumb.Item>
                 <Breadcrumb.Link asChild>
-                  <Link to="/teacher/predictions">{subjectDisplayName}</Link>
+                  <Link
+                    to={
+                      targetSubjectId
+                        ? `/teacher/predictions/subject/${targetSubjectId}`
+                        : "/teacher/predictions"
+                    }
+                  >
+                    {subjectDisplayName}
+                  </Link>
                 </Breadcrumb.Link>
               </Breadcrumb.Item>
               <Breadcrumb.Separator />
@@ -669,49 +731,112 @@ function TeacherCurrentTermSectionPredictions() {
               </div>
             )}
 
-            {loading ? (
-              <div className="py-20 text-center font-semibold text-gray-500">
-                Loading current-term projections...
+            <div className="grid grid-cols-1 lg:grid-cols-15 gap-4 items-start">
+              {/* ── Left Column: Prediction Table ── */}
+              <div className="lg:col-span-8 xl:col-span-10 min-w-0 flex flex-col gap-4">
+                {loading ? (
+                  <div className="py-20 text-center font-semibold text-gray-500">
+                    Loading current-term projections...
+                  </div>
+                ) : loadError ? null : !selectedPeriodId ? (
+                  <Card className="border-2 border-black bg-white p-6 text-center font-semibold text-gray-700">
+                    Select an academic term to view projections.
+                  </Card>
+                ) : assignedScopes.length === 0 ? (
+                  <div role="alert" className="border-2 border-red-600 bg-red-50 p-6 font-semibold flex flex-col items-start gap-4">
+                    <p className="text-red-950 font-bold">
+                      This subject is not assigned to this section or you do not have permission to access it in the selected term.
+                    </p>
+                    <Button asChild variant="outline" className="border-2 border-black font-bold">
+                      <Link to="/teacher/predictions">Return to AI Predictions</Link>
+                    </Button>
+                  </div>
+                ) : rows.length === 0 ? (
+                  <Card className="flex flex-col items-center justify-center gap-2 p-8 text-center border-2 border-black bg-white">
+                    <p className="text-lg font-bold text-gray-900">
+                      No predictions available for {subjectDisplayName} in {sectionName}.
+                    </p>
+                    <p className="text-sm text-gray-600 mt-1 max-w-md mx-auto">
+                      There are currently no generated predictions for this subject and section in the selected term.
+                    </p>
+                  </Card>
+                ) : (
+                  <PredictionTable
+                    items={data.items}
+                    total={data.total}
+                    limit={Math.max(10, data.total)}
+                    offset={0}
+                    hideClass
+                    hideSubject
+                    hidePagination
+                    currentTerm
+                    onSort={() => undefined}
+                    onPageChange={() => undefined}
+                    onRowClick={(predictionId) =>
+                      setSelected(rows.find((row) => row.prediction_id === predictionId) || null)
+                    }
+                  />
+                )}
               </div>
-            ) : loadError ? null : !selectedPeriodId ? (
-              <Card className="border-2 border-black bg-white p-6 text-center font-semibold text-gray-700">
-                Select an academic term to view projections.
-              </Card>
-            ) : assignedScopes.length === 0 ? (
-              <div role="alert" className="border-2 border-red-600 bg-red-50 p-6 font-semibold flex flex-col items-start gap-4">
-                <p className="text-red-950 font-bold">
-                  This subject is not assigned to this section or you do not have permission to access it in the selected term.
-                </p>
-                <Button asChild variant="outline" className="border-2 border-black font-bold">
-                  <Link to="/teacher/predictions">Return to AI Predictions</Link>
-                </Button>
-              </div>
-            ) : rows.length === 0 ? (
-              <Card className="flex flex-col items-center justify-center gap-2 p-8 text-center border-2 border-black bg-white">
-                <p className="text-lg font-bold text-gray-900">
-                  No predictions available for {subjectDisplayName} in {sectionName}.
-                </p>
-                <p className="text-sm text-gray-600 mt-1 max-w-md mx-auto">
-                  There are currently no generated predictions for this subject and section in the selected term.
-                </p>
-              </Card>
-            ) : (
-              <PredictionTable
-                items={data.items}
-                total={data.total}
-                limit={Math.max(10, data.total)}
-                offset={0}
-                hideClass
-                hideSubject
-                hidePagination
-                currentTerm
-                onSort={() => undefined}
-                onPageChange={() => undefined}
-                onRowClick={(predictionId) =>
-                  setSelected(rows.find((row) => row.prediction_id === predictionId) || null)
-                }
-              />
-            )}
+
+              {/* ── Right Column: Lesson Performance ── */}
+              <aside className="lg:col-span-7 xl:col-span-5 min-w-0 lg:sticky lg:top-4 flex flex-col gap-4">
+                {/* Scored quiz lesson performance */}
+                <Card className="flex flex-col p-4 sm:p-5 min-h-62 border-2 border-black bg-background">
+                  <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
+                    <Card.Title className="text-base font-bold text-foreground sm:text-lg">
+                      Lesson Performance
+                    </Card.Title>
+                  </Card.Header>
+
+                  <Card.Content className="flex flex-col justify-between gap-2.5 p-0 h-full">
+                    <div className="flex flex-col gap-2.5">
+                      {!lessonSubject?.items.length && (
+                        <Empty className="rounded! bg-retro shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground">
+                          <Empty.Content>
+                            <Empty.Icon>
+                              <IconContainer className="bg-primary rounded-none">
+                                <BookOpen className="size-6 text-foreground" />
+                              </IconContainer>
+                            </Empty.Icon>
+                            <Empty.Title className="text-base! font-medium">
+                              {emptyLessonMessage(!lessonSubject
+                                ? "No subjects assigned for this academic period."
+                                : lessonSubject.coverage.scored_mapped_response_count === 0
+                                  ? "No scored quiz answers linked to lessons for this subject."
+                                  : `Not enough evidence yet. Each lesson needs scores from at least ${lessonPerformance?.policy.min_learners ?? 3} learners across ${lessonPerformance?.policy.min_questions ?? 3} questions.`)}
+                            </Empty.Title>
+                          </Empty.Content>
+                        </Empty>
+                      )}
+                      {lessonSubject?.items.slice(0, 5).map((item) => (
+                        <div
+                          key={item.lesson_id}
+                          title={`Points earned / points available. ${item.scored_response_count} scored responses · ${item.learner_count} learners · ${item.question_count} questions.`}
+                          className="flex items-center justify-between gap-3 text-xs sm:text-sm"
+                        >
+                          <span className="font-medium text-foreground/90 shrink-0 w-24 truncate">
+                            {item.title}
+                          </span>
+                          <Progress value={item.performance_percent} className="h-2.5 flex-1" />
+                          <span className="font-semibold text-foreground text-right w-10 shrink-0">
+                            {item.performance_percent}%
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {lessonSubject && (
+                      <Card.Description className="text-xs text-muted-foreground -mb-2">
+                        {lessonSubject.coverage.scored_mapped_response_count} scored lesson-linked responses. {lessonSubject.coverage.ungraded_response_count} awaiting scores.
+                        {lessonSubject.warnings.map((warning, index) => (
+                          <span key={`${warning.code}-${index}`}> {warning.message}</span>
+                        ))}
+                      </Card.Description>
+                    )}
+                  </Card.Content>
+                </Card>
+              </aside>
+            </div>
           </div>
         </div>
       </div>

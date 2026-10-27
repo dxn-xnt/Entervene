@@ -57,7 +57,7 @@ export default function ClassworkDetailModal({
   detailLoadingId,
   detailError,
   onClose,
-  sectionName,
+  sectionName: _sectionName,
   tracking: propTracking,
 }: ClassworkDetailModalProps) {
   const navigate = useNavigate();

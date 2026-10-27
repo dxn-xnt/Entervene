@@ -27,6 +27,9 @@ export function StudentSubjectSectionCard({
   const completionRate = classworks?.length
     ? Math.round((completedCount / classworks.length) * 100)
     : null;
+  const pendingCount = classworks?.filter(
+    (item) => !item.is_submitted && item.status !== "completed",
+  ).length ?? 0;
   const nextClasswork = classworks
     ?.filter((item) => item.status !== "completed")
     .sort((a, b) => {
@@ -43,19 +46,26 @@ export function StudentSubjectSectionCard({
     >
       <Card
         variant="retro"
-        className="relative flex h-full min-w-0 cursor-pointer flex-col justify-between gap-3 border-black p-3 shadow-md shadow-black transition-all hover:bg-retro hover:shadow-none group-focus-visible:bg-retro"
+        className="relative flex h-full min-w-0 cursor-pointer flex-col justify-between gap-3 border-black p-3.5 pt-4 shadow-md shadow-black transition-all hover:bg-retro hover:shadow-none group-focus-visible:bg-retro"
       >
         <div className="flex min-w-0 items-center gap-3">
-          <Avatar variant="teacher" className="size-16 shrink-0 rounded-full border-2 border-black">
+          <Avatar variant="teacher" className="size-14 shrink-0 rounded-full border-2 border-black">
             <Avatar.Image src={teacherAvatar || "/avatars/teacher-avatars/12.svg"} alt="" />
             <Avatar.Fallback className="rounded-full bg-primary text-base font-bold text-primary-foreground">
               <UserRound className="size-7" />
             </Avatar.Fallback>
           </Avatar>
-          <div className="flex min-w-0 flex-col items-start gap-1">
-            <Card.Title className="min-w-0 break-words text-2xl font-bold leading-tight">
-              {subjectName}
-            </Card.Title>
+          <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+            <div className="flex w-full flex-row gap-2 items-center justify-between">
+              <Card.Title className="min-w-0 break-words text-2xl font-bold leading-tight">
+                {subjectName}
+              </Card.Title>
+              {pendingCount > 0 && (
+                <Badge size="sm" variant="surface" className="shrink-0">
+                  {pendingCount} Pending
+                </Badge>
+              )}
+            </div>
             <span className="min-w-0 break-words text-sm text-muted-foreground">{teacherName}</span>
           </div>
         </div>

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import StudentClassworkView from "./student-classwork-view";
+import StudentClassworkView from "./classwork-view";
 import * as apiModule from "@/lib/api";
 import * as persistentApi from "@/lib/student-persistent-interventions-api";
 
@@ -44,7 +44,12 @@ const mockReadingDetail = {
   lock_date: null,
   allow_late_submissions: true,
   attachments: [],
-  linked_lessons: [],
+  linked_lessons: [
+    {
+      lesson_id: 101,
+      title: "Introduction to Kinematics",
+    },
+  ],
 };
 
 const mount = (path: string) =>
@@ -53,6 +58,7 @@ const mount = (path: string) =>
       <Routes>
         <Route path="/student/classworks/:assignmentId" element={<StudentClassworkView />} />
         <Route path="/student/interventions" element={<div>Study Support Page</div>} />
+        <Route path="/student/subjects/:classId/:subjectId" element={<div data-testid="subject-detail-page">Subject Detail Page</div>} />
       </Routes>
     </MemoryRouter>
   );
@@ -62,7 +68,7 @@ beforeEach(() => {
   mockToast.success.mockClear();
   mockToast.error.mockClear();
 
-  vi.spyOn(apiModule, "apiFetch").mockImplementation(async (path: string, options?: RequestInit) => {
+  vi.spyOn(apiModule, "apiFetch").mockImplementation(async (path: string, _options?: RequestInit) => {
     if (path.includes("/api/v1/classwork-assignments/assignment/16")) {
       return {
         ok: true,
@@ -232,5 +238,33 @@ describe("StudentClassworkView reading review and intervention integration", () 
     // Study Support Preparation card and Mark as Reviewed remain active
     expect(screen.getByText("Study Support Preparation")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Mark as Reviewed" })).toBeTruthy();
+  });
+
+  it("navigates to lesson and subject when clicked in the subtitle", async () => {
+    mount("/student/classworks/16");
+
+    const lessonButtons = await screen.findAllByRole("button", {
+      name: "Introduction to Kinematics",
+    });
+    expect(lessonButtons.length).toBeGreaterThanOrEqual(1);
+    expect(lessonButtons[0].className).toContain("hover:underline");
+
+    const subjectButton = screen.getByRole("button", { name: "Physics" });
+    expect(subjectButton).toBeTruthy();
+    expect(subjectButton.className).toContain("hover:underline");
+
+    fireEvent.click(subjectButton);
+    expect(await screen.findByTestId("subject-detail-page")).toBeTruthy();
+  });
+
+  it("renders breadcrumbs hierarchy Study Support -> Intervention Title -> Classwork when coming from intervention view", async () => {
+    mount(
+      "/student/classworks/16?from=%2Fstudent%2Finterventions%2Fview%3Fintervention%3D7&support_title=Physics%20Support"
+    );
+
+    expect(await screen.findByRole("heading", { name: "Kinematics Reference Guide" })).toBeTruthy();
+    expect(screen.getByText("Study Support")).toBeTruthy();
+    expect(screen.getByText("Physics Support")).toBeTruthy();
+    expect(screen.getAllByText("Kinematics Reference Guide").length).toBeGreaterThanOrEqual(2);
   });
 });

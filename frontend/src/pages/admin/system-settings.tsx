@@ -1049,7 +1049,7 @@ export default function AdminSystemSettings() {
                     <Text as="p" className="text-xs text-muted-foreground">Changing this configuration year does not activate it.</Text>
                   </div>
                   {isLoadingScopes && <Text as="p" className="text-sm">Loading pathway settings...</Text>}
-                  <Table>
+                  <Table className="shadow-none" wrapperClassName="shadow-none">
                     <Table.Header>
                       <Table.Row>
                         <Table.Head>Level</Table.Head>

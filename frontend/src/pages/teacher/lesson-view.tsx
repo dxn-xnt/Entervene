@@ -708,25 +708,7 @@ export function TeacherLessonView({
                                 <div className="flex flex-col gap-1.5">
                                     <div className="flex items-end justify-between px-2">
                                         <span className="text-base font-semibold">Lesson Content</span>
-                                        <Button
-                                            type="button"
-                                            variant="link"
-                                            size="sm"
-                                            onClick={() => setIsContentExpanded((prev) => !prev)}
-                                            className="text-foreground p-0 text-sm gap-1 shadow-none"
-                                        >
-                                            {isContentExpanded ? (
-                                                <>
-                                                    Show less
-                                                    <ChevronUp size={14} />
-                                                </>
-                                            ) : (
-                                                <>
-                                                    See more
-                                                    <ChevronDown size={14} />
-                                                </>
-                                            )}
-                                        </Button>
+
                                     </div>
                                     <Card
                                         className={cn(
@@ -743,7 +725,7 @@ export function TeacherLessonView({
                                     </Card>
                                 </div>
                             )}
-                            <div className="flex flex-col gap-3 px-2 -mt-1">
+                            <div className="flex flex-row gap-3 px-2 justify-between -mt-1">
                                 {(lesson.updated_at || lesson.created_at) && (
                                     <p className="text-sm text-foreground/80">
                                         {lesson.updated_at && (!lesson.created_at || lesson.updated_at !== lesson.created_at)
@@ -751,6 +733,25 @@ export function TeacherLessonView({
                                             : `Created ${formatDate(lesson.created_at)}`}
                                     </p>
                                 )}
+                                <Button
+                                    type="button"
+                                    variant="link"
+                                    size="sm"
+                                    onClick={() => setIsContentExpanded((prev) => !prev)}
+                                    className="text-foreground p-0 text-sm gap-1 shadow-none"
+                                >
+                                    {isContentExpanded ? (
+                                        <>
+                                            Show less
+                                            <ChevronUp size={14} />
+                                        </>
+                                    ) : (
+                                        <>
+                                            See more
+                                            <ChevronDown size={14} />
+                                        </>
+                                    )}
+                                </Button>
                             </div>
                         </div>
                     </div>
