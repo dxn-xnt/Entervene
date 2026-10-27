@@ -34,7 +34,7 @@ import { Select } from "@/components/retroui/Select";
 import { Alert } from "@/components/retroui/Alert";
 import { Avatar } from "@/components/retroui/Avatar";
 import QuizAnalysisView from "./classworks/quiz-analysis-view";
-import StudentSubmissionView from "./classworks/student-submission-view";
+import StudentSubmissionView from "./student-submission-view";
 import EditClassworkModal from "./forms/edit-classwork";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
@@ -42,7 +42,7 @@ import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
 import IconContainer from "@/components/icon-container";
-import { toTitleCase } from "@/lib/formatters";
+import { formatToTitleCase } from "@/lib/formatters";
 
 export type ClassworkViewProps = {
   classwork?: TeacherClasswork;
@@ -736,13 +736,13 @@ export default function ClassworkView({
                         <div className="flex flex-row items-center gap-2">
                           <span>{selected.title}</span>
                           <Badge variant="secondary" size="sm" className="h-fit ml-1">
-                            {toTitleCase(selected.classwork_type)}
+                            {formatToTitleCase(selected.classwork_type)}
                           </Badge>
                         </div>
 
                         <div className="gap-3">
                           {(Boolean(selected.linked_lessons?.length) || Boolean(selected.subject_name)) && (
-                            <p className="font-normal text-sm text-muted-foreground">
+                            <p className="font-normal text-sm text-muted-foreground line-clamp-2 break-words">
                               {selected.linked_lessons && selected.linked_lessons.length > 0 ? (
                                 <>
                                   Linked under {selected.linked_lessons.length === 1 ? "lesson" : "lessons"}{" "}
@@ -789,22 +789,22 @@ export default function ClassworkView({
                       </div>
 
                     </Card.Title>
-                    <div className="flex flex-wrap items-center gap-2 px-2">
+                    <div className="flex flex-row items-center gap-2 px-2 whitespace-nowrap">
                       {!isReadingType(selected.classwork_type) && selected.classwork_category && (
                         <Badge
                           variant="outline"
                           size="md"
-                          className="w-fit"
+                          className="w-fit whitespace-nowrap"
                         >
-                          {toTitleCase(selected.classwork_category)}
+                          {formatToTitleCase(selected.classwork_category)}
                         </Badge>
                       )}
 
-                      <Badge variant="solid" size="md">
+                      <Badge variant="solid" size="md" className="whitespace-nowrap">
                         {selected.is_published ? "Published" : "Draft"}
                       </Badge>
                       {selected.is_locked && (
-                        <Badge variant="outline" size="sm" className="bg-white">
+                        <Badge variant="outline" size="sm" className="bg-white whitespace-nowrap">
                           Locked
                         </Badge>
                       )}
@@ -970,7 +970,7 @@ export default function ClassworkView({
               {/* Submissions & Grading / Reading Engagement Progress Card */}
               {isReadingType(selected.classwork_type) ? (
                 <div className="space-y-6 mt-2">
-                  <Card className="w-full shadow-none bg-primary">
+                  <Card className="w-full bg-card shadow-none hover:shadow-none">
                     <Card.Content className="space-y-3">
 
                       {/* Reading Engagement Progress */}
@@ -987,8 +987,7 @@ export default function ClassworkView({
                         </div>
                         <Progress
                           value={submissionRate}
-                          className="w-full h-3 border-2 border-black bg-gray-100"
-                          indicatorClassName="bg-black"
+                          className="w-full h-3"
                         />
                       </div>
                     </Card.Content>
@@ -1115,7 +1114,7 @@ export default function ClassworkView({
               ) : (
                 <>
                   {/* Submissions & Grading Progress Card */}
-                  <Card className="w-full shadow-none bg-primary">
+                  <Card className="w-full bg-primary shadow-none hover:shadow-none">
                     <Card.Content className="space-y-3">
                       {/* Submission Rate */}
                       <div className="space-y-1.5">
@@ -1131,15 +1130,14 @@ export default function ClassworkView({
                         </div>
                         <Progress
                           value={submissionRate}
-                          className="w-full h-3 border-2 border-black bg-gray-100"
-                          indicatorClassName="bg-black"
+                          className="w-full h-3"
                         />
                       </div>
 
                       {/* Grading Completion Progress */}
                       {needsGrading && (
                         <div className="space-y-1.5">
-                          <div className="flex justify-between items-center text-sm text-gray-800">
+                          <div className="flex justify-between items-center text-sm text-foreground">
                             <span>Grading Completion</span>
                             <span>
                               {isTrackingLoading && !tracking
@@ -1151,8 +1149,7 @@ export default function ClassworkView({
                           </div>
                           <Progress
                             value={gradingRate}
-                            className="w-full h-3 border-2 border-black bg-gray-100"
-                            indicatorClassName="bg-black"
+                            className="w-full h-3"
                           />
                         </div>
                       )}

@@ -92,6 +92,7 @@ class StudentPersistentIntervention(BaseModel):
     preparation: StudentPreparationProgress
     activities: list[StudentSupportActivity]
     reviewer_id: int | None
+    activated_at: datetime | None = None
     resolved_at: datetime | None = None
     resolution_message: str | None = None
 

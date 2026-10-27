@@ -187,14 +187,14 @@ export function CompletionRateCard({
                   <span className="text-3xl font-bold leading-none">
                     {completion.rate}
                   </span>
-                  <span className="text-[10px] text-gray-500 -mt-0.5">
+                  <span className="text-sm text-gray-500 -mt-0.5">
                     %
                   </span>
                 </div>
               </div>
             </div>
 
-            <p className="text-center text-xs text-gray-600 mt-2">
+            <p className="text-center text-sm text-gray-600 mt-2">
               {completion.completed} of {completion.total} activities done
             </p>
           </>
@@ -262,14 +262,14 @@ export function ClassworkDistributionCard({
                   <span className="text-2xl font-bold leading-none">
                     {totalCount}
                   </span>
-                  <span className="text-[9px] text-gray-500">
+                  <span className="text-sm text-gray-500">
                     total
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-3 text-xs">
+            <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-3 text-sm">
               {distribution.map((d) => (
                 <span key={d.type} className="flex items-center gap-1">
                   <span
@@ -327,7 +327,7 @@ export function SubjectPerformanceCard({
                 .map((item) => (
                   <div key={item.subjectId} className="flex items-center gap-2">
                     <span
-                      className="text-xs w-28 truncate font-medium"
+                      className="text-sm w-28 truncate font-medium"
                       title={item.subject}
                     >
                       {item.subject}
@@ -348,7 +348,7 @@ export function SubjectPerformanceCard({
                       />
                     </div>
 
-                    <span className="text-xs font-semibold w-10 text-right">
+                    <span className="text-sm font-semibold w-10 text-right">
                       {item.score}%
                     </span>
                   </div>
@@ -356,7 +356,7 @@ export function SubjectPerformanceCard({
             </div>
 
             {weakestSubject && (
-              <p className="text-xs mt-3 text-gray-600">
+              <p className="text-sm mt-3 text-gray-600">
                 Recommended Attention:{" "}
                 <span className="font-bold">{weakestSubject.subject}</span>
               </p>

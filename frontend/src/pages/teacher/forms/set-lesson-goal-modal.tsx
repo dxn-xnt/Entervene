@@ -19,7 +19,7 @@ import {
   type LessonGoalItemResponse,
   type LessonGoalResponse,
 } from "@/lib/api";
-import { toTitleCase } from "@/lib/formatters";
+import { formatToTitleCase } from "@/lib/formatters";
 import { Empty } from "@/components/retroui/Empty";
 
 export interface SetGoalLessonItem {
@@ -387,7 +387,7 @@ export function SetLessonGoalModal({
                                     </span>
                                   </div>
                                   <Badge variant="outline" size="sm" className="shrink-0">
-                                    {toTitleCase(cw.classwork_type) || "Task"}
+                                    {formatToTitleCase(cw.classwork_type) || "Task"}
                                   </Badge>
                                 </label>
                               );

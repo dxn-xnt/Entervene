@@ -6,6 +6,7 @@ import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/teacher/button";
 import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
+import { Button as RetroButton } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
@@ -52,6 +53,7 @@ export default function EditClassworkModal({
     classworkToEditDraft(classwork),
   );
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [rubricConfirmation, setRubricConfirmation] = useState<"graded" | "submitted" | null>(null);
   const [editMaterials, setEditMaterials] = useState<File[]>([]);
   const [removingAttachmentId, setRemovingAttachmentId] = useState<number | null>(null);
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
@@ -96,6 +98,7 @@ export default function EditClassworkModal({
       classwork.linked_lessons?.map((lesson) => lesson.lesson_id) ?? [],
     );
     setEditMaterials([]);
+    setRubricConfirmation(null);
     setRubricLevels(
       classwork.rubric_levels?.length
         ? classwork.rubric_levels.map((level) => ({ ...level }))
@@ -297,7 +300,7 @@ export default function EditClassworkModal({
     }
   };
 
-  const saveClassworkEdit = async () => {
+  const saveClassworkEdit = async (rubricConfirmed = false) => {
     if (!currentClasswork || !editDraft) return;
 
     const isReading = isReadingType(editDraft.classwork_type);
@@ -347,10 +350,10 @@ export default function EditClassworkModal({
       rubricChanged &&
       (currentClasswork.has_submissions || currentClasswork.has_graded_submissions)
     ) {
-      const message = currentClasswork.has_graded_submissions
-        ? "This classwork already has graded submissions. Updating the rubric will not change previously recorded grades. Continue?"
-        : "This classwork already has student submissions. Rubric changes will apply when these submissions are graded. Continue?";
-      if (!window.confirm(message)) return;
+      if (!rubricConfirmed) {
+        setRubricConfirmation(currentClasswork.has_graded_submissions ? "graded" : "submitted");
+        return;
+      }
     }
 
     setIsSavingEdit(true);
@@ -496,6 +499,7 @@ export default function EditClassworkModal({
   };
 
   return (
+    <>
     <Dialog
       open={isOpen}
       onOpenChange={(open) => {
@@ -1078,7 +1082,7 @@ export default function EditClassworkModal({
               </Button>
               <Button
                 variant="default"
-                onClick={saveClassworkEdit}
+                onClick={() => void saveClassworkEdit()}
                 disabled={isSavingEdit || removingAttachmentId !== null}
                 className="cursor-pointer"
               >
@@ -1090,5 +1094,45 @@ export default function EditClassworkModal({
         </Dialog.Content>
       )}
     </Dialog>
+    <Dialog
+      open={rubricConfirmation !== null}
+      onOpenChange={(open) => {
+        if (!open && !isSavingEdit) setRubricConfirmation(null);
+      }}
+    >
+      {rubricConfirmation && (
+        <Dialog.Content className="max-w-md">
+          <Dialog.Header>
+            <Text as="h5" className="font-sans text-xl font-bold">
+              Update Rubric?
+            </Text>
+          </Dialog.Header>
+          <div className="px-5 py-5 text-sm text-foreground">
+            {rubricConfirmation === "graded"
+              ? "This classwork already has graded submissions. Updating the rubric will not change previously recorded grades."
+              : "This classwork already has student submissions. Rubric changes will apply when these submissions are graded."}
+          </div>
+          <Dialog.Footer className="mt-0">
+            <RetroButton
+              variant="outline"
+              onClick={() => setRubricConfirmation(null)}
+              disabled={isSavingEdit}
+            >
+              Cancel
+            </RetroButton>
+            <RetroButton
+              onClick={() => {
+                setRubricConfirmation(null);
+                void saveClassworkEdit(true);
+              }}
+              disabled={isSavingEdit}
+            >
+              Save Changes
+            </RetroButton>
+          </Dialog.Footer>
+        </Dialog.Content>
+      )}
+    </Dialog>
+    </>
   );
 }

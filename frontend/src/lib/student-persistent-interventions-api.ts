@@ -69,6 +69,7 @@ export interface StudentPersistentIntervention {
   preparation: StudentPreparationProgress;
   activities: StudentSupportActivity[];
   reviewer_id: number | null;
+  activated_at?: string | null;
   resolved_at: string | null;
   resolution_message: string | null;
 }

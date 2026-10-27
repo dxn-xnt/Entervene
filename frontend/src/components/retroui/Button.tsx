@@ -6,7 +6,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { Slot } from "@radix-ui/react-slot";
 import {
   Archive, ArrowLeft, ArrowRight, ArrowRightLeft, Calendar, Check,
-  CheckSquare, ClipboardCheck, Copy, Download, Eye, FileUp, Filter,
+  CheckSquare, ClipboardCheck, Copy, Download, ExternalLink, Eye, FileUp, Filter,
   KeyRound, LogIn, Pencil, Plus, RefreshCw, RotateCcw, Save, Send,
   Sparkles, Trash2, Upload, UserPlus, X, type LucideIcon,
 } from "lucide-react";
@@ -85,7 +85,7 @@ function semanticButtonIcon(label: string): LucideIcon | null {
   if (/reset/.test(text)) return RotateCcw;
   if (/save|saving|draft/.test(text)) return Save;
   if (/edit|adjust/.test(text)) return Pencil;
-  if (/view|details|results|classmates|review/.test(text)) return Eye;
+  if (/view|details|results|classmates|review|open/.test(text)) return ExternalLink;
   if (/download|export/.test(text)) return Download;
   if (/upload|replace file|select files/.test(text)) return Upload;
   if (/import|validat.*csv/.test(text)) return FileUp;
@@ -99,7 +99,7 @@ function semanticButtonIcon(label: string): LucideIcon | null {
   if (/generate/.test(text)) return Sparkles;
   if (/add|create|new|retake/.test(text)) return Plus;
   if (/confirm|done|complete|approve|activate|full|zero/.test(text)) return Check;
-  if (/next|continue|take quiz|resume|open/.test(text)) return ArrowRight;
+  if (/next|continue|take quiz|resume/.test(text)) return ArrowRight;
   if (/grade|score/.test(text)) return ClipboardCheck;
   if (/term|period/.test(text)) return Calendar;
   if (/summary|all|filter/.test(text)) return Filter;

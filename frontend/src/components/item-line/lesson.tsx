@@ -123,11 +123,14 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
           aria-label={`View lesson: ${lesson.title}`}
         >
           <div className="flex flex-col w-full items-start min-w-0 text-left">
-            <div className="flex flex-wrap items-center w-full justify-between gap-2 min-w-0 pr-2">
-              <h4 className="text-xl sm:text-2xl font-semibold text-black break-words line-clamp-2 hover:underline">
+            <div className="flex items-center w-full justify-between gap-2 min-w-0 pr-2">
+              <h4
+                className="text-xl sm:text-2xl font-semibold text-black truncate min-w-0 flex-1"
+                title={lesson.title}
+              >
                 {lesson.title}
               </h4>
-              <div className="flex flex-row items-center gap-2 -mr-1">
+              <div className="flex flex-row items-center gap-2 -mr-1 shrink-0">
                 <Badge
                   variant={lesson.is_published ? "solid" : "default"}
                   size="sm"

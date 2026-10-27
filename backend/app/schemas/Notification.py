@@ -19,6 +19,11 @@ NotificationType = Literal[
     "intervention_candidate",
     "intervention_resolved",
     "intervention_reviewer_available",
+    "repost_request_received",
+    "repost_package_ready",
+    "repost_request_declined",
+    "repost_package_declined",
+    "repost_accepted",
 ]
 
 

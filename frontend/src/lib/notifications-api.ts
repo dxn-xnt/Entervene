@@ -12,7 +12,12 @@ export type NotificationItem = {
     | "grade_submission_closing_soon"
     | "intervention_candidate"
     | "intervention_resolved"
-    | "intervention_reviewer_available";
+    | "intervention_reviewer_available"
+    | "repost_request_received"
+    | "repost_package_ready"
+    | "repost_request_declined"
+    | "repost_package_declined"
+    | "repost_accepted";
   title: string;
   body: string | null;
   action_url: string | null;

@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, ArrowRight, FileText, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, CheckCheck, FileText, Plus, Trash2, X } from "lucide-react";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
+import { Card } from "@/components/retroui/Card";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { FormMessage } from "@/components/retroui/FormMessage";
@@ -33,7 +34,7 @@ import { ActivityRubricEditor } from "@/components/activity-rubric-editor";
 import { activityRubricMaximum, defaultActivityRubric, validateActivityRubric } from "@/lib/classwork-utils";
 import type { ActivityRubricLevel } from "@/types/classwork";
 import type { TeacherInterventionDetail, RemediationFocus, OriginalExamination, RemediationClassworkTarget, RemediationResource } from "@/lib/teacher-interventions-api";
-import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
+import { categoryFromFocus } from "@/lib/remediation-authoring";
 import { RemediationTeacherGuidanceBanner } from "./remediation-teacher-guidance-banner";
 
 function scaleRubricToMaxPoints(levels: ActivityRubricLevel[], targetPoints: number): ActivityRubricLevel[] {
@@ -220,6 +221,9 @@ export default function CreateClassworkModal({
 
   const toggleClass = (classId: number) => {
     if (remediationTarget) return;
+    if (validationError === "Select at least one section to assign this classwork.") {
+      setValidationError("");
+    }
     setSelectedClassIds((current) =>
       current.includes(classId)
         ? current.filter((id) => id !== classId)
@@ -505,7 +509,7 @@ export default function CreateClassworkModal({
           </div>
         </Dialog.Header>
 
-        <section className="flex flex-col gap-4 p-5">
+        <section className="flex flex-col gap-4 p-5 pr-3">
           {validationError && validationError !== "Topic title is required." && (
             <FormMessage>{validationError}</FormMessage>
           )}
@@ -518,6 +522,20 @@ export default function CreateClassworkModal({
                   remediationGradeTreatment={remediationGradeTreatment}
                   remediationOriginalExam={remediationOriginalExam}
                   selectedOriginalTarget={selectedOriginalTarget}
+                  remediationOriginalTargets={remediationOriginalTargets}
+                  selectedTargetId={selectedTargetId}
+                  onSelectTargetId={(nextId) => {
+                    setSelectedTargetId(nextId);
+                    const target = remediationOriginalTargets.find((t) => t.assignment_id === nextId);
+                    if (target) {
+                      setDraft((cur) => ({ ...cur, total_points: String(target.max_points) }));
+                      if (selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT") {
+                        setRubricLevels((levels) => scaleRubricToMaxPoints(levels, target.max_points));
+                      }
+                    }
+                    setValidationError("");
+                  }}
+                  disabled={isCreating}
                   remediationReferences={remediationReferences}
                   className="mb-1"
                 />
@@ -596,66 +614,7 @@ export default function CreateClassworkModal({
                 </Select>
               </Field>
 
-              {remediationDraft && (remediationGradeTreatment === "WRITTEN_WORK" || remediationGradeTreatment === "PERFORMANCE_TASK") && (
-                <Field label="Targeted Original Classwork" isRequired={true}>
-                  {remediationOriginalTargets && remediationOriginalTargets.length > 1 ? (
-                    <Select
-                      value={selectedTargetId ? String(selectedTargetId) : ""}
-                      onValueChange={(val) => {
-                        const nextId = Number(val);
-                        setSelectedTargetId(nextId);
-                        const target = remediationOriginalTargets.find((t) => t.assignment_id === nextId);
-                        if (target) {
-                          setDraft((cur) => ({ ...cur, total_points: String(target.max_points) }));
-                          if (selectedType === "ACTIVITY" || selectedType === "ASSIGNMENT") {
-                            setRubricLevels((levels) => scaleRubricToMaxPoints(levels, target.max_points));
-                          }
-                        }
-                        setValidationError("");
-                      }}
-                      disabled={isCreating}
-                    >
-                      <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
-                        <Select.Value placeholder="Select target classwork assignment" />
-                      </Select.Trigger>
-                      <Select.Content className="border-2 border-black rounded bg-white">
-                        <Select.Group>
-                          {remediationOriginalTargets.map((target) => (
-                            <Select.Item key={target.assignment_id} value={String(target.assignment_id)}>
-                              {target.title} ({target.original_score ?? 0}/{target.max_points} pts)
-                              {target.is_recommended ? " — Recommended" : ""}
-                            </Select.Item>
-                          ))}
-                        </Select.Group>
-                      </Select.Content>
-                    </Select>
-                  ) : null}
-                  {selectedOriginalTarget ? (
-                    <div className="flex items-center justify-between p-3 bg-muted/40 rounded border-2 border-border mt-1">
-                      <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold">{selectedOriginalTarget.title}</span>
-                          {selectedOriginalTarget.is_recommended && (
-                            <Badge variant="secondary" size="sm">
-                              Recommended
-                            </Badge>
-                          )}
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          Original score: {selectedOriginalTarget.original_score ?? 0} / {selectedOriginalTarget.max_points} points · Required maximum: {selectedOriginalTarget.max_points} points
-                        </span>
-                      </div>
-                      <Badge variant="surface" size="sm">
-                        {selectedOriginalTarget.component === "WRITTEN_WORK" ? "Written Work" : "Performance Task"}
-                      </Badge>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-destructive font-medium" role="alert">
-                      Please select a target original classwork assignment.
-                    </p>
-                  )}
-                </Field>
-              )}
+
 
               <Field label="Topic Title" isRequired={true}>
                 <Input
@@ -787,11 +746,7 @@ export default function CreateClassworkModal({
               )}
 
               <Field label={remediationDraft ? "Upload Material (Optional)" : "Upload Material"}>
-                {remediationDraft && (
-                  <p className="text-xs text-muted-foreground -mt-1 mb-2">
-                    Optional. Selected reading materials from your plan are already available to the student; attach files only if you have new prompts or worksheets.
-                  </p>
-                )}
+
                 {materials.length === 0 ? (
                   <Empty className="shadow-md rounded! hover:shadow-none transition-shadow">
                     <EmptyHeader>
@@ -876,6 +831,11 @@ export default function CreateClassworkModal({
                       />
                     </label>
                   </div>
+                )}
+                {remediationDraft && (
+                  <p className="text-sm font-normal text-muted-foreground mb-2">
+                    Selected materials from plan are already available to the student. Attach files only when you have new worksheets.
+                  </p>
                 )}
               </Field>
 
@@ -989,57 +949,113 @@ export default function CreateClassworkModal({
               </div>
 
               <div className="mt-4">
-                <Field label="Assign to sections">
+
+
+                <Field label="Assign to Sections" isRequired>
                   {remediationTarget ? (
-                    <div className="mb-3 rounded border-2 border-black bg-muted/30 p-3 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold">Single-Student Remedial Assignment</span>
+                    <Card className="mb-3 rounded border-2 border-black bg-primary p-3 space-y-1">
+                      <div className="flex items-start justify-between">
+                        <span className="text-base font-bold">Single-Student Remedial Assignment</span>
                         <Badge variant="solid" size="sm">Individual Recipient</Badge>
                       </div>
-                      <p className="text-xs text-foreground">
+                      <p className="text-sm text-foreground font-normal mt-2">
                         This activity is exclusively assigned to <strong>{remediationTarget.student_name}</strong> in section <strong>{remediationTarget.class_name}</strong>. Other students will not receive or see this assignment.
                       </p>
-                    </div>
+                    </Card>
                   ) : (
                     <div className="mb-2 flex items-center justify-end">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setSelectedClassIds(
-                            selectedSubjectLoads.map((load) => load.class_id),
-                          )
-                        }
-                        disabled={isCreating || selectedSubjectLoads.length === 0}
-                        className="px-2 py-1 text-xs border border-black rounded shadow-xs"
-                      >
-                        Select all
-                      </Button>
+                      {selectedSubjectLoads.length > 0 && (
+                        <div className="flex items-center justify-end -mt-8 mb-2">
+                          <Button
+                            size="sm"
+                            className="shadow-none -mt-1"
+                            autoIcon={false}
+                            onClick={() => {
+                              if (validationError === "Select at least one section to assign this classwork.") {
+                                setValidationError("");
+                              }
+                              setSelectedClassIds(
+                                selectedSubjectLoads.map((load) => load.class_id),
+                              );
+                            }}
+                            disabled={isCreating || Boolean(remediationTarget)}
+                          >
+                            <CheckCheck className="size-4 mr-2" />
+                            Select All
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
-                    {selectedSubjectLoads.map((load) => {
-                      const isSelected = selectedClassIds.includes(load.class_id);
-                      return (
-                        <button
-                          key={load.subject_load_id}
-                          type="button"
-                          onClick={() => toggleClass(load.class_id)}
-                          disabled={isCreating || Boolean(remediationTarget)}
-                          className={`rounded border-2 border-black px-3 py-2 text-xs font-bold text-center cursor-pointer transition shadow-md hover:translate-y-0.5 active:translate-y-1 ${isSelected ? "bg-[#7ABA78]" : "bg-white"
-                            }`}
-                        >
-                          {load.section_name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {selectedSubjectLoads.length === 0 && (
-                    <p className="rounded border-2 border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500 bg-gray-50">
-                      No active sections are assigned to this subject.
-                    </p>
+
+
+                  {selectedSubjectLoads.length > 0 ? (
+                    <Card className="-mt-1 grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                      {selectedSubjectLoads.map((load) => {
+                        const isSelected = selectedClassIds.includes(load.class_id);
+                        return (
+                          <button
+                            key={load.subject_load_id}
+                            type="button"
+                            onClick={() => toggleClass(load.class_id)}
+                            disabled={isCreating || Boolean(remediationTarget)}
+                            className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isSelected
+                              ? "bg-primary text-black"
+                              : "bg-white text-black hover:bg-accent"
+                              }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between">
+                                <p className="font-bold text-base truncate">
+                                  {load.section_name}
+                                </p>
+                                <div
+                                  className={`flex size-5 shrink-0 items-center justify-center rounded border-2 border-black transition-colors ${isSelected ? "bg-black text-white" : "bg-white text-transparent"
+                                    }`}
+                                >
+                                  <Check className="size-3.5 stroke-[3]" />
+                                </div>
+                              </div>
+
+                              <div className="mt-1 flex items-center justify-between w-full">
+                                <p
+                                  className={`text-xs font-medium ${isSelected
+                                    ? "text-foreground"
+                                    : "text-muted-foreground"
+                                    }`}
+                                >
+                                  {load.grade_level || "Active Section"}
+                                </p>
+                                {typeof load.student_count === "number" && (
+                                  <p
+                                    className={`text-xs font-medium ${isSelected
+                                      ? "text-foreground"
+                                      : "text-muted-foreground"
+                                      }`}
+                                  >
+                                    {load.student_count} {load.student_count === 1 ? "student" : "students"}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </Card>
+                  ) : (
+                    <Empty className="shadow-md hover:shadow-none transition-shadow">
+                      <EmptyHeader>
+                        <EmptyTitle>No Sections Found</EmptyTitle>
+                        <EmptyDescription className="text-center">
+                          No active sections are assigned to this subject.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  )}
+
+                  {validationError === "Select at least one section to assign this classwork." && (
+                    <FormMessage>{validationError}</FormMessage>
                   )}
                 </Field>
               </div>

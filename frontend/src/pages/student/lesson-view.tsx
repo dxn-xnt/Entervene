@@ -83,7 +83,7 @@ export function LessonView({
               <div className="flex flex-col gap-3">
                 {(lesson.competency_code || lesson.competency_statement) && (
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-foreground/70">Competency</p>
+                    <p className="text-sm font-semibold uppercase tracking-wide text-foreground/70">Competency</p>
                     <p className="mt-1 break-words text-sm font-semibold text-foreground sm:text-base">
                       {lesson.competency_code || lesson.competency_statement}
                     </p>
@@ -100,7 +100,7 @@ export function LessonView({
               </div>
               {lesson.content && (
                 <div className="min-w-0">
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground/70">Lesson Content</h2>
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground/70">Lesson Content</h2>
                   <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground sm:text-base">
                     {lesson.content}
                   </p>

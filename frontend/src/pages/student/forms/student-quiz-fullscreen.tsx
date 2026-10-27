@@ -107,7 +107,7 @@ export default function StudentQuizFullscreen({
                   : "Hidden"
                 : formatExamTimer(quizRemainingSeconds)}
             </p>
-            <p className="text-xs font-semibold text-gray-700">
+            <p className="text-sm font-semibold text-gray-700">
               {isSummaryMode ? "score" : "time left"}
             </p>
           </div>
@@ -156,7 +156,7 @@ export default function StudentQuizFullscreen({
             {isSummaryMode ? (
               <div className="mt-4">
                 <p className="text-sm font-semibold">Quiz Summary</p>
-                <p className="text-xs text-gray-600">
+                <p className="text-sm text-gray-600">
                   Review your recorded answers and item scores.
                 </p>
               </div>
@@ -170,7 +170,7 @@ export default function StudentQuizFullscreen({
                       setQuizCurrentIndex(index);
                       setQuizReviewMode(false);
                     }}
-                    className={`relative h-8 min-w-8 rounded border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${index === quizCurrentIndex
+                    className={`relative h-8 min-w-8 rounded border-black px-2 text-sm font-bold shadow-md hover:shadow-none ${index === quizCurrentIndex
                         ? "bg-white"
                         : hasQuizAnswer(question)
                           ? "bg-[#F6E9B2]"
@@ -220,7 +220,7 @@ export default function StudentQuizFullscreen({
                             : "outline"
                         }
                         size="sm"
-                        className="shrink-0 text-xs font-bold"
+                        className="shrink-0 text-sm font-bold"
                       >
                         {selectedClasswork.show_scores
                           ? `${question.points_awarded ?? 0}/${question.points} pts`
@@ -248,7 +248,7 @@ export default function StudentQuizFullscreen({
                                 <span className="min-w-0 break-words">
                                   {option.option_text}
                                 </span>
-                                <span className="text-xs font-bold">
+                                <span className="text-sm font-bold">
                                   {isCorrect && isSelected
                                     ? "Your answer / Correct answer"
                                     : isCorrect
@@ -262,7 +262,7 @@ export default function StudentQuizFullscreen({
                           );
                         })}
                         {!selectedOption && (
-                          <p className="text-xs font-semibold text-red-700">
+                          <p className="text-sm font-semibold text-red-700">
                             No answer recorded.
                           </p>
                         )}
@@ -298,7 +298,7 @@ export default function StudentQuizFullscreen({
                     <Badge
                       variant="outline"
                       size="sm"
-                      className="rounded border border-gray-300 text-[11px] font-semibold"
+                      className="rounded border border-gray-300 text-sm font-semibold"
                     >
                       {hasQuizAnswer(question)
                         ? "Answer Recorded"
@@ -348,7 +348,7 @@ export default function StudentQuizFullscreen({
                   onClick={() =>
                     toggleQuizFlag(currentQuestion.quiz_question_id)
                   }
-                  className={`rounded border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${flaggedQuizQuestionIds.has(currentQuestion.quiz_question_id)
+                  className={`rounded border-black px-4 py-2 text-sm font-bold shadow-md hover:shadow-none ${flaggedQuizQuestionIds.has(currentQuestion.quiz_question_id)
                       ? "bg-[#F6E9B2]"
                       : "bg-white"
                     }`}

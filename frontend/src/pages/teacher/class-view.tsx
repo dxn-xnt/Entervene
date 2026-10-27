@@ -11,6 +11,7 @@ import {
   FileText,
   Lightbulb,
   Pencil,
+  Repeat,
   Search,
   Users,
   X,
@@ -38,6 +39,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/To
 import { Avatar } from "@/components/retroui/Avatar";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
 import SetLessonGoalModal from "./forms/set-lesson-goal-modal";
+import { RepostModal } from "@/components/teacher/repost-modal";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 
@@ -72,6 +74,7 @@ import {
 import type {
   ClassworkDetail,
   CompetencyItem,
+  Lesson,
   LessonDraft,
 } from "./subject-details/types";
 
@@ -108,7 +111,10 @@ export default function TeacherClassDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [tab, setTab] = useState<DetailTab>("lessons");
+  const { selectedPeriodId } = useAcademicPeriod();
   const [isSetGoalModalOpen, setIsSetGoalModalOpen] = useState(false);
+  const [isRepostModalOpen, setIsRepostModalOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [studentInterfaceStudent, setStudentInterfaceStudent] = useState<TeacherAdvisoryStudentItem | null>(null);
   const [lessonInterfaceLesson, setLessonInterfaceLesson] = useState<LessonItem | null>(null);
   const [classworkInterfaceClasswork, setClassworkInterfaceClasswork] = useState<TeacherClasswork | null>(null);
@@ -210,6 +216,14 @@ export default function TeacherClassDetail() {
                   </div>
 
                   <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
+                    <Button
+                      size="header"
+                      variant="outline"
+                      className="w-full md:w-auto whitespace-nowrap"
+                      onClick={() => setIsRepostModalOpen(true)}
+                    >
+                      <Repeat className="size-4" /> Repost
+                    </Button>
                     {tab === "lessons" ? (
                       <div className="flex flex-row gap-2">
                         <Button
@@ -297,6 +311,7 @@ export default function TeacherClassDetail() {
                   isSetGoalModalOpen={isSetGoalModalOpen}
                   setIsSetGoalModalOpen={setIsSetGoalModalOpen}
                   onLessonViewChange={setLessonInterfaceLesson}
+                  refreshTrigger={refreshKey}
                 />
               )}
               {tab === "students" && (
@@ -312,6 +327,25 @@ export default function TeacherClassDetail() {
                   currentSubject={currentSubject}
                   subjectId={currentSubject?.subject_id || initialSubjectId}
                   onClassworkViewChange={setClassworkInterfaceClasswork}
+                  refreshTrigger={refreshKey}
+                />
+              )}
+              {detail && (currentSubject?.subject_id || initialSubjectId || detail.subject_loads[0]?.subject_id) && (
+                <RepostModal
+                  open={isRepostModalOpen}
+                  onOpenChange={setIsRepostModalOpen}
+                  destinationClassId={Number(detail.class_id)}
+                  destinationSubjectId={Number(
+                    currentSubject?.subject_id ||
+                    initialSubjectId ||
+                    detail.subject_loads[0]?.subject_id,
+                  )}
+                  destinationAcademicPeriodId={Number(selectedPeriodId || 1)}
+                  sectionName={detail.section_name}
+                  subjectName={currentSubject?.subject_name}
+                  onClonedSuccess={() => {
+                    setRefreshKey((k) => k + 1);
+                  }}
                 />
               )}
             </div>
@@ -360,14 +394,17 @@ function LessonsTab({
   isSetGoalModalOpen,
   setIsSetGoalModalOpen,
   onLessonViewChange,
+  refreshTrigger,
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
   initialSubjectId?: number | null;
   isSetGoalModalOpen?: boolean;
   setIsSetGoalModalOpen?: (open: boolean) => void;
   onLessonViewChange?: (lesson: LessonItem | null) => void;
+  refreshTrigger?: number;
 }) {
   const navigate = useNavigate();
+  const toast = useToast();
   const { selectedPeriodId, periods } = useAcademicPeriod();
   const [internalSetGoalModalOpen, setInternalSetGoalModalOpen] = useState(false);
   const isGoalModalOpen = isSetGoalModalOpen !== undefined ? isSetGoalModalOpen : internalSetGoalModalOpen;
@@ -528,7 +565,7 @@ function LessonsTab({
 
   useEffect(() => {
     void loadLessonsAndCompetencies();
-  }, [detail.class_id, selectedSubjectId]);
+  }, [detail.class_id, selectedSubjectId, refreshTrigger]);
 
   const loadCuratedGoals = useCallback(async () => {
     if (!detail.class_id || !selectedSubjectId || !selectedPeriodId) {
@@ -746,6 +783,18 @@ function LessonsTab({
     }
   };
 
+  const archiveLessonFromDetail = async (lesson: Lesson) => {
+    const response = await apiFetch(`/api/v1/lessons/${lesson.lesson_id}/archive`, {
+      method: "PUT",
+    });
+    if (!response.ok) throw new Error("Unable to archive lesson.");
+
+    setLessons((current) =>
+      current.filter((item) => item.lesson_id !== lesson.lesson_id),
+    );
+    toast.success({ title: "Lesson archived" });
+  };
+
   const filteredLessons = useMemo(() => {
     const list =
       lessonFilter === "all"
@@ -817,6 +866,7 @@ function LessonsTab({
             openLessonManager={(l) => openLessonManager(l as any)}
             openClassworkForm={(l) => openClassworkForm(l as any)}
             openClassworkDetail={(cw) => openClassworkDetail(cw as any)}
+            onArchiveLesson={archiveLessonFromDetail}
             linkedClassworks={
               (linkedClassworks[activeLessonDetail.lesson_id] || []) as any
             }
@@ -1364,11 +1414,13 @@ function ClassworkTab({
   currentSubject,
   subjectId,
   onClassworkViewChange,
+  refreshTrigger,
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
   currentSubject?: TeacherAdvisoryClassDetailResponse["subject_loads"][number] | null;
   subjectId?: number | null;
   onClassworkViewChange?: (cw: TeacherClasswork | null) => void;
+  refreshTrigger?: number;
 }) {
   const navigate = useNavigate();
   const activeSubjectId =
@@ -1426,7 +1478,7 @@ function ClassworkTab({
 
   useEffect(() => {
     void loadClassworks();
-  }, [loadClassworks]);
+  }, [loadClassworks, refreshTrigger]);
 
   useEffect(() => {
     if (!detail.class_id || !activeSubjectId) return;

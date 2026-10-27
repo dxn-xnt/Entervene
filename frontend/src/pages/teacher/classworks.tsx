@@ -493,6 +493,19 @@ export default function Classworks() {
     }
   };
 
+  const handleClassworkCreated = async () => {
+    await Promise.all([loadClassworks(), refetchClasses()]);
+    const targetId =
+      remediationTarget?.intervention_id ??
+      (Number.isInteger(interventionId) && interventionId > 0
+        ? interventionId
+        : null);
+    closeCreateWizard();
+    if (remediationType && targetId) {
+      navigate(`/teacher/interventions?active=${targetId}`);
+    }
+  };
+
   const openClassworkDetail = (item: TeacherClasswork) => {
     navigate(`/teacher/classworks/${item.classwork_id}`);
   };
@@ -821,10 +834,7 @@ export default function Classworks() {
                       initialTargetAssignmentId={initialTargetAssignmentId}
                       remediationReferences={remediationReferences}
                       onClose={closeCreateWizard}
-                      onSuccess={async () => {
-                        await Promise.all([loadClassworks(), refetchClasses()]);
-                        closeCreateWizard();
-                      }}
+                      onSuccess={handleClassworkCreated}
                       onBack={() => setSelectedType(null)}
                     />
                   ) : (
@@ -851,10 +861,7 @@ export default function Classworks() {
                       initialTargetAssignmentId={initialTargetAssignmentId}
                       remediationReferences={remediationReferences}
                       onClose={closeCreateWizard}
-                      onSuccess={async () => {
-                        await Promise.all([loadClassworks(), refetchClasses()]);
-                        closeCreateWizard();
-                      }}
+                      onSuccess={handleClassworkCreated}
                       onBack={() => setSelectedType(null)}
                     />
                   ))}

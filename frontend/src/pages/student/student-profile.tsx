@@ -190,7 +190,7 @@ const StudentProfile = () => {
                 {(studentProfile?.student_lrn ||
                   studentProfile?.grade_level ||
                   studentProfile?.section_name) && (
-                  <div className="flex flex-col items-start gap-1 text-xs sm:items-end">
+                  <div className="flex flex-col items-start gap-1 text-sm sm:items-end">
                     {studentProfile?.student_lrn && (
                       <Badge variant="solid" size="sm" className="tracking-wider">
                         LRN: {studentProfile.student_lrn}
@@ -240,13 +240,13 @@ const StudentProfile = () => {
                       <Badge
                         variant="secondary"
                         size="sm"
-                        className="rounded border border-black bg-primary text-xs font-bold text-black"
+                        className="rounded border border-black bg-primary text-sm font-bold text-black"
                       >
                         Today
                       </Badge>
                     </div>
 
-                    <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">
+                    <div className="grid grid-cols-7 gap-1 text-center text-sm text-muted-foreground">
                       {weekDayLabels.map((day) => (
                         <span key={day}>{day}</span>
                       ))}

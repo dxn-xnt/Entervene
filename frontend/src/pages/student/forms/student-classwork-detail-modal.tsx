@@ -271,7 +271,7 @@ export default function StudentClassworkDetailModal({
                               className="block w-full border-black bg-white p-3.5 shadow-none hover:shadow-none"
                             >
                               <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold uppercase text-gray-500">
+                                <span className="text-sm font-bold uppercase text-gray-500">
                                   Lesson:
                                 </span>
                                 <p className="text-sm font-extrabold text-black">
@@ -279,7 +279,7 @@ export default function StudentClassworkDetailModal({
                                 </p>
                               </div>
                               {lesson.description && (
-                                <div className="mt-1 flex items-start gap-2 text-xs">
+                                <div className="mt-1 flex items-start gap-2 text-sm">
                                   <span className="shrink-0 font-bold uppercase text-gray-500">
                                     Topic:
                                   </span>
@@ -293,7 +293,7 @@ export default function StudentClassworkDetailModal({
                               {lesson.readings &&
                                 lesson.readings.length > 0 && (
                                   <div className="mt-3 border-t border-black/10 pt-2.5">
-                                    <div className="mb-1.5 flex items-center gap-1 text-[11px] font-bold uppercase text-gray-600">
+                                    <div className="mb-1.5 flex items-center gap-1 text-sm font-bold uppercase text-gray-600">
                                       <BookOpen
                                         size={13}
                                         className="text-black"
@@ -307,7 +307,7 @@ export default function StudentClassworkDetailModal({
                                       {lesson.readings.map((reading) => (
                                         <div
                                           key={reading.classwork_id}
-                                          className="flex items-center gap-2 border border-black/15 bg-[#F6E9B2]/40 px-2.5 py-1.5 text-xs"
+                                          className="flex items-center gap-2 border border-black/15 bg-[#F6E9B2]/40 px-2.5 py-1.5 text-sm"
                                         >
                                           <BookOpen
                                             size={13}
@@ -317,7 +317,7 @@ export default function StudentClassworkDetailModal({
                                             {reading.title}
                                           </span>
                                           {reading.description && (
-                                            <span className="text-gray-600 truncate text-[11px]">
+                                            <span className="text-gray-600 truncate text-sm">
                                               — {reading.description}
                                             </span>
                                           )}
@@ -331,7 +331,7 @@ export default function StudentClassworkDetailModal({
                               {lesson.attachments &&
                                 lesson.attachments.length > 0 && (
                                   <div className="mt-3 border-t border-black/10 pt-2.5">
-                                    <div className="mb-1.5 flex items-center gap-1 text-[11px] font-bold uppercase text-gray-600">
+                                    <div className="mb-1.5 flex items-center gap-1 text-sm font-bold uppercase text-gray-600">
                                       <Paperclip
                                         size={13}
                                         className="text-black"
@@ -455,7 +455,7 @@ export default function StudentClassworkDetailModal({
                                 {selectedQuizAttempt.max_attempts}
                               </span>
                             </div>
-                            <Card className="mt-2 flex w-full flex-wrap gap-2 border-black bg-white p-2 text-xs font-semibold text-gray-600 shadow-none hover:shadow-none">
+                            <Card className="mt-2 flex w-full flex-wrap gap-2 border-black bg-white p-2 text-sm font-semibold text-gray-600 shadow-none hover:shadow-none">
                               <span>
                                 {selectedQuizAttempt.questions.length} questions
                               </span>
@@ -482,7 +482,7 @@ export default function StudentClassworkDetailModal({
                                       0}
                                   </>
                                 ) : (
-                                  <span className="rounded-full bg-gray-200 px-2 py-1 text-xs text-gray-700">
+                                  <span className="rounded-full bg-gray-200 px-2 py-1 text-sm text-gray-700">
                                     Score hidden
                                   </span>
                                 )}
@@ -493,7 +493,7 @@ export default function StudentClassworkDetailModal({
                           {selectedQuizAttempt.status !== "pending" ? (
                             <div className="space-y-2">
                               {selectedQuizAttempt.summary_message ? (
-                                <div className="w-full rounded border border-black bg-white px-3 py-2 text-xs font-semibold text-gray-700">
+                                <div className="w-full rounded border border-black bg-white px-3 py-2 text-sm font-semibold text-gray-700">
                                   {selectedQuizAttempt.summary_release_at
                                     ? `Your quiz has been submitted successfully. Your quiz summary will be available on ${formatDateTime(selectedQuizAttempt.summary_release_at)}.`
                                     : selectedQuizAttempt.summary_message}
