@@ -13,13 +13,14 @@ import { Save, SlidersHorizontal } from "lucide-react";
 import InterventionSupportMaterials, {
   type InterventionSupportMaterialsHandle,
 } from "./intervention-support-materials";
+import ClassworkItemLine from "@/components/item-line/classwork";
 import type {
   DiagnosisSnapshot,
   TeacherInterventionDetail,
   TeacherInterventionSummary,
   TeacherResolvedInterventionDetail,
 } from "@/lib/teacher-interventions-api";
-import { formatDate } from "@/lib/formatters";
+import { formatDate, formatToTitleCase } from "@/lib/formatters";
 
 const label = (value: string) =>
   value
@@ -106,10 +107,10 @@ function AcademicDiagnosisCard({
   );
 
   return (
-    <Card className="space-y-3 w-full">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
+    <Card className="flex flex-col gap-2 w-full">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground uppercase font-bold">Support focus:</span>
+          <span className="text-base text-foreground">Support focus:</span>
           <span className="text-base font-bold">{focusName}</span>
         </div>
         <Badge variant="outline" size="sm">
@@ -118,35 +119,41 @@ function AcademicDiagnosisCard({
       </div>
 
       {scoredCompetencies.length > 0 && (
-        <div className="space-y-2">
-          <span className="text-xs font-bold uppercase text-muted-foreground block">
-            Scored competency focus
+        <div className="flex flex-col gap-2">
+          <span className="text-base text-foreground">
+            Competency Focus:
           </span>
-          <div className="space-y-1.5">
+          <div className="flex flex-col gap-2">
             {scoredCompetencies.map((item) => (
-              <div key={item.competency_id} className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary" size="sm">
-                  {item.competency_code}
-                </Badge>
-                <span className="text-sm font-medium">{item.competency_statement}</span>
-              </div>
+              <ClassworkItemLine
+                key={item.competency_id}
+                className="border-2! shadow-none!"
+                size="sm"
+                item={{
+                  classwork_id: item.competency_id,
+                  title: item.competency_statement,
+                }}
+                showPublicationStatus={false}
+                showCategory={false}
+                showType={false}
+              />
             ))}
           </div>
-          {questionScores.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          {/* {questionScores.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
               {questionScores.slice(0, 3).map((item) => (
                 <Badge key={item.key} variant="outline" size="sm">
                   Question #{item.id}: {item.score}/{item.possible}
                 </Badge>
               ))}
             </div>
-          )}
+          )} */}
         </div>
       )}
 
       {focusPercent != null && (
-        <div className="flex items-center justify-between border-t border-border pt-2">
-          <span className="text-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-base">
             Weakest component: <span className="font-semibold">{primaryComp ? label(primaryComp) : focusName}</span>
           </span>
           <Badge variant={percentVariant(focusPercent)} size="sm">
@@ -155,7 +162,7 @@ function AcademicDiagnosisCard({
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 pt-2 border-t border-border text-xs">
+      <div className="flex flex-wrap gap-2">
         <Badge variant="surface" size="sm">
           {scoredCompetencies.length} scored competency targets
         </Badge>
@@ -244,68 +251,70 @@ export default function InterventionModal({
             <FormMessage>{detailError}</FormMessage>
           ) : (
             detail && (
-              <div className="space-y-5">
+              <div className="flex flex-col gap-4">
                 {detail.status === "RESOLVED" ? (
                   (() => {
                     const resolved = detail as TeacherResolvedInterventionDetail;
                     return (
                       <>
-                        <Card className="w-full space-y-2 border-2 border-black bg-primary">
-                          <div className="flex items-start gap-4">
-                            <div className="flex flex-col mt-3 items-center h-full">
-                              <Avatar variant="student" className="size-14 shrink-0">
-                                <Avatar.Image
-                                  src="/avatars/student-avatars/1.svg"
-                                  alt={resolved.student_name}
-                                />
-                                <Avatar.Fallback>
-                                  {(resolved.student_name || "?").charAt(0).toUpperCase()}
-                                </Avatar.Fallback>
-                              </Avatar>
-                            </div>
+                        <div className="flex flex-col gap-2">
+                          <Card className="w-full space-y-2 border-2 border-black bg-primary">
+                            <div className="flex items-start gap-4">
+                              <div className="flex flex-col mt-3 items-center h-full">
+                                <Avatar variant="student" className="size-14 shrink-0">
+                                  <Avatar.Image
+                                    src="/avatars/student-avatars/1.svg"
+                                    alt={resolved.student_name}
+                                  />
+                                  <Avatar.Fallback>
+                                    {(resolved.student_name || "?").charAt(0).toUpperCase()}
+                                  </Avatar.Fallback>
+                                </Avatar>
+                              </div>
 
-                            <div className="flex flex-col gap-1 w-full">
-                              <div className="flex flex-row justify-between w-full items-end">
-                                <h2 className="text-xl font-black -mb-1">{resolved.student_name}</h2>
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  <Badge variant="solid" size="md">
-                                    Resolved
-                                  </Badge>
-                                  <Badge variant="outline" size="md">
-                                    {label(resolved.resolution_reason || "Resolved")}
-                                  </Badge>
+                              <div className="flex flex-col gap-1 w-full">
+                                <div className="flex flex-row justify-between w-full items-end">
+                                  <h2 className="text-xl font-black -mb-1">{resolved.student_name}</h2>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <Badge variant="solid" size="md">
+                                      Resolved
+                                    </Badge>
+                                    <Badge variant="outline" size="md">
+                                      {label(resolved.resolution_reason || "Resolved")}
+                                    </Badge>
+                                  </div>
+                                </div>
+
+                                <div className="mt-2 grid grid-cols-2 gap-1 text-sm">
+                                  <p className="text-sm">
+                                    Subject:{" "}
+                                    <span className="text-base font-semibold">{resolved.subject_name}</span>
+                                  </p>
+                                  <p className="text-sm">
+                                    Class:{" "}
+                                    <span className="text-base font-semibold">{resolved.class_name}</span>
+                                  </p>
+                                  <p>
+                                    Trigger: <strong>{resolved.triggering_predicted_grade.toFixed(2)}</strong>
+                                  </p>
+                                  <p>
+                                    Resolution:{" "}
+                                    <strong>
+                                      {resolved.resolution_projection != null
+                                        ? resolved.resolution_projection.toFixed(2)
+                                        : "Unavailable"}
+                                    </strong>
+                                  </p>
                                 </div>
                               </div>
-
-                              <div className="mt-2 grid grid-cols-2 gap-1 text-sm">
-                                <p className="text-sm">
-                                  Subject:{" "}
-                                  <span className="text-base font-semibold">{resolved.subject_name}</span>
-                                </p>
-                                <p className="text-sm">
-                                  Class:{" "}
-                                  <span className="text-base font-semibold">{resolved.class_name}</span>
-                                </p>
-                                <p>
-                                  Trigger: <strong>{resolved.triggering_predicted_grade.toFixed(2)}</strong>
-                                </p>
-                                <p>
-                                  Resolution:{" "}
-                                  <strong>
-                                    {resolved.resolution_projection != null
-                                      ? resolved.resolution_projection.toFixed(2)
-                                      : "Unavailable"}
-                                  </strong>
-                                </p>
-                              </div>
                             </div>
-                          </div>
-                        </Card>
+                          </Card>
 
-                        <p className="text-sm text-muted-foreground">
-                          Resolved: {resolved.resolved_at ? date(resolved.resolved_at) : "Unavailable"}.
-                          This resolution describes this past cycle, not the student's current prediction.
-                        </p>
+                          <p className="text-sm text-muted-foreground px-2">
+                            Resolved: {resolved.resolved_at ? date(resolved.resolved_at) : "Unavailable"}.
+                            This resolution describes this past cycle, not the student's current prediction.
+                          </p>
+                        </div>
 
                         {newerActive && (
                           <Card className="space-y-2 w-full border-2 border-border">
@@ -322,69 +331,71 @@ export default function InterventionModal({
                           </Card>
                         )}
 
-                        <h3 className="font-black mb-2">Academic Diagnosis</h3>
-                        <AcademicDiagnosisCard diagnosis={resolved.diagnosis_snapshot} />
+                        <div className="flex flex-col gap-1">
+                          <h3 className="font-black">Academic Diagnosis</h3>
+                          <AcademicDiagnosisCard diagnosis={resolved.diagnosis_snapshot} />
+                        </div>
 
-                        <h3 className="font-black mb-2">Targeted Support History</h3>
-                        {resolved.targeted_activities.length ? (
-                          <div className="space-y-2">
-                            {resolved.targeted_activities.map((activity) => (
-                              <Card
-                                key={activity.assignment_id}
-                                className="p-3 text-sm space-y-1.5 w-full"
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <span className="font-semibold">{activity.title}</span>
-                                  <Badge
-                                    variant={activity.submission_status === "graded" ? "solid" : "outline"}
-                                    size="sm"
-                                  >
-                                    {activity.submission_status === "graded"
-                                      ? "Completed"
-                                      : label(
-                                        activity.submission_status ||
-                                        "Not submitted"
-                                      )}
-                                  </Badge>
-                                </div>
-                                {activity.grade != null && activity.total_points != null && (
-                                  <p className="text-xs text-muted-foreground">
-                                    Score: <strong>{activity.grade}/{activity.total_points}</strong>
-                                  </p>
-                                )}
-                                {activity.original_assignment_id && (
-                                  <div className="text-xs text-muted-foreground pt-1 border-t border-border flex flex-wrap gap-x-3 gap-y-0.5">
-                                    <span>
-                                      Original: {activity.original_title} ·{" "}
-                                      {label(activity.exam_subtype || "Examination")}
-                                    </span>
-                                    <span>
-                                      Original: {activity.original_grade ?? "—"}/{activity.total_points ?? "—"}
-                                    </span>
-                                    <span>
-                                      Remedial: {activity.grade ?? "Pending"}/{activity.total_points ?? "—"}
-                                    </span>
-                                    <span>
-                                      Effective:{" "}
-                                      <strong>
-                                        {activity.effective_grade ?? "—"}/{activity.total_points ?? "—"}
-                                      </strong>
-                                    </span>
+                        <div className="flex flex-col gap-1">
+                          <h3 className="font-black">Targeted Support History</h3>
+                          {resolved.targeted_activities.length ? (
+                            <div className="space-y-2">
+                              {resolved.targeted_activities.map((activity) => (
+                                <Card
+                                  key={activity.assignment_id}
+                                  className="p-3 text-sm space-y-1.5 w-full"
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <span className="text-lg font-semibold">{formatToTitleCase(activity.title)}</span>
+                                    <Badge
+                                      variant={activity.submission_status === "graded" ? "solid" : "outline"}
+                                      size="sm"
+                                    >
+                                      {activity.submission_status === "graded"
+                                        ? "Completed"
+                                        : label(
+                                          activity.submission_status ||
+                                          "Not submitted"
+                                        )}
+                                    </Badge>
                                   </div>
-                                )}
-                              </Card>
-                            ))}
-                          </div>
-                        ) : (
-                          <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
-                            <Empty.Content>
-                              <Empty.Description className="text-sm text-muted-foreground">
-                                No targeted activity was recorded for this resolved cycle.
-                              </Empty.Description>
-                            </Empty.Content>
-                          </Empty>
-                        )}
+                                  {activity.grade != null && activity.total_points != null && (
+                                    <p className="text-base">
+                                      Score: <strong>{activity.grade}/{activity.total_points}</strong>
+                                    </p>
+                                  )}
 
+                                  {activity.original_assignment_id && (
+                                    <div className="text-base text-foreground flex flex-wrap gap-x-3 gap-1">
+                                      <span>
+                                        Original: <strong>{activity.original_title}</strong> ·{" "}
+                                        <strong>{label(activity.exam_subtype || "Examination")}</strong>
+                                      </span>
+                                      <span>
+                                        Original: <strong>{activity.original_grade ?? "—"}/{activity.total_points ?? "—"}</strong>
+                                      </span>
+                                      <span>
+                                        Remedial: <strong>{activity.grade ?? "Pending"}/{activity.total_points ?? "—"}</strong>
+                                      </span>
+                                      <span>
+                                        Effective: <strong>{activity.effective_grade ?? "—"}/{activity.total_points ?? "—"}</strong>
+                                      </span>
+                                    </div>
+                                  )}
+                                </Card>
+                              ))}
+                            </div>
+                          ) : (
+                            <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
+                              <Empty.Content>
+                                <Empty.Description className="text-sm text-muted-foreground">
+                                  No targeted activity was recorded for this resolved cycle.
+                                </Empty.Description>
+                              </Empty.Content>
+                            </Empty>
+                          )}
+                        </div>
+                        {/* 
                         {resolved.sent_reviewer && (
                           <div className="space-y-2">
                             <h3 className="font-black">Sent Reviewer</h3>
@@ -401,7 +412,7 @@ export default function InterventionModal({
                               </div>
                             </Card>
                           </div>
-                        )}
+                        )} */}
                       </>
                     );
                   })()
@@ -542,7 +553,7 @@ export default function InterventionModal({
                                     <div>
                                       <span className="font-semibold text-sm">{activity.title}</span>
                                       <span className="ml-2">
-                                        <Badge variant="outline" size="sm">
+                                        <Badge variant="solid" size="sm">
                                           {label(activity.component)}
                                         </Badge>
                                       </span>
@@ -587,7 +598,6 @@ export default function InterventionModal({
                                 <Card key={item.competency_id} className="space-y-2 p-3">
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex items-center gap-2">
-                                      <Badge variant="secondary" size="sm">{item.competency_code}</Badge>
                                       <span className="font-semibold text-sm">{item.competency_statement}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
@@ -598,16 +608,16 @@ export default function InterventionModal({
                                         variant={percentVariant(item.percent)}
                                         size="sm"
                                       >
-                                        ({percent(item.percent)})
+                                        {percent(item.percent)}
                                       </Badge>
                                     </div>
                                   </div>
                                   {item.supporting_scores.map((score, index) => (
                                     <div
                                       key={`${score.quiz_question_id ?? score.source_type}-${index}`}
-                                      className="text-xs text-muted-foreground flex flex-wrap gap-1.5 pt-1.5 border-t border-border"
+                                      className="text-xs text-muted-foreground flex flex-wrap gap-1.5 pt-1.5"
                                     >
-                                      <Badge variant="outline" size="sm">
+                                      <Badge variant="solid" size="sm">
                                         {score.source_type === "QUIZ_QUESTION"
                                           ? `Question #${score.quiz_question_id ?? "unknown"}`
                                           : "Activity score"}
@@ -643,7 +653,7 @@ export default function InterventionModal({
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex items-center gap-2">
                                       <span className="font-semibold text-sm">{assessment.title}</span>
-                                      <Badge variant="outline" size="sm">{label(assessment.component)}</Badge>
+                                      <Badge variant="solid" size="sm">{label(assessment.component)}</Badge>
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                       <Badge variant="surface" size="sm">

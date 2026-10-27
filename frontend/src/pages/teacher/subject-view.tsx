@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Award, BookOpen, CheckSquare, ClipboardList, FileText, Paperclip, Plus, Repeat, Users, X, type LucideIcon } from "lucide-react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Award, BookOpen, CheckSquare, ClipboardList, FileText, Plus, Repeat, X, type LucideIcon } from "lucide-react";
+import { useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import AppLayout from "@/layouts/app-layout";
-import { API_URL, apiFetch } from "@/lib/api";
-import AttachmentDisplay from "@/components/attachment-display";
+import { apiFetch } from "@/lib/api";
 import CreateLessonModal from "@/pages/teacher/forms/create-lesson";
 import {
   getTeacherRecordPeriods,
@@ -15,15 +14,14 @@ import { Button } from "@/components/teacher/button";
 import { Dialog, dialogHeaderCloseButtonClassName } from "@/components/retroui/Dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { SubjectClassHeader } from "@/components/subject-class-header";
-import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
-import { Badge } from "@/components/retroui/Badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { Text } from "@/components/retroui/Text";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
+import ClassworkDetailModal from "./forms/classwork-preview-modal";
 import { isQuizType } from "@/lib/classwork-utils";
 import type { ClassworkKind } from "@/types/classwork";
 import CompetencyModal from "./forms/competency-modal";
@@ -89,7 +87,6 @@ export default function SubjectDetails() {
     classId: string;
     subjectId: string;
   }>();
-  const navigate = useNavigate();
   const { selectedPeriodId } = useAcademicPeriod();
   const [isRepostModalOpen, setIsRepostModalOpen] = useState(false);
   const [competencies, setCompetencies] = useState<CompetencyItem[]>([]);
@@ -1161,308 +1158,15 @@ export default function SubjectDetails() {
               />
             )}
 
-            {(selectedClasswork || detailLoadingId || detailError) && (
-              <Dialog
-                open={Boolean(
-                  selectedClasswork || detailLoadingId || detailError,
-                )}
-                onOpenChange={(open) => {
-                  if (!open) closeClassworkDetail();
-                }}
-              >
-                <Dialog.Content
-                  size="4xl"
-                  className="no-scrollbar h-fit max-h-[90vh] overflow-x-hidden"
-                  overlay={{ className: "bg-black/50" }}
-                >
-                  <Dialog.Header asChild>
-                    <>
-                      <p className="text-xl font-bold">
-                        {selectedClasswork?.title || "Classwork"}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <Tooltip>
-                          <TooltipTrigger render={<button
-                            type="button"
-                            onClick={closeClassworkDetail}
-                            aria-label="Close modal"
-                            className={dialogHeaderCloseButtonClassName}
-                          >
-                            <X className="size-4" />
-                          </button>} />
-                          <TooltipContent>Close modal</TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </>
-                  </Dialog.Header>
-
-                  <div className="min-h-0 flex-1 overflow-y-auto">
-                    {detailLoadingId ? (
-                      <div className="p-8 text-center text-sm font-semibold text-gray-600">
-                        Loading classwork details...
-                      </div>
-                    ) : detailError ? (
-                      <div className="m-5 border-2 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700">
-                        {detailError}
-                      </div>
-                    ) : selectedClasswork ? (
-                      <div className="grid grid-cols-1 gap-5 p-5">
-                        <div className="space-y-4">
-                          <Card className="block">
-                            <Card.Content className="space-y-3">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge
-                                  variant="secondary"
-                                  className="text-xs font-semibold"
-                                >
-                                  {selectedClasswork.classwork_type || "Classwork"}
-                                </Badge>
-                                {selectedClasswork.classwork_category && (
-                                  <Badge
-                                    variant="solid"
-                                    className="text-xs font-semibold"
-                                  >
-                                    {selectedClasswork.classwork_category.replace(
-                                      /_/g,
-                                      " ",
-                                    )}
-                                  </Badge>
-                                )}
-                                <Badge
-                                  variant="solid"
-                                  className="text-xs font-semibold"
-                                >
-                                  {selectedClasswork.is_published
-                                    ? "Published"
-                                    : "Draft"}
-                                </Badge>
-                                {selectedClasswork.is_locked && (
-                                  <Badge variant="destructive" size="sm" className="font-semibold">
-                                    Locked
-                                  </Badge>
-                                )}
-                              </div>
-
-                              <Card.Title className="text-3xl font-bold">
-                                {selectedClasswork.title}
-                              </Card.Title>
-                              <div className="grid gap-3 text-sm sm:grid-cols-3">
-                                <div className="border-2 border-black bg-gray-50 p-3">
-                                  <p className="font-semibold text-gray-600">
-                                    Due date
-                                  </p>
-                                  <p className="font-bold">
-                                    {selectedClasswork.due_date
-                                      ? new Date(
-                                        selectedClasswork.due_date,
-                                      ).toLocaleString()
-                                      : "No due date"}
-                                  </p>
-                                </div>
-                                <div className="border-2 border-black bg-gray-50 p-3">
-                                  <p className="font-semibold text-gray-600">
-                                    Points
-                                  </p>
-                                  <p className="font-bold">
-                                    {selectedClasswork.total_points ?? "Not set"}
-                                  </p>
-                                </div>
-                                <div className="border-2 border-black bg-gray-50 p-3">
-                                  <p className="font-semibold text-gray-600">
-                                    Section
-                                  </p>
-                                  <p className="font-bold">
-                                    {selectedClasswork.section_name ||
-                                      sectionName ||
-                                      "Class"}
-                                  </p>
-                                </div>
-                              </div>
-                            </Card.Content>
-                          </Card>
-
-                          {(selectedClasswork.description ||
-                            selectedClasswork.instructions) && (
-                              <Card className="block">
-                                <Card.Content className="space-y-3">
-                                  {selectedClasswork.description && (
-                                    <div>
-                                      <Card.Title className="mb-0 font-bold">
-                                        Description
-                                      </Card.Title>
-                                      <p className="mt-1 text-sm">
-                                        {selectedClasswork.description}
-                                      </p>
-                                    </div>
-                                  )}
-                                  {selectedClasswork.instructions && (
-                                    <div>
-                                      <Card.Title className="mb-0 font-bold">
-                                        Instructions
-                                      </Card.Title>
-                                      <p className="mt-1 whitespace-pre-wrap text-sm">
-                                        {selectedClasswork.instructions}
-                                      </p>
-                                    </div>
-                                  )}
-                                </Card.Content>
-                              </Card>
-                            )}
-
-                          <Card className="block">
-                            <Card.Content className="space-y-3">
-                              <div className="flex items-center gap-2">
-                                <Paperclip size={18} />
-                                <Card.Title className="mb-0 text-base font-bold">
-                                  Reference Files
-                                </Card.Title>
-                                <Badge
-                                  variant="secondary"
-                                  size="sm"
-                                  className="ml-auto"
-                                >
-                                  {selectedClasswork.attachments?.length || 0}
-                                </Badge>
-                              </div>
-                              {selectedClasswork.attachments?.length ? (
-                                <AttachmentDisplay
-                                  attachments={selectedClasswork.attachments}
-                                  type="classwork"
-                                  downloadUrl={(attachmentId) =>
-                                    `${API_URL}/api/v1/classwork-assignments/classwork/${selectedClasswork.classwork_id}/attachments/${attachmentId}/download`
-                                  }
-                                />
-                              ) : (
-                                <p className="text-sm text-gray-600">
-                                  No classwork files attached.
-                                </p>
-                              )}
-                            </Card.Content>
-                          </Card>
-                        </div>
-
-                        <aside className="space-y-4">
-                          <Card className="block bg-primary">
-                            <Card.Content>
-                              <div className="flex items-center gap-2">
-                                <Users size={18} />
-                                <Card.Title className="mb-0 text-base font-bold">
-                                  Submission Tracking
-                                </Card.Title>
-                              </div>
-                              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                                <div className="border-2 border-black bg-white p-2">
-                                  <p className="text-2xl font-bold">
-                                    {selectedTracking?.total_students ?? 0}
-                                  </p>
-                                  <p className="text-[11px] font-semibold">
-                                    Students
-                                  </p>
-                                </div>
-                                <div className="border-2 border-black bg-white p-2">
-                                  <p className="text-2xl font-bold">
-                                    {selectedTracking?.submitted_count ?? 0}
-                                  </p>
-                                  <p className="text-[11px] font-semibold">
-                                    Submitted
-                                  </p>
-                                </div>
-                                <div className="border-2 border-black bg-white p-2">
-                                  <p className="text-2xl font-bold">
-                                    {selectedTracking?.missing_count ?? 0}
-                                  </p>
-                                  <p className="text-[11px] font-semibold">
-                                    Pending
-                                  </p>
-                                </div>
-                              </div>
-                            </Card.Content>
-                          </Card>
-
-                          <Card className="block">
-                            <Card.Content>
-                              <Card.Title className="mb-3 text-base font-bold">
-                                Submitted Students
-                              </Card.Title>
-                              <div className="space-y-2">
-                                {(selectedTracking?.submitted ?? [])
-                                  .slice(0, 6)
-                                  .map((student) => (
-                                    <div
-                                      key={student.student_id}
-                                      className="border-2 border-black px-3 py-2 text-sm"
-                                    >
-                                      <p className="font-semibold">
-                                        {student.student_name}
-                                      </p>
-                                      <p className="text-xs text-gray-600">
-                                        {student.status}
-                                        {student.submitted_at
-                                          ? ` | ${new Date(student.submitted_at).toLocaleString()}`
-                                          : ""}
-                                        {student.grade != null
-                                          ? ` | Grade ${student.grade}`
-                                          : ""}
-                                      </p>
-                                    </div>
-                                  ))}
-                                {(selectedTracking?.submitted ?? []).length ===
-                                  0 && (
-                                    <p className="text-sm text-gray-600">
-                                      No submissions yet.
-                                    </p>
-                                  )}
-                              </div>
-                            </Card.Content>
-                          </Card>
-
-                          <Card className="block">
-                            <Card.Content>
-                              <Card.Title className="mb-3 text-base font-bold">
-                                Needs Follow-up
-                              </Card.Title>
-                              <div className="space-y-2">
-                                {(selectedTracking?.missing ?? [])
-                                  .slice(0, 6)
-                                  .map((student) => (
-                                    <div
-                                      key={student.student_id}
-                                      className="border-2 border-black px-3 py-2 text-sm"
-                                    >
-                                      <p className="font-semibold">
-                                        {student.student_name}
-                                      </p>
-                                      <p className="text-xs text-gray-600">
-                                        {student.status.replace(/_/g, " ")}
-                                      </p>
-                                    </div>
-                                  ))}
-                                {(selectedTracking?.missing ?? []).length === 0 && (
-                                  <p className="text-sm text-gray-600">
-                                    Everyone is accounted for.
-                                  </p>
-                                )}
-                              </div>
-                            </Card.Content>
-                          </Card>
-                        </aside>
-                      </div>
-                    ) : null}
-                  </div>
-                  <Dialog.Footer className="mt-0">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="header"
-                      onClick={() => selectedClasswork && navigate(`/teacher/classworks/${selectedClasswork.classwork_id}`)}
-                      disabled={!selectedClasswork}
-                    >
-                      View classwork details
-                    </Button>
-                  </Dialog.Footer>
-                </Dialog.Content>
-              </Dialog>
-            )}
+            {/* ── Reused Classwork Detail & Tracking Dialog ── */}
+            <ClassworkDetailModal
+              selectedClasswork={selectedClasswork}
+              detailLoadingId={detailLoadingId}
+              detailError={detailError}
+              onClose={closeClassworkDetail}
+              sectionName={sectionName}
+              tracking={selectedTracking}
+            />
 
             {/* ── Competency Create/Edit Modal ── */}
             {isCompetencyModalOpen && subjectId && (

@@ -6,13 +6,16 @@
  * Converts a string (including snake_case and kebab-case) into Title Case.
  * Example: "WRITTEN_WORK" -> "Written Work", "quarterly_assessment" -> "Quarterly Assessment"
  */
-export function toTitleCase(str?: string | null, fallback = ""): string {
+export function formatToTitleCase(str?: string | null, fallback = ""): string {
   if (!str) return fallback;
   return str
     .toLowerCase()
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
+
+/** Backward-compatibility alias */
+export const toTitleCase = formatToTitleCase;
 
 /**
  * Formats a date string or Date object into human-readable words.

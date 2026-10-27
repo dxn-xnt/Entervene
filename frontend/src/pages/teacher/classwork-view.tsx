@@ -34,7 +34,7 @@ import { Select } from "@/components/retroui/Select";
 import { Alert } from "@/components/retroui/Alert";
 import { Avatar } from "@/components/retroui/Avatar";
 import QuizAnalysisView from "./classworks/quiz-analysis-view";
-import StudentSubmissionView from "./classworks/student-submission-view";
+import StudentSubmissionView from "./student-submission-view";
 import EditClassworkModal from "./forms/edit-classwork";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
@@ -42,7 +42,7 @@ import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
 import IconContainer from "@/components/icon-container";
-import { toTitleCase } from "@/lib/formatters";
+import { formatToTitleCase } from "@/lib/formatters";
 
 export type ClassworkViewProps = {
   classwork?: TeacherClasswork;
@@ -736,7 +736,7 @@ export default function ClassworkView({
                         <div className="flex flex-row items-center gap-2">
                           <span>{selected.title}</span>
                           <Badge variant="secondary" size="sm" className="h-fit ml-1">
-                            {toTitleCase(selected.classwork_type)}
+                            {formatToTitleCase(selected.classwork_type)}
                           </Badge>
                         </div>
 
@@ -796,7 +796,7 @@ export default function ClassworkView({
                           size="md"
                           className="w-fit whitespace-nowrap"
                         >
-                          {toTitleCase(selected.classwork_category)}
+                          {formatToTitleCase(selected.classwork_category)}
                         </Badge>
                       )}
 
@@ -1114,7 +1114,7 @@ export default function ClassworkView({
               ) : (
                 <>
                   {/* Submissions & Grading Progress Card */}
-                  <Card className="w-full bg-card shadow-none hover:shadow-none">
+                  <Card className="w-full bg-primary shadow-none hover:shadow-none">
                     <Card.Content className="space-y-3">
                       {/* Submission Rate */}
                       <div className="space-y-1.5">

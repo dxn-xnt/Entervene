@@ -1,4 +1,4 @@
-import { Eye } from "lucide-react";
+import { Eye, FileText } from "lucide-react";
 import AttachmentDisplay from "@/components/attachment-display";
 import { API_URL } from "@/lib/api";
 import { Button } from "@/components/teacher/button";
@@ -11,6 +11,7 @@ import { Avatar } from "@/components/retroui/Avatar";
 import { Alert } from "@/components/retroui/Alert";
 import { useNavigate } from "react-router-dom";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import {
   formatDate,
   isQuizType,
@@ -126,7 +127,7 @@ export default function StudentSubmissionView({
                 <Card.Content>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3 min-w-0">
-                      <Avatar variant="student" className="size-12 shrink-0">
+                      <Avatar variant="student" className="size-10 shrink-0">
                         <Avatar.Image
                           src={selectedStudent.avatar || "/avatars/student-avatars/1.svg"}
                           alt={selectedStudent.student_name}
@@ -221,9 +222,13 @@ export default function StudentSubmissionView({
                       </div>
                     )
                   ) : (
-                    <div className="py-8 text-center text-sm font-semibold text-muted-foreground">
-                      This student has not submitted work yet.
-                    </div>
+                    <TeacherEmptyState
+                      icon={<FileText />}
+                      title="No Work Submitted"
+                      description="This student has not submitted work yet."
+                      compact
+                      className="shadow-none"
+                    />
                   )}
                 </Card.Content>
               </Card>
@@ -273,7 +278,7 @@ export default function StudentSubmissionView({
                     value={feedbackDraft}
                     onChange={(event) => onFeedbackChange(event.target.value)}
                     disabled={!selectedSubmissionDetail || isPostingGrade}
-                    className="min-h-24 w-full border-2 border-black p-3 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
+                    className="min-h-24 w-full border-2 border-black p-3 text-sm outline-none rounded! placeholder:text-muted-foreground disabled:opacity-50"
                     placeholder="Write constructive feedback for the student..."
                   />
                 </div>
