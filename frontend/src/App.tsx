@@ -53,6 +53,7 @@ const TeacherAttendance = lazy(() => import("./pages/teacher/attendance"));
 const PredictionsDashboard = lazy(() => import("./pages/teacher/predictions"));
 const GradesPredictions = lazy(() => import("./pages/teacher/grade-predictions"));
 const SectionPredictions = lazy(() => import("./pages/teacher/section-predictions"));
+const SubjectPrediction = lazy(() => import("./pages/teacher/subject-prediction"));
 const LessonPlannerPage = lazy(() => import("./pages/teacher/lesson-planner/lesson-planner-page"));
 const LessonPlannerListPage = lazy(() => import("./pages/teacher/lesson-planner/lesson-planner-list-page"));
 const TeacherTOSPage = lazy(() => import("./pages/teacher/tos/teacher-tos-page"));
@@ -62,8 +63,8 @@ const TeacherRequests = lazy(() => import("./pages/teacher/requests"));
 const StudentBoard = lazy(() => import("./pages/student/studyboard"));
 const StudentProfile = lazy(() => import("./pages/student/student-profile"));
 const StudentSubjects = lazy(() => import("./pages/student/subjects"));
-const StudentSubjectDetail = lazy(() => import("./pages/student/student-subject-detail"));
-const StudentClassworkView = lazy(() => import("./pages/student/student-classwork-view"));
+const StudentSubjectDetail = lazy(() => import("./pages/student/subject-detail"));
+const StudentClassworkView = lazy(() => import("./pages/student/classwork-view"));
 const StudentInterventions = lazy(() => import("./pages/student/interventions"));
 const StudentInterventionView = lazy(() => import("./pages/student/intervention-view"));
 const StudentGrades = lazy(() => import("./pages/student/grades/grades"));
@@ -145,6 +146,7 @@ const App = () => {
                   <Route path={routes.teacher.predictions} element={<PredictionsDashboard />} />
                   <Route path={routes.teacher.gradePredictions} element={<GradesPredictions />} />
                   <Route path={routes.teacher.sectionPredictions} element={<SectionPredictions />} />
+                  <Route path={routes.teacher.subjectPredictions} element={<SubjectPrediction />} />
                   <Route path={routes.teacher.subjectSectionPredictions} element={<SectionPredictions />} />
                   <Route path={routes.teacher.lessonPlanner} element={<LessonPlannerListPage />} />
                   <Route path={routes.teacher.lessonPlannerCreate} element={<LessonPlannerPage />} />

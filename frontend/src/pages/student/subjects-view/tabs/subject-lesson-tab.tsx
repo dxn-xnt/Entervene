@@ -479,9 +479,9 @@ export default function SubjectLessonTab({
       setSelectedClasswork((prev) =>
         prev
           ? {
-              ...prev,
-              submission_status: attempt.status,
-            }
+            ...prev,
+            submission_status: attempt.status,
+          }
           : null,
       );
       updateClassworkStatus(
@@ -618,9 +618,9 @@ export default function SubjectLessonTab({
       setSelectedClasswork((prev) =>
         prev
           ? {
-              ...prev,
-              submission_status: sub.status,
-            }
+            ...prev,
+            submission_status: sub.status,
+          }
           : null,
       );
       updateClassworkStatus(assignmentId, sub.status);
@@ -716,7 +716,7 @@ export default function SubjectLessonTab({
             className="min-w-0 flex-1 cursor-pointer p-4 text-left"
           >
             <span className="flex flex-wrap items-center justify-between gap-2 pr-2">
-              <span className="text-xl font-semibold leading-tight hover:underline sm:text-2xl">{lesson.title}</span>
+              <span className="text-xl font-semibold sm:text-2xl">{lesson.title}</span>
               <span className="flex flex-wrap items-center gap-2">
                 {lesson.attachments.length > 0 && (
                   <Badge variant="secondary" size="sm" className="rounded border border-black bg-success px-2 py-0.5 text-sm font-bold text-black">
@@ -726,12 +726,12 @@ export default function SubjectLessonTab({
               </span>
             </span>
             <span className="mt-1 block text-sm text-foreground">
-              {lesson.description ||
-                (lesson.updated_at
-                  ? `Updated ${fmtDate(lesson.updated_at)}`
-                  : lesson.created_at
-                    ? `Created ${fmtDate(lesson.created_at)}`
-                    : "")}
+
+              {lesson.updated_at
+                ? `Updated ${fmtDate(lesson.updated_at)}`
+                : lesson.created_at
+                  ? `Created ${fmtDate(lesson.created_at)}`
+                  : ""}
             </span>
           </button>
           <button
@@ -999,7 +999,13 @@ export default function SubjectLessonTab({
                 </div>
 
                 <div className="space-y-3">
-                  {sortedLessons.length === 0 ? <StudentEmptyState icon={<BookOpen />} title="No lessons match this filter" description="Choose another lesson or clear the filter to see all lessons." action={{ label: "Clear filter", onClick: () => setLessonFilter("all") }} /> : sortedLessons.map(renderStudentLessonItem)}
+                  {sortedLessons.length === 0 ?
+                    <StudentEmptyState icon={<BookOpen />} title="No lessons match this filter" description="Choose another lesson or clear the filter to see all lessons."
+                      action={{
+                        label: "Clear filter",
+                        onClick: () => setLessonFilter("all")
+                      }} /> :
+                    sortedLessons.map(renderStudentLessonItem)}
                 </div>
               </div>
 

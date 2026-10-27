@@ -1,5 +1,9 @@
+import { Link } from "react-router-dom";
+import { ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
+import { Button } from "@/components/retroui/Button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { SubjectSectionCard } from "./subject-section-card";
 import type { DashboardSubjectGroupSummary } from "./current-term-dashboard-adapter";
 
@@ -13,7 +17,6 @@ export function PredictionSubjectSection({ group }: PredictionSubjectSectionProp
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h2 className="text-xl font-bold">{group.display_name}</h2>
-
         </div>
         <div className="flex flex-row flex-wrap gap-2 items-center">
           {group.high_risk_count > 0 && (
@@ -31,6 +34,22 @@ export function PredictionSubjectSection({ group }: PredictionSubjectSectionProp
               {group.needs_monitoring_count} Monitoring
             </Badge>
           )}
+          <Tooltip>
+            <TooltipTrigger render={
+              <Button
+                asChild
+                size="sm"
+                variant="secondary"
+                className="shadow-none p-1"
+                aria-label={`View ${group.display_name} predictions`}
+              >
+                <Link to={`/teacher/predictions/subject/${group.subject_id}`}>
+                  <ArrowUpRight className="size-3" />
+                </Link>
+              </Button>
+            } />
+            <TooltipContent>View all {group.display_name} predictions</TooltipContent>
+          </Tooltip>
         </div>
       </div>
       <div className="flex flex-wrap gap-3 pt-2">
