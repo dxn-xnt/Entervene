@@ -200,7 +200,7 @@ export default function StudentInterventionView() {
                     <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
                       {title}
                     </h1>
-                    <p className="text-xs sm:text-sm font-medium text-foreground">
+                    <p className="text-sm font-medium text-foreground">
                       {subjectName}
                       {teacherName ? ` · ${teacherName}` : ""}
                     </p>

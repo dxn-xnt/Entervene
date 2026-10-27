@@ -18,11 +18,11 @@ import {
   Send,
   X,
 } from "lucide-react";
-import { Button } from "@/components/retroui/Button";
+import { Button } from "@/components/teacher/button";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import {
   cloneSelfMaterials,
   createContentRequest,
@@ -701,18 +701,35 @@ export function RepostWorkspace({
     }
   };
 
+  const reuseFooterAction = (
+    <>
+      <span className="text-sm text-muted-foreground">
+        {selectedTokens.size} material{selectedTokens.size === 1 ? "" : "s"} ready to clone
+      </span>
+      <Button
+        type="button"
+        variant="default"
+        disabled={selfLoading || cloningInProgress || selectedTokens.size === 0}
+        onClick={handleSelfCloneExecute}
+      >
+        {cloningInProgress ? <Loader2 className="size-4 animate-spin" /> : <FolderSync className="size-4" />}
+        {cloningInProgress ? "Reusing Materials..." : `Reuse Selected Materials (${selectedTokens.size})`}
+      </Button>
+    </>
+  );
+
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-background text-foreground">
       {/* ── Destination Header / Selector ── */}
-      <div className="bg-white border-b-2 border-black p-4 shrink-0">
+      <div className="shrink-0 bg-background px-4 py-3 sm:px-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block mb-0.5">
+            <span className="mb-0.5 block text-sm font-medium text-muted-foreground">
               Proposed Destination
             </span>
             {activeDestination ? (
               <div className="flex items-center gap-2">
-                <h4 className="text-base sm:text-lg font-black font-head text-foreground truncate">
+                <h4 className="truncate text-base font-semibold text-foreground sm:text-lg">
                   {activeDestination.subjectName} &middot; {activeDestination.sectionName}
                 </h4>
                 <Badge variant="outline" size="sm" className="border-black font-bold shrink-0">
@@ -750,12 +767,14 @@ export function RepostWorkspace({
       </div>
 
       {/* ── Unified 4-Tab Bar ── */}
-      <div className="flex border-b-2 border-black bg-gray-100 shrink-0 overflow-x-auto">
+      <div role="tablist" aria-label="Repost sections" className="flex shrink-0 gap-2 overflow-x-auto border-b-2 border-border bg-background px-4 pt-2 sm:px-6">
         <button
           type="button"
           onClick={() => handleTabSwitch("reuse")}
-          className={`flex-1 min-w-[140px] py-3 px-4 font-bold text-xs sm:text-sm border-r-2 border-black transition-colors flex items-center justify-center gap-2 ${
-            activeTab === "reuse" ? "bg-white text-black shadow-inner" : "text-gray-600 hover:bg-gray-200"
+          role="tab"
+          aria-selected={activeTab === "reuse"}
+          className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)] border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
+            activeTab === "reuse" ? "bg-primary text-primary-foreground" : "bg-background text-foreground hover:bg-accent"
           }`}
         >
           <FolderSync className="size-4 shrink-0" />
@@ -764,8 +783,10 @@ export function RepostWorkspace({
         <button
           type="button"
           onClick={() => handleTabSwitch("request")}
-          className={`flex-1 min-w-[140px] py-3 px-4 font-bold text-xs sm:text-sm border-r-2 border-black transition-colors flex items-center justify-center gap-2 ${
-            activeTab === "request" ? "bg-white text-black shadow-inner" : "text-gray-600 hover:bg-gray-200"
+          role="tab"
+          aria-selected={activeTab === "request"}
+          className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)] border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
+            activeTab === "request" ? "bg-primary text-primary-foreground" : "bg-background text-foreground hover:bg-accent"
           }`}
         >
           <Send className="size-4 shrink-0" />
@@ -774,8 +795,10 @@ export function RepostWorkspace({
         <button
           type="button"
           onClick={() => handleTabSwitch("received")}
-          className={`flex-1 min-w-[120px] py-3 px-4 font-bold text-xs sm:text-sm border-r-2 border-black transition-colors flex items-center justify-center gap-2 ${
-            activeTab === "received" ? "bg-white text-black shadow-inner" : "text-gray-600 hover:bg-gray-200"
+          role="tab"
+          aria-selected={activeTab === "received"}
+          className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)] border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
+            activeTab === "received" ? "bg-primary text-primary-foreground" : "bg-background text-foreground hover:bg-accent"
           }`}
         >
           <Inbox className="size-4 shrink-0" />
@@ -789,8 +812,10 @@ export function RepostWorkspace({
         <button
           type="button"
           onClick={() => handleTabSwitch("sent")}
-          className={`flex-1 min-w-[120px] py-3 px-4 font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 ${
-            activeTab === "sent" ? "bg-white text-black shadow-inner" : "text-gray-600 hover:bg-gray-200"
+          role="tab"
+          aria-selected={activeTab === "sent"}
+          className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)] border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
+            activeTab === "sent" ? "bg-primary text-primary-foreground" : "bg-background text-foreground hover:bg-accent"
           }`}
         >
           <PackageCheck className="size-4 shrink-0" />
@@ -810,12 +835,11 @@ export function RepostWorkspace({
         {/* =================================================================== */}
         {activeTab === "reuse" && (
           <div className="space-y-4">
-            <div className="bg-amber-50 border-2 border-black p-4 rounded text-xs text-gray-800">
-              <p className="font-bold">Reuse Your Historical Curriculum Materials</p>
-              <p className="mt-1 text-gray-700">
-                Directly copy competencies, lessons, and classworks from your previous academic years into{" "}
-                <strong>{activeDestination?.sectionName || "your destination section"}</strong>. Cloned items
-                will initially be created as unpublished drafts for you to review and customize.
+            <div className="space-y-1 text-sm">
+              <p className="font-semibold">Reuse Previous Materials</p>
+              <p className="text-muted-foreground">
+                Copy previous competencies, lessons, and classworks into{" "}
+                <strong>{activeDestination?.sectionName || "your destination section"}</strong> as unpublished drafts.
               </p>
             </div>
 
@@ -870,20 +894,18 @@ export function RepostWorkspace({
                 {/* Filter and select toolbar */}
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Type:</span>
+                    <span className="text-sm font-medium text-muted-foreground">Type:</span>
                     {(["ALL", "COMPETENCY", "LESSON", "CLASSWORK"] as const).map((t) => (
-                      <button
+                      <Button
                         key={t}
                         type="button"
+                        size="sm"
+                        autoIcon={false}
+                        variant={selfItemTypeFilter === t ? "default" : "outline"}
                         onClick={() => setSelfItemTypeFilter(t)}
-                        className={`px-2.5 py-1 text-xs font-bold rounded border border-black transition-colors ${
-                          selfItemTypeFilter === t
-                            ? "bg-black text-white shadow-xs"
-                            : "bg-white text-gray-800 hover:bg-gray-100"
-                        }`}
                       >
                         {t === "ALL" ? "All" : t.charAt(0) + t.slice(1).toLowerCase() + "s"}
-                      </button>
+                      </Button>
                     ))}
                   </div>
 
@@ -919,14 +941,14 @@ export function RepostWorkspace({
                     <p className="text-xs font-bold">Loading your prior teaching records...</p>
                   </div>
                 ) : filteredSelfMaterials.length === 0 ? (
-                  <Empty className="py-12 border-2 border-dashed border-gray-300 rounded">
-                    <EmptyHeader>
-                      <EmptyTitle>No Prior Materials Found</EmptyTitle>
-                      <EmptyDescription>
-                        You do not have any published teaching records for this subject in previous academic years.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
+                  <TeacherEmptyState
+                    icon={<FolderSync />}
+                    title={selfMaterials.length === 0 ? "No Prior Materials Found" : "No Materials Match This Type"}
+                    description={selfMaterials.length === 0
+                      ? "You do not have any published teaching records for this subject in previous academic years."
+                      : "Try another material type to see available records."}
+                    compact
+                  />
                 ) : (
                   <div className="border-2 border-black rounded divide-y divide-black max-h-96 overflow-y-auto bg-white shadow-[2px_2px_0px_#000]">
                     {filteredSelfMaterials.map((item) => {
@@ -969,28 +991,11 @@ export function RepostWorkspace({
                 )}
 
                 {/* Footer action */}
-                <div className="pt-2 flex items-center justify-between border-t border-gray-200">
-                  <span className="text-xs font-semibold text-muted-foreground">
-                    {selectedTokens.size} material{selectedTokens.size === 1 ? "" : "s"} ready to clone
-                  </span>
-                  <Button
-                    variant="default"
-                    disabled={selfLoading || cloningInProgress || selectedTokens.size === 0}
-                    onClick={handleSelfCloneExecute}
-                    className="flex items-center gap-2"
-                  >
-                    {cloningInProgress ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" /> Reusing Materials...
-                      </>
-                    ) : (
-                      <>
-                        <FolderSync className="size-4" />
-                        Reuse Selected Materials ({selectedTokens.size})
-                      </>
-                    )}
-                  </Button>
-                </div>
+                {!isDialogContext && (
+                  <div className="-mx-4 flex flex-wrap items-center justify-between gap-3 border-t-2 border-border px-4 pt-4 sm:-mx-6 sm:px-6">
+                    {reuseFooterAction}
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -1001,7 +1006,7 @@ export function RepostWorkspace({
         {/* =================================================================== */}
         {activeTab === "request" && (
           <div className="space-y-5">
-            <div className="bg-white border-2 border-black p-4 rounded text-xs text-gray-800 shadow-[2px_2px_0px_#000]">
+            <div className="space-y-1 text-sm">
               <p className="font-bold">Request Course Materials from a Colleague</p>
               <p className="mt-1 text-gray-600">
                 Ask another teacher who handled {activeDestination?.subjectName || "this subject"} in a completed
@@ -1233,7 +1238,7 @@ export function RepostWorkspace({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-black font-head uppercase tracking-wider">
+                <h4 className="text-sm font-semibold">
                   Requests Received from Colleagues
                 </h4>
                 <p className="text-xs text-muted-foreground font-medium">
@@ -1264,14 +1269,7 @@ export function RepostWorkspace({
                 <p className="text-xs font-bold">Loading received requests...</p>
               </div>
             ) : !incomingData || incomingData.items.length === 0 ? (
-              <Empty className="py-12 border-2 border-dashed border-gray-300 rounded">
-                <EmptyHeader>
-                  <EmptyTitle>No Received Requests</EmptyTitle>
-                  <EmptyDescription>
-                    You have not received any material requests from other teachers.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
+              <TeacherEmptyState icon={<Inbox />} title="No Received Requests" description="You have not received any material requests from other teachers." compact />
             ) : (
               <div className="grid grid-cols-1 gap-3">
                 {incomingData.items.map((req) => (
@@ -1336,7 +1334,7 @@ export function RepostWorkspace({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-black font-head uppercase tracking-wider">
+                <h4 className="text-sm font-semibold">
                   Requests Sent to Colleagues
                 </h4>
                 <p className="text-xs text-muted-foreground font-medium">
@@ -1367,14 +1365,7 @@ export function RepostWorkspace({
                 <p className="text-xs font-bold">Loading sent requests...</p>
               </div>
             ) : !outgoingData || outgoingData.items.length === 0 ? (
-              <Empty className="py-12 border-2 border-dashed border-gray-300 rounded">
-                <EmptyHeader>
-                  <EmptyTitle>No Sent Requests</EmptyTitle>
-                  <EmptyDescription>
-                    You have not sent any requests to other teachers yet.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
+              <TeacherEmptyState icon={<Send />} title="No Sent Requests" description="You have not sent any requests to other teachers yet." compact />
             ) : (
               <div className="grid grid-cols-1 gap-3">
                 {outgoingData.items.map((req) => (
@@ -1435,6 +1426,12 @@ export function RepostWorkspace({
           </div>
         )}
       </div>
+
+      {isDialogContext && activeTab === "reuse" && !cloneSuccessResult && (
+        <Dialog.Footer position="static" className="justify-between">
+          {reuseFooterAction}
+        </Dialog.Footer>
+      )}
 
       {/* ===================================================================== */}
       {/* CHILD MODAL: PACKAGE BUILDER (Owner view, 0 selected by default)      */}
@@ -1500,14 +1497,7 @@ export function RepostWorkspace({
                 <p className="text-xs font-bold">Loading your eligible materials...</p>
               </div>
             ) : eligibleMaterials.length === 0 ? (
-              <Empty className="py-8">
-                <EmptyHeader>
-                  <EmptyTitle>No Eligible Materials</EmptyTitle>
-                  <EmptyDescription>
-                    You do not have any published, owned materials matching this request scope.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
+              <TeacherEmptyState icon={<Package />} title="No Eligible Materials" description="You do not have any published, owned materials matching this request scope." compact />
             ) : (
               <div className="border-2 border-black rounded divide-y divide-black max-h-80 overflow-y-auto bg-white">
                 {eligibleMaterials.map((item) => {

@@ -970,7 +970,7 @@ export default function ClassworkView({
               {/* Submissions & Grading / Reading Engagement Progress Card */}
               {isReadingType(selected.classwork_type) ? (
                 <div className="space-y-6 mt-2">
-                  <Card className="w-full shadow-none bg-primary">
+                  <Card className="w-full bg-card shadow-none hover:shadow-none">
                     <Card.Content className="space-y-3">
 
                       {/* Reading Engagement Progress */}
@@ -987,8 +987,7 @@ export default function ClassworkView({
                         </div>
                         <Progress
                           value={submissionRate}
-                          className="w-full h-3 border-2 border-black bg-gray-100"
-                          indicatorClassName="bg-black"
+                          className="w-full h-3"
                         />
                       </div>
                     </Card.Content>
@@ -1115,7 +1114,7 @@ export default function ClassworkView({
               ) : (
                 <>
                   {/* Submissions & Grading Progress Card */}
-                  <Card className="w-full shadow-none bg-primary">
+                  <Card className="w-full bg-card shadow-none hover:shadow-none">
                     <Card.Content className="space-y-3">
                       {/* Submission Rate */}
                       <div className="space-y-1.5">
@@ -1131,15 +1130,14 @@ export default function ClassworkView({
                         </div>
                         <Progress
                           value={submissionRate}
-                          className="w-full h-3 border-2 border-black bg-gray-100"
-                          indicatorClassName="bg-black"
+                          className="w-full h-3"
                         />
                       </div>
 
                       {/* Grading Completion Progress */}
                       {needsGrading && (
                         <div className="space-y-1.5">
-                          <div className="flex justify-between items-center text-sm text-gray-800">
+                          <div className="flex justify-between items-center text-sm text-foreground">
                             <span>Grading Completion</span>
                             <span>
                               {isTrackingLoading && !tracking
@@ -1151,8 +1149,7 @@ export default function ClassworkView({
                           </div>
                           <Progress
                             value={gradingRate}
-                            className="w-full h-3 border-2 border-black bg-gray-100"
-                            indicatorClassName="bg-black"
+                            className="w-full h-3"
                           />
                         </div>
                       )}

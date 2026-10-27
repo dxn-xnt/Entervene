@@ -206,7 +206,7 @@ const SubjectGrade = ({
                             {item.show_scores !== false ? (
                               <>
                                 {item.grade !== null ? item.grade : "-"}
-                                <span className="text-xs text-muted-foreground">
+                                <span className="text-sm text-muted-foreground">
                                   /{item.total_points ?? 100}
                                 </span>
                               </>
@@ -214,7 +214,7 @@ const SubjectGrade = ({
                               <Badge
                                 variant="outline"
                                 size="sm"
-                                className="rounded border border-gray-300 bg-gray-100 text-xs font-normal text-gray-500"
+                                className="rounded border border-gray-300 bg-gray-100 text-sm font-normal text-gray-500"
                               >
                                 Score hidden
                               </Badge>

@@ -74,6 +74,7 @@ import {
 import type {
   ClassworkDetail,
   CompetencyItem,
+  Lesson,
   LessonDraft,
 } from "./subject-details/types";
 
@@ -403,6 +404,7 @@ function LessonsTab({
   refreshTrigger?: number;
 }) {
   const navigate = useNavigate();
+  const toast = useToast();
   const { selectedPeriodId, periods } = useAcademicPeriod();
   const [internalSetGoalModalOpen, setInternalSetGoalModalOpen] = useState(false);
   const isGoalModalOpen = isSetGoalModalOpen !== undefined ? isSetGoalModalOpen : internalSetGoalModalOpen;
@@ -781,6 +783,18 @@ function LessonsTab({
     }
   };
 
+  const archiveLessonFromDetail = async (lesson: Lesson) => {
+    const response = await apiFetch(`/api/v1/lessons/${lesson.lesson_id}/archive`, {
+      method: "PUT",
+    });
+    if (!response.ok) throw new Error("Unable to archive lesson.");
+
+    setLessons((current) =>
+      current.filter((item) => item.lesson_id !== lesson.lesson_id),
+    );
+    toast.success({ title: "Lesson archived" });
+  };
+
   const filteredLessons = useMemo(() => {
     const list =
       lessonFilter === "all"
@@ -852,6 +866,7 @@ function LessonsTab({
             openLessonManager={(l) => openLessonManager(l as any)}
             openClassworkForm={(l) => openClassworkForm(l as any)}
             openClassworkDetail={(cw) => openClassworkDetail(cw as any)}
+            onArchiveLesson={archiveLessonFromDetail}
             linkedClassworks={
               (linkedClassworks[activeLessonDetail.lesson_id] || []) as any
             }

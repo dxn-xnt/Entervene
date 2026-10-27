@@ -120,7 +120,7 @@ export default function StudentReviewerSection() {
               <Card key={item.material_id} className="w-full space-y-4 p-5 md:p-6">
                 <h3 className="font-bold">{item.title}</h3>
                 <p>{item.subject_name}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   Shared {new Date(item.sent_at).toLocaleDateString("en-PH")}
                 </p>
                 <Button
@@ -164,7 +164,7 @@ export default function StudentReviewerSection() {
                 <p className="font-medium text-sm text-foreground">
                   {detail.introduction}
                 </p>
-                <div className="whitespace-pre-wrap leading-relaxed rounded border-2 border-border bg-muted/40 p-4 font-mono text-xs md:text-sm">
+                <div className="whitespace-pre-wrap leading-relaxed rounded border-2 border-border bg-muted/40 p-4 font-mono text-sm">
                   {detail.body}
                 </div>
               </div>

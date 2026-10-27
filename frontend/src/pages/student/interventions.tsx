@@ -382,7 +382,7 @@ export default function StudentInterventions() {
 
                           {/* Meta line */}
                           <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
-                            <span className="text-xs sm:text-sm text-muted-foreground">
+                            <span className="text-sm text-muted-foreground">
                               {item.resolved_at
                                 ? `Resolved ${formatDate(item.resolved_at)}`
                                 : "Resolved"}
