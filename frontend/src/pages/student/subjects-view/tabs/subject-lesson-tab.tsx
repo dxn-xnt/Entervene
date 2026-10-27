@@ -4,10 +4,10 @@ import { studentClassworkPath } from "@/lib/student-classwork-navigation";
 import {
   BookOpen,
   ClipboardList,
-  ChevronRight,
   FileText,
   GraduationCap,
 } from "lucide-react";
+import LessonItemLine from "@/components/item-line/lesson";
 import { StudentLessonDetailScreen } from "@/pages/student/lesson-view";
 import { apiFetch, getLessonGoals, getStudentTodos, type LessonGoalItemResponse, type TodoItem } from "@/lib/api";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
@@ -704,52 +704,37 @@ export default function SubjectLessonTab({
 
   const renderStudentLessonItem = (lesson: Lesson) => {
     return (
-      <div
+      <LessonItemLine
         key={lesson.lesson_id}
-        className="w-full overflow-hidden rounded border-2 border-black bg-primary shadow-md transition-all hover:translate-x-1"
         id={`student-lesson-${lesson.lesson_id}`}
+        lesson={lesson}
+        isExpanded={expandedId === lesson.lesson_id}
+        onToggle={() => toggleLesson(lesson.lesson_id)}
+        onOpenLessonDetail={() => void openLessonDetail(lesson)}
+        showPublicationStatus={false}
+        badge={
+          lesson.attachments.length > 0 ? (
+            <Badge
+              variant="secondary"
+              size="sm"
+              className="rounded border border-black bg-success px-2 py-0.5 text-sm font-bold text-black"
+            >
+              {lesson.attachments.length} material{lesson.attachments.length === 1 ? "" : "s"}
+            </Badge>
+          ) : null
+        }
+        subtitle={
+          lesson.updated_at
+            ? `Updated ${fmtDate(lesson.updated_at)}`
+            : lesson.created_at
+              ? `Created ${fmtDate(lesson.created_at)}`
+              : ""
+        }
       >
-        <div className="flex items-stretch">
-          <button
-            type="button"
-            onClick={() => void openLessonDetail(lesson)}
-            className="min-w-0 flex-1 cursor-pointer p-4 text-left"
-          >
-            <span className="flex flex-wrap items-center justify-between gap-2 pr-2">
-              <span className="text-xl font-semibold sm:text-2xl">{lesson.title}</span>
-              <span className="flex flex-wrap items-center gap-2">
-                {lesson.attachments.length > 0 && (
-                  <Badge variant="secondary" size="sm" className="rounded border border-black bg-success px-2 py-0.5 text-sm font-bold text-black">
-                    {lesson.attachments.length} material{lesson.attachments.length === 1 ? "" : "s"}
-                  </Badge>
-                )}
-              </span>
-            </span>
-            <span className="mt-1 block text-sm text-foreground">
-
-              {lesson.updated_at
-                ? `Updated ${fmtDate(lesson.updated_at)}`
-                : lesson.created_at
-                  ? `Created ${fmtDate(lesson.created_at)}`
-                  : ""}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => toggleLesson(lesson.lesson_id)}
-            aria-label={`${expandedId === lesson.lesson_id ? "Collapse" : "Expand"} ${lesson.title} classwork`}
-            aria-expanded={expandedId === lesson.lesson_id}
-            className="flex w-10 shrink-0 cursor-pointer items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            <ChevronRight className={`size-4 transition-transform ${expandedId === lesson.lesson_id ? "rotate-90" : ""}`} aria-hidden="true" />
-          </button>
+        <div className="flex flex-col gap-2">
+          {renderLessonClassworkCards(lesson, true)}
         </div>
-        {expandedId === lesson.lesson_id && (
-          <div className="flex flex-col gap-2 border-t-2 border-black bg-white p-3">
-            {renderLessonClassworkCards(lesson, true)}
-          </div>
-        )}
-      </div>
+      </LessonItemLine>
     );
   };
 
