@@ -16,6 +16,7 @@ import app.api.v1.routes.Submissions as submission_routes
 from app.api.v1.routes.Auth import get_current_user
 from app.api.v1.routes.Classworks import router as classworks_router
 from app.api.v1.routes.Submissions import router as submissions_router
+from app.api.v1.routes.Quizzes import router as quizzes_router
 from app.core.Security import create_access_token
 from app.db.Base import Base
 from app.db.Session import get_db
@@ -45,6 +46,9 @@ from app.models.submissions.SubmissionAttachment import SubmissionAttachment
 from app.models.notifications.Notification import Notification
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
+from app.models.intervention.Intervention import Intervention
+from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
+from app.models.classwork.RemediationReadingPrerequisite import RemediationReadingPrerequisite
 
 
 TABLES = [
@@ -74,6 +78,9 @@ TABLES = [
     Notification.__table__,
     GradingTemplate.__table__,
     GradingTemplateComponent.__table__,
+    Intervention.__table__,
+    RemediationAssignmentLink.__table__,
+    RemediationReadingPrerequisite.__table__,
 ]
 
 
@@ -256,6 +263,7 @@ def authz_context(tmp_path):
     test_app = FastAPI()
     test_app.include_router(classworks_router, prefix="/api/v1/classwork-assignments")
     test_app.include_router(submissions_router, prefix="/api/v1/submissions")
+    test_app.include_router(quizzes_router, prefix="/api/v1/quizzes")
     test_app.dependency_overrides[get_db] = lambda: db
     test_app.dependency_overrides[get_current_user] = lambda: identity
     with TestClient(test_app) as client:
@@ -858,3 +866,130 @@ def test_teacher_can_delete_owned_classwork_attachment(authz_context, monkeypatc
     assert c["db"].query(ClassworkAttachment).filter_by(
         classwork_attachment_id=c["classwork_attachment"].classwork_attachment_id
     ).count() == 0
+
+
+def test_reading_progress_endpoints_create_one_ungraded_idempotent_record(authz_context):
+    c = authz_context
+    reading = Classwork(
+        title="Secure reading",
+        classwork_type="READING",
+        is_graded=False,
+        total_points=None,
+        is_published=True,
+        is_archived=False,
+        subject_id=c["subject"].subject_id,
+        created_by_staff_id=c["owner"].staff_id,
+    )
+    c["db"].add(reading)
+    c["db"].flush()
+    assignment = ClassworkAssignment(
+        classwork_id=reading.classwork_id,
+        class_id=c["allowed_class"].class_id,
+        academic_period_id=c["period"].academic_period_id,
+        assigned_by_staff_id=c["owner"].staff_id,
+        is_published=True,
+    )
+    c["db"].add(assignment)
+    c["db"].commit()
+    _act_as(c, "student", "student")
+
+    base = f"/api/v1/submissions/assignment/{assignment.classwork_assignment_id}"
+    focused = c["client"].post(f"{base}/reading-focus", json={"focused_seconds": 30})
+    completed = c["client"].post(f"{base}/complete-reading")
+    repeated = c["client"].post(f"{base}/complete-reading")
+
+    assert focused.status_code == 200
+    assert focused.json()["status"] == "pending"
+    assert focused.json()["attempt_count"] == 0
+    assert focused.json()["grade"] is None
+    assert completed.status_code == repeated.status_code == 200
+    assert completed.json()["submission_id"] == repeated.json()["submission_id"]
+    assert completed.json()["status"] == "submitted"
+    assert completed.json()["attempt_count"] == repeated.json()["attempt_count"] == 1
+    assert completed.json()["submitted_at"] == repeated.json()["submitted_at"]
+    assert completed.json()["grade"] is None
+    rows = c["db"].query(StudentSubmission).filter_by(
+        classwork_assignment_id=assignment.classwork_assignment_id,
+        student_id=c["student"].student_id,
+    ).all()
+    assert len(rows) == 1
+    assert rows[0].reading_focused_seconds == 30
+    assert rows[0].grade is None and rows[0].graded_at is None
+
+
+def test_reading_progress_endpoints_reject_invalid_or_inaccessible_assignments(authz_context):
+    c = authz_context
+    assignment = c["assignment"]
+    classwork = c["classwork"]
+    complete_url = f"/api/v1/submissions/assignment/{assignment.classwork_assignment_id}/complete-reading"
+    focus_url = f"/api/v1/submissions/assignment/{assignment.classwork_assignment_id}/reading-focus"
+    _act_as(c, "student", "student")
+
+    def focus() -> int:
+        return c["client"].post(focus_url, json={"focused_seconds": 30}).status_code
+
+    assert c["client"].post(complete_url).status_code == 400
+    assert focus() == 400
+
+    classwork.classwork_type = "READING"
+    classwork.is_graded = True
+    c["db"].commit()
+    assert c["client"].post(complete_url).status_code == 400
+    assert focus() == 400
+
+    classwork.is_graded = False
+    classwork.is_published = False
+    c["db"].commit()
+    assert c["client"].post(complete_url).status_code == 403
+    assert focus() == 403
+
+    classwork.is_published = True
+    assignment.is_published = False
+    c["db"].commit()
+    assert c["client"].post(complete_url).status_code == 403
+    assert focus() == 403
+
+    assignment.is_published = True
+    assignment.is_locked = True
+    c["db"].commit()
+    assert c["client"].post(complete_url).status_code == 403
+    assert focus() == 403
+
+    assignment.is_locked = False
+    classwork.is_archived = True
+    c["db"].commit()
+    assert c["client"].post(complete_url).status_code == 404
+    assert focus() == 404
+
+    classwork.is_archived = False
+    c["db"].commit()
+    _act_as(c, "other_student", "student")
+    assert c["client"].post(complete_url).status_code == 403
+    assert focus() == 403
+    assert c["client"].post(
+        "/api/v1/submissions/assignment/999999/complete-reading"
+    ).status_code == 404
+    assert c["client"].post(
+        "/api/v1/submissions/assignment/999999/reading-focus",
+        json={"focused_seconds": 30},
+    ).status_code == 404
+
+
+@pytest.mark.parametrize("value", [0, -1, 301, 1.5, "30", True, None])
+def test_reading_focus_endpoint_rejects_invalid_duration(authz_context, value):
+    c = authz_context
+    c["classwork"].classwork_type = "READING"
+    c["classwork"].is_graded = False
+    c["classwork"].is_published = True
+    c["assignment"].is_published = True
+    c["assignment"].is_locked = False
+    c["assignment"].lock_date = None
+    c["db"].commit()
+    _act_as(c, "student", "student")
+
+    response = c["client"].post(
+        f"/api/v1/submissions/assignment/{c['assignment'].classwork_assignment_id}/reading-focus",
+        json={"focused_seconds": value},
+    )
+
+    assert response.status_code == 422

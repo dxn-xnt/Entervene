@@ -14,12 +14,15 @@ from app.models.academic.StudentCLass import StudentClass
 from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.RemediationReadingPrerequisite import RemediationReadingPrerequisite
+from app.models.intervention.InterventionReadingReview import InterventionReadingReview
 from app.models.intervention.InterventionSupportMaterial import InterventionSupportMaterial
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.suggestion.StudentSuggestion import StudentSuggestion
 from app.services.intervention.InterventionSupportMaterialService import create_material
 from app.services.intervention.TeacherInterventionService import activate_teacher_candidate
+from app.services.submission.SubmissionService import complete_reading_assignment
 from tests.test_current_period_live_feature_builder import current_period_context
 from tests.test_teacher_intervention_review import candidate_context, _id, _staff
 
@@ -96,3 +99,237 @@ def test_exact_student_sees_only_active_safe_support(candidate_context):
     assert own.get("/student/interventions").json()["items"] == []
     assert own.get(path).status_code == 404
     assert db.query(StudentSuggestion).count() == legacy_before
+
+
+def test_active_read_contract_reports_required_progress_issues_and_activity_state(candidate_context):
+    ctx = candidate_context
+    db = ctx["db"]
+    own_account = UserAccount(user_id=uuid4(), email=f"guided-{uuid4().hex[:8]}@example.test")
+    other_account = UserAccount(user_id=uuid4(), email=f"guided-other-{uuid4().hex[:8]}@example.test")
+    other = Student(
+        student_id=uuid4(), student_lrn="300000000097", first_name="Other",
+        last_name="Reader", user_id=other_account.user_id,
+    )
+    db.add_all([own_account, other_account, other])
+    db.flush()
+    ctx["student"].user_id = own_account.user_id
+    db.add(StudentClass(
+        student_id=other.student_id, class_id=ctx["class"].class_id,
+        academic_year_id=ctx["class"].academic_year_id, enrollment_status="enrolled",
+    ))
+    db.commit()
+    activate_teacher_candidate(db, _staff(ctx), _id(ctx))
+
+    def reading(title: str, *, published: bool = True) -> Classwork:
+        item = Classwork(
+            title=title, classwork_type="READING", is_graded=False,
+            subject_id=ctx["subject"].subject_id, created_by_staff_id=_staff(ctx),
+            is_published=published, total_points=None,
+        )
+        db.add(item)
+        db.flush()
+        return item
+
+    def assign(item: Classwork, *, published: bool = True) -> ClassworkAssignment:
+        assignment = ClassworkAssignment(
+            classwork_id=item.classwork_id, class_id=ctx["class"].class_id,
+            academic_period_id=ctx["period"].academic_period_id,
+            assigned_by_staff_id=_staff(ctx), is_published=published,
+        )
+        db.add(assignment)
+        db.flush()
+        return assignment
+
+    incomplete = reading("Required foundations")
+    incomplete_assignment = assign(incomplete)
+    completed = reading("Required worked examples")
+    completed_assignment = assign(completed)
+    planning_only = reading("Teacher planning reference")
+    unpublished = reading("Unpublished reading", published=False)
+    assign(unpublished, published=False)
+    inaccessible = reading("Archived reading")
+    inaccessible.is_archived = True
+    invalid = Classwork(
+        title="Not a reading", classwork_type="ASSIGNMENT", is_graded=True,
+        subject_id=ctx["subject"].subject_id, created_by_staff_id=_staff(ctx),
+        is_published=True, total_points=Decimal("10"),
+    )
+    db.add(invalid)
+    db.flush()
+
+    db.add(StudentSubmission(
+        student_id=ctx["student"].student_id,
+        classwork_assignment_id=completed_assignment.classwork_assignment_id,
+        status="submitted", attempt_count=1, reading_focused_seconds=125,
+        submitted_at=datetime.now(timezone.utc),
+    ))
+    db.add(InterventionReadingReview(
+        intervention_id=_id(ctx),
+        reading_assignment_id=completed_assignment.classwork_assignment_id,
+        student_id=ctx["student"].student_id,
+    ))
+
+    published_work = Classwork(
+        title="Published remediation", classwork_type="QUIZ", is_graded=True,
+        subject_id=ctx["subject"].subject_id, created_by_staff_id=_staff(ctx),
+        is_published=True, total_points=Decimal("10"),
+    )
+    draft_work = Classwork(
+        title="Draft remediation", classwork_type="ASSIGNMENT", is_graded=True,
+        subject_id=ctx["subject"].subject_id, created_by_staff_id=_staff(ctx),
+        is_published=False, total_points=Decimal("10"),
+    )
+    db.add_all([published_work, draft_work])
+    db.flush()
+    published_assignment = ClassworkAssignment(
+        classwork_id=published_work.classwork_id, class_id=ctx["class"].class_id,
+        academic_period_id=ctx["period"].academic_period_id,
+        assigned_by_staff_id=_staff(ctx), is_published=True,
+        recipient_student_id=ctx["student"].student_id,
+        source_intervention_id=_id(ctx), remediation_request_id=uuid4(),
+    )
+    draft_assignment = ClassworkAssignment(
+        classwork_id=draft_work.classwork_id, class_id=ctx["class"].class_id,
+        academic_period_id=ctx["period"].academic_period_id,
+        assigned_by_staff_id=_staff(ctx), is_published=False,
+        recipient_student_id=ctx["student"].student_id,
+        source_intervention_id=_id(ctx), remediation_request_id=uuid4(),
+    )
+    db.add_all([published_assignment, draft_assignment])
+    db.flush()
+    db.add_all([
+        RemediationReadingPrerequisite(
+            remediation_assignment_id=published_assignment.classwork_assignment_id,
+            reading_classwork_id=incomplete.classwork_id,
+            reading_assignment_id=incomplete_assignment.classwork_assignment_id,
+            display_order=1,
+        ),
+        RemediationReadingPrerequisite(
+            remediation_assignment_id=published_assignment.classwork_assignment_id,
+            reading_classwork_id=completed.classwork_id,
+            reading_assignment_id=completed_assignment.classwork_assignment_id,
+            display_order=2,
+        ),
+    ])
+
+    intervention = ctx["candidate"]
+    intervention.remediation_plan = {
+        "teacher_choice": "QUIZ",
+        "selected_resources": [
+            {"kind": "CLASSWORK", "id": incomplete.classwork_id},
+            {"kind": "CLASSWORK", "id": completed.classwork_id},
+            {"kind": "CLASSWORK", "id": planning_only.classwork_id},
+            {"kind": "CLASSWORK", "id": unpublished.classwork_id},
+            {"kind": "CLASSWORK", "id": invalid.classwork_id},
+            {"kind": "CLASSWORK", "id": 999999},
+            {"kind": "CLASSWORK", "id": inaccessible.classwork_id},
+        ],
+    }
+    db.commit()
+
+    own = _client(ctx, own_account.user_id)
+    path = f"/student/interventions/{_id(ctx)}"
+    response = own.get(path)
+    assert response.status_code == 200
+    data = response.json()
+    assert [(item["order"], item["classwork_id"], item["assignment_id"]) for item in data["required_readings"]] == [
+        (1, incomplete.classwork_id, incomplete_assignment.classwork_assignment_id),
+        (2, completed.classwork_id, completed_assignment.classwork_assignment_id),
+    ]
+    assert data["required_readings"][0]["completion_status"] == "NOT_STARTED"
+    assert data["required_readings"][0]["review_status"] == "NOT_REVIEWED"
+    assert data["required_readings"][1]["completion_status"] == "COMPLETED"
+    assert data["required_readings"][1]["review_status"] == "REVIEWED"
+    assert data["required_readings"][1]["focused_seconds"] == 125
+    assert [(issue["order"], issue["reason"]) for issue in data["resource_issues"]] == [
+        (3, "PLANNING_ONLY"),
+        (4, "UNPUBLISHED"),
+        (5, "NOT_REQUIRED_READING"),
+        (6, "MISSING_RESOURCE"),
+        (7, "INACCESSIBLE"),
+    ]
+    assert data["preparation"] == {
+        "state": "BLOCKED",
+        "is_satisfied": False,
+        "completed_count": 1,
+        "required_count": 7,
+        "accessible_count": 2,
+        "unavailable_count": 5,
+        "summary": "1 of 7 completed",
+    }
+    assert [item["title"] for item in data["activities"]] == ["Published remediation"]
+    assert data["activities"][0]["access_state"] == "PREPARATION_REQUIRED"
+    assert data["activities"][0]["access_enforced"] is True
+    assert "Draft remediation" not in response.text
+    assert _client(ctx, other_account.user_id).get(path).status_code == 404
+
+    completed_response = complete_reading_assignment(
+        incomplete_assignment.classwork_assignment_id,
+        ctx["student"],
+        db,
+    )
+    assert completed_response.status == "submitted"
+    intervention.remediation_plan = {
+        "teacher_choice": "QUIZ",
+        "selected_resources": [
+            {"kind": "CLASSWORK", "id": incomplete.classwork_id},
+            {"kind": "CLASSWORK", "id": completed.classwork_id},
+        ],
+    }
+    db.commit()
+
+    # Classwork completion alone does NOT satisfy intervention preparation
+    unreviewed_data = own.get(path).json()
+    assert unreviewed_data["required_readings"][0]["completion_status"] == "COMPLETED"
+    assert unreviewed_data["required_readings"][0]["review_status"] == "NOT_REVIEWED"
+    assert unreviewed_data["preparation"]["state"] == "IN_PROGRESS"
+    assert unreviewed_data["preparation"]["completed_count"] == 1
+    assert unreviewed_data["preparation"]["summary"] == "1 of 2 completed"
+    assert unreviewed_data["activities"][0]["access_state"] == "PREPARATION_REQUIRED"
+
+    # Review acknowledgment satisfies intervention preparation
+    from app.services.intervention.InterventionReadingReviewService import acknowledge_intervention_reading_review
+    acknowledge_intervention_reading_review(
+        db,
+        intervention_id=_id(ctx),
+        reading_assignment_id=incomplete_assignment.classwork_assignment_id,
+        student=ctx["student"],
+    )
+    completed_data = own.get(path).json()
+    assert completed_data["required_readings"][0]["review_status"] == "REVIEWED"
+    assert completed_data["preparation"]["state"] == "COMPLETE"
+    assert completed_data["preparation"]["is_satisfied"] is True
+    assert completed_data["preparation"]["summary"] == "2 of 2 completed"
+    assert completed_data["activities"][0]["access_state"] == "READY"
+    assert completed_data["activities"][0]["access_enforced"] is True
+
+
+def test_active_read_contract_never_satisfies_empty_or_invalid_requirements(candidate_context):
+    ctx = candidate_context
+    db = ctx["db"]
+    own_account = UserAccount(user_id=uuid4(), email=f"no-reading-{uuid4().hex[:8]}@example.test")
+    db.add(own_account)
+    db.flush()
+    ctx["student"].user_id = own_account.user_id
+    db.commit()
+    activate_teacher_candidate(db, _staff(ctx), _id(ctx))
+    own = _client(ctx, own_account.user_id)
+    path = f"/student/interventions/{_id(ctx)}"
+
+    empty = own.get(path).json()["preparation"]
+    assert empty["state"] == "NOT_CONFIGURED"
+    assert empty["is_satisfied"] is False
+    assert empty["summary"] == "0 of 0 completed"
+
+    ctx["candidate"].remediation_plan = {
+        "teacher_choice": "CLASSWORK",
+        "selected_resources": [{"kind": "CLASSWORK", "id": 999999}],
+    }
+    db.commit()
+    invalid = own.get(path).json()
+    assert invalid["required_readings"] == []
+    assert invalid["resource_issues"] == [
+        {"resource_id": 999999, "order": 1, "reason": "MISSING_RESOURCE"}
+    ]
+    assert invalid["preparation"]["state"] == "BLOCKED"
+    assert invalid["preparation"]["is_satisfied"] is False

@@ -31,6 +31,7 @@ from app.services.classwork.ClassworkShared import (
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
 from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
+from app.services.intervention.RemediationPrerequisiteService import require_remediation_prerequisite
 from app.services.quiz.quiz_normalization import is_identification_correct
 
 
@@ -40,6 +41,7 @@ def get_student_quiz_attempt(
     assignment_id: int,
 ) -> QuizAttemptResponse:
     assignment, classwork, quiz = _student_quiz_scope(db, student, assignment_id)
+    require_remediation_prerequisite(db, assignment, student)
     submission = _submission_for(db, student, assignment_id)
     return _attempt_response(db, assignment, classwork, quiz, submission)
 
@@ -50,6 +52,7 @@ def start_student_quiz_attempt(
     assignment_id: int,
 ) -> QuizAttemptResponse:
     assignment, classwork, quiz = _student_quiz_scope(db, student, assignment_id)
+    require_remediation_prerequisite(db, assignment, student)
     _ensure_before_due(assignment)
     ensure_remedial_period_open(db, assignment, student.student_id)
 
@@ -95,6 +98,7 @@ def submit_student_quiz_attempt(
     payload: QuizSubmitRequest,
 ) -> QuizAttemptResponse:
     assignment, classwork, quiz = _student_quiz_scope(db, student, assignment_id)
+    require_remediation_prerequisite(db, assignment, student)
     ensure_remedial_period_open(db, assignment, student.student_id)
     submission = _submission_for(db, student, assignment_id)
     previous_grade = submission.grade if submission else None

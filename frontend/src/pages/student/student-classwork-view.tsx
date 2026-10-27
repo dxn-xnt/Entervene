@@ -8,10 +8,13 @@ import {
 import {
   ArrowLeft,
   BookOpen,
+  CheckCircle2,
   CheckSquare,
   ClipboardList,
   FileText,
   LockKeyhole,
+  Shield,
+  Timer,
 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -36,6 +39,10 @@ import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { useToast } from "@/components/retroui/Toast";
 import { API_URL, apiFetch } from "@/lib/api";
 import { getQuizAttempt, type QuizAttemptResponse } from "@/lib/quiz-api";
+import {
+  listInterventionReadingReviews,
+  reviewInterventionReading,
+} from "@/lib/student-persistent-interventions-api";
 import {
   studentClassworkReturnPath,
   studentClassworkSourceLabel,
@@ -80,6 +87,11 @@ export default function StudentClassworkView() {
   const toast = useToast();
   const { assignmentId: rawId } = useParams<{ assignmentId: string }>();
   const [searchParams] = useSearchParams();
+  const rawInterventionId = searchParams.get("intervention_id");
+  const interventionId =
+    rawInterventionId && /^\d+$/.test(rawInterventionId)
+      ? Number(rawInterventionId)
+      : null;
   const assignmentId = Number(rawId);
   const [detail, setDetail] = useState<StudentClassworkDetail | null>(null);
   const [submission, setSubmission] = useState<Submission | null>(null);
@@ -87,6 +99,8 @@ export default function StudentClassworkView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [interventionReviewed, setInterventionReviewed] = useState(false);
+  const [reviewActionLoading, setReviewActionLoading] = useState(false);
   const [quizError, setQuizError] = useState("");
   const [showQuizSummary, setShowQuizSummary] = useState(false);
   const [quizCurrentIndex, setQuizCurrentIndex] = useState(0);
@@ -152,6 +166,26 @@ export default function StudentClassworkView() {
             );
           }
         }
+
+        if (
+          nextDetail.classwork_type?.toUpperCase() === "READING" &&
+          interventionId
+        ) {
+          try {
+            const reviews = await listInterventionReadingReviews(interventionId);
+            if (!cancelled) {
+              const found = reviews.some(
+                (r) =>
+                  (r.reading_assignment_id === assignmentId ||
+                    r.assignment_id === assignmentId) &&
+                  r.review_status === "REVIEWED",
+              );
+              setInterventionReviewed(found);
+            }
+          } catch (cause) {
+            console.warn("Unable to load reading review status:", cause);
+          }
+        }
       } catch (cause) {
         if (!cancelled)
           setError(
@@ -167,7 +201,7 @@ export default function StudentClassworkView() {
     return () => {
       cancelled = true;
     };
-  }, [assignmentId]);
+  }, [assignmentId, interventionId]);
 
   const returnPath = useMemo(
     () =>
@@ -251,6 +285,32 @@ export default function StudentClassworkView() {
       });
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const reviewReading = async () => {
+    if (!interventionId) return;
+    setReviewActionLoading(true);
+    try {
+      const response = await reviewInterventionReading(
+        interventionId,
+        assignmentId,
+      );
+      if (response.review_status === "REVIEWED") {
+        setInterventionReviewed(true);
+      }
+      toast.success({
+        title: "Reading reviewed",
+        description: "Your study support progress has been updated.",
+      });
+    } catch (cause) {
+      toast.error({
+        title: "Review failed",
+        description:
+          cause instanceof Error ? cause.message : "Please try again.",
+      });
+    } finally {
+      setReviewActionLoading(false);
     }
   };
 
@@ -550,6 +610,75 @@ export default function StudentClassworkView() {
                       )}
                   </div>
                 </Card>
+
+                {isReading && interventionId && (
+                  <Card className="block w-full space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <IconContainer
+                          variant="primary"
+                          size="sm"
+                          className="size-9 p-0"
+                        >
+                          <Shield size={18} />
+                        </IconContainer>
+                        <div>
+                          <h2 className="text-base font-bold sm:text-lg">
+                            Study Support Preparation
+                          </h2>
+                          <p className="text-xs text-muted-foreground">
+                            Required reading review for your intervention
+                          </p>
+                        </div>
+                      </div>
+                      <Badge
+                        variant={interventionReviewed ? "success" : "outline"}
+                        size="md"
+                        className="gap-1"
+                      >
+                        {interventionReviewed ? (
+                          <CheckCircle2 className="size-3.5" />
+                        ) : (
+                          <Timer className="size-3.5" />
+                        )}
+                        {interventionReviewed ? "Reviewed" : "Review Required"}
+                      </Badge>
+                    </div>
+
+                    <p className="text-sm text-muted-foreground">
+                      {interventionReviewed
+                        ? "You have acknowledged and reviewed this reading for your study support intervention."
+                        : "Review the material and acknowledge it below to update your study support progress."}
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        variant={interventionReviewed ? "outline" : "default"}
+                        autoIcon={false}
+                        disabled={reviewActionLoading}
+                        className="gap-2"
+                        onClick={() => void reviewReading()}
+                      >
+                        <CheckCircle2 className="size-4" />
+                        {reviewActionLoading ? "Updating..." : "Mark as Reviewed"}
+                      </Button>
+
+                      {returnPath.startsWith("/student/interventions") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          autoIcon={false}
+                          className="gap-2"
+                          onClick={back}
+                        >
+                          <ArrowLeft className="size-4" />
+                          Back to Study Support
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                )}
 
                 <Card className="block w-full">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

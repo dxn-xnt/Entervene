@@ -6,3 +6,4 @@ from .ClassworkCoverage import ClassworkCoverage
 from .ActivityRubricLevel import ActivityRubricLevel
 from .RubricTemplate import RubricTemplate
 from .RemediationAssignmentLink import RemediationAssignmentLink
+from .RemediationReadingPrerequisite import RemediationReadingPrerequisite

@@ -13,11 +13,49 @@ from app.models.classwork.RemediationAssignmentLink import RemediationAssignment
 from app.models.intervention.Intervention import Intervention
 from app.models.notifications.Notification import Notification
 from app.models.auth.UserAccount import UserAccount
+from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.classwork.ClassworkService import _stage_targeted_assignment_notification
 from app.services.quiz.QuizAnalysisService import build_teacher_quiz_analysis
 from app.services.classwork.ClassworkService import create_classwork_wizard_record, assign_classwork_to_classes
 from app.schemas.Classwork import ClassworkAssignRequest
-from app.services.intervention.InterventionRemediationService import PlanUpdate, save_plan
+from app.services.intervention.InterventionRemediationService import PlanUpdate, ResourceRef, save_plan as _raw_save_plan
+
+
+def save_plan(db, staff_id, intervention_id, body: PlanUpdate):
+    if not body.selected_resources:
+        intervention = db.get(Intervention, intervention_id)
+        if intervention:
+            reading = db.query(Classwork).filter_by(
+                subject_id=intervention.subject_id,
+                classwork_type="READING",
+                is_graded=False,
+                is_published=True,
+            ).first()
+            if not reading:
+                reading = Classwork(
+                    title="Default test reading",
+                    classwork_type="READING",
+                    is_graded=False,
+                    total_points=None,
+                    is_published=True,
+                    subject_id=intervention.subject_id,
+                    created_by_staff_id=staff_id,
+                )
+                db.add(reading)
+                db.flush()
+                assignment = ClassworkAssignment(
+                    classwork_id=reading.classwork_id,
+                    class_id=intervention.class_id,
+                    academic_period_id=intervention.academic_period_id,
+                    assigned_by_staff_id=staff_id,
+                    is_published=True,
+                )
+                db.add(assignment)
+                db.flush()
+            body = body.model_copy(update={
+                "selected_resources": [ResourceRef(kind="CLASSWORK", id=reading.classwork_id)],
+            })
+    return _raw_save_plan(db, staff_id, intervention_id, body)
 from tests.test_classwork_submission_authorization import authz_context, _act_as, _bearer
 from tests.test_classwork_submission_authorization import _valid_quiz_payload
 from tests.test_intervention_support_materials import _activate
@@ -32,16 +70,74 @@ def test_targeted_assignment_is_private_across_existing_student_surfaces(authz_c
     # Move the other student's fixture enrollment into the same class.
     other = c["db"].query(type(c["student"])).filter_by(user_id=c["accounts"]["other_student"].user_id).one()
     c["db"].query(StudentClass).filter_by(student_id=other.student_id).one().class_id = c["allowed_class"].class_id
+    from datetime import datetime, timezone
+    from app.services.intervention.RemediationReadingPrerequisiteService import (
+        ReadingPrerequisiteSnapshotItem,
+        stage_remediation_reading_prerequisites,
+    )
+
+    intervention = Intervention(
+        intervention_id=9999,
+        student_id=c["student"].student_id,
+        class_id=c["allowed_class"].class_id,
+        subject_id=c["subject"].subject_id,
+        academic_period_id=c["period"].academic_period_id,
+        source_prediction_id=1,
+        status="ACTIVE",
+        diagnosis_snapshot={},
+        activated_at=datetime.now(timezone.utc),
+        activated_by_staff_id=c["owner"].staff_id,
+    )
+    c["db"].add(intervention)
+    reading_cw = Classwork(
+        title="Prep Reading",
+        classwork_type="READING",
+        is_graded=False,
+        is_published=True,
+        is_archived=False,
+        subject_id=c["subject"].subject_id,
+        created_by_staff_id=c["owner"].staff_id,
+    )
+    c["db"].add(reading_cw)
+    c["db"].flush()
+    reading_assign = ClassworkAssignment(
+        classwork_id=reading_cw.classwork_id,
+        class_id=c["allowed_class"].class_id,
+        academic_period_id=c["period"].academic_period_id,
+        assigned_by_staff_id=c["owner"].staff_id,
+        is_published=True,
+        recipient_student_id=c["student"].student_id,
+        source_intervention_id=9999,
+        remediation_request_id=uuid4(),
+    )
+    c["db"].add(reading_assign)
+    c["db"].flush()
+    c["db"].add(StudentSubmission(
+        classwork_assignment_id=reading_assign.classwork_assignment_id,
+        student_id=c["student"].student_id,
+        status="submitted",
+    ))
     c["assignment"].recipient_student_id = c["student"].student_id
     c["assignment"].source_intervention_id = 9999
     c["assignment"].remediation_request_id = uuid4()
+    stage_remediation_reading_prerequisites(
+        c["db"],
+        remediation_assignment_id=c["assignment"].classwork_assignment_id,
+        items=[
+            ReadingPrerequisiteSnapshotItem(
+                reading_classwork_id=reading_cw.classwork_id,
+                reading_assignment_id=reading_assign.classwork_assignment_id,
+                display_order=1,
+            )
+        ],
+    )
     c["db"].commit()
     assignment_id = c["assignment"].classwork_assignment_id
     classwork_id = c["classwork"].classwork_id
     list_url = f"/api/v1/classwork-assignments/class/{c['allowed_class'].class_id}/subject/{c['subject'].subject_id}"
 
     _act_as(c, "student", "student")
-    assert len(c["client"].get(list_url).json()) == 1
+    assert len(c["client"].get(list_url).json()) == 2
     assert c["client"].get(f"/api/v1/classwork-assignments/classwork/{classwork_id}").status_code == 200
     _act_as(c, "other_student", "student")
     assert c["client"].get(list_url).json() == []
@@ -441,9 +537,81 @@ def test_targeted_quiz_attempt_rejects_classmate(quiz_attempt_context):
     db.add(StudentClass(student_id=c["other_student"].student_id, class_id=c["assignment"].class_id,
                         academic_year_id=db.query(StudentClass).filter_by(student_id=c["student"].student_id).one().academic_year_id,
                         enrollment_status="enrolled"))
+    from datetime import date, datetime, timezone
+    from app.models.academic.AcademicPeriod import AcademicPeriod
+    from app.services.intervention.RemediationReadingPrerequisiteService import (
+        ReadingPrerequisiteSnapshotItem,
+        stage_remediation_reading_prerequisites,
+    )
+
+    period = db.query(AcademicPeriod).first()
+    if not period:
+        period = AcademicPeriod(
+            period_name="Q1",
+            academic_year_id=c["assignment"].class_.academic_year_id,
+            start_date=date(2025, 6, 1),
+            end_date=date(2025, 8, 31),
+            is_active=True,
+        )
+        db.add(period)
+        db.flush()
+    c["assignment"].academic_period_id = period.academic_period_id
+
+    intervention = Intervention(
+        intervention_id=9999,
+        student_id=c["student"].student_id,
+        class_id=c["assignment"].class_id,
+        subject_id=c["classwork"].subject_id,
+        academic_period_id=period.academic_period_id,
+        source_prediction_id=1,
+        status="ACTIVE",
+        diagnosis_snapshot={},
+        activated_at=datetime.now(timezone.utc),
+        activated_by_staff_id=c["classwork"].created_by_staff_id,
+    )
+    db.add(intervention)
+    reading_cw = Classwork(
+        title="Prep Reading",
+        classwork_type="READING",
+        is_graded=False,
+        is_published=True,
+        is_archived=False,
+        subject_id=c["classwork"].subject_id,
+        created_by_staff_id=c["classwork"].created_by_staff_id,
+    )
+    db.add(reading_cw)
+    db.flush()
+    reading_assign = ClassworkAssignment(
+        classwork_id=reading_cw.classwork_id,
+        class_id=c["assignment"].class_id,
+        academic_period_id=period.academic_period_id,
+        assigned_by_staff_id=c["classwork"].created_by_staff_id,
+        is_published=True,
+        recipient_student_id=c["student"].student_id,
+        source_intervention_id=9999,
+        remediation_request_id=uuid4(),
+    )
+    db.add(reading_assign)
+    db.flush()
+    db.add(StudentSubmission(
+        classwork_assignment_id=reading_assign.classwork_assignment_id,
+        student_id=c["student"].student_id,
+        status="submitted",
+    ))
     c["assignment"].recipient_student_id = c["student"].student_id
     c["assignment"].source_intervention_id = 9999
     c["assignment"].remediation_request_id = uuid4()
+    stage_remediation_reading_prerequisites(
+        db,
+        remediation_assignment_id=c["assignment"].classwork_assignment_id,
+        items=[
+            ReadingPrerequisiteSnapshotItem(
+                reading_classwork_id=reading_cw.classwork_id,
+                reading_assignment_id=reading_assign.classwork_assignment_id,
+                display_order=1,
+            )
+        ],
+    )
     db.commit()
     aid = c["assignment"].classwork_assignment_id
     assert c["client"].post(f"/api/v1/quizzes/assignment/{aid}/start").status_code == 200

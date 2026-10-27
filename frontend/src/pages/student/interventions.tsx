@@ -3,9 +3,10 @@ import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/student/button";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
-import { Empty } from "@/components/retroui/Empty";
+import { Alert } from "@/components/retroui/Alert";
 import ClassworkItemLine from "@/components/item-line/classwork";
 import { routes } from "@/../routes";
 import {
@@ -19,7 +20,16 @@ import {
   type StudentSupportActivity,
 } from "@/lib/student-persistent-interventions-api";
 import IconContainer from "@/components/icon-container";
-import { BookOpen, ClipboardList, History, Shield } from "lucide-react";
+import {
+  BookOpen,
+  CheckCircle2,
+  ClipboardList,
+  ExternalLink,
+  History,
+  LockKeyhole,
+  Shield,
+  Timer,
+} from "lucide-react";
 import { formatDateTime } from "@/lib/formatters";
 
 export default function StudentInterventions() {
@@ -28,6 +38,8 @@ export default function StudentInterventions() {
   const [reviewers, setReviewers] = useState<StudentReviewerSummary[]>([]);
   const [activeInterventions, setActiveInterventions] = useState<StudentPersistentIntervention[]>([]);
   const [resolvedInterventions, setResolvedInterventions] = useState<StudentPersistentIntervention[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,8 +63,21 @@ export default function StudentInterventions() {
         if (resolvedRes.status === "fulfilled") {
           setResolvedInterventions(resolvedRes.value.items || []);
         }
+
+        if (
+          revRes.status === "rejected" ||
+          activeRes.status === "rejected" ||
+          resolvedRes.status === "rejected"
+        ) {
+          setLoadError("Some study support could not be loaded. Please try again later.");
+        }
       } catch (err) {
         console.warn("Unable to load live interventions", err);
+        if (!cancelled) {
+          setLoadError("Study support could not be loaded. Please try again later.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     };
 
@@ -65,9 +90,15 @@ export default function StudentInterventions() {
 
 
 
+  const classworkLink = (assignmentId: number, interventionId?: number) =>
+    `/student/classworks/${assignmentId}?from=${encodeURIComponent(
+      window.location.pathname
+    )}${interventionId ? `&intervention_id=${interventionId}` : ""}`;
+
   const renderActivities = (
     activities: StudentSupportActivity[],
-    emptyPlaceholder?: React.ReactNode
+    emptyPlaceholder?: React.ReactNode,
+    interventionId?: number
   ) => {
     if (activities && activities.length > 0) {
       return (
@@ -75,66 +106,158 @@ export default function StudentInterventions() {
           <p className="font-semibold text-foreground text-sm">
             Curated remediation activities:
           </p>
-          <div className="flex flex-col gap-2">
-            {activities.map((act) => (
-              <ClassworkItemLine
-                key={act.assignment_id}
-                className="border-2! shadow-none!"
-                item={{
-                  classwork_id: act.assignment_id,
-                  title: act.title,
-                  classwork_type: act.classwork_type,
-                }}
-                showPublicationStatus={false}
-                showCategory={false}
-                showType={false}
-                onClick={() =>
-                  navigate(
-                    `/student/classworks/${act.assignment_id}?from=${encodeURIComponent(
-                      window.location.pathname
-                    )}`
-                  )
-                }
-                rightContent={
-                  <div className="flex items-center gap-2">
-                    {act.grade != null && act.total_points != null && (
-                      <span className="text-xs font-bold">
-                        {act.grade}
-                        <span className="font-medium text-muted-foreground text-xs">
-                          {" "}
-                          / {act.total_points}
-                        </span>
-                      </span>
-                    )}
-                    {act.classwork_type && (
-                      <Badge variant="surface" size="sm">
-                        {act.classwork_type === "QUIZ"
+          <div className="flex flex-col gap-3">
+            {activities.map((activity) => {
+              const preparationBlocked = activity.preparation?.state === "BLOCKED";
+              const historical = activity.access_state === "HISTORICAL";
+              const locked = activity.access_state === "PREPARATION_REQUIRED";
+              const finished = ["submitted", "graded", "completed"].includes(
+                activity.submission_status?.toLowerCase() ?? ""
+              );
+              const orderedReadings = [...activity.readings].sort(
+                (left, right) => left.order - right.order
+              );
+
+              return (
+                <Card
+                  key={activity.assignment_id}
+                  className="w-full space-y-4 border-2 border-border bg-card p-3 shadow-none sm:p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h4 className="break-words text-base font-bold sm:text-lg">
+                        {activity.title}
+                      </h4>
+                      <p className="text-sm text-muted-foreground">
+                        {activity.classwork_type === "QUIZ"
                           ? "Quiz"
-                          : act.classwork_type === "ASSIGNMENT"
+                          : activity.classwork_type === "ASSIGNMENT"
                             ? "Assignment"
-                            : act.classwork_type}
-                      </Badge>
-                    )}
-                    {act.submission_status && (
+                            : activity.classwork_type}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {activity.grade != null && activity.total_points != null && (
+                        <Badge variant="outline" size="sm">
+                          Score: {activity.grade}/{activity.total_points}
+                        </Badge>
+                      )}
+                      {activity.submission_status && (
+                        <Badge variant={finished ? "solid" : "outline"} size="sm" className="capitalize">
+                          {activity.submission_status === "graded"
+                            ? "Completed"
+                            : activity.submission_status === "submitted"
+                              ? "Submitted"
+                              : activity.submission_status}
+                        </Badge>
+                      )}
                       <Badge
-                        variant={
-                          act.submission_status === "graded" || act.submission_status === "submitted"
-                            ? "solid"
-                            : "outline"
-                        }
+                        variant={historical ? "default" : locked ? "outline" : "success"}
                         size="sm"
+                        className="gap-1"
                       >
-                        {act.submission_status === "graded"
-                          ? "Completed"
-                          : act.submission_status === "submitted"
-                            ? "Submitted"
-                            : act.submission_status}
+                        {historical ? (
+                          <History className="size-3.5" />
+                        ) : locked ? (
+                          <LockKeyhole className="size-3.5" />
+                        ) : (
+                          <CheckCircle2 className="size-3.5" />
+                        )}
+                        {historical ? "Unavailable" : locked ? "Locked" : "Ready"}
                       </Badge>
-                    )}
+                    </div>
                   </div>
-                }
-              />
-            ))}
+
+                  {activity.preparation && (
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <BookOpen className="size-4 shrink-0" />
+                      {activity.preparation.completed_count} of {activity.preparation.required_count}{" "}
+                      reviewed
+                    </div>
+                  )}
+
+                  {orderedReadings.length > 0 && (
+                    <div className="space-y-2" aria-label={`Required readings for ${activity.title}`}>
+                      <p className="text-sm font-bold">Required Supporting Readings</p>
+                      {orderedReadings.map((reading) => {
+                        const isReviewed = reading.review_status === "REVIEWED";
+                        return (
+                          <ClassworkItemLine
+                            key={reading.assignment_id}
+                            size="sm"
+                            className="border-2! shadow-none!"
+                            item={{
+                              classwork_id: reading.classwork_id,
+                              title: reading.title,
+                              classwork_type: "READING",
+                            }}
+                            showPublicationStatus={false}
+                            showCategory={false}
+                            showType={false}
+                            rightContent={
+                              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                                <Badge
+                                  variant={isReviewed ? "success" : "outline"}
+                                  size="sm"
+                                  className="gap-1"
+                                >
+                                  {isReviewed ? (
+                                    <CheckCircle2 className="size-3.5" />
+                                  ) : (
+                                    <Timer className="size-3.5" />
+                                  )}
+                                  {isReviewed ? "Reviewed" : "Review Required"}
+                                </Badge>
+                                {!historical && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    autoIcon={false}
+                                    className="gap-2"
+                                    aria-label={`Open reading: ${reading.title}`}
+                                    onClick={() => navigate(classworkLink(reading.assignment_id, interventionId))}
+                                  >
+                                    <ExternalLink className="size-4" />
+                                    Open Reading
+                                  </Button>
+                                )}
+                              </div>
+                            }
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {preparationBlocked ? (
+                    <Alert status="warning">
+                      Some required readings are unavailable. Your teacher needs to update this activity before you can continue.
+                    </Alert>
+                  ) : locked ? (
+                    <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <LockKeyhole className="mt-0.5 size-4 shrink-0" />
+                      Complete all Supporting Readings before opening this activity.
+                    </p>
+                  ) : historical ? (
+                    <p className="text-sm text-muted-foreground">
+                      {activity.prerequisite_message || "This activity is no longer available."}
+                    </p>
+                  ) : (
+                    <div className="flex justify-end">
+                      <Button
+                        size="sm"
+                        autoIcon={false}
+                        className="gap-2"
+                        onClick={() => navigate(classworkLink(activity.assignment_id, interventionId))}
+                      >
+                        <ExternalLink className="size-4" />
+                        {finished ? "View Activity" : "Start Activity"}
+                      </Button>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
           </div>
         </div>
       );
@@ -143,21 +266,13 @@ export default function StudentInterventions() {
   };
 
   const emptyActivitiesPlaceholder = (
-    <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
-      <Empty.Content>
-        <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
-          <IconContainer className="bg-primary" size="sm">
-            <ClipboardList className="size-8" />
-          </IconContainer>
-        </Empty.Icon>
-        <Empty.Title className="text-base! font-bold">
-          No practice activities yet
-        </Empty.Title>
-        <Empty.Description className="text-sm text-muted-foreground">
-          Practice activities are on their way. We'll let you know when the first one is ready.
-        </Empty.Description>
-      </Empty.Content>
-    </Empty>
+    <StudentEmptyState
+      embedded
+      className="bg-background shadow-none"
+      icon={<ClipboardList />}
+      title="No practice activities yet"
+      description="Practice activities are on their way. We'll let you know when the first one is ready."
+    />
   );
 
   return (
@@ -174,6 +289,7 @@ export default function StudentInterventions() {
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-6 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               <div className="w-full flex flex-col gap-4">
+                {loadError && <Alert status="error">{loadError}</Alert>}
 
                 {/* Section 1: New from your teacher */}
                 {reviewers.length > 0 && (
@@ -212,7 +328,7 @@ export default function StudentInterventions() {
                             </div>
 
                             {/* Curated remediation activities if any */}
-                            {renderActivities(activities)}
+                            {renderActivities(activities, undefined, matchingIntervention?.intervention_id)}
 
                             {/* Meta line */}
                             <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
@@ -246,22 +362,14 @@ export default function StudentInterventions() {
                     Your Active Support
                   </h3>
 
-                  {activeInterventions.length === 0 ? (
-                    <Empty className="w-full border-2 rounded! border-border bg-card p-6 shadow-md hover:shadow-none">
-                      <Empty.Content>
-                        <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
-                          <IconContainer className="bg-primary" size="sm">
-                            <Shield className="size-8" />
-                          </IconContainer>
-                        </Empty.Icon>
-                        <Empty.Title className="text-base! font-bold">
-                          No active support
-                        </Empty.Title>
-                        <Empty.Description className="text-sm text-muted-foreground">
-                          You don't have any active intervention support right now.
-                        </Empty.Description>
-                      </Empty.Content>
-                    </Empty>
+                  {loading ? (
+                    <p className="text-sm text-muted-foreground">Loading your active support...</p>
+                  ) : activeInterventions.length === 0 ? (
+                    <StudentEmptyState
+                      icon={<Shield />}
+                      title="No active support"
+                      description="You don't have any active intervention support right now."
+                    />
                   ) : (
                     <div className="space-y-4">
                       {activeInterventions.map((item) => (
@@ -299,7 +407,7 @@ export default function StudentInterventions() {
                           </p>
 
                           {/* Curated remediation classwork activities */}
-                          {renderActivities(item.activities, emptyActivitiesPlaceholder)}
+                          {renderActivities(item.activities, emptyActivitiesPlaceholder, item.intervention_id)}
 
                           {/* Meta line */}
                           <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
@@ -337,22 +445,14 @@ export default function StudentInterventions() {
                     Past support
                   </h3>
 
-                  {resolvedInterventions.length === 0 ? (
-                    <Empty className="w-full border-2 rounded! border-border bg-card p-6 shadow-md hover:shadow-none">
-                      <Empty.Content>
-                        <Empty.Icon className="size-8 text-muted-foreground flex items-center justify-center">
-                          <IconContainer className="bg-primary" size="sm">
-                            <History className="size-8" />
-                          </IconContainer>
-                        </Empty.Icon>
-                        <Empty.Title className="text-base! font-bold">
-                          No past support yet
-                        </Empty.Title>
-                        <Empty.Description className="text-sm text-muted-foreground">
-                          Finished support will be saved here so you can look back on it.
-                        </Empty.Description>
-                      </Empty.Content>
-                    </Empty>
+                  {loading ? (
+                    <p className="text-sm text-muted-foreground">Loading past support...</p>
+                  ) : resolvedInterventions.length === 0 ? (
+                    <StudentEmptyState
+                      icon={<History />}
+                      title="No past support yet"
+                      description="Finished support will be saved here so you can look back on it."
+                    />
                   ) : (
                     <div className="space-y-4">
                       {resolvedInterventions.map((item) => (
@@ -392,7 +492,7 @@ export default function StudentInterventions() {
                           )}
 
                           {/* Curated remediation classwork activities */}
-                          {renderActivities(item.activities)}
+                          {renderActivities(item.activities, undefined, item.intervention_id)}
 
                           {/* Meta line */}
                           <div className="flex items-end flex-wrap justify-between gap-2 mt-auto pt-2">
