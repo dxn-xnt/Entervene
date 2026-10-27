@@ -209,6 +209,23 @@ class ContentCloningRequestService:
                 message="An open request already exists for this teacher and destination scope.",
             ) from None
         db.refresh(request)
+        owner_staff = db.get(AcademicStaff, request.source_owner_staff_id)
+        requester_staff = db.get(AcademicStaff, requester_staff_id)
+        subject = db.get(Subject, request.subject_id)
+        dest_class = db.get(Class, destination.class_id)
+        if owner_staff and owner_staff.user_id:
+            from app.services.cloning.ContentCloningNotification import send_cloning_notification, staff_name
+            req_name = staff_name(requester_staff)
+            sub_name = subject.subject_name if subject else "materials"
+            sec_name = dest_class.section_name if dest_class else "class"
+            send_cloning_notification(
+                db,
+                user_id=owner_staff.user_id,
+                notification_type="repost_request_received",
+                title=f"New Repost Request: {sub_name}",
+                body=f"{req_name} requested course materials for {sec_name}.",
+                action_url=f"/teacher/requests?box=incoming&request_id={request.request_id}",
+            )
         return request, False
 
     @staticmethod
@@ -364,6 +381,21 @@ class ContentCloningRequestService:
             now=now,
         )
         db.add(event)
+        requester_staff = db.get(AcademicStaff, request.requester_staff_id)
+        owner_staff = db.get(AcademicStaff, request.source_owner_staff_id)
+        subject = db.get(Subject, request.subject_id)
+        if requester_staff and requester_staff.user_id:
+            from app.services.cloning.ContentCloningNotification import stage_cloning_notification, staff_name
+            own_name = staff_name(owner_staff)
+            sub_name = subject.subject_name if subject else "materials"
+            stage_cloning_notification(
+                db,
+                user_id=requester_staff.user_id,
+                notification_type="repost_request_declined",
+                title=f"Repost Request Declined: {sub_name}",
+                body=f"{own_name} declined your material request.",
+                action_url=f"/teacher/requests?box=outgoing&request_id={request.request_id}",
+            )
         db.commit()
         db.refresh(request)
         return request

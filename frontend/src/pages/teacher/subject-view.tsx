@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Award, BookOpen, CheckSquare, ClipboardList, FileText, Paperclip, Plus, Users, X, type LucideIcon } from "lucide-react";
+import { Award, BookOpen, CheckSquare, ClipboardList, FileText, Paperclip, Plus, Repeat, Users, X, type LucideIcon } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import AppLayout from "@/layouts/app-layout";
@@ -30,6 +30,8 @@ import ManageLessonModal from "./forms/manage-lesson";
 import SubjectLessonList from "./subject-details/subject-lesson-list";
 import SubjectClassworkTab from "./subject-details/subject-classwork-tab";
 import TeacherLessonDetailScreen from "./lesson-view";
+import { RepostModal } from "@/components/teacher/repost-modal";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import TOSGeneratorScreen from "./subject-details/tos-generator-screen";
 import {
   LOCKED_CLASSWORK_MESSAGE,
@@ -87,6 +89,8 @@ export default function SubjectDetails() {
     subjectId: string;
   }>();
   const navigate = useNavigate();
+  const { selectedPeriodId } = useAcademicPeriod();
+  const [isRepostModalOpen, setIsRepostModalOpen] = useState(false);
   const [competencies, setCompetencies] = useState<CompetencyItem[]>([]);
   const [isCompetencyModalOpen, setIsCompetencyModalOpen] = useState(false);
   const [isTOSOpen, setIsTOSOpen] = useState(false);
@@ -859,6 +863,16 @@ export default function SubjectDetails() {
                     </div>
 
                     <div className="flex flex-wrap w-full gap-2 md:flex md:w-auto md:flex-nowrap md:items-center">
+                      <Button
+                        type="button"
+                        size="header"
+                        variant="outline"
+                        onClick={() => setIsRepostModalOpen(true)}
+                        className="w-full whitespace-nowrap md:w-auto"
+                      >
+                        <Repeat size={16} />
+                        Repost
+                      </Button>
                       {/* <Button
                         type="button"
                         size="header"
@@ -1468,6 +1482,22 @@ export default function SubjectDetails() {
                   setIsCreatingLesson(false);
                   setSelectedCompetencyIdForNewLesson(undefined);
                   await refreshSubjectData();
+                }}
+              />
+            )}
+
+            {/* ── Repost Materials Modal ── */}
+            {classId && subjectId && (
+              <RepostModal
+                open={isRepostModalOpen}
+                onOpenChange={setIsRepostModalOpen}
+                destinationClassId={Number(classId)}
+                destinationSubjectId={Number(subjectId)}
+                destinationAcademicPeriodId={Number(selectedPeriodId || subjectLoad?.academic_period_id || 1)}
+                sectionName={sectionName}
+                subjectName={subjectName}
+                onClonedSuccess={() => {
+                  void refreshSubjectData();
                 }}
               />
             )}
