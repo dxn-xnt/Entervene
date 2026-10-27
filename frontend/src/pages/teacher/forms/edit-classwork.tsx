@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Check, CheckCheck, FileText, Plus, Trash2 } from "lucide-react";
+import { Check, CheckCheck, FileText, Plus, Trash2, UserCheck } from "lucide-react";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/teacher/button";
 import { Text } from "@/components/retroui/Text";
@@ -71,6 +71,12 @@ export default function EditClassworkModal({
       : defaultActivityRubric.map((level) => ({ ...level })),
   );
   const toast = useToast();
+  const targetedAssignment = useMemo(
+    () => currentClasswork.assignments?.find(
+      (assignment) => assignment.recipient_student_id && assignment.source_intervention_id,
+    ) ?? null,
+    [currentClasswork.assignments],
+  );
 
   const setFormError = (msg: string) => {
     toast.error({ title: msg });
@@ -78,6 +84,10 @@ export default function EditClassworkModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    if (targetedAssignment) {
+      setLoads([]);
+      return;
+    }
     apiFetch("/api/v1/classwork-assignments/teacher/classes")
       .then(async (res) => {
         if (res.ok) {
@@ -86,7 +96,7 @@ export default function EditClassworkModal({
         }
       })
       .catch(() => { });
-  }, [isOpen]);
+  }, [isOpen, targetedAssignment]);
 
   useEffect(() => {
     setCurrentClasswork(classwork);
@@ -982,25 +992,42 @@ export default function EditClassworkModal({
               </div>
 
               <div className="mt-6">
-                <Field label="Assign to sections">
-                  {selectedSubjectLoads.length > 0 && (
-                    <div className="flex items-center justify-end -mt-8 mb-2">
-                      <Button
-                        size="sm"
-                        className="shadow-none -mt-1"
-                        autoIcon={false}
-                        onClick={() =>
-                          setSelectedClassIds(
-                            selectedSubjectLoads.map((load) => load.class_id),
-                          )
-                        }
-                        disabled={isSavingEdit}
-                      >
-                        <CheckCheck className="size-4 mr-2" />
-                        Select All
-                      </Button>
-                    </div>
-                  )}
+                {targetedAssignment ? (
+                  <Field label="Assigned student">
+                    <Card className="flex items-center gap-3 border-2 border-primary bg-primary/10 p-3 shadow-none">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded border-2 border-black bg-primary">
+                        <UserCheck className="size-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold">
+                          {targetedAssignment.recipient_student_name || "Intervention student"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Automatically assigned only to this student through Intervention #{targetedAssignment.source_intervention_id}.
+                        </p>
+                      </div>
+                    </Card>
+                  </Field>
+                ) : (
+                  <Field label="Assign to sections">
+                    {selectedSubjectLoads.length > 0 && (
+                      <div className="flex items-center justify-end -mt-8 mb-2">
+                        <Button
+                          size="sm"
+                          className="shadow-none -mt-1"
+                          autoIcon={false}
+                          onClick={() =>
+                            setSelectedClassIds(
+                              selectedSubjectLoads.map((load) => load.class_id),
+                            )
+                          }
+                          disabled={isSavingEdit}
+                        >
+                          <CheckCheck className="size-4 mr-2" />
+                          Select All
+                        </Button>
+                      </div>
+                    )}
 
                   {selectedSubjectLoads.length > 0 ? (
                     <Card className="-mt-1 grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
@@ -1065,7 +1092,8 @@ export default function EditClassworkModal({
                       </EmptyHeader>
                     </Empty>
                   )}
-                </Field>
+                  </Field>
+                )}
               </div>
             </div>
           </section>

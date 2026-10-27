@@ -32,6 +32,9 @@ export type ClassworkAssignment = {
   is_published: boolean;
   show_scores: boolean;
   is_locked?: boolean | null;
+  recipient_student_id?: string | null;
+  recipient_student_name?: string | null;
+  source_intervention_id?: number | null;
 };
 
 export type LinkedLesson = {

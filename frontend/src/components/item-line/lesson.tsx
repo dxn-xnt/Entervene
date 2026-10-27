@@ -1,10 +1,13 @@
 import {
   Archive,
+  CheckCircle2,
   ChevronRight,
   ClipboardList,
   Eye,
+  Loader2,
   Pencil,
   Plus,
+  RotateCcw,
 } from "lucide-react";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Badge } from "@/components/retroui/Badge";
@@ -20,6 +23,8 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/formatters";
+import type { LessonDeliveryRecord } from "@/lib/lesson-delivery-api";
 
 export interface LessonAttachment {
   lesson_attachment_id?: number;
@@ -45,6 +50,8 @@ export interface LessonItem {
   is_draft?: boolean;
   is_archived?: boolean;
   attachments?: LessonAttachment[];
+  delivery?: LessonDeliveryRecord | null;
+  is_taught?: boolean;
 }
 
 export interface LinkedClassworkItem {
@@ -75,16 +82,12 @@ export interface LessonItemLineProps<TLesson extends LessonItem = LessonItem> {
   className?: string;
   /** Show the retro drop shadow on the lesson card. Defaults to true. */
   withShadow?: boolean;
-  /** Whether to show publication status badge (Published/Draft). Defaults to true. */
-  showPublicationStatus?: boolean;
-  /** Custom badge to display next to the title (e.g. materials count) */
-  badge?: React.ReactNode;
-  /** Subtitle or date text to display below the title */
-  subtitle?: React.ReactNode;
-  /** Custom children to render in accordion content */
-  children?: React.ReactNode;
-  /** Optional HTML id for the root element */
-  id?: string;
+  // Delivery status & actions
+  delivery?: LessonDeliveryRecord | null;
+  isDelivered?: boolean;
+  isDeliveryLoading?: boolean;
+  onConfirmDelivery?: (lesson: TLesson) => void | Promise<void>;
+  onOpenCorrectionDialog?: (lesson: TLesson) => void;
 }
 
 
@@ -101,13 +104,22 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
   onArchiveLesson,
   className,
   withShadow = true,
-  showPublicationStatus = true,
-  badge,
-  subtitle,
-  children,
-  id,
+  delivery,
+  isDelivered,
+  isDeliveryLoading = false,
+  onConfirmDelivery,
+  onOpenCorrectionDialog,
 }: LessonItemLineProps<TLesson>) => {
-  const hasActions = Boolean(onOpenLessonManager || onArchiveLesson);
+  const activeDelivery = delivery || lesson.delivery || null;
+  const isTaught = Boolean(
+    isDelivered ?? lesson.is_taught ?? activeDelivery?.is_active,
+  );
+  const hasActions = Boolean(
+    onOpenLessonManager ||
+      onArchiveLesson ||
+      onConfirmDelivery ||
+      onOpenCorrectionDialog,
+  );
 
   const accordionContent = (
     <Accordion
@@ -147,17 +159,47 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
                 {lesson.title}
               </h4>
               <div className="flex flex-row items-center gap-2 -mr-1 shrink-0">
-                {badge !== undefined ? (
-                  badge
-                ) : showPublicationStatus ? (
-                  <Badge
-                    variant={lesson.is_published ? "solid" : "default"}
+                <Badge
+                  variant={lesson.is_published ? "solid" : "default"}
+                  size="sm"
+                  className="shrink-0 text-xs font-bold"
+                  data-testid={`badge-published-${lesson.lesson_id}`}
+                >
+                  {lesson.is_published ? "Published" : "Draft"}
+                </Badge>
+                <Badge
+                  variant={isTaught ? "success" : "outline"}
+                  size="sm"
+                  className={cn(
+                    "shrink-0 text-xs font-bold",
+                    !isTaught && "text-muted-foreground border-border bg-background",
+                  )}
+                  data-testid={`badge-taught-${lesson.lesson_id}`}
+                >
+                  {isTaught ? "Taught" : "Not Taught"}
+                </Badge>
+                {!isTaught && onConfirmDelivery && (
+                  <Button
+                    type="button"
+                    variant="secondary"
                     size="sm"
-                    className="shrink-0 text-xs font-bold"
+                    disabled={isDeliveryLoading}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void onConfirmDelivery?.(lesson);
+                    }}
+                    className="h-6 px-2 text-[11px] font-semibold gap-1 shrink-0 hidden md:inline-flex"
+                    title="Mark lesson as taught"
+                    data-testid={`quick-mark-taught-${lesson.lesson_id}`}
                   >
-                    {lesson.is_published ? "Published" : "Draft"}
-                  </Badge>
-                ) : null}
+                    {isDeliveryLoading ? (
+                      <Loader2 className="size-3 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="size-3" />
+                    )}
+                    <span>Mark as Taught</span>
+                  </Button>
+                )}
               </div>
             </div>
             {subtitle && (
@@ -204,50 +246,87 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
                 </p>
               )}
 
-              {isLoadingClassworks ? (
-                <LoadingPanel label="Loading classworks..." />
-              ) : classworks.length === 0 ? (
-                <Empty className="border-2 bg-white p-6 shadow-none bg-retro">
-                  <EmptyHeader>
-                    <EmptyMedia>
-                      <div className="flex size-9 items-center justify-center border-2 border-black bg-primary">
-                        <ClipboardList className="size-4.5 text-black" />
-                      </div>
-                    </EmptyMedia>
-                    <EmptyTitle className="text-sm font-bold">No classworks yet</EmptyTitle>
-                    <EmptyDescription className="text-xs">
-                      No classworks assigned to this lesson yet.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : (
-                classworks.map((cw) => (
-                  <ClassworkItemLine
-                    key={cw.classwork_assignment_id}
-                    item={cw}
-                    onOpen={onOpenClassworkDetail}
-                    className="shadow-none!"
-                    showCategoryBadge={false}
-                    showPublicationStatus={false}
-                  />
-                ))
-              )}
-              {onOpenClassworkForm && (
-                <div className="flex items-center justify-end gap-2 pt-1">
-                  <Button
-                    type="button"
-                    variant="default"
-                    size="sm"
-                    onClick={() => onOpenClassworkForm?.(lesson)}
-                    className="h-8"
-                  >
-                    <Plus size={14} className="mr-1.5" />
-                    Add Classwork
-                  </Button>
-                </div>
-              )}
-            </>
+          {isLoadingClassworks ? (
+            <LoadingPanel label="Loading classworks..." />
+          ) : classworks.length === 0 ? (
+            <Empty className="border-2 bg-white p-6 shadow-none bg-retro">
+              <EmptyHeader>
+                <EmptyMedia>
+                  <div className="flex size-9 items-center justify-center border-2 border-black bg-primary">
+                    <ClipboardList className="size-4.5 text-black" />
+                  </div>
+                </EmptyMedia>
+                <EmptyTitle className="text-sm font-bold">No classworks yet</EmptyTitle>
+                <EmptyDescription className="text-xs">
+                  No classworks assigned to this lesson yet.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            classworks.map((cw) => (
+              <ClassworkItemLine
+                key={cw.classwork_assignment_id}
+                item={cw}
+                onOpen={onOpenClassworkDetail}
+                className="shadow-none!"
+                showCategoryBadge={false}
+                showPublicationStatus={false}
+              />
+            ))
           )}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-dashed border-gray-200 mt-2">
+            <div className="flex items-center gap-2">
+              {!isTaught && onConfirmDelivery && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={isDeliveryLoading}
+                  onClick={() => void onConfirmDelivery(lesson)}
+                  className="h-8 gap-1.5"
+                  data-testid={`mark-taught-btn-${lesson.lesson_id}`}
+                >
+                  {isDeliveryLoading ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 size={14} />
+                  )}
+                  <span>Mark as Taught</span>
+                </Button>
+              )}
+              {isTaught && onOpenCorrectionDialog && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isDeliveryLoading}
+                  onClick={() => onOpenCorrectionDialog(lesson)}
+                  className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  data-testid={`correct-delivery-btn-${lesson.lesson_id}`}
+                >
+                  <RotateCcw size={13} />
+                  <span>Correct Confirmation</span>
+                </Button>
+              )}
+              {isTaught && activeDelivery?.delivered_at && (
+                <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                  Confirmed taught {formatDate(activeDelivery.delivered_at)}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={() => onOpenClassworkForm?.(lesson)}
+                className="h-8"
+              >
+                <Plus size={14} className="mr-1.5" />
+                Add Classwork
+              </Button>
+            </div>
+          </div>
         </Accordion.Content>
       </Accordion.Item>
     </Accordion>
@@ -270,6 +349,24 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
           >
             <Eye size={14} />
             <span>View Lesson</span>
+          </ContextMenu.Item>
+        )}
+        {!isTaught && onConfirmDelivery && (
+          <ContextMenu.Item
+            onClick={() => void onConfirmDelivery(lesson)}
+            className="flex items-center gap-2 cursor-pointer px-2.5 py-2 hover:bg-yellow-100 rounded focus:bg-yellow-100 text-xs font-bold"
+          >
+            <CheckCircle2 size={14} />
+            <span>Mark as Taught</span>
+          </ContextMenu.Item>
+        )}
+        {isTaught && onOpenCorrectionDialog && (
+          <ContextMenu.Item
+            onClick={() => onOpenCorrectionDialog(lesson)}
+            className="flex items-center gap-2 cursor-pointer px-2.5 py-2 hover:bg-yellow-100 rounded focus:bg-yellow-100 text-xs font-bold"
+          >
+            <RotateCcw size={14} />
+            <span>Correct Delivery Confirmation</span>
           </ContextMenu.Item>
         )}
         {onOpenLessonManager && (

@@ -120,6 +120,7 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
     assignments_data = []
     for assignment in cw.assignments:
         class_row = assignment.class_
+        recipient = assignment.recipient_student
         assignments_data.append({
             "classwork_assignment_id": assignment.classwork_assignment_id,
             "classwork_id": assignment.classwork_id,
@@ -133,6 +134,13 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
             "is_published": assignment.is_published,
             "show_scores": cw.show_scores,
             "is_locked": assignment_is_locked(assignment),
+            "recipient_student_id": assignment.recipient_student_id,
+            "recipient_student_name": (
+                f"{recipient.first_name} {recipient.last_name}".strip()
+                if recipient is not None
+                else None
+            ),
+            "source_intervention_id": assignment.source_intervention_id,
         })
 
     linked_lessons = [

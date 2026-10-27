@@ -120,7 +120,7 @@ def test_provider_has_no_retries_or_fallback(monkeypatch):
 
     def handler(request):
         calls.append(request)
-        return httpx.Response(429, json={"error": "limited"})
+        return httpx.Response(429, json={"error": "limited"}, headers={"Retry-After": "7"})
 
     async def run():
         token = guard.actor.set("teacher")
@@ -128,13 +128,52 @@ def test_provider_has_no_retries_or_fallback(monkeypatch):
             with patch("app.services.ai.Provider.reserve_call") as reserve, patch("app.services.ai.Provider.record_failure"), patch("app.services.ai.Provider.httpx.AsyncHTTPTransport", return_value=httpx.MockTransport(handler)):
                 with pytest.raises(HTTPException) as caught:
                     await generate_text("prompt", "system")
-                assert caught.value.status_code == 502
+                assert caught.value.status_code == 429
+                assert caught.value.headers["Retry-After"] == "7"
+                assert "manual authoring" in caught.value.detail
                 reserve.assert_called_once()
         finally:
             guard.actor.reset(token)
     asyncio.run(run())
     assert len(calls) == 1
     assert calls[0].url.host == "api.groq.com"
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_status"),
+    [
+        (httpx.ReadTimeout("private prompt"), 504),
+        (
+            httpx.HTTPStatusError(
+                "private response",
+                request=httpx.Request("POST", "https://mock-provider.invalid"),
+                response=httpx.Response(
+                    503,
+                    request=httpx.Request("POST", "https://mock-provider.invalid"),
+                ),
+            ),
+            503,
+        ),
+    ],
+)
+def test_provider_surfaces_timeout_and_unavailable_without_retry(monkeypatch, failure, expected_status):
+    monkeypatch.setattr(settings, "groq_api_key", "test-key")
+    monkeypatch.setattr(settings, "groq_model", "openai/gpt-oss-20b")
+
+    async def run():
+        token = guard.actor.set("teacher")
+        try:
+            with patch("app.services.ai.Provider.reserve_call"), \
+                 patch("app.services.ai.Provider.record_failure"), \
+                 patch("app.services.ai.Provider._execute_groq", new=AsyncMock(side_effect=failure)) as execute:
+                with pytest.raises(HTTPException) as caught:
+                    await generate_text("prompt", "system")
+                assert caught.value.status_code == expected_status
+                execute.assert_awaited_once()
+        finally:
+            guard.actor.reset(token)
+
+    asyncio.run(run())
 
 
 def test_disabled_and_oversized_prompts_never_reserve(monkeypatch):

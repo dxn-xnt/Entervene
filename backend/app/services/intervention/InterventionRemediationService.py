@@ -38,6 +38,7 @@ from app.services.grading.SubjectGradeProjectionService import calculate_subject
 from app.services.grading.MidtermRemediationProjectionService import calculate_ai_midterm_what_if
 
 FORMATS = {"QUIZ", "TOS", "CLASSWORK", "EXISTING_MATERIAL_ONLY"}
+AI_RECOMMENDATION_FORMATS = {"QUIZ", "CLASSWORK", "EXISTING_MATERIAL_ONLY"}
 GRADED_TREATMENTS = {"WRITTEN_WORK", "PERFORMANCE_TASK", "EXAMINATION"}
 
 
@@ -76,7 +77,54 @@ class PlanUpdate(BaseModel):
 class Advisory(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     recommended_format: str
+    recommended_grade_treatment: str | None
     reason: str = Field(min_length=10, max_length=400)
+
+
+def _advisory_options(focus: dict, exams: list[dict], has_resources: bool) -> list[dict]:
+    """Return only format/treatment pairs supported by the existing authoring workflow."""
+    component = focus.get("component")
+    options: list[tuple[str, str | None]] = []
+    if component == "WRITTEN_WORK":
+        options.extend((
+            ("QUIZ", "WRITTEN_WORK"),
+            ("QUIZ", "PRACTICE_ONLY"),
+            ("CLASSWORK", "WRITTEN_WORK"),
+            ("CLASSWORK", "PRACTICE_ONLY"),
+        ))
+    elif component == "PERFORMANCE_TASK":
+        options.extend((
+            ("CLASSWORK", "PERFORMANCE_TASK"),
+            ("CLASSWORK", "PRACTICE_ONLY"),
+        ))
+    elif component == "EXAMINATION":
+        options.append(("QUIZ", "PRACTICE_ONLY"))
+        subtype = focus.get("exam_subtype")
+        if subtype and any(exam.get("subtype") == subtype for exam in exams):
+            options.insert(0, ("QUIZ", "EXAMINATION"))
+    else:
+        # Ambiguous component evidence cannot support a graded recommendation.
+        options.extend((
+            ("QUIZ", "PRACTICE_ONLY"),
+            ("CLASSWORK", "PRACTICE_ONLY"),
+        ))
+    if has_resources:
+        options.append(("EXISTING_MATERIAL_ONLY", None))
+    return [
+        {"recommended_format": method, "recommended_grade_treatment": treatment}
+        for method, treatment in options
+    ]
+
+
+def _validate_advisory_mapping(advice: Advisory, options: list[dict]) -> None:
+    if advice.recommended_format not in AI_RECOMMENDATION_FORMATS:
+        raise HTTPException(502, "AI returned a non-assignable remediation format")
+    candidate = {
+        "recommended_format": advice.recommended_format,
+        "recommended_grade_treatment": advice.recommended_grade_treatment,
+    }
+    if candidate not in options:
+        raise HTTPException(502, "AI returned a remediation format that is incompatible with the verified evidence")
 
 
 _WEAKNESS_CLAIM_RE = re.compile(
@@ -647,21 +695,28 @@ def save_plan(db: Session, staff_id: str, intervention_id: int, body: PlanUpdate
 
 async def generate_advisory(db: Session, staff_id: str, intervention_id: int) -> dict:
     row = _row(db, staff_id, intervention_id)
-    if not settings.groq_api_key:
-        raise HTTPException(503, "Groq is not configured for remediation advice")
+    if not settings.groq_api_key and not settings.gemini_api_key:
+        raise HTTPException(503, "AI service is not configured for remediation advice")
     grounding = build_grounding(row, _source(db, row))
-    system = ("You advise a teacher on a remediation FORMAT. Return only JSON with recommended_format and reason. "
-              "Format is one of QUIZ, TOS, CLASSWORK, EXISTING_MATERIAL_ONLY. Advisory only. "
+    focus = build_remediation_focus(row)
+    exams = original_exams(db, row)
+    options = _advisory_options(focus, exams, bool(resources(db, row, staff_id)))
+    system = ("You advise a teacher on a remediation format and grade treatment. Return only JSON with "
+              "recommended_format, recommended_grade_treatment, and reason. Choose one exact pair from eligible_recommendations. "
+              "TOS is teacher planning only and is never a student remediation recommendation. Advisory only. "
               "Use only the supplied facts. Question scores support missed concepts; scored competencies support measured weakness. "
               "Activity totals plus coverage allow review suggestions but never prove each covered topic weak. "
               "Component-only evidence supports only component-level advice. "
-              "TOS is a planning/export tool. No examination slot or subtype may be selected. "
+              "Do not select or invent an examination slot, subtype, question, task, lesson, or competency. "
               "Keep reason short and format-level. Refer only to the verified grading component and evidence level. "
               "Do not name a lesson or competency unless it appears under measured_scored_competencies. "
               "When evidence is coverage-only or component-only, do not claim a topic weakness. "
               "Prefer neutral wording such as 'supports the verified Performance Task focus'.")
-    focus = build_remediation_focus(row)
-    raw = await Provider.generate_text(json.dumps({"evidence": grounding, "deterministic_focus": focus}),
+    raw = await Provider.generate_text(json.dumps({
+                                           "evidence": grounding,
+                                           "deterministic_focus": focus,
+                                           "eligible_recommendations": options,
+                                       }),
                                        system, json_output=True, max_tokens=350)
     try:
         candidate = raw.strip()
@@ -670,8 +725,7 @@ async def generate_advisory(db: Session, staff_id: str, intervention_id: int) ->
         advice = Advisory.model_validate(json.loads(candidate))
     except (ValueError, ValidationError, TypeError):
         raise HTTPException(502, "AI returned an invalid remediation advisory") from None
-    if advice.recommended_format not in FORMATS:
-        raise HTTPException(502, "AI returned an unsupported remediation format")
+    _validate_advisory_mapping(advice, options)
     _validate_advisory_reason(advice, grounding, focus)
     db.refresh(row)
     if row.status != "ACTIVE" or not _eligible_scope(db, staff_id, row):

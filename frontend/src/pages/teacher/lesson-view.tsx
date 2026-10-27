@@ -1,10 +1,13 @@
 import {
     Archive,
+    CheckCircle2,
     ChevronDown,
     ChevronUp,
     ClipboardList,
+    Loader2,
     Pencil,
     Plus,
+    RotateCcw,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -29,6 +32,7 @@ import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import ClassworkItemLine from "@/components/item-line/classwork";
 import type { Lesson, LinkedClasswork } from "./subject-details/types";
+import type { LessonDeliveryRecord } from "@/lib/lesson-delivery-api";
 
 export interface StudentSupportItem {
     id: string;
@@ -497,6 +501,11 @@ export interface TeacherLessonViewProps {
     onArchiveLesson?: (lesson: Lesson) => Promise<void> | void;
     linkedClassworks: LinkedClasswork[];
     isLoadingClasswork?: boolean;
+    delivery?: LessonDeliveryRecord | null;
+    isDelivered?: boolean;
+    isDeliveryLoading?: boolean;
+    onConfirmDelivery?: (lesson: Lesson) => Promise<void> | void;
+    onOpenCorrectionDialog?: (lesson: Lesson) => void;
 }
 
 export function TeacherLessonView({
@@ -511,10 +520,18 @@ export function TeacherLessonView({
     onArchiveLesson,
     linkedClassworks = [],
     isLoadingClasswork = false,
+    delivery,
+    isDelivered,
+    isDeliveryLoading = false,
+    onConfirmDelivery,
+    onOpenCorrectionDialog,
 }: TeacherLessonViewProps) {
     const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
     const [isArchivingLesson, setIsArchivingLesson] = useState(false);
     const [isContentExpanded, setIsContentExpanded] = useState(false);
+
+    const activeDelivery = delivery || lesson.delivery || null;
+    const isTaught = Boolean(isDelivered ?? lesson.is_taught ?? activeDelivery?.is_active);
 
     return (
         <div className="flex flex-col flex-1 min-w-0 w-full animate-in fade-in-50 duration-200">
@@ -569,6 +586,38 @@ export function TeacherLessonView({
                     </div>
 
                     <div className="flex flex-wrap w-full gap-2 md:flex md:w-auto md:flex-nowrap md:items-center">
+                        {!isTaught && onConfirmDelivery && (
+                            <Button
+                                type="button"
+                                size="header"
+                                variant="outline"
+                                onClick={() => void onConfirmDelivery(lesson)}
+                                disabled={isDeliveryLoading}
+                                className="w-full whitespace-nowrap md:w-auto gap-1.5"
+                                data-testid={`detail-mark-taught-${lesson.lesson_id}`}
+                            >
+                                {isDeliveryLoading ? (
+                                    <Loader2 size={16} className="animate-spin" />
+                                ) : (
+                                    <CheckCircle2 size={16} />
+                                )}
+                                Mark as Taught
+                            </Button>
+                        )}
+                        {isTaught && onOpenCorrectionDialog && (
+                            <Button
+                                type="button"
+                                size="header"
+                                variant="outline"
+                                onClick={() => onOpenCorrectionDialog(lesson)}
+                                disabled={isDeliveryLoading}
+                                className="w-full whitespace-nowrap md:w-auto gap-1.5"
+                                data-testid={`detail-correct-delivery-${lesson.lesson_id}`}
+                            >
+                                <RotateCcw size={16} />
+                                Correct Delivery
+                            </Button>
+                        )}
                         <Button
                             type="button"
                             size="header"
@@ -625,16 +674,32 @@ export function TeacherLessonView({
                                             </p>
                                         </div>
                                     )}
+                                    {isTaught && activeDelivery?.delivered_at && (
+                                        <p className="text-xs text-foreground/80 font-medium pt-0.5">
+                                            Confirmed taught {formatDate(activeDelivery.delivered_at)}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
-                            <Badge
-                                variant={lesson.is_published ? "solid" : "default"}
-                                size="sm"
-                                className="py-1"
-                            >
-                                {lesson.is_published ? "Published" : "Draft"}
-                            </Badge>
+                            <div className="flex flex-row items-center gap-2">
+                                <Badge
+                                    variant={lesson.is_published ? "solid" : "default"}
+                                    size="sm"
+                                    className="py-1"
+                                    data-testid={`detail-badge-published-${lesson.lesson_id}`}
+                                >
+                                    {lesson.is_published ? "Published" : "Draft"}
+                                </Badge>
+                                <Badge
+                                    variant={isTaught ? "success" : "outline"}
+                                    size="sm"
+                                    className={cn("py-1", !isTaught && "text-muted-foreground border-border bg-background")}
+                                    data-testid={`detail-badge-taught-${lesson.lesson_id}`}
+                                >
+                                    {isTaught ? "Taught" : "Not Taught"}
+                                </Badge>
+                            </div>
                         </div>
 
                         <div className="flex flex-col gap-3">

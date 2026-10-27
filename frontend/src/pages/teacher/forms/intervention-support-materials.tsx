@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/retroui/Checkbox";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Empty } from "@/components/retroui/Empty";
 import ClassworkItemLine from "@/components/item-line/classwork";
-import { Activity, BookOpen, Plus } from "lucide-react";
+import { Activity, BookOpen, Plus, Sparkles, Lock, RefreshCw, Pencil, Save, ExternalLink, Eye } from "lucide-react";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import {
   createSupportMaterial,
@@ -27,6 +27,20 @@ import {
   generateRemediationAdvisory,
   previewScoreAdjustment,
   projectSubjectGrade,
+  generateRemediationDraft,
+  preflightRemediationDraft,
+  createRemediationAssessment,
+  InterventionApiError,
+  type RemediationGeneratedDraft,
+  type RemediationAssessmentCreateResult,
+  type RemediationQuizDraft,
+  type RemediationClassworkDraft,
+  type RemediationQuizQuestionDraft,
+  type RemediationTeacherAnswerKey,
+  type RemediationTaskDraft,
+  type RemediationDeliverableDraft,
+  type RemediationRubricLevelDraft,
+  type RemediationTeacherClassworkGuide,
   type SubjectGradeProjectionResponse,
   type ClassworkScorePreview,
   type RemediationFormat,
@@ -52,11 +66,11 @@ const date = (value: string) =>
     timeStyle: "short",
   });
 
-const methods: Array<{ value: RemediationFormat; label: string; detail: string }> = [
-  { value: "QUIZ", label: "Quiz", detail: "Focused practice in the existing Quiz builder" },
-  { value: "CLASSWORK", label: "Classwork", detail: "Targeted activity in the existing Classwork creator" },
-  { value: "TOS", label: "TOS Blueprint", detail: "Assessment blueprint and export only" },
-  { value: "EXISTING_MATERIAL_ONLY", label: "Materials Only", detail: "Planning references only, no new graded assessment" },
+const methods: Array<{ value: RemediationFormat; label: string; detail: string; aiRecommendable: boolean }> = [
+  { value: "QUIZ", label: "Quiz", detail: "Focused practice in the existing Quiz builder", aiRecommendable: true },
+  { value: "CLASSWORK", label: "Classwork", detail: "Targeted activity in the existing Classwork creator", aiRecommendable: true },
+  { value: "TOS", label: "TOS Blueprint", detail: "Teacher planning and export only; not assigned to students", aiRecommendable: false },
+  { value: "EXISTING_MATERIAL_ONLY", label: "Materials Only", detail: "Planning references only, no new graded assessment", aiRecommendable: true },
 ];
 
 const label = (value: string) =>
@@ -75,6 +89,38 @@ const componentLabel = (value: string | null | undefined) =>
 
 const isGraded = (choice: RemediationFormat | null) =>
   choice === "QUIZ" || choice === "CLASSWORK";
+
+const newRemediationRequestId = () => {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = character === "x" ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+};
+
+const isSupportedAIRecommendation = (
+  suggestion: RemediationPlan["ai_suggestion"],
+  focus: RemediationFocus | null,
+  originalExams: OriginalExamination[]
+) => {
+  if (!suggestion) return false;
+  const method = methods.find((item) => item.value === suggestion.recommended_format);
+  if (!method?.aiRecommendable) return false;
+  const treatment = suggestion.recommended_grade_treatment;
+  if (suggestion.recommended_format === "EXISTING_MATERIAL_ONLY") return treatment == null;
+  if (!focus || treatment == null) return false;
+  if (treatment !== "PRACTICE_ONLY" && treatment !== focus.component) return false;
+  if (focus.component === "PERFORMANCE_TASK" && suggestion.recommended_format !== "CLASSWORK") return false;
+  if (focus.component === "EXAMINATION" && suggestion.recommended_format !== "QUIZ") return false;
+  if (
+    treatment === "EXAMINATION" &&
+    (!focus.exam_subtype || !originalExams.some((exam) => exam.subtype === focus.exam_subtype))
+  ) return false;
+  return true;
+};
 
 const validateCap = (value: string): string | null => {
   const trimmed = value.trim();
@@ -112,6 +158,107 @@ const reconcileSelectedResources = (
     seen.add(key);
     return true;
   });
+};
+
+export interface DraftValidationResult {
+  isValid: boolean;
+  issues: string[];
+}
+
+export const validateDraftCompleteness = (
+  draft: RemediationGeneratedDraft | null
+): DraftValidationResult => {
+  if (!draft) return { isValid: false, issues: ["No draft loaded."] };
+  const issues: string[] = [];
+
+  if (!draft.title?.trim()) {
+    issues.push("Remediation title is required.");
+  }
+
+  if (draft.draft_format === "QUIZ") {
+    const quizDraft = draft as RemediationQuizDraft;
+    if (!quizDraft.instructions?.trim()) {
+      issues.push("Student instructions are required.");
+    }
+    if (!quizDraft.questions || quizDraft.questions.length === 0) {
+      issues.push("At least one quiz question is required.");
+    } else {
+      quizDraft.questions.forEach((q, idx) => {
+        const itemNum = q.display_order || idx + 1;
+        if (!q.question_text?.trim()) {
+          issues.push(`Item ${itemNum}: Question prompt is required.`);
+        }
+        if (!q.points || Number(q.points) <= 0) {
+          issues.push(`Item ${itemNum}: Points must be greater than 0.`);
+        }
+        if (q.options && q.options.length > 0) {
+          const hasEmptyOpt = q.options.some((opt) => !opt.option_text?.trim());
+          if (hasEmptyOpt) {
+            issues.push(`Item ${itemNum}: All option choices must have text.`);
+          }
+        }
+        if (!q.teacher_answer_key?.correct_answer?.trim()) {
+          issues.push(`Item ${itemNum}: Correct answer is required.`);
+        }
+        if (!q.teacher_answer_key?.explanation?.trim()) {
+          issues.push(`Item ${itemNum}: Teacher explanation is required.`);
+        }
+      });
+    }
+  } else if (draft.draft_format === "CLASSWORK") {
+    const cwDraft = draft as RemediationClassworkDraft;
+    if (!cwDraft.description?.trim()) {
+      issues.push("Activity overview is required.");
+    }
+    if (!cwDraft.student_instructions?.trim()) {
+      issues.push("Student instructions are required.");
+    }
+    if (!cwDraft.tasks || cwDraft.tasks.length === 0) {
+      issues.push("At least one task is required.");
+    } else {
+      cwDraft.tasks.forEach((t, idx) => {
+        const tNum = t.task_number || idx + 1;
+        if (!t.title?.trim()) {
+          issues.push(`Task ${tNum}: Title is required.`);
+        }
+        if (!t.instructions?.trim()) {
+          issues.push(`Task ${tNum}: Instructions are required.`);
+        }
+      });
+    }
+    if (!cwDraft.deliverables || cwDraft.deliverables.length === 0) {
+      issues.push("At least one deliverable is required.");
+    } else {
+      cwDraft.deliverables.forEach((d, idx) => {
+        if (!d.deliverable_name?.trim()) {
+          issues.push(`Deliverable ${idx + 1}: Name is required.`);
+        }
+      });
+    }
+    if (!cwDraft.rubric_levels || cwDraft.rubric_levels.length === 0) {
+      issues.push("At least one rubric level is required.");
+    } else {
+      cwDraft.rubric_levels.forEach((r, idx) => {
+        if (!r.level_name?.trim()) {
+          issues.push(`Rubric level ${idx + 1}: Name is required.`);
+        }
+        if (r.points == null || Number(r.points) < 0) {
+          issues.push(`Rubric level ${idx + 1}: Points cannot be negative.`);
+        }
+      });
+    }
+    if (!draft.teacher_guide?.exemplar_or_expected_response?.trim()) {
+      issues.push("Teacher guide exemplar or expected response is required.");
+    }
+    if (!draft.teacher_guide?.evaluation_notes?.trim()) {
+      issues.push("Teacher evaluation notes are required.");
+    }
+  }
+
+  return {
+    isValid: issues.length === 0,
+    issues,
+  };
 };
 
 type GradeTreatment = NonNullable<RemediationPlan["grade_treatment"]>;
@@ -213,6 +360,16 @@ const InterventionSupportMaterials = forwardRef<
   const advisoryAttemptedRef = useRef<Set<number>>(new Set());
   const advisoryInFlightRef = useRef<Set<number>>(new Set());
   const previousPageRef = useRef(page);
+  const [generatingDraft, setGeneratingDraft] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [generatedDraft, setGeneratedDraft] = useState<RemediationGeneratedDraft | null>(null);
+  const [showDraftPreview, setShowDraftPreview] = useState(false);
+  const [quizQuestionMode, setQuizQuestionMode] = useState<"NEW_TARGETED" | "REUSE_ORIGINAL">("NEW_TARGETED");
+  const [isEditingDraft, setIsEditingDraft] = useState(false);
+  const [draftSaveState, setDraftSaveState] = useState<"idle" | "validating" | "saving" | "saved" | "error">("idle");
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
+  const [savedAssessment, setSavedAssessment] = useState<RemediationAssessmentCreateResult | null>(null);
+  const draftRequestIdRef = useRef<string | null>(null);
 
   const setNotice = (message: string) => {
     if (message) toast.success({ title: message });
@@ -252,8 +409,10 @@ const InterventionSupportMaterials = forwardRef<
       setRecommendationPreviewReady(false);
 
       choiceOrigin.current = loadedPlan.teacher_choice ? "manual" : "none";
-      const initialRecommendation = methods.find(
-        (method) => method.value === loadedPlan.ai_suggestion?.recommended_format
+      const initialRecommendation = isSupportedAIRecommendation(
+        loadedPlan.ai_suggestion,
+        workspace.focus,
+        workspace.original_exams ?? []
       );
       setPlan({
         ...loadedPlan,
@@ -300,10 +459,13 @@ const InterventionSupportMaterials = forwardRef<
       advisoryAttemptedRef.current.delete(interventionId);
     }
 
-    const supportedRecommendation = methods.some(
-      (method) => method.value === plan.ai_suggestion?.recommended_format
+    const supportedRecommendation = isSupportedAIRecommendation(
+      plan.ai_suggestion,
+      focus,
+      originalExams
     );
-    if (page !== "plan" || loading || supportedRecommendation) return;
+    // Never replace or interrupt an existing teacher-authored method choice.
+    if (page !== "plan" || loading || supportedRecommendation || plan.teacher_choice) return;
     if (
       advisoryAttemptedRef.current.has(interventionId) ||
       advisoryInFlightRef.current.has(interventionId)
@@ -317,8 +479,10 @@ const InterventionSupportMaterials = forwardRef<
     void generateRemediationAdvisory(interventionId)
       .then((advisoryRes) => {
         const suggestion = advisoryRes.plan?.ai_suggestion;
-        const supported = methods.some(
-          (method) => method.value === suggestion?.recommended_format
+        const supported = isSupportedAIRecommendation(
+          suggestion ?? null,
+          advisoryRes.focus,
+          advisoryRes.original_exams ?? []
         );
         if (!suggestion || !supported) {
           setAdvisoryError("No supported remediation recommendation is available right now.");
@@ -337,7 +501,7 @@ const InterventionSupportMaterials = forwardRef<
       .finally(() => {
         advisoryInFlightRef.current.delete(interventionId);
       });
-  }, [interventionId, loading, page, plan.ai_suggestion?.recommended_format]);
+  }, [focus, interventionId, loading, originalExams, page, plan.ai_suggestion, plan.teacher_choice]);
 
   const reviewer = materials.find((item) => item.kind === "STUDENT_REVIEWER");
   const oldAssessment = materials.find((item) => item.kind === "REMEDIAL_ASSESSMENT");
@@ -537,6 +701,26 @@ const InterventionSupportMaterials = forwardRef<
     return scorePreviews.filter((preview) => selectedIds.has(preview.assignment_id));
   }, [plan.original_exam_assignment_id, scorePreviews, selectedActivityIds]);
 
+  const selectedTargetMaximum = useMemo(() => {
+    if (!plan.grade_treatment || plan.grade_treatment === "PRACTICE_ONLY") return 20;
+    if (plan.grade_treatment === "EXAMINATION") {
+      const exam = originalExams.find(
+        (item) =>
+          item.assignment_id === plan.original_exam_assignment_id ||
+          selectedActivityIds.includes(item.assignment_id)
+      );
+      return exam?.total_points ?? chosenActivities[0]?.possible_score ?? 20;
+    }
+    return selectedScorePreviews[0]?.max_points ?? chosenActivities[0]?.possible_score ?? 20;
+  }, [
+    chosenActivities,
+    originalExams,
+    plan.grade_treatment,
+    plan.original_exam_assignment_id,
+    selectedActivityIds,
+    selectedScorePreviews,
+  ]);
+
   const recommendedAssignmentId = useMemo(() => {
     if (plan.grade_treatment === "PRACTICE_ONLY") {
       return null;
@@ -716,7 +900,7 @@ const InterventionSupportMaterials = forwardRef<
       cancelled = true;
     };
   }, [capInput, interventionId, originalExams, plan.grade_treatment, treatmentActivities]);
-  const assigned: NonNullable<RemediationProgress["assigned_remediation"]> =
+  const persistedAssigned: NonNullable<RemediationProgress["assigned_remediation"]> =
     progress?.assigned_remediation ??
     progress?.completed_remediation.map((item) => ({
       ...item,
@@ -725,6 +909,35 @@ const InterventionSupportMaterials = forwardRef<
       submission_status: "graded",
     })) ??
     [];
+  const assigned: NonNullable<RemediationProgress["assigned_remediation"]> =
+    savedAssessment && generatedDraft && !persistedAssigned.some(
+      (item) => item.classwork_id === savedAssessment.classwork_id
+    )
+      ? [
+        ...persistedAssigned,
+        {
+          title: generatedDraft.title,
+          assignment_id: savedAssessment.classwork_assignment_id,
+          classwork_id: savedAssessment.classwork_id,
+          classwork_type: generatedDraft.draft_format === "QUIZ"
+            ? "QUIZ"
+            : generatedDraft.target_component === "PERFORMANCE_TASK"
+              ? "ACTIVITY"
+              : "ASSIGNMENT",
+          is_published: false,
+          component: generatedDraft.target_component,
+          is_graded: generatedDraft.grade_treatment !== "PRACTICE_ONLY",
+          submission_status: "draft",
+          grade: null,
+          total_points: generatedDraft.total_points,
+          original_assignment_id: plan.original_exam_assignment_id ?? plan.target_assignment_ids?.[0] ?? null,
+          original_title:
+            chosenActivities[0]?.title ??
+            originalExams.find((item) => item.assignment_id === plan.original_exam_assignment_id)?.title ??
+            null,
+        },
+      ]
+      : persistedAssigned;
   const phase = progress?.completed_remediation.length
     ? "Monitoring"
     : assigned.some((item) => item.is_published !== false)
@@ -851,6 +1064,286 @@ const InterventionSupportMaterials = forwardRef<
     [plan, interventionId, selectedActivityIds, capInput]
   );
 
+  const handleGenerateWithAI = async () => {
+    if (!plan.teacher_choice || (plan.teacher_choice !== "QUIZ" && plan.teacher_choice !== "CLASSWORK")) {
+      return;
+    }
+
+    if (
+      isGraded(plan.teacher_choice) &&
+      (!plan.grade_treatment ||
+        (plan.grade_treatment === "EXAMINATION" &&
+          !plan.original_exam_assignment_id &&
+          selectedActivityIds.length === 0) ||
+        ((plan.grade_treatment === "WRITTEN_WORK" || plan.grade_treatment === "PERFORMANCE_TASK") &&
+          (!plan.target_assignment_ids || plan.target_assignment_ids.length === 0) &&
+          selectedActivityIds.length === 0))
+    ) {
+      toast.error({
+        title: "Incomplete adjustment",
+        description:
+          plan.grade_treatment === "EXAMINATION"
+            ? "Choose a grade treatment and original Examination before generating."
+            : "Choose a grade treatment and at least one target classwork before generating.",
+      });
+      return;
+    }
+
+    const saved = await saveAdjustments();
+    if (!saved) return;
+
+    setGeneratingDraft(true);
+    setGenerationError(null);
+    setDraftSaveState("idle");
+    setDraftSaveError(null);
+    setSavedAssessment(null);
+    draftRequestIdRef.current = newRemediationRequestId();
+    setShowDraftPreview(true);
+
+    let targetComponent: "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION";
+    if (plan.grade_treatment === "EXAMINATION") {
+      targetComponent = "EXAMINATION";
+    } else if (plan.grade_treatment === "PERFORMANCE_TASK") {
+      targetComponent = "PERFORMANCE_TASK";
+    } else if (plan.grade_treatment === "WRITTEN_WORK") {
+      targetComponent = "WRITTEN_WORK";
+    } else {
+      targetComponent = (focus?.component ?? (plan.teacher_choice === "QUIZ" ? "WRITTEN_WORK" : "PERFORMANCE_TASK")) as "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION";
+    }
+
+    const examSubtype = targetComponent === "EXAMINATION" ? (focus?.exam_subtype ?? "SUMMATIVE_1") : undefined;
+
+    const readingIds = reconcileSelectedResources(plan.selected_resources, resources)
+      .filter((r) => r.kind === "CLASSWORK")
+      .map((r) => r.id);
+
+    const quizQuestionIds = focus?.question_evidence
+      ?.map((q) => q.quiz_question_id)
+      .filter((id): id is number => typeof id === "number");
+
+    try {
+      const draft = await generateRemediationDraft(interventionId, {
+        draft_format: plan.teacher_choice,
+        target_component: targetComponent,
+        grade_treatment: plan.grade_treatment ?? "PRACTICE_ONLY",
+        exam_subtype: examSubtype,
+        item_count: 5,
+        total_points: selectedTargetMaximum,
+        activity_mode: "ONLINE",
+        selected_lesson_ids: focus?.lesson_ids?.length ? focus.lesson_ids : undefined,
+        selected_competency_ids: focus?.competency_ids?.length ? focus.competency_ids : undefined,
+        selected_quiz_question_ids: quizQuestionIds?.length ? quizQuestionIds : undefined,
+        selected_reading_ids: readingIds.length ? readingIds : undefined,
+      });
+      setGeneratedDraft(draft);
+    } catch (cause: unknown) {
+      const status = cause instanceof InterventionApiError
+        ? cause.status
+        : typeof cause === "object" && cause !== null && "status" in cause
+          ? Number((cause as { status?: unknown }).status)
+          : undefined;
+      let msg = cause instanceof Error ? cause.message : "AI remediation draft generation failed.";
+      if (status === 429) {
+        msg = "AI generation rate limit reached (Groq free tier). Please wait a moment before trying again.";
+      } else if (status === 502) {
+        msg = `AI generation service error: ${msg}`;
+      } else if (status === 504 || status === 503) {
+        msg = "AI provider timed out or is temporarily unavailable. Please retry shortly.";
+      }
+      setGenerationError(msg);
+    } finally {
+      setGeneratingDraft(false);
+    }
+  };
+
+  const targetAssignmentSummary = useMemo(() => {
+    if (plan.grade_treatment === "EXAMINATION") {
+      const exam = originalExams.find(
+        (e) =>
+          e.assignment_id === plan.original_exam_assignment_id ||
+          selectedActivityIds.includes(e.assignment_id)
+      );
+      return exam ? `${exam.title} (${exam.total_points} pts)` : "Original Examination";
+    }
+    if (selectedScorePreviews.length > 0) {
+      return selectedScorePreviews
+        .map((p) => `${p.title ?? "Classwork"} (${p.max_points} pts)`)
+        .join(", ");
+    }
+    const acts = treatmentActivities.filter(
+      (a) =>
+        selectedActivityIds.includes(a.classwork_id) ||
+        ((a as { classwork_assignment_id?: number }).classwork_assignment_id != null &&
+          selectedActivityIds.includes((a as { classwork_assignment_id?: number }).classwork_assignment_id!))
+    );
+    if (acts.length > 0) {
+      return acts.map((a) => `${a.title} (${a.possible_score} pts)`).join(", ");
+    }
+    return "None selected";
+  }, [
+    plan.grade_treatment,
+    plan.original_exam_assignment_id,
+    originalExams,
+    selectedScorePreviews,
+    treatmentActivities,
+    selectedActivityIds,
+  ]);
+
+  const draftValidation = useMemo(
+    () => validateDraftCompleteness(generatedDraft),
+    [generatedDraft]
+  );
+
+  const handleSaveAssessmentDraft = async () => {
+    if (!generatedDraft || !draftValidation.isValid) {
+      setDraftSaveState("error");
+      setDraftSaveError(
+        draftValidation.issues[0] ?? "Complete the required draft fields before saving."
+      );
+      return;
+    }
+    if (draftSaveState === "validating" || draftSaveState === "saving" || draftSaveState === "saved") {
+      return;
+    }
+
+    const requestId = draftRequestIdRef.current ?? newRemediationRequestId();
+    draftRequestIdRef.current = requestId;
+    setDraftSaveError(null);
+    setDraftSaveState("validating");
+    try {
+      await preflightRemediationDraft(interventionId, generatedDraft);
+      setDraftSaveState("saving");
+      const saved = await createRemediationAssessment(
+        interventionId,
+        requestId,
+        generatedDraft
+      );
+      if (saved.is_published !== false) {
+        throw new Error("The assessment was not returned as an unpublished draft.");
+      }
+      setSavedAssessment(saved);
+      setDraftSaveState("saved");
+      setIsEditingDraft(false);
+      toast.success({ title: "Assessment draft saved" });
+      await load();
+    } catch (cause) {
+      setDraftSaveState("error");
+      setDraftSaveError(
+        cause instanceof Error ? cause.message : "Unable to save the assessment draft."
+      );
+    }
+  };
+
+  const handleUpdateQuizQuestion = (
+    qIndex: number,
+    updates: Partial<RemediationQuizQuestionDraft>
+  ) => {
+    if (generatedDraft?.draft_format !== "QUIZ") return;
+    const newQuestions = [...generatedDraft.questions];
+    newQuestions[qIndex] = { ...newQuestions[qIndex], ...updates };
+    const newTotal = newQuestions.reduce(
+      (sum, q) => sum + (Number(q.points) || 0),
+      0
+    );
+    setGeneratedDraft({
+      ...generatedDraft,
+      questions: newQuestions,
+      total_points: newTotal,
+    });
+  };
+
+  const handleUpdateQuizOption = (
+    qIndex: number,
+    optIndex: number,
+    option_text: string
+  ) => {
+    if (generatedDraft?.draft_format !== "QUIZ") return;
+    const newQuestions = [...generatedDraft.questions];
+    const newOptions = [...newQuestions[qIndex].options];
+    newOptions[optIndex] = { ...newOptions[optIndex], option_text };
+    newQuestions[qIndex] = { ...newQuestions[qIndex], options: newOptions };
+    setGeneratedDraft({
+      ...generatedDraft,
+      questions: newQuestions,
+    });
+  };
+
+  const handleUpdateQuizAnswerKey = (
+    qIndex: number,
+    updates: Partial<RemediationTeacherAnswerKey>
+  ) => {
+    if (generatedDraft?.draft_format !== "QUIZ") return;
+    const newQuestions = [...generatedDraft.questions];
+    newQuestions[qIndex] = {
+      ...newQuestions[qIndex],
+      teacher_answer_key: {
+        ...newQuestions[qIndex].teacher_answer_key,
+        ...updates,
+      },
+    };
+    setGeneratedDraft({
+      ...generatedDraft,
+      questions: newQuestions,
+    });
+  };
+
+  const handleUpdateClassworkTask = (
+    tIndex: number,
+    updates: Partial<RemediationTaskDraft>
+  ) => {
+    if (generatedDraft?.draft_format !== "CLASSWORK") return;
+    const newTasks = [...generatedDraft.tasks];
+    newTasks[tIndex] = { ...newTasks[tIndex], ...updates };
+    setGeneratedDraft({
+      ...generatedDraft,
+      tasks: newTasks,
+    });
+  };
+
+  const handleUpdateClassworkDeliverable = (
+    dIndex: number,
+    updates: Partial<RemediationDeliverableDraft>
+  ) => {
+    if (generatedDraft?.draft_format !== "CLASSWORK") return;
+    const newDeliverables = [...generatedDraft.deliverables];
+    newDeliverables[dIndex] = { ...newDeliverables[dIndex], ...updates };
+    setGeneratedDraft({
+      ...generatedDraft,
+      deliverables: newDeliverables,
+    });
+  };
+
+  const handleUpdateClassworkRubricLevel = (
+    rIndex: number,
+    updates: Partial<RemediationRubricLevelDraft>
+  ) => {
+    if (generatedDraft?.draft_format !== "CLASSWORK") return;
+    const newLevels = [...generatedDraft.rubric_levels];
+    newLevels[rIndex] = { ...newLevels[rIndex], ...updates };
+    const maxRubric = newLevels.reduce(
+      (max, r) => Math.max(max, Number(r.points) || 0),
+      0
+    );
+    setGeneratedDraft({
+      ...generatedDraft,
+      rubric_levels: newLevels,
+      total_points: maxRubric > 0 ? maxRubric : generatedDraft.total_points,
+    });
+  };
+
+  const handleUpdateClassworkTeacherGuide = (
+    updates: Partial<RemediationTeacherClassworkGuide>
+  ) => {
+    if (generatedDraft?.draft_format !== "CLASSWORK") return;
+    setGeneratedDraft({
+      ...generatedDraft,
+      teacher_guide: {
+        ...generatedDraft.teacher_guide,
+        ...updates,
+      },
+    });
+  };
+
   const openTool = async () => {
     if (!plan.teacher_choice || plan.teacher_choice === "EXISTING_MATERIAL_ONLY") return;
     if (
@@ -911,86 +1404,6 @@ const InterventionSupportMaterials = forwardRef<
     navigate(
       `${plan.teacher_choice === "TOS" ? "/teacher/tos" : "/teacher/classworks"}?${params.toString()}`
     );
-  };
-
-  const requestAdvisory = () => {
-    const manualChoice = choiceOrigin.current === "manual";
-    let requestingAdvice = false;
-    setWorking(true);
-    setAdvisoryError(null);
-    void (async () => {
-      try {
-        const parsedCap = parseFloat(capInput);
-        const saved = await saveRemediationPlan(interventionId, {
-          teacher_choice: plan.teacher_choice,
-          grade_treatment: plan.grade_treatment ?? null,
-          selected_resources: plan.selected_resources,
-          ...(plan.grade_treatment === "EXAMINATION"
-            ? {
-              original_exam_assignment_id:
-                plan.original_exam_assignment_id ??
-                (selectedActivityIds.length > 0 ? selectedActivityIds[0] : null),
-            }
-            : {}),
-          ...(plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY"
-            ? {
-              target_assignment_ids: selectedActivityIds,
-              score_adjustment_cap: Number.isFinite(parsedCap) ? parsedCap : 75,
-            }
-            : {}),
-        });
-        setResources(saved.resources);
-        requestingAdvice = true;
-        const result = await generateRemediationAdvisory(interventionId);
-        const recommendation = methods.find(
-          (method) => method.value === result.plan.ai_suggestion?.recommended_format
-        );
-        if (!recommendation || !result.plan.ai_suggestion) {
-          setPlan({ ...result.plan, ai_suggestion: null });
-          setAdvisoryError("No supported remediation recommendation is available right now.");
-          return;
-        }
-
-        if (manualChoice) {
-          setPlan({
-            ...result.plan,
-            teacher_choice: saved.plan.teacher_choice,
-            grade_treatment: saved.plan.grade_treatment,
-            original_exam_assignment_id: saved.plan.original_exam_assignment_id,
-            target_assignment_ids: saved.plan.target_assignment_ids ?? selectedActivityIds,
-            score_adjustment_cap:
-              saved.plan.score_adjustment_cap ??
-              (Number.isFinite(parsedCap) ? parsedCap : 75),
-          });
-        } else {
-          choiceOrigin.current = "ai";
-          setPlan({
-            ...result.plan,
-            teacher_choice: recommendation.value,
-            grade_treatment: isGraded(recommendation.value)
-              ? (saved.plan.grade_treatment ?? "PRACTICE_ONLY")
-              : null,
-            original_exam_assignment_id: isGraded(recommendation.value)
-              ? saved.plan.original_exam_assignment_id
-              : null,
-            target_assignment_ids: saved.plan.target_assignment_ids ?? selectedActivityIds,
-            score_adjustment_cap:
-              saved.plan.score_adjustment_cap ??
-              (Number.isFinite(parsedCap) ? parsedCap : 75),
-          });
-        }
-        setNotice("AI recommendation ready. Teacher choice remains final.");
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : undefined;
-        if (requestingAdvice) setAdvisoryError(message ?? "AI recommendation is unavailable right now.");
-        toast.error({
-          title: requestingAdvice ? "AI recommendation unavailable" : "Unable to save current resources",
-          description: message,
-        });
-      } finally {
-        setWorking(false);
-      }
-    })();
   };
 
   const createReviewer = () =>
@@ -1541,6 +1954,11 @@ const InterventionSupportMaterials = forwardRef<
                                     {item.recommended && (
                                       <Badge variant="solid" size="sm">
                                         Recommended
+                                      </Badge>
+                                    )}
+                                    {isChecked && (
+                                      <Badge variant="solid" size="sm">
+                                        Teacher selected
                                       </Badge>
                                     )}
                                   </div>
@@ -2150,6 +2568,776 @@ const InterventionSupportMaterials = forwardRef<
                 </Dialog.Content>
               </Dialog>
 
+              <Dialog
+                open={showDraftPreview}
+                onOpenChange={(open) => {
+                  if (generatingDraft && !open) return;
+                  setShowDraftPreview(open);
+                }}
+              >
+                <Dialog.Content size="xl" className="max-h-[90vh] flex flex-col">
+                  <Dialog.Header>
+                    <div className="flex flex-wrap items-center justify-between gap-2 pr-6">
+                      <div className="flex items-center gap-2">
+                        <Dialog.Title className="text-lg font-bold flex items-center gap-2">
+                          <Sparkles className="size-5 text-primary fill-primary/20" />
+                          AI Remediation Draft Preview
+                        </Dialog.Title>
+                        <Badge variant="surface" size="sm">Teacher Review Only</Badge>
+                      </div>
+                      <Badge variant="outline" size="sm">
+                        {draftSaveState === "saved" ? "Saved Unpublished" : "Unsaved Draft"}
+                      </Badge>
+                    </div>
+                    <Dialog.Description className="text-sm text-muted-foreground">
+                      Teacher evaluation preview grounded in verified student weaknesses and taught lessons.
+                    </Dialog.Description>
+                  </Dialog.Header>
+
+                  <div className="flex-1 space-y-4 overflow-y-auto p-4 pr-3">
+                    <Alert status="info">
+                      Review and edit this AI draft, then explicitly save it to the classwork repository.
+                      Saving keeps both the assessment and its targeted assignment unpublished and inaccessible to students.
+                    </Alert>
+
+                    {generatingDraft && (
+                      <div className="flex flex-col items-center justify-center p-8 gap-3 border-2 border-border rounded bg-card text-center">
+                        <RefreshCw className="size-8 animate-spin text-primary" />
+                        <h4 className="font-bold text-base">Generating Remediation Draft…</h4>
+                        <p className="text-sm text-muted-foreground max-w-md">
+                          Grounded in student weaknesses, eligible taught lessons, and verified learning materials.
+                        </p>
+                      </div>
+                    )}
+
+                    {!generatingDraft && generationError && (
+                      <div className="flex flex-col gap-3">
+                        <Alert status="error">
+                          <div className="flex flex-col gap-1">
+                            <strong className="font-bold">Remediation Draft Generation Failed</strong>
+                            <span>{generationError}</span>
+                          </div>
+                        </Alert>
+                        <p className="text-sm text-muted-foreground px-1">
+                          All your selected targets, readings, and manual authoring options remain preserved.
+                          You may retry generation or continue using the manual authoring builder.
+                        </p>
+                        <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="outline" onClick={() => setShowDraftPreview(false)}>
+                            Dismiss
+                          </Button>
+                          <Button size="sm" onClick={handleGenerateWithAI}>
+                            Retry Generation
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {!generatingDraft && generatedDraft && (
+                      <div className="flex flex-col gap-4">
+                        {draftSaveState === "saved" && savedAssessment && (
+                          <Alert status="success">
+                            <div className="flex flex-col gap-1 text-sm">
+                              <strong className="font-bold">Assessment draft saved</strong>
+                              <span>
+                                This assessment is unpublished and unavailable to students. Publication readiness is checked separately when you choose to publish it.
+                              </span>
+                            </div>
+                          </Alert>
+                        )}
+                        {draftSaveState === "error" && draftSaveError && (
+                          <Alert status="error">
+                            <div className="flex flex-col gap-1 text-sm">
+                              <strong className="font-bold">Assessment draft was not saved</strong>
+                              <span>{draftSaveError}</span>
+                            </div>
+                          </Alert>
+                        )}
+                        {/* Academic Treatment & Score Adjustment Context Banner */}
+                        <Card className="p-3 border-2 border-border bg-muted/20 flex flex-col gap-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                                Academic Treatment & Score Adjustment Context
+                              </span>
+                              <Badge variant="outline" size="sm">
+                                {capInput || plan.score_adjustment_cap || 75}% Cap
+                              </Badge>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              Teacher-controlled in Adjust Support
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                            <div>
+                              <span className="text-muted-foreground font-semibold block">Grade Treatment</span>
+                              <span className="font-bold">
+                                {plan.grade_treatment === "PRACTICE_ONLY"
+                                  ? "Ungraded Practice"
+                                  : componentLabel(plan.grade_treatment ?? "PRACTICE_ONLY")}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground font-semibold block">Original Target Assignment</span>
+                              <span className="font-bold">
+                                {targetAssignmentSummary}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground font-semibold block">Adjustment Cap Rule</span>
+                              <span className="font-medium text-muted-foreground">
+                                Capped at {capInput || plan.score_adjustment_cap || 75}% of original max points. The AI draft does not alter your cap.
+                              </span>
+                            </div>
+                          </div>
+                        </Card>
+
+                        {/* Draft Title, Metadata & Action Bar */}
+                        <Card className="flex flex-col gap-2 p-3 bg-muted/30">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            {isEditingDraft ? (
+                              <div className="flex flex-col gap-1 flex-1 min-w-[240px]">
+                                <Label htmlFor="draft-title-input" className="text-xs font-bold">Remediation Title</Label>
+                                <Input
+                                  id="draft-title-input"
+                                  aria-label="Remediation Title"
+                                  value={generatedDraft.title}
+                                  onChange={(e) =>
+                                    setGeneratedDraft({ ...generatedDraft, title: e.target.value })
+                                  }
+                                  className="font-bold text-base h-9"
+                                />
+                              </div>
+                            ) : (
+                              <span className="font-black text-lg">{generatedDraft.title}</span>
+                            )}
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Badge variant="solid" size="sm">
+                                {generatedDraft.draft_format}
+                              </Badge>
+                              <Badge variant="outline" size="sm">
+                                {componentLabel(generatedDraft.target_component)}
+                              </Badge>
+                              <Badge variant="surface" size="sm">
+                                {generatedDraft.total_points} Total Points
+                              </Badge>
+                              {draftValidation.isValid ? (
+                                <Badge
+                                  variant="surface"
+                                  size="sm"
+                                  className="bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold"
+                                >
+                                  Draft Complete
+                                </Badge>
+                              ) : (
+                                <Badge variant="destructive" size="sm">
+                                  {draftValidation.issues.length}{" "}
+                                  {draftValidation.issues.length === 1 ? "Incomplete Field" : "Incomplete Fields"}
+                                </Badge>
+                              )}
+                              <Button
+                                size="sm"
+                                variant={isEditingDraft ? "default" : "outline"}
+                                onClick={() => setIsEditingDraft(!isEditingDraft)}
+                                disabled={draftSaveState === "saved" || draftSaveState === "validating" || draftSaveState === "saving"}
+                                className="gap-1.5 ml-1"
+                              >
+                                <Pencil className="size-3.5" />
+                                {isEditingDraft ? "Done Editing (Preview)" : "Edit Draft"}
+                              </Button>
+                            </div>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Treatment: {generatedDraft.grade_treatment === "PRACTICE_ONLY" ? "Ungraded Practice" : componentLabel(generatedDraft.grade_treatment)}
+                            {generatedDraft.draft_format === "QUIZ" && generatedDraft.duration_minutes ? ` · ${generatedDraft.duration_minutes} mins` : ""}
+                          </p>
+                        </Card>
+
+                        {/* Incomplete Issues Alert */}
+                        {!draftValidation.isValid && isEditingDraft && (
+                          <Alert status="warning">
+                            <div className="flex flex-col gap-1 text-xs">
+                              <strong className="font-bold">Please complete the required fields:</strong>
+                              <ul className="list-disc list-inside space-y-0.5">
+                                {draftValidation.issues.slice(0, 5).map((issue, idx) => (
+                                  <li key={idx}>{issue}</li>
+                                ))}
+                                {draftValidation.issues.length > 5 && (
+                                  <li>...and {draftValidation.issues.length - 5} more issues</li>
+                                )}
+                              </ul>
+                            </div>
+                          </Alert>
+                        )}
+
+                        <Alert status="info">
+                          <div className="flex flex-col gap-1 text-xs">
+                            <strong className="font-bold">Draft completeness is not publication readiness.</strong>
+                            <span>
+                              Save runs backend preflight against the original target, maximum points, selected Readings, grade treatment, and teacher-controlled cap. Publishing remains a separate teacher action.
+                            </span>
+                          </div>
+                        </Alert>
+
+                        {generatedDraft.draft_format === "QUIZ" && (
+                          <div className="flex flex-col gap-1.5 p-3 border-2 border-border rounded bg-card">
+                            <Label className="font-bold text-sm">Question Selection Mode</Label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <Card
+                                className={`p-2.5 border-2 transition-all cursor-pointer ${
+                                  quizQuestionMode === "NEW_TARGETED"
+                                    ? "border-primary bg-primary"
+                                    : "border-border"
+                                }`}
+                                onClick={() => setQuizQuestionMode("NEW_TARGETED")}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="font-bold text-sm">Generate New Targeted Questions</span>
+                                  <Badge variant="solid" size="sm">Supported</Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Generates new practice items targeting verified weak competencies and lessons.
+                                </p>
+                              </Card>
+
+                              <Card
+                                className="p-2.5 border-2 border-border opacity-60 cursor-not-allowed bg-muted/20"
+                                aria-disabled="true"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="font-bold text-sm">Reuse Original Questions</span>
+                                  <Badge variant="outline" size="sm">Unsupported</Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Backend assessment service does not support verbatim question extraction.
+                                </p>
+                              </Card>
+                            </div>
+                          </div>
+                        )}
+
+                        {generatedDraft.draft_format === "QUIZ" && (
+                          <div className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-1">
+                              <Label htmlFor="quiz-instructions-input" className="font-bold text-sm">Student Instructions</Label>
+                              {isEditingDraft ? (
+                                <textarea
+                                  id="quiz-instructions-input"
+                                  aria-label="Student Instructions"
+                                  className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2.5 text-sm font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[70px]"
+                                  value={generatedDraft.instructions}
+                                  onChange={(e) =>
+                                    setGeneratedDraft({ ...generatedDraft, instructions: e.target.value })
+                                  }
+                                />
+                              ) : (
+                                <div className="p-3 border-2 rounded bg-background text-sm">
+                                  {generatedDraft.instructions}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center justify-between">
+                                <Label className="font-bold text-sm">
+                                  Student Questions ({generatedDraft.questions.length} items)
+                                </Label>
+                                <span className="text-xs text-muted-foreground">Answer keys separated below</span>
+                              </div>
+
+                              {generatedDraft.questions.map((q, idx) => (
+                                <Card key={q.display_order ?? idx} className="p-3 flex flex-col gap-2 border-2">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="outline" size="sm">Item {q.display_order}</Badge>
+                                      <span className="font-bold text-sm">{label(q.question_type)}</span>
+                                      {q.difficulty_level && (
+                                        <Badge variant="surface" size="sm">{q.difficulty_level}</Badge>
+                                      )}
+                                    </div>
+                                    {isEditingDraft ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <Label htmlFor={`quiz-points-${idx}`} className="text-xs font-bold">Points:</Label>
+                                        <Input
+                                          id={`quiz-points-${idx}`}
+                                          aria-label="Points:"
+                                          type="number"
+                                          min="1"
+                                          value={q.points}
+                                          onChange={(e) =>
+                                            handleUpdateQuizQuestion(idx, {
+                                              points: Math.max(1, parseInt(e.target.value, 10) || 1),
+                                            })
+                                          }
+                                          className="w-16 h-8 px-2 text-center text-xs font-bold"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs font-bold">{q.points} {q.points === 1 ? "point" : "points"}</span>
+                                    )}
+                                  </div>
+
+                                  {isEditingDraft ? (
+                                    <div className="flex flex-col gap-1">
+                                      <Label htmlFor={`quiz-prompt-${idx}`} className="text-xs font-bold">Question Prompt</Label>
+                                      <textarea
+                                        id={`quiz-prompt-${idx}`}
+                                        aria-label="Question Prompt"
+                                        className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2 text-sm font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[50px]"
+                                        value={q.question_text}
+                                        onChange={(e) =>
+                                          handleUpdateQuizQuestion(idx, { question_text: e.target.value })
+                                        }
+                                      />
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm font-medium">{q.question_text}</p>
+                                  )}
+
+                                  {q.options && q.options.length > 0 && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mt-1">
+                                      {q.options.map((opt, optIdx) => (
+                                        <div
+                                          key={opt.option_order ?? optIdx}
+                                          className="p-2 border rounded text-xs bg-muted/30 flex items-center gap-2"
+                                        >
+                                          <span className="font-bold text-muted-foreground">
+                                            {String.fromCharCode(64 + opt.option_order)}.
+                                          </span>
+                                          {isEditingDraft ? (
+                                            <Input
+                                              aria-label={`Option ${String.fromCharCode(64 + opt.option_order)}`}
+                                              value={opt.option_text}
+                                              onChange={(e) =>
+                                                handleUpdateQuizOption(idx, optIdx, e.target.value)
+                                              }
+                                              className="h-7 text-xs px-2 flex-1"
+                                            />
+                                          ) : (
+                                            <span>{opt.option_text}</span>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </Card>
+                              ))}
+                            </div>
+
+                            <Card className="flex flex-col gap-3 p-4 border-2 border-primary bg-primary/5 mt-2">
+                              <div className="flex items-center justify-between border-b pb-2">
+                                <div className="flex items-center gap-2">
+                                  <Lock className="size-4 text-primary" />
+                                  <h4 className="font-bold text-base">Teacher-Only Answer Key & Explanations</h4>
+                                </div>
+                                <Badge variant="solid" size="sm">Teacher Eyes Only</Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Never shown to students in student instructions or assignments.
+                              </p>
+
+                              <div className="flex flex-col gap-3">
+                                {generatedDraft.questions.map((q, idx) => (
+                                  <div
+                                    key={`key-${q.display_order ?? idx}`}
+                                    className="flex flex-col gap-1.5 p-3 rounded border bg-background text-xs"
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-bold text-sm">Item {q.display_order} Answer Key</span>
+                                      <span className="text-muted-foreground">
+                                        Lesson #{q.targeted_lesson_id} · Competency #{q.targeted_competency_id}
+                                      </span>
+                                    </div>
+                                    {isEditingDraft ? (
+                                      <div className="flex flex-col gap-2 mt-1">
+                                        <div className="flex flex-col gap-1">
+                                          <Label htmlFor={`quiz-correct-ans-${idx}`} className="text-xs font-semibold text-muted-foreground">Correct Answer</Label>
+                                          <Input
+                                            id={`quiz-correct-ans-${idx}`}
+                                            aria-label="Correct Answer"
+                                            value={q.teacher_answer_key.correct_answer}
+                                            onChange={(e) =>
+                                              handleUpdateQuizAnswerKey(idx, { correct_answer: e.target.value })
+                                            }
+                                            className="h-8 text-xs font-bold text-primary px-2"
+                                          />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                          <Label htmlFor={`quiz-explanation-${idx}`} className="text-xs font-semibold text-muted-foreground">Explanation</Label>
+                                          <textarea
+                                            id={`quiz-explanation-${idx}`}
+                                            aria-label="Explanation"
+                                            className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2 text-xs font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[45px]"
+                                            value={q.teacher_answer_key.explanation}
+                                            onChange={(e) =>
+                                              handleUpdateQuizAnswerKey(idx, { explanation: e.target.value })
+                                            }
+                                          />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                          <Label htmlFor={`quiz-scoring-guide-${idx}`} className="text-xs font-semibold text-muted-foreground">Scoring Guide (Optional)</Label>
+                                          <Input
+                                            id={`quiz-scoring-guide-${idx}`}
+                                            aria-label="Scoring Guide (Optional)"
+                                            value={q.teacher_answer_key.scoring_guide ?? ""}
+                                            onChange={(e) =>
+                                              handleUpdateQuizAnswerKey(idx, { scoring_guide: e.target.value })
+                                            }
+                                            className="h-8 text-xs px-2"
+                                          />
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <div>
+                                          <span className="font-semibold text-muted-foreground">Correct Answer: </span>
+                                          <span className="font-bold text-primary">{q.teacher_answer_key.correct_answer}</span>
+                                        </div>
+                                        <div>
+                                          <span className="font-semibold text-muted-foreground">Explanation: </span>
+                                          <span>{q.teacher_answer_key.explanation}</span>
+                                        </div>
+                                        {q.teacher_answer_key.scoring_guide && (
+                                          <div>
+                                            <span className="font-semibold text-muted-foreground">Scoring Guide: </span>
+                                            <span>{q.teacher_answer_key.scoring_guide}</span>
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </Card>
+                          </div>
+                        )}
+
+                        {generatedDraft.draft_format === "CLASSWORK" && (
+                          <div className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-2">
+                              <Label htmlFor="cw-overview-input" className="font-bold text-sm">Activity Overview</Label>
+                              {isEditingDraft ? (
+                                <textarea
+                                  id="cw-overview-input"
+                                  aria-label="Activity Overview"
+                                  className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2.5 text-sm font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[60px]"
+                                  value={generatedDraft.description}
+                                  onChange={(e) =>
+                                    setGeneratedDraft({ ...generatedDraft, description: e.target.value })
+                                  }
+                                />
+                              ) : (
+                                <div className="p-3 border-2 rounded bg-background text-sm">
+                                  {generatedDraft.description}
+                                </div>
+                              )}
+                              <Label htmlFor="cw-instructions-input" className="font-bold text-sm mt-1">Student Instructions</Label>
+                              {isEditingDraft ? (
+                                <textarea
+                                  id="cw-instructions-input"
+                                  aria-label="Student Instructions"
+                                  className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2.5 text-sm font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[70px]"
+                                  value={generatedDraft.student_instructions}
+                                  onChange={(e) =>
+                                    setGeneratedDraft({ ...generatedDraft, student_instructions: e.target.value })
+                                  }
+                                />
+                              ) : (
+                                <div className="p-3 border-2 rounded bg-background text-sm whitespace-pre-wrap">
+                                  {generatedDraft.student_instructions}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex flex-col gap-2">
+                              <Label className="font-bold text-sm">
+                                Step-by-Step Tasks ({generatedDraft.tasks.length} tasks)
+                              </Label>
+                              {generatedDraft.tasks.map((task, idx) => (
+                                <Card key={task.task_number ?? idx} className="p-3 flex flex-col gap-1.5 border-2">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="outline" size="sm">Task {task.task_number}</Badge>
+                                      {isEditingDraft ? (
+                                        <Input
+                                          id={`cw-task-title-${idx}`}
+                                          aria-label="Task Title"
+                                          value={task.title}
+                                          onChange={(e) =>
+                                            handleUpdateClassworkTask(idx, { title: e.target.value })
+                                          }
+                                          className="h-8 text-sm font-bold"
+                                        />
+                                      ) : (
+                                        <span className="font-bold text-sm">{task.title}</span>
+                                      )}
+                                    </div>
+                                    <span className="text-xs text-muted-foreground">
+                                      Lesson #{task.targeted_lesson_id} · Competency #{task.targeted_competency_id}
+                                    </span>
+                                  </div>
+                                  {isEditingDraft ? (
+                                    <textarea
+                                      id={`cw-task-instructions-${idx}`}
+                                      aria-label="Task Instructions"
+                                      className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2 text-sm font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[50px]"
+                                      value={task.instructions}
+                                      onChange={(e) =>
+                                        handleUpdateClassworkTask(idx, { instructions: e.target.value })
+                                      }
+                                    />
+                                  ) : (
+                                    <p className="text-sm whitespace-pre-wrap">{task.instructions}</p>
+                                  )}
+                                </Card>
+                              ))}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="font-bold text-sm">Required Deliverables</Label>
+                                <div className="flex flex-col gap-2">
+                                  {generatedDraft.deliverables.map((del, idx) => (
+                                    <Card key={idx} className="p-2.5 flex flex-col gap-1 border-2">
+                                      <div className="flex items-center justify-between">
+                                        {isEditingDraft ? (
+                                          <Input
+                                            value={del.deliverable_name}
+                                            onChange={(e) =>
+                                              handleUpdateClassworkDeliverable(idx, { deliverable_name: e.target.value })
+                                            }
+                                            className="h-7 text-xs font-bold"
+                                          />
+                                        ) : (
+                                          <span className="font-bold text-sm">{del.deliverable_name}</span>
+                                        )}
+                                        <Badge variant="surface" size="sm">{del.deliverable_type}</Badge>
+                                      </div>
+                                      {isEditingDraft ? (
+                                        <Input
+                                          value={del.description}
+                                          onChange={(e) =>
+                                            handleUpdateClassworkDeliverable(idx, { description: e.target.value })
+                                          }
+                                          className="h-7 text-xs"
+                                        />
+                                      ) : (
+                                        <p className="text-xs text-muted-foreground">{del.description}</p>
+                                      )}
+                                    </Card>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="font-bold text-sm">Supported Upload Formats</Label>
+                                <div className="p-3 border-2 rounded bg-background flex flex-col gap-2">
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {generatedDraft.supported_upload_formats.map((fmt) => (
+                                      <Badge key={fmt} variant="outline" size="sm">{fmt}</Badge>
+                                    ))}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Activity Mode: <strong>{generatedDraft.activity_mode}</strong>
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                              <Label className="font-bold text-sm">Grading Rubric Levels</Label>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {generatedDraft.rubric_levels.map((r, idx) => (
+                                  <Card key={idx} className="p-3 flex flex-col gap-1 border-2">
+                                    <div className="flex items-center justify-between">
+                                      {isEditingDraft ? (
+                                        <div className="flex items-center gap-1.5 flex-1 mr-2">
+                                          <Input
+                                            value={r.level_name}
+                                            onChange={(e) =>
+                                              handleUpdateClassworkRubricLevel(idx, { level_name: e.target.value })
+                                            }
+                                            className="h-7 text-xs font-bold flex-1"
+                                          />
+                                          <Input
+                                            type="number"
+                                            min="0"
+                                            value={r.points}
+                                            onChange={(e) =>
+                                              handleUpdateClassworkRubricLevel(idx, {
+                                                points: Math.max(0, parseInt(e.target.value, 10) || 0),
+                                              })
+                                            }
+                                            className="h-7 w-16 text-xs text-center font-bold"
+                                          />
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <span className="font-bold text-sm">{r.level_name}</span>
+                                          <Badge variant="solid" size="sm">{r.points} pts</Badge>
+                                        </>
+                                      )}
+                                    </div>
+                                    {isEditingDraft ? (
+                                      <textarea
+                                        className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2 text-xs font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[40px] mt-1"
+                                        value={r.description}
+                                        onChange={(e) =>
+                                          handleUpdateClassworkRubricLevel(idx, { description: e.target.value })
+                                        }
+                                      />
+                                    ) : (
+                                      <p className="text-xs text-muted-foreground">{r.description}</p>
+                                    )}
+                                  </Card>
+                                ))}
+                              </div>
+                            </div>
+
+                            <Card className="flex flex-col gap-3 p-4 border-2 border-primary bg-primary/5 mt-2">
+                              <div className="flex items-center justify-between border-b pb-2">
+                                <div className="flex items-center gap-2">
+                                  <Lock className="size-4 text-primary" />
+                                  <h4 className="font-bold text-base">Teacher Evaluation Guide</h4>
+                                </div>
+                                <Badge variant="solid" size="sm">Teacher Eyes Only</Badge>
+                              </div>
+
+                              <div className="flex flex-col gap-2 text-xs">
+                                <div>
+                                  <span className="font-semibold text-muted-foreground block mb-0.5">
+                                    Exemplar / Expected Response:
+                                  </span>
+                                  {isEditingDraft ? (
+                                    <textarea
+                                      className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2 text-xs font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[50px]"
+                                      value={generatedDraft.teacher_guide.exemplar_or_expected_response}
+                                      onChange={(e) =>
+                                        handleUpdateClassworkTeacherGuide({ exemplar_or_expected_response: e.target.value })
+                                      }
+                                    />
+                                  ) : (
+                                    <div className="p-2.5 rounded border bg-background whitespace-pre-wrap">
+                                      {generatedDraft.teacher_guide.exemplar_or_expected_response}
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  <span className="font-semibold text-muted-foreground block mb-0.5">
+                                    Evaluation Notes:
+                                  </span>
+                                  {isEditingDraft ? (
+                                    <textarea
+                                      className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2 text-xs font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[50px]"
+                                      value={generatedDraft.teacher_guide.evaluation_notes}
+                                      onChange={(e) =>
+                                        handleUpdateClassworkTeacherGuide({ evaluation_notes: e.target.value })
+                                      }
+                                    />
+                                  ) : (
+                                    <div className="p-2.5 rounded border bg-background whitespace-pre-wrap">
+                                      {generatedDraft.teacher_guide.evaluation_notes}
+                                    </div>
+                                  )}
+                                </div>
+                                {generatedDraft.teacher_guide.common_misconceptions?.length > 0 && (
+                                  <div>
+                                    <span className="font-semibold text-muted-foreground block mb-0.5">
+                                      Common Misconceptions:
+                                    </span>
+                                    {isEditingDraft ? (
+                                      <textarea
+                                        className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2 text-xs font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[50px]"
+                                        value={generatedDraft.teacher_guide.common_misconceptions.join("\n")}
+                                        onChange={(e) =>
+                                          handleUpdateClassworkTeacherGuide({
+                                            common_misconceptions: e.target.value.split("\n").filter(Boolean),
+                                          })
+                                        }
+                                      />
+                                    ) : (
+                                      <ul className="list-disc list-inside p-2.5 rounded border bg-background space-y-0.5">
+                                        {generatedDraft.teacher_guide.common_misconceptions.map((m, i) => (
+                                          <li key={i}>{m}</li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </Card>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <Dialog.Footer className="mt-0 justify-between items-center sm:justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        Score Cap: <strong>{capInput || plan.score_adjustment_cap || 75}%</strong> · Draft publishing in PR 2D.2
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {generatedDraft && !generatingDraft && (
+                        <Button
+                          size="sm"
+                          variant={isEditingDraft ? "default" : "outline"}
+                          onClick={() => setIsEditingDraft(!isEditingDraft)}
+                          disabled={draftSaveState === "saved" || draftSaveState === "validating" || draftSaveState === "saving"}
+                          className="gap-1.5"
+                        >
+                          <Pencil className="size-3.5" />
+                          {isEditingDraft ? "Done Editing (Preview)" : "Edit Draft"}
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowDraftPreview(false)}
+                        disabled={generatingDraft}
+                      >
+                        Close Preview
+                      </Button>
+                      {savedAssessment ? (
+                        <Button
+                          size="sm"
+                          onClick={() => navigate(`/teacher/classworks/${savedAssessment.classwork_id}`)}
+                          className="gap-1.5"
+                        >
+                          <ExternalLink className="size-3.5" />
+                          Open Saved Assessment
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => void handleSaveAssessmentDraft()}
+                          disabled={
+                            generatingDraft ||
+                            !generatedDraft ||
+                            !draftValidation.isValid ||
+                            draftSaveState === "validating" ||
+                            draftSaveState === "saving"
+                          }
+                          className="gap-1.5"
+                        >
+                          {draftSaveState === "validating" || draftSaveState === "saving" ? (
+                            <RefreshCw className="size-3.5 animate-spin" />
+                          ) : (
+                            <Save className="size-3.5" />
+                          )}
+                          {draftSaveState === "validating"
+                            ? "Validating Draft..."
+                            : draftSaveState === "saving"
+                              ? "Saving Draft..."
+                              : "Save Assessment Draft"}
+                        </Button>
+                      )}
+                    </div>
+                  </Dialog.Footer>
+                </Dialog.Content>
+              </Dialog>
+
               <div className="flex flex-col gap-1">
                 <h3 className="font-black">Remediation Activity</h3>
                 <Card className="flex flex-col gap-2">
@@ -2166,6 +3354,7 @@ const InterventionSupportMaterials = forwardRef<
                     {methods.map((method) => {
                       const isSelected = plan.teacher_choice === method.value;
                       const isAiRecommended =
+                        method.aiRecommendable &&
                         plan.ai_suggestion?.recommended_format === method.value;
                       const selectMethod = () => {
                         if (working) return;
@@ -2231,47 +3420,64 @@ const InterventionSupportMaterials = forwardRef<
                     </Label>
                     {assigned.length > 0 ? (
                       <div className="flex flex-col gap-2">
-                        {assigned.map((item) => (
-                          <ClassworkItemLine
-                            key={item.assignment_id}
-                            className="border-2! shadow-none!"
-                            size="sm"
-                            item={{
-                              classwork_id: item.classwork_id ?? item.assignment_id,
-                              title: item.title,
-                              classwork_type:
-                                item.classwork_type ??
-                                (plan.teacher_choice === "QUIZ" ? "QUIZ" : "ASSIGNMENT"),
-                            }}
-                            showPublicationStatus={false}
-                            showCategory={false}
-                            showType={false}
-                            rightContent={
-                              <div className="flex items-center gap-2">
-                                {item.grade != null && item.total_points != null && (
-                                  <span className="text-xs font-bold">
-                                    {item.grade}
-                                    <span className="font-medium text-muted-foreground text-xs">
-                                      {" "}
-                                      / {item.total_points}
-                                    </span>
+                        {assigned.map((item) => {
+                          const classworkId = item.classwork_id ?? item.assignment_id;
+                          const isPublished = item.is_published === true;
+                          return (
+                            <Card key={item.assignment_id} className="flex flex-col gap-3 border-2 p-3 shadow-none">
+                              <ClassworkItemLine
+                                className="border-0! p-0 shadow-none! hover:translate-x-0"
+                                size="sm"
+                                item={{
+                                  classwork_id: classworkId,
+                                  title: item.title,
+                                  classwork_type:
+                                    item.classwork_type ??
+                                    (plan.teacher_choice === "QUIZ" ? "QUIZ" : "ASSIGNMENT"),
+                                  classwork_category: item.component,
+                                  total_points: item.total_points,
+                                  is_published: isPublished,
+                                }}
+                                showPublicationStatus
+                                showCategory
+                                showType
+                                rightContent={item.total_points != null ? (
+                                  <span className="text-xs font-bold whitespace-nowrap">
+                                    {item.total_points} points
                                   </span>
-                                )}
-                                <Badge variant="surface" size="sm">
-                                  {item.classwork_type ? label(item.classwork_type) : "Assignment"}
-                                </Badge>
-                                {item.submission_status && (
-                                  <Badge
-                                    variant={item.submission_status === "graded" ? "solid" : "outline"}
-                                    size="sm"
-                                  >
-                                    {label(item.submission_status)}
-                                  </Badge>
-                                )}
+                                ) : undefined}
+                              />
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-border pt-2 text-xs">
+                                <span className="text-muted-foreground">
+                                  Original: <strong className="text-foreground">{item.original_title ?? targetAssignmentSummary}</strong>
+                                  {" · "}Cap: <strong className="text-foreground">{plan.score_adjustment_cap ?? 75}%</strong>
+                                </span>
+                                <span className="font-semibold text-muted-foreground">
+                                  {isPublished ? "Published" : "Unpublished"}
+                                </span>
                               </div>
-                            }
-                          />
-                        ))}
+                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => navigate(`/teacher/classworks/${classworkId}`)}
+                                  className="gap-1.5"
+                                >
+                                  <Eye className="size-4" />
+                                  View Assessment
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => navigate(`/teacher/classworks/${classworkId}?edit=1`)}
+                                  className="gap-1.5"
+                                >
+                                  <Pencil className="size-4" />
+                                  Edit Assessment
+                                </Button>
+                              </div>
+                            </Card>
+                          );
+                        })}
                       </div>
                     ) : (
                       <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
@@ -2291,9 +3497,21 @@ const InterventionSupportMaterials = forwardRef<
                       </Empty>
                     )}
 
-                    {plan.teacher_choice !== "EXISTING_MATERIAL_ONLY" && (
-                      <div className="flex flex-row w-full justify-end mt-2">
-                        <Button disabled={continueDisabled} onClick={openTool} size="sm" className="gap-2">
+                    {assigned.length === 0 && plan.teacher_choice !== "EXISTING_MATERIAL_ONLY" && (
+                      <div className="flex flex-row flex-wrap w-full justify-end items-center gap-2 mt-2">
+                        {(plan.teacher_choice === "QUIZ" || plan.teacher_choice === "CLASSWORK") && (
+                          <Button
+                            disabled={continueDisabled || working || generatingDraft}
+                            onClick={handleGenerateWithAI}
+                            size="sm"
+                            variant="outline"
+                            className="gap-2"
+                          >
+                            <Sparkles className="size-4" />
+                            Generate with AI
+                          </Button>
+                        )}
+                        <Button disabled={continueDisabled || working || generatingDraft} onClick={openTool} size="sm" className="gap-2">
                           Continue to{" "}
                           {plan.teacher_choice === "QUIZ"
                             ? "Quiz Builder"
@@ -2418,7 +3636,7 @@ const InterventionSupportMaterials = forwardRef<
                               Targeted {componentLabel(plan.grade_treatment)} {chosenActivities.length > 1 ? "Classworks" : "Classwork"}
                             </Label>
                             <Badge variant={capError ? "destructive" : "surface"} size="sm">
-                              {capError ? "Invalid Cap" : `${capInput ? capInput : "75"}%`}
+                              {capError ? "Invalid Cap" : `${capInput ? capInput : "75"}% Cap`}
                             </Badge>
                           </div>
                           {chosenActivities.length > 0 && (

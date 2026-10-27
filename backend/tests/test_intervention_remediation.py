@@ -15,7 +15,7 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.intervention.Intervention import Intervention
 from app.services.ai.UsageGuard import actor
 from app.services.intervention.InterventionRemediationService import (
-    PlanUpdate, generate_advisory, get_workspace, save_plan,
+    PlanUpdate, _advisory_options, generate_advisory, get_workspace, save_plan,
 )
 from tests.test_intervention_support_materials import _activate, _http
 from tests.test_teacher_intervention_review import candidate_context, _id, _other_staff, _staff
@@ -73,18 +73,25 @@ def test_advisory_uses_provider_and_keeps_teacher_choice(candidate_context, monk
     _activate(ctx)
     save_plan(db, _staff(ctx), _id(ctx), PlanUpdate(teacher_choice="CLASSWORK"))
     monkeypatch.setattr(settings, "groq_api_key", "test-key")
+    selected = {}
     async def fake(prompt, system_prompt, **kwargs):
         assert actor.get() == _staff(ctx)
-        assert set(json.loads(prompt)) == {"evidence", "deterministic_focus"}
+        payload = json.loads(prompt)
+        assert set(payload) == {"evidence", "deterministic_focus", "eligible_recommendations"}
         assert kwargs["json_output"] is True
-        return json.dumps({"recommended_format": "QUIZ", "reason": "Focused practice may support the measured component."})
+        selected.update(payload["eligible_recommendations"][0])
+        return json.dumps({
+            **selected,
+            "reason": "Focused practice may support the measured component.",
+        })
     monkeypatch.setattr("app.services.ai.Provider.generate_text", fake)
     token = actor.set(_staff(ctx))
     try:
         result = asyncio.run(generate_advisory(db, _staff(ctx), _id(ctx)))
     finally:
         actor.reset(token)
-    assert result["plan"]["ai_suggestion"]["recommended_format"] == "QUIZ"
+    assert result["plan"]["ai_suggestion"]["recommended_format"] == selected["recommended_format"]
+    assert result["plan"]["ai_suggestion"]["recommended_grade_treatment"] == selected["recommended_grade_treatment"]
     assert result["plan"]["teacher_choice"] == "CLASSWORK"
     assert result["plan"]["ai_suggestion"]["evidence_used"]["source_prediction_id"] == ctx["candidate"].source_prediction_id
 
@@ -114,20 +121,38 @@ def test_changing_selected_resources_invalidates_saved_advisory(candidate_contex
     assert saved["plan"]["ai_suggestion"] is None
 
 
-def test_groq_required_before_provider_call(candidate_context, monkeypatch):
+def test_configured_provider_required_before_provider_call(candidate_context, monkeypatch):
     ctx = candidate_context; _activate(ctx)
     monkeypatch.setattr(settings, "groq_api_key", None)
+    monkeypatch.setattr(settings, "gemini_api_key", None)
     with patch("app.services.ai.Provider.generate_text") as provider, pytest.raises(HTTPException) as exc:
         asyncio.run(generate_advisory(ctx["db"], _staff(ctx), _id(ctx)))
     assert exc.value.status_code == 503
     provider.assert_not_called()
 
 
+def test_gemini_only_configuration_can_generate_advisory(candidate_context, monkeypatch):
+    ctx = candidate_context; _activate(ctx)
+    monkeypatch.setattr(settings, "groq_api_key", None)
+    monkeypatch.setattr(settings, "gemini_api_key", "test-gemini-key")
+    async def fake(prompt, *_args, **_kwargs):
+        recommendation = json.loads(prompt)["eligible_recommendations"][0]
+        return json.dumps({
+            **recommendation,
+            "reason": "Focused practice may support the measured component.",
+        })
+
+    monkeypatch.setattr("app.services.ai.Provider.generate_text", fake)
+    result = asyncio.run(generate_advisory(ctx["db"], _staff(ctx), _id(ctx)))
+    assert result["plan"]["ai_suggestion"]["recommended_format"] in {"QUIZ", "CLASSWORK"}
+
+
 def test_advisory_rejects_unverified_weakness_claim(candidate_context, monkeypatch):
     ctx = candidate_context; _activate(ctx)
     monkeypatch.setattr(settings, "groq_api_key", "test-key")
     async def unsupported(*_args, **_kwargs):
-        return json.dumps({"recommended_format": "QUIZ", "reason": "The student is weak in an unmeasured topic."})
+        return json.dumps({"recommended_format": "QUIZ", "recommended_grade_treatment": "PRACTICE_ONLY",
+                           "reason": "The student is weak in an unmeasured topic."})
     monkeypatch.setattr("app.services.ai.Provider.generate_text", unsupported)
     with pytest.raises(HTTPException) as exc:
         asyncio.run(generate_advisory(ctx["db"], _staff(ctx), _id(ctx)))
@@ -145,6 +170,7 @@ def test_advisory_allows_verified_component_level_method_reason(candidate_contex
     async def component_only(*_args, **_kwargs):
         return json.dumps({
             "recommended_format": "CLASSWORK",
+            "recommended_grade_treatment": focus["component"],
             "reason": f"Structured practice supports the verified weakest {component} grading component.",
         })
 
@@ -159,13 +185,104 @@ def test_advisory_cannot_invent_exam_subtype(candidate_context, monkeypatch):
     ctx = candidate_context; _activate(ctx)
     monkeypatch.setattr(settings, "groq_api_key", "test-key")
     async def invented(*_args, **_kwargs):
-        return json.dumps({"recommended_format": "QUIZ", "reason": "General practice may help the student.",
+        return json.dumps({"recommended_format": "QUIZ", "recommended_grade_treatment": "PRACTICE_ONLY",
+                           "reason": "General practice may help the student.",
                            "exam_subtype": "TERM_EXAM"})
     monkeypatch.setattr("app.services.ai.Provider.generate_text", invented)
     with pytest.raises(HTTPException) as exc:
         asyncio.run(generate_advisory(ctx["db"], _staff(ctx), _id(ctx)))
     assert exc.value.status_code == 502
     assert ctx["db"].get(Intervention, _id(ctx)).remediation_plan is None
+
+
+def test_advisory_options_follow_verified_component_mappings():
+    written = _advisory_options({"component": "WRITTEN_WORK"}, [], False)
+    performance = _advisory_options({"component": "PERFORMANCE_TASK"}, [], False)
+    examination_unconfirmed = _advisory_options(
+        {"component": "EXAMINATION", "exam_subtype": None}, [], False,
+    )
+    examination_confirmed = _advisory_options(
+        {"component": "EXAMINATION", "exam_subtype": "TERM_EXAM"},
+        [{"subtype": "TERM_EXAM"}],
+        True,
+    )
+
+    assert {tuple(item.values()) for item in written} == {
+        ("QUIZ", "WRITTEN_WORK"), ("QUIZ", "PRACTICE_ONLY"),
+        ("CLASSWORK", "WRITTEN_WORK"), ("CLASSWORK", "PRACTICE_ONLY"),
+    }
+    assert performance == [
+        {"recommended_format": "CLASSWORK", "recommended_grade_treatment": "PERFORMANCE_TASK"},
+        {"recommended_format": "CLASSWORK", "recommended_grade_treatment": "PRACTICE_ONLY"},
+    ]
+    assert examination_unconfirmed == [
+        {"recommended_format": "QUIZ", "recommended_grade_treatment": "PRACTICE_ONLY"},
+    ]
+    assert {tuple(item.values()) for item in examination_confirmed} == {
+        ("QUIZ", "EXAMINATION"), ("QUIZ", "PRACTICE_ONLY"),
+        ("EXISTING_MATERIAL_ONLY", None),
+    }
+
+
+def test_advisory_rejects_tos_and_incompatible_component_mapping(candidate_context, monkeypatch):
+    ctx = candidate_context; _activate(ctx)
+    monkeypatch.setattr(settings, "groq_api_key", "test-key")
+
+    async def tos(*_args, **_kwargs):
+        return json.dumps({
+            "recommended_format": "TOS",
+            "recommended_grade_treatment": None,
+            "reason": "A blueprint may support teacher planning.",
+        })
+
+    monkeypatch.setattr("app.services.ai.Provider.generate_text", tos)
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(generate_advisory(ctx["db"], _staff(ctx), _id(ctx)))
+    assert exc.value.status_code == 502
+    assert "non-assignable" in exc.value.detail
+
+    component = get_workspace(ctx["db"], _staff(ctx), _id(ctx))["focus"]["component"]
+    incompatible_format = "QUIZ" if component == "PERFORMANCE_TASK" else "CLASSWORK"
+    incompatible_treatment = "WRITTEN_WORK" if component != "WRITTEN_WORK" else "PERFORMANCE_TASK"
+
+    async def incompatible(*_args, **_kwargs):
+        return json.dumps({
+            "recommended_format": incompatible_format,
+            "recommended_grade_treatment": incompatible_treatment,
+            "reason": "Structured practice may support the measured component.",
+        })
+
+    monkeypatch.setattr("app.services.ai.Provider.generate_text", incompatible)
+    with pytest.raises(HTTPException) as mismatch:
+        asyncio.run(generate_advisory(ctx["db"], _staff(ctx), _id(ctx)))
+    assert mismatch.value.status_code == 502
+    assert "incompatible" in mismatch.value.detail
+
+
+def test_advisory_failure_and_malformed_output_preserve_manual_plan(candidate_context, monkeypatch):
+    ctx = candidate_context; _activate(ctx)
+    monkeypatch.setattr(settings, "groq_api_key", "test-key")
+    save_plan(ctx["db"], _staff(ctx), _id(ctx), PlanUpdate(teacher_choice="TOS"))
+
+    async def unavailable(*_args, **_kwargs):
+        raise HTTPException(429, "AI provider rate limit reached")
+
+    monkeypatch.setattr("app.services.ai.Provider.generate_text", unavailable)
+    with pytest.raises(HTTPException) as provider_error:
+        asyncio.run(generate_advisory(ctx["db"], _staff(ctx), _id(ctx)))
+    assert provider_error.value.status_code == 429
+    assert get_workspace(ctx["db"], _staff(ctx), _id(ctx))["plan"]["teacher_choice"] == "TOS"
+
+    async def malformed(*_args, **_kwargs):
+        return "not-json"
+
+    monkeypatch.setattr("app.services.ai.Provider.generate_text", malformed)
+    with pytest.raises(HTTPException) as invalid:
+        asyncio.run(generate_advisory(ctx["db"], _staff(ctx), _id(ctx)))
+    assert invalid.value.status_code == 502
+    plan = get_workspace(ctx["db"], _staff(ctx), _id(ctx))["plan"]
+    assert plan["teacher_choice"] == "TOS"
+    assert plan["ai_suggestion"] is None
 
 
 def test_http_teacher_only_and_candidate_rejected(candidate_context):

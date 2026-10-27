@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Award, BookOpen, CheckSquare, ClipboardList, FileText, Plus, Repeat, X, type LucideIcon } from "lucide-react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -19,6 +19,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { Text } from "@/components/retroui/Text";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Alert } from "@/components/retroui/Alert";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
 import ClassworkDetailModal from "./forms/classwork-preview-modal";
@@ -32,6 +33,13 @@ import TeacherLessonDetailScreen from "./lesson-view";
 import { RepostModal } from "@/components/teacher/repost-modal";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import TOSGeneratorScreen from "./subject-details/tos-generator-screen";
+import {
+  fetchClassSubjectDeliveries,
+  confirmLessonDelivery,
+  correctLessonDelivery,
+  type LessonDeliveryRecord,
+} from "@/lib/lesson-delivery-api";
+import LessonDeliveryCorrectionModal from "./forms/lesson-delivery-correction-modal";
 import {
   LOCKED_CLASSWORK_MESSAGE,
 } from "./subject-details/constants";
@@ -87,7 +95,7 @@ export default function SubjectDetails() {
     classId: string;
     subjectId: string;
   }>();
-  const { selectedPeriodId } = useAcademicPeriod();
+  const { selectedPeriodId, periods } = useAcademicPeriod();
   const [isRepostModalOpen, setIsRepostModalOpen] = useState(false);
   const [competencies, setCompetencies] = useState<CompetencyItem[]>([]);
   const [isCompetencyModalOpen, setIsCompetencyModalOpen] = useState(false);
@@ -130,10 +138,15 @@ export default function SubjectDetails() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   void isLoading;
+  const [deliveriesByLessonId, setDeliveriesByLessonId] = useState<Record<number, LessonDeliveryRecord>>({});
+  const [deliveryLoadingLessonId, setDeliveryLoadingLessonId] = useState<number | null>(null);
+  const [correctionTargetLesson, setCorrectionTargetLesson] = useState<Lesson | null>(null);
+  const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
 
   const refreshSubjectData = async () => {
     if (!classId || !subjectId) return;
     try {
+      void loadDeliveries();
       const [lessonsRes, compsRes] = await Promise.all([
         apiFetch(`/api/v1/lessons/my-class/${classId}/subject/${subjectId}`),
         apiFetch(`/api/v1/competencies/subject/${subjectId}`),
@@ -413,6 +426,112 @@ export default function SubjectDetails() {
         load.subject_id === Number(subjectId),
     );
   }, [classId, loads, subjectId]);
+
+  const effectivePeriodId = useMemo(() => {
+    if (selectedPeriodId) return Number(selectedPeriodId);
+    const active = periods.find((p) => p.is_active);
+    if (active) return active.id;
+    if (periods.length > 0) return periods[0].id;
+    return subjectLoad?.academic_period_id || null;
+  }, [selectedPeriodId, periods, subjectLoad?.academic_period_id]);
+
+  const loadDeliveries = useCallback(async () => {
+    if (!classId || !subjectId || !effectivePeriodId) return;
+    try {
+      const records = await fetchClassSubjectDeliveries(
+        Number(classId),
+        Number(subjectId),
+        effectivePeriodId,
+      );
+      const map: Record<number, LessonDeliveryRecord> = {};
+      records.forEach((rec) => {
+        if (rec.is_active) {
+          map[rec.lesson_id] = rec;
+        }
+      });
+      setDeliveriesByLessonId(map);
+    } catch (err) {
+      console.warn("Failed to load lesson delivery records:", err);
+    }
+  }, [classId, subjectId, effectivePeriodId]);
+
+  useEffect(() => {
+    void loadDeliveries();
+  }, [loadDeliveries]);
+
+  const handleConfirmDelivery = async (lesson: Lesson) => {
+    if (!classId || !subjectId || !effectivePeriodId) {
+      setError("Academic period context is missing. Please select an academic term.");
+      return;
+    }
+    setDeliveryLoadingLessonId(lesson.lesson_id);
+    setError("");
+    try {
+      const delivery = await confirmLessonDelivery({
+        lesson_id: lesson.lesson_id,
+        class_id: Number(classId),
+        subject_id: Number(subjectId),
+        academic_period_id: effectivePeriodId,
+      });
+      setDeliveriesByLessonId((prev) => ({
+        ...prev,
+        [lesson.lesson_id]: delivery,
+      }));
+      setLessons((prev) =>
+        prev.map((l) =>
+          l.lesson_id === lesson.lesson_id
+            ? { ...l, delivery, is_taught: true }
+            : l,
+        ),
+      );
+      if (activeLessonDetail && activeLessonDetail.lesson_id === lesson.lesson_id) {
+        setActiveLessonDetail((prev) =>
+          prev ? { ...prev, delivery, is_taught: true } : null,
+        );
+      }
+      toast.success(`Lesson "${lesson.title}" confirmed as taught.`);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to confirm lesson delivery.",
+      );
+    } finally {
+      setDeliveryLoadingLessonId(null);
+    }
+  };
+
+  const openCorrectionDialog = (lesson: Lesson) => {
+    setCorrectionTargetLesson(lesson);
+    setIsCorrectionModalOpen(true);
+  };
+
+  const handleConfirmCorrection = async (deliveryId: number, reason: string) => {
+    if (!correctionTargetLesson) return;
+    const lessonId = correctionTargetLesson.lesson_id;
+    setDeliveryLoadingLessonId(lessonId);
+    try {
+      const updatedDelivery = await correctLessonDelivery(deliveryId, { reason });
+      setDeliveriesByLessonId((prev) => {
+        const next = { ...prev };
+        delete next[lessonId];
+        return next;
+      });
+      setLessons((prev) =>
+        prev.map((l) =>
+          l.lesson_id === lessonId
+            ? { ...l, delivery: updatedDelivery, is_taught: false }
+            : l,
+        ),
+      );
+      if (activeLessonDetail && activeLessonDetail.lesson_id === lessonId) {
+        setActiveLessonDetail((prev) =>
+          prev ? { ...prev, delivery: updatedDelivery, is_taught: false } : null,
+        );
+      }
+      toast.success("Lesson delivery confirmation corrected.");
+    } finally {
+      setDeliveryLoadingLessonId(null);
+    }
+  };
 
   const subjectName = subjectLoad?.subject_name || "Subject";
   const sectionName = subjectLoad?.section_name;
@@ -815,13 +934,14 @@ export default function SubjectDetails() {
             {activeLessonDetail ? (
               <>
                 {error && (
-                  <div className="mx-3 mt-3 sm:mx-4 md:mx-6 rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    {error}
-                  </div>
+                  <Alert status="error" onClose={() => setError("")} className="mx-3 mt-3 sm:mx-4 md:mx-6">
+                    <Alert.Description>{error}</Alert.Description>
+                  </Alert>
                 )}
                 <TeacherLessonDetailScreen
                   lesson={activeLessonDetail}
                   subjectName={subjectName}
+                  sectionName={sectionName}
                   closeLessonDetail={closeLessonDetail}
                   openLessonManager={openLessonManager}
                   openClassworkForm={openClassworkForm}
@@ -833,6 +953,21 @@ export default function SubjectDetails() {
                   isLoadingClasswork={
                     loadingClassworkId === activeLessonDetail.lesson_id
                   }
+                  delivery={
+                    deliveriesByLessonId[activeLessonDetail.lesson_id] ||
+                    activeLessonDetail.delivery ||
+                    null
+                  }
+                  isDelivered={Boolean(
+                    activeLessonDetail.is_taught ??
+                      (deliveriesByLessonId[activeLessonDetail.lesson_id]?.is_active ||
+                        activeLessonDetail.delivery?.is_active),
+                  )}
+                  isDeliveryLoading={
+                    deliveryLoadingLessonId === activeLessonDetail.lesson_id
+                  }
+                  onConfirmDelivery={handleConfirmDelivery}
+                  onOpenCorrectionDialog={openCorrectionDialog}
                 />
               </>
             ) : isTOSOpen && subjectId ? (
@@ -945,9 +1080,9 @@ export default function SubjectDetails() {
 
                 <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
                   {error && (
-                    <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
-                      {error}
-                    </div>
+                    <Alert status="error" onClose={() => setError("")}>
+                      <Alert.Description>{error}</Alert.Description>
+                    </Alert>
                   )}
 
                   <SubjectClassHeader
@@ -998,6 +1133,10 @@ export default function SubjectDetails() {
                       overviewCompletion={overviewCompletion}
                       classId={classId}
                       subjectId={subjectId}
+                      deliveriesByLessonId={deliveriesByLessonId}
+                      deliveryLoadingLessonId={deliveryLoadingLessonId}
+                      onConfirmDelivery={handleConfirmDelivery}
+                      onOpenCorrectionDialog={openCorrectionDialog}
                     />
                   )}
                 </div>
@@ -1224,6 +1363,33 @@ export default function SubjectDetails() {
                 onClonedSuccess={() => {
                   void refreshSubjectData();
                 }}
+              />
+            )}
+
+            {/* ── Lesson Delivery Correction Modal ── */}
+            {isCorrectionModalOpen && (
+              <LessonDeliveryCorrectionModal
+                open={isCorrectionModalOpen}
+                onOpenChange={(open) => {
+                  setIsCorrectionModalOpen(open);
+                  if (!open) setCorrectionTargetLesson(null);
+                }}
+                deliveryId={
+                  correctionTargetLesson
+                    ? (deliveriesByLessonId[correctionTargetLesson.lesson_id]?.delivery_id ||
+                       correctionTargetLesson.delivery?.delivery_id ||
+                       null)
+                    : null
+                }
+                lessonTitle={correctionTargetLesson?.title}
+                deliveredAt={
+                  correctionTargetLesson
+                    ? (deliveriesByLessonId[correctionTargetLesson.lesson_id]?.delivered_at ||
+                       correctionTargetLesson.delivery?.delivered_at ||
+                       null)
+                    : null
+                }
+                onConfirmCorrection={handleConfirmCorrection}
               />
             )}
           </div>

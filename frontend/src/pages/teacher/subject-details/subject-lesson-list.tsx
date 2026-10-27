@@ -47,6 +47,7 @@ import {
 import { IconContainer } from "@/components/icon-container";
 
 import type { CompetencyItem, Lesson, LinkedClasswork } from "./types";
+import type { LessonDeliveryRecord } from "@/lib/lesson-delivery-api";
 
 type SubjectLessonListProps = {
   lessonSearch: string;
@@ -80,6 +81,11 @@ type SubjectLessonListProps = {
   // Subject & Class context
   classId?: string | number;
   subjectId?: string | number;
+  // Lesson delivery additions
+  deliveriesByLessonId?: Record<number, LessonDeliveryRecord>;
+  deliveryLoadingLessonId?: number | null;
+  onConfirmDelivery?: (lesson: Lesson) => Promise<void> | void;
+  onOpenCorrectionDialog?: (lesson: Lesson) => void;
 };
 
 export default function SubjectLessonList({
@@ -109,6 +115,10 @@ export default function SubjectLessonList({
   overviewCompletion = 0,
   classId,
   subjectId,
+  deliveriesByLessonId = {},
+  deliveryLoadingLessonId = null,
+  onConfirmDelivery,
+  onOpenCorrectionDialog,
 }: SubjectLessonListProps) {
   const navigate = useNavigate();
   const [internalCompetencyFilter, setInternalCompetencyFilter] = useState("all");
@@ -220,6 +230,9 @@ export default function SubjectLessonList({
         !quarterlyIds.has(cw.classwork_assignment_id),
     );
     const isLoadingCw = loadingClassworkId === lesson.lesson_id;
+    const delivery = deliveriesByLessonId[lesson.lesson_id] || lesson.delivery || null;
+    const isDelivered = Boolean(lesson.is_taught ?? delivery?.is_active);
+    const isDeliveryLoading = deliveryLoadingLessonId === lesson.lesson_id;
 
     return (
       <LessonItemLine
@@ -235,6 +248,11 @@ export default function SubjectLessonList({
         onOpenLessonManager={openLessonManager}
         onArchiveLesson={() => setLessonToArchive(lesson)}
         withShadow={false}
+        delivery={delivery}
+        isDelivered={isDelivered}
+        isDeliveryLoading={isDeliveryLoading}
+        onConfirmDelivery={onConfirmDelivery}
+        onOpenCorrectionDialog={onOpenCorrectionDialog}
       />
     );
   };

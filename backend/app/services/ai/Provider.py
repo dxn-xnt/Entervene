@@ -209,6 +209,26 @@ async def generate_text(prompt: str, system_prompt: str, *, json_output: bool = 
         logger.error("AI provider timeout type=%s", type(exc).__name__)
         await run_in_threadpool(record_failure)
         raise HTTPException(504, "AI generation timed out. No automatic retry was made.") from None
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        logger.error("AI provider HTTP failure status=%s", status)
+        await run_in_threadpool(record_failure)
+        if status == 429:
+            retry_after = exc.response.headers.get("Retry-After")
+            headers = {"Retry-After": retry_after} if retry_after else None
+            raise HTTPException(
+                429,
+                "AI provider rate limit reached. Continue with manual authoring or try again later.",
+                headers=headers,
+            ) from None
+        if status == 408:
+            raise HTTPException(504, "AI generation timed out. No automatic retry was made.") from None
+        if status in {401, 403} or status >= 500:
+            raise HTTPException(
+                503,
+                "AI provider is unavailable. Continue with manual authoring or try again later.",
+            ) from None
+        raise HTTPException(502, "AI provider rejected the request. No automatic retry was made.") from None
     except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as exc:
         logger.error("AI provider call failed type=%s", type(exc).__name__)
         await run_in_threadpool(record_failure)

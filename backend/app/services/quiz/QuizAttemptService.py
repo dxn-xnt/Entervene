@@ -482,6 +482,7 @@ def _attempt_question_out(
                 is_correct=option.is_correct if reveal_answers else None,
             )
             for option in sorted(question.options, key=lambda item: item.option_order)
+            if question.question_type == "MULTIPLE_CHOICE"
         ],
         answer_text=answer.answer_text if answer and include_student_answer else None,
         selected_option_id=selected_option_id,
