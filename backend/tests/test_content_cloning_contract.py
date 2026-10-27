@@ -76,6 +76,7 @@ from app.models.cloning.ContentCloning import (
 )
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
+from app.models.notifications.Notification import Notification
 from app.schemas.ContentCloning import (
     ContentSelectionItem,
     OwnerEligibleMaterialItem,
@@ -175,6 +176,7 @@ TABLES = [
     ContentCloneOperation.__table__,
     ContentCloneItemMap.__table__,
     ContentShareEvent.__table__,
+    Notification.__table__,
 ]
 
 
@@ -1020,7 +1022,7 @@ def test_package_preview_schema_includes_safe_titles_and_hides_private_data():
 # ── PR B Test Suite: Teacher Content Selection, Immutable Packages, Lifecycle ──
 
 
-def _create_pr_b_fixture(db: Session, scenario: dict):
+def _create_pr_b_fixture(db: Session, scenario: dict, include_remedial: bool = True):
     """Sets up owned instructional materials (Competency, Lesson, Classwork with Rubric & Quiz, Attachments)
     and a pending ContentShareRequest from REQ to OWNER."""
     # 1. Lesson for OWNER
@@ -1107,24 +1109,25 @@ def _create_pr_b_fixture(db: Session, scenario: dict):
     db.add(QuizQuestion(quiz_id=quiz.quiz_id, question_id=question.question_id, display_order=1))
 
     # 3. Remedial Classwork (MUST BE EXCLUDED)
-    remedial_cw = Classwork(
-        classwork_id=30,
-        title="Targeted Remedial Support",
-        classwork_type="ASSIGNMENT",
-        subject_id=5,
-        created_by_staff_id="OWNER",
-    )
-    db.add(remedial_cw)
-    db.flush()
-    db.add(ClassworkAssignment(
-        classwork_id=remedial_cw.classwork_id,
-        class_id=10,
-        academic_period_id=11,
-        assigned_by_staff_id="OWNER",
-        recipient_student_id=uuid.uuid4(),  # Learner targeted!
-        source_intervention_id=999,
-        remediation_request_id=uuid.uuid4(),
-    ))
+    if include_remedial:
+        remedial_cw = Classwork(
+            classwork_id=30,
+            title="Targeted Remedial Support",
+            classwork_type="ASSIGNMENT",
+            subject_id=5,
+            created_by_staff_id="OWNER",
+        )
+        db.add(remedial_cw)
+        db.flush()
+        db.add(ClassworkAssignment(
+            classwork_id=remedial_cw.classwork_id,
+            class_id=10,
+            academic_period_id=11,
+            assigned_by_staff_id="OWNER",
+            recipient_student_id=uuid.uuid4(),  # Learner targeted!
+            source_intervention_id=999,
+            remediation_request_id=uuid.uuid4(),
+        ))
 
     # 4. Request from REQ to OWNER
     req, _ = ContentCloningRequestService.create_request(
@@ -1778,7 +1781,7 @@ def test_staged_attachments_and_snapshots_cannot_be_accessed_publicly_or_leaked(
 
 
 def _send_full_clone_package(db: Session, scenario: dict):
-    request = _create_pr_b_fixture(db, scenario)
+    request = _create_pr_b_fixture(db, scenario, include_remedial=False)
     source_lesson = db.get(Lesson, 10)
     source_lesson.competency_id = 1
     source_work = db.get(Classwork, 20)

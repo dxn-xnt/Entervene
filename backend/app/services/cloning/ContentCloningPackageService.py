@@ -906,13 +906,14 @@ class ContentCloningPackageService:
             expires_at = package_expires_at(sent_at)
             package = ContentSharePackage(
                 package_id=package_uuid,
-                request_id=request.request_id,
+                request=request,
                 source_owner_staff_id=staff_id,
                 manifest_hash=manifest_hash,
                 summary_counts=counts,
                 sent_at=sent_at,
                 expires_at=expires_at,
             )
+            request.package = package
             db.add(package)
             db.flush()
 
@@ -950,7 +951,7 @@ class ContentCloningPackageService:
             request.expires_at = expires_at
 
             event = ContentShareEvent(
-                request_id=request.request_id,
+                request=request,
                 actor_staff_id=staff_id,
                 event_type="PACKAGE_SENT",
                 from_status=from_status,
@@ -962,6 +963,24 @@ class ContentCloningPackageService:
                 },
             )
             db.add(event)
+
+            requester_staff = db.get(AcademicStaff, request.requester_staff_id)
+            owner_staff = db.get(AcademicStaff, staff_id)
+            subject = db.get(Subject, request.subject_id)
+
+            if requester_staff and requester_staff.user_id:
+                from app.services.cloning.ContentCloningNotification import stage_cloning_notification, staff_name
+                own_name = staff_name(owner_staff)
+                sub_name = subject.subject_name if subject else "materials"
+                stage_cloning_notification(
+                    db,
+                    user_id=requester_staff.user_id,
+                    notification_type="repost_package_ready",
+                    title=f"Materials Ready: {sub_name}",
+                    body=f"{own_name} prepared and packaged materials for your repost request.",
+                    action_url=f"/teacher/requests?box=outgoing&request_id={request.request_id}",
+                )
+
             db.commit()
 
         except Exception as exc:
@@ -1105,7 +1124,7 @@ class ContentCloningPackageService:
             request.open_request_key = None  # Releases scope lock
 
             event = ContentShareEvent(
-                request_id=request.request_id,
+                request=request,
                 actor_staff_id=staff_id,
                 event_type="REQUEST_DECLINED_BY_REQUESTER",
                 from_status=from_status,
@@ -1115,6 +1134,23 @@ class ContentCloningPackageService:
                 },
             )
             db.add(event)
+
+            owner_staff = db.get(AcademicStaff, request.source_owner_staff_id)
+            requester_staff = db.get(AcademicStaff, staff_id)
+            subject = db.get(Subject, request.subject_id)
+            if owner_staff and owner_staff.user_id:
+                from app.services.cloning.ContentCloningNotification import stage_cloning_notification, staff_name
+                req_name = staff_name(requester_staff)
+                sub_name = subject.subject_name if subject else "materials"
+                stage_cloning_notification(
+                    db,
+                    user_id=owner_staff.user_id,
+                    notification_type="repost_package_declined",
+                    title=f"Package Declined: {sub_name}",
+                    body=f"{req_name} declined the sent material package.",
+                    action_url=f"/teacher/requests?box=incoming&request_id={request.request_id}",
+                )
+
             db.commit()
 
             return request

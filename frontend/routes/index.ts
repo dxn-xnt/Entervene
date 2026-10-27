@@ -56,6 +56,7 @@ export const routes = {
     lessonPlannerCreate: "/teacher/classes/:classId/subjects/:subjectId/lesson-planner/new",
     lessonPlannerEdit: "/teacher/classes/:classId/subjects/:subjectId/lesson-planner/:planId",
     tos: "/teacher/tos",
+    requests: "/teacher/requests",
   },
 
   student: {

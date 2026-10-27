@@ -56,6 +56,7 @@ const SectionPredictions = lazy(() => import("./pages/teacher/section-prediction
 const LessonPlannerPage = lazy(() => import("./pages/teacher/lesson-planner/lesson-planner-page"));
 const LessonPlannerListPage = lazy(() => import("./pages/teacher/lesson-planner/lesson-planner-list-page"));
 const TeacherTOSPage = lazy(() => import("./pages/teacher/tos/teacher-tos-page"));
+const TeacherRequests = lazy(() => import("./pages/teacher/requests"));
 
 // // Student pages
 const StudentBoard = lazy(() => import("./pages/student/studyboard"));
@@ -150,6 +151,7 @@ const App = () => {
                   <Route path={routes.teacher.lessonPlannerEdit} element={<LessonPlannerPage />} />
                   <Route path="/teacher/lesson-planner" element={<Navigate to={routes.teacher.classes} replace />} />
                   <Route path={routes.teacher.tos} element={<TeacherTOSPage />} />
+                  <Route path={routes.teacher.requests} element={<TeacherRequests />} />
                 </Route>
 
                 {/* Student */}
