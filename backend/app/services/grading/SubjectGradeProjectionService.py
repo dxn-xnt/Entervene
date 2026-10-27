@@ -167,6 +167,7 @@ def calculate_subject_grade_projection(
     target_assignment_ids: list[int] | None = None,
     cap_percentage: Decimal | float | int | str = DEFAULT_REMEDIATION_CAP_PERCENTAGE,
     eligible_components: set[CanonicalGradingComponent] | None = None,
+    source_intervention_id: int | None = None,
 ) -> dict[str, Any]:
     """Calculate current and cumulative hypothetical grades without database writes.
 
@@ -315,7 +316,11 @@ def calculate_subject_grade_projection(
             current_grade = float(stored_grade) if stored_grade is not None else None
             current_initial = float(finalized.initial_grade) if finalized.initial_grade is not None else None
 
-        linked_original_ids = {link.original_assignment_id for link in links}
+        linked_original_ids = {
+            link.original_assignment_id
+            for link in links
+            if source_intervention_id is None or link.source_intervention_id != source_intervention_id
+        }
         opportunities: dict[int, dict[str, Any]] = {}
         candidate_assignments = [] if finalized is not None else [*written, *performance]
         for assignment in candidate_assignments:

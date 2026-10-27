@@ -224,16 +224,16 @@ describe("guided Study Support activities", () => {
       title: "Ready activity",
       access_state: "READY",
       preparation: { state: "COMPLETE", is_satisfied: true, completed_count: 1, required_count: 1, accessible_count: 1, unavailable_count: 0, summary: "1 of 1" },
-      readings: [reading(401, 1, "COMPLETED", "Saved reading A")],
+      readings: [reading(401, 1, "REVIEWED", "Saved reading A", "COMPLETED")],
     });
     const second = activity({
       assignment_id: 902,
       title: "Locked activity",
       preparation: { state: "NOT_STARTED", is_satisfied: false, completed_count: 0, required_count: 1, accessible_count: 1, unavailable_count: 0, summary: "0 of 1" },
-      readings: [reading(402, 1, "NOT_STARTED", "Saved reading B")],
+      readings: [reading(402, 1, "NOT_REVIEWED", "Saved reading B", "NOT_STARTED")],
     });
     mockApi.listActive.mockResolvedValue({
-      items: [intervention([first, second], { required_readings: [reading(999, 1, "COMPLETED", "Changed current plan reading")] })],
+      items: [intervention([first, second], { required_readings: [reading(999, 1, "REVIEWED", "Changed current plan reading", "COMPLETED")] })],
     });
     mount();
     expect(await screen.findByText("Saved reading A")).toBeTruthy();
@@ -246,7 +246,7 @@ describe("guided Study Support activities", () => {
   it("shows a safe blocked state without inventing an inaccessible title", async () => {
     const blocked = activity({
       preparation: { state: "BLOCKED", is_satisfied: false, completed_count: 0, required_count: 2, accessible_count: 1, unavailable_count: 1, summary: "1 resource unavailable" },
-      readings: [reading(501, 1, "NOT_STARTED", "Available reading")],
+      readings: [reading(501, 1, "NOT_REVIEWED", "Available reading", "NOT_STARTED")],
     });
     mockApi.listActive.mockResolvedValue({ items: [intervention([blocked])] });
     mount();
