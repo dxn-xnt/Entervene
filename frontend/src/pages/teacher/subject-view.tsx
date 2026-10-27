@@ -21,6 +21,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { DialogueSelect } from "@/components/dialogue-select";
 import { Text } from "@/components/retroui/Text";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
 import { isQuizType } from "@/lib/classwork-utils";
@@ -93,6 +94,8 @@ export default function SubjectDetails() {
   const [isRepostModalOpen, setIsRepostModalOpen] = useState(false);
   const [competencies, setCompetencies] = useState<CompetencyItem[]>([]);
   const [isCompetencyModalOpen, setIsCompetencyModalOpen] = useState(false);
+  const [competencyToArchive, setCompetencyToArchive] = useState<number | null>(null);
+  const [isArchivingCompetency, setIsArchivingCompetency] = useState(false);
   const [isTOSOpen, setIsTOSOpen] = useState(false);
   const [editingCompetency, setEditingCompetency] = useState<CompetencyItem | null>(null);
   const [selectedCompetencyIdForNewLesson, setSelectedCompetencyIdForNewLesson] = useState<number | undefined>(undefined);
@@ -199,13 +202,14 @@ export default function SubjectDetails() {
     refreshSubjectData();
   };
 
-  const handleArchiveCompetency = async (competencyId: number) => {
-    if (
-      !window.confirm(
-        "Are you sure you want to archive this learning competency? Any attached lessons will become standalone.",
-      )
-    )
-      return;
+  const handleArchiveCompetency = (competencyId: number) => {
+    setCompetencyToArchive(competencyId);
+  };
+
+  const confirmArchiveCompetency = async () => {
+    if (competencyToArchive === null) return;
+    const competencyId = competencyToArchive;
+    setIsArchivingCompetency(true);
     try {
       const res = await apiFetch(`/api/v1/competencies/${competencyId}`, {
         method: "DELETE",
@@ -223,9 +227,12 @@ export default function SubjectDetails() {
           ),
         );
         toast.success("Competency archived.");
+        setCompetencyToArchive(null);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to archive competency.");
+    } finally {
+      setIsArchivingCompetency(false);
     }
   };
 
@@ -1467,6 +1474,20 @@ export default function SubjectDetails() {
                 onSuccess={handleCompetencySaved}
               />
             )}
+
+            <ConfirmDialog
+              open={competencyToArchive !== null}
+              onOpenChange={(open) => {
+                if (!open && !isArchivingCompetency) setCompetencyToArchive(null);
+              }}
+              title="Archive Competency"
+              confirmationTitle="Are you sure you want to archive this learning competency?"
+              description="Any attached lessons will become standalone."
+              confirmLabel={isArchivingCompetency ? "Archiving..." : "Archive Competency"}
+              confirmVariant="destructive"
+              isLoading={isArchivingCompetency}
+              onConfirm={confirmArchiveCompetency}
+            />
 
             {/* ── Lesson Create Modal ── */}
             {isCreatingLesson && (

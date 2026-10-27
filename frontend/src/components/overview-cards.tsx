@@ -11,6 +11,7 @@ type OverviewCardProps = {
   statDescription?: string;
   trend?: "up" | "down";
   progressValue?: number;
+  descriptionAtBottom?: boolean;
   className?: string;
 };
 
@@ -75,6 +76,7 @@ export function OverviewCard({
   statDescription,
   trend,
   progressValue,
+  descriptionAtBottom = false,
   className,
 }: OverviewCardProps) {
   const description = statDescription ?? descriptionFor(title);
@@ -83,14 +85,21 @@ export function OverviewCard({
   const isNegative = trend === "down" || (stat && stat.includes("▼"));
 
   return (
-    <Card className={cn("@container/card transition-all duration-200", className)}>
+    <Card className={cn("@container/card transition-all duration-200", descriptionAtBottom && "flex h-full flex-col", className)}>
       <Card.Header className="">
         <Card.Description className="text-xl font-bold text-foreground/90">{title}</Card.Description>
       </Card.Header>
-      <Card.Content className="space-y-1.5">
+      <Card.Content className={cn("space-y-1.5", descriptionAtBottom && "flex flex-1 flex-col")}>
         <Card.Title className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">{count}</Card.Title>
+        {descriptionAtBottom && typeof progressValue === "number" && (
+          <Progress
+            value={progressValue}
+            className="mt-2 h-2"
+            aria-label={`${title}: ${Math.round(progressValue)}%`}
+          />
+        )}
         {(stat || description) && (
-          <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+          <p className={cn("text-xs sm:text-sm text-muted-foreground leading-relaxed", descriptionAtBottom && "mt-auto pt-2")}>
             {stat && (
               <span
                 className={cn(
@@ -106,7 +115,7 @@ export function OverviewCard({
             {description}
           </p>
         )}
-        {typeof progressValue === "number" && (
+        {!descriptionAtBottom && typeof progressValue === "number" && (
           <Progress
             value={progressValue}
             className="mt-2 h-2"

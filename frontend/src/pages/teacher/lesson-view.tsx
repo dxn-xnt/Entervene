@@ -1,17 +1,15 @@
 import {
     Archive,
-    BookOpen,
     ClipboardList,
     Pencil,
     Plus,
-    X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";
-import IconContainer from "@/components/icon-container";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
     Empty,
     EmptyContent,
@@ -60,7 +58,7 @@ export function TeacherLessonView({
     return (
         <div className="flex flex-col flex-1 min-w-0 w-full animate-in fade-in-50 duration-200">
             {/* ── Universal Header ── */}
-            <div data-page-tabs-sticky-region>
+            <div data-page-tabs-sticky-region className="border-b-2 border-border">
                 <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6 lg:flex-row lg:items-center lg:justify-between">
                     <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                         <SidebarTrigger className="shrink-0 md:hidden" />
@@ -147,15 +145,12 @@ export function TeacherLessonView({
                 </header>
             </div>
 
-            <div className="-mt-[3px] flex min-w-0 flex-col gap-3 border-t-2! border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+            <div className="flex min-w-0 flex-col gap-3 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
                 {/* ── Hero Lesson Information Card ── */}
                 <Card className="block w-full border-2 border-black bg-primary p-4 sm:p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                     <div className="flex flex-col gap-4">
                         <div className="flex flex-wrap items-start gap-2 justify-between">
-                            <div className="flex flex-row gap-3 items-center">
-                                <IconContainer variant="default" size="xl" className="rounded!">
-                                    <BookOpen />
-                                </IconContainer>
+                            <div className="flex min-w-0 items-center">
                                 {/* Lesson Title */}
                                 <div className="flex flex-col gap-1">
                                     <h1 className="text-xl sm:text-2xl font-extrabold text-black leading-tight break-words">
@@ -184,13 +179,13 @@ export function TeacherLessonView({
                         <div className="flex flex-col gap-3">
 
                             {lesson.content && (
-                                <Card className="min-w-0 shadow-none py-2">
+                                <div className="min-w-0">
                                     <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
                                         {lesson.content}
                                     </p>
-                                </Card>
+                                </div>
                             )}
-                            <div className="flex flex-col gap-3 px-1">
+                            <div className="flex flex-col gap-3">
                                 {(lesson.updated_at || lesson.created_at) && (
                                     <p className="text-sm text-foreground/80">
                                         {lesson.updated_at && (!lesson.created_at || lesson.updated_at !== lesson.created_at)
@@ -261,80 +256,31 @@ export function TeacherLessonView({
             </div>
 
             {/* ── Archive Confirmation Modal ── */}
-            {showArchiveConfirm && (
-                <div
-                    role="dialog"
-                    aria-modal="true"
-                    onClick={(e) => e.stopPropagation()}
-                    className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4"
-                >
-                    <Card className="block w-full max-w-md border-2 border-black bg-background text-foreground shadow-[4px_4px_0_#000]">
-                        <div className="flex items-center justify-between border-b-2 border-black bg-red-100 px-5 py-3">
-                            <div className="flex items-center gap-2 text-red-800">
-                                <Archive size={18} />
-                                <Card.Title className="mb-0 text-base font-bold text-red-800">
-                                    Archive Lesson?
-                                </Card.Title>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowArchiveConfirm(false)}
-                                disabled={isArchivingLesson}
-                                className="rounded p-1 hover:bg-white/60 disabled:opacity-50 cursor-pointer"
-                                aria-label="Close archive confirmation"
-                            >
-                                <X size={16} />
-                            </button>
-                        </div>
-                        <Card.Content className="space-y-3 p-5">
-                            <p className="text-sm font-medium">
-                                Are you sure you want to archive{" "}
-                                <span className="font-bold">"{lesson.title}"</span>?
-                            </p>
-                            <p className="text-xs text-gray-600">
-                                This hides the lesson from the teacher lesson list and student
-                                lesson views. You can restore it later from the backend archive
-                                flow.
-                            </p>
-                        </Card.Content>
-                        <div className="flex justify-end gap-3 border-t-2 border-black px-5 py-4 bg-gray-50">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setShowArchiveConfirm(false)}
-                                disabled={isArchivingLesson}
-                                className="border-black font-bold"
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                type="button"
-                                onClick={async () => {
-                                    if (!onArchiveLesson) return;
-                                    setIsArchivingLesson(true);
-                                    try {
-                                        await onArchiveLesson(lesson);
-                                        setShowArchiveConfirm(false);
-                                        closeLessonDetail();
-                                    } catch (err) {
-                                        toast.error(
-                                            err instanceof Error
-                                                ? err.message
-                                                : "Unable to archive lesson."
-                                        );
-                                    } finally {
-                                        setIsArchivingLesson(false);
-                                    }
-                                }}
-                                disabled={isArchivingLesson}
-                                className="border-2 border-black bg-red-600 text-white font-bold hover:bg-red-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                            >
-                                {isArchivingLesson ? "Archiving..." : "Archive Lesson"}
-                            </Button>
-                        </div>
-                    </Card>
-                </div>
-            )}
+            <ConfirmDialog
+                open={showArchiveConfirm}
+                onOpenChange={(open) => {
+                    if (!isArchivingLesson) setShowArchiveConfirm(open);
+                }}
+                title="Archive Lesson"
+                confirmationTitle={`Are you sure you want to archive "${lesson.title}"?`}
+                description="This hides the lesson from the teacher lesson list and student lesson views. You can restore it later from the backend archive flow."
+                confirmLabel={isArchivingLesson ? "Archiving..." : "Archive Lesson"}
+                confirmVariant="destructive"
+                isLoading={isArchivingLesson}
+                onConfirm={async () => {
+                    if (!onArchiveLesson) return;
+                    setIsArchivingLesson(true);
+                    try {
+                        await onArchiveLesson(lesson);
+                        setShowArchiveConfirm(false);
+                        closeLessonDetail();
+                    } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Unable to archive lesson.");
+                    } finally {
+                        setIsArchivingLesson(false);
+                    }
+                }}
+            />
         </div>
     );
 }
