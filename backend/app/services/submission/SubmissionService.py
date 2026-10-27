@@ -30,6 +30,10 @@ from app.services.classwork.ClassworkShared import (
     cleanup_saved_files,
 )
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
+from app.services.intervention.RemediationPrerequisiteService import require_remediation_prerequisite
+
+
+MAX_READING_FOCUS_DELTA_SECONDS = 300
 
 
 def user_id(current_user: dict):
@@ -115,6 +119,11 @@ def authorize_submission_access(submission: StudentSubmission, current_user: dic
     if role == "student":
         student = db.query(Student).filter(Student.user_id == current_user_id).first()
         if student and str(submission.student_id) == str(student.student_id):
+            assignment = db.query(ClassworkAssignment).filter(
+                ClassworkAssignment.classwork_assignment_id == submission.classwork_assignment_id
+            ).first()
+            if assignment:
+                require_remediation_prerequisite(db, assignment, student)
             return
     if role == "teacher":
         staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == current_user_id).first()
@@ -185,6 +194,7 @@ def assert_student_can_modify_submission(
         raise HTTPException(status_code=404, detail="Classwork not found")
     require_assignment_recipient(assignment, student)
     ensure_remedial_period_open(db, assignment, student.student_id)
+    require_remediation_prerequisite(db, assignment, student)
     enrollment = db.query(StudentClass).filter(
         StudentClass.student_id == student.student_id,
         StudentClass.class_id == assignment.class_id,
@@ -246,6 +256,7 @@ async def submit_student_work(
         raise HTTPException(status_code=404, detail="Classwork not found")
     require_assignment_recipient(assignment, student)
     ensure_remedial_period_open(db, assignment, student.student_id)
+    require_remediation_prerequisite(db, assignment, student)
     enrollment = db.query(StudentClass).filter(
         StudentClass.student_id == student.student_id,
         StudentClass.class_id == assignment.class_id,
@@ -357,43 +368,81 @@ async def submit_student_work(
     return build_submission_response(submission, db)
 
 
+def _student_reading_scope(
+    assignment_id: int,
+    student: Student,
+    db: Session,
+) -> tuple[ClassworkAssignment, Classwork]:
+    """Authorize one accessible, genuine ungraded Reading assignment.
+
+    Locking the assignment serializes focus/completion creation so repeated or
+    concurrent requests reuse the student's existing submission row.
+    """
+    assignment = db.query(ClassworkAssignment).filter(
+        ClassworkAssignment.classwork_assignment_id == assignment_id,
+    ).with_for_update().one_or_none()
+    if assignment is None:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    classwork = db.get(Classwork, assignment.classwork_id)
+    if classwork is None or classwork.is_archived:
+        raise HTTPException(status_code=404, detail="Classwork not found")
+    require_assignment_recipient(assignment, student)
+    if not db.query(StudentClass.student_class_id).filter(
+        StudentClass.student_id == student.student_id,
+        StudentClass.class_id == assignment.class_id,
+        StudentClass.enrollment_status == "enrolled",
+    ).first():
+        raise HTTPException(status_code=403, detail="Not enrolled in this class")
+    if not classwork.is_published or not assignment_is_available(assignment):
+        raise HTTPException(status_code=403, detail="This reading is not available")
+    if assignment_is_locked(assignment):
+        raise HTTPException(status_code=403, detail="This reading is locked")
+    if (classwork.classwork_type or "").upper() != "READING" or classwork.is_graded:
+        raise HTTPException(
+            status_code=400,
+            detail="Reading progress is only available for non-graded Reading classworks",
+        )
+    ensure_remedial_period_open(db, assignment, student.student_id)
+    return assignment, classwork
+
+
 def complete_reading_assignment(
     assignment_id: int,
     student: Student,
     db: Session,
 ) -> SubmissionResponse:
-    assignment = db.query(ClassworkAssignment).filter(
-        ClassworkAssignment.classwork_assignment_id == assignment_id
-    ).first()
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
-    classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
-    if not classwork or classwork.is_archived:
-        raise HTTPException(status_code=404, detail="Classwork not found")
-    require_assignment_recipient(assignment, student)
-    ensure_remedial_period_open(db, assignment, student.student_id)
-    enrollment = db.query(StudentClass).filter(
-        StudentClass.student_id == student.student_id,
-        StudentClass.class_id == assignment.class_id,
-        StudentClass.enrollment_status == "enrolled",
-    ).first()
-    if not enrollment:
-        raise HTTPException(status_code=403, detail="Not enrolled in this class")
+    assignment, _ = _student_reading_scope(assignment_id, student, db)
     now = datetime.now(timezone.utc)
-    if not assignment_is_available(assignment, now):
-        raise HTTPException(status_code=403, detail="This assignment is not available")
-    if assignment_is_locked(assignment, now):
-        raise HTTPException(status_code=403, detail="This assignment is locked")
 
     existing = db.query(StudentSubmission).filter(
         StudentSubmission.classwork_assignment_id == assignment_id,
         StudentSubmission.student_id == student.student_id,
-    ).first()
+    ).order_by(StudentSubmission.submission_id.desc()).first()
 
     if existing:
+        if existing.status in ("submitted", "late", "graded"):
+            # Reading completion is a single persisted acknowledgement. Legacy
+            # graded Reading rows are normalized without creating grade evidence.
+            changed = any((
+                existing.status == "graded",
+                existing.grade is not None,
+                existing.graded_at is not None,
+                existing.graded_by_staff_id is not None,
+            ))
+            if changed:
+                existing.status = "submitted"
+                existing.grade = None
+                existing.graded_at = None
+                existing.graded_by_staff_id = None
+                db.commit()
+                db.refresh(existing)
+            return build_submission_response(existing, db)
         existing.submitted_at = now
         existing.status = "submitted"
-        existing.attempt_count = (existing.attempt_count or 0) + 1
+        existing.attempt_count = max(existing.attempt_count or 0, 1)
+        existing.grade = None
+        existing.graded_at = None
+        existing.graded_by_staff_id = None
         db.commit()
         db.refresh(existing)
         return build_submission_response(existing, db)
@@ -417,29 +466,19 @@ def record_reading_focus(
     student: Student,
     db: Session,
 ) -> SubmissionResponse:
-    if focused_seconds <= 0:
-        raise HTTPException(status_code=400, detail="focused_seconds must be positive")
-    assignment = db.query(ClassworkAssignment).filter(
-        ClassworkAssignment.classwork_assignment_id == assignment_id
-    ).first()
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
-    classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
-    if not classwork or classwork.is_archived:
-        raise HTTPException(status_code=404, detail="Classwork not found")
-    require_assignment_recipient(assignment, student)
-    enrollment = db.query(StudentClass).filter(
-        StudentClass.student_id == student.student_id,
-        StudentClass.class_id == assignment.class_id,
-        StudentClass.enrollment_status == "enrolled",
-    ).first()
-    if not enrollment:
-        raise HTTPException(status_code=403, detail="Not enrolled in this class")
+    if isinstance(focused_seconds, bool) or not isinstance(focused_seconds, int):
+        raise HTTPException(status_code=400, detail="focused_seconds must be an integer")
+    if focused_seconds <= 0 or focused_seconds > MAX_READING_FOCUS_DELTA_SECONDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"focused_seconds must be between 1 and {MAX_READING_FOCUS_DELTA_SECONDS}",
+        )
+    assignment, _ = _student_reading_scope(assignment_id, student, db)
 
     existing = db.query(StudentSubmission).filter(
         StudentSubmission.classwork_assignment_id == assignment_id,
         StudentSubmission.student_id == student.student_id,
-    ).first()
+    ).order_by(StudentSubmission.submission_id.desc()).first()
 
     if existing:
         existing.reading_focused_seconds = (existing.reading_focused_seconds or 0) + focused_seconds

@@ -394,6 +394,8 @@ def project_subject_grade(
                 elif db.query(RemediationAssignmentLink.remediation_link_id).filter_by(
                     original_assignment_id=assignment_id,
                     student_id=row.student_id,
+                ).filter(
+                    RemediationAssignmentLink.source_intervention_id != intervention_id,
                 ).first() is not None:
                     code, message = "TARGET_ALREADY_REMEDIATED", "This original assignment already has a remediation activity for the student."
                 elif db.query(StudentSubmission.submission_id).filter_by(
@@ -427,6 +429,7 @@ def project_subject_grade(
             target_assignment_ids=target_assignment_ids,
             cap_percentage=authoritative_cap,
             eligible_components={expected_component} if expected_component is not None else set(),
+            source_intervention_id=intervention_id,
         )
         source = _source(db, row)
         version = db.get(AIModelVersion, source.model_version_id)

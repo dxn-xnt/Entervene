@@ -1,5 +1,5 @@
 # app/schemas/Submission.py
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
@@ -37,4 +37,4 @@ class GradeRequest(BaseModel):
 
 
 class ReadingFocusPayload(BaseModel):
-    focused_seconds: int
+    focused_seconds: int = Field(gt=0, le=300, strict=True)

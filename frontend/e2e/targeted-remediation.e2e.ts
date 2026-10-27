@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
-const title = "Mathematics 10 focused practice";
+const title = "Deterministic Remedial Quiz";
 
 type FixtureState = {
   database: string;
@@ -14,6 +14,11 @@ type FixtureState = {
   intervention_id: number;
   original_assignment_id: number;
   target_student_id: string;
+  reading_assignment_ids: number[];
+  quiz_assignment_id: number;
+  classwork_assignment_id: number;
+  blocked_assignment_id: number;
+  historical_assignment_id: number;
 };
 
 async function login(browser: Browser, email: string, password: string, base: string) {
@@ -46,44 +51,59 @@ function inspect() {
   }> };
 }
 
-test("targeted Examination remediation is pending only for its student and opens without starting an attempt", async ({ browser }) => {
+function setReadingCompletion(state: "zero" | "partial" | "complete") {
+  execFileSync(
+    process.env.E2E_PYTHON!,
+    [join(process.env.E2E_BACKEND_DIR!, "tests/browser/remediation_fixture.py"), state, process.env.E2E_STATE_FILE!],
+    { cwd: process.env.E2E_BACKEND_DIR!, encoding: "utf8", timeout: 15_000 },
+  );
+}
+
+test("deterministic student Study Support fixture authenticates and loads", async ({ browser }) => {
+  const state = JSON.parse(readFileSync(process.env.E2E_STATE_FILE!, "utf8")) as FixtureState;
+  const base = process.env.E2E_FRONTEND_URL!;
+  const api = process.env.E2E_BACKEND_URL!;
+  const student = await login(browser, state.target_email, state.password, base);
+  const errors: string[] = [];
+  student.page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+  try {
+    await student.page.goto(`${base}/student/interventions`);
+    await expect(student.page.getByRole("heading", { name: "Study Support" })).toBeVisible();
+    await expect(student.page.getByText("0 of 3 reviewed")).toBeVisible();
+    await expect(student.page.getByText("Deterministic Remedial Quiz")).toBeVisible();
+    await expect(student.page.getByText("Historical Activity Without Snapshot")).toBeVisible();
+    const response = await student.page.evaluate(async (backend) => {
+      const result = await fetch(`${backend}/api/v1/student/interventions`, { credentials: "include" });
+      return { status: result.status, body: await result.json() };
+    }, api);
+    expect(response.status).toBe(200);
+    expect(response.body.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ intervention_id: state.intervention_id }),
+    ]));
+    expect(errors.filter((message) => !message.includes("ERR_NETWORK_ACCESS_DENIED"))).toEqual([]);
+  } finally {
+    await student.context.close();
+  }
+});
+
+test("seeded remediation is visible only to its student and opens without starting an attempt", async ({ browser }) => {
   const state = JSON.parse(readFileSync(process.env.E2E_STATE_FILE!, "utf8")) as FixtureState;
   const base = process.env.E2E_FRONTEND_URL!;
   const api = process.env.E2E_BACKEND_URL!;
   const contexts: BrowserContext[] = [];
   try {
-    const teacher = await login(browser, state.teacher_email, state.password, base);
-    contexts.push(teacher.context);
-    await teacher.page.goto(`${base}/teacher/interventions`);
-    await teacher.page.getByRole("button", { name: "Review" }).first().click();
-    await teacher.page.getByRole("button", { name: "Approve Intervention" }).click();
-    await teacher.page.getByRole("tab", { name: "Active" }).click();
-    await teacher.page.getByRole("button", { name: "Review" }).first().click();
-    await teacher.page.getByRole("button", { name: "Prepare Remediation" }).click();
-    await teacher.page.getByRole("radio", { name: /Quiz Focused practice/ }).click();
-    await teacher.page.getByRole("radio", { name: /Remedial Examination/ }).click();
-    await expect(teacher.page.getByLabel("Original Examination")).toHaveValue(String(state.original_assignment_id));
-    await teacher.page.getByRole("button", { name: /Continue to Quiz Builder/ }).click();
-    await teacher.page.getByRole("button", { name: /Create manually/ }).click();
-    await teacher.page.getByRole("button", { name: "Next" }).click();
-    await teacher.page.locator('textarea[placeholder^="Which of the following"]').fill("Which ratio is 2 to 1?");
-    await teacher.page.locator('input[type="number"][placeholder="Enter text"]').last().fill("10");
-    await teacher.page.locator('input[placeholder="Choice 1"]').fill("2:1");
-    await teacher.page.locator('input[placeholder="Choice 2"]').fill("1:2");
-    await teacher.page.getByRole("radio", { name: "Mark choice 1 correct" }).click();
-    await teacher.page.getByRole("button", { name: "Next" }).click();
-    await teacher.page.getByRole("combobox").filter({ hasText: "Keep hidden from students" }).click();
-    await teacher.page.getByRole("option", { name: "Publish now" }).click();
-    await teacher.page.getByRole("button", { name: "Assign", exact: true }).click();
-    await expect(teacher.page.getByText(title, { exact: true }).first()).toBeVisible();
-
     const published = inspect();
     expect(published.database).toBe(state.database);
     expect(published.assignments).toHaveLength(1);
     const assignment = published.assignments[0];
+    expect(assignment.assignment_id).toBe(state.quiz_assignment_id);
     expect(assignment.published).toBe(true);
     expect(assignment.recipient_student_id).toBe(state.target_student_id);
     expect(assignment.submission_count).toBe(0);
+
+    setReadingCompletion("complete");
 
     const target = await login(browser, state.target_email, state.password, base);
     contexts.push(target.context);
@@ -99,15 +119,15 @@ test("targeted Examination remediation is pending only for its student and opens
     expect(targetList.data.completed.some((item: { assignment_id: number }) => item.assignment_id === assignment.assignment_id)).toBe(false);
 
     await card.click();
-    await expect(target.page.getByText("Student classwork detail")).toBeVisible();
-    await expect(target.page.getByText("Not Submitted Yet").first()).toBeVisible();
+    await expect(target.page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(target.page.getByText("Status: not started")).toBeVisible();
     await expect(target.page.getByRole("button", { name: "Start Quiz" })).toBeVisible();
     expect(inspect().assignments[0].submission_count).toBe(0);
 
     const control = await login(browser, state.control_email, state.password, base);
     contexts.push(control.context);
     await control.page.goto(`${base}/student/todo`);
-    await expect(control.page.getByText("Pending Tasks")).toBeVisible();
+    await expect(control.page.getByRole("heading", { name: "To do" })).toBeVisible();
     await expect(control.page.getByRole("button", { name: new RegExp(title) })).toHaveCount(0);
     const controlList = await todos(control.page, api);
     expect(controlList.status).toBe(200);

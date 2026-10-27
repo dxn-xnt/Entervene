@@ -482,6 +482,21 @@ async def create_classwork_wizard_record(
             upsert_quiz_builder(db, classwork, quiz_builder)
 
         if intervention and is_published:
+            from app.services.intervention.RemediationReadingPrerequisiteService import (
+                resolve_reading_prerequisite_snapshot_items,
+                stage_remediation_reading_prerequisites,
+            )
+            items = resolve_reading_prerequisite_snapshot_items(
+                db,
+                intervention=intervention,
+                remediation_assignment=created_assignments[0],
+                require_readings=True,
+            )
+            stage_remediation_reading_prerequisites(
+                db,
+                remediation_assignment_id=created_assignments[0].classwork_assignment_id,
+                items=items,
+            )
             _stage_targeted_assignment_notification(db, created_assignments[0], classwork, subject_id)
         db.commit()
         db.refresh(classwork)
@@ -950,10 +965,11 @@ def assign_classwork_to_classes(
     if classwork.is_archived:
         raise HTTPException(status_code=400, detail="Cannot assign archived classwork")
     class_ids = dedupe_ids(body.class_ids)
+    intervention = None
     targeted = db.query(ClassworkAssignment).filter(
         ClassworkAssignment.classwork_id == classwork_id,
         ClassworkAssignment.recipient_student_id.isnot(None),
-    ).first()
+    ).with_for_update().first()
     if targeted:
         if current_user is None or current_user.get("role") != "teacher":
             raise HTTPException(status_code=403, detail="Teacher remediation identity is required")
@@ -1056,6 +1072,25 @@ def assign_classwork_to_classes(
             db.flush()
             for assignment in new_assignments:
                 assignment.max_attempts = None
+        if targeted and body.is_published:
+            from app.services.intervention.RemediationReadingPrerequisiteService import (
+                remediation_reading_prerequisites,
+                resolve_reading_prerequisite_snapshot_items,
+                stage_remediation_reading_prerequisites,
+            )
+            existing_snapshots = remediation_reading_prerequisites(db, targeted.classwork_assignment_id)
+            if not was_targeted_published and not existing_snapshots:
+                items = resolve_reading_prerequisite_snapshot_items(
+                    db,
+                    intervention=intervention,
+                    remediation_assignment=targeted,
+                    require_readings=True,
+                )
+                stage_remediation_reading_prerequisites(
+                    db,
+                    remediation_assignment_id=targeted.classwork_assignment_id,
+                    items=items,
+                )
         if targeted and body.is_published and not was_targeted_published:
             db.flush()
             _stage_targeted_assignment_notification(db, targeted, classwork, classwork.subject_id)
