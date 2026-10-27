@@ -11,6 +11,7 @@ from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.classwork.ClassworkShared import assignment_is_available, assignment_is_locked
 from app.services.academic.ContentAuthorizationService import authorize_teacher_content, resolve_content_staff_id
+from app.services.intervention.RemediationPrerequisiteService import require_remediation_prerequisite
 
 
 def assignment_allows_student(assignment: ClassworkAssignment, student_id) -> bool:
@@ -68,12 +69,19 @@ def authorize_classwork_access(
             )
             if class_id is not None:
                 query = query.filter(ClassworkAssignment.class_id == class_id)
-            if any(
-                assignment_allows_student(assignment, student.student_id)
+            matching_assignments = [
+                assignment for assignment in query.all()
+                if assignment_allows_student(assignment, student.student_id)
                 and assignment_is_available(assignment)
                 and not assignment_is_locked(assignment)
-                for assignment in query.all()
-            ):
+            ]
+            if matching_assignments:
+                remedial_assignment = next(
+                    (a for a in matching_assignments if a.source_intervention_id is not None),
+                    None,
+                )
+                if remedial_assignment is not None:
+                    require_remediation_prerequisite(db, remedial_assignment, student)
                 return
     raise HTTPException(status_code=403, detail="Access denied")
 
@@ -109,6 +117,7 @@ def authorize_assignment_access(
         ).first():
             if assignment_is_locked(assignment):
                 raise HTTPException(status_code=403, detail="This assignment is locked")
+            require_remediation_prerequisite(db, assignment, student)
             return
     raise HTTPException(status_code=403, detail="Access denied")
 

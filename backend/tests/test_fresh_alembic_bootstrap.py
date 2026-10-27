@@ -21,6 +21,7 @@ from app.db.Session import engine as configured_engine
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.classwork.RemediationAssignmentLink import RemediationAssignmentLink
+from app.models.classwork.RemediationReadingPrerequisite import RemediationReadingPrerequisite
 from app.services.AcademicPeriodService import create_or_update_academic_periods
 
 
@@ -63,7 +64,7 @@ def test_empty_postgres_database_upgrades_to_head():
             "user_account", "user_roles", "student", "academic_staff", "classwork",
             "classwork_assignment", "student_submission", "ai_model_version",
             "development_current_term_prediction", "intervention", "intervention_support_material",
-            "remediation_assignment_link",
+            "remediation_assignment_link", "remediation_reading_prerequisite",
         } <= set(inspector.get_table_names())
         def references(table):
             return {
@@ -117,6 +118,50 @@ def test_empty_postgres_database_upgrades_to_head():
         }
         assert link_unique | link_checks <= model_constraints
         assert {index.name for index in RemediationAssignmentLink.__table__.indexes} <= link_indexes
+        prerequisite_columns = {
+            column["name"]: column
+            for column in inspector.get_columns("remediation_reading_prerequisite")
+        }
+        assert set(prerequisite_columns) == {
+            "prerequisite_id", "remediation_assignment_id", "reading_classwork_id",
+            "reading_assignment_id", "display_order", "created_at",
+        }
+        assert all(column["nullable"] is False for column in prerequisite_columns.values())
+        assert {
+            (("remediation_assignment_id",), "classwork_assignment"),
+            (("reading_classwork_id",), "classwork"),
+            (("reading_assignment_id",), "classwork_assignment"),
+        } <= references("remediation_reading_prerequisite")
+        prerequisite_unique = {
+            constraint["name"]
+            for constraint in inspector.get_unique_constraints("remediation_reading_prerequisite")
+        }
+        assert {
+            "uq_remediation_reading_prerequisite_order",
+            "uq_remediation_reading_prerequisite_reading",
+        } <= prerequisite_unique
+        prerequisite_checks = {
+            constraint["name"]
+            for constraint in inspector.get_check_constraints("remediation_reading_prerequisite")
+        }
+        assert "ck_remediation_reading_prerequisite_order_positive" in prerequisite_checks
+        prerequisite_indexes = {
+            index["name"]
+            for index in inspector.get_indexes("remediation_reading_prerequisite")
+        }
+        assert {
+            "ix_remediation_reading_prerequisite_remediation",
+            "ix_remediation_reading_prerequisite_reading_assignment",
+        } <= prerequisite_indexes
+        prerequisite_model_constraints = {
+            constraint.name
+            for constraint in RemediationReadingPrerequisite.__table__.constraints
+            if constraint.name
+        }
+        assert prerequisite_unique | prerequisite_checks <= prerequisite_model_constraints
+        assert {
+            index.name for index in RemediationReadingPrerequisite.__table__.indexes
+        } <= prerequisite_indexes
         updated_at = next(column for column in inspector.get_columns("academic_period") if column["name"] == "updated_at")
         assert updated_at["nullable"] is False
         assert updated_at["default"] is None
@@ -142,6 +187,15 @@ def test_empty_postgres_database_upgrades_to_head():
             assert period.updated_at is not None
 
         subprocess.run(
+            [sys.executable, "-m", "alembic", "downgrade", "20261026_remediation_link"],
+            cwd=BACKEND_DIR, env=environment, check=True, capture_output=True, text=True,
+        )
+        assert "remediation_reading_prerequisite" not in inspect(target).get_table_names()
+        assert "remediation_assignment_link" in inspect(target).get_table_names()
+        with target.connect() as connection:
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "20261026_remediation_link"
+
+        subprocess.run(
             [sys.executable, "-m", "alembic", "downgrade", "20261022_passing_policy_audit"],
             cwd=BACKEND_DIR, env=environment, check=True, capture_output=True, text=True,
         )
@@ -154,6 +208,7 @@ def test_empty_postgres_database_upgrades_to_head():
             cwd=BACKEND_DIR, env=environment, check=True, capture_output=True, text=True,
         )
         assert "remediation_assignment_link" in inspect(target).get_table_names()
+        assert "remediation_reading_prerequisite" in inspect(target).get_table_names()
         with target.connect() as connection:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == head
 

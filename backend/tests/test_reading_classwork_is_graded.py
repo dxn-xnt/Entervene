@@ -2,6 +2,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 import uuid
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import CheckConstraint, create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -906,6 +907,7 @@ def test_complete_reading_assignment_marks_reading_as_submitted_and_increments_c
     response = complete_reading_assignment(asgn_reading.classwork_assignment_id, student, db)
     assert response.status == "submitted"
     assert response.submitted_at is not None
+    assert response.attempt_count == 1
 
     # Query database to confirm submission record is created
     sub_after = db.query(StudentSubmission).filter(
@@ -916,6 +918,16 @@ def test_complete_reading_assignment_marks_reading_as_submitted_and_increments_c
     assert sub_after.status == "submitted"
     assert sub_after.submitted_at is not None
     assert sub_after.grade is None
+
+    first_submitted_at = sub_after.submitted_at
+    repeated = complete_reading_assignment(asgn_reading.classwork_assignment_id, student, db)
+    assert repeated.submission_id == response.submission_id
+    assert repeated.attempt_count == 1
+    assert repeated.submitted_at == first_submitted_at
+    assert db.query(StudentSubmission).filter_by(
+        classwork_assignment_id=asgn_reading.classwork_assignment_id,
+        student_id=student.student_id,
+    ).count() == 1
 
 
 def test_record_reading_focus_accumulates_seconds_and_preserves_isolation(db_session):
@@ -1022,3 +1034,13 @@ def test_record_reading_focus_accumulates_seconds_and_preserves_isolation(db_ses
     ).first()
     assert sub.reading_focused_seconds == 105
     assert sub.grade is None
+
+    for invalid_seconds in (0, -1, 301, 1.5, True):
+        with pytest.raises(HTTPException) as exc:
+            record_reading_focus(
+                asgn_reading.classwork_assignment_id,
+                invalid_seconds,
+                student,
+                db,
+            )
+        assert exc.value.status_code == 400
