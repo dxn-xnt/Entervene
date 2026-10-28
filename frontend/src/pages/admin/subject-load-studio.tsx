@@ -2800,7 +2800,7 @@ export default function AdminSubjectLoadStudio() {
       {
         isCopyModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="w-full max-w-md rounded-none border-2 border-border bg-background p-6 text-foreground shadow-[4px_4px_0_#000]">
+            <div className="w-full max-w-md rounded border-2 border-border bg-background p-6 text-foreground shadow-[4px_4px_0_#000]">
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
                 <Copy className="size-5" /> Copy Schedule from Term
               </h2>

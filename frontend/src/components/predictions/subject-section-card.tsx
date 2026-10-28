@@ -20,7 +20,6 @@ export function SubjectSectionCard({
   subjectId,
   classId,
   name,
-  gradeLevel: _gradeLevel,
   totalPredictions = 0,
   highRisk = 0,
   moderateRisk = 0,
@@ -122,13 +121,13 @@ export function SubjectSectionCard({
               ))}
             </div>
           ) : totalPredictions === 0 ? (
-            <div className="w-full py-2.5 px-3 bg-gray-100 border border-black text-center shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+            <div className="w-full rounded! py-2.5 px-3 bg-gray-100 border border-black text-center shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
               <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">
                 No Predictions Yet
               </span>
             </div>
           ) : (
-            <div className="w-full py-2.5 px-3 bg-emerald-100/70 border border-black text-center shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+            <div className="w-full rounded! py-2.5 px-3 bg-emerald-100/70 border border-black text-center shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
               <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
                 No At-Risk Students
               </span>

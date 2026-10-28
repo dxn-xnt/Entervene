@@ -55,7 +55,7 @@ export function SubjectCatalogCard({
                 </span>} />
                 <TooltipContent>Subject actions</TooltipContent>
               </Tooltip>
-              <DropdownMenuContent align="end" className="border-2">
+              <DropdownMenuContent align="end" className="rounded border-2">
                 {onEdit ? (
                   <DropdownMenuItem
                     onClick={(e) => {
@@ -63,7 +63,7 @@ export function SubjectCatalogCard({
                       e.stopPropagation();
                       onEdit(subject);
                     }}
-                    className="gap-2"
+                    className="gap-2 rounded"
                   >
                     <PenIcon className="size-4" /> Edit
                   </DropdownMenuItem>
@@ -75,7 +75,7 @@ export function SubjectCatalogCard({
                       e.stopPropagation();
                       onArchive(subject);
                     }}
-                    className="gap-2"
+                    className="gap-2 rounded"
                   >
                     <ArchiveIcon className="size-4" /> Archive
                   </DropdownMenuItem>
@@ -87,7 +87,7 @@ export function SubjectCatalogCard({
                       e.stopPropagation();
                       onRestore(subject);
                     }}
-                    className="gap-2"
+                    className="gap-2 rounded"
                   >
                     <RotateCcw className="size-4" /> Restore
                   </DropdownMenuItem>

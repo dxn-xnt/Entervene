@@ -240,29 +240,29 @@ function LegacyGradePredictions() {
 
                 {/* Right Column: Sections Overview */}
                 <div className="w-full lg:w-72 xl:w-80 shrink-0 flex flex-col gap-3">
-                  <Card className="flex flex-col gap-3 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-white p-4">
-                    <div className="flex items-center justify-between border-b-2 border-black pb-2">
-                      <Text as="h4" className="font-head font-bold text-base">Grade {grade} Sections</Text>
+                  <Card className="flex flex-col gap-3 border-2 border-black bg-white p-4 shadow-none hover:shadow-none">
+                    <div className="flex items-center justify-between gap-3">
+                      <Text as="h4" className="min-w-0 truncate font-head text-base font-bold">Grade {grade} Sections</Text>
                       <Badge size="sm" variant="surface" className="font-bold">
                         {currentGradeGroup?.sections.length ?? 0}
                       </Badge>
                     </div>
 
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-3">
                       {currentGradeGroup && currentGradeGroup.sections.length > 0 ? (
                         currentGradeGroup.sections.map((sec) => (
                           <div
                             key={sec.class_id}
                             onClick={() => navigate(`/${baseRole}/predictions/${grade}/${sec.class_id}`)}
-                            className="cursor-pointer border-2 border-black p-2.5 bg-yellow-50 hover:bg-yellow-100 transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between"
+                            className="flex cursor-pointer items-center justify-between gap-3 rounded border-2 border-black bg-yellow-50 p-3 transition-colors hover:bg-yellow-100"
                           >
-                            <div>
-                              <p className="font-bold text-sm text-black">{sec.section_name}</p>
-                              <p className="text-xs text-gray-600 font-medium">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-bold text-black" title={sec.section_name}>{sec.section_name}</p>
+                              <p className="truncate text-xs font-medium text-gray-600">
                                 {sec.total_students} {sec.total_students === 1 ? "student" : "students"}
                               </p>
                             </div>
-                            <div className="text-right">
+                            <div className="shrink-0 text-right">
                               <span className={`text-xs font-black px-2 py-0.5 border border-black rounded ${sec.at_risk_count > 0 ? "bg-red-200 text-red-900" : "bg-emerald-100 text-emerald-900"}`}>
                                 {sec.at_risk_count} at risk
                               </span>
@@ -431,7 +431,7 @@ function TeacherCurrentTermGradePredictions() {
             </div>
 
             <Card className="w-full shrink-0 border-2 border-black bg-white p-4 shadow-[4px_4px_0px_#000] lg:w-80">
-              <Text as="h4" className="mb-3 border-b-2 border-black pb-2 font-head text-base font-bold">
+              <Text as="h4" className="mb-3 font-head text-base font-bold">
                 Grade {grade} Sections
               </Text>
               <div className="flex flex-col gap-2">
@@ -439,7 +439,7 @@ function TeacherCurrentTermGradePredictions() {
                   <Link
                     key={section.class_id}
                     to={`/teacher/predictions/${grade}/${section.class_id}`}
-                    className="flex items-center justify-between border-2 border-black bg-yellow-50 p-2.5 hover:bg-yellow-100"
+                    className="flex items-center justify-between gap-3 rounded border-2 border-black bg-yellow-50 p-3 hover:bg-yellow-100"
                   >
                     <span className="font-bold">{section.section_name}</span>
                     <Badge size="sm" variant="surface">

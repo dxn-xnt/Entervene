@@ -519,7 +519,7 @@ export default function AddUserModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }} >
-      <Dialog.Content size="md" className="w-[calc(100vw-1.5rem)] max-w-lg rounded-none font-sans lg:max-w-[40%]">
+      <Dialog.Content size="md" data-admin-user-import={step === "import" ? "" : undefined} className="w-[calc(100vw-1.5rem)] max-w-lg rounded font-sans lg:max-w-[40%]">
         <Dialog.Header asChild className="bg-primary text-black font-sans flex items-center justify-between">
           <div>
             <span className="text-xl font-bold normal-case">
@@ -572,7 +572,7 @@ export default function AddUserModal({
                 </Select>
               </Field>
 
-              <div className="flex items-center justify-between rounded border-2 border-black bg-muted/40 p-3 shadow-[2px_2px_0_#000]">
+              <div data-import-surface className="flex items-center justify-between rounded border-2 border-black bg-muted/40 p-3 shadow-[2px_2px_0_#000]">
                 <span className="text-xs font-semibold text-foreground">
                   Download CSV template for {importRole}
                 </span>
@@ -588,6 +588,7 @@ export default function AddUserModal({
               </div>
 
               <div
+                data-import-surface
                 onDragOver={(e) => {
                   e.preventDefault();
                   setDragOver(true);
@@ -807,7 +808,7 @@ export default function AddUserModal({
                 <Field label="Address">
                   <textarea
                     rows={2}
-                    className="w-full rounded border-2 border-black bg-background px-4 py-2 font-sans text-base font-normal shadow-md transition focus:outline-hidden focus:shadow-xs resize-none"
+                    className="w-full rounded! border-2 border-black bg-background px-4 py-2 font-sans text-base font-normal shadow-md transition focus:outline-hidden focus:shadow-xs resize-none"
                     placeholder="Street, Barangay, City…"
                     value={form.address}
                     onChange={(e) => handleField("address", e.target.value)}

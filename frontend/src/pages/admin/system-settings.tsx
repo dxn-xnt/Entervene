@@ -12,6 +12,7 @@ import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Switch } from "@/components/retroui/Switch";
+import { Checkbox } from "@/components/retroui/Checkbox";
 import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
 import { useToast } from "@/components/retroui/Toast";
@@ -676,13 +677,13 @@ export default function AdminSystemSettings() {
                     </div>
                   </div>
                   <label className="flex flex-col gap-1 text-sm font-semibold">Audit reason<Input id="average-audit-reason" value={averageReason} aria-invalid={averageError === "Select a year, enter an audit reason, and confirm this change." && !averageReason.trim()} aria-describedby={averageError === "Select a year, enter an audit reason, and confirm this change." && !averageReason.trim() ? "average-audit-reason-error" : undefined} onChange={(event) => { setAverageReason(event.target.value); if (event.target.value.trim() && averageConfirmed) setAverageError(""); }} />{averageError === "Select a year, enter an audit reason, and confirm this change." && !averageReason.trim() && <FormMessage id="average-audit-reason-error">Enter an audit reason.</FormMessage>}</label>
-                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={averageConfirmed} onChange={(event) => { setAverageConfirmed(event.target.checked); if (event.target.checked && averageReason.trim()) setAverageError(""); }} /> I confirm this year-specific policy action.</label>
+                  <label className="flex items-center gap-2 text-sm"><Checkbox checked={averageConfirmed} onCheckedChange={(checked) => { const confirmed = checked === true; setAverageConfirmed(confirmed); if (confirmed && averageReason.trim()) setAverageError(""); }} /> I confirm this year-specific policy action.</label>
                   {averageError === "Select a year, enter an audit reason, and confirm this change." && !averageConfirmed && <FormMessage>Confirm this policy action.</FormMessage>}
                 </Card.Content>
               </Card>
 
               {/* Grading Templates */}
-              <section id="grading-templates" aria-labelledby="grading-templates-title" className="space-y-4 border-2 border-black bg-white p-4 shadow-[4px_4px_0_#000]">
+              <section id="grading-templates" aria-labelledby="grading-templates-title" className="space-y-4 rounded border-2 border-black bg-white p-4 shadow-[4px_4px_0_#000]">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <Text as="h2" id="grading-templates-title" className="text-2xl font-bold">Default Grading Templates</Text>
@@ -721,7 +722,7 @@ export default function AdminSystemSettings() {
                           </div>
                           <div className="grid grid-cols-3 gap-2">
                             {[["WW", template.ww], ["PT", template.pt], ["Exams", template.qa]].map(([label, value]) => (
-                              <div key={label} className="border-2 border-black bg-white px-2 py-3 text-center">
+                              <div key={label} className="rounded border-2 border-black bg-white px-2 py-3 text-center">
                                 <strong className="block text-xl">{value}%</strong>
                                 <span className="text-xs text-black/60">{label}</span>
                               </div>
@@ -854,7 +855,7 @@ export default function AdminSystemSettings() {
                     </div>
                   </div>
 
-                  <div className="border-2 border-black bg-background p-4 flex flex-col gap-3">
+                  <div className="flex flex-col gap-3 rounded border-2 border-black bg-background p-4">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div className="flex items-center gap-2">
                         <Text as="p" className="text-sm font-semibold">
@@ -918,11 +919,11 @@ export default function AdminSystemSettings() {
                 </Card.Header>
                 <Card.Content className="flex flex-col gap-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-primary border-2 border-black p-4 flex flex-col gap-3">
+                    <div className="flex flex-col gap-3 rounded border-2 border-black bg-primary p-4">
                       <Text as="h6" className="text-xl font-bold mb-1">
                         School Levels
                       </Text>
-                      <div className="flex items-center justify-between border-2 border-black px-3 py-2 bg-white">
+                      <div className="flex items-center justify-between rounded border-2 border-black bg-white px-3 py-2">
                         <Text as="p" className="font-medium">
                           Junior High School
                         </Text>
@@ -931,7 +932,7 @@ export default function AdminSystemSettings() {
                           onCheckedChange={() => setJhsEnabled((v) => !v)}
                         />
                       </div>
-                      <div className="flex items-center justify-between border-2 border-black px-3 py-2 bg-white">
+                      <div className="flex items-center justify-between rounded border-2 border-black bg-white px-3 py-2">
                         <Text as="p" className="font-sans font-medium">
                           Senior High School
                         </Text>
@@ -949,7 +950,7 @@ export default function AdminSystemSettings() {
                       </Text>
                     </div>
 
-                    <div className="bg-primary border-2 border-black p-4 flex flex-col gap-3 bg-neutral-50">
+                    <div className="flex flex-col gap-3 rounded border-2 border-black bg-neutral-50 p-4">
                       <div className="flex items-center justify-between">
                         <Text as="h6" className="text-xl font-bold">
                           Senior High School Pathways
@@ -991,7 +992,7 @@ export default function AdminSystemSettings() {
                         pathways.map((p) => (
                           <div
                             key={p.id}
-                            className="flex items-center justify-between border-2 border-black px-3 py-2 bg-white"
+                            className="flex items-center justify-between rounded border-2 border-black bg-white px-3 py-2"
                           >
                             <div className="flex flex-row gap-2 items-end">
                               <Text as="p" className="font-sans font-medium">

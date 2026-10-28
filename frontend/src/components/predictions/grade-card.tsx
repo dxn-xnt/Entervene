@@ -89,14 +89,14 @@ export function GradeCard({
   const targetUrl = `/${activeRole}/predictions/${grade}/${classId !== undefined ? classId : encodeURIComponent(name)}`;
 
   return (
-    <RetroCard className="group relative flex flex-col justify-between shadow-none p-3 hover:-translate-y-1 transition-transform min-w-[200px] max-w-full">
+    <RetroCard className="group relative flex min-w-[200px] max-w-full flex-col justify-between p-3 shadow-none transition-transform hover:-translate-y-1 hover:shadow-none">
       <Link
         to={targetUrl}
         className="min-w-0 flex-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-1 rounded"
         aria-label={`View ${name} predictions`}
       >
-        <div className="flex flex-col items-start justify-between gap-1">
-          <div className="flex flex-row w-full justify-between items-center gap-2">
+        <div className="flex flex-col items-start justify-between gap-3">
+          <div className="flex w-full flex-row items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
               <Tooltip>
                 <TooltipTrigger render={<p className="text-lg font-bold leading-tight truncate">{name}</p>} />
@@ -129,7 +129,7 @@ export function GradeCard({
               ))}
             </div>
           ) : (
-            <div className="w-full py-2.5 px-3 bg-emerald-100/70 border border-black text-center shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+            <div className="w-full rounded! border border-black bg-emerald-100/70 px-3 py-2.5 text-center">
               <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
                 No At-Risk Students
               </span>
