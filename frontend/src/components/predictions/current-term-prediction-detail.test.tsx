@@ -48,10 +48,34 @@ describe("current-term prediction detail", () => {
     render(<MemoryRouter><PredictionDetailSheet predictionId={41} currentTermPrediction={prediction} open onOpenChange={() => undefined} /></MemoryRouter>);
     expect(screen.queryByRole("link", { name: "Review Intervention" })).toBeNull();
   });
+  it("links a supplied matching active intervention to the teacher active intervention modal", () => {
+    const view = render(<MemoryRouter><PredictionDetailSheet predictionId={41} currentTermPrediction={prediction} activeInterventionId={19} open onOpenChange={() => undefined} /></MemoryRouter>);
+    expect(screen.getByRole("link", { name: "View Active Intervention" }).getAttribute("href")).toBe("/teacher/interventions?active=19");
+    view.unmount();
+    render(<MemoryRouter><PredictionDetailSheet predictionId={41} currentTermPrediction={prediction} open onOpenChange={() => undefined} /></MemoryRouter>);
+    expect(screen.queryByRole("link", { name: "View Active Intervention" })).toBeNull();
+  });
+  it("never shows active intervention link in the Admin prediction detail", () => {
+    auth.role = "admin";
+    render(<MemoryRouter><PredictionDetailSheet predictionId={41} currentTermPrediction={prediction} activeInterventionId={19} open onOpenChange={() => undefined} /></MemoryRouter>);
+    expect(screen.queryByRole("link", { name: "View Active Intervention" })).toBeNull();
+  });
   it("never shows candidate review in the Admin prediction detail", () => {
     auth.role = "admin";
     render(<MemoryRouter><PredictionDetailSheet predictionId={41} currentTermPrediction={prediction} candidateId={12} open onOpenChange={() => undefined} /></MemoryRouter>);
     expect(screen.queryByRole("link", { name: "Review Intervention" })).toBeNull();
+  });
+  it("links a supplied matching active intervention to the teacher active intervention modal", () => {
+    const view = render(<MemoryRouter><PredictionDetailSheet predictionId={41} currentTermPrediction={prediction} activeInterventionId={19} open onOpenChange={() => undefined} /></MemoryRouter>);
+    expect(screen.getByRole("link", { name: "View Active Intervention" }).getAttribute("href")).toBe("/teacher/interventions?active=19");
+    view.unmount();
+    render(<MemoryRouter><PredictionDetailSheet predictionId={41} currentTermPrediction={prediction} open onOpenChange={() => undefined} /></MemoryRouter>);
+    expect(screen.queryByRole("link", { name: "View Active Intervention" })).toBeNull();
+  });
+  it("never shows active intervention link in the Admin prediction detail", () => {
+    auth.role = "admin";
+    render(<MemoryRouter><PredictionDetailSheet predictionId={41} currentTermPrediction={prediction} activeInterventionId={19} open onOpenChange={() => undefined} /></MemoryRouter>);
+    expect(screen.queryByRole("link", { name: "View Active Intervention" })).toBeNull();
   });
   const renderExamination = (status: DevelopmentCurrentTermListItem["academic_evidence"]["examination"]["presentation"]["status"], components: { SUMMATIVE_1: number | null; SUMMATIVE_2: number | null; TERM_EXAM: number | null }, performancePercent: number | null = null) => {
     render(<PredictionDetailSheet predictionId={41} currentTermPrediction={{

@@ -50,6 +50,7 @@ interface PredictionDetailSheetProps {
   onOpenChange: (open: boolean) => void;
   currentTermPrediction?: DevelopmentCurrentTermListItem | null;
   candidateId?: number;
+  activeInterventionId?: number;
 }
 
 const RISK_BADGE_STYLES: Record<string, string> = {
@@ -97,10 +98,12 @@ export default function PredictionDetailSheet({
   onOpenChange,
   currentTermPrediction = null,
   candidateId,
+  activeInterventionId,
 }: PredictionDetailSheetProps) {
   const toast = useToast();
-  const { user } = useAuth();
-  const isTeacher = user?.role === "teacher";
+  const { user, role } = useAuth();
+  const isTeacher = (user?.role ?? role) === "teacher";
+
 
   const [detail, setDetail] = useState<PredictionDetail | null>(null);
   const [suggestions, setSuggestions] = useState<PredictionSuggestionItem[]>([]);
@@ -210,7 +213,11 @@ export default function PredictionDetailSheet({
 
         {currentTermPrediction ? (
           <div>
-            <CurrentTermTeacherDetail prediction={currentTermPrediction} />
+            <CurrentTermTeacherDetail
+              prediction={currentTermPrediction}
+              isTeacher={isTeacher}
+              activeInterventionId={activeInterventionId}
+            />
 
             {isTeacher && candidateId !== undefined && (
               <div className="px-4 pb-5 pt-3">
@@ -766,8 +773,12 @@ function formatDate(value: string): string {
 
 function CurrentTermTeacherDetail({
   prediction,
+  isTeacher = false,
+  activeInterventionId,
 }: {
   prediction: DevelopmentCurrentTermListItem;
+  isTeacher?: boolean;
+  activeInterventionId?: number;
 }) {
   const academic = prediction.academic_evidence;
   const attendance = prediction.participation_context.attendance;
@@ -997,6 +1008,7 @@ function CurrentTermTeacherDetail({
 
       <section
         aria-labelledby="term-progress-heading"
+        className="mb-4"
       >
         <h2 id="term-progress-heading" className="mb-2 text-base font-black">
           Term Progress
@@ -1027,6 +1039,15 @@ function CurrentTermTeacherDetail({
           </dd>
         </dl>
       </section>
+      {isTeacher && activeInterventionId !== undefined && (
+        <div className="pb-5">
+          <Button asChild>
+            <Link to={`${routes.teacher.interventions}?active=${activeInterventionId}`}>
+              View Active Intervention
+            </Link>
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

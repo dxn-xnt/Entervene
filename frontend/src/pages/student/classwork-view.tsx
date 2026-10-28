@@ -587,6 +587,7 @@ export default function StudentClassworkView() {
                                   >
                                     {lesson.title}
                                   </button>
+                                  
                                   {lesson.readings &&
                                     lesson.readings.length > 0 && (
                                       <div className="mt-2 space-y-2">
