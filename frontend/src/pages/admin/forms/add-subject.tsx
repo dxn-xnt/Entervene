@@ -18,6 +18,7 @@ import {
   getGradingTemplates,
   getSubjectOfferingFormOptions,
   getSubjectFormOptions,
+  getSubjects,
   type GradingTemplateListItem,
   type SubjectListItem,
   type SubjectOfferingFormOptions,
@@ -74,6 +75,17 @@ function pathwayLabel(pathway: SubjectOfferingPathway) {
   return "STEM Engineering";
 }
 
+function suggestedSubjectCode(name: string, grade: number | undefined, existingCodes: string[]) {
+  const firstWord = name.trim().match(/[\p{L}\p{N}]+/u)?.[0];
+  if (!firstWord || grade === undefined) return "";
+  const base = `${Array.from(firstWord).slice(0, 2).join("").toUpperCase()}${grade}`;
+  const used = new Set(existingCodes.map((code) => code.toUpperCase()));
+  if (!used.has(base)) return base;
+  let suffix = 2;
+  while (used.has(`${base}${suffix}`)) suffix += 1;
+  return `${base}${suffix}`;
+}
+
 
 
 function formWithDefaults(
@@ -103,6 +115,7 @@ export default function AddSubjectModal({
     GradingTemplateListItem[]
   >([]);
   const [form, setForm] = React.useState<SubjectFormState>(emptyForm);
+  const [existingSubjects, setExistingSubjects] = React.useState<SubjectListItem[]>([]);
   const [offerNow, setOfferNow] = React.useState(false);
   const [offeringForm, setOfferingForm] =
     React.useState<OfferingFormState>(emptyOfferingForm);
@@ -135,6 +148,17 @@ export default function AddSubjectModal({
       });
       setOfferNow(false);
     }
+  }, [open, subjectToEdit]);
+
+  React.useEffect(() => {
+    if (open === false || subjectToEdit) return;
+    let active = true;
+    void getSubjects().then((result) => {
+      if (active) setExistingSubjects(result.subjects);
+    }).catch(() => {
+      // The server still validates duplicate codes if this suggestion cannot be checked.
+    });
+    return () => { active = false; };
   }, [open, subjectToEdit]);
 
   React.useEffect(() => {
@@ -236,6 +260,19 @@ export default function AddSubjectModal({
   const selectedLevel = options?.academic_levels.find(
     (level) => String(level.academic_level_id) === form.academic_level_id,
   );
+  React.useEffect(() => {
+    if (subjectToEdit) return;
+    const grade = options?.academic_levels.find(
+      (level) => String(level.academic_level_id) === form.academic_level_id,
+    )?.grade_level;
+    const codes = existingSubjects
+      .filter((subject) => subject.academic_level.academic_level_id === Number(form.academic_level_id))
+      .map((subject) => subject.subject_codename || "");
+    const suggestion = suggestedSubjectCode(form.subject_name, grade, codes);
+    setForm((current) => current.subject_codename === suggestion
+      ? current
+      : { ...current, subject_codename: suggestion });
+  }, [form.subject_name, form.academic_level_id, options, existingSubjects, subjectToEdit]);
   const selectedYearId = Number(offeringForm.academic_year_id);
   const availablePeriods = React.useMemo(
     () =>
@@ -365,6 +402,7 @@ export default function AddSubjectModal({
         is_math_or_science: form.is_math_or_science,
       });
       if (!offerNow) {
+        setExistingSubjects((current) => [...current, created]);
         setSuccessMessage(
           `${created.subject_name} has been added to the subject catalog.`,
         );
@@ -391,6 +429,7 @@ export default function AddSubjectModal({
           `Subject created and ${offeringForm.academic_period_ids.length} offering(s) added.`,
         );
         toast.success({ title: "Subject and offerings created" });
+        setExistingSubjects((current) => [...current, created]);
         setForm(formWithDefaults(options));
         setOfferNow(false);
         setOfferingForm((current) => ({ ...current, academic_period_ids: [] }));
@@ -404,6 +443,7 @@ export default function AddSubjectModal({
         setSuccessMessage(
           `${created.subject_name} has been added to the subject catalog.`,
         );
+        setExistingSubjects((current) => [...current, created]);
         setForm(formWithDefaults(options));
         await onCreated?.();
       }
@@ -536,11 +576,9 @@ export default function AddSubjectModal({
             <Input
               id="subject-code"
               value={form.subject_codename}
-              onChange={(event) =>
-                setField("subject_codename", event.target.value)
-              }
+              readOnly
               type="text"
-              placeholder="Enter code"
+              placeholder="Generated from subject name and grade level"
             />
           </div>
           <div className="flex flex-col gap-1.5">
