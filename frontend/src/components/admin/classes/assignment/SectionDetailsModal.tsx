@@ -24,7 +24,7 @@ export default function SectionDetailsModal({
   const sorted = sortAssignmentStudents(students);
   return (
     <div className="fixed inset-0 z-[70] grid place-items-center bg-black/50 p-4">
-      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-none border-2 border-border bg-background text-foreground shadow-[4px_4px_0_#000]">
+      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded border-2 border-border bg-background text-foreground shadow-[4px_4px_0_#000]">
         <div className="flex shrink-0 items-start justify-between border-b-2 border-black bg-primary p-4">
           <div>
             <h3 className="text-lg font-bold">{section.sectionName}</h3>

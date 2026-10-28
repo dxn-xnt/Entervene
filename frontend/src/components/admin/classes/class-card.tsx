@@ -47,7 +47,7 @@ export default function ClassCard({ item, onEdit, onArchive }: {
           {pathwayLabel && <p className="mt-1 text-xs font-semibold text-muted-foreground">Academic Pathway: {pathwayLabel}</p>}
         </Link>
         <div className="flex items-center gap-2 shrink-0">
-          <Badge variant={isArchived ? "default" : "surface"}>
+          <Badge size="sm" variant={isArchived ? "default" : "secondary"}>
             {isArchived ? "Archived" : "Active"}
           </Badge>
           <DropdownMenu>
@@ -57,7 +57,7 @@ export default function ClassCard({ item, onEdit, onArchive }: {
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="p-2 shadow-none"
+                    className="p-1 shadow-none"
                     aria-label="More options"
                     onClick={(e) => e.preventDefault()}
                   >
@@ -67,11 +67,11 @@ export default function ClassCard({ item, onEdit, onArchive }: {
               </span>} />
               <TooltipContent>Class actions</TooltipContent>
             </Tooltip>
-            <DropdownMenuContent align="end" className="border-2">
-              <DropdownMenuItem onClick={onEdit} className="gap-2">
+            <DropdownMenuContent align="end" className="rounded border-2">
+              <DropdownMenuItem onClick={onEdit} className="gap-2 rounded">
                 <PenIcon className="size-4" /> Edit
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onArchive} disabled={isArchived} className="gap-2">
+              <DropdownMenuItem onClick={onArchive} disabled={isArchived} className="gap-2 rounded">
                 <ArchiveIcon className="size-4" /> Archive
               </DropdownMenuItem>
             </DropdownMenuContent>

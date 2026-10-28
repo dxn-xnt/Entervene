@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Ellipsis, Lock, Plus, Search, X } from "lucide-react";
+import { Lock, Pencil, Plus, Search, X } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/admin/button";
 import { Card } from "@/components/retroui/Card";
@@ -149,9 +149,9 @@ function TemplateCard({ template, onEdit }: { template: GradingTemplateListItem;
   const [showAll, setShowAll] = useState(false);
   const grouped = useMemo(() => { const groups = new Map<number | null, GradingTemplateListItem["assigned_subjects"]>(); for (const subject of template.assigned_subjects) { const key = subject.grade_level ?? null; groups.set(key, [...(groups.get(key) ?? []), subject]); } return [...groups.entries()].sort(([a], [b]) => (a ?? 999) - (b ?? 999)); }, [template.assigned_subjects]);
   const preview = template.assigned_subjects.slice(0, 4);
-  return <Card className="flex h-full min-w-0 flex-col overflow-hidden border-2 border-black bg-primary p-3 shadow-[5px_5px_0_#000]"><div className="mb-2 flex min-w-0 items-start justify-between gap-2"><h3 className="min-w-0 break-words text-xl font-bold leading-tight">{template.template_name}</h3><div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5"><Badge className="bg-white capitalize" variant="outline">{template.status}</Badge>{template.is_locked ? <Badge className="bg-black text-white" variant="solid"><Lock className="mr-1 size-3" />Locked</Badge> : null}<Button aria-label={`Edit ${template.template_name}`} size="icon" className="size-8 bg-black p-1 text-white shadow-none" onClick={() => onEdit(template)}><Ellipsis className="size-4" /></Button></div></div>
+  return <Card className="flex h-full min-w-0 flex-col overflow-hidden border-2 border-black bg-primary p-3 shadow-[5px_5px_0_#000]"><div className="mb-2 flex min-w-0 items-start justify-between gap-2"><h3 className="min-w-0 break-words text-xl font-bold leading-tight">{template.template_name}</h3><div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5"><Badge className="bg-white capitalize" variant="outline">{template.status}</Badge>{template.is_locked ? <Badge className="bg-black text-white" variant="solid"><Lock className="mr-1 size-3" />Locked</Badge> : null}<Button aria-label={`Edit ${template.template_name}`} size="icon" className="size-8 bg-black p-1 text-white shadow-none" onClick={() => onEdit(template)}><Pencil className="size-4" /></Button></div></div>
     <div className="mb-2 flex items-center justify-between gap-2 text-sm"><span>Passing: <strong>{template.passing_threshold}%</strong></span><span className="text-right"><strong>{template.assigned_subject_count}</strong> assigned</span></div>
-    <div className="mb-2 flex-1 border-2 border-black bg-white p-2"><div className="flex flex-wrap gap-1.5">{preview.map((subject) => <Badge key={subject.subject_id} className="max-w-full bg-primary" variant="outline">{subject.subject_name}</Badge>)}{!template.assigned_subjects.length ? <span className="text-sm text-black/55">No assigned subjects</span> : null}</div>
+    <div className="mb-2 flex-1 rounded border-2 border-black bg-white p-2"><div className="flex flex-wrap gap-1.5">{preview.map((subject) => <Badge key={subject.subject_id} className="max-w-full bg-primary" variant="outline">{subject.subject_name}</Badge>)}{!template.assigned_subjects.length ? <span className="text-sm text-black/55">No assigned subjects</span> : null}</div>
       {template.assigned_subjects.length > 4 ? <Button size="sm" variant="outline" className="mt-2 w-full shadow-none" onClick={() => setShowAll(true)}>{`View All Subjects (${template.assigned_subject_count})`}</Button> : null}
     </div>
     <div className="mt-auto grid grid-cols-3 gap-1.5"><Metric label="Written Work" value={weight(template, "Written Work")} /><Metric label="Performance Tasks" value={weight(template, "Performance Tasks")} /><Metric label="Exams" value={weight(template, "Exams")} /></div>
@@ -165,6 +165,6 @@ function TemplateCard({ template, onEdit }: { template: GradingTemplateListItem;
   </Card>;
 }
 
-function Metric({ label, value }: { label: string; value: number }) { return <div className="min-w-0 border-2 border-black bg-white px-1 py-2 text-center"><span className="block break-words text-xs leading-tight">{label}</span><strong className="text-lg">{value}%</strong></div>; }
+function Metric({ label, value }: { label: string; value: number }) { return <div className="min-w-0 rounded border-2 border-black bg-white px-1 py-2 text-center"><span className="block break-words text-xs leading-tight">{label}</span><strong className="text-lg">{value}%</strong></div>; }
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="flex flex-col gap-1 text-sm font-semibold">{label}{children}</label>; }
 function PercentInput({ value, disabled, invalid, onChange }: { value: string; disabled: boolean; invalid?: boolean; onChange: (value: string) => void }) { return <div className="relative"><Input className="pr-9" type="number" min="0" max="100" value={value} disabled={disabled} aria-invalid={invalid} onChange={(event) => onChange(event.target.value)} /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">%</span></div>; }

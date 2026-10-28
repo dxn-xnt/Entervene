@@ -981,7 +981,12 @@ export default function AdminSubjects() {
                     </div>
                     <div >
                       {archivedSubjects.length === 0 ? (
-                        <p className="text-sm">No archived catalog subjects.</p>
+                        <EmptyStateCard
+                          compact
+                          icon={<Archive />}
+                          title="No archived catalog subjects"
+                          description="Catalog subjects you archive will appear here."
+                        />
                       ) : (
                         <div className="flex gap-3 overflow-auto pb-2 pt-1">
                           {archivedSubjects.map((subject) => (
@@ -1016,7 +1021,12 @@ export default function AdminSubjects() {
                     </div>
                     <div>
                       {archivedOfferings.length === 0 ? (
-                        <p className="text-sm">No archived subject offerings.</p>
+                        <EmptyStateCard
+                          compact
+                          icon={<Archive />}
+                          title="No archived subject offerings"
+                          description="Subject offerings you archive will appear here."
+                        />
                       ) : (
                         <div className="flex gap-3 overflow-auto pb-2 pt-1">
                           {archivedOfferings.map((offering) => (

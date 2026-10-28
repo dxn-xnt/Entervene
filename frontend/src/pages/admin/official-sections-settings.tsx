@@ -130,7 +130,7 @@ export default function OfficialSectionsSettings({ academicYearId, levels, pathw
         {editingId != null && <Button variant="outline" className="w-fit" onClick={resetDraft}>Cancel edit</Button>}
         {loading ? <Text as="p">Loading sections...</Text> : !gradeSections.length ? <Text as="p" className="text-sm text-muted-foreground">No official sections configured for this grade and academic year.</Text> : (
           <div className="grid gap-2">
-            {gradeSections.map((section) => <div key={section.id} className="flex flex-wrap items-center justify-between gap-2 border-2 border-border p-2 text-sm">
+            {gradeSections.map((section) => <div key={section.id} className="flex flex-wrap items-center justify-between gap-2 rounded border-2 border-border p-2 text-sm">
               <div><b>{section.section_name}</b>{section.pathway_name ? ` — ${section.pathway_name}` : ""}<span className="ml-2 text-xs text-muted-foreground">{section.is_active ? "Active" : "Inactive"}{section.has_class ? " · In use" : ""}</span></div>
               {!section.has_class && <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={() => { setEditingId(section.id); setName(section.section_name); setPathwayId(section.pathway_id == null ? "" : String(section.pathway_id)); }}>Edit</Button>

@@ -315,40 +315,52 @@ export default function AssignSubstituteModal({
                       return (
                         <Card
                           key={load.subject_load_id}
+                          variant={isSelected && !isCovered ? "primary" : "default"}
                           onClick={() => {
                             if (!isCovered) handleToggleLoad(load.subject_load_id);
                           }}
-                          className={`p-3 transition-all flex items-start justify-between ${isCovered
+                          className={`flex flex-col gap-2 p-3 transition-all ${isCovered
                               ? "opacity-60 bg-muted/30 border-dashed cursor-not-allowed"
                               : isSelected
-                                ? "border-primary bg-primary/10 shadow-sm cursor-pointer"
+                                ? "border-border cursor-pointer"
                                 : "hover:bg-muted/40 cursor-pointer"
                             }`}
                         >
-                          <div className="flex items-start gap-3">
-                            <Checkbox
-                              checked={isSelected}
-                              disabled={isCovered}
-                              onCheckedChange={() => {
-                                if (!isCovered) handleToggleLoad(load.subject_load_id);
-                              }}
-                              size="sm"
-                            />
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-semibold text-sm">
-                                  {load.subject_name} {load.subject_codename ? `(${load.subject_codename})` : ""}
-                                </span>
-                                <Badge variant="outline" className="text-xs font-normal">
-                                  {load.section_name}
+                          <div className="flex w-full min-w-0 flex-wrap items-start justify-between gap-3">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <Checkbox
+                                type="button"
+                                variant="solid"
+                                checked={isSelected}
+                                disabled={isCovered}
+                                onClick={(event) => event.stopPropagation()}
+                                onCheckedChange={() => {
+                                  if (!isCovered) handleToggleLoad(load.subject_load_id);
+                                }}
+                                size="md"
+                                className="shrink-0 border-foreground"
+                              />
+                              <span className="min-w-0 text-sm font-semibold">
+                                {load.subject_name} {load.subject_codename ? `(${load.subject_codename})` : ""}
+                              </span>
+                            </div>
+                            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                              <Badge variant="outline" size="sm" className="font-normal">
+                                {load.section_name}
+                              </Badge>
+                              {load.is_active_period && (
+                                <Badge variant="surface" size="sm">
+                                  Active Term
                                 </Badge>
-                                {load.is_active_period && (
-                                  <Badge variant="surface" size="sm">
-                                    Active Term
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                              )}
+                              {isCovered && (
+                                <Badge variant="outline" size="sm">
+                                  Covered by {load.active_substitute_name}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                                 <span className="flex items-center gap-1">
                                   <Clock className="h-3 w-3" />
                                   {load.start_time && load.end_time
@@ -359,15 +371,8 @@ export default function AssignSubstituteModal({
                                 {load.days_of_week && load.days_of_week.length > 0 && (
                                   <span>• {load.days_of_week.map((d) => d.slice(0, 3)).join(", ")}</span>
                                 )}
-                              </div>
-                            </div>
                           </div>
 
-                          {isCovered && (
-                            <Badge variant="outline" className="text-xs shrink-0 ml-2">
-                              Covered by {load.active_substitute_name}
-                            </Badge>
-                          )}
                         </Card>
                       );
                     })}
@@ -439,8 +444,8 @@ export default function AssignSubstituteModal({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-foreground flex items-center gap-1">
-                <Calendar className="h-3 w-3" />
-                <span>Start Date *</span>
+                <Calendar className="size-4 shrink-0 text-foreground" />
+                <span>Start Date <span className="text-destructive">*</span></span>
               </label>
               <Input
                 id="substitution-start-date"
@@ -456,7 +461,7 @@ export default function AssignSubstituteModal({
 
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-foreground flex items-center gap-1">
-                <Calendar className="h-3 w-3" />
+                <Calendar className="size-4 shrink-0 text-foreground" />
                 <span>Expected End Date (Optional)</span>
               </label>
               <Input

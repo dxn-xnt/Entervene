@@ -598,6 +598,12 @@ textarea::placeholder,
   border-radius: 0;
 }
 
+/* The Admin user import dialog uses rounded content and upload surfaces. */
+[data-admin-user-import],
+[data-admin-user-import] [data-import-surface] {
+  border-radius: var(--radius) !important;
+}
+
 /* Radios, avatars, and status indicators intentionally retain their shape. */
 :where(form, [data-slot="dialog-content"], [data-slot="sheet-content"]) :where(input[type="radio"], [role="radio"], [data-slot="avatar"], [data-shape="circle"]) {
   border-radius: 9999px;

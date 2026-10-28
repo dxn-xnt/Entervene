@@ -37,7 +37,7 @@ export function SubjectGradeSection({
     >
       <Accordion.Item
         value={accordionValue}
-        className="border-2 border-border bg-background shadow-md overflow-hidden rounded-none"
+        className="border-2 border-border bg-background shadow-md overflow-hidden rounded"
       >
         <Accordion.Header className="items-center px-4 py-3 bg-primary text-foreground">
           <div className="flex items-center justify-between w-full mr-2">
