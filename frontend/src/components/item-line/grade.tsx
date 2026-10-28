@@ -11,7 +11,7 @@ type CardProps = {
 const GradeItemLine = ({ section, subject, badge, onClick }: CardProps) => {
     return (
         <RetroCard className="flex flex-row justify-between items-center px-4 py-2" onClick={onClick}>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-0">
                 <div className="flex flex-row gap-3 items-center">
                     <p className="font-semibold text-2xl">{section}</p>
                 </div>

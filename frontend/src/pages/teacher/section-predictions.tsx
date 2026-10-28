@@ -10,7 +10,10 @@ import IconContainer from "@/components/icon-container";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
-import { useTeacherCandidateShortcut } from "@/components/predictions/use-teacher-candidate-shortcut";
+import {
+  useTeacherActiveInterventionShortcut,
+  useTeacherCandidateShortcut,
+} from "@/components/predictions/use-teacher-candidate-shortcut";
 import { useAuth } from "@/context/AuthContext";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import type {
@@ -430,6 +433,7 @@ function TeacherCurrentTermSectionPredictions() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
   const candidateId = useTeacherCandidateShortcut(selected);
+  const activeInterventionId = useTeacherActiveInterventionShortcut(selected);
 
   // Auto-open via search params (e.g. from dashboard)
   const [searchParams] = useSearchParams();
@@ -845,6 +849,7 @@ function TeacherCurrentTermSectionPredictions() {
         predictionId={selected?.prediction_id ?? null}
         currentTermPrediction={selected}
         candidateId={candidateId}
+        activeInterventionId={activeInterventionId}
         open={selected !== null}
         onOpenChange={(open) => {
           if (!open) setSelected(null);

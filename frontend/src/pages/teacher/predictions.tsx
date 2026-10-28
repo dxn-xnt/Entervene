@@ -12,7 +12,10 @@ import { cn } from "@/lib/utils";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
-import { useTeacherCandidateShortcut } from "@/components/predictions/use-teacher-candidate-shortcut";
+import {
+  useTeacherActiveInterventionShortcut,
+  useTeacherCandidateShortcut,
+} from "@/components/predictions/use-teacher-candidate-shortcut";
 import { PredictionGradeSection } from "@/components/predictions/prediction-grade-section";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import type {
@@ -396,6 +399,7 @@ function TeacherCurrentTermDashboard() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
   const candidateId = useTeacherCandidateShortcut(selected);
+  const activeInterventionId = useTeacherActiveInterventionShortcut(selected);
 
   useEffect(() => {
     if (!selectedPeriodId) {
@@ -557,6 +561,7 @@ function TeacherCurrentTermDashboard() {
         predictionId={selected?.prediction_id ?? null}
         currentTermPrediction={selected}
         candidateId={candidateId}
+        activeInterventionId={activeInterventionId}
         open={selected !== null}
         onOpenChange={(open) => {
           if (!open) setSelected(null);

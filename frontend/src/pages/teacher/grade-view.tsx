@@ -65,12 +65,12 @@ function MissingGradeItems({ items, total }: { items: GradeSendMissingItem[]; to
   </div>;
 }
 
-/** Helper to get at most 2 latest items (or scores) arranged latest to oldest (newest first). */
+/** Helper to get at most 2 latest items (or scores) arranged chronologically (left to right). */
 function getLatestTwo<T>(arr: T[]): { item: T; originalIndex: number }[] {
   if (!arr || arr.length === 0) return [];
   const result: { item: T; originalIndex: number }[] = [];
   const start = Math.max(0, arr.length - 2);
-  for (let i = arr.length - 1; i >= start; i--) {
+  for (let i = start; i < arr.length; i++) {
     result.push({ item: arr[i], originalIndex: i });
   }
   return result;
@@ -787,7 +787,7 @@ const TeacherGradeView = () => {
                   <TooltipContent>View scores</TooltipContent>
                 </Tooltip>
                 <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
-                  {getLatestTwo(cg.writtenWork).map(({ item }) => (
+                  {getLatestTwo(cg.writtenWork).map(({ item, originalIndex }) => (
                     <Tooltip key={item.id}>
                       <TooltipTrigger render={<button
                         type="button"
@@ -796,7 +796,7 @@ const TeacherGradeView = () => {
                         aria-label={isViewOnly ? item.title : `Enter scores for ${item.title}`}
                         onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                       >
-                        <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
+                        <span className="truncate max-w-[90px] font-semibold">WW{originalIndex + 1}</span>
                         {item.sourceInterventionId && <span className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
                         <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                       </button>} />
@@ -837,7 +837,7 @@ const TeacherGradeView = () => {
                   <TooltipContent>View scores</TooltipContent>
                 </Tooltip>
                 <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
-                  {getLatestTwo(cg.performanceTask).map(({ item }) => (
+                  {getLatestTwo(cg.performanceTask).map(({ item, originalIndex }) => (
                     <Tooltip key={item.id}>
                       <TooltipTrigger render={<button
                         type="button"
@@ -846,7 +846,7 @@ const TeacherGradeView = () => {
                         aria-label={isViewOnly ? item.title : `Enter scores for ${item.title}`}
                         onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                       >
-                        <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
+                        <span className="truncate max-w-[90px] font-semibold">PT{originalIndex + 1}</span>
                         {item.sourceInterventionId && <span className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
                         <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                       </button>} />
@@ -892,7 +892,7 @@ const TeacherGradeView = () => {
                   <TooltipContent>View scores</TooltipContent>
                 </Tooltip>
                 <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
-                  {getLatestTwo(examItems).map(({ item }) => (
+                  {getLatestTwo(examItems).map(({ item, originalIndex }) => (
                     <Tooltip key={item.id}>
                       <TooltipTrigger render={<button
                         type="button"
@@ -901,7 +901,7 @@ const TeacherGradeView = () => {
                         aria-label={isViewOnly ? item.title : `Enter scores for ${item.title}`}
                         onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                       >
-                        <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
+                        <span className="truncate max-w-[90px] font-semibold">E{originalIndex + 1}</span>
                         {item.sourceInterventionId && <span className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
                         <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                       </button>} />

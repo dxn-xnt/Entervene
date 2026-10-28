@@ -318,6 +318,14 @@ export function matchingCandidate(prediction: DevelopmentCurrentTermListItem, ca
     && prediction.projected_final_term_grade < (candidate.passing_threshold ?? 85));
 }
 
+export function matchingActiveIntervention(prediction: DevelopmentCurrentTermListItem, activeInterventions: TeacherInterventionSummary[]): TeacherInterventionSummary | undefined {
+  return activeInterventions.find((intervention) => intervention.status === "ACTIVE"
+    && intervention.student_id === prediction.student_id
+    && intervention.class_id === prediction.class_id
+    && intervention.subject_id === prediction.subject_id
+    && intervention.academic_period_id === prediction.academic_period_id);
+}
+
 export interface RemediationDraftGenerationRequest {
   draft_format: "QUIZ" | "CLASSWORK";
   target_component: "WRITTEN_WORK" | "PERFORMANCE_TASK" | "EXAMINATION";

@@ -15,7 +15,10 @@ import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
-import { useTeacherCandidateShortcut } from "@/components/predictions/use-teacher-candidate-shortcut";
+import {
+  useTeacherActiveInterventionShortcut,
+  useTeacherCandidateShortcut,
+} from "@/components/predictions/use-teacher-candidate-shortcut";
 import {
   type AssignedSubjectSectionScope,
   type AuthorizedCurrentTermRow,
@@ -50,6 +53,7 @@ export default function SubjectPrediction() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
   const candidateId = useTeacherCandidateShortcut(selected);
+  const activeInterventionId = useTeacherActiveInterventionShortcut(selected);
 
   // Section-by-section health
   const [healthData, setHealthData] = useState<TeacherDashboardHealthResponse | null>(null);
@@ -532,6 +536,7 @@ export default function SubjectPrediction() {
         predictionId={selected?.prediction_id ?? null}
         currentTermPrediction={selected}
         candidateId={candidateId}
+        activeInterventionId={activeInterventionId}
         open={selected !== null}
         onOpenChange={(open) => {
           if (!open) setSelected(null);
