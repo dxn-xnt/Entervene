@@ -655,7 +655,7 @@ function EditUserModal({
               <EditField label="Address">
                 <textarea
                   rows={3}
-                  className="w-full resize-none rounded border-2 border-border bg-background px-4 py-2 text-sm text-foreground shadow-md transition focus:outline-hidden focus:shadow-xs"
+                  className="w-full resize-none rounded! border-2 border-border bg-background px-4 py-2 text-sm text-foreground shadow-md transition focus:outline-hidden focus:shadow-xs"
                   value={form.address || ""}
                   onChange={(event) => setField("address", event.target.value)}
                 />

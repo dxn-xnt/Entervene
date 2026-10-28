@@ -297,7 +297,7 @@ export default function ExistingClassDistribution({
             <Alert status="info">Create another eligible class for this academic year and grade before distributing students evenly.</Alert>
           ) : (
             <>
-              <fieldset className="grid gap-2 rounded border-2 border-border p-3">
+              <fieldset className="grid gap-2 rounded! border-2 border-border p-3">
                 <legend className="px-1 font-bold">Existing classes to include</legend>
                 <label className="flex items-center gap-2"><input type="checkbox" checked disabled />{sourceSectionName} (current class)</label>
                 {otherClasses.map((item) => (
@@ -307,7 +307,7 @@ export default function ExistingClassDistribution({
                   </label>
                 ))}
               </fieldset>
-              <fieldset className="grid gap-2 rounded border-2 border-border p-3">
+              <fieldset className="grid gap-2 rounded! border-2 border-border p-3">
                 <legend className="px-1 font-bold">Distribution method</legend>
                 <label className="flex items-center gap-2"><input type="radio" name="existing-distribution-mode" checked={mode === "alphabetical"} onChange={() => { setMode("alphabetical"); setPreview(null); setError(""); }} />Balance alphabetically and by gender</label>
                 <label className="flex items-center gap-2"><input type="radio" name="existing-distribution-mode" checked={mode === "gwa"} onChange={() => { setMode("gwa"); setPreview(null); setError(""); }} />Balance by prior academic performance (GWA)</label>

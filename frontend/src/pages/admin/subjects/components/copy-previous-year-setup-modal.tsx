@@ -156,7 +156,7 @@ export function CopyPreviousYearSetupModal({
             </div>
           </div>
 
-          <label className="flex cursor-pointer items-start gap-3 rounded border-2 border-black bg-background p-3 text-sm shadow-[2px_2px_0_#000]">
+          <label className="flex cursor-pointer items-start gap-3 rounded! border-2 border-black bg-background p-3 text-sm shadow-[2px_2px_0_#000]">
             <Checkbox
               checked={overwriteExisting}
               onCheckedChange={(checked) => setOverwriteExisting(checked === true)}

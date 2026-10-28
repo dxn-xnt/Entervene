@@ -468,7 +468,7 @@ export default function AddSubjectModal({
             </Text>
           </div>
         </Dialog.Header>
-        <section className="flex flex-col gap-4 p-4">
+        <section className="flex flex-col gap-4 px-5 py-4">
           <Text as="p" className="text-sm">
             {successMessage}
           </Text>
@@ -505,7 +505,7 @@ export default function AddSubjectModal({
           </Text>
         </div>
       </Dialog.Header>
-      <section className="flex flex-col gap-4 p-4">
+      <section className="flex flex-col gap-4 px-5 py-4">
         <AdminValidationAlert
           message={error && !["Select a grade level.", "Subject name is required.", "Select an academic year for the offering.", "Select at least one term for the offering.", "Select a pathway for the offering.", "Select an active grading template."].includes(error) ? error : null}
           attempt={validationAttempt}
@@ -599,10 +599,19 @@ export default function AddSubjectModal({
             </Select>
             {error === "Select an active grading template." && <FormMessage id="grading-template-error">{error}</FormMessage>}
             {selectedTemplateObj && (
-              <div className="rounded border border-black/20 bg-muted/20 p-3 text-sm">
-                <strong>{selectedTemplateObj.template_name}</strong>
-                <p>Passing Threshold: {selectedTemplateObj.passing_threshold}%</p>
-                <p>Written Work: {selectedTemplateObj.components.find((c) => c.component_name === "Written Work")?.weight ?? 0}% | Performance Tasks: {selectedTemplateObj.components.find((c) => c.component_name === "Performance Tasks")?.weight ?? 0}% | Exams: {selectedTemplateObj.components.find((c) => c.component_name === "Exams")?.weight ?? 0}%</p>
+              <div className="rounded! border-2 border-black bg-primary p-3 text-sm mt-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <strong>{selectedTemplateObj.template_name}</strong>
+                  <span>Passing Threshold: {selectedTemplateObj.passing_threshold}%</span>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  {(["Written Work", "Performance Tasks", "Exams"] as const).map((componentName) => (
+                    <div key={componentName} className="flex items-center justify-between gap-2 rounded! border-2 border-black bg-background p-2">
+                      <span>{componentName}</span>
+                      <strong>{selectedTemplateObj.components.find((component) => component.component_name === componentName)?.weight ?? 0}%</strong>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -619,7 +628,7 @@ export default function AddSubjectModal({
             />
           </div>
           <div className="flex flex-col gap-1">
-            <div className="flex items-start gap-3 mt-2 rounded border-2 border-black p-3 shadow-[2px_2px_0_#000]">
+            <div className="flex items-start gap-3 mt-2 rounded! border-2 border-black p-3 shadow-[2px_2px_0_#000]">
               <Checkbox
                 id="is-math-science"
                 checked={form.is_math_or_science}
@@ -641,7 +650,7 @@ export default function AddSubjectModal({
             </div>
           </div>
         </div>
-        <section className="rounded border-2 border-black bg-[#fff7d6] p-3 shadow-[3px_3px_0_#000]">
+        <section className="rounded! border-2 border-black bg-[#fff7d6] p-3 shadow-[3px_3px_0_#000]">
           <div className="flex items-start gap-3">
             <Checkbox
               id="offer-now"
