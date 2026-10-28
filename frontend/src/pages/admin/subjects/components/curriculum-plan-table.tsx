@@ -336,11 +336,11 @@ export function CurriculumPlanTable({
                           </span>} />
                           <TooltipContent>{readOnly ? readOnlyReason || "Read-only" : "Curriculum actions"}</TooltipContent>
                         </Tooltip>
-                        <DropdownMenuContent align="end" className="border-2 min-w-[140px]">
+                        <DropdownMenuContent align="end" className="min-w-[140px] rounded border-2 border-border">
                           <DropdownMenuItem
                             onClick={() => onEdit(row.primaryOffering)}
                             disabled={readOnly}
-                            className="gap-2 cursor-pointer"
+                            className="cursor-pointer gap-2 rounded"
                           >
                             <Pencil className="size-4" /> Edit
                           </DropdownMenuItem>
@@ -348,7 +348,7 @@ export function CurriculumPlanTable({
                             <DropdownMenuItem
                               onClick={() => onArchive(row.primaryOffering)}
                               disabled={readOnly}
-                              className="gap-2 cursor-pointer"
+                              className="cursor-pointer gap-2 rounded"
                             >
                               <Archive className="size-4" /> Archive
                             </DropdownMenuItem>
@@ -356,7 +356,7 @@ export function CurriculumPlanTable({
                             <DropdownMenuItem
                               onClick={() => onRestore(row.primaryOffering)}
                               disabled={readOnly}
-                              className="gap-2 cursor-pointer"
+                              className="cursor-pointer gap-2 rounded"
                             >
                               <RotateCcw className="size-4" /> Restore
                             </DropdownMenuItem>
