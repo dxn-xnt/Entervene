@@ -235,13 +235,23 @@ function LegacyPredictionsDashboard() {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
+            <div data-page-tabs-sticky-region={canUseDevelopment ? "" : undefined}>
             {/* ── Header ── */}
             <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <SidebarTrigger className="shrink-0 md:hidden" />
               <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1>
             </header>
 
-            {canUseDevelopment && <Tabs tabs={[{ id: "legacy", label: "AI Predictions" }, { id: "development", label: "Current-Term Development" }]} activeTab={view} onTabChange={setView} />}
+            {canUseDevelopment && (
+              <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                <Tabs
+                  tabs={[{ id: "legacy", label: "AI Predictions" }, { id: "development", label: "Current-Term Development" }]}
+                  activeTab={view}
+                  onTabChange={setView}
+                />
+              </div>
+            )}
+            </div>
 
             {canUseDevelopment && view === "development" ? (
               <DevelopmentCurrentTermPanel

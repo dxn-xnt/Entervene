@@ -977,6 +977,7 @@ export default function SubjectLessonTab({
               {/* ════════════════ RIGHT: Weekly Goals ════════════════ */}
               <div className="flex w-full min-w-0 flex-col gap-4">
                 <LessonGoalProgress
+                  shadowless
                   goalItems={curatedGoals}
                   className="w-full min-w-0"
                   onClassworkClick={(_cwId, asgnId) => {

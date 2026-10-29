@@ -190,7 +190,7 @@ export default function CompetencyModal({
                 aria-invalid={error === "Learning competency statement is required."}
                 aria-describedby={error === "Learning competency statement is required." ? "competency-statement-error" : undefined}
                 placeholder="e.g. Translates verbal phrases to mathematical expressions and vice versa."
-                className="w-full resize-none rounded border-2 border-border bg-background px-4 py-2 font-sans text-base font-normal shadow-md transition focus:outline-hidden focus:shadow-xs aria-[invalid=true]:border-destructive"
+                className="w-full resize-none rounded! border-2 border-border bg-background px-4 py-2 font-sans text-base font-normal shadow-md transition focus:outline-hidden focus:shadow-xs aria-[invalid=true]:border-destructive"
               />
               {error === "Learning competency statement is required." && <FormMessage id="competency-statement-error">{error}</FormMessage>}
             </Field>

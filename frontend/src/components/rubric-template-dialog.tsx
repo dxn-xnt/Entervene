@@ -3,6 +3,7 @@ import { BookOpenCheck, Copy, ExternalLink, MoreVertical, Pencil, Plus, Trash2, 
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import {
   Dialog,
   dialogHeaderCloseButtonClassName,
@@ -276,9 +277,9 @@ export function RubricTemplateDialog({
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           {view === "list" && (
-            <>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex-1 min-w-0 -mb-4">
+            <div>
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div className="min-w-0 flex-1">
                   <Tabs
                     tabs={templateTabs}
                     activeTab={tab}
@@ -287,7 +288,7 @@ export function RubricTemplateDialog({
                     tabClassName="rounded-t!"
                   />
                 </div>
-                <Button type="button" size="sm" onClick={() => openForm()}>
+                <Button type="button" size="sm" className="mb-2" onClick={() => openForm()}>
                   <Plus /> Create Template
                 </Button>
               </div>
@@ -326,19 +327,21 @@ export function RubricTemplateDialog({
               )}
 
               {!loading && !error && visible.length === 0 && (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tab === "mine"
-                    ? "No personal templates yet. Create one to reuse it later."
-                    : "No system templates are available."}
-                </p>
+                <TeacherEmptyState
+                  compact
+                  className="mt-0"
+                  icon={<BookOpenCheck />}
+                  title={tab === "mine" ? "No personal templates yet" : "No system templates available"}
+                  description={tab === "mine" ? "Create a template to reuse in future classwork." : "System rubric templates will appear here when available."}
+                />
               )}
 
-              {!loading && !error && (
-                <Card className="grid gap-3 md:grid-cols-2">
+              {!loading && !error && visible.length > 0 && (
+                <div className="grid gap-3 rounded! border-2 border-border bg-card p-4 md:grid-cols-2">
                   {visible.map((template) => (
                     <Card
                       key={template.rubric_template_id}
-                      className="min-w-0 p-4 shadow-none hover:bg-retro hover:-translate-y-1"
+                      className="min-w-0 border-2 border-border p-4 shadow-none hover:bg-retro hover:-translate-y-1"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
@@ -444,9 +447,9 @@ export function RubricTemplateDialog({
                       </div>
                     </Card>
                   ))}
-                </Card>
+                </div>
               )}
-            </>
+            </div>
           )}
 
           {view === "form" && (

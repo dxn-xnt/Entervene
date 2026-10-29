@@ -207,22 +207,22 @@ function OverviewTab({
   return (
     <div className="grid gap-4 min-w-0">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px] xl:grid-rows-[auto_1fr] items-stretch min-w-0">
-        <section className="min-w-0">
+        <section className="flex min-w-0 flex-col gap-2">
           <h3 className="text-lg font-bold">Subjects</h3>
           <div className="grid gap-2 min-w-0">
             {detail.subject_loads.length ? (
               detail.subject_loads.map((load) => (
                 <Card key={load.subject_load_id} className="block w-full">
-                  <Card.Content className="flex min-h-16 items-center justify-between gap-4">
+                  <Card.Content className="flex min-h-16 items-start justify-between gap-4">
                     <span>
-                      <span className="block text-xl font-black">
+                      <span className="block text-xl font-bold text-foreground/90">
                         {load.subject_name}
                       </span>
-                      <span className="block text-[10px] font-semibold text-black/65">
+                      <span className="block text-sm text-muted-foreground">
                         {load.teacher_name}
                       </span>
                     </span>
-                    <span className="text-right text-xs font-semibold">
+                    <span className="text-right text-sm font-medium">
                       {load.schedule || "No schedule"}
                     </span>
                   </Card.Content>

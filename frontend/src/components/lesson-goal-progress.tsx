@@ -3,6 +3,8 @@ import { ClipboardList, BookOpen, FileText, GraduationCap, Pencil, Sparkles } fr
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
+import { cn } from "@/lib/utils";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
 import {
   Empty,
   EmptyContent,
@@ -34,6 +36,7 @@ export interface LessonGoalProgressProps {
   className?: string;
   title?: string;
   isTeacher?: boolean;
+  shadowless?: boolean;
   onSetGoal?: () => void;
   onClassworkClick?: (classworkId: number, classworkAssignmentId?: number | null) => void;
 }
@@ -79,13 +82,15 @@ function ClassworkIcon({
   type,
   size = 16,
   isExam = false,
+  neutral = false,
 }: {
   type?: string | null;
   size?: number;
   isExam?: boolean;
+  neutral?: boolean;
 }) {
   if (isExam || type?.toLowerCase() === "exam") {
-    return <GraduationCap size={size} className="text-purple-700" />;
+    return <GraduationCap size={size} className={neutral ? "shrink-0 text-foreground" : "text-purple-700"} />;
   }
   switch (type?.toLowerCase()) {
     case "quiz":
@@ -102,11 +107,13 @@ function TimelineItem({
   isFirst = false,
   isLast = false,
   status = "upcoming",
+  hideTrack = false,
 }: {
   children: React.ReactNode;
   isFirst?: boolean;
   isLast?: boolean;
   status: "done" | "ongoing" | "upcoming";
+  hideTrack?: boolean;
 }) {
   const getDotClass = () => {
     switch (status) {
@@ -135,7 +142,7 @@ function TimelineItem({
   return (
     <div className="relative flex items-start gap-3 last:pb-0">
       {/* Timeline track column */}
-      <div className="relative flex flex-col items-center shrink-0 w-3.5 self-stretch">
+      {!hideTrack && <div className="relative flex flex-col items-center shrink-0 w-3.5 self-stretch">
         {/* Continuous line segment */}
         {!(isFirst && isLast) && (
           <div
@@ -152,7 +159,7 @@ function TimelineItem({
         <div
           className={`relative z-10 w-3.5 h-3.5 rounded-full border-2 shrink-0 mt-[20px] ${getDotClass()}`}
         />
-      </div>
+      </div>}
       {/* Content */}
       <div className="flex-1 min-w-0 my-1.5">
         {children}
@@ -170,6 +177,7 @@ export function LessonGoalProgress({
   className = "flex-1 min-w-0",
   title = "Lesson Goals",
   isTeacher = false,
+  shadowless = false,
   onSetGoal,
   onClassworkClick,
 }: LessonGoalProgressProps) {
@@ -181,12 +189,19 @@ export function LessonGoalProgress({
     <div className={className}>
 
 
-      <Card className="block w-full min-w-0">
+      <Card className={cn("block w-full min-w-0", shadowless && "shadow-none hover:shadow-none")}>
         {/* State 1: Curated Mode is empty */}
         {isCuratedEmpty ? (
-          <Card.Content className="p-2 pt-1 flex flex-col gap-3">
+          <Card.Content className="flex flex-col gap-3 p-0">
             <Card.Title className="text-xl">{title}</Card.Title>
-            <Empty className="border-0 bg-retro p-6 shadow-none">
+            {!isTeacher ? (
+              <StudentEmptyState
+                cardless
+                icon={<Sparkles />}
+                title="No lesson goals set yet"
+                description="Your teacher has not highlighted any lesson goal yet."
+              />
+            ) : <Empty className="border-0 bg-retro p-6 shadow-none">
               <EmptyHeader>
                 <EmptyMedia>
                   <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
@@ -213,13 +228,13 @@ export function LessonGoalProgress({
                   </Button>
                 </EmptyContent>
               )}
-            </Empty>
+            </Empty>}
           </Card.Content>
         ) : hasCuratedMode && goalItems && goalItems.length > 0 ? (
           /* State 2: Curated Mode with Teacher-Selected Items */
-          <Card.Content className="p-4 flex flex-col gap-3">
-            <Card.Title>
-              Lesson Goals
+          <Card.Content className="flex flex-col gap-3 p-0">
+            <Card.Title className="text-xl font-bold">
+              {title}
             </Card.Title>
             {goalItems.map((item, idx) => {
               const isFirst = idx === 0;
@@ -228,13 +243,13 @@ export function LessonGoalProgress({
               if (item.item_type === "LESSON" && item.lesson) {
                 return (
                   <div key={`goal-lesson-${item.goal_item_id}`} className="flex flex-col gap-1.5">
-                    <Card.Description className="break-words text-lg sm:text-xl font-extrabold text-black">
+                    <Card.Description className="break-words text-sm font-semibold text-foreground">
                       {item.lesson.title}
                     </Card.Description>
                     {/* Decorative Lesson Completion Timeline Item (maintained per requirements) */}
-                    <TimelineItem isFirst={isFirst} isLast={isLast} status="upcoming">
-                      <div className="border-2 border-muted-foreground bg-muted px-2 py-1 text-center text-muted-foreground sm:px-3">
-                        <p className="text-xs font-semibold">Lesson Completion</p>
+                    <TimelineItem isFirst={isFirst} isLast={isLast} status="upcoming" hideTrack>
+                      <div className="rounded border-2 border-border bg-background px-3 py-2 text-center text-muted-foreground">
+                        <p className="text-sm font-semibold">Lesson Completion</p>
                       </div>
                     </TimelineItem>
                   </div>
@@ -258,25 +273,24 @@ export function LessonGoalProgress({
                 return (
                   <TimelineItem
                     key={`goal-cw-${item.goal_item_id}`}
+                    hideTrack
                     isFirst={isFirst}
                     isLast={isLast}
                     status={itemStatus}
                   >
                     <div
                       onClick={() => onClassworkClick && onClassworkClick(cw.classwork_id, cw.classwork_assignment_id)}
-                      className={`flex items-center justify-between gap-2 w-full border-2 px-3 py-2 transition-all ${isExam
-                        ? "bg-purple-50/70 border-purple-900 hover:bg-purple-100"
-                        : "bg-white border-black hover:bg-accent"
-                        } ${onClassworkClick ? "cursor-pointer" : ""}`}
+                      className={cn("flex w-full flex-wrap items-center justify-between gap-2 rounded border-2 border-border bg-card px-3 py-2 text-card-foreground transition-colors hover:bg-accent", onClassworkClick && "cursor-pointer")}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <ClassworkIcon type={cw.classwork_type} isExam={isExam} />
-                        <p className="text-xs font-bold truncate text-black">{cw.title}</p>
+                      <div className="flex w-full min-w-0 items-center gap-2 [&>svg]:shrink-0">
+                        <ClassworkIcon type={cw.classwork_type} isExam={isExam} neutral />
+                        <p className="whitespace-normal break-words text-sm font-semibold text-foreground">{cw.title}</p>
                       </div>
                       {badge && (
                         <Badge
-                          variant="secondary"
-                          className={`text-[10px] font-bold px-1.5 py-0.5 shrink-0 whitespace-nowrap ${badge.cls}`}
+                          size="sm"
+                          variant={isCompletedClasswork(cw.submission_status) ? "success" : cw.submission_status === "late" || badge.label.includes("late") ? "destructive" : "outline"}
+                          className="shrink-0 whitespace-nowrap"
                         >
                           {badge.label}
                         </Badge>
@@ -317,6 +331,7 @@ export function LessonGoalProgress({
                     <div className="relative">
                       <TimelineItem
                         isFirst={true}
+                        hideTrack={isTeacher}
                         isLast={orderedClassworks.length === 0}
                         status="upcoming"
                       >
@@ -346,6 +361,7 @@ export function LessonGoalProgress({
                           return (
                             <TimelineItem
                               key={cw.classwork_assignment_id}
+                              hideTrack={isTeacher}
                               isFirst={false}
                               isLast={idx === orderedClassworks.length - 1}
                               status={itemStatus}

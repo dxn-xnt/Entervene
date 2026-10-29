@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
+import { Alert } from "@/components/retroui/Alert";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { Select } from "@/components/retroui/Select";
@@ -161,7 +162,10 @@ export function TOSGeneratorScreen({
   const visibleSaveError = saveError?.step === step && saveError.subjectId === currentSubjectId ? saveError.message : null;
 
   useEffect(() => {
-    if (visibleSaveError) saveErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (visibleSaveError) {
+      saveErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      saveErrorRef.current?.focus({ preventScroll: true });
+    }
   }, [visibleSaveError]);
 
   useEffect(() => {
@@ -616,9 +620,14 @@ export function TOSGeneratorScreen({
     if (await handleSaveDraft()) onBack();
   };
 
+  const showAssistError = (message: string) => {
+    setSaveError({ message, step, subjectId: currentSubjectId });
+  };
+
   const handleSuggestTitle = async () => {
+    setSaveError(null);
     if (!currentSubjectName) {
-      alert("Please select a Subject Curriculum first so AI has context for the title.");
+      showAssistError("Please select a Subject Curriculum first so AI has context for the title.");
       return;
     }
     setIsSuggestingTitle(true);
@@ -639,16 +648,17 @@ export function TOSGeneratorScreen({
         if (data?.title) setTitle(data.title);
       } else {
         const err = await res.json().catch(() => ({}));
-        alert(err?.detail || "Failed to generate title suggestion.");
+        showAssistError(err?.detail || "Failed to generate title suggestion.");
       }
     } catch (e: any) {
-      alert(e.message || "Could not reach AI service.");
+      showAssistError(e.message || "Could not reach AI service.");
     } finally {
       setIsSuggestingTitle(false);
     }
   };
 
   const handleSuggestTestParts = async () => {
+    setSaveError(null);
     setIsSuggestingParts(true);
     try {
       const res = await apiFetch("/api/v1/ai/tos-assist", {
@@ -668,18 +678,19 @@ export function TOSGeneratorScreen({
         }
       } else {
         const err = await res.json().catch(() => ({}));
-        alert(err?.detail || "Failed to generate test parts suggestion.");
+        showAssistError(err?.detail || "Failed to generate test parts suggestion.");
       }
     } catch (e: any) {
-      alert(e.message || "Could not reach AI service.");
+      showAssistError(e.message || "Could not reach AI service.");
     } finally {
       setIsSuggestingParts(false);
     }
   };
 
   const handleSuggestCompetencies = async () => {
+    setSaveError(null);
     if (!currentSubjectName) {
-      alert("Please select a Subject Curriculum first so AI knows what curriculum topics to generate.");
+      showAssistError("Please select a Subject Curriculum first so AI knows what curriculum topics to generate.");
       return;
     }
     setIsSuggestingComps(true);
@@ -708,16 +719,17 @@ export function TOSGeneratorScreen({
         }
       } else {
         const err = await res.json().catch(() => ({}));
-        alert(err?.detail || "Failed to generate competencies suggestion.");
+        showAssistError(err?.detail || "Failed to generate competencies suggestion.");
       }
     } catch (e: any) {
-      alert(e.message || "Could not reach AI service.");
+      showAssistError(e.message || "Could not reach AI service.");
     } finally {
       setIsSuggestingComps(false);
     }
   };
 
   const handleRefineTopic = async (compIdx: number) => {
+    setSaveError(null);
     const targetComp = compInputs[compIdx];
     if (!targetComp) return;
     setRefiningCompIdx(compIdx);
@@ -748,10 +760,10 @@ export function TOSGeneratorScreen({
         }
       } else {
         const err = await res.json().catch(() => ({}));
-        alert(err?.detail || "Failed to refine topic.");
+        showAssistError(err?.detail || "Failed to refine topic.");
       }
     } catch (e: any) {
-      alert(e.message || "Could not reach AI service.");
+      showAssistError(e.message || "Could not reach AI service.");
     } finally {
       setRefiningCompIdx(null);
     }
@@ -1133,7 +1145,7 @@ export function TOSGeneratorScreen({
 
           {/* Screen Content Body */}
           <div className={modalMode ? "min-w-0 p-1" : "min-w-0 p-3 sm:p-6"}>
-            {visibleSaveError && <div ref={saveErrorRef} className="mb-4"><FormMessage>{visibleSaveError}</FormMessage></div>}
+            {visibleSaveError && <div ref={saveErrorRef} tabIndex={-1} className="mb-4 outline-none"><Alert aria-live="assertive" className="border-0 bg-transparent p-0 text-sm font-medium text-destructive">{visibleSaveError}</Alert></div>}
             {(step === "ai-review" || step === "export") &&
               (generationWarnings.length > 0 || shortfall.missing > 0) && (
                 <section aria-label="Generator warnings" role="status" className="mb-6 rounded border-2 border-amber-600 bg-amber-50 p-4 text-black">
@@ -1316,7 +1328,7 @@ export function TOSGeneratorScreen({
 
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <label className="text-xs font-bold text-muted-foreground block">Subject Curriculum</label>
+                    <label className="text-sm font-bold text-black block">Subject Curriculum</label>
                     <Select value={currentSubjectId ? String(currentSubjectId) : ""}
                       onValueChange={(value) => handleSubjectChange(Number(value))}>
                       <Select.Trigger aria-label="Subject Curriculum" className="mt-1 w-full min-w-0 rounded">
@@ -1333,7 +1345,7 @@ export function TOSGeneratorScreen({
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-muted-foreground block">Exam Language</label>
+                    <label className="text-sm font-bold text-black block">Exam Language</label>
                     <Select value={language}
                       onValueChange={(value) => setLanguage(value as "English" | "Filipino")}>
                       <Select.Trigger aria-label="Exam Language" className="mt-1 w-full min-w-0 rounded">
@@ -1348,7 +1360,7 @@ export function TOSGeneratorScreen({
 
                   <div>
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-muted-foreground block">Exam Title</label>
+                      <label className="text-sm font-bold text-black block">Exam Title</label>
                       <Tooltip>
                         <TooltipTrigger render={<span className="inline-flex"><Button
                           type="button"
@@ -1377,7 +1389,7 @@ export function TOSGeneratorScreen({
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-muted-foreground block">Academic Term (Trimester)</label>
+                    <label className="text-sm font-bold text-black block">Academic Term (Trimester)</label>
                     <Select value={quarter}
                       onValueChange={(value) => setQuarter(value)}>
                       <Select.Trigger aria-label="Academic Term" className="mt-1 w-full min-w-0 rounded">
@@ -1439,7 +1451,7 @@ export function TOSGeneratorScreen({
                       return (
                         <div
                           key={t.type}
-                          className="flex flex-col gap-2 rounded border-2 border-border bg-muted/20 p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+                          className="flex flex-col gap-2 rounded! border-2 border-border bg-muted/20 p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
                         >
                           <div>
                             <p className="text-xs font-black text-foreground">{t.label}</p>
@@ -1459,7 +1471,7 @@ export function TOSGeneratorScreen({
                                     setTestParts(filtered);
                                   }
                                 }}
-                                className={`rounded border-2 px-2.5 py-1 text-[11px] font-extrabold transition-all ${count === preset ? "border-border bg-primary text-primary-foreground shadow-sm" : "border-border/30 bg-card text-muted-foreground hover:bg-accent"}`}
+                                className={`rounded! border-2 px-2.5 py-1 text-[11px] font-extrabold transition-all ${count === preset ? "border-border bg-primary text-primary-foreground shadow-sm" : "border-border/30 bg-card text-muted-foreground hover:bg-accent"}`}
                               >
                                 {preset}
                               </button>
@@ -1807,7 +1819,7 @@ export function TOSGeneratorScreen({
                       size="sm"
                       variant="outline"
                       onClick={() => setDifficultyRatio({ easy: 60, average: 30, difficult: 10 })}
-                      className="text-muted-foreground"
+                      className="text-black"
                     >
                       Reset to 60/30/10 Standard
                     </Button>
@@ -1853,7 +1865,7 @@ export function TOSGeneratorScreen({
                       size="sm"
                       variant="outline"
                       onClick={handleRecalculate}
-                      className="text-muted-foreground"
+                      className="text-black"
                     >
                       <RefreshCw className="size-4" /> Recalculate
                     </Button>
@@ -1867,7 +1879,7 @@ export function TOSGeneratorScreen({
                           setIsExporting(null);
                         }
                       }}
-                      className="text-muted-foreground"
+                      className="text-black"
                     >
                       <FileDown className="size-4" /> Blueprint PDF
                     </Button>
@@ -1881,7 +1893,7 @@ export function TOSGeneratorScreen({
                           setIsExporting(null);
                         }
                       }}
-                      className="text-muted-foreground"
+                      className="text-black"
                     >
                       <FileText className="size-4" /> Word (.docx)
                     </Button>

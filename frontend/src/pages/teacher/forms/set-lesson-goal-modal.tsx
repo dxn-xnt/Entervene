@@ -322,7 +322,7 @@ export function SetLessonGoalModal({
                     return (
                       <div
                         key={lesson.lesson_id}
-                        className="w-full overflow-hidden rounded border-2 border-border bg-background"
+                        className="w-full overflow-hidden rounded! border-2 border-border bg-background"
                       >
                         {/* Lesson Row */}
                         <div className="flex items-center justify-between bg-muted/50 p-2.5">
@@ -423,7 +423,7 @@ export function SetLessonGoalModal({
                     return (
                       <label
                         key={exam.classwork_id}
-                        className="flex cursor-pointer select-none items-center justify-between gap-2 rounded border-2 border-border bg-background p-3"
+                        className="flex cursor-pointer select-none items-center justify-between gap-2 rounded! border-2 border-border bg-background p-3"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <Checkbox
@@ -478,7 +478,7 @@ export function SetLessonGoalModal({
             <Card.Content className="min-w-0">
 
               {selectedItems.length === 0 ? (
-                <div className="rounded border-2 border-dashed border-border bg-background px-4 py-8 text-center">
+                <div className="rounded! border-2 border-dashed border-border bg-background px-4 py-8 text-center">
                   <p className="text-sm font-bold text-foreground">No goals selected yet</p>
                   <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
                     Check items above to add them. You can reorder them to dictate the exact order shown to students.
@@ -489,7 +489,7 @@ export function SetLessonGoalModal({
                   {selectedItems.map((item, index) => (
                     <div
                       key={item.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded border-2 border-border bg-background p-3 text-card-foreground"
+                      className="flex flex-wrap items-center justify-between gap-2 rounded! border-2 border-border bg-background p-3 text-card-foreground"
                     >
                       {/* Index & Title */}
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
