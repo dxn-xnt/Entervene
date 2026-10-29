@@ -415,7 +415,7 @@ export function GradingTemplateManager({
             </section>
 
             {editing ? (
-              <section className="space-y-3 rounded! border-2 border-black bg-primary/20 p-3">
+              <Card className="block w-full space-y-3 border-border bg-background p-3 shadow-none hover:shadow-none">
                 <h4 className="font-bold">Audited passing-threshold edit</h4>
                 <p className="text-xs">
                   This changes the shared template for every assigned subject.
@@ -503,7 +503,7 @@ export function GradingTemplateManager({
                 >
                   {thresholdSaving ? "Saving..." : "Save Threshold with Audit"}
                 </Button>
-              </section>
+              </Card>
             ) : null}
 
             <section>
@@ -669,8 +669,8 @@ export function GradingTemplateManager({
             </Field>
 
             <section className="rounded! border-2 border-border bg-primary p-3">
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div>
+              <div className="mb-3 grid grid-cols-[minmax(0,1fr)_150px] items-start gap-2">
+                <div className="min-w-0">
                   <h4 className="font-bold">
                     Components{" "}
                     {editing?.is_locked ? (
@@ -684,8 +684,12 @@ export function GradingTemplateManager({
                     </p>
                   ) : null}
                 </div>
-                <div className="rounded! border-2 border-border bg-background px-3 py-2">
-                  Total: <strong>{total}%</strong>
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex h-10 min-w-0 flex-1 items-center gap-1 whitespace-nowrap rounded! border-2 border-border bg-background px-4 font-sans text-base font-normal">
+                    <span>Total:</span>
+                    <strong>{total}</strong>
+                  </div>
+                  <span className="shrink-0">%</span>
                 </div>
               </div>
               <div className="space-y-2">
