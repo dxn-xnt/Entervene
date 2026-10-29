@@ -1807,7 +1807,7 @@ export function TOSGeneratorScreen({
                       size="sm"
                       variant="outline"
                       onClick={() => setDifficultyRatio({ easy: 60, average: 30, difficult: 10 })}
-                      className="text-muted-foreground"
+                      className="text-black"
                     >
                       Reset to 60/30/10 Standard
                     </Button>
