@@ -7,6 +7,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import { Table } from "@/components/retroui/Table";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/admin/button";
 import { useToast } from "@/components/retroui/Toast";
@@ -377,15 +378,6 @@ export default function AdminClassDetail() {
                       </Breadcrumb.Item>
                       <Breadcrumb.Separator />
                       <Breadcrumb.Item>
-                        <Breadcrumb.Link
-                          href={`/admin/classes?grade=${encodeURIComponent(selectedClass.grade)}`}
-                          className="text-xl text-muted-foreground font-semibold"
-                        >
-                          {selectedClass.grade}
-                        </Breadcrumb.Link>
-                      </Breadcrumb.Item>
-                      <Breadcrumb.Separator />
-                      <Breadcrumb.Item>
                         <Breadcrumb.Page>{selectedClass.section}</Breadcrumb.Page>
                       </Breadcrumb.Item>
                     </Breadcrumb.List>
@@ -526,11 +518,11 @@ function OverviewTab({
     };
   }, [classId]);
 
-  const recentActivity = [1, 2, 3].slice(0, 3);
+
   const classSubjects = (scheduleData?.schedule || []).filter((s) => s.type === "class");
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
+    <div className="grid gap-4">
       <div className="grid gap-4">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
           {/* Performance chart */}
@@ -539,7 +531,7 @@ function OverviewTab({
               <Text as="h4" className="font-sans text-lg font-bold">
                 Period Class Performance
               </Text>
-              <Text as="p" className="text-xs font-semibold text-black/65">
+              <Text as="p" className="text-sm text-muted-foreground">
                 Average class mastery across all subjects
               </Text>
             </div>
@@ -588,19 +580,14 @@ function OverviewTab({
               Average mastery per subject load
             </Text>
             <div className="grid gap-2">
-              {(classSubjects.length > 0 ? classSubjects : selectedClass.subjects).map((subjectItem, index: number) => {
+              {(classSubjects.length > 0 ? classSubjects : selectedClass.subjects).map((subjectItem) => {
                 const subject = subjectItem as { subject?: string; name?: string; progress?: number };
                 const name = subject.subject || subject.name || "Subject";
                 const progress = subject.progress || 90;
                 return (
                   <div key={name} className="grid grid-cols-[80px_1fr_34px] items-center gap-2 text-xs">
                     <span className="truncate font-semibold">{name}</span>
-                    <span className="h-2 rounded-full bg-black/15">
-                      <span
-                        className={`block h-full rounded-full ${index % 2 === 0 ? "bg-[#79bd80]" : "bg-[#f7c76f]"}`}
-                        style={{ width: `${progress}%` }}
-                      />
-                    </span>
+                    <Progress value={progress} className="h-2" aria-label={`${name} mastery: ${progress}%`} />
                     <span className="text-right font-bold">{progress}%</span>
                   </div>
                 );
@@ -651,8 +638,8 @@ function OverviewTab({
                       <Text as="p" className="text-lg font-bold">
                         {subject.subject}
                       </Text>
-                      <Text as="p" className="text-xs font-semibold text-black/65">
-                        Teacher: {subject.teacher || "Unassigned"}
+                      <Text as="p" className="text-sm text-muted-foreground">
+                        {subject.teacher || "Unassigned"}
                       </Text>
                     </span>
                     <Text as="p" className="text-sm font-semibold">
@@ -672,27 +659,7 @@ function OverviewTab({
         </section>
       </div>
 
-      {/* Sidebar — Recent Activity */}
-      <aside className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <Text as="h3" className="font-sans text-xl font-bold">
-            Recent Activity
-          </Text>
-          <button className="text-xs font-semibold text-black/50 underline-offset-2 hover:text-black hover:underline transition-colors">
-            View all
-          </button>
-        </div>
-        <RetroCard className="p-3">
-          <div className="grid gap-2">
-            {recentActivity.map((item) => (
-              <div key={item} className="rounded border border-border bg-background p-2 text-xs">
-                <p className="font-semibold">New lessons added for Sci10</p>
-                <p className="text-black/65">Added by {selectedClass.adviser} - 2 hours ago</p>
-              </div>
-            ))}
-          </div>
-        </RetroCard>
-      </aside>
+
     </div>
   );
 }
