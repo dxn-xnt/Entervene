@@ -17,7 +17,12 @@ import { ToggleSwitch } from "@/components/retroui/ToggleSwitch";
 import { OverviewCard } from "@/components/overview-cards";
 import { useToast } from "@/components/retroui/Toast";
 import { UserProfileHeader } from "@/components/profile-header";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
+import { EmptyStateCard } from "./subjects/components/empty-state-card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/retroui/Tooltip";
 import {
   ApiRequestError,
   archiveUser,
@@ -33,7 +38,16 @@ import {
   type UserRole,
 } from "../../lib/api";
 import { mergeAnalytics } from "../../mocks/userAnalytics";
-import { Archive, BookOpen, Clock, GraduationCap, Layers, Pencil, RefreshCw, Users } from "lucide-react";
+import {
+  Archive,
+  BookOpen,
+  Clock,
+  GraduationCap,
+  Layers,
+  Pencil,
+  RefreshCw,
+  Users,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -64,8 +78,21 @@ type StatusStyle = {
   variant: "default" | "secondary" | "outline" | "solid" | "surface" | "ghost";
 };
 
-const COMMON_STATUS_OPTIONS = ["active", "pending", "inactive", "suspended", "archived"];
-const STUDENT_STATUS_OPTIONS = ["active", "no section assigned", "graduated", "archived", "transferred", "dropped"];
+const COMMON_STATUS_OPTIONS = [
+  "active",
+  "pending",
+  "inactive",
+  "suspended",
+  "archived",
+];
+const STUDENT_STATUS_OPTIONS = [
+  "active",
+  "no section assigned",
+  "graduated",
+  "archived",
+  "transferred",
+  "dropped",
+];
 
 function getStatusStyle(status: string | undefined | null): StatusStyle {
   switch ((status || "").toLowerCase()) {
@@ -114,11 +141,15 @@ export default function AdminUserDetail() {
 
   useEffect(() => {
     const onAvatarUpdated = (event: Event) => {
-      const { userId: updatedId, avatar } = (event as CustomEvent<{ userId: string; avatar: string | null }>).detail;
-      if (updatedId === userId) setUser((current) => current ? { ...current, avatar } : current);
+      const { userId: updatedId, avatar } = (
+        event as CustomEvent<{ userId: string; avatar: string | null }>
+      ).detail;
+      if (updatedId === userId)
+        setUser((current) => (current ? { ...current, avatar } : current));
     };
     window.addEventListener("enterve:avatar-updated", onAvatarUpdated);
-    return () => window.removeEventListener("enterve:avatar-updated", onAvatarUpdated);
+    return () =>
+      window.removeEventListener("enterve:avatar-updated", onAvatarUpdated);
   }, [userId]);
 
   useEffect(() => {
@@ -164,7 +195,10 @@ export default function AdminUserDetail() {
   }, [userId, role]);
 
   const effectiveRole = user?.role ?? role ?? "student";
-  const data = useMemo(() => mergeAnalytics(effectiveRole, analytics), [effectiveRole, analytics]);
+  const data = useMemo(
+    () => mergeAnalytics(effectiveRole, analytics),
+    [effectiveRole, analytics],
+  );
   const isPending = (user?.account_status || "").toLowerCase() === "pending";
   const isArchived = (user?.account_status || "").toLowerCase() === "archived";
   const [resending, setResending] = useState(false);
@@ -179,13 +213,15 @@ export default function AdminUserDetail() {
     setError(null);
     setNotice(null);
     try {
-      const res = await resendUserInvitation(userId);
-      setNotice(res.message || "Invitation resent successfully.");
+      await resendUserInvitation(userId);
       toast.success({ title: "Invitation resent" });
       const updated = await getUserDetail(userId);
       setUser(updated);
     } catch (err: unknown) {
-      toast.error({ title: "Failed to resend invitation", description: err instanceof Error ? err.message : undefined });
+      toast.error({
+        title: "Failed to resend invitation",
+        description: err instanceof Error ? err.message : undefined,
+      });
     } finally {
       setResending(false);
     }
@@ -204,8 +240,16 @@ export default function AdminUserDetail() {
       setNotice("User updated successfully.");
       toast.success({ title: "User updated" });
     } catch (err) {
-      if (err instanceof ApiRequestError && (err.status === 400 || err.status === 422)) setEditError(err.message);
-      else toast.error({ title: "Unable to update user", description: err instanceof Error ? err.message : undefined });
+      if (
+        err instanceof ApiRequestError &&
+        (err.status === 400 || err.status === 422)
+      )
+        setEditError(err.message);
+      else
+        toast.error({
+          title: "Unable to update user",
+          description: err instanceof Error ? err.message : undefined,
+        });
     } finally {
       setSaving(false);
     }
@@ -224,7 +268,10 @@ export default function AdminUserDetail() {
       setNotice("User archived successfully.");
       toast.success({ title: "User archived" });
     } catch (err) {
-      toast.error({ title: "Unable to archive user", description: err instanceof Error ? err.message : undefined });
+      toast.error({
+        title: "Unable to archive user",
+        description: err instanceof Error ? err.message : undefined,
+      });
     } finally {
       setArchiving(false);
     }
@@ -235,7 +282,6 @@ export default function AdminUserDetail() {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-
             <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
@@ -269,9 +315,7 @@ export default function AdminUserDetail() {
                       <>
                         <Breadcrumb.Separator />
                         <Breadcrumb.Item>
-                          <Breadcrumb.Page>
-                            {user.name}
-                          </Breadcrumb.Page>
+                          <Breadcrumb.Page>{user.name}</Breadcrumb.Page>
                         </Breadcrumb.Item>
                       </>
                     )}
@@ -289,14 +333,19 @@ export default function AdminUserDetail() {
                       disabled={resending}
                       className="gap-2"
                     >
-                      <RefreshCw className={cn("size-3.5", resending && "animate-spin")} />
+                      <RefreshCw
+                        className={cn("size-3.5", resending && "animate-spin")}
+                      />
                       Resend Invitation
                     </Button>
                   )}
                   <Button
                     type="button"
                     variant="default"
-                    onClick={() => { setEditError(null); setEditOpen(true); }}
+                    onClick={() => {
+                      setEditError(null);
+                      setEditOpen(true);
+                    }}
                     disabled={isPending || isArchived}
                     title={actionDisabledReason}
                     className="gap-2"
@@ -320,7 +369,6 @@ export default function AdminUserDetail() {
             </header>
 
             <div className="border-t border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
-
               {!loading && error && (
                 <Alert status="error">
                   <Alert.Description>{error}</Alert.Description>
@@ -333,24 +381,32 @@ export default function AdminUserDetail() {
                 </Alert>
               )}
 
-              {!loading && user && isPending && user.email_status === "failed" && (
-                <Alert status="error" className="border-2 border-red-500 bg-red-50 text-red-900">
-                  <Alert.Description className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <span>
-                      <strong>Invitation Email Failed:</strong> The invitation email could not be delivered to <strong>{user.email}</strong>.
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="default"
-                      className="bg-red-600 hover:bg-red-700 text-white shrink-0 shadow-none"
-                      onClick={handleResendInvitation}
-                      disabled={resending}
-                    >
-                      Resend Invitation
-                    </Button>
-                  </Alert.Description>
-                </Alert>
-              )}
+              {!loading &&
+                user &&
+                isPending &&
+                user.email_status === "failed" && (
+                  <Alert
+                    status="error"
+                    className="border-2 border-red-500 bg-red-50 text-red-900"
+                  >
+                    <Alert.Description className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <span>
+                        <strong>Invitation Email Failed:</strong> The invitation
+                        email could not be delivered to{" "}
+                        <strong>{user.email}</strong>.
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="bg-red-600 hover:bg-red-700 text-white shrink-0 shadow-none"
+                        onClick={handleResendInvitation}
+                        disabled={resending}
+                      >
+                        Resend Invitation
+                      </Button>
+                    </Alert.Description>
+                  </Alert>
+                )}
 
               {!loading && user && (
                 <div className="space-y-3">
@@ -360,17 +416,34 @@ export default function AdminUserDetail() {
                     role={user.role}
                     subtitle={
                       user.role === "student"
-                        ? [user.grade_level ? `Grade ${user.grade_level}` : null, sectionName(user.section) ?? "No section assigned"].filter(Boolean).join(" - ")
+                        ? [
+                            user.grade_level
+                              ? `Grade ${user.grade_level}`
+                              : null,
+                            sectionName(user.section) ?? "No section assigned",
+                          ]
+                            .filter(Boolean)
+                            .join(" - ")
                         : user.email
                     }
                     extra={user.role === "student" ? user.email : undefined}
-                    avatarVariant={user.role === "student" ? "student" : user.role === "teacher" ? "teacher" : "default"}
+                    avatarVariant={
+                      user.role === "student"
+                        ? "student"
+                        : user.role === "teacher"
+                          ? "teacher"
+                          : "default"
+                    }
                     statusLabel={statusStyle.label}
                     statusVariant={statusStyle.variant}
                     isPending={isPending}
                   />
-                  {effectiveRole === "student" && <StudentAnalytics data={data} />}
-                  {effectiveRole === "teacher" && <TeacherAnalytics user={user} data={data} />}
+                  {effectiveRole === "student" && (
+                    <StudentAnalytics data={data} />
+                  )}
+                  {effectiveRole === "teacher" && (
+                    <TeacherAnalytics user={user} data={data} />
+                  )}
                   {effectiveRole === "admin" && <AdminAnalytics data={data} />}
                 </div>
               )}
@@ -401,7 +474,6 @@ export default function AdminUserDetail() {
     </AppLayout>
   );
 }
-
 
 function initialEditForm(user: UserDetail): UpdateUserPayload {
   const nameParts = user.name.split(" ");
@@ -446,20 +518,39 @@ function EditUserModal({
   onClose: () => void;
   onSubmit: (payload: UpdateUserPayload) => void;
 }) {
-  const [form, setForm] = useState<UpdateUserPayload>(() => initialEditForm(user));
-  const [fieldErrors, setFieldErrors] = useState<Partial<Record<"first_name" | "last_name" | "email" | "prior_gwa", string>>>({});
+  const [form, setForm] = useState<UpdateUserPayload>(() =>
+    initialEditForm(user),
+  );
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<Record<"first_name" | "last_name" | "email" | "prior_gwa", string>>
+  >({});
   const [validationAttempt, setValidationAttempt] = useState(0);
   const isStudent = user.role === "student";
   const isTeacher = user.role === "teacher";
 
-  function setField<K extends keyof UpdateUserPayload>(field: K, value: UpdateUserPayload[K]) {
+  function setField<K extends keyof UpdateUserPayload>(
+    field: K,
+    value: UpdateUserPayload[K],
+  ) {
     onClearError();
     setForm((prev) => ({ ...prev, [field]: value }));
     if (field === "first_name" || field === "last_name" || field === "email") {
-      const valid = field === "email" ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim()) : !!String(value).trim();
-      if (valid) setFieldErrors((current) => ({ ...current, [field]: undefined }));
+      const valid =
+        field === "email"
+          ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim())
+          : !!String(value).trim();
+      if (valid)
+        setFieldErrors((current) => ({ ...current, [field]: undefined }));
     }
-    if (field === "prior_gwa" && (value == null || value === "" || (Number.isFinite(Number(value)) && Number(value) >= 60 && Number(value) <= 100))) setFieldErrors((current) => ({ ...current, prior_gwa: undefined }));
+    if (
+      field === "prior_gwa" &&
+      (value == null ||
+        value === "" ||
+        (Number.isFinite(Number(value)) &&
+          Number(value) >= 60 &&
+          Number(value) <= 100))
+    )
+      setFieldErrors((current) => ({ ...current, prior_gwa: undefined }));
   }
 
   function submit(event: FormEvent) {
@@ -468,8 +559,16 @@ function EditUserModal({
     if (!form.first_name.trim()) errors.first_name = "Enter a first name.";
     if (!form.last_name.trim()) errors.last_name = "Enter a last name.";
     if (!form.email.trim()) errors.email = "Enter an email address.";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errors.email = "Enter a valid email address.";
-    if (form.prior_gwa != null && String(form.prior_gwa).trim() !== "" && (!Number.isFinite(Number(form.prior_gwa)) || Number(form.prior_gwa) < 60 || Number(form.prior_gwa) > 100)) errors.prior_gwa = "Enter a prior GWA from 60 to 100.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()))
+      errors.email = "Enter a valid email address.";
+    if (
+      form.prior_gwa != null &&
+      String(form.prior_gwa).trim() !== "" &&
+      (!Number.isFinite(Number(form.prior_gwa)) ||
+        Number(form.prior_gwa) < 60 ||
+        Number(form.prior_gwa) > 100)
+    )
+      errors.prior_gwa = "Enter a prior GWA from 60 to 100.";
     if (Object.keys(errors).length) {
       setFieldErrors(errors);
       setValidationAttempt((attempt) => attempt + 1);
@@ -485,12 +584,22 @@ function EditUserModal({
       address: form.address?.trim() || "",
       employment_status: form.employment_status?.trim() || "",
       section: form.section?.trim() || null,
-      prior_gwa: form.prior_gwa !== undefined && form.prior_gwa !== null && String(form.prior_gwa).trim() !== "" ? Number(form.prior_gwa) : null,
+      prior_gwa:
+        form.prior_gwa !== undefined &&
+        form.prior_gwa !== null &&
+        String(form.prior_gwa).trim() !== ""
+          ? Number(form.prior_gwa)
+          : null,
     });
   }
 
   return (
-    <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog
+      open={true}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <Dialog.Content size="2xl">
         <Dialog.Header position="static">
           <h2 className="font-sans text-xl font-bold">Edit User</h2>
@@ -507,18 +616,28 @@ function EditUserModal({
                 <Input
                   id="edit-user-first-name"
                   aria-invalid={!!fieldErrors.first_name}
-                  aria-describedby={fieldErrors.first_name ? "edit-user-first-name-error" : undefined}
+                  aria-describedby={
+                    fieldErrors.first_name
+                      ? "edit-user-first-name-error"
+                      : undefined
+                  }
                   value={form.first_name}
-                  onChange={(event) => setField("first_name", event.target.value)}
+                  onChange={(event) =>
+                    setField("first_name", event.target.value)
+                  }
                   required
                   className="w-full"
                 />
-                <FormMessage id="edit-user-first-name-error">{fieldErrors.first_name}</FormMessage>
+                <FormMessage id="edit-user-first-name-error">
+                  {fieldErrors.first_name}
+                </FormMessage>
               </EditField>
               <EditField label="Middle Name">
                 <Input
                   value={form.middle_name || ""}
-                  onChange={(event) => setField("middle_name", event.target.value)}
+                  onChange={(event) =>
+                    setField("middle_name", event.target.value)
+                  }
                   className="w-full"
                 />
               </EditField>
@@ -526,13 +645,21 @@ function EditUserModal({
                 <Input
                   id="edit-user-last-name"
                   aria-invalid={!!fieldErrors.last_name}
-                  aria-describedby={fieldErrors.last_name ? "edit-user-last-name-error" : undefined}
+                  aria-describedby={
+                    fieldErrors.last_name
+                      ? "edit-user-last-name-error"
+                      : undefined
+                  }
                   value={form.last_name}
-                  onChange={(event) => setField("last_name", event.target.value)}
+                  onChange={(event) =>
+                    setField("last_name", event.target.value)
+                  }
                   required
                   className="w-full"
                 />
-                <FormMessage id="edit-user-last-name-error">{fieldErrors.last_name}</FormMessage>
+                <FormMessage id="edit-user-last-name-error">
+                  {fieldErrors.last_name}
+                </FormMessage>
               </EditField>
             </div>
 
@@ -540,14 +667,18 @@ function EditUserModal({
               <Input
                 id="edit-user-email"
                 aria-invalid={!!fieldErrors.email}
-                aria-describedby={fieldErrors.email ? "edit-user-email-error" : undefined}
+                aria-describedby={
+                  fieldErrors.email ? "edit-user-email-error" : undefined
+                }
                 type="email"
                 value={form.email}
                 onChange={(event) => setField("email", event.target.value)}
                 required
                 className="w-full"
               />
-              <FormMessage id="edit-user-email-error">{fieldErrors.email}</FormMessage>
+              <FormMessage id="edit-user-email-error">
+                {fieldErrors.email}
+              </FormMessage>
             </EditField>
 
             <EditField label="Account Status">
@@ -573,8 +704,15 @@ function EditUserModal({
                 <div className="grid gap-3 md:grid-cols-2">
                   <EditField label="Current Year Level">
                     <Select
-                      value={form.grade_level !== null && form.grade_level !== undefined ? String(form.grade_level) : ""}
-                      onValueChange={(val) => setField("grade_level", val ? Number(val) : null)}
+                      value={
+                        form.grade_level !== null &&
+                        form.grade_level !== undefined
+                          ? String(form.grade_level)
+                          : ""
+                      }
+                      onValueChange={(val) =>
+                        setField("grade_level", val ? Number(val) : null)
+                      }
                     >
                       <Select.Trigger className="w-full min-w-0">
                         <Select.Value placeholder="Select..." />
@@ -592,7 +730,9 @@ function EditUserModal({
                     <Input
                       value={form.section || ""}
                       placeholder="Optional"
-                      onChange={(event) => setField("section", event.target.value)}
+                      onChange={(event) =>
+                        setField("section", event.target.value)
+                      }
                       className="w-full"
                     />
                   </EditField>
@@ -601,12 +741,20 @@ function EditUserModal({
                   <Input
                     id="edit-user-prior-gwa"
                     aria-invalid={!!fieldErrors.prior_gwa}
-                    aria-describedby={fieldErrors.prior_gwa ? "edit-user-prior-gwa-error" : undefined}
+                    aria-describedby={
+                      fieldErrors.prior_gwa
+                        ? "edit-user-prior-gwa-error"
+                        : undefined
+                    }
                     type="number"
                     step="0.01"
                     min="60"
                     max="100"
-                    value={form.prior_gwa !== null && form.prior_gwa !== undefined ? String(form.prior_gwa) : ""}
+                    value={
+                      form.prior_gwa !== null && form.prior_gwa !== undefined
+                        ? String(form.prior_gwa)
+                        : ""
+                    }
                     placeholder="e.g. 88.50 (Optional)"
                     onChange={(event) => {
                       const val = event.target.value;
@@ -614,10 +762,14 @@ function EditUserModal({
                     }}
                     className={`w-full ${user.has_computed_gwa ? "opacity-60 bg-muted/30" : ""}`}
                   />
-                  <FormMessage id="edit-user-prior-gwa-error">{fieldErrors.prior_gwa}</FormMessage>
+                  <FormMessage id="edit-user-prior-gwa-error">
+                    {fieldErrors.prior_gwa}
+                  </FormMessage>
                   {user.has_computed_gwa && (
                     <p className="mt-1 text-[11px] text-muted-foreground font-semibold">
-                      Fallback only — this student has a computed average from prior year grades. The computed value is used for sectioning.
+                      Fallback only — this student has a computed average from
+                      prior year grades. The computed value is used for
+                      sectioning.
                     </p>
                   )}
                 </EditField>
@@ -629,7 +781,9 @@ function EditUserModal({
                 <EditField label="Contact Number">
                   <Input
                     value={form.contact_number || ""}
-                    onChange={(event) => setField("contact_number", event.target.value)}
+                    onChange={(event) =>
+                      setField("contact_number", event.target.value)
+                    }
                     className="w-full"
                   />
                 </EditField>
@@ -642,9 +796,13 @@ function EditUserModal({
                       <Select.Value placeholder="Select status" />
                     </Select.Trigger>
                     <Select.Content>
-                      <Select.Item value="Regular/Permanent">Regular/Permanent</Select.Item>
+                      <Select.Item value="Regular/Permanent">
+                        Regular/Permanent
+                      </Select.Item>
                       <Select.Item value="Substitute">Substitute</Select.Item>
-                      <Select.Item value="Probationary">Probationary</Select.Item>
+                      <Select.Item value="Probationary">
+                        Probationary
+                      </Select.Item>
                     </Select.Content>
                   </Select>
                 </EditField>
@@ -677,7 +835,13 @@ function EditUserModal({
   );
 }
 
-function EditField({ label, children }: { label: string; children: ReactNode }) {
+function EditField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
   return (
     <label className="flex flex-col gap-1 text-sm">
       {label}
@@ -700,9 +864,15 @@ function ArchiveUserDialog({
   return (
     <ConfirmDialog
       open
-      onOpenChange={(open) => { if (!open) onCancel(); }}
+      onOpenChange={(open) => {
+        if (!open) onCancel();
+      }}
       title="Archive User"
-      confirmationTitle={<p className="text-base">Are you sure you want to archive <strong>{userName}</strong>?</p>}
+      confirmationTitle={
+        <p className="text-base">
+          Are you sure you want to archive <strong>{userName}</strong>?
+        </p>
+      }
       description="Archived users will no longer appear in the default active user list, but their records and analytics will be preserved."
       confirmLabel={archiving ? "Archiving user..." : "Archive User"}
       confirmVariant="destructive"
@@ -714,30 +884,56 @@ function ArchiveUserDialog({
   );
 }
 
-function Panel({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
+function Panel({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
+}) {
   return (
     <Card className="w-full p-4">
       <Card.Header className="p-0 mb-3">
-        <Card.Title className="text-lg font-bold leading-tight mb-0">{title}</Card.Title>
-        {subtitle && <p className="text-[10px] text-muted-foreground">{subtitle}</p>}
+        <Card.Title className="text-lg font-bold leading-tight mb-0">
+          {title}
+        </Card.Title>
+        {subtitle && (
+          <p className="text-[10px] text-muted-foreground">{subtitle}</p>
+        )}
       </Card.Header>
       <Card.Content className="p-0">{children}</Card.Content>
     </Card>
   );
 }
 
-function SubjectBars({ rows }: { rows: Array<Record<string, number | string>> }) {
+function SubjectBars({
+  rows,
+}: {
+  rows: Array<Record<string, number | string>>;
+}) {
   if (!rows || rows.length === 0) {
-    return <p className="py-4 text-center text-xs text-muted-foreground">No subject performance records available.</p>;
+    return (
+      <p className="py-4 text-center text-xs text-muted-foreground">
+        No subject performance records available.
+      </p>
+    );
   }
   return (
     <div className="space-y-2">
       {rows.map((row, index) => {
         const value = valueNumber(row.value);
         return (
-          <div key={`${row.subject}-${index}`} className="grid grid-cols-[130px_minmax(0,1fr)_36px] items-center gap-2 text-xs">
+          <div
+            key={`${row.subject}-${index}`}
+            className="grid grid-cols-[130px_minmax(0,1fr)_36px] items-center gap-2 text-xs"
+          >
             <span className="truncate">{row.subject}</span>
-            <Progress value={Math.max(4, Math.min(value, 100))} className="h-2" />
+            <Progress
+              value={Math.max(4, Math.min(value, 100))}
+              className="h-2"
+            />
             <span className="text-right font-semibold">{value}%</span>
           </div>
         );
@@ -746,7 +942,13 @@ function SubjectBars({ rows }: { rows: Array<Record<string, number | string>> })
   );
 }
 
-function SmallLineChart({ data, xKey }: { data: Array<Record<string, number | string>>; xKey: string }) {
+function SmallLineChart({
+  data,
+  xKey,
+}: {
+  data: Array<Record<string, number | string>>;
+  xKey: string;
+}) {
   if (!data || data.length === 0) {
     return (
       <div className="flex h-36 items-center justify-center text-xs text-muted-foreground">
@@ -756,13 +958,29 @@ function SmallLineChart({ data, xKey }: { data: Array<Record<string, number | st
   }
   return (
     <div className="h-36">
-      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+      <ResponsiveContainer
+        width="100%"
+        height="100%"
+        minWidth={0}
+        minHeight={0}
+      >
         <LineChart data={data}>
           <CartesianGrid stroke="#e5e1d8" vertical={false} />
-          <XAxis dataKey={xKey} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+          <XAxis
+            dataKey={xKey}
+            tick={{ fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+          />
           <YAxis hide domain={[0, 100]} />
           <ChartTooltip />
-          <Line type="monotone" dataKey="score" stroke="#dc2626" strokeWidth={2} dot={false} />
+          <Line
+            type="monotone"
+            dataKey="score"
+            stroke="#dc2626"
+            strokeWidth={2}
+            dot={false}
+          />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -803,7 +1021,9 @@ function TeacherHandledSideCard({
   handledClasses?: TeacherHandledClass[];
   className?: string;
 }) {
-  const [activeTab, setActiveTab] = useState<"subjects" | "classes">("subjects");
+  const [activeTab, setActiveTab] = useState<"subjects" | "classes">(
+    "subjects",
+  );
   const filteredSubjects = handledSubjects;
   const filteredClasses = handledClasses;
 
@@ -831,11 +1051,12 @@ function TeacherHandledSideCard({
       <Card.Content className="p-0 flex flex-col overflow-y-auto gap-2">
         {activeTab === "subjects" ? (
           filteredSubjects.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground px-4">
-              <BookOpen className="size-8 opacity-30 mb-2" />
-              <p className="text-xs font-semibold">No subjects assigned</p>
-              <p className="text-[11px] opacity-75 mt-0.5">No subject loads are currently mapped to this teacher.</p>
-            </div>
+            <EmptyStateCard
+              compact
+              icon={<BookOpen aria-hidden="true" />}
+              title="No subjects assigned"
+              description="No subject loads are currently mapped to this teacher."
+            />
           ) : (
             filteredSubjects.map((subject) => (
               <Card
@@ -846,19 +1067,34 @@ function TeacherHandledSideCard({
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     <Tooltip>
-                      <TooltipTrigger render={<h4 className="font-bold text-md truncate leading-tight block" tabIndex={0}>
-                        {subject.subject_name}
-                      </h4>} />
+                      <TooltipTrigger
+                        render={
+                          <h4
+                            className="font-bold text-md truncate leading-tight block"
+                            tabIndex={0}
+                          >
+                            {subject.subject_name}
+                          </h4>
+                        }
+                      />
                       <TooltipContent>{subject.subject_name}</TooltipContent>
                     </Tooltip>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {subject.is_core ? (
-                      <Badge variant="secondary" size="sm" className="text-[10px]">
+                      <Badge
+                        variant="secondary"
+                        size="sm"
+                        className="text-[10px]"
+                      >
                         Core
                       </Badge>
                     ) : (
-                      <Badge variant="secondary" size="sm" className="text-[10px]">
+                      <Badge
+                        variant="secondary"
+                        size="sm"
+                        className="text-[10px]"
+                      >
                         Applied
                       </Badge>
                     )}
@@ -867,23 +1103,29 @@ function TeacherHandledSideCard({
 
                 <div className="flex flex-wrap items-center justify-between text-[12px] text-muted-foreground">
                   {subject.grade_levels && subject.grade_levels.length > 0 && (
-                    <span className="font-semibold text-foreground">{subject.grade_levels.join(", ")}</span>
-                  )}
-                  {subject.weekly_hours !== undefined && subject.weekly_hours > 0 && (
-                    <span className="flex items-center gap-1">
-                      <Clock className="size-3" />
-                      {subject.weekly_hours} hrs/wk
+                    <span className="font-semibold text-foreground">
+                      {subject.grade_levels.join(", ")}
                     </span>
                   )}
+                  {subject.weekly_hours !== undefined &&
+                    subject.weekly_hours > 0 && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="size-3" />
+                        {subject.weekly_hours} hrs/wk
+                      </span>
+                    )}
                   <span className="flex items-center gap-1">
                     <Layers className="size-3" />
-                    {subject.class_count ?? subject.sections?.length ?? 0} {subject.class_count === 1 ? "class" : "classes"}
+                    {subject.class_count ?? subject.sections?.length ?? 0}{" "}
+                    {subject.class_count === 1 ? "class" : "classes"}
                   </span>
                 </div>
 
                 {subject.sections && subject.sections.length > 0 && (
                   <div className="flex flex-row gap-2 items-center align-center mt-1">
-                    <div className="text-[11px] font-medium text-muted-foreground">Assigned Sections:</div>
+                    <div className="text-[11px] font-medium text-muted-foreground">
+                      Assigned Sections:
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {subject.sections.map((sec, idx) => (
                         <Badge
@@ -901,88 +1143,140 @@ function TeacherHandledSideCard({
               </Card>
             ))
           )
+        ) : filteredClasses.length === 0 ? (
+          <EmptyStateCard
+            compact
+            icon={<GraduationCap aria-hidden="true" />}
+            title="No classes assigned"
+            description="No class sections are currently handled by this teacher."
+          />
         ) : (
-          filteredClasses.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground px-4">
-              <GraduationCap className="size-8 opacity-30 mb-2" />
-              <p className="text-xs font-semibold">No classes assigned</p>
-              <p className="text-[11px] opacity-75 mt-0.5">No class sections are currently handled by this teacher.</p>
-            </div>
-          ) : (
-            filteredClasses.map((cls) => (
-              <Card
-                variant="squares"
-                key={cls.class_id}
-                className="w-full overflow-x-auto shadow-none"
-              >
-                <div className="flex flex-col items-start justify-between gap-2">
-                  <div className="w-full flex-1 flex flex-row gap-2 items-center justify-between">
-                    <Tooltip>
-                      <TooltipTrigger render={<h4 className="font-bold text-lg truncate leading-tight block" tabIndex={0}>{cls.section_name}</h4>} />
-                      <TooltipContent>{cls.section_name}</TooltipContent>
-                    </Tooltip>
-                    {cls.is_adviser && (
-                      <Badge variant="solid" size="sm" className="text-[11px] shrink-0">
-                        Adviser
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex flex-row justify-between w-full align-center items-center">
-                    {cls.grade_level && (
-                      <span className="text-[12px] font-semibold text-muted-foreground">
-                        Grade {cls.grade_level}
-                      </span>
-                    )}
-                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                      <span className="flex items-center gap-1 font-medium text-foreground">
-                        <Users className="size-3" />
-                        {cls.student_count ?? 0} {cls.student_count === 1 ? "student" : "students"}
-                      </span>
-                    </div>
+          filteredClasses.map((cls) => (
+            <Card
+              variant="squares"
+              key={cls.class_id}
+              className="w-full overflow-x-auto shadow-none"
+            >
+              <div className="flex flex-col items-start justify-between gap-2">
+                <div className="w-full flex-1 flex flex-row gap-2 items-center justify-between">
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <h4
+                          className="font-bold text-lg truncate leading-tight block"
+                          tabIndex={0}
+                        >
+                          {cls.section_name}
+                        </h4>
+                      }
+                    />
+                    <TooltipContent>{cls.section_name}</TooltipContent>
+                  </Tooltip>
+                  {cls.is_adviser && (
+                    <Badge
+                      variant="solid"
+                      size="sm"
+                      className="text-[11px] shrink-0"
+                    >
+                      Adviser
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex flex-row justify-between w-full align-center items-center">
+                  {cls.grade_level && (
+                    <span className="text-[12px] font-semibold text-muted-foreground">
+                      Grade {cls.grade_level}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                    <span className="flex items-center gap-1 font-medium text-foreground">
+                      <Users className="size-3" />
+                      {cls.student_count ?? 0}{" "}
+                      {cls.student_count === 1 ? "student" : "students"}
+                    </span>
                   </div>
                 </div>
+              </div>
 
-                {cls.subjects && cls.subjects.length > 0 && (
-                  <div className="flex flex-row gap-2 mt-2">
-                    <div className="text-[10px] font-medium text-muted-foreground whitespace-nowrap mt-0.5">Subjects Taught:</div>
-                    <div className="flex flex-wrap gap-2">
-                      {cls.subjects.map((sub, idx) => (
-                        <Badge
-                          key={`${sub}-${idx}`}
-                          variant="outline"
-                          size="sm"
-                          className="text-[10px] py-0.5 px-1.5 font-medium"
-                        >
-                          {sub}
-                        </Badge>
-                      ))}
-                    </div>
+              {cls.subjects && cls.subjects.length > 0 && (
+                <div className="flex flex-row gap-2 mt-2">
+                  <div className="text-[10px] font-medium text-muted-foreground whitespace-nowrap mt-0.5">
+                    Subjects Taught:
                   </div>
-                )}
-              </Card>
-            ))
-          )
+                  <div className="flex flex-wrap gap-2">
+                    {cls.subjects.map((sub, idx) => (
+                      <Badge
+                        key={`${sub}-${idx}`}
+                        variant="outline"
+                        size="sm"
+                        className="text-[10px] py-0.5 px-1.5 font-medium"
+                      >
+                        {sub}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+          ))
         )}
       </Card.Content>
     </Card>
   );
 }
 
-function TeacherAnalytics({ user, data }: { user: UserDetail; data: ReturnType<typeof mergeAnalytics> }) {
+function TeacherAnalytics({
+  user,
+  data,
+}: {
+  user: UserDetail;
+  data: ReturnType<typeof mergeAnalytics>;
+}) {
   const summary = data.summary;
-  const rawHours = user.workload_hours ?? (summary.workloadHours !== undefined && summary.workloadHours !== null ? Number(summary.workloadHours) : null);
-  const loadCount = user.load_count ?? (summary.loadCount !== undefined && summary.loadCount !== null ? Number(summary.loadCount) : user.class_count ?? valueNumber(summary.classesHandled, 0));
-  const workloadDisplay = rawHours !== null && rawHours > 0 ? `${rawHours} hrs` : rawHours !== null ? "0 hrs" : `${loadCount} loads`;
+  const rawHours =
+    user.workload_hours ??
+    (summary.workloadHours !== undefined && summary.workloadHours !== null
+      ? Number(summary.workloadHours)
+      : null);
+  const loadCount =
+    user.load_count ??
+    (summary.loadCount !== undefined && summary.loadCount !== null
+      ? Number(summary.loadCount)
+      : (user.class_count ?? valueNumber(summary.classesHandled, 0)));
+  const workloadDisplay =
+    rawHours !== null && rawHours > 0
+      ? `${rawHours} hrs`
+      : rawHours !== null
+        ? "0 hrs"
+        : `${loadCount} loads`;
 
-  const classCount = user.class_count ?? (summary.classesHandled !== undefined && summary.classesHandled !== null ? Number(summary.classesHandled) : 0);
-  const totalStudents = summary.totalStudents !== undefined && summary.totalStudents !== null ? Number(summary.totalStudents) : null;
+  const classCount =
+    user.class_count ??
+    (summary.classesHandled !== undefined && summary.classesHandled !== null
+      ? Number(summary.classesHandled)
+      : 0);
+  const totalStudents =
+    summary.totalStudents !== undefined && summary.totalStudents !== null
+      ? Number(summary.totalStudents)
+      : null;
 
-  const subjectCount = user.subjects?.length || (summary.subjectsHandled !== undefined && summary.subjectsHandled !== null ? Number(summary.subjectsHandled) : 0);
+  const subjectCount =
+    user.subjects?.length ||
+    (summary.subjectsHandled !== undefined && summary.subjectsHandled !== null
+      ? Number(summary.subjectsHandled)
+      : 0);
 
   const rawPerf = summary.classPerformance;
-  const hasPerf = rawPerf !== null && rawPerf !== undefined && rawPerf !== "N/A" && rawPerf !== "Unavailable";
+  const hasPerf =
+    rawPerf !== null &&
+    rawPerf !== undefined &&
+    rawPerf !== "N/A" &&
+    rawPerf !== "Unavailable";
   const numericPerf = hasPerf ? Number(rawPerf) : null;
-  const perfDisplay = numericPerf !== null && !isNaN(numericPerf) ? `${Math.round(numericPerf)}%` : "N/A";
+  const perfDisplay =
+    numericPerf !== null && !isNaN(numericPerf)
+      ? `${Math.round(numericPerf)}%`
+      : "N/A";
 
   const handledSubjects = user.handled_subjects ?? data.handled_subjects ?? [];
   const handledClasses = user.handled_classes ?? data.handled_classes ?? [];
@@ -991,39 +1285,66 @@ function TeacherAnalytics({ user, data }: { user: UserDetail; data: ReturnType<t
     <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px] items-stretch">
       {/* Left Column: Stat Cards & Analytics Panels */}
       <div className="flex flex-col gap-3 min-w-0">
-        <OverviewGrid metrics={[
-
-          {
-            title: "Class Handled",
-            count: String(classCount),
-            stat: totalStudents !== null && totalStudents > 0 ? `${totalStudents} ${totalStudents === 1 ? "student" : "students"}` : undefined,
-            statDescription: totalStudents !== null && totalStudents > 0 ? "total enrolled in assigned classes" : "assigned class sections",
-          },
-          {
-            title: "Subjects Handled",
-            count: String(subjectCount),
-            stat: `+ ${String(subjectCount)}`,
-            statDescription: subjectCount > 0 ? "subjects assigned" : "distinct subjects taught",
-          },
-          {
-            title: "Class Performance",
-            count: perfDisplay,
-            stat: numericPerf !== null && !isNaN(numericPerf) ? (numericPerf >= 75 ? "Passing average" : "Needs support") : undefined,
-            statDescription: numericPerf !== null && !isNaN(numericPerf) ? "score across classwork" : "no graded assessments yet",
-          },
-          {
-            title: "Workload",
-            count: workloadDisplay,
-            stat: loadCount > 0 ? `${loadCount} ${loadCount === 1 ? "load" : "loads"}` : undefined,
-            statDescription: "scheduled weekly teaching load",
-          },
-        ]} />
+        <OverviewGrid
+          metrics={[
+            {
+              title: "Class Handled",
+              count: String(classCount),
+              stat:
+                totalStudents !== null && totalStudents > 0
+                  ? `${totalStudents} ${totalStudents === 1 ? "student" : "students"}`
+                  : undefined,
+              statDescription:
+                totalStudents !== null && totalStudents > 0
+                  ? "total enrolled in assigned classes"
+                  : "assigned class sections",
+            },
+            {
+              title: "Subjects Handled",
+              count: String(subjectCount),
+              stat: `+ ${String(subjectCount)}`,
+              statDescription:
+                subjectCount > 0
+                  ? "subjects assigned"
+                  : "distinct subjects taught",
+            },
+            {
+              title: "Class Performance",
+              count: perfDisplay,
+              stat:
+                numericPerf !== null && !isNaN(numericPerf)
+                  ? numericPerf >= 75
+                    ? "Passing average"
+                    : "Needs support"
+                  : undefined,
+              statDescription:
+                numericPerf !== null && !isNaN(numericPerf)
+                  ? "score across classwork"
+                  : "no graded assessments yet",
+            },
+            {
+              title: "Workload",
+              count: workloadDisplay,
+              stat:
+                loadCount > 0
+                  ? `${loadCount} ${loadCount === 1 ? "load" : "loads"}`
+                  : undefined,
+              statDescription: "scheduled weekly teaching load",
+            },
+          ]}
+        />
 
         <div className="grid gap-3 md:grid-cols-[1.4fr_1fr]">
-          <Panel title="Period Class Performance" subtitle="Average student score across all handled subjects">
+          <Panel
+            title="Period Class Performance"
+            subtitle="Average student score across all handled subjects"
+          >
             <SmallLineChart data={data.period_performance} xKey="period" />
           </Panel>
-          <Panel title="Subject Breakdown" subtitle="Avg. score per subject handled">
+          <Panel
+            title="Subject Breakdown"
+            subtitle="Avg. score per subject handled"
+          >
             <SubjectBars rows={data.subject_breakdown} />
           </Panel>
         </div>
@@ -1044,7 +1365,11 @@ function TeacherAnalytics({ user, data }: { user: UserDetail; data: ReturnType<t
   );
 }
 
-function StudentAnalytics({ data }: { data: ReturnType<typeof mergeAnalytics> }) {
+function StudentAnalytics({
+  data,
+}: {
+  data: ReturnType<typeof mergeAnalytics>;
+}) {
   const summary = data.summary;
   const lms = data.lms_behavior;
   const weakSubjects = data.subject_mastery
@@ -1058,25 +1383,43 @@ function StudentAnalytics({ data }: { data: ReturnType<typeof mergeAnalytics> })
             <h2 className="text-lg font-bold">Subject Overview</h2>
             <div className="text-right text-sm font-bold text-red-600">
               {summary.failureRisk}
-              <div className="text-[10px] font-normal text-foreground">{summary.modelConfidence} model confidence</div>
+              <div className="text-[10px] font-normal text-foreground">
+                {summary.modelConfidence} model confidence
+              </div>
             </div>
           </div>
-          <OverviewGrid metrics={[
-            { title: "Written Works Average", count: String(displayMetric(summary.writtenWorksAverage)), statDescription: "out of 100" },
-            { title: "Performance Average", count: String(displayMetric(summary.performanceAverage)), statDescription: "out of 100" },
-            {
-              title: "Completion Rate",
-              count: typeof summary.completionRate === "number" ? `${summary.completionRate}%` : String(displayMetric(summary.completionRate)),
-              statDescription: "activities done",
-            },
-          ]} />
+          <OverviewGrid
+            metrics={[
+              {
+                title: "Written Works Average",
+                count: String(displayMetric(summary.writtenWorksAverage)),
+                statDescription: "out of 100",
+              },
+              {
+                title: "Performance Average",
+                count: String(displayMetric(summary.performanceAverage)),
+                statDescription: "out of 100",
+              },
+              {
+                title: "Completion Rate",
+                count:
+                  typeof summary.completionRate === "number"
+                    ? `${summary.completionRate}%`
+                    : String(displayMetric(summary.completionRate)),
+                statDescription: "activities done",
+              },
+            ]}
+          />
         </div>
         <Panel title="LMS Behavior">
           <div className="grid gap-2">
             <MiniStat label="Total logins" value={lms.totalLogins} />
             <MiniStat label="Avg session" value={lms.averageSession} />
             <MiniStat label="Missed activities" value={lms.missedActivities} />
-            <MiniStat label="On time submissions" value={lms.onTimeSubmissions} />
+            <MiniStat
+              label="On time submissions"
+              value={lms.onTimeSubmissions}
+            />
           </div>
         </Panel>
       </div>
@@ -1086,7 +1429,9 @@ function StudentAnalytics({ data }: { data: ReturnType<typeof mergeAnalytics> })
           <div className="mt-4 text-[10px]">
             Weak Subjects:{" "}
             <span className="font-bold">
-              {weakSubjects.length ? weakSubjects.join(", ") : "No weak subject data available"}
+              {weakSubjects.length
+                ? weakSubjects.join(", ")
+                : "No weak subject data available"}
             </span>
           </div>
         </Panel>
@@ -1103,13 +1448,33 @@ function AdminAnalytics({ data }: { data: ReturnType<typeof mergeAnalytics> }) {
   const summary = data.summary;
   return (
     <>
-      <OverviewGrid metrics={[
-        { title: "Classes Made", count: String(valueNumber(summary.classesMade)), stat: "2+", statDescription: "increased from previous academic year" },
-        { title: "Subject Loads Assigned", count: String(valueNumber(summary.subjectLoadsAssigned)), stat: "2+", statDescription: "increased from previous academic year" },
-        { title: "Subjects Added", count: String(valueNumber(summary.subjectsAdded)), stat: "8%", statDescription: "increased from previous academic year" },
-      ]} />
+      <OverviewGrid
+        metrics={[
+          {
+            title: "Classes Made",
+            count: String(valueNumber(summary.classesMade)),
+            stat: "2+",
+            statDescription: "increased from previous academic year",
+          },
+          {
+            title: "Subject Loads Assigned",
+            count: String(valueNumber(summary.subjectLoadsAssigned)),
+            stat: "2+",
+            statDescription: "increased from previous academic year",
+          },
+          {
+            title: "Subjects Added",
+            count: String(valueNumber(summary.subjectsAdded)),
+            stat: "8%",
+            statDescription: "increased from previous academic year",
+          },
+        ]}
+      />
       <div className="grid gap-3 lg:grid-cols-[1.4fr_0.8fr]">
-        <Panel title="Subject Breakdown" subtitle="Avg. score per subject handled">
+        <Panel
+          title="Subject Breakdown"
+          subtitle="Avg. score per subject handled"
+        >
           <SubjectBars rows={data.subject_breakdown} />
         </Panel>
         <ActivityFeed rows={data.activity_feed} />
@@ -1131,13 +1496,20 @@ function ActivityFeed({ rows }: { rows: Array<Record<string, string>> }) {
   return (
     <Panel title="Recent Activity" subtitle="Latest action logged">
       {!rows || rows.length === 0 ? (
-        <p className="py-4 text-center text-xs text-muted-foreground">No recent activity logged.</p>
+        <p className="py-4 text-center text-xs text-muted-foreground">
+          No recent activity logged.
+        </p>
       ) : (
         <div className="space-y-3">
           {rows.map((row, index) => (
-            <div key={`${row.title}-${index}`} className="border-b border-black/10 pb-2 last:border-0">
+            <div
+              key={`${row.title}-${index}`}
+              className="border-b border-black/10 pb-2 last:border-0"
+            >
               <div className="text-xs font-bold">{row.title}</div>
-              <div className="text-[10px] text-muted-foreground">{row.timestamp}</div>
+              <div className="text-[10px] text-muted-foreground">
+                {row.timestamp}
+              </div>
             </div>
           ))}
         </div>
@@ -1149,21 +1521,35 @@ function ActivityFeed({ rows }: { rows: Array<Record<string, string>> }) {
 function StudentSnapshot() {
   const rows = Array.from({ length: 5 }, (_, index) => index);
   return (
-    <Panel title="Student Performance Snapshot" subtitle="Top at-risk students across all sections">
+    <Panel
+      title="Student Performance Snapshot"
+      subtitle="Top at-risk students across all sections"
+    >
       <Table wrapperClassName="border-0 shadow-none">
         <Table.Header className="bg-transparent text-muted-foreground border-b border-black/10 font-normal text-[10px]">
           <Table.Row className="hover:bg-transparent">
-            <Table.Head className="h-6 px-0 text-[10px] font-normal text-muted-foreground">Student</Table.Head>
-            <Table.Head className="h-6 px-0 text-[10px] font-normal text-muted-foreground">Subject</Table.Head>
-            <Table.Head className="h-6 px-0 text-right text-[10px] font-normal text-muted-foreground">Score</Table.Head>
+            <Table.Head className="h-6 px-0 text-[10px] font-normal text-muted-foreground">
+              Student
+            </Table.Head>
+            <Table.Head className="h-6 px-0 text-[10px] font-normal text-muted-foreground">
+              Subject
+            </Table.Head>
+            <Table.Head className="h-6 px-0 text-right text-[10px] font-normal text-muted-foreground">
+              Score
+            </Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
           {rows.map((row) => (
-            <Table.Row key={row} className="border-b border-black/10 hover:bg-transparent text-xs">
+            <Table.Row
+              key={row}
+              className="border-b border-black/10 hover:bg-transparent text-xs"
+            >
               <Table.Cell className="py-1.5 px-0">John Doe</Table.Cell>
               <Table.Cell className="py-1.5 px-0">Science 10</Table.Cell>
-              <Table.Cell className="py-1.5 px-0 text-right font-semibold">98%</Table.Cell>
+              <Table.Cell className="py-1.5 px-0 text-right font-semibold">
+                98%
+              </Table.Cell>
             </Table.Row>
           ))}
         </Table.Body>
@@ -1172,38 +1558,59 @@ function StudentSnapshot() {
   );
 }
 
-function ClassworkTable({ rows }: { rows: Array<Record<string, number | string | null>> }) {
+function ClassworkTable({
+  rows,
+}: {
+  rows: Array<Record<string, number | string | null>>;
+}) {
   return (
     <section className="space-y-2">
       <h2 className="text-lg font-bold">Classwork</h2>
       <Table wrapperClassName="border-black">
         <Table.Header>
           <Table.Row>
-            <Table.Head className="text-xs font-semibold">Classwork Name</Table.Head>
+            <Table.Head className="text-xs font-semibold">
+              Classwork Name
+            </Table.Head>
             <Table.Head className="text-xs font-semibold">Type</Table.Head>
             <Table.Head className="text-xs font-semibold">Subject</Table.Head>
             <Table.Head className="text-xs font-semibold">Status</Table.Head>
-            <Table.Head className="text-right text-xs font-semibold">Score</Table.Head>
+            <Table.Head className="text-right text-xs font-semibold">
+              Score
+            </Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
           {rows.length > 0 ? (
             rows.map((row, index) => (
               <Table.Row key={`${row.name}-${index}`}>
-                <Table.Cell className="font-semibold text-xs">{row.name}</Table.Cell>
+                <Table.Cell className="font-semibold text-xs">
+                  {row.name}
+                </Table.Cell>
                 <Table.Cell className="text-xs">{row.type}</Table.Cell>
-                <Table.Cell className="font-semibold text-xs">{row.subject}</Table.Cell>
+                <Table.Cell className="font-semibold text-xs">
+                  {row.subject}
+                </Table.Cell>
                 <Table.Cell className="text-xs">
-                  <Badge variant="outline" size="sm" className="text-[10px] py-0.5">
+                  <Badge
+                    variant="outline"
+                    size="sm"
+                    className="text-[10px] py-0.5"
+                  >
                     {row.status}
                   </Badge>
                 </Table.Cell>
-                <Table.Cell className="text-right font-bold text-xs">{row.score}</Table.Cell>
+                <Table.Cell className="text-right font-bold text-xs">
+                  {row.score}
+                </Table.Cell>
               </Table.Row>
             ))
           ) : (
             <Table.Row>
-              <Table.Cell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">
+              <Table.Cell
+                colSpan={5}
+                className="py-6 text-center text-xs text-muted-foreground"
+              >
                 No classwork records are available yet.
               </Table.Cell>
             </Table.Row>
@@ -1223,4 +1630,3 @@ function displayMetric(value: unknown) {
   }
   return "Unavailable";
 }
-

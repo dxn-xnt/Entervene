@@ -38,7 +38,7 @@ export function PredictionGradeSection({ group, role }: PredictionGradeSectionPr
     : group.monitoring;
 
   return (
-    <Card className="flex flex-col bg-primary shadow-none hover:shadow-none">
+    <Card variant="primary" className="flex flex-col">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">{levelName}</h2>
         <div className="flex flex-row gap-3">

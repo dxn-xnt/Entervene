@@ -129,11 +129,11 @@ export function GradeCard({
               ))}
             </div>
           ) : (
-            <div className="w-full rounded! border border-black bg-emerald-100/70 px-3 py-2.5 text-center">
+            <Card className="w-full border border-border bg-emerald-100/70 px-3 py-2.5 text-center shadow-none hover:shadow-none">
               <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
                 No At-Risk Students
               </span>
-            </div>
+            </Card>
           )}
         </div>
       </Link>
