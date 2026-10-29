@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
+import { Alert } from "@/components/retroui/Alert";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { Select } from "@/components/retroui/Select";
@@ -161,7 +162,10 @@ export function TOSGeneratorScreen({
   const visibleSaveError = saveError?.step === step && saveError.subjectId === currentSubjectId ? saveError.message : null;
 
   useEffect(() => {
-    if (visibleSaveError) saveErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (visibleSaveError) {
+      saveErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      saveErrorRef.current?.focus({ preventScroll: true });
+    }
   }, [visibleSaveError]);
 
   useEffect(() => {
@@ -616,9 +620,14 @@ export function TOSGeneratorScreen({
     if (await handleSaveDraft()) onBack();
   };
 
+  const showAssistError = (message: string) => {
+    setSaveError({ message, step, subjectId: currentSubjectId });
+  };
+
   const handleSuggestTitle = async () => {
+    setSaveError(null);
     if (!currentSubjectName) {
-      alert("Please select a Subject Curriculum first so AI has context for the title.");
+      showAssistError("Please select a Subject Curriculum first so AI has context for the title.");
       return;
     }
     setIsSuggestingTitle(true);
@@ -639,16 +648,17 @@ export function TOSGeneratorScreen({
         if (data?.title) setTitle(data.title);
       } else {
         const err = await res.json().catch(() => ({}));
-        alert(err?.detail || "Failed to generate title suggestion.");
+        showAssistError(err?.detail || "Failed to generate title suggestion.");
       }
     } catch (e: any) {
-      alert(e.message || "Could not reach AI service.");
+      showAssistError(e.message || "Could not reach AI service.");
     } finally {
       setIsSuggestingTitle(false);
     }
   };
 
   const handleSuggestTestParts = async () => {
+    setSaveError(null);
     setIsSuggestingParts(true);
     try {
       const res = await apiFetch("/api/v1/ai/tos-assist", {
@@ -668,18 +678,19 @@ export function TOSGeneratorScreen({
         }
       } else {
         const err = await res.json().catch(() => ({}));
-        alert(err?.detail || "Failed to generate test parts suggestion.");
+        showAssistError(err?.detail || "Failed to generate test parts suggestion.");
       }
     } catch (e: any) {
-      alert(e.message || "Could not reach AI service.");
+      showAssistError(e.message || "Could not reach AI service.");
     } finally {
       setIsSuggestingParts(false);
     }
   };
 
   const handleSuggestCompetencies = async () => {
+    setSaveError(null);
     if (!currentSubjectName) {
-      alert("Please select a Subject Curriculum first so AI knows what curriculum topics to generate.");
+      showAssistError("Please select a Subject Curriculum first so AI knows what curriculum topics to generate.");
       return;
     }
     setIsSuggestingComps(true);
@@ -708,16 +719,17 @@ export function TOSGeneratorScreen({
         }
       } else {
         const err = await res.json().catch(() => ({}));
-        alert(err?.detail || "Failed to generate competencies suggestion.");
+        showAssistError(err?.detail || "Failed to generate competencies suggestion.");
       }
     } catch (e: any) {
-      alert(e.message || "Could not reach AI service.");
+      showAssistError(e.message || "Could not reach AI service.");
     } finally {
       setIsSuggestingComps(false);
     }
   };
 
   const handleRefineTopic = async (compIdx: number) => {
+    setSaveError(null);
     const targetComp = compInputs[compIdx];
     if (!targetComp) return;
     setRefiningCompIdx(compIdx);
@@ -748,10 +760,10 @@ export function TOSGeneratorScreen({
         }
       } else {
         const err = await res.json().catch(() => ({}));
-        alert(err?.detail || "Failed to refine topic.");
+        showAssistError(err?.detail || "Failed to refine topic.");
       }
     } catch (e: any) {
-      alert(e.message || "Could not reach AI service.");
+      showAssistError(e.message || "Could not reach AI service.");
     } finally {
       setRefiningCompIdx(null);
     }
@@ -1133,7 +1145,7 @@ export function TOSGeneratorScreen({
 
           {/* Screen Content Body */}
           <div className={modalMode ? "min-w-0 p-1" : "min-w-0 p-3 sm:p-6"}>
-            {visibleSaveError && <div ref={saveErrorRef} className="mb-4"><FormMessage>{visibleSaveError}</FormMessage></div>}
+            {visibleSaveError && <div ref={saveErrorRef} tabIndex={-1} className="mb-4 outline-none"><Alert aria-live="assertive" className="border-0 bg-transparent p-0 text-sm font-medium text-destructive">{visibleSaveError}</Alert></div>}
             {(step === "ai-review" || step === "export") &&
               (generationWarnings.length > 0 || shortfall.missing > 0) && (
                 <section aria-label="Generator warnings" role="status" className="mb-6 rounded border-2 border-amber-600 bg-amber-50 p-4 text-black">
