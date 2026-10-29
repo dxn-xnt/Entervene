@@ -4,6 +4,7 @@ import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { cn } from "@/lib/utils";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
 import {
   Empty,
   EmptyContent,
@@ -35,6 +36,7 @@ export interface LessonGoalProgressProps {
   className?: string;
   title?: string;
   isTeacher?: boolean;
+  shadowless?: boolean;
   onSetGoal?: () => void;
   onClassworkClick?: (classworkId: number, classworkAssignmentId?: number | null) => void;
 }
@@ -175,6 +177,7 @@ export function LessonGoalProgress({
   className = "flex-1 min-w-0",
   title = "Lesson Goals",
   isTeacher = false,
+  shadowless = false,
   onSetGoal,
   onClassworkClick,
 }: LessonGoalProgressProps) {
@@ -186,12 +189,19 @@ export function LessonGoalProgress({
     <div className={className}>
 
 
-      <Card className="block w-full min-w-0">
+      <Card className={cn("block w-full min-w-0", shadowless && "shadow-none hover:shadow-none")}>
         {/* State 1: Curated Mode is empty */}
         {isCuratedEmpty ? (
-          <Card.Content className={cn("p-2 pt-1 flex flex-col gap-3", isTeacher && "p-0")}>
+          <Card.Content className="flex flex-col gap-3 p-0">
             <Card.Title className="text-xl">{title}</Card.Title>
-            <Empty className="border-0 bg-retro p-6 shadow-none">
+            {!isTeacher ? (
+              <StudentEmptyState
+                cardless
+                icon={<Sparkles />}
+                title="No lesson goals set yet"
+                description="Your teacher has not highlighted any lesson goal yet."
+              />
+            ) : <Empty className="border-0 bg-retro p-6 shadow-none">
               <EmptyHeader>
                 <EmptyMedia>
                   <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
@@ -218,12 +228,12 @@ export function LessonGoalProgress({
                   </Button>
                 </EmptyContent>
               )}
-            </Empty>
+            </Empty>}
           </Card.Content>
         ) : hasCuratedMode && goalItems && goalItems.length > 0 ? (
           /* State 2: Curated Mode with Teacher-Selected Items */
-          <Card.Content className={cn("p-4 flex flex-col gap-3", isTeacher && "p-0")}>
-            <Card.Title className={isTeacher ? "text-xl font-bold" : undefined}>
+          <Card.Content className="flex flex-col gap-3 p-0">
+            <Card.Title className="text-xl font-bold">
               {title}
             </Card.Title>
             {goalItems.map((item, idx) => {
@@ -233,13 +243,13 @@ export function LessonGoalProgress({
               if (item.item_type === "LESSON" && item.lesson) {
                 return (
                   <div key={`goal-lesson-${item.goal_item_id}`} className="flex flex-col gap-1.5">
-                    <Card.Description className={cn("break-words text-lg sm:text-xl font-extrabold text-black", isTeacher && "text-sm sm:text-sm font-semibold text-foreground")}>
+                    <Card.Description className="break-words text-sm font-semibold text-foreground">
                       {item.lesson.title}
                     </Card.Description>
                     {/* Decorative Lesson Completion Timeline Item (maintained per requirements) */}
-                    <TimelineItem isFirst={isFirst} isLast={isLast} status="upcoming" hideTrack={isTeacher}>
-                      <div className={cn("border-2 border-muted-foreground bg-muted px-2 py-1 text-center text-muted-foreground sm:px-3", isTeacher && "rounded border-border bg-background px-3 py-2")}>
-                        <p className={cn("text-xs font-semibold", isTeacher && "text-sm")}>Lesson Completion</p>
+                    <TimelineItem isFirst={isFirst} isLast={isLast} status="upcoming" hideTrack>
+                      <div className="rounded border-2 border-border bg-background px-3 py-2 text-center text-muted-foreground">
+                        <p className="text-sm font-semibold">Lesson Completion</p>
                       </div>
                     </TimelineItem>
                   </div>
@@ -263,27 +273,24 @@ export function LessonGoalProgress({
                 return (
                   <TimelineItem
                     key={`goal-cw-${item.goal_item_id}`}
-                    hideTrack={isTeacher}
+                    hideTrack
                     isFirst={isFirst}
                     isLast={isLast}
                     status={itemStatus}
                   >
                     <div
                       onClick={() => onClassworkClick && onClassworkClick(cw.classwork_id, cw.classwork_assignment_id)}
-                      className={cn(`flex items-center justify-between gap-2 w-full border-2 px-3 py-2 transition-all ${isExam
-                        ? "bg-purple-50/70 border-purple-900 hover:bg-purple-100"
-                        : "bg-white border-black hover:bg-accent"
-                        } ${onClassworkClick ? "cursor-pointer" : ""}`, isTeacher && "flex-wrap rounded border-border bg-card text-card-foreground hover:bg-accent")}
+                      className={cn("flex w-full flex-wrap items-center justify-between gap-2 rounded border-2 border-border bg-card px-3 py-2 text-card-foreground transition-colors hover:bg-accent", onClassworkClick && "cursor-pointer")}
                     >
-                      <div className={cn("flex items-center gap-2 min-w-0", isTeacher && "w-full")}>
-                        <ClassworkIcon type={cw.classwork_type} isExam={isExam} neutral={isTeacher} />
-                        <p className={cn("text-xs font-bold truncate text-black", isTeacher && "whitespace-normal break-words text-sm font-semibold text-foreground")}>{cw.title}</p>
+                      <div className="flex w-full min-w-0 items-center gap-2 [&>svg]:shrink-0">
+                        <ClassworkIcon type={cw.classwork_type} isExam={isExam} neutral />
+                        <p className="whitespace-normal break-words text-sm font-semibold text-foreground">{cw.title}</p>
                       </div>
                       {badge && (
                         <Badge
-                          size={isTeacher ? "sm" : undefined}
-                          variant={isTeacher ? isCompletedClasswork(cw.submission_status) ? "success" : cw.submission_status === "late" || badge.label.includes("late") ? "destructive" : "outline" : "secondary"}
-                          className={isTeacher ? "shrink-0 whitespace-nowrap" : `text-[10px] font-bold px-1.5 py-0.5 shrink-0 whitespace-nowrap ${badge.cls}`}
+                          size="sm"
+                          variant={isCompletedClasswork(cw.submission_status) ? "success" : cw.submission_status === "late" || badge.label.includes("late") ? "destructive" : "outline"}
+                          className="shrink-0 whitespace-nowrap"
                         >
                           {badge.label}
                         </Badge>
