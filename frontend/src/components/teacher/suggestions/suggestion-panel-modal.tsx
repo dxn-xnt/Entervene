@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Lightbulb, Send } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/teacher/button";
@@ -93,7 +93,17 @@ export function SuggestionPanel({
   const [isGenerating, setIsGenerating] = useState(false);
   const [recommendationThreshold, setRecommendationThreshold] = useState(75);
   const [formError, setFormError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [titleError, setTitleError] = useState("");
+  const [thresholdError, setThresholdError] = useState("");
+  const [resourceError, setResourceError] = useState("");
+  const alertRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (formError) {
+      alertRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      alertRef.current?.focus({ preventScroll: true });
+    }
+  }, [formError]);
 
   const handleClose = () => {
     if (onOpenChange) onOpenChange(false);
@@ -162,7 +172,9 @@ export function SuggestionPanel({
   useEffect(() => {
     if (isModalOpen) {
       setFormError("");
-      setSuccess("");
+      setTitleError("");
+      setThresholdError("");
+      setResourceError("");
     }
   }, [isModalOpen]);
 
@@ -171,17 +183,16 @@ export function SuggestionPanel({
 
     const selected = resources.find((resource) => resource.id === resourceId);
     if (!selected) {
-      setFormError("Select a lesson or classwork resource.");
+      setResourceError("Select a lesson or classwork resource.");
       return;
     }
     if (!title.trim()) {
-      setFormError("Suggestion title is required.");
+      setTitleError("Enter a suggestion title.");
       return;
     }
 
     setIsSubmitting(true);
     setFormError("");
-    setSuccess("");
     try {
       await createManualSuggestion({
         student_id: student.student_id,
@@ -193,7 +204,6 @@ export function SuggestionPanel({
         lesson_id: selected.lessonId ?? null,
         classwork_assignment_id: selected.classworkAssignmentId ?? null,
       });
-      setSuccess("Suggestion sent to student successfully.");
       toast.success({ title: "Suggestion sent to student" });
       setTitle("");
       setDescription("");
@@ -205,7 +215,6 @@ export function SuggestionPanel({
       setFormError(
         err instanceof Error ? err.message : "Unable to create suggestion.",
       );
-      toast.error({ title: "Unable to create suggestion", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSubmitting(false);
     }
@@ -216,19 +225,19 @@ export function SuggestionPanel({
       setFormError("Select a subject before generating recommendation drafts.");
       return;
     }
+    if (!Number.isFinite(recommendationThreshold) || recommendationThreshold < 0 || recommendationThreshold > 100) {
+      setThresholdError("Enter a threshold from 0 to 100.");
+      return;
+    }
 
     setIsGenerating(true);
     setFormError("");
-    setSuccess("");
     try {
       const result = await generateRecommendationDrafts({
         class_id: classId,
         subject_id: subjectId,
         low_score_threshold: recommendationThreshold,
       });
-      setSuccess(
-        `Generated ${result.suggestions.length} draft recommendation${result.suggestions.length === 1 ? "" : "s"} for teacher review.`,
-      );
       toast.success({ title: `${result.suggestions.length} recommendation draft${result.suggestions.length === 1 ? "" : "s"} generated` });
       if (onSuccess) onSuccess();
     } catch (err) {
@@ -237,7 +246,6 @@ export function SuggestionPanel({
           ? err.message
           : "Unable to generate recommendation drafts.",
       );
-      toast.error({ title: "Unable to generate recommendations", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsGenerating(false);
     }
@@ -269,31 +277,39 @@ export function SuggestionPanel({
             For {student.full_name}
           </Dialog.Description>
           {formError && (
-            <Alert status="error" className="text-xs">
-              {formError}
-            </Alert>
-          )}
-          {success && (
-            <Alert status="success" className="text-xs">
-              {success}
-            </Alert>
+            <div ref={alertRef} tabIndex={-1}>
+              <Alert
+                status="error"
+                aria-live="assertive"
+                className="border-0 bg-transparent p-0 text-sm font-medium text-destructive shadow-none"
+              >
+                {formError}
+              </Alert>
+            </div>
           )}
 
-          {/* AI Drafts Generator Card */}
-          <div className="border border-border bg-muted/50 p-3">
+          <div>
             <div className="flex flex-wrap items-end gap-2">
-              <label className="min-w-32 flex-1 text-xs font-bold">
+              <label className="min-w-32 flex-1 text-sm font-medium">
                 Low score threshold (%)
                 <Input
                   type="number"
                   min={0}
                   max={100}
                   value={recommendationThreshold}
-                  onChange={(event) =>
-                    setRecommendationThreshold(Number(event.target.value))
-                  }
-                  className="mt-1 h-10 w-full rounded-none border-border bg-background px-2 shadow-none"
+                  aria-invalid={Boolean(thresholdError)}
+                  aria-describedby={thresholdError ? "suggestion-threshold-error" : undefined}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setRecommendationThreshold(value);
+                    if (Number.isFinite(value) && value >= 0 && value <= 100) {
+                      setThresholdError("");
+                      setFormError("");
+                    }
+                  }}
+                  className="mt-1 w-full shadow-none aria-[invalid=true]:border-destructive"
                 />
+                {thresholdError && <span id="suggestion-threshold-error" className="mt-1 block text-sm text-destructive">{thresholdError}</span>}
               </label>
               <Button
                 type="button"
@@ -301,20 +317,20 @@ export function SuggestionPanel({
                 size="sm"
                 onClick={generateDrafts}
                 disabled={isGenerating || !subjectId}
-                className="h-10 font-black disabled:opacity-50"
+                className="h-10 disabled:opacity-50"
               >
                 <Bot size={14} className="mr-1 inline" />
                 {isGenerating ? "Generating..." : "Generate AI Drafts"}
               </Button>
             </div>
-            <p className="mt-1 text-[11px] font-semibold text-muted-foreground">
+            <p className="mt-2 text-sm text-muted-foreground">
               Scans low classwork results and saves suggested materials as teacher-approved drafts.
             </p>
           </div>
 
-          <form id="suggestion-form" onSubmit={submitSuggestion} className="space-y-3">
+          <form id="suggestion-form" onSubmit={submitSuggestion} noValidate className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="text-xs font-bold text-foreground">
+              <label className="text-sm font-medium text-foreground">
                 Subject <span className="text-red-500">*</span>
                 <Select value={String(subjectId)} onValueChange={(value) => setSubjectId(Number(value))}>
                   <Select.Trigger className="mt-1 w-full"><Select.Value /></Select.Trigger>
@@ -331,7 +347,7 @@ export function SuggestionPanel({
                 </Select>
               </label>
 
-              <label className="text-xs font-bold text-foreground">
+              <label className="text-sm font-medium text-foreground">
                 Resource Type <span className="text-red-500">*</span>
                 <Select value={resourceType} onValueChange={(value) => setResourceType(value as SuggestionResourceType)}>
                   <Select.Trigger className="mt-1 w-full"><Select.Value /></Select.Trigger>
@@ -343,10 +359,14 @@ export function SuggestionPanel({
               </label>
             </div>
 
-            <label className="block text-xs font-bold text-foreground">
+            <label className="block text-sm font-medium text-foreground">
               Resource <span className="text-red-500">*</span>
-              <Select value={resourceId} onValueChange={setResourceId} disabled={isResourceLoading || resources.length === 0}>
-                <Select.Trigger className="mt-1 w-full"><Select.Value placeholder={isResourceLoading ? "Loading resources..." : "No resources found"} /></Select.Trigger>
+              <Select value={resourceId} onValueChange={(value) => {
+                setResourceId(value);
+                setResourceError("");
+                setFormError("");
+              }} disabled={isResourceLoading || resources.length === 0}>
+                <Select.Trigger aria-invalid={Boolean(resourceError)} aria-describedby={resourceError ? "suggestion-resource-error" : undefined} className="mt-1 w-full aria-[invalid=true]:border-destructive"><Select.Value placeholder={isResourceLoading ? "Loading resources..." : "No resources found"} /></Select.Trigger>
                 <Select.Content>
                 {resources.length ? (
                   resources.map((resource) => (
@@ -357,39 +377,48 @@ export function SuggestionPanel({
                 ) : null}
                 </Select.Content>
               </Select>
+              {resourceError && <span id="suggestion-resource-error" className="mt-1 block text-sm text-destructive">{resourceError}</span>}
             </label>
 
-            <label className="block text-xs font-bold text-foreground">
+            <label className="block text-sm font-medium text-foreground">
               Title <span className="text-red-500">*</span>
               <Input
                 value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 shadow-none"
+                onChange={(event) => {
+                  setTitle(event.target.value);
+                  if (event.target.value.trim()) {
+                    setTitleError("");
+                    setFormError("");
+                  }
+                }}
+                aria-invalid={Boolean(titleError)}
+                aria-describedby={titleError ? "suggestion-title-error" : undefined}
+                className="mt-1 w-full shadow-none aria-[invalid=true]:border-destructive"
                 placeholder="e.g. Review this material"
-                required
               />
+              {titleError && <span id="suggestion-title-error" className="mt-1 block text-sm text-destructive">{titleError}</span>}
             </label>
 
-            <label className="block text-xs font-bold text-foreground">
+            <label className="block text-sm font-medium text-foreground">
               Reason / Teacher's Note
               <textarea
                 rows={3}
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                className="mt-1 w-full resize-none rounded-none border-2 border-border bg-background p-2 text-xs font-medium text-foreground"
+                className="mt-1 w-full resize-none rounded! border-2 border-border bg-background p-2 font-sans text-sm text-foreground"
                 placeholder="Why this material will help the student..."
               />
             </label>
 
             <div className="grid gap-3 sm:grid-cols-2 items-center">
-              <label className="text-xs font-bold text-foreground">
+              <label className="text-sm font-medium text-foreground">
                 Priority
                 <Select value={priority} onValueChange={(value) => setPriority(value as SuggestionPriority)}>
                   <Select.Trigger className="mt-1 w-full"><Select.Value /></Select.Trigger>
                   <Select.Content>
                   {priorities.map((item) => (
                     <Select.Item key={item} value={item}>
-                      {item}
+                      {item.charAt(0) + item.slice(1).toLowerCase()}
                     </Select.Item>
                   ))}
                   </Select.Content>
@@ -406,7 +435,7 @@ export function SuggestionPanel({
             size="sm"
             onClick={handleClose}
             disabled={isSubmitting}
-            className="px-4 text-xs font-bold"
+            className="px-4"
           >
             Cancel
           </Button>
@@ -415,7 +444,7 @@ export function SuggestionPanel({
             type="submit"
             size="sm"
             disabled={isSubmitting || !resources.length}
-            className="px-5 text-xs font-bold disabled:opacity-50"
+            className="px-5 disabled:opacity-50"
           >
             <Send size={14} className="mr-1 inline" />
             {isSubmitting ? "Sending..." : "Send Suggestion"}

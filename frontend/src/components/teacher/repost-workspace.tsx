@@ -773,7 +773,7 @@ export function RepostWorkspace({
           onClick={() => handleTabSwitch("reuse")}
           role="tab"
           aria-selected={activeTab === "reuse"}
-          className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)] border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
+          className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)]! border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
             activeTab === "reuse" ? "bg-primary text-primary-foreground" : "bg-background text-foreground hover:bg-accent"
           }`}
         >
@@ -785,7 +785,7 @@ export function RepostWorkspace({
           onClick={() => handleTabSwitch("request")}
           role="tab"
           aria-selected={activeTab === "request"}
-          className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)] border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
+          className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)]! border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
             activeTab === "request" ? "bg-primary text-primary-foreground" : "bg-background text-foreground hover:bg-accent"
           }`}
         >
@@ -797,7 +797,7 @@ export function RepostWorkspace({
           onClick={() => handleTabSwitch("received")}
           role="tab"
           aria-selected={activeTab === "received"}
-          className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)] border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
+          className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)]! border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
             activeTab === "received" ? "bg-primary text-primary-foreground" : "bg-background text-foreground hover:bg-accent"
           }`}
         >
@@ -814,7 +814,7 @@ export function RepostWorkspace({
           onClick={() => handleTabSwitch("sent")}
           role="tab"
           aria-selected={activeTab === "sent"}
-          className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)] border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
+          className={`flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)]! border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${
             activeTab === "sent" ? "bg-primary text-primary-foreground" : "bg-background text-foreground hover:bg-accent"
           }`}
         >
@@ -1039,7 +1039,7 @@ export function RepostWorkspace({
               <>
                 {/* ── Search Mode Selector ── */}
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-1.5 text-foreground">
+                  <label className="block text-sm font-bold  mb-1.5 text-foreground">
                     Source Search Mode
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -1052,14 +1052,14 @@ export function RepostWorkspace({
                         key={item.mode}
                         type="button"
                         onClick={() => handleScopeModeChange(item.mode as any)}
-                        className={`p-2.5 text-left rounded border-2 border-black transition-all ${
+                        className={`rounded! border-2 border-border p-2.5 text-left transition-all ${
                           scopeMode === item.mode
                             ? "bg-primary font-bold shadow-sm"
                             : "bg-white text-gray-700 hover:bg-gray-50"
                         }`}
                       >
-                        <p className="text-xs font-bold">{item.label}</p>
-                        <p className="text-[10px] text-gray-600 leading-tight mt-0.5">{item.desc}</p>
+                        <p className="text-sm font-bold">{item.label}</p>
+                        <p className="text-xs text-gray-600 leading-tight mt-0.5">{item.desc}</p>
                       </button>
                     ))}
                   </div>
@@ -1067,8 +1067,8 @@ export function RepostWorkspace({
 
                 {/* ── Dynamic Year & Period Selectors ── */}
                 {scopeMode === "ALL_TERMS" && (
-                  <div className="p-3 border-2 border-black rounded bg-gray-50 space-y-2">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-foreground">
+                  <div className="p-3 border-2 border-black rounded! bg-gray-50 space-y-2">
+                    <label className="block text-sm font-bold text-foreground">
                       Select Prior Academic Year
                     </label>
                     {loadingCalendar ? (
@@ -1076,7 +1076,7 @@ export function RepostWorkspace({
                         <Loader2 className="size-3 animate-spin" /> Loading academic calendar...
                       </div>
                     ) : eligibleHistoricalYears.length === 0 ? (
-                      <div className="text-xs text-amber-800 bg-amber-50 p-2.5 border border-amber-300 rounded font-medium">
+                      <div className="text-xs text-amber-800 bg-amber-50 p-2.5 border border-amber-300 rounded! font-medium">
                         No prior completed academic years exist relative to this destination term.
                       </div>
                     ) : (
@@ -1096,13 +1096,13 @@ export function RepostWorkspace({
                 )}
 
                 {scopeMode === "PERIOD" && (
-                  <div className="p-3 border-2 border-black rounded bg-gray-50 space-y-3">
+                  <div className="p-3 border-2 border-black rounded! bg-gray-50 space-y-3">
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-foreground">
+                      <label className="block text-sm font-bold  mb-1 text-foreground">
                         1. Select Prior Academic Year
                       </label>
                       {eligibleHistoricalYears.length === 0 ? (
-                        <div className="text-xs text-amber-800 bg-amber-50 p-2 border border-amber-300 rounded font-medium">
+                        <div className="text-xs text-amber-800 bg-amber-50 p-2 border border-amber-300 rounded! font-medium">
                           No prior completed academic years exist.
                         </div>
                       ) : (
@@ -1121,11 +1121,11 @@ export function RepostWorkspace({
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-foreground">
+                      <label className="block text-sm font-bold mb-1 text-foreground">
                         2. Select Specific Historical Term
                       </label>
                       {periodsForSelectedYear.length === 0 ? (
-                        <div className="text-xs text-amber-800 bg-amber-50 p-2 border border-amber-300 rounded font-medium">
+                        <div className="text-xs text-amber-800 bg-amber-50 p-2 border border-amber-300 rounded! font-medium">
                           No prior completed terms exist in the selected year.
                         </div>
                       ) : (
@@ -1147,11 +1147,11 @@ export function RepostWorkspace({
 
                 {/* ── Select Source Teacher ── */}
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-1.5 text-foreground">
+                  <label className="block text-sm font-bold mb-1.5 text-foreground">
                     Select Source Teacher
                   </label>
                   {!isSourceScopeValid ? (
-                    <div className="border border-gray-300 bg-gray-50 p-3 rounded text-xs text-gray-600 font-medium">
+                    <div className="border border-gray-300 bg-gray-50 p-3 rounded! text-xs text-gray-600 font-medium">
                       Please select an academic year and term above to see eligible teachers.
                     </div>
                   ) : teachersLoading ? (
@@ -1159,7 +1159,7 @@ export function RepostWorkspace({
                       <Loader2 className="size-4 animate-spin" /> Looking for verified subject teachers...
                     </div>
                   ) : sourceTeachers.length === 0 ? (
-                    <div className="border border-amber-300 bg-amber-50 p-3 rounded text-xs text-amber-900 font-medium">
+                    <div className="border border-amber-300 bg-amber-50 p-3 rounded! text-xs text-amber-900 font-medium">
                       No other verified teachers found with published teaching records for{" "}
                       <strong>{activeDestination?.subjectName}</strong> in the selected scope.
                     </div>
@@ -1180,7 +1180,7 @@ export function RepostWorkspace({
 
                 {/* ── Personal Note / Message ── */}
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-1.5 text-foreground">
+                  <label className="block text-sm font-bold  mb-1.5 text-foreground">
                     Personal Note / Request Message
                   </label>
                   <textarea
@@ -1188,7 +1188,7 @@ export function RepostWorkspace({
                     onChange={(e) => setRequestMessage(e.target.value)}
                     placeholder={`Hi, could you please share your lessons and classworks for ${activeDestination?.subjectName || "this subject"}?`}
                     rows={3}
-                    className="w-full border-2 border-black p-2.5 rounded text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-black shadow-[2px_2px_0px_#000]"
+                    className="w-full rounded! border-2 border-border bg-background p-2.5 font-sans text-sm focus:outline-none focus:ring-1 focus:ring-black"
                   />
                 </div>
 
@@ -1198,34 +1198,6 @@ export function RepostWorkspace({
                   </div>
                 )}
 
-                {/* ── Submit Action ── */}
-                <div className="pt-2 flex items-center justify-between border-t border-gray-200">
-                  <span className="text-xs text-muted-foreground font-semibold">
-                    Colleague will receive an in-app alert to curate materials
-                  </span>
-                  <Button
-                    variant="default"
-                    disabled={
-                      !activeDestination ||
-                      !selectedTeacherId ||
-                      !isSourceScopeValid ||
-                      teachersLoading ||
-                      sendingRequest
-                    }
-                    onClick={handleSendRequest}
-                    className="flex items-center gap-2"
-                  >
-                    {sendingRequest ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" /> Sending Request...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="size-4" /> Send Repost Request
-                      </>
-                    )}
-                  </Button>
-                </div>
               </>
             )}
           </div>
@@ -1431,6 +1403,50 @@ export function RepostWorkspace({
         <Dialog.Footer position="static" className="justify-between">
           {reuseFooterAction}
         </Dialog.Footer>
+      )}
+
+      {isDialogContext && activeTab === "request" && !requestSentSuccess && (
+        <Dialog.Footer position="static" className="justify-between">
+          <span className="text-sm text-muted-foreground">
+            Colleague will receive an in-app alert to curate materials
+          </span>
+          <Button
+            variant="default"
+            disabled={
+              !activeDestination ||
+              !selectedTeacherId ||
+              !isSourceScopeValid ||
+              teachersLoading ||
+              sendingRequest
+            }
+            onClick={handleSendRequest}
+          >
+            {sendingRequest ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+            {sendingRequest ? "Sending Request..." : "Send Repost Request"}
+          </Button>
+        </Dialog.Footer>
+      )}
+
+      {!isDialogContext && activeTab === "request" && !requestSentSuccess && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 border-border px-4 py-4 sm:px-6">
+          <span className="text-sm text-muted-foreground">
+            Colleague will receive an in-app alert to curate materials
+          </span>
+          <Button
+            variant="default"
+            disabled={
+              !activeDestination ||
+              !selectedTeacherId ||
+              !isSourceScopeValid ||
+              teachersLoading ||
+              sendingRequest
+            }
+            onClick={handleSendRequest}
+          >
+            {sendingRequest ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+            {sendingRequest ? "Sending Request..." : "Send Repost Request"}
+          </Button>
+        </div>
       )}
 
       {/* ===================================================================== */}
@@ -1669,7 +1685,7 @@ export function RepostWorkspace({
                     </div>
 
                     <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-gray-700 mb-2">
+                      <h4 className="text-xs font-bold uppercase  text-gray-700 mb-2">
                         Packaged Items ({packagePreview.items.length})
                       </h4>
                       <div className="border-2 border-black rounded divide-y divide-black bg-white max-h-64 overflow-y-auto">

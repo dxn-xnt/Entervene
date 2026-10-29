@@ -16,13 +16,7 @@ import { Button } from "@/components/retroui/Button";
 import { ContextMenu } from "@/components/retroui/ContextMenu";
 import ClassworkItemLine from "@/components/item-line/classwork";
 import { LoadingPanel } from "@/components/loading-panel";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/formatters";
 import type { LessonDeliveryRecord } from "@/lib/lesson-delivery-api";
@@ -193,28 +187,6 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
                 >
                   {isTaught ? "Taught" : "Not Taught"}
                 </Badge>
-                {!isTaught && onConfirmDelivery && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    disabled={isDeliveryLoading}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void onConfirmDelivery?.(lesson);
-                    }}
-                    className="h-6 px-2 text-[11px] font-semibold gap-1 shrink-0 hidden md:inline-flex"
-                    title="Mark lesson as taught"
-                    data-testid={`quick-mark-taught-${lesson.lesson_id}`}
-                  >
-                    {isDeliveryLoading ? (
-                      <Loader2 className="size-3 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="size-3" />
-                    )}
-                    <span>Mark as Taught</span>
-                  </Button>
-                )}
               </div>
             </div>
             {subtitle && (
@@ -264,19 +236,18 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
               {isLoadingClassworks ? (
                 <LoadingPanel label="Loading classworks..." />
               ) : classworks.length === 0 ? (
-                <Empty className="border-2 bg-white p-6 shadow-none bg-retro">
-                  <EmptyHeader>
-                    <EmptyMedia>
-                      <div className="flex size-9 items-center justify-center border-2 border-black bg-primary">
-                        <ClipboardList className="size-4.5 text-black" />
-                      </div>
-                    </EmptyMedia>
-                    <EmptyTitle className="text-sm font-bold">No classworks yet</EmptyTitle>
-                    <EmptyDescription className="text-xs">
-                      No classworks assigned to this lesson yet.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
+                <TeacherEmptyState
+                  icon={<ClipboardList />}
+                  title="No classworks yet"
+                  description="No classworks assigned to this lesson yet."
+                  action={onOpenClassworkForm ? {
+                    label: "Add Classwork",
+                    icon: <Plus className="size-4" />,
+                    onClick: () => onOpenClassworkForm(lesson),
+                  } : undefined}
+                  compact
+                  className="bg-background shadow-none hover:shadow-none"
+                />
               ) : (
                 classworks.map((cw) => (
                   <ClassworkItemLine
@@ -289,12 +260,19 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
                   />
                 ))
               )}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-dashed border-gray-200 mt-2">
-                <div className="flex items-center gap-2">
+              {((!isTaught && onConfirmDelivery) ||
+                (isTaught && onOpenCorrectionDialog) ||
+                (classworks.length > 0 && onOpenClassworkForm)) && <div className="mt-2 flex w-full flex-wrap items-center justify-between gap-2 pt-2">
+                {isTaught && activeDelivery?.delivered_at ? (
+                  <span className="text-sm text-muted-foreground">
+                    Confirmed taught {formatDate(activeDelivery.delivered_at)}
+                  </span>
+                ) : <span />}
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   {!isTaught && onConfirmDelivery && (
                     <Button
                       type="button"
-                      variant="secondary"
+                      variant="default"
                       size="sm"
                       disabled={isDeliveryLoading}
                       onClick={() => void onConfirmDelivery(lesson)}
@@ -316,21 +294,14 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
                       size="sm"
                       disabled={isDeliveryLoading}
                       onClick={() => onOpenCorrectionDialog(lesson)}
-                      className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                      className="h-8 gap-1.5 text-black hover:text-black"
                       data-testid={`correct-delivery-btn-${lesson.lesson_id}`}
                     >
                       <RotateCcw size={13} />
                       <span>Correct Confirmation</span>
                     </Button>
                   )}
-                  {isTaught && activeDelivery?.delivered_at && (
-                    <span className="text-[11px] text-muted-foreground hidden sm:inline">
-                      Confirmed taught {formatDate(activeDelivery.delivered_at)}
-                    </span>
-                  )}
-                </div>
-                {onOpenClassworkForm && (
-                  <div className="flex items-center gap-2">
+                  {classworks.length > 0 && onOpenClassworkForm && (
                     <Button
                       type="button"
                       variant="default"
@@ -341,9 +312,9 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
                       <Plus size={14} className="mr-1.5" />
                       Add Classwork
                     </Button>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              </div>}
             </>
           )}
         </Accordion.Content>

@@ -80,8 +80,7 @@ export default function LessonDeliveryCorrectionModal({
       <Dialog.Content size="md" className="overflow-visible">
         <Dialog.Header position="fixed" asChild>
           <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-2">
-              <RotateCcw className="size-5 text-destructive" />
+            <div>
               <Text as="h5" className="font-sans text-xl font-bold">
                 Correct Lesson Delivery Confirmation
               </Text>
@@ -108,12 +107,12 @@ export default function LessonDeliveryCorrectionModal({
         <form onSubmit={handleSubmit} noValidate>
           <section className="flex flex-col gap-4 p-5">
             {error && (
-              <Alert status="error" onClose={() => setError("")}>
+              <Alert status="error" className="rounded!" onClose={() => setError("")}>
                 <Alert.Description>{error}</Alert.Description>
               </Alert>
             )}
 
-            <div className="rounded border-2 border-border bg-retro/40 p-3 space-y-1">
+            <div className="rounded! border-2 border-border bg-retro/40 p-3 space-y-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Lesson
@@ -129,7 +128,7 @@ export default function LessonDeliveryCorrectionModal({
               </p>
             </div>
 
-            <div className="flex items-start gap-2.5 rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+            <div className="flex items-start gap-2.5 rounded! border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
               <AlertTriangle className="size-4 shrink-0 text-amber-600 mt-0.5" />
               <p>
                 Revoking this delivery confirmation removes the <strong>Taught</strong> status for this class and grading period. An auditable reason is required and preserved in the revision history.
@@ -163,8 +162,8 @@ export default function LessonDeliveryCorrectionModal({
                   if (error) setError("");
                 }}
                 disabled={isSubmitting}
-                placeholder="Explain why this delivery record is being corrected (e.g., entered by mistake, lesson postponed to next term, scheduled for another section)..."
-                className="w-full resize-none rounded border-2 border-border bg-background px-3 py-2 font-sans text-sm shadow-sm transition focus:outline-hidden focus:ring-1 focus:ring-primary"
+                placeholder="Explain why this delivery record is being corrected..."
+                className="w-full resize-none rounded! border-2 border-border bg-background px-3 py-2 font-sans text-sm shadow-sm transition focus:outline-hidden focus:ring-1 focus:ring-primary"
               />
               <p className="text-[11px] text-muted-foreground">
                 Minimum 3 characters required.
