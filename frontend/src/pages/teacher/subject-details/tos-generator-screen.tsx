@@ -1316,7 +1316,7 @@ export function TOSGeneratorScreen({
 
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <label className="text-xs font-bold text-muted-foreground block">Subject Curriculum</label>
+                    <label className="text-sm font-bold text-black block">Subject Curriculum</label>
                     <Select value={currentSubjectId ? String(currentSubjectId) : ""}
                       onValueChange={(value) => handleSubjectChange(Number(value))}>
                       <Select.Trigger aria-label="Subject Curriculum" className="mt-1 w-full min-w-0 rounded">
@@ -1333,7 +1333,7 @@ export function TOSGeneratorScreen({
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-muted-foreground block">Exam Language</label>
+                    <label className="text-sm font-bold text-black block">Exam Language</label>
                     <Select value={language}
                       onValueChange={(value) => setLanguage(value as "English" | "Filipino")}>
                       <Select.Trigger aria-label="Exam Language" className="mt-1 w-full min-w-0 rounded">
@@ -1348,7 +1348,7 @@ export function TOSGeneratorScreen({
 
                   <div>
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-muted-foreground block">Exam Title</label>
+                      <label className="text-sm font-bold text-black block">Exam Title</label>
                       <Tooltip>
                         <TooltipTrigger render={<span className="inline-flex"><Button
                           type="button"
@@ -1377,7 +1377,7 @@ export function TOSGeneratorScreen({
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-muted-foreground block">Academic Term (Trimester)</label>
+                    <label className="text-sm font-bold text-black block">Academic Term (Trimester)</label>
                     <Select value={quarter}
                       onValueChange={(value) => setQuarter(value)}>
                       <Select.Trigger aria-label="Academic Term" className="mt-1 w-full min-w-0 rounded">
@@ -1439,7 +1439,7 @@ export function TOSGeneratorScreen({
                       return (
                         <div
                           key={t.type}
-                          className="flex flex-col gap-2 rounded border-2 border-border bg-muted/20 p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+                          className="flex flex-col gap-2 rounded! border-2 border-border bg-muted/20 p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
                         >
                           <div>
                             <p className="text-xs font-black text-foreground">{t.label}</p>
@@ -1459,7 +1459,7 @@ export function TOSGeneratorScreen({
                                     setTestParts(filtered);
                                   }
                                 }}
-                                className={`rounded border-2 px-2.5 py-1 text-[11px] font-extrabold transition-all ${count === preset ? "border-border bg-primary text-primary-foreground shadow-sm" : "border-border/30 bg-card text-muted-foreground hover:bg-accent"}`}
+                                className={`rounded! border-2 px-2.5 py-1 text-[11px] font-extrabold transition-all ${count === preset ? "border-border bg-primary text-primary-foreground shadow-sm" : "border-border/30 bg-card text-muted-foreground hover:bg-accent"}`}
                               >
                                 {preset}
                               </button>
@@ -1853,7 +1853,7 @@ export function TOSGeneratorScreen({
                       size="sm"
                       variant="outline"
                       onClick={handleRecalculate}
-                      className="text-muted-foreground"
+                      className="text-black"
                     >
                       <RefreshCw className="size-4" /> Recalculate
                     </Button>
@@ -1867,7 +1867,7 @@ export function TOSGeneratorScreen({
                           setIsExporting(null);
                         }
                       }}
-                      className="text-muted-foreground"
+                      className="text-black"
                     >
                       <FileDown className="size-4" /> Blueprint PDF
                     </Button>
@@ -1881,7 +1881,7 @@ export function TOSGeneratorScreen({
                           setIsExporting(null);
                         }
                       }}
-                      className="text-muted-foreground"
+                      className="text-black"
                     >
                       <FileText className="size-4" /> Word (.docx)
                     </Button>
