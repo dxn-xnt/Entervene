@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Sparkles,
   RefreshCw,
   Pencil,
   Lock,
@@ -261,6 +260,7 @@ export default function AiRemediationDraftModal({
               <Dialog.Title className="text-lg font-bold flex items-center gap-2">
                 AI Remediation Draft Preview
               </Dialog.Title>
+              <Badge variant="surface" size="sm">Teacher Review Only</Badge>
             </div>
             <Badge variant="outline" size="sm">
               {draftSaveState === "saved" ? "Saved Unpublished" : "Unsaved Draft"}
@@ -575,6 +575,7 @@ export default function AiRemediationDraftModal({
                       <div className="flex items-center gap-2">
                         <h4 className="font-bold text-base">Teacher-Only Answer Key & Explanations</h4>
                       </div>
+                      <Badge variant="solid" size="sm">Teacher Eyes Only</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground -mt-1">
                       Never shown to students in student instructions or assignments.

@@ -17,7 +17,7 @@ import { Checkbox } from "@/components/retroui/Checkbox";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Empty } from "@/components/retroui/Empty";
 import ClassworkItemLine from "@/components/item-line/classwork";
-import { Activity, BookOpen, Plus, Sparkles, Pencil } from "lucide-react";
+import { Activity, BookOpen, Plus, Sparkles, Pencil, Lock } from "lucide-react";
 import AiRemediationDraftModal, {
   type DraftValidationResult,
 } from "./ai-remediation-draft-modal";
@@ -293,9 +293,10 @@ const isEligibleGradeTreatment = (
 
 const reconcileGradeTreatment = (
   plan: RemediationPlan,
-  focus: RemediationFocus
+  focus: RemediationFocus,
+  hasAssessment: boolean = false
 ): RemediationPlan =>
-  isEligibleGradeTreatment(plan.grade_treatment, focus)
+  hasAssessment || isEligibleGradeTreatment(plan.grade_treatment, focus)
     ? plan
     : {
       ...plan,
@@ -374,6 +375,12 @@ const InterventionSupportMaterials = forwardRef<
   const [savedAssessment, setSavedAssessment] = useState<RemediationAssessmentCreateResult | null>(null);
   const draftRequestIdRef = useRef<string | null>(null);
 
+  const hasSavedAssessment = Boolean(
+    (progress?.assigned_remediation && progress.assigned_remediation.length > 0) ||
+    (progress?.completed_remediation && progress.completed_remediation.length > 0) ||
+    savedAssessment !== null
+  );
+
   const setNotice = (message: string) => {
     if (message) toast.success({ title: message });
   };
@@ -387,6 +394,10 @@ const InterventionSupportMaterials = forwardRef<
       ]);
       setMaterials(support.items);
       setResources(workspace.resources);
+      const hasExistingAssessment = Boolean(
+        (workspace.progress?.assigned_remediation && workspace.progress.assigned_remediation.length > 0) ||
+        (workspace.progress?.completed_remediation && workspace.progress.completed_remediation.length > 0)
+      );
       const loadedPlan = reconcileGradeTreatment(
         {
           ...workspace.plan,
@@ -395,13 +406,21 @@ const InterventionSupportMaterials = forwardRef<
             workspace.resources
           ),
         },
-        workspace.focus
+        workspace.focus,
+        hasExistingAssessment
       );
+      const primaryAssigned = workspace.progress?.assigned_remediation?.[0];
+      if (hasExistingAssessment && !loadedPlan.grade_treatment && primaryAssigned) {
+        loadedPlan.grade_treatment = primaryAssigned.is_graded === false ? "PRACTICE_ONLY" : (primaryAssigned.component as GradeTreatment | null);
+      }
       const loadedTargets =
-        loadedPlan.target_assignment_ids ??
-        (loadedPlan.original_exam_assignment_id != null
-          ? [loadedPlan.original_exam_assignment_id]
-          : []);
+        loadedPlan.target_assignment_ids && loadedPlan.target_assignment_ids.length > 0
+          ? loadedPlan.target_assignment_ids
+          : loadedPlan.original_exam_assignment_id != null
+            ? [loadedPlan.original_exam_assignment_id]
+            : primaryAssigned?.original_assignment_id != null
+              ? [primaryAssigned.original_assignment_id]
+              : [];
       const loadedCap = loadedPlan.score_adjustment_cap ?? 75;
       setSelectedActivityIds(loadedTargets);
       setCapInput(String(loadedCap));
@@ -639,6 +658,7 @@ const InterventionSupportMaterials = forwardRef<
   ]);
 
   const toggleActivitySelection = (activity: (typeof treatmentActivities)[number]) => {
+    if (hasSavedAssessment) return;
     const matchingExam = originalExams.find(
       (e) => e.title === activity.title || e.assignment_id === activity.classwork_id
     );
@@ -957,6 +977,12 @@ const InterventionSupportMaterials = forwardRef<
   const hasSupportingResources = selectedResources.length > 0;
   const hasRemediationActivity = assigned.length > 0;
   const hasConfiguredSupport = Boolean(hasSupportingResources && hasRemediationActivity);
+  const primaryAssignedAssessment = assigned[0] ?? null;
+  const activeGradeTreatment: GradeTreatment | null =
+    plan.grade_treatment ??
+    (primaryAssignedAssessment?.is_graded === false
+      ? "PRACTICE_ONLY"
+      : (primaryAssignedAssessment?.component as GradeTreatment | null));
   const focusName = focus?.component
     ? componentLabel(focus.component)
     : "Component unavailable";
@@ -1028,8 +1054,9 @@ const InterventionSupportMaterials = forwardRef<
       return false;
     }
 
+    const treatmentToUse = plan.grade_treatment ?? (hasSavedAssessment ? activeGradeTreatment : null);
     let parsedCap: number | undefined = undefined;
-    if (plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY") {
+    if (treatmentToUse && treatmentToUse !== "PRACTICE_ONLY") {
       const err = validateCap(capInput);
       if (err) {
         setCapError(err);
@@ -1043,16 +1070,16 @@ const InterventionSupportMaterials = forwardRef<
     try {
       const result = await saveRemediationPlan(interventionId, {
         teacher_choice: plan.teacher_choice,
-        grade_treatment: plan.grade_treatment ?? null,
+        grade_treatment: treatmentToUse ?? null,
         selected_resources: reconcileSelectedResources(plan.selected_resources, resources),
-        ...(plan.grade_treatment === "EXAMINATION"
+        ...(treatmentToUse === "EXAMINATION"
           ? {
             original_exam_assignment_id:
               plan.original_exam_assignment_id ??
               (selectedActivityIds.length > 0 ? selectedActivityIds[0] : null),
           }
           : {}),
-        ...(plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY"
+        ...(treatmentToUse && treatmentToUse !== "PRACTICE_ONLY"
           ? {
             target_assignment_ids: selectedActivityIds,
             score_adjustment_cap:
@@ -2298,8 +2325,8 @@ const InterventionSupportMaterials = forwardRef<
               </Dialog>
 
               <Dialog
-                open={panel === "classworks"}
-                onOpenChange={(open) => setPanel(open ? "classworks" : "")}
+                open={panel === "classworks" && !hasSavedAssessment}
+                onOpenChange={(open) => setPanel(open && !hasSavedAssessment ? "classworks" : "")}
               >
                 <Dialog.Content size="md" className="max-h-[85vh]">
                   <Dialog.Header>
@@ -2336,9 +2363,11 @@ const InterventionSupportMaterials = forwardRef<
                               id="score-adjustment-cap"
                               type="number"
                               min={0}
+                              disabled={hasSavedAssessment}
                               max={99}
                               value={capInput}
                               onChange={(e) => {
+                                if (hasSavedAssessment) return;
                                 const val = e.target.value;
                                 setCapInput(val);
                                 setCapError(validateCap(val));
@@ -2361,14 +2390,16 @@ const InterventionSupportMaterials = forwardRef<
                                 <button
                                   key={preset}
                                   type="button"
+                                  disabled={hasSavedAssessment}
                                   onClick={() => {
+                                    if (hasSavedAssessment) return;
                                     setCapInput(String(preset));
                                     setCapError(null);
                                   }}
                                   className={`px-2 py-0.5 text-xs font-bold rounded! border-2 transition-all ${isPreset
                                     ? "bg-primary text-primary-foreground border-black"
                                     : "bg-background text-foreground border-border hover:border-black"
-                                    }`}
+                                    } ${hasSavedAssessment ? "opacity-50 cursor-not-allowed" : ""}`}
                                 >
                                   {preset}%
                                 </button>
@@ -2656,7 +2687,7 @@ const InterventionSupportMaterials = forwardRef<
                         method.aiRecommendable &&
                         plan.ai_suggestion?.recommended_format === method.value;
                       const selectMethod = () => {
-                        if (working) return;
+                        if (working || hasSavedAssessment) return;
                         choiceOrigin.current = "manual";
                         setPlan((current) => ({
                           ...current,
@@ -2671,10 +2702,15 @@ const InterventionSupportMaterials = forwardRef<
                           key={method.value}
                           role="radio"
                           aria-checked={isSelected}
-                          tabIndex={working ? -1 : 0}
-                          className={`p-3 cursor-pointer border-2! transition-all ${isSelected
-                            ? "border-primary bg-primary"
-                            : "hover:bg-retro"
+                          aria-disabled={hasSavedAssessment}
+                          tabIndex={working || hasSavedAssessment ? -1 : 0}
+                          className={`p-3 border-2! transition-all ${hasSavedAssessment
+                              ? isSelected
+                                ? "border-primary bg-primary cursor-default"
+                                : "opacity-50 cursor-not-allowed pointer-events-none bg-muted/20"
+                              : isSelected
+                                ? "border-primary bg-primary cursor-pointer"
+                                : "hover:bg-retro cursor-pointer"
                             }`}
                           onClick={selectMethod}
                           onKeyDown={(event) => {
@@ -2687,7 +2723,13 @@ const InterventionSupportMaterials = forwardRef<
                           <div className="flex items-center justify-between">
                             <span className="font-bold text-base">{method.label}</span>
                             <div className="flex items-center gap-1.5">
-                              {isAiRecommended && (
+                              {hasSavedAssessment && isSelected && (
+                                <Badge variant="surface" size="sm">
+                                  <Lock className="size-3 mr-1" />
+                                  Locked
+                                </Badge>
+                              )}
+                              {!hasSavedAssessment && isAiRecommended && (
                                 <Badge variant="solid" size="sm">Recommended</Badge>
                               )}
                             </div>
@@ -2702,6 +2744,12 @@ const InterventionSupportMaterials = forwardRef<
                       );
                     })}
                   </div>
+                  {hasSavedAssessment && (
+                    <p className="text-xs text-muted-foreground px-1 flex items-center gap-1">
+                      <Lock className="size-3 inline shrink-0" />
+                      Remediation delivery format is locked to the saved assessment.
+                    </p>
+                  )}
                   {plan.ai_suggestion && (
                     <div className="px-1 text-sm text-muted-foreground">
                       <p>{plan.ai_suggestion.reason}</p>
@@ -2819,116 +2867,156 @@ const InterventionSupportMaterials = forwardRef<
                   <h3 className="font-black text-xl">Grade Treatment</h3>
                   <Card className="flex flex-col gap-3 border-2 bg-card">
 
-                    <div className="flex flex-col gap-1">
-                      <Label className="font-bold text-base">
-                        How should this activity be treated?
-                      </Label>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        {([
-                          "PRACTICE_ONLY",
-                          ...(focus?.component && focus.component !== "EXAMINATION"
-                            ? [focus.component]
-                            : []),
-                        ] as GradeTreatment[]).map(
-                          (choice) => {
-                            const isSelected = plan.grade_treatment === choice;
-                            return (
-                              <Card
-                                key={choice}
-                                className={`p-2.5 cursor-pointer border-2 transition-all border-2! text-sm font-semibold flex items-center justify-between ${isSelected
-                                  ? "border-primary bg-primary"
-                                  : "border-border "
-                                  }`}
-                                onClick={() => {
-                                  if (working) return;
-                                  setSelectedActivityIds([]);
-                                  setPlan((current) => ({
-                                    ...current,
-                                    grade_treatment: choice,
-                                    original_exam_assignment_id: null,
-                                  }));
-                                }}
-                              >
-                                <span>
-                                  {choice === "PRACTICE_ONLY"
-                                    ? "Ungraded Activity"
-                                    : componentLabel(choice)}
-                                </span>
-                                <Checkbox
-                                  checked={isSelected}
-                                  variant="solid"
-                                  className={`border-black transition-colors pointer-events-none ${isSelected ? "bg-black text-white" : "bg-white text-black"}`}
-                                />
-                              </Card>
-                            );
-                          }
+                    {hasSavedAssessment ? (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-border pb-2">
+                          <div className="flex items-center gap-2">
+                            <Lock className="size-4 text-muted-foreground" />
+                            <Label className="font-bold text-base cursor-default">
+                              Saved Grade Treatment
+                            </Label>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant="solid" size="sm">
+                              {activeGradeTreatment === "PRACTICE_ONLY"
+                                ? "Ungraded Activity"
+                                : activeGradeTreatment === "EXAMINATION"
+                                  ? "Remedial Exam"
+                                  : componentLabel(activeGradeTreatment)}
+                            </Badge>
+                            <Badge variant="surface" size="sm">
+                              Locked
+                            </Badge>
+                          </div>
+                        </div>
+                        <p className="text-sm text-muted-foreground px-1">
+                          {activeGradeTreatment === "PRACTICE_ONLY"
+                            ? "Ungraded Activity stores completion without changing grades."
+                            : activeGradeTreatment === "WRITTEN_WORK"
+                              ? "Written Work adds a portion of the score to a classwork under the category."
+                              : activeGradeTreatment === "PERFORMANCE_TASK"
+                                ? "Performance Task adds a portion of the score to a performance task under the category."
+                                : activeGradeTreatment === "EXAMINATION"
+                                  ? "Remedial Exam replaces the original assessment's effective score only when higher."
+                                  : "Grade treatment and score adjustment rules are locked to the saved assessment."}
+                        </p>
+                        <p className="text-xs text-muted-foreground px-1 flex items-center gap-1">
+                          <Lock className="size-3 inline shrink-0" />
+                          Academic treatment, targeted classwork, and adjustment cap are locked because a curated remediation activity exists.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        <Label className="font-bold text-base">
+                          How should this activity be treated?
+                        </Label>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {([
+                            "PRACTICE_ONLY",
+                            ...(focus?.component && focus.component !== "EXAMINATION"
+                              ? [focus.component]
+                              : []),
+                          ] as GradeTreatment[]).map(
+                            (choice) => {
+                              const isSelected = plan.grade_treatment === choice;
+                              return (
+                                <Card
+                                  key={choice}
+                                  className={`p-2.5 cursor-pointer border-2 transition-all border-2! text-sm font-semibold flex items-center justify-between ${isSelected
+                                    ? "border-primary bg-primary"
+                                    : "border-border "
+                                    }`}
+                                  onClick={() => {
+                                    if (working) return;
+                                    setSelectedActivityIds([]);
+                                    setPlan((current) => ({
+                                      ...current,
+                                      grade_treatment: choice,
+                                      original_exam_assignment_id: null,
+                                    }));
+                                  }}
+                                >
+                                  <span>
+                                    {choice === "PRACTICE_ONLY"
+                                      ? "Ungraded Activity"
+                                      : componentLabel(choice)}
+                                  </span>
+                                  <Checkbox
+                                    checked={isSelected}
+                                    variant="solid"
+                                    className={`border-black transition-colors pointer-events-none ${isSelected ? "bg-black text-white" : "bg-white text-black"}`}
+                                  />
+                                </Card>
+                              );
+                            }
+                          )}
+                          {focus?.component === "EXAMINATION" && (
+                            <Card
+                              className={`p-2.5 cursor-pointer border-2 transition-all border-2! text-sm font-semibold flex items-center justify-between ${plan.grade_treatment === "EXAMINATION"
+                                ? "border-primary bg-primary"
+                                : "border-border "
+                                } ${originalExams.length === 0 ? "opacity-50 pointer-events-none" : ""}`}
+                              onClick={() => {
+                                if (working || originalExams.length === 0) return;
+                                setSelectedActivityIds([]);
+                                setPlan((current) => ({
+                                  ...current,
+                                  grade_treatment: "EXAMINATION",
+                                  original_exam_assignment_id: null,
+                                }));
+                              }}
+                            >
+                              <span>Remedial Exam</span>
+                              <Checkbox
+                                checked={plan.grade_treatment === "EXAMINATION"}
+                                variant="solid"
+                                className={`border-black transition-colors pointer-events-none ${plan.grade_treatment === "EXAMINATION" ? "bg-black text-white" : "bg-white text-black"}`}
+                              />
+                            </Card>
+                          )}
+                        </div>
+                        {focus?.component == null && (
+                          <Alert status="warning">
+                            No single verified weakest grading component is available.
+                            Graded remediation is unavailable; use Ungraded Activity.
+                          </Alert>
                         )}
-                        {focus?.component === "EXAMINATION" && (
-                          <Card
-                            className={`p-2.5 cursor-pointer border-2 transition-all border-2! text-sm font-semibold flex items-center justify-between ${plan.grade_treatment === "EXAMINATION"
-                              ? "border-primary bg-primary"
-                              : "border-border "
-                              } ${originalExams.length === 0 ? "opacity-50 pointer-events-none" : ""}`}
-                            onClick={() => {
-                              if (working || originalExams.length === 0) return;
-                              setSelectedActivityIds([]);
-                              setPlan((current) => ({
-                                ...current,
-                                grade_treatment: "EXAMINATION",
-                                original_exam_assignment_id: null,
-                              }));
-                            }}
-                          >
-                            <span>Remedial Exam</span>
-                            <Checkbox
-                              checked={plan.grade_treatment === "EXAMINATION"}
-                              variant="solid"
-                              className={`border-black transition-colors pointer-events-none ${plan.grade_treatment === "EXAMINATION" ? "bg-black text-white" : "bg-white text-black"}`}
-                            />
-                          </Card>
+                        {plan.grade_treatment && (
+                          <p className="text-sm text-muted-foreground px-1">
+                            {{
+                              PRACTICE_ONLY:
+                                "Ungraded Activity stores completion without changing grades.",
+                              WRITTEN_WORK:
+                                "Written Work adds a portion of the score to a classwork under the category.",
+                              PERFORMANCE_TASK:
+                                "Performance Task adds a portion of the score to a performance task under the category.",
+                              EXAMINATION:
+                                "Remedial Exam replaces the original assessment's effective score only when higher.",
+                            }[plan.grade_treatment]}
+                          </p>
                         )}
                       </div>
-                      {focus?.component == null && (
-                        <Alert status="warning">
-                          No single verified weakest grading component is available.
-                          Graded remediation is unavailable; use Ungraded Activity.
-                        </Alert>
-                      )}
-                      {plan.grade_treatment && (
-                        <p className="text-sm text-muted-foreground px-1">
-                          {{
-                            PRACTICE_ONLY:
-                              "Ungraded Activity stores completion without changing grades.",
-                            WRITTEN_WORK:
-                              "Written Work adds a portion of the score to a classwork under the category.",
-                            PERFORMANCE_TASK:
-                              "Performance Task adds a portion of the score to a performance task under the category.",
-                            EXAMINATION:
-                              "Remedial Exam replaces the original assessment's effective score only when higher.",
-                          }[plan.grade_treatment]}
-                        </p>
-                      )}
-                    </div>
+                    )}
 
-                    {focus?.component === "EXAMINATION" && originalExams.length === 0 && (
+                    {!hasSavedAssessment && focus?.component === "EXAMINATION" && originalExams.length === 0 && (
                       <p className="text-sm text-destructive px-1">
                         No scored original Examination is available for this student and
                         period.
                       </p>
                     )}
 
-                    {plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY" && (
+                    {activeGradeTreatment && activeGradeTreatment !== "PRACTICE_ONLY" && (
                       <div className="space-y-3 pt-2">
                         <div className="flex items-end justify-between">
                           <div className="flex items-center gap-2">
                             <Label className="text-base font-bold">
-                              Targeted {componentLabel(plan.grade_treatment)} {chosenActivities.length > 1 ? "Classworks" : "Classwork"}
+                              Targeted {componentLabel(activeGradeTreatment)} {chosenActivities.length > 1 ? "Classworks" : "Classwork"}
                             </Label>
-                            <Badge variant={capError ? "destructive" : "surface"} size="sm">
-                              {capError ? "Invalid Cap" : `${capInput ? capInput : "75"}% Cap`}
+                            <Badge variant={!hasSavedAssessment && capError ? "destructive" : "surface"} size="sm">
+                              {!hasSavedAssessment && capError ? "Invalid Cap" : `${capInput ? capInput : (plan.score_adjustment_cap ?? 75)}% Cap`}
                             </Badge>
                           </div>
-                          {chosenActivities.length > 0 && (
+                          {!hasSavedAssessment && chosenActivities.length > 0 && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -2989,12 +3077,49 @@ const InterventionSupportMaterials = forwardRef<
                                     </div>
                                   </div>
                                   <p className="text-sm text-foreground px-1">
-                                    Actual grade reflects from students remediation score.
+                                    {hasSavedAssessment
+                                      ? `Original max: ${preview?.max_points ?? chosenActivity.possible_score} pts · Capped at ${plan.score_adjustment_cap ?? 75}%`
+                                      : "Actual grade reflects from students remediation score."}
                                   </p>
                                 </Card>
                               );
                             })}
                           </div>
+                        ) : hasSavedAssessment ? (
+                          <Card className="flex flex-col gap-2 p-3 rounded border-2! border-border bg-card">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-base font-bold">
+                                  {primaryAssignedAssessment?.original_title ?? targetAssignmentSummary}
+                                </span>
+                                <Badge variant="solid" size="sm">
+                                  Targeted
+                                </Badge>
+                              </div>
+                              <Badge variant="surface" size="sm">
+                                {componentLabel(activeGradeTreatment)}
+                              </Badge>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 py-1.5 text-center bg-retro rounded! border-2">
+                              <div className="flex flex-col gap-0.5">
+                                <p className="text-xs text-muted-foreground font-medium">Original</p>
+                                <p className="text-base font-bold">
+                                  {primaryAssignedAssessment?.original_grade != null && primaryAssignedAssessment?.total_points != null
+                                    ? `${primaryAssignedAssessment.original_grade}/${primaryAssignedAssessment.total_points}`
+                                    : "Recorded Score"}
+                                </p>
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <p className="text-xs text-muted-foreground font-medium">Adjustment Cap</p>
+                                <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                                  {plan.score_adjustment_cap ?? 75}%
+                                </p>
+                              </div>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              Original target maximum points: {primaryAssignedAssessment?.total_points != null ? `${primaryAssignedAssessment.total_points} points` : "Preserved"}
+                            </p>
+                          </Card>
                         ) : (
                           <Empty className="w-full border-2 rounded! border-border bg-background p-4 shadow-none hover:shadow-none">
                             <Empty.Content>
@@ -3008,8 +3133,8 @@ const InterventionSupportMaterials = forwardRef<
                               </Empty.Title>
                               <Empty.Description className="text-sm whitespace-nowrap text-muted-foreground">
                                 {treatmentActivities.length > 0
-                                  ? `Select classwork from ${componentLabel(plan.grade_treatment)} to add score to`
-                                  : `No scored ${componentLabel(plan.grade_treatment).toLowerCase()} classworks available for this student`}
+                                  ? `Select classwork from ${componentLabel(activeGradeTreatment)} to add score to`
+                                  : `No scored ${componentLabel(activeGradeTreatment).toLowerCase()} classworks available for this student`}
                               </Empty.Description>
                               {treatmentActivities.length > 0 && (
                                 <Button
