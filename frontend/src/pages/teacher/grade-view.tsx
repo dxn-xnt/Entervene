@@ -1322,7 +1322,7 @@ const TeacherGradeView = () => {
               variant="outline"
               onClick={() => setShowBulkConfirm(false)}
               disabled={sendingAll}
-              className="h-9 px-4 text-xs font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100"
+              className="h-9 px-4 text-xs font-bold border-2 border-black hover:bg-yellow-100"
             >
               {timingGate.isLocked ? "Close" : "Cancel"}
             </Button>
@@ -1331,7 +1331,7 @@ const TeacherGradeView = () => {
                 variant="default"
                 onClick={() => handleBulkSend(forceResendAll)}
                 disabled={sendingAll}
-                className="h-9 px-4 text-xs font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] bg-primary hover:bg-primary-hover text-black"
+                className="h-9 px-4 text-xs font-bold border-2 border-black bg-primary hover:bg-primary-hover text-black"
               >
                 {sendingAll ? (
                   <>
@@ -1392,7 +1392,7 @@ const TeacherGradeView = () => {
                 setConflictData(null);
                 fetchGradebook();
               }}
-              className="h-9 px-4 text-xs font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100"
+              className="h-9 px-4 text-xs font-bold border-2 border-black hover:bg-yellow-100"
             >
               <RefreshCw className="size-3.5 mr-1.5" /> Refresh Gradebook
             </Button>
@@ -1408,7 +1408,7 @@ const TeacherGradeView = () => {
                   handleBulkSend(true);
                 }
               }}
-              className="h-9 px-4 text-xs font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] bg-primary hover:bg-primary-hover text-black"
+              className="h-9 px-4 text-xs font-bold border-2 border-black bg-primary hover:bg-primary-hover text-black"
             >
               Send Recomputed Grade
             </Button>
@@ -1477,7 +1477,7 @@ const TeacherGradeView = () => {
             <Button
               variant="default"
               onClick={() => setBulkSendSummary(null)}
-              className="h-9 px-5 text-xs font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] bg-primary hover:bg-primary-hover text-black"
+              className="h-9 px-5 text-xs font-bold border-2 border-black bg-primary hover:bg-primary-hover text-black"
             >
               Done
             </Button>

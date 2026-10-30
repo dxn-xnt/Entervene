@@ -896,7 +896,7 @@ export default function ClassworkView({
                 confirmationTitle={`Are you sure you want to archive "${selected.title}"?`}
                 description="This only works while no student work is turned in. If there are submissions, ask students to unsubmit first. Linked lessons stay intact."
                 confirmLabel={isArchiving ? "Archiving..." : "Archive Classwork"}
-                confirmVariant="default"
+                confirmVariant="destructive"
                 isLoading={isArchiving}
                 onCancel={() => setShowArchiveConfirm(false)}
                 onConfirm={archiveSelectedClasswork}

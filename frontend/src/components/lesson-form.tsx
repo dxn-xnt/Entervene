@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CardContent } from "@/components/ui/card";
+import { Button } from "@/components/retroui/Button";
 
 interface LessonFormProps {
   classId: number;
@@ -148,22 +149,25 @@ export default function LessonForm({
             </span>
           </div>
 
-          <div className="flex gap-3 justify-end">
-            <button
+          <div data-slot="dialog-footer" className="flex gap-3 justify-end">
+            <Button
+              variant="outline"
+              autoIcon={false}
               type="button"
-              className="rounded-none border px-6 py-2 hover:bg-gray-50"
+              className="rounded-none! border px-6 py-2 hover:bg-gray-50 disabled:translate-none disabled:shadow-none"
               disabled={isLoading}
               onClick={() => window.history.back()}
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
+              autoIcon={false}
               type="submit"
               disabled={isLoading}
-              className="rounded-none border bg-primary px-6 py-2 font-medium text-primary-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-none! border bg-primary px-6 py-2 font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:translate-none disabled:shadow-none"
             >
               {isLoading ? "Saving..." : buttonLabel}
-            </button>
+            </Button>
           </div>
         </form>
       </CardContent>

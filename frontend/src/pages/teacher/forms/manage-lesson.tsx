@@ -346,7 +346,7 @@ export default function ManageLessonModal({
 
       {isArchiveConfirmOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4">
-          <Card className="block w-full max-w-md border-border bg-background text-foreground shadow-[4px_4px_0_#000] hover:shadow-[4px_4px_0_#000]">
+          <Card data-modal-content className="block w-full max-w-md border-border bg-background text-foreground shadow-[4px_4px_0_#000] hover:shadow-[4px_4px_0_#000]">
             <div className="flex items-center justify-between border-b border-black bg-red-100 px-5 py-3">
               <div className="flex items-center gap-2 text-red-800">
                 <Archive size={18} />
@@ -375,23 +375,26 @@ export default function ManageLessonModal({
                 flow.
               </p>
             </Card.Content>
-            <div className="flex justify-end gap-3 border-t border-black px-5 py-4">
-              <button
+            <div data-slot="dialog-footer" className="flex justify-end gap-3 border-t border-black px-5 py-4">
+              <Button
+                variant="outline"
+                autoIcon={false}
                 type="button"
                 onClick={() => setArchiveConfirmOpen(false)}
                 disabled={isArchivingLesson}
-                className="rounded border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
+                className="rounded border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50 disabled:translate-none disabled:shadow-none"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                autoIcon={false}
                 type="button"
                 onClick={handleArchive}
                 disabled={isArchivingLesson}
-                className="rounded border border-black bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 disabled:opacity-50"
+                className="rounded border border-black bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50 disabled:translate-none disabled:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
               >
                 {isArchivingLesson ? "Archiving..." : "Archive Lesson"}
-              </button>
+              </Button>
             </div>
           </Card>
         </div>

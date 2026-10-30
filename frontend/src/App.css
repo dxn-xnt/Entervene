@@ -647,6 +647,30 @@ body:has([data-teacher-page]) [data-slot="dialog-footer"] {
   border-radius: var(--radius);
 }
 
+/* Dialog footer actions use Edit Classwork's RetroUI interaction at every size.
+   Keep these rules scoped to footers; disabled/loading buttons retain their
+   existing component styles, and colors and geometry stay with each variant. */
+:is([data-slot="dialog-content"], [data-modal-content]) [data-slot="dialog-footer"] {
+  overflow: visible;
+}
+
+:is([data-slot="dialog-content"], [data-modal-content]) [data-slot="dialog-footer"] [data-slot="button"]:not(:disabled):not([aria-disabled="true"]) {
+  box-shadow: var(--shadow-md);
+  translate: 0 0;
+  transition-property: all;
+  transition-duration: 200ms;
+}
+
+:is([data-slot="dialog-content"], [data-modal-content]) [data-slot="dialog-footer"] [data-slot="button"]:not(:disabled):not([aria-disabled="true"]):hover {
+  box-shadow: var(--shadow);
+  translate: 0 0.25rem;
+}
+
+:is([data-slot="dialog-content"], [data-modal-content]) [data-slot="dialog-footer"] [data-slot="button"]:not(:disabled):not([aria-disabled="true"]):active {
+  box-shadow: none;
+  translate: 0.25rem 0.5rem;
+}
+
 /* Rubric template actions follow the same rounded, evenly spaced button style. */
 [data-rubric-template-dialog] [data-slot="button"],
 [data-rubric-template-actions] [data-slot="button"] {
