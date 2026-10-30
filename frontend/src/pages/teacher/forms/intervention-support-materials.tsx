@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from "react";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { unorderedValues } from "@/lib/form-changes";
+import { NoChangesMessage } from "@/components/retroui/FormMessage";
 import { useNavigate } from "react-router-dom";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/teacher/button";
@@ -308,6 +311,7 @@ export interface InterventionSupportMaterialsHandle {
 }
 
 export interface InterventionSupportMaterialsProps {
+  onChangesChange?: (hasChanges: boolean) => void;
   detail: TeacherInterventionDetail;
   page?: "overview" | "plan";
   previousResolved?: TeacherInterventionSummary;
@@ -318,7 +322,7 @@ const InterventionSupportMaterials = forwardRef<
   InterventionSupportMaterialsHandle,
   InterventionSupportMaterialsProps
 >(function InterventionSupportMaterials(
-  { detail, page = "overview", previousResolved, onAdjustSupport },
+  { detail, page = "overview", previousResolved, onAdjustSupport, onChangesChange },
   ref
 ) {
   const toast = useToast();
@@ -344,6 +348,7 @@ const InterventionSupportMaterials = forwardRef<
   const [selectedActivityIds, setSelectedActivityIds] = useState<number[]>([]);
   const [lessonFilter, setLessonFilter] = useState("ALL");
   const [capInput, setCapInput] = useState<string>("75");
+  const [savedPlanValues, setSavedPlanValues] = useState<unknown>(null);
   const [capError, setCapError] = useState<string | null>(null);
   const [scorePreviews, setScorePreviews] = useState<ClassworkScorePreview[]>([]);
   const [projectionResponse, setProjectionResponse] = useState<SubjectGradeProjectionResponse | null>(null);
@@ -422,6 +427,10 @@ const InterventionSupportMaterials = forwardRef<
           loadedPlan.original_exam_assignment_id ?? (loadedTargets[0] ?? null),
         ai_suggestion: initialRecommendation ? loadedPlan.ai_suggestion : null,
       });
+      setSavedPlanValues(planValues({
+        ...loadedPlan,
+        original_exam_assignment_id: loadedPlan.original_exam_assignment_id ?? loadedTargets[0] ?? null,
+      }, loadedTargets, String(loadedCap), workspace.resources));
 
       setAdvisoryError(
         loadedPlan.ai_suggestion && !initialRecommendation
@@ -987,7 +996,28 @@ const InterventionSupportMaterials = forwardRef<
     }
   };
 
+  function planValues(value: RemediationPlan, targets: number[], cap: string, availableResources: RemediationResource[]) {
+    return {
+      teacher_choice: value.teacher_choice,
+      grade_treatment: value.grade_treatment ?? null,
+      selected_resources: unorderedValues(reconcileSelectedResources(value.selected_resources, availableResources)),
+      original_exam_assignment_id: value.grade_treatment === "EXAMINATION" ? value.original_exam_assignment_id ?? targets[0] ?? null : null,
+      targets: value.grade_treatment && value.grade_treatment !== "PRACTICE_ONLY" ? unorderedValues(targets) : [],
+      cap: value.grade_treatment && value.grade_treatment !== "PRACTICE_ONLY" ? Number(cap) : null,
+    };
+  }
+  const changes = useEditFormChanges({
+    initialValues: savedPlanValues,
+    values: planValues(plan, selectedActivityIds, capInput, resources),
+    resetKey: interventionId,
+  });
+  useEffect(() => {
+    onChangesChange?.(!loading && changes.hasChanges);
+  }, [loading, changes.hasChanges, onChangesChange]);
   const saveAdjustments = async (): Promise<boolean> => {
+    // Generation and assignment also call this to persist prerequisites. An
+    // unchanged prerequisite is already saved and needs no request or toast.
+    if (!changes.guardChanges()) return true;
     if (
       isGraded(plan.teacher_choice) &&
       (!plan.grade_treatment ||
@@ -1036,6 +1066,9 @@ const InterventionSupportMaterials = forwardRef<
         advisoryAttemptedRef.current.delete(interventionId);
       }
       setPlan(result.plan);
+      setSavedPlanValues(planValues(result.plan,
+        result.plan.target_assignment_ids ?? selectedActivityIds,
+        String(result.plan.score_adjustment_cap ?? capInput), result.resources));
       setResources(result.resources);
       if (result.plan.target_assignment_ids !== undefined) {
         setSelectedActivityIds(result.plan.target_assignment_ids);
@@ -1060,8 +1093,7 @@ const InterventionSupportMaterials = forwardRef<
     ref,
     () => ({
       saveAdjustments,
-    }),
-    [plan, interventionId, selectedActivityIds, capInput]
+    })
   );
 
   const handleGenerateWithAI = async () => {
@@ -1469,6 +1501,7 @@ const InterventionSupportMaterials = forwardRef<
 
   return (
     <section className="flex flex-col gap-4" aria-label="Intervention workflow">
+      <NoChangesMessage message={changes.noChangesMessage} />
       <div className="flex flex-col gap-2">
         <Card className="w-full space-y-2 border-2 border-black bg-primary">
           <div className="flex items-start gap-4">

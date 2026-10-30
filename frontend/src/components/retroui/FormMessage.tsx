@@ -15,3 +15,7 @@ export function FormMessage({ children, className, ...props }: FormMessageProps)
     </Text>
   );
 }
+
+export function NoChangesMessage({ message }: { message?: string | null }) {
+  return <FormMessage role="status" aria-live="polite" className="w-full text-muted-foreground font-normal" >{message}</FormMessage>;
+}

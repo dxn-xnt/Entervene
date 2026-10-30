@@ -1,8 +1,12 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
-import { Archive, Check, CheckCheck, X } from "lucide-react";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { unorderedValues } from "@/lib/form-changes";
+import { NoChangesMessage } from "@/components/retroui/FormMessage";
+import { Check, CheckCheck } from "lucide-react";
 import { Button } from "@/components/teacher/button";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Input } from "@/components/retroui/Input";
 import { Switch } from "@/components/retroui/Switch";
 import Field from "@/components/admin/classes/fields/Field";
@@ -60,6 +64,26 @@ export default function ManageLessonModal({
   toggleLessonClass,
 }: ManageLessonModalProps) {
   const [internalShowArchiveConfirm, setInternalShowArchiveConfirm] = useState(false);
+  const [classBaseline, setClassBaseline] = useState(() => ({ lessonId: selectedLesson.lesson_id, ids: unorderedValues(lessonClassIds) }));
+  if (classBaseline.lessonId !== selectedLesson.lesson_id) {
+    setClassBaseline({ lessonId: selectedLesson.lesson_id, ids: unorderedValues(lessonClassIds) });
+  }
+  const initialClasses = classBaseline.lessonId === selectedLesson.lesson_id ? classBaseline.ids : unorderedValues(lessonClassIds);
+  const lessonValues = (value: LessonDraft) => ({
+    title: value.title.trim(), description: value.description.trim(),
+    content: value.content.trim(), order_index: Number(value.order_index),
+    is_published: value.is_published,
+  });
+  const changes = useEditFormChanges({
+    resetKey: selectedLesson.lesson_id,
+    initialValues: [lessonValues({
+      title: selectedLesson.title, description: selectedLesson.description ?? "",
+      content: selectedLesson.content ?? "", order_index: String(selectedLesson.order_index),
+      is_published: selectedLesson.is_published, show_scores: selectedLesson.show_scores,
+      competency_id: selectedLesson.competency_id,
+    }), initialClasses],
+    values: [lessonValues(lessonDraft), unorderedValues(lessonClassIds)],
+  });
 
   const isArchiveConfirmOpen =
     propShowArchiveConfirm !== undefined
@@ -80,6 +104,7 @@ export default function ManageLessonModal({
   };
 
   const handleSave = () => {
+    if (!changes.guardChanges()) return;
     if (onSave) onSave();
     else if (saveLesson) saveLesson();
   };
@@ -301,35 +326,16 @@ export default function ManageLessonModal({
             )}
           </div>
 
-          <Dialog.Footer className="sm:justify-between">
-            <Button
-              type="button"
-              onClick={handleClose}
-              disabled={
-                isSavingLesson ||
-                isArchivingLesson ||
-                removingLessonAttachmentId !== null
-              }
-            >
-              Close
-            </Button>
+          <Dialog.Footer>
+            <NoChangesMessage message={changes.noChangesMessage} />
 
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
-              <Button
-                variant="outline"
-                onClick={() => setArchiveConfirmOpen(true)}
-                disabled={
-                  isArchivingLesson ||
-                  isSavingLesson ||
-                  removingLessonAttachmentId !== null
-                }
-              >
-                Archive Lesson
-              </Button>
+
               <Button
                 type="button"
                 onClick={handleSave}
                 disabled={
+                  !changes.hasChanges ||
                   isSavingLesson ||
                   isArchivingLesson ||
                   removingLessonAttachmentId !== null
@@ -344,61 +350,19 @@ export default function ManageLessonModal({
         </Dialog.Content>
       </Dialog>
 
-      {isArchiveConfirmOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4">
-          <Card data-modal-content className="block w-full max-w-md border-border bg-background text-foreground shadow-[4px_4px_0_#000] hover:shadow-[4px_4px_0_#000]">
-            <div className="flex items-center justify-between border-b border-black bg-red-100 px-5 py-3">
-              <div className="flex items-center gap-2 text-red-800">
-                <Archive size={18} />
-                <Card.Title className="mb-0 text-base font-bold text-red-800">
-                  Archive Lesson?
-                </Card.Title>
-              </div>
-              <button
-                type="button"
-                onClick={() => setArchiveConfirmOpen(false)}
-                disabled={isArchivingLesson}
-                className="rounded p-1 hover:bg-white/60 disabled:opacity-50"
-                aria-label="Close archive confirmation"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <Card.Content className="space-y-3">
-              <p className="text-sm font-medium">
-                Are you sure you want to archive{" "}
-                <span className="font-bold">"{selectedLesson.title}"</span>?
-              </p>
-              <p className="text-xs text-gray-600">
-                This hides the lesson from the teacher lesson list and student
-                lesson views. You can restore it later from the backend archive
-                flow.
-              </p>
-            </Card.Content>
-            <div data-slot="dialog-footer" className="flex justify-end gap-3 border-t border-black px-5 py-4">
-              <Button
-                variant="outline"
-                autoIcon={false}
-                type="button"
-                onClick={() => setArchiveConfirmOpen(false)}
-                disabled={isArchivingLesson}
-                className="rounded border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50 disabled:translate-none disabled:shadow-none"
-              >
-                Cancel
-              </Button>
-              <Button
-                autoIcon={false}
-                type="button"
-                onClick={handleArchive}
-                disabled={isArchivingLesson}
-                className="rounded border border-black bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50 disabled:translate-none disabled:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
-              >
-                {isArchivingLesson ? "Archiving..." : "Archive Lesson"}
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
+      <ConfirmDialog
+        open={isArchiveConfirmOpen}
+        onOpenChange={(open) => {
+          if (!isArchivingLesson) setArchiveConfirmOpen(open);
+        }}
+        title="Archive Lesson"
+        confirmationTitle={`Are you sure you want to archive "${selectedLesson.title}"?`}
+        description="This hides the lesson from the teacher lesson list and student lesson views. You can restore it later from the backend archive flow."
+        confirmLabel={isArchivingLesson ? "Archiving..." : "Archive Lesson"}
+        confirmVariant="destructive"
+        isLoading={isArchivingLesson}
+        onConfirm={handleArchive}
+      />
     </>
   );
 }

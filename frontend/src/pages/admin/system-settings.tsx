@@ -6,7 +6,8 @@ import { useNavigate } from "react-router-dom";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/admin/button";
 import { Input } from "@/components/retroui/Input";
-import { FormMessage } from "@/components/retroui/FormMessage";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -115,6 +116,23 @@ export default function AdminSystemSettings() {
   const [shsEnabled, setShsEnabled] = React.useState(true);
   const [medicalEnabled, setMedicalEnabled] = React.useState(true);
   const [engineeringEnabled, setEngineeringEnabled] = React.useState(true);
+  const [savedSettings, setSavedSettings] = React.useState<Record<string, string> | null>(null);
+  const hoursChanges = useEditFormChanges({
+    initialValues: [savedSettings?.school_day_start ?? "06:00", savedSettings?.school_day_end ?? "20:00"],
+    values: [schoolDayStart, schoolDayEnd],
+  });
+  const capsChanges = useEditFormChanges({
+    initialValues: [Number(savedSettings?.min_subjects_per_day ?? 4), Number(savedSettings?.max_subjects_per_day ?? 6), Number(Number(savedSettings?.max_hours_per_day ?? 6).toFixed(2))],
+    values: [Number(minSubjects), Number(maxSubjects), Number(((parseFloat(maxMinutes) || 0) / 60).toFixed(2))],
+  });
+  const scopeChanges = useEditFormChanges({
+    initialValues: ["jhs_enabled", "shs_enabled", "medical_pathway_enabled", "engineering_pathway_enabled"].map(key => savedSettings?.[key] !== "false"),
+    values: [jhsEnabled, shsEnabled, medicalEnabled, engineeringEnabled],
+  });
+  const policyChanges = useEditFormChanges({
+    enabled: !!averagePolicy?.configured, resetKey: averageYearId,
+    initialValues: Number(averagePolicy?.threshold), values: Number(averagePassing),
+  });
 
   // Grading templates
   const [templates, setTemplates] = React.useState<Template[]>([]);
@@ -268,6 +286,7 @@ export default function AdminSystemSettings() {
           flatSettings[item.key] = item.value;
         });
       });
+      setSavedSettings(flatSettings);
 
       if (flatSettings["jhs_enabled"])
         setJhsEnabled(flatSettings["jhs_enabled"] === "true");
@@ -350,6 +369,7 @@ export default function AdminSystemSettings() {
   };
 
   const handleSaveThresholds = async (action: "edit" | "confirm_legacy" | "initialize_manual" | "copy_previous") => {
+    if (action === "edit" && !policyChanges.guardChanges()) return;
     if (!averagePolicy || !averageConfirmed || !averageReason.trim()) {
       setAverageError("Select a year, enter an audit reason, and confirm this change.");
       setAverageValidationAttempt((attempt) => attempt + 1);
@@ -388,6 +408,7 @@ export default function AdminSystemSettings() {
   };
 
   const handleSaveTeacherCaps = async () => {
+    if (!capsChanges.guardChanges()) return;
     if (parseInt(minSubjects) > parseInt(maxSubjects)) {
       setTeacherCapsError("Minimum subjects cannot exceed maximum subjects.");
       return;
@@ -403,6 +424,7 @@ export default function AdminSystemSettings() {
         updateSetting("max_hours_per_day", hoursFromMinutes),
       ]);
       showToast("Teacher workload caps saved.");
+      capsChanges.markSaved();
       refetchGlobalSettings();
     } catch (err) {
       console.error(err);
@@ -413,6 +435,7 @@ export default function AdminSystemSettings() {
   };
 
   const handleSaveSchoolHours = async () => {
+    if (!hoursChanges.guardChanges()) return;
     setIsSavingSchoolHours(true);
     try {
       // Basic client-side validation to prevent obvious errors before hitting the backend
@@ -429,6 +452,7 @@ export default function AdminSystemSettings() {
       await saveSingleSetting("school_day_start", schoolDayStart);
       await saveSingleSetting("school_day_end", schoolDayEnd);
       showToast("School operational hours saved");
+      hoursChanges.markSaved();
     } catch (err) {
       showToast(
         err instanceof Error ? err.message : "Failed to save school hours.",
@@ -440,6 +464,7 @@ export default function AdminSystemSettings() {
   };
 
   const handleSaveScope = async () => {
+    if (!scopeChanges.guardChanges()) return;
     setIsSavingScope(true);
     try {
       await saveSingleSetting("jhs_enabled", jhsEnabled ? "true" : "false");
@@ -453,6 +478,7 @@ export default function AdminSystemSettings() {
         engineeringEnabled ? "true" : "false",
       );
       showToast("Curriculum scope saved");
+      scopeChanges.markSaved();
     } catch (err) {
       showToast(
         err instanceof Error ? err.message : "Failed to save curriculum scope.",
@@ -583,11 +609,12 @@ export default function AdminSystemSettings() {
                     size="sm"
                     className="w-full justify-center whitespace-nowrap sm:w-auto"
                     onClick={handleSaveSchoolHours}
-                    disabled={isSavingSchoolHours}
+                    disabled={isSavingSchoolHours || !hoursChanges.hasChanges}
                   >
                     <Save className="size-3.5 mr-2" />
                     Save Hours
                   </Button>
+                  <NoChangesMessage message={hoursChanges.noChangesMessage} />
                 </Card.Header>
 
                 <Card.Content className="flex flex-col gap-4">
@@ -641,11 +668,12 @@ export default function AdminSystemSettings() {
                     size="sm"
                     className="w-full justify-center whitespace-nowrap sm:w-auto"
                     onClick={() => void handleSaveThresholds("edit")}
-                    disabled={isSavingThresholds || !averagePolicy?.configured}
+                    disabled={isSavingThresholds || !averagePolicy?.configured || !policyChanges.hasChanges}
                   >
                     <Save className="mr-2 size-3.5" />
                     Save Threshold
                   </Button>
+                  <NoChangesMessage message={policyChanges.noChangesMessage} />
                 </Card.Header>
                 <Card.Content className="flex flex-col gap-4">
                   <AdminValidationAlert message={averageError === "Select a year, enter an audit reason, and confirm this change." ? null : averageError} attempt={averageValidationAttempt} />
@@ -910,11 +938,12 @@ export default function AdminSystemSettings() {
                       size="sm"
                       className="w-full justify-center whitespace-nowrap sm:w-auto"
                       onClick={handleSaveScope}
-                      disabled={isSavingScope}
+                      disabled={isSavingScope || !scopeChanges.hasChanges}
                     >
                       <Save className="size-3.5 mr-2" />
                       Save Scope
                     </Button>
+                  <NoChangesMessage message={scopeChanges.noChangesMessage} />
                   </div>
                 </Card.Header>
                 <Card.Content className="flex flex-col gap-4">
@@ -1165,12 +1194,13 @@ export default function AdminSystemSettings() {
                     className="w-full justify-center whitespace-nowrap sm:w-auto"
                     onClick={handleSaveTeacherCaps}
                     disabled={
-                      isSavingTeacherCaps
+                      isSavingTeacherCaps || !capsChanges.hasChanges
                     }
                   >
                     <Save className="size-3.5 mr-2" />
                     Save Workload Caps
                   </Button>
+                  <NoChangesMessage message={capsChanges.noChangesMessage} />
                 </Card.Header>
                 <Card.Content className="flex flex-col gap-6 w-full">
                   <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">

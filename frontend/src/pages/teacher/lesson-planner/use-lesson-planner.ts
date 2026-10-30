@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -159,6 +160,7 @@ export function useLessonPlanner(
 ) {
   const navigate = useNavigate();
   const [draft, setDraft] = useState<LessonPlanDraft>(DEFAULT_DRAFT);
+  const [savedDraft, setSavedDraft] = useState<LessonPlanDraft>(DEFAULT_DRAFT);
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
@@ -212,7 +214,7 @@ export function useLessonPlanner(
         const res = await apiFetch(`/api/v1/lesson-plans/${planId}`);
         if (!res.ok) throw new Error("Unable to load lesson plan.");
         const data = await res.json();
-        setDraft({
+        const loadedDraft = {
           ...DEFAULT_DRAFT,
           ...data,
           subject_id: data.subject_id ?? subjectId ?? null,
@@ -236,7 +238,9 @@ export function useLessonPlanner(
           learning_experience: { ...DEFAULT_DRAFT.learning_experience, ...(data.learning_experience ?? {}) },
           assessment: { ...DEFAULT_DRAFT.assessment, ...(data.assessment ?? {}) },
           ways_forward: { ...DEFAULT_DRAFT.ways_forward, ...(data.ways_forward ?? {}) },
-        });
+        } as LessonPlanDraft;
+        setDraft(loadedDraft);
+        setSavedDraft(loadedDraft);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to load plan.";
         setApiError(msg);
@@ -275,7 +279,14 @@ export function useLessonPlanner(
   );
 
   // Save draft (no validation, stays on current page)
+  const changes = useEditFormChanges({
+    enabled: !!planId,
+    resetKey: planId,
+    initialValues: draftToPayload(savedDraft, "DRAFT", classId, subjectId),
+    values: draftToPayload(draft, "DRAFT", classId, subjectId),
+  });
   const saveDraft = useCallback(async () => {
+    if (!changes.guardChanges()) return;
     setIsSaving(true);
     setApiError("");
     setSaveSuccess(false);
@@ -308,6 +319,7 @@ export function useLessonPlanner(
         }
       }
       if (!res.ok) throw new Error("Unable to save draft.");
+      setSavedDraft(draft);
       setSaveSuccess(true);
       toast.success("Lesson plan draft saved successfully.");
     } catch (err) {
@@ -317,7 +329,7 @@ export function useLessonPlanner(
     } finally {
       setIsSaving(false);
     }
-  }, [draft, planId, classId, subjectId, navigate]);
+  }, [draft, planId, classId, subjectId, navigate, changes]);
 
   // Submit (enforces validation, marks status as SUBMITTED, navigates to list)
   const submitPlan = useCallback(async () => {
@@ -378,6 +390,8 @@ export function useLessonPlanner(
   }, [draft, planId, classId, subjectId]);
 
   return {
+    canSaveDraft: !planId || changes.hasChanges,
+    noChangesMessage: changes.noChangesMessage,
     draft,
     setField,
     setNestedField,

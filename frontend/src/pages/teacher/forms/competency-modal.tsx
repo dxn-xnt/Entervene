@@ -8,6 +8,8 @@ import { Input } from "@/components/retroui/Input";
 import Field from "@/components/admin/classes/fields/Field";
 import { apiFetch } from "@/lib/api";
 import type { CompetencyItem } from "../subject-details/types";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { NoChangesMessage } from "@/components/retroui/FormMessage";
 
 interface CompetencyModalProps {
   open?: boolean;
@@ -61,6 +63,12 @@ export default function CompetencyModal({
     setError("");
   }, [targetCompetency, isModalOpen]);
 
+  const changes = useEditFormChanges({
+    enabled: !!targetCompetency,
+    resetKey: `${isModalOpen}:${targetCompetency?.competency_id}`,
+    initialValues: [targetCompetency?.statement?.trim(), targetCompetency?.competency_code?.trim(), targetCompetency?.description?.trim(), Number(targetCompetency?.target_hours) || 0, Number(targetCompetency?.order_index) || 1],
+    values: [statement.trim(), competencyCode.trim(), description.trim(), Number(targetHours) || 0, Number(orderIndex) || 1],
+  });
   const handleClose = () => {
     if (onOpenChange) onOpenChange(false);
     if (onClose) onClose();
@@ -68,6 +76,7 @@ export default function CompetencyModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!changes.guardChanges()) return;
     if (!statement.trim()) {
       setError("Learning competency statement is required.");
       return;
@@ -222,6 +231,7 @@ export default function CompetencyModal({
           </section>
 
           <Dialog.Footer position="static">
+            <NoChangesMessage message={changes.noChangesMessage} />
             <Button
               type="button"
               variant="outline"
@@ -234,7 +244,7 @@ export default function CompetencyModal({
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || (!!targetCompetency && !changes.hasChanges)}
               className="gap-2"
             >
               {isSubmitting ? (

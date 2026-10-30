@@ -12,6 +12,8 @@ import { ProfileHeader } from "@/components/profile-header";
 import { useAuth } from "@/context/AuthContext";
 import { useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { NoChangesMessage } from "@/components/retroui/FormMessage";
 
 const TEACHER_AVATARS = [
   "/avatars/teacher-avatars/12.svg",
@@ -36,6 +38,10 @@ export default function TeacherProfile() {
   );
   const [scheduleData, setScheduleData] = useState<DynamicScheduleResponse | null>(null);
   const [isScheduleLoading, setIsScheduleLoading] = useState(true);
+  const changes = useEditFormChanges({ initialValues: user?.avatar || "/avatars/teacher-avatars/12.svg", values: tempSelectedAvatar, resetKey: String(isModalOpen) });
+  useEffect(() => {
+    if (isModalOpen) setTempSelectedAvatar(user?.avatar || "/avatars/teacher-avatars/12.svg");
+  }, [isModalOpen, user?.avatar]);
 
   useEffect(() => {
     let isMounted = true;
@@ -152,11 +158,14 @@ export default function TeacherProfile() {
           </div>
 
           <Dialog.Footer className="mt-0">
+            <NoChangesMessage message={changes.noChangesMessage} />
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>
             <Button
+              disabled={!changes.hasChanges}
               onClick={async () => {
+                if (!changes.guardChanges()) return;
                 try {
                   await updateAvatar(tempSelectedAvatar);
                   toast.success({ title: "Avatar updated" });

@@ -12,7 +12,8 @@ import { Loader } from "@/components/retroui/Loader";
 import { Select } from "@/components/retroui/Select";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Text } from "@/components/retroui/Text";
-import { FormMessage } from "@/components/retroui/FormMessage";
+import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Alert } from "@/components/retroui/Alert";
 import { TimePickerSingle, type TimeValue } from "@/components/retroui/TimePicker";
@@ -107,6 +108,7 @@ export default function BreakConfigDrawer({
   const { getSetting } = useSettings();
   const [activeGroup, setActiveGroup] = useState<string>(initialGroup || "JHS_45MIN");
   const [slots, setSlots] = useState<PeriodTemplateSlotItem[]>([]);
+  const [savedSlots, setSavedSlots] = useState<PeriodTemplateSlotItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isReassigning, setIsReassigning] = useState(false);
@@ -135,6 +137,7 @@ export default function BreakConfigDrawer({
           const data = (await res.json()) as PeriodTemplateSlotItem[];
           if (data && data.length > 0) {
             setSlots(data);
+            setSavedSlots(data);
             return;
           }
         }
@@ -146,6 +149,7 @@ export default function BreakConfigDrawer({
       // Fall back to initial slots if provided
       if (initialSlots && initialSlots.length > 0) {
         setSlots(initialSlots);
+        setSavedSlots(initialSlots);
       }
     };
     void fetchTemplates();
@@ -280,12 +284,17 @@ export default function BreakConfigDrawer({
     setShowNewGroupModal(false);
   };
 
+  const changes = useEditFormChanges({
+    initialValues: savedSlots, values: slots, resetKey: String(open),
+  });
   const handleSaveClick = () => {
+    if (!changes.guardChanges()) return;
     setNotice(null);
     setShowConfirmModal(true);
   };
 
   const executeSave = async () => {
+    if (!changes.guardChanges()) return;
     setIsSaving(true);
     setNotice(null);
     try {
@@ -582,11 +591,12 @@ export default function BreakConfigDrawer({
 
 
           <Dialog.Footer position="static">
+            <NoChangesMessage message={changes.noChangesMessage} />
             <Button variant="outline" disabled={isSaving} onClick={onClose}>
               Cancel
             </Button>
             <Button
-              disabled={isSaving}
+              disabled={isSaving || isLoading || !changes.hasChanges}
               onClick={handleSaveClick}
             >
               <Save className="size-4 mr-2" />
