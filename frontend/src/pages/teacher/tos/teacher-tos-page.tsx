@@ -6,6 +6,7 @@ import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
@@ -71,6 +72,7 @@ export const TeacherTOSPage: React.FC = () => {
   >("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [examToDelete, setExamToDelete] = useState<SavedTOSSummary | null>(null);
 
   // Active Wizard Mode State
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -208,20 +210,15 @@ export const TeacherTOSPage: React.FC = () => {
     setIsWizardOpen(true);
   };
 
-  const handleDeleteExam = async (e: React.MouseEvent, examId: number) => {
-    e.stopPropagation();
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this Table of Specifications?",
-      )
-    )
-      return;
-
+  const handleDeleteExam = async () => {
+    if (!examToDelete || deletingId !== null) return;
+    const examId = examToDelete.tos_exam_id;
     setDeletingId(examId);
     try {
       const res = await apiFetch(`/api/v1/tos/${examId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
       setExams((prev) => prev.filter((ex) => ex.tos_exam_id !== examId));
+      setExamToDelete(null);
       toast.success("TOS exam deleted.");
     } catch {
       toast.error("Failed to delete TOS exam.");
@@ -391,7 +388,10 @@ export const TeacherTOSPage: React.FC = () => {
                                 <DropdownMenuItem className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded p-2 text-xs hover:bg-accent" onClick={() => handleOpenExam(ex)}>
                                   <Pencil className="size-4" /><span>Edit</span>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded p-2 text-xs text-destructive hover:bg-destructive/10" disabled={deletingId === ex.tos_exam_id} onClick={(event) => handleDeleteExam(event, ex.tos_exam_id)}>
+                                <DropdownMenuItem className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded p-2 text-xs text-destructive hover:bg-destructive/10" disabled={deletingId !== null} onClick={(event) => {
+                                  event.stopPropagation();
+                                  setExamToDelete(ex);
+                                }}>
                                   <Trash2 className="size-4" /><span>Delete</span>
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
@@ -430,6 +430,19 @@ export const TeacherTOSPage: React.FC = () => {
           </div>
         </div>
       </div>
+      <ConfirmDialog
+        open={examToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && deletingId === null) setExamToDelete(null);
+        }}
+        title="Delete TOS"
+        confirmationTitle={`Are you sure you want to delete "${examToDelete?.title ?? "this Table of Specifications"}"?`}
+        description="This action cannot be undone."
+        confirmLabel={deletingId !== null ? "Deleting..." : "Delete TOS"}
+        confirmVariant="destructive"
+        isLoading={deletingId !== null}
+        onConfirm={handleDeleteExam}
+      />
       <Dialog open={isWizardOpen} onOpenChange={(open) => {
         if (!open) {
           setIsWizardOpen(false);

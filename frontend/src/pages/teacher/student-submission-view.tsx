@@ -32,7 +32,6 @@ export type StudentSubmissionViewProps = {
   gradeDraft: string;
   feedbackDraft: string;
   gradeError: string;
-  gradeSuccess: string;
   isPostingGrade: boolean;
   onClose: () => void;
   onGradeChange: (value: string) => void;
@@ -50,7 +49,6 @@ export default function StudentSubmissionView({
   gradeDraft,
   feedbackDraft,
   gradeError,
-  gradeSuccess,
   isPostingGrade,
   onClose,
   onGradeChange,
@@ -282,12 +280,6 @@ export default function StudentSubmissionView({
                     placeholder="Write constructive feedback for the student..."
                   />
                 </div>
-
-                {gradeSuccess && (
-                  <Alert status="success">
-                    <Alert.Description>{gradeSuccess}</Alert.Description>
-                  </Alert>
-                )}
 
                 {gradeError && (
                   <Alert status="error">
