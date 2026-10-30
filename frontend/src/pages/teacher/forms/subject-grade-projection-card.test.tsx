@@ -84,7 +84,7 @@ describe("SubjectGradeProjectionCard unit tests", () => {
     expect(screen.getByText("Authoritative")).toBeTruthy();
     expect(screen.getAllByText("74.0%").length).toBeGreaterThanOrEqual(1); // current
     expect(screen.getByText("78.0%")).toBeTruthy(); // projected
-    expect(screen.getByText("+4.0%")).toBeTruthy(); // gain
+    expect(screen.getByText("(+4.0%)")).toBeTruthy(); // gain
     expect(screen.getByText("Reaches Passing")).toBeTruthy();
     expect(screen.getByText("75.0%")).toBeTruthy(); // passing threshold
     expect(
@@ -136,7 +136,7 @@ describe("SubjectGradeProjectionCard unit tests", () => {
     expect(screen.getByText("Provisional AI Estimate")).toBeTruthy();
     expect(screen.getAllByText("72.4%").length).toBeGreaterThanOrEqual(1); // baseline
     expect(screen.getByText("76.8%")).toBeTruthy(); // hypothetical
-    expect(screen.getByText("+4.4%")).toBeTruthy(); // difference
+    expect(screen.getByText("(+4.4%)")).toBeTruthy(); // difference
     expect(screen.getByText("Est. Reaches Passing")).toBeTruthy();
 
     // Verify explicit disclaimer that it is NOT official or guaranteed
@@ -309,8 +309,8 @@ describe("SubjectGradeProjectionCard unit tests", () => {
       />
     );
 
-    expect(screen.getByText("-0.8%")).toBeTruthy();
-    expect(screen.queryByText("+0.8%")).toBeNull();
+    expect(screen.getByText("(-0.8%)")).toBeTruthy();
+    expect(screen.queryByText("(+0.8%)")).toBeNull();
   });
 
   it("7. Ungraded support (PRACTICE_ONLY) displays Ungraded Support Treatment and does not present grade improvement", () => {
@@ -377,5 +377,59 @@ describe("SubjectGradeProjectionCard unit tests", () => {
       />
     );
     expect(screen.queryByText(/Subject grade projections are not calculated in-browser/i)).toBeNull();
+  });
+  it("10. Difference badge uses variant success for positive difference and destructive for negative difference", () => {
+    const { rerender } = render(
+      <SubjectGradeProjectionCard
+        projection={baseResponse}
+        selectedTargetIds={[101]}
+        capPercentage={75}
+        gradeTreatment="WRITTEN_WORK"
+      />
+    );
+    const positiveBadge = screen.getByText("(+4.0%)");
+    expect(positiveBadge.className).toContain("bg-success");
+    expect(positiveBadge.className).not.toContain("text-success");
+
+    const nonMonotonicAiResponse: SubjectGradeProjectionResponse = {
+      ...baseResponse,
+      status: "UNAVAILABLE",
+      current_subject_grade: null,
+      unavailable_reasons: [{ code: "INCOMPLETE_EXAMINATION_EVIDENCE", message: "Incomplete." }],
+      ai_midterm_what_if: {
+        status: "AVAILABLE",
+        estimate_kind: "AI_MIDTERM_WHAT_IF_ESTIMATE",
+        is_official_grade: false,
+        is_guaranteed: false,
+        model_name: "midterm-remediation-v1",
+        prediction_purpose: "CURRENT_TERM_FINAL_GRADE_PROJECTION",
+        evidence_basis: "LIVE_ACTUAL_EVIDENCE_WITH_EPHEMERAL_CAPPED_WW_PT_OVERRIDES",
+        baseline_predicted_term_grade: 75.0,
+        readiness: { ready: true },
+        target_estimates: [
+          {
+            assignment_id: 101,
+            maximum_hypothetical_effective_score: 15.0,
+            hypothetical_predicted_term_grade: 74.2,
+            step_estimated_difference: -0.8,
+            estimated_difference_from_baseline: -0.8,
+          },
+        ],
+        unavailable_reasons: [],
+        limitations: [],
+      },
+    };
+
+    rerender(
+      <SubjectGradeProjectionCard
+        projection={nonMonotonicAiResponse}
+        selectedTargetIds={[101]}
+        capPercentage={75}
+        gradeTreatment="WRITTEN_WORK"
+      />
+    );
+    const negativeBadge = screen.getByText("(-0.8%)");
+    expect(negativeBadge.className).toContain("bg-destructive");
+    expect(negativeBadge.className).not.toContain("text-destructive");
   });
 });

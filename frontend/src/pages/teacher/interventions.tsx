@@ -24,8 +24,6 @@ import {
   type TeacherInterventionSummary,
   type TeacherResolvedInterventionDetail,
 } from "@/lib/teacher-interventions-api";
-import { EmptyHeader, EmptyMedia } from "@/components/ui/empty";
-import { Avatar } from "@/components/retroui/Avatar";
 
 const label = (value: string) =>
   value
@@ -259,9 +257,13 @@ export default function TeacherInterventions() {
         title: "Intervention approved",
         description: `Intervention approved for ${active.student_name} in ${active.subject_name}.`,
       });
-      close();
-      await refresh();
-      await refreshActive();
+      const next = new URLSearchParams(params);
+      next.delete("candidate");
+      next.delete("resolved");
+      next.set("view", "active");
+      next.set("active", String(active.intervention_id));
+      setParams(next);
+      await Promise.all([refresh(), refreshActive()]);
     } catch (error) {
       const message =
         error instanceof Error

@@ -3,7 +3,6 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Skeleton } from "@/components/retroui/Skeleton";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/teacher/button";
-import { Alert } from "@/components/retroui/Alert";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { Badge } from "@/components/retroui/Badge";
 import { Accordion } from "@/components/retroui/Accordion";
@@ -69,9 +68,9 @@ const strongestEvidence = (diagnosis: DiagnosisSnapshot) => {
       (item) => item.in_weakest_supported_component && item.percent < 100
     )
   ) {
-    return "Assessment coverage only · competencies are unranked";
+    return "Assessment coverage only";
   }
-  return "Component-level evidence only · no specific competency identified";
+  return "Component-level evidence only";
 };
 
 function AcademicDiagnosisCard({
@@ -90,21 +89,6 @@ function AcademicDiagnosisCard({
   const coverageItems = diagnosis.manual_assessment_coverage ?? [];
   const strongestEvidenceText = strongestEvidence(diagnosis);
 
-  const questionScores = scoredCompetencies.flatMap((item) =>
-    item.supporting_scores
-      .filter(
-        (s) =>
-          s.source_type === "QUIZ_QUESTION" &&
-          s.score != null &&
-          s.possible_score != null
-      )
-      .map((s, idx) => ({
-        key: `${s.quiz_question_id ?? idx}-${idx}`,
-        id: s.quiz_question_id ?? "unknown",
-        score: s.score!,
-        possible: s.possible_score!,
-      }))
-  );
 
   return (
     <Card className="flex flex-col gap-2 w-full">
@@ -396,7 +380,6 @@ export default function InterventionModal({
                             </Empty>
                           )}
                         </div>
-                        {/* 
                         {resolved.sent_reviewer && (
                           <div className="space-y-2">
                             <h3 className="font-black">Sent Reviewer</h3>
@@ -413,7 +396,7 @@ export default function InterventionModal({
                               </div>
                             </Card>
                           </div>
-                        )} */}
+                        )}
                       </>
                     );
                   })()

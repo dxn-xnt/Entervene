@@ -17,7 +17,10 @@ import { Checkbox } from "@/components/retroui/Checkbox";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Empty } from "@/components/retroui/Empty";
 import ClassworkItemLine from "@/components/item-line/classwork";
-import { Activity, BookOpen, Plus, Sparkles, Lock, RefreshCw, Pencil, Save, ExternalLink, Eye } from "lucide-react";
+import { Activity, BookOpen, Plus, Sparkles, Pencil, Lock } from "lucide-react";
+import AiRemediationDraftModal, {
+  type DraftValidationResult,
+} from "./ai-remediation-draft-modal";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import {
   createSupportMaterial,
@@ -163,12 +166,7 @@ const reconcileSelectedResources = (
   });
 };
 
-export interface DraftValidationResult {
-  isValid: boolean;
-  issues: string[];
-}
-
-export const validateDraftCompleteness = (
+const validateDraftCompleteness = (
   draft: RemediationGeneratedDraft | null
 ): DraftValidationResult => {
   if (!draft) return { isValid: false, issues: ["No draft loaded."] };
@@ -1815,16 +1813,14 @@ const InterventionSupportMaterials = forwardRef<
                                     </span>
                                   </span>
                                 )}
-                                <Badge variant="surface" size="sm">
-                                  {item.classwork_type ? label(item.classwork_type) : "Assignment"}
-                                </Badge>
+
                                 <Badge
                                   variant={
                                     item.submission_status === "graded"
                                       ? "solid"
                                       : item.is_published === false || item.submission_status === "draft"
-                                        ? "secondary"
-                                        : "outline"
+                                        ? "default"
+                                        : "surface"
                                   }
                                   size="sm"
                                 >
@@ -2356,11 +2352,37 @@ const InterventionSupportMaterials = forwardRef<
                     />
 
                     {plan.grade_treatment && plan.grade_treatment !== "PRACTICE_ONLY" && (
-                      <div className="flex flex-col gap-2 p-3 rounded border-2 border-border bg-card">
+                      <Card className="flex flex-col gap-2 p-3 rounded border-2 border-border bg-card">
                         <div className="flex items-center justify-between">
-                          <Label htmlFor="score-adjustment-cap" className="text-sm font-bold">
-                            Score Adjustment Cap (%)
+                          <Label htmlFor="score-adjustment-cap" className="text-base font-bold">
+                            Score Adjustment Cap
                           </Label>
+
+                          <div className="flex flex-row gap-1">
+                            <Input
+                              id="score-adjustment-cap"
+                              type="number"
+                              min={0}
+                              disabled={hasSavedAssessment}
+                              max={99}
+                              value={capInput}
+                              onChange={(e) => {
+                                if (hasSavedAssessment) return;
+                                const val = e.target.value;
+                                setCapInput(val);
+                                setCapError(validateCap(val));
+                              }}
+                              placeholder="75"
+                              className="w-24 h-8! border-2"
+                            />
+                            <span className="text-sm font-semibold mt-2">%</span>
+                          </div>
+
+                        </div>
+                        <div className="flex items-center gap-2 justify-between">
+                          <span className="text-xs text-muted-foreground">
+                            Default: 75% · Prohibits 100% full replacement
+                          </span>
                           <div className="flex items-center gap-1.5">
                             {[75, 80, 85].map((preset) => {
                               const isPreset = capInput === String(preset);
@@ -2374,7 +2396,7 @@ const InterventionSupportMaterials = forwardRef<
                                     setCapInput(String(preset));
                                     setCapError(null);
                                   }}
-                                  className={`px-2 py-0.5 text-xs font-bold rounded border-2 transition-all ${isPreset
+                                  className={`px-2 py-0.5 text-xs font-bold rounded! border-2 transition-all ${isPreset
                                     ? "bg-primary text-primary-foreground border-black"
                                     : "bg-background text-foreground border-border hover:border-black"
                                     } ${hasSavedAssessment ? "opacity-50 cursor-not-allowed" : ""}`}
@@ -2385,57 +2407,35 @@ const InterventionSupportMaterials = forwardRef<
                             })}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            id="score-adjustment-cap"
-                            type="number"
-                            min={0}
-                            max={99}
-                            disabled={hasSavedAssessment}
-                            value={capInput}
-                            onChange={(e) => {
-                              if (hasSavedAssessment) return;
-                              const val = e.target.value;
-                              setCapInput(val);
-                              setCapError(validateCap(val));
-                            }}
-                            placeholder="75"
-                            className="w-24 border-2"
-                          />
-                          <span className="text-sm font-semibold">%</span>
-                          <span className="text-xs text-muted-foreground ml-auto">
-                            Default: 75% · Prohibits 100% full replacement
-                          </span>
-                        </div>
-                        {capError ? (
-                          <p className="text-xs text-destructive font-medium" role="alert">
-                            {capError}
-                          </p>
-                        ) : Number.isFinite(parseFloat(capInput)) &&
-                          parseFloat(capInput) !==
-                          Number(
-                            projectionResponse?.target_projections?.[0]?.cap_percentage ??
-                            projectionResponse?.eligible_target_gains?.[0]?.cap_percentage ??
-                            plan.score_adjustment_cap ??
-                            75
-                          ) ? (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Unsaved cap change ({capInput}%). The projection above reflects the saved{" "}
-                            {projectionResponse?.target_projections?.[0]?.cap_percentage ??
-                              projectionResponse?.eligible_target_gains?.[0]?.cap_percentage ??
-                              plan.score_adjustment_cap ??
-                              75}
-                            % cap until adjustments are saved.
-                          </p>
-                        ) : null}
-                      </div>
+                      </Card>
                     )}
+                    {capError ? (
+                      <p className="text-xs text-destructive font-medium" role="alert">
+                        {capError}
+                      </p>
+                    ) : Number.isFinite(parseFloat(capInput)) &&
+                      parseFloat(capInput) !==
+                      Number(
+                        projectionResponse?.target_projections?.[0]?.cap_percentage ??
+                        projectionResponse?.eligible_target_gains?.[0]?.cap_percentage ??
+                        plan.score_adjustment_cap ??
+                        75
+                      ) ? (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Unsaved cap change ({capInput}%). The projection above reflects the saved{" "}
+                        {projectionResponse?.target_projections?.[0]?.cap_percentage ??
+                          projectionResponse?.eligible_target_gains?.[0]?.cap_percentage ??
+                          plan.score_adjustment_cap ??
+                          75}
+                        % cap until adjustments are saved.
+                      </p>
+                    ) : null}
 
                     {selectedScorePreviews.length > 0 ? (
-                      <div className="flex flex-col gap-2 p-3 rounded border-2 border-border bg-card">
+                      <Card className="flex flex-col gap-2 p-3 rounded border-2 border-border bg-card">
                         <div className="flex items-center justify-between">
-                          <p className="text-sm font-bold">Score Adjustment Preview</p>
-                          <Badge variant="outline" size="sm">
+                          <p className="text-base font-bold">Score Adjustment Preview</p>
+                          <Badge variant="surface" size="sm">
                             {capInput || "75"}% Cap
                           </Badge>
                         </div>
@@ -2448,19 +2448,20 @@ const InterventionSupportMaterials = forwardRef<
                             );
                             const comp = act?.component ?? plan.grade_treatment;
                             return (
-                              <div
+                              <Card
                                 key={`modal-prev-${preview.assignment_id}`}
-                                className="flex flex-col gap-1 p-2 rounded border-2 border-border bg-background"
+                                className="flex flex-col border-2! gap-1 p-3 bg-primary rounded border-2 border-border"
                               >
                                 <div className="flex items-center justify-between">
-                                  <span className="text-sm font-bold">Selected: {preview.title}</span>
+                                  <span className="text-sm font-bold">{preview.title}</span>
                                   {comp && (
-                                    <Badge variant="surface" size="sm">
+                                    <Badge variant="solid" size="sm">
                                       {componentLabel(comp)}
                                     </Badge>
                                   )}
                                 </div>
-                                <div className="grid grid-cols-3 gap-2 py-1.5 text-center bg-muted/40 rounded border mt-1">
+
+                                <Card className="grid grid-cols-3 border-2! gap-2 py-1.5 text-center bg-background! bg-retro rounded border mt-1">
                                   <div>
                                     <p className="text-[11px] text-muted-foreground font-semibold">Original</p>
                                     <p className="text-base font-bold">
@@ -2479,15 +2480,16 @@ const InterventionSupportMaterials = forwardRef<
                                       +{preview.possible_gain > 0 ? preview.possible_gain : 0}
                                     </p>
                                   </div>
-                                </div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">
-                                  Hypothetical maximum only · Not an actual awarded grade.
+                                </Card>
+
+                                <p className="text-xs text-foreground mt-0.5">
+                                  Actual grade reflects from students remediation score.
                                 </p>
-                              </div>
+                              </Card>
                             );
                           })}
                         </div>
-                      </div>
+                      </Card>
                     ) : selectedActivityIds.length > 0 ? (
                       <div className="flex flex-col gap-2 p-3 rounded border-2 border-border bg-card">
                         <div className="flex items-center justify-between">
@@ -2506,9 +2508,7 @@ const InterventionSupportMaterials = forwardRef<
 
                     <div className="flex flex-col gap-1 mb-2">
                       <p className="text-base font-semibold">Eligible Student Classworks</p>
-                      <p className="text-xs text-muted-foreground">
-                        Select one or more {plan.grade_treatment === "PRACTICE_ONLY" ? "diagnostic" : componentLabel(plan.grade_treatment).toLowerCase()} activities to receive score adjustments.
-                      </p>
+
                       {treatmentActivities.length > 0 ? (
                         <div className="flex flex-col gap-2 mt-1">
                           {treatmentActivities.map((activity) => {
@@ -2622,7 +2622,11 @@ const InterventionSupportMaterials = forwardRef<
                           </Empty.Content>
                         </Empty>
                       )}
+                      <p className="text-xs text-muted-foreground">
+                        Select one or more {plan.grade_treatment === "PRACTICE_ONLY" ? "diagnostic" : componentLabel(plan.grade_treatment).toLowerCase()} activities to receive score adjustments.
+                      </p>
                     </div>
+
                   </div>
                   <Dialog.Footer className="mt-0">
                     <Button onClick={() => setPanel("")}>
@@ -2632,775 +2636,37 @@ const InterventionSupportMaterials = forwardRef<
                 </Dialog.Content>
               </Dialog>
 
-              <Dialog
+              <AiRemediationDraftModal
                 open={showDraftPreview}
                 onOpenChange={(open) => {
                   if (generatingDraft && !open) return;
                   setShowDraftPreview(open);
                 }}
-              >
-                <Dialog.Content size="xl" className="max-h-[90vh] flex flex-col">
-                  <Dialog.Header>
-                    <div className="flex flex-wrap items-center justify-between gap-2 pr-6">
-                      <div className="flex items-center gap-2">
-                        <Dialog.Title className="text-lg font-bold flex items-center gap-2">
-                          <Sparkles className="size-5 text-primary fill-primary/20" />
-                          AI Remediation Draft Preview
-                        </Dialog.Title>
-                        <Badge variant="surface" size="sm">Teacher Review Only</Badge>
-                      </div>
-                      <Badge variant="outline" size="sm">
-                        {draftSaveState === "saved" ? "Saved Unpublished" : "Unsaved Draft"}
-                      </Badge>
-                    </div>
-                    <Dialog.Description className="text-sm text-muted-foreground">
-                      Teacher evaluation preview grounded in verified student weaknesses and taught lessons.
-                    </Dialog.Description>
-                  </Dialog.Header>
-
-                  <div className="flex-1 space-y-4 overflow-y-auto p-4 pr-3">
-                    <Alert status="info">
-                      Review and edit this AI draft, then explicitly save it to the classwork repository.
-                      Saving keeps both the assessment and its targeted assignment unpublished and inaccessible to students.
-                    </Alert>
-
-                    {generatingDraft && (
-                      <div className="flex flex-col items-center justify-center p-8 gap-3 border-2 border-border rounded bg-card text-center">
-                        <RefreshCw className="size-8 animate-spin text-primary" />
-                        <h4 className="font-bold text-base">Generating Remediation Draft…</h4>
-                        <p className="text-sm text-muted-foreground max-w-md">
-                          Grounded in student weaknesses, eligible taught lessons, and verified learning materials.
-                        </p>
-                      </div>
-                    )}
-
-                    {!generatingDraft && generationError && (
-                      <div className="flex flex-col gap-3">
-                        <Alert status="error">
-                          <div className="flex flex-col gap-1">
-                            <strong className="font-bold">Remediation Draft Generation Failed</strong>
-                            <span>{generationError}</span>
-                          </div>
-                        </Alert>
-                        <p className="text-sm text-muted-foreground px-1">
-                          All your selected targets, readings, and manual authoring options remain preserved.
-                          You may retry generation or continue using the manual authoring builder.
-                        </p>
-                        <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="outline" onClick={() => setShowDraftPreview(false)}>
-                            Dismiss
-                          </Button>
-                          <Button size="sm" onClick={handleGenerateWithAI}>
-                            Retry Generation
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {!generatingDraft && generatedDraft && (
-                      <div className="flex flex-col gap-4">
-                        {draftSaveState === "saved" && savedAssessment && (
-                          <Alert status="success">
-                            <div className="flex flex-col gap-1 text-sm">
-                              <strong className="font-bold">Assessment draft saved</strong>
-                              <span>
-                                This assessment is unpublished and unavailable to students. Publication readiness is checked separately when you choose to publish it.
-                              </span>
-                            </div>
-                          </Alert>
-                        )}
-                        {draftSaveState === "error" && draftSaveError && (
-                          <Alert status="error">
-                            <div className="flex flex-col gap-1 text-sm">
-                              <strong className="font-bold">Assessment draft was not saved</strong>
-                              <span>{draftSaveError}</span>
-                            </div>
-                          </Alert>
-                        )}
-                        {/* Academic Treatment & Score Adjustment Context Banner */}
-                        <Card className="p-3 border-2 border-border bg-muted/20 flex flex-col gap-2">
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                                Academic Treatment & Score Adjustment Context
-                              </span>
-                              <Badge variant="outline" size="sm">
-                                {capInput || plan.score_adjustment_cap || 75}% Cap
-                              </Badge>
-                            </div>
-                            <span className="text-xs text-muted-foreground">
-                              Teacher-controlled in Adjust Support
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                            <div>
-                              <span className="text-muted-foreground font-semibold block">Grade Treatment</span>
-                              <span className="font-bold">
-                                {plan.grade_treatment === "PRACTICE_ONLY"
-                                  ? "Ungraded Practice"
-                                  : componentLabel(plan.grade_treatment ?? "PRACTICE_ONLY")}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground font-semibold block">Original Target Assignment</span>
-                              <span className="font-bold">
-                                {targetAssignmentSummary}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground font-semibold block">Adjustment Cap Rule</span>
-                              <span className="font-medium text-muted-foreground">
-                                Capped at {capInput || plan.score_adjustment_cap || 75}% of original max points. The AI draft does not alter your cap.
-                              </span>
-                            </div>
-                          </div>
-                        </Card>
-
-                        {/* Draft Title, Metadata & Action Bar */}
-                        <Card className="flex flex-col gap-2 p-3 bg-muted/30">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            {isEditingDraft ? (
-                              <div className="flex flex-col gap-1 flex-1 min-w-[240px]">
-                                <Label htmlFor="draft-title-input" className="text-xs font-bold">Remediation Title</Label>
-                                <Input
-                                  id="draft-title-input"
-                                  aria-label="Remediation Title"
-                                  value={generatedDraft.title}
-                                  onChange={(e) =>
-                                    setGeneratedDraft({ ...generatedDraft, title: e.target.value })
-                                  }
-                                  className="font-bold text-base h-9"
-                                />
-                              </div>
-                            ) : (
-                              <span className="font-black text-lg">{generatedDraft.title}</span>
-                            )}
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <Badge variant="solid" size="sm">
-                                {generatedDraft.draft_format}
-                              </Badge>
-                              <Badge variant="outline" size="sm">
-                                {componentLabel(generatedDraft.target_component)}
-                              </Badge>
-                              <Badge variant="surface" size="sm">
-                                {generatedDraft.total_points} Total Points
-                              </Badge>
-                              {draftValidation.isValid ? (
-                                <Badge
-                                  variant="surface"
-                                  size="sm"
-                                  className="bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold"
-                                >
-                                  Draft Complete
-                                </Badge>
-                              ) : (
-                                <Badge variant="destructive" size="sm">
-                                  {draftValidation.issues.length}{" "}
-                                  {draftValidation.issues.length === 1 ? "Incomplete Field" : "Incomplete Fields"}
-                                </Badge>
-                              )}
-                              <Button
-                                size="sm"
-                                variant={isEditingDraft ? "default" : "outline"}
-                                onClick={() => setIsEditingDraft(!isEditingDraft)}
-                                disabled={draftSaveState === "saved" || draftSaveState === "validating" || draftSaveState === "saving"}
-                                className="gap-1.5 ml-1"
-                              >
-                                <Pencil className="size-3.5" />
-                                {isEditingDraft ? "Done Editing (Preview)" : "Edit Draft"}
-                              </Button>
-                            </div>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            Treatment: {generatedDraft.grade_treatment === "PRACTICE_ONLY" ? "Ungraded Practice" : componentLabel(generatedDraft.grade_treatment)}
-                            {generatedDraft.draft_format === "QUIZ" && generatedDraft.duration_minutes ? ` · ${generatedDraft.duration_minutes} mins` : ""}
-                          </p>
-                        </Card>
-
-                        {/* Incomplete Issues Alert */}
-                        {!draftValidation.isValid && isEditingDraft && (
-                          <Alert status="warning">
-                            <div className="flex flex-col gap-1 text-xs">
-                              <strong className="font-bold">Please complete the required fields:</strong>
-                              <ul className="list-disc list-inside space-y-0.5">
-                                {draftValidation.issues.slice(0, 5).map((issue, idx) => (
-                                  <li key={idx}>{issue}</li>
-                                ))}
-                                {draftValidation.issues.length > 5 && (
-                                  <li>...and {draftValidation.issues.length - 5} more issues</li>
-                                )}
-                              </ul>
-                            </div>
-                          </Alert>
-                        )}
-
-                        <Alert status="info">
-                          <div className="flex flex-col gap-1 text-xs">
-                            <strong className="font-bold">Draft completeness is not publication readiness.</strong>
-                            <span>
-                              Save runs backend preflight against the original target, maximum points, selected Readings, grade treatment, and teacher-controlled cap. Publishing remains a separate teacher action.
-                            </span>
-                          </div>
-                        </Alert>
-
-                        {generatedDraft.draft_format === "QUIZ" && (
-                          <div className="flex flex-col gap-1.5 p-3 border-2 border-border rounded bg-card">
-                            <Label className="font-bold text-sm">Question Selection Mode</Label>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <Card
-                                className={`p-2.5 border-2 transition-all cursor-pointer ${
-                                  quizQuestionMode === "NEW_TARGETED"
-                                    ? "border-primary bg-primary"
-                                    : "border-border"
-                                }`}
-                                onClick={() => setQuizQuestionMode("NEW_TARGETED")}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="font-bold text-sm">Generate New Targeted Questions</span>
-                                  <Badge variant="solid" size="sm">Supported</Badge>
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Generates new practice items targeting verified weak competencies and lessons.
-                                </p>
-                              </Card>
-
-                              <Card
-                                className="p-2.5 border-2 border-border opacity-60 cursor-not-allowed bg-muted/20"
-                                aria-disabled="true"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="font-bold text-sm">Reuse Original Questions</span>
-                                  <Badge variant="outline" size="sm">Unsupported</Badge>
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Backend assessment service does not support verbatim question extraction.
-                                </p>
-                              </Card>
-                            </div>
-                          </div>
-                        )}
-
-                        {generatedDraft.draft_format === "QUIZ" && (
-                          <div className="flex flex-col gap-3">
-                            <div className="flex flex-col gap-1">
-                              <Label htmlFor="quiz-instructions-input" className="font-bold text-sm">Student Instructions</Label>
-                              {isEditingDraft ? (
-                                <textarea
-                                  id="quiz-instructions-input"
-                                  aria-label="Student Instructions"
-                                  className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2.5 text-sm font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[70px]"
-                                  value={generatedDraft.instructions}
-                                  onChange={(e) =>
-                                    setGeneratedDraft({ ...generatedDraft, instructions: e.target.value })
-                                  }
-                                />
-                              ) : (
-                                <div className="p-3 border-2 rounded bg-background text-sm">
-                                  {generatedDraft.instructions}
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="flex flex-col gap-2">
-                              <div className="flex items-center justify-between">
-                                <Label className="font-bold text-sm">
-                                  Student Questions ({generatedDraft.questions.length} items)
-                                </Label>
-                                <span className="text-xs text-muted-foreground">Answer keys separated below</span>
-                              </div>
-
-                              {generatedDraft.questions.map((q, idx) => (
-                                <Card key={q.display_order ?? idx} className="p-3 flex flex-col gap-2 border-2">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="outline" size="sm">Item {q.display_order}</Badge>
-                                      <span className="font-bold text-sm">{label(q.question_type)}</span>
-                                      {q.difficulty_level && (
-                                        <Badge variant="surface" size="sm">{q.difficulty_level}</Badge>
-                                      )}
-                                    </div>
-                                    {isEditingDraft ? (
-                                      <div className="flex items-center gap-1.5">
-                                        <Label htmlFor={`quiz-points-${idx}`} className="text-xs font-bold">Points:</Label>
-                                        <Input
-                                          id={`quiz-points-${idx}`}
-                                          aria-label="Points:"
-                                          type="number"
-                                          min="1"
-                                          value={q.points}
-                                          onChange={(e) =>
-                                            handleUpdateQuizQuestion(idx, {
-                                              points: Math.max(1, parseInt(e.target.value, 10) || 1),
-                                            })
-                                          }
-                                          className="w-16 h-8 px-2 text-center text-xs font-bold"
-                                        />
-                                      </div>
-                                    ) : (
-                                      <span className="text-xs font-bold">{q.points} {q.points === 1 ? "point" : "points"}</span>
-                                    )}
-                                  </div>
-
-                                  {isEditingDraft ? (
-                                    <div className="flex flex-col gap-1">
-                                      <Label htmlFor={`quiz-prompt-${idx}`} className="text-xs font-bold">Question Prompt</Label>
-                                      <textarea
-                                        id={`quiz-prompt-${idx}`}
-                                        aria-label="Question Prompt"
-                                        className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2 text-sm font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[50px]"
-                                        value={q.question_text}
-                                        onChange={(e) =>
-                                          handleUpdateQuizQuestion(idx, { question_text: e.target.value })
-                                        }
-                                      />
-                                    </div>
-                                  ) : (
-                                    <p className="text-sm font-medium">{q.question_text}</p>
-                                  )}
-
-                                  {q.options && q.options.length > 0 && (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mt-1">
-                                      {q.options.map((opt, optIdx) => (
-                                        <div
-                                          key={opt.option_order ?? optIdx}
-                                          className="p-2 border rounded text-xs bg-muted/30 flex items-center gap-2"
-                                        >
-                                          <span className="font-bold text-muted-foreground">
-                                            {String.fromCharCode(64 + opt.option_order)}.
-                                          </span>
-                                          {isEditingDraft ? (
-                                            <Input
-                                              aria-label={`Option ${String.fromCharCode(64 + opt.option_order)}`}
-                                              value={opt.option_text}
-                                              onChange={(e) =>
-                                                handleUpdateQuizOption(idx, optIdx, e.target.value)
-                                              }
-                                              className="h-7 text-xs px-2 flex-1"
-                                            />
-                                          ) : (
-                                            <span>{opt.option_text}</span>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </Card>
-                              ))}
-                            </div>
-
-                            <Card className="flex flex-col gap-3 p-4 border-2 border-primary bg-primary/5 mt-2">
-                              <div className="flex items-center justify-between border-b pb-2">
-                                <div className="flex items-center gap-2">
-                                  <Lock className="size-4 text-primary" />
-                                  <h4 className="font-bold text-base">Teacher-Only Answer Key & Explanations</h4>
-                                </div>
-                                <Badge variant="solid" size="sm">Teacher Eyes Only</Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground">
-                                Never shown to students in student instructions or assignments.
-                              </p>
-
-                              <div className="flex flex-col gap-3">
-                                {generatedDraft.questions.map((q, idx) => (
-                                  <div
-                                    key={`key-${q.display_order ?? idx}`}
-                                    className="flex flex-col gap-1.5 p-3 rounded border bg-background text-xs"
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <span className="font-bold text-sm">Item {q.display_order} Answer Key</span>
-                                      <span className="text-muted-foreground">
-                                        Lesson #{q.targeted_lesson_id} · Competency #{q.targeted_competency_id}
-                                      </span>
-                                    </div>
-                                    {isEditingDraft ? (
-                                      <div className="flex flex-col gap-2 mt-1">
-                                        <div className="flex flex-col gap-1">
-                                          <Label htmlFor={`quiz-correct-ans-${idx}`} className="text-xs font-semibold text-muted-foreground">Correct Answer</Label>
-                                          <Input
-                                            id={`quiz-correct-ans-${idx}`}
-                                            aria-label="Correct Answer"
-                                            value={q.teacher_answer_key.correct_answer}
-                                            onChange={(e) =>
-                                              handleUpdateQuizAnswerKey(idx, { correct_answer: e.target.value })
-                                            }
-                                            className="h-8 text-xs font-bold text-primary px-2"
-                                          />
-                                        </div>
-                                        <div className="flex flex-col gap-1">
-                                          <Label htmlFor={`quiz-explanation-${idx}`} className="text-xs font-semibold text-muted-foreground">Explanation</Label>
-                                          <textarea
-                                            id={`quiz-explanation-${idx}`}
-                                            aria-label="Explanation"
-                                            className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2 text-xs font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[45px]"
-                                            value={q.teacher_answer_key.explanation}
-                                            onChange={(e) =>
-                                              handleUpdateQuizAnswerKey(idx, { explanation: e.target.value })
-                                            }
-                                          />
-                                        </div>
-                                        <div className="flex flex-col gap-1">
-                                          <Label htmlFor={`quiz-scoring-guide-${idx}`} className="text-xs font-semibold text-muted-foreground">Scoring Guide (Optional)</Label>
-                                          <Input
-                                            id={`quiz-scoring-guide-${idx}`}
-                                            aria-label="Scoring Guide (Optional)"
-                                            value={q.teacher_answer_key.scoring_guide ?? ""}
-                                            onChange={(e) =>
-                                              handleUpdateQuizAnswerKey(idx, { scoring_guide: e.target.value })
-                                            }
-                                            className="h-8 text-xs px-2"
-                                          />
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <>
-                                        <div>
-                                          <span className="font-semibold text-muted-foreground">Correct Answer: </span>
-                                          <span className="font-bold text-primary">{q.teacher_answer_key.correct_answer}</span>
-                                        </div>
-                                        <div>
-                                          <span className="font-semibold text-muted-foreground">Explanation: </span>
-                                          <span>{q.teacher_answer_key.explanation}</span>
-                                        </div>
-                                        {q.teacher_answer_key.scoring_guide && (
-                                          <div>
-                                            <span className="font-semibold text-muted-foreground">Scoring Guide: </span>
-                                            <span>{q.teacher_answer_key.scoring_guide}</span>
-                                          </div>
-                                        )}
-                                      </>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            </Card>
-                          </div>
-                        )}
-
-                        {generatedDraft.draft_format === "CLASSWORK" && (
-                          <div className="flex flex-col gap-3">
-                            <div className="flex flex-col gap-2">
-                              <Label htmlFor="cw-overview-input" className="font-bold text-sm">Activity Overview</Label>
-                              {isEditingDraft ? (
-                                <textarea
-                                  id="cw-overview-input"
-                                  aria-label="Activity Overview"
-                                  className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2.5 text-sm font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[60px]"
-                                  value={generatedDraft.description}
-                                  onChange={(e) =>
-                                    setGeneratedDraft({ ...generatedDraft, description: e.target.value })
-                                  }
-                                />
-                              ) : (
-                                <div className="p-3 border-2 rounded bg-background text-sm">
-                                  {generatedDraft.description}
-                                </div>
-                              )}
-                              <Label htmlFor="cw-instructions-input" className="font-bold text-sm mt-1">Student Instructions</Label>
-                              {isEditingDraft ? (
-                                <textarea
-                                  id="cw-instructions-input"
-                                  aria-label="Student Instructions"
-                                  className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2.5 text-sm font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[70px]"
-                                  value={generatedDraft.student_instructions}
-                                  onChange={(e) =>
-                                    setGeneratedDraft({ ...generatedDraft, student_instructions: e.target.value })
-                                  }
-                                />
-                              ) : (
-                                <div className="p-3 border-2 rounded bg-background text-sm whitespace-pre-wrap">
-                                  {generatedDraft.student_instructions}
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="flex flex-col gap-2">
-                              <Label className="font-bold text-sm">
-                                Step-by-Step Tasks ({generatedDraft.tasks.length} tasks)
-                              </Label>
-                              {generatedDraft.tasks.map((task, idx) => (
-                                <Card key={task.task_number ?? idx} className="p-3 flex flex-col gap-1.5 border-2">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="outline" size="sm">Task {task.task_number}</Badge>
-                                      {isEditingDraft ? (
-                                        <Input
-                                          id={`cw-task-title-${idx}`}
-                                          aria-label="Task Title"
-                                          value={task.title}
-                                          onChange={(e) =>
-                                            handleUpdateClassworkTask(idx, { title: e.target.value })
-                                          }
-                                          className="h-8 text-sm font-bold"
-                                        />
-                                      ) : (
-                                        <span className="font-bold text-sm">{task.title}</span>
-                                      )}
-                                    </div>
-                                    <span className="text-xs text-muted-foreground">
-                                      Lesson #{task.targeted_lesson_id} · Competency #{task.targeted_competency_id}
-                                    </span>
-                                  </div>
-                                  {isEditingDraft ? (
-                                    <textarea
-                                      id={`cw-task-instructions-${idx}`}
-                                      aria-label="Task Instructions"
-                                      className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2 text-sm font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[50px]"
-                                      value={task.instructions}
-                                      onChange={(e) =>
-                                        handleUpdateClassworkTask(idx, { instructions: e.target.value })
-                                      }
-                                    />
-                                  ) : (
-                                    <p className="text-sm whitespace-pre-wrap">{task.instructions}</p>
-                                  )}
-                                </Card>
-                              ))}
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              <div className="flex flex-col gap-1.5">
-                                <Label className="font-bold text-sm">Required Deliverables</Label>
-                                <div className="flex flex-col gap-2">
-                                  {generatedDraft.deliverables.map((del, idx) => (
-                                    <Card key={idx} className="p-2.5 flex flex-col gap-1 border-2">
-                                      <div className="flex items-center justify-between">
-                                        {isEditingDraft ? (
-                                          <Input
-                                            value={del.deliverable_name}
-                                            onChange={(e) =>
-                                              handleUpdateClassworkDeliverable(idx, { deliverable_name: e.target.value })
-                                            }
-                                            className="h-7 text-xs font-bold"
-                                          />
-                                        ) : (
-                                          <span className="font-bold text-sm">{del.deliverable_name}</span>
-                                        )}
-                                        <Badge variant="surface" size="sm">{del.deliverable_type}</Badge>
-                                      </div>
-                                      {isEditingDraft ? (
-                                        <Input
-                                          value={del.description}
-                                          onChange={(e) =>
-                                            handleUpdateClassworkDeliverable(idx, { description: e.target.value })
-                                          }
-                                          className="h-7 text-xs"
-                                        />
-                                      ) : (
-                                        <p className="text-xs text-muted-foreground">{del.description}</p>
-                                      )}
-                                    </Card>
-                                  ))}
-                                </div>
-                              </div>
-
-                              <div className="flex flex-col gap-1.5">
-                                <Label className="font-bold text-sm">Supported Upload Formats</Label>
-                                <div className="p-3 border-2 rounded bg-background flex flex-col gap-2">
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {generatedDraft.supported_upload_formats.map((fmt) => (
-                                      <Badge key={fmt} variant="outline" size="sm">{fmt}</Badge>
-                                    ))}
-                                  </div>
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    Activity Mode: <strong>{generatedDraft.activity_mode}</strong>
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
-                              <Label className="font-bold text-sm">Grading Rubric Levels</Label>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {generatedDraft.rubric_levels.map((r, idx) => (
-                                  <Card key={idx} className="p-3 flex flex-col gap-1 border-2">
-                                    <div className="flex items-center justify-between">
-                                      {isEditingDraft ? (
-                                        <div className="flex items-center gap-1.5 flex-1 mr-2">
-                                          <Input
-                                            value={r.level_name}
-                                            onChange={(e) =>
-                                              handleUpdateClassworkRubricLevel(idx, { level_name: e.target.value })
-                                            }
-                                            className="h-7 text-xs font-bold flex-1"
-                                          />
-                                          <Input
-                                            type="number"
-                                            min="0"
-                                            value={r.points}
-                                            onChange={(e) =>
-                                              handleUpdateClassworkRubricLevel(idx, {
-                                                points: Math.max(0, parseInt(e.target.value, 10) || 0),
-                                              })
-                                            }
-                                            className="h-7 w-16 text-xs text-center font-bold"
-                                          />
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <span className="font-bold text-sm">{r.level_name}</span>
-                                          <Badge variant="solid" size="sm">{r.points} pts</Badge>
-                                        </>
-                                      )}
-                                    </div>
-                                    {isEditingDraft ? (
-                                      <textarea
-                                        className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2 text-xs font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[40px] mt-1"
-                                        value={r.description}
-                                        onChange={(e) =>
-                                          handleUpdateClassworkRubricLevel(idx, { description: e.target.value })
-                                        }
-                                      />
-                                    ) : (
-                                      <p className="text-xs text-muted-foreground">{r.description}</p>
-                                    )}
-                                  </Card>
-                                ))}
-                              </div>
-                            </div>
-
-                            <Card className="flex flex-col gap-3 p-4 border-2 border-primary bg-primary/5 mt-2">
-                              <div className="flex items-center justify-between border-b pb-2">
-                                <div className="flex items-center gap-2">
-                                  <Lock className="size-4 text-primary" />
-                                  <h4 className="font-bold text-base">Teacher Evaluation Guide</h4>
-                                </div>
-                                <Badge variant="solid" size="sm">Teacher Eyes Only</Badge>
-                              </div>
-
-                              <div className="flex flex-col gap-2 text-xs">
-                                <div>
-                                  <span className="font-semibold text-muted-foreground block mb-0.5">
-                                    Exemplar / Expected Response:
-                                  </span>
-                                  {isEditingDraft ? (
-                                    <textarea
-                                      className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2 text-xs font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[50px]"
-                                      value={generatedDraft.teacher_guide.exemplar_or_expected_response}
-                                      onChange={(e) =>
-                                        handleUpdateClassworkTeacherGuide({ exemplar_or_expected_response: e.target.value })
-                                      }
-                                    />
-                                  ) : (
-                                    <div className="p-2.5 rounded border bg-background whitespace-pre-wrap">
-                                      {generatedDraft.teacher_guide.exemplar_or_expected_response}
-                                    </div>
-                                  )}
-                                </div>
-                                <div>
-                                  <span className="font-semibold text-muted-foreground block mb-0.5">
-                                    Evaluation Notes:
-                                  </span>
-                                  {isEditingDraft ? (
-                                    <textarea
-                                      className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2 text-xs font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[50px]"
-                                      value={generatedDraft.teacher_guide.evaluation_notes}
-                                      onChange={(e) =>
-                                        handleUpdateClassworkTeacherGuide({ evaluation_notes: e.target.value })
-                                      }
-                                    />
-                                  ) : (
-                                    <div className="p-2.5 rounded border bg-background whitespace-pre-wrap">
-                                      {generatedDraft.teacher_guide.evaluation_notes}
-                                    </div>
-                                  )}
-                                </div>
-                                {generatedDraft.teacher_guide.common_misconceptions?.length > 0 && (
-                                  <div>
-                                    <span className="font-semibold text-muted-foreground block mb-0.5">
-                                      Common Misconceptions:
-                                    </span>
-                                    {isEditingDraft ? (
-                                      <textarea
-                                        className="w-full rounded-[var(--radius)]! border-2 border-border bg-background p-2 text-xs font-normal text-foreground shadow-md transition focus:border-black focus-visible:outline-none min-h-[50px]"
-                                        value={generatedDraft.teacher_guide.common_misconceptions.join("\n")}
-                                        onChange={(e) =>
-                                          handleUpdateClassworkTeacherGuide({
-                                            common_misconceptions: e.target.value.split("\n").filter(Boolean),
-                                          })
-                                        }
-                                      />
-                                    ) : (
-                                      <ul className="list-disc list-inside p-2.5 rounded border bg-background space-y-0.5">
-                                        {generatedDraft.teacher_guide.common_misconceptions.map((m, i) => (
-                                          <li key={i}>{m}</li>
-                                        ))}
-                                      </ul>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </Card>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <Dialog.Footer className="mt-0 justify-between items-center sm:justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        Score Cap: <strong>{capInput || plan.score_adjustment_cap || 75}%</strong> · Draft publishing in PR 2D.2
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {generatedDraft && !generatingDraft && (
-                        <Button
-                          size="sm"
-                          variant={isEditingDraft ? "default" : "outline"}
-                          onClick={() => setIsEditingDraft(!isEditingDraft)}
-                          disabled={draftSaveState === "saved" || draftSaveState === "validating" || draftSaveState === "saving"}
-                          className="gap-1.5"
-                        >
-                          <Pencil className="size-3.5" />
-                          {isEditingDraft ? "Done Editing (Preview)" : "Edit Draft"}
-                        </Button>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowDraftPreview(false)}
-                        disabled={generatingDraft}
-                      >
-                        Close Preview
-                      </Button>
-                      {savedAssessment ? (
-                        <Button
-                          size="sm"
-                          onClick={() => navigate(`/teacher/classworks/${savedAssessment.classwork_id}`)}
-                          className="gap-1.5"
-                        >
-                          <ExternalLink className="size-3.5" />
-                          Open Saved Assessment
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          onClick={() => void handleSaveAssessmentDraft()}
-                          disabled={
-                            generatingDraft ||
-                            !generatedDraft ||
-                            !draftValidation.isValid ||
-                            draftSaveState === "validating" ||
-                            draftSaveState === "saving"
-                          }
-                          className="gap-1.5"
-                        >
-                          {draftSaveState === "validating" || draftSaveState === "saving" ? (
-                            <RefreshCw className="size-3.5 animate-spin" />
-                          ) : (
-                            <Save className="size-3.5" />
-                          )}
-                          {draftSaveState === "validating"
-                            ? "Validating Draft..."
-                            : draftSaveState === "saving"
-                              ? "Saving Draft..."
-                              : "Save Assessment Draft"}
-                        </Button>
-                      )}
-                    </div>
-                  </Dialog.Footer>
-                </Dialog.Content>
-              </Dialog>
+                generatingDraft={generatingDraft}
+                generationError={generationError}
+                generatedDraft={generatedDraft}
+                setGeneratedDraft={setGeneratedDraft}
+                draftSaveState={draftSaveState}
+                draftSaveError={draftSaveError}
+                savedAssessment={savedAssessment}
+                isEditingDraft={isEditingDraft}
+                setIsEditingDraft={setIsEditingDraft}
+                quizQuestionMode={quizQuestionMode}
+                setQuizQuestionMode={setQuizQuestionMode}
+                draftValidation={draftValidation}
+                capInput={capInput}
+                plan={plan}
+                targetAssignmentSummary={targetAssignmentSummary}
+                onGenerateWithAI={handleGenerateWithAI}
+                onSaveAssessmentDraft={handleSaveAssessmentDraft}
+                onUpdateQuizQuestion={handleUpdateQuizQuestion}
+                onUpdateQuizOption={handleUpdateQuizOption}
+                onUpdateQuizAnswerKey={handleUpdateQuizAnswerKey}
+                onUpdateClassworkTask={handleUpdateClassworkTask}
+                onUpdateClassworkDeliverable={handleUpdateClassworkDeliverable}
+                onUpdateClassworkRubricLevel={handleUpdateClassworkRubricLevel}
+                onUpdateClassworkTeacherGuide={handleUpdateClassworkTeacherGuide}
+              />
 
               <div className="flex flex-col gap-1">
                 <h3 className="font-black">Remediation Activity</h3>
@@ -3438,15 +2704,14 @@ const InterventionSupportMaterials = forwardRef<
                           aria-checked={isSelected}
                           aria-disabled={hasSavedAssessment}
                           tabIndex={working || hasSavedAssessment ? -1 : 0}
-                          className={`p-3 border-2! transition-all ${
-                            hasSavedAssessment
+                          className={`p-3 border-2! transition-all ${hasSavedAssessment
                               ? isSelected
                                 ? "border-primary bg-primary cursor-default"
                                 : "opacity-50 cursor-not-allowed pointer-events-none bg-muted/20"
                               : isSelected
                                 ? "border-primary bg-primary cursor-pointer"
                                 : "hover:bg-retro cursor-pointer"
-                          }`}
+                            }`}
                           onClick={selectMethod}
                           onKeyDown={(event) => {
                             if (event.key === "Enter" || event.key === " ") {
@@ -3506,9 +2771,9 @@ const InterventionSupportMaterials = forwardRef<
                           const classworkId = item.classwork_id ?? item.assignment_id;
                           const isPublished = item.is_published === true;
                           return (
-                            <Card key={item.assignment_id} className="flex flex-col gap-3 border-2 p-3 shadow-none">
+                            <Card key={item.assignment_id} className="flex flex-col gap-3 border-2 p-0 shadow-none">
                               <ClassworkItemLine
-                                className="border-0! p-0 shadow-none! hover:translate-x-0"
+                                className="shadow-none! border-2!"
                                 size="sm"
                                 item={{
                                   classwork_id: classworkId,
@@ -3521,31 +2786,21 @@ const InterventionSupportMaterials = forwardRef<
                                   is_published: isPublished,
                                 }}
                                 showPublicationStatus
-                                showCategory
-                                showType
+                                showCategory={false}
+                                showType={false}
                                 rightContent={item.total_points != null ? (
                                   <span className="text-xs font-bold whitespace-nowrap">
                                     {item.total_points} points
                                   </span>
                                 ) : undefined}
                               />
-                              <div className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-border pt-2 text-xs">
-                                <span className="text-muted-foreground">
-                                  Original: <strong className="text-foreground">{item.original_title ?? targetAssignmentSummary}</strong>
-                                  {" · "}Cap: <strong className="text-foreground">{plan.score_adjustment_cap ?? 75}%</strong>
-                                </span>
-                                <span className="font-semibold text-muted-foreground">
-                                  {isPublished ? "Published" : "Unpublished"}
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                              <div className="flex flex-row gap-2 self-end">
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   onClick={() => navigate(`/teacher/classworks/${classworkId}`)}
                                   className="gap-1.5"
                                 >
-                                  <Eye className="size-4" />
                                   View Assessment
                                 </Button>
                                 <Button
@@ -3784,7 +3039,7 @@ const InterventionSupportMaterials = forwardRef<
                               return (
                                 <Card
                                   key={`chosen-cw-${chosenActivity.classwork_id}-${chosenActivity.title}`}
-                                  className="flex flex-col gap-2 p-3 rounded border-2! border-border rounded! bg-card"
+                                  className="flex flex-col gap-2 p-3 rounded border-2! border-border rounded! bg-primary"
                                 >
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
@@ -3793,13 +3048,11 @@ const InterventionSupportMaterials = forwardRef<
                                         Targeted
                                       </Badge>
                                     </div>
-                                    <Badge variant="surface" size="sm">
-                                      {componentLabel(chosenActivity.component)}
-                                    </Badge>
+
                                   </div>
-                                  <div className="grid grid-cols-3 gap-2 py-1.5 text-center bg-retro rounded! border-2">
+                                  <div className="grid grid-cols-3 gap-2 py-1.5 text-center bg-background bg-retro rounded! border-2">
                                     <div className="flex flex-col gap-0.5">
-                                      <p className="text-xs text-muted-foreground font-medium">Original</p>
+                                      <p className="text-xs text-foreground font-medium">Original</p>
                                       <p className="text-base font-bold">
                                         {preview
                                           ? `${preview.original_score}/${preview.max_points}`
@@ -3807,7 +3060,7 @@ const InterventionSupportMaterials = forwardRef<
                                       </p>
                                     </div>
                                     <div className="flex flex-col gap-0.5">
-                                      <p className="text-xs text-muted-foreground font-medium">Maximum adjusted</p>
+                                      <p className="text-xs text-foreground font-medium">Maximum Adjusted</p>
                                       <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
                                         {preview
                                           ? `${preview.max_adjusted_score}/${preview.max_points}`
@@ -3815,7 +3068,7 @@ const InterventionSupportMaterials = forwardRef<
                                       </p>
                                     </div>
                                     <div className="flex flex-col gap-0.5">
-                                      <p className="text-xs text-muted-foreground font-medium">Possible gain</p>
+                                      <p className="text-xs text-foreground font-medium">Possible Gain</p>
                                       <p className="text-base font-bold">
                                         {preview
                                           ? `+${preview.possible_gain > 0 ? preview.possible_gain : 0}`
@@ -3823,10 +3076,10 @@ const InterventionSupportMaterials = forwardRef<
                                       </p>
                                     </div>
                                   </div>
-                                  <p className="text-sm text-muted-foreground">
+                                  <p className="text-sm text-foreground px-1">
                                     {hasSavedAssessment
                                       ? `Original max: ${preview?.max_points ?? chosenActivity.possible_score} pts · Capped at ${plan.score_adjustment_cap ?? 75}%`
-                                      : "Hypothetical maximum only · Not an actual awarded grade"}
+                                      : "Actual grade reflects from students remediation score."}
                                   </p>
                                 </Card>
                               );

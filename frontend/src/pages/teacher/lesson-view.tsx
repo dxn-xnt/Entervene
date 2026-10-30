@@ -641,16 +641,6 @@ export function TeacherLessonView({
                                 Archive Lesson
                             </Button>
                         )}
-                        <Button
-                            type="button"
-                            size="header"
-                            variant="default"
-                            onClick={() => openClassworkForm(lesson)}
-                            className="w-full whitespace-nowrap md:w-auto"
-                        >
-                            <Plus size={16} />
-                            Add Classwork
-                        </Button>
                     </div>
                 </header>
             </div>
