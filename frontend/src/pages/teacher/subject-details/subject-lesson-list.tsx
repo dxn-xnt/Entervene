@@ -844,7 +844,7 @@ export default function SubjectLessonList({
           onClick={(e) => e.stopPropagation()}
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4"
         >
-          <Card className="block w-full max-w-md border-2 border-black bg-background text-foreground shadow-[4px_4px_0_#000]">
+          <Card data-modal-content className="block w-full max-w-md border-2 border-black bg-background text-foreground shadow-[4px_4px_0_#000]">
             <div className="flex items-center justify-between border-b-2 border-black bg-red-100 px-5 py-3">
               <div className="flex items-center gap-2 text-red-800">
                 <Archive size={18} />
@@ -873,7 +873,7 @@ export default function SubjectLessonList({
                 flow.
               </p>
             </Card.Content>
-            <div className="flex justify-end gap-3 border-t-2 border-black px-5 py-4 bg-gray-50">
+            <div data-slot="dialog-footer" className="flex justify-end gap-3 border-t-2 border-black px-5 py-4 bg-gray-50">
               <Button
                 type="button"
                 variant="outline"
@@ -911,7 +911,7 @@ export default function SubjectLessonList({
                   }
                 }}
                 disabled={isArchivingLesson}
-                className="border-2 border-black bg-red-600 text-white font-bold hover:bg-red-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                className="border-2 border-black bg-red-600 text-white font-bold hover:bg-red-700"
               >
                 {isArchivingLesson ? "Archiving..." : "Archive Lesson"}
               </Button>

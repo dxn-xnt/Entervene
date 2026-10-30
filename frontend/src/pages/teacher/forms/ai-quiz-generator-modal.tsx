@@ -1026,7 +1026,7 @@ export default function AIQuizGeneratorModal({
               size="sm"
               disabled={isGenerating || totalItemCount <= 0 || hasAnyBreakdownError}
               onClick={handleGenerate}
-              className="gap-2 border-2 border-black bg-amber-400 text-black hover:bg-amber-500 font-extrabold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer"
+              className="gap-2 border-2 border-black bg-amber-400 text-black hover:bg-amber-500 font-extrabold cursor-pointer"
             >
               {isGenerating ? (
                 <>

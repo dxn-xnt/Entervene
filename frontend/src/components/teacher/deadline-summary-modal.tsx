@@ -282,7 +282,7 @@ export default function DeadlineSummaryModal({
             variant="outline"
             size="sm"
             onClick={onClose}
-            className="border-2 border-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+            className="border-2 border-black font-bold"
           >
             Dismiss / View Full Roster
           </Button>

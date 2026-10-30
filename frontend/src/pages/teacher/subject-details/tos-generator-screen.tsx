@@ -1,3 +1,5 @@
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { NoChangesMessage } from "@/components/retroui/FormMessage";
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
   TableProperties,
@@ -358,6 +360,7 @@ export function TOSGeneratorScreen({
   };
 
   const startNewExam = () => {
+    setSavedExamPayload(null);
     setSaveError(null);
     setExamId(null);
     setTitle(`Summative Assessment ${savedExams.length + 1}`);
@@ -488,6 +491,7 @@ export function TOSGeneratorScreen({
           };
         });
         setRows(restoredRows);
+        setCaptureLoadedExam(true);
         setGrandTotal({
           ...computed.grand_total,
           easy: restoredRows.reduce((sum, row) => sum + row.easy, 0),
@@ -572,7 +576,22 @@ export function TOSGeneratorScreen({
     })),
   });
 
+  const currentExamPayload = buildExamPayload(questions.length > 0 ? "FINALIZED" : "DRAFT");
+  const [savedExamPayload, setSavedExamPayload] = useState<unknown>(null);
+  const [captureLoadedExam, setCaptureLoadedExam] = useState(false);
+  const changes = useEditFormChanges({
+    enabled: !!examId,
+    resetKey: examId ?? "new",
+    initialValues: savedExamPayload,
+    values: currentExamPayload,
+  });
+  useEffect(() => {
+    if (!captureLoadedExam) return;
+    setSavedExamPayload(currentExamPayload);
+    setCaptureLoadedExam(false);
+  }, [captureLoadedExam, currentExamPayload]);
   const handleSaveDraft = async () => {
+    if (!changes.guardChanges()) return false;
     setIsSaving(true);
     setSaveError(null);
     const saveStep = step;
@@ -601,6 +620,7 @@ export function TOSGeneratorScreen({
       }
 
       const result = await res.json();
+      setSavedExamPayload(payload);
       if (result?.tos_exam_id) {
         setExamId(result.tos_exam_id);
       }
@@ -1044,7 +1064,7 @@ export function TOSGeneratorScreen({
               <Button
                 size="header"
                 variant="outline"
-                disabled={isSaving}
+                disabled={isSaving || (!!examId && !changes.hasChanges)}
                 onClick={() => questions.length > 0 ? guardShortExam(handleSaveDraft) : void handleSaveDraft()}
                 className="min-w-0 whitespace-nowrap"
               >
@@ -1145,6 +1165,7 @@ export function TOSGeneratorScreen({
 
           {/* Screen Content Body */}
           <div className={modalMode ? "min-w-0 p-1" : "min-w-0 p-3 sm:p-6"}>
+            {!modalMode && <NoChangesMessage message={changes.noChangesMessage} />}
             {visibleSaveError && <div ref={saveErrorRef} tabIndex={-1} className="mb-4 outline-none"><Alert aria-live="assertive" className="border-0 bg-transparent p-0 text-sm font-medium text-destructive">{visibleSaveError}</Alert></div>}
             {(step === "ai-review" || step === "export") &&
               (generationWarnings.length > 0 || shortfall.missing > 0) && (
@@ -2662,13 +2683,14 @@ export function TOSGeneratorScreen({
       </div>
       {modalMode && (
         <Dialog.Footer className="mt-0">
+          <NoChangesMessage message={changes.noChangesMessage} />
           <div className="flex w-full flex-wrap items-center justify-between gap-3">
             <Button type="button" variant="outline" onClick={onBack}>
               <X className="size-4" /> Cancel
             </Button>
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
               {step !== "saved-list" && (
-                <Button type="button" variant="outline" disabled={isSaving} onClick={() => questions.length > 0 ? guardShortExam(handleSaveAndClose) : void handleSaveAndClose()}>
+                <Button type="button" variant="outline" disabled={isSaving || (!!examId && !changes.hasChanges)} onClick={() => questions.length > 0 ? guardShortExam(handleSaveAndClose) : void handleSaveAndClose()}>
                   <Save className="size-4" /> {isSaving ? "Saving..." : "Save Draft"}
                 </Button>
               )}

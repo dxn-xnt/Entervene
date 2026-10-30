@@ -205,6 +205,7 @@ export default function InterventionModal({
 }: InterventionModalProps) {
   const [supportPage, setSupportPage] = useState<"overview" | "plan">("overview");
   const [savingAdjustments, setSavingAdjustments] = useState(false);
+  const [supportHasChanges, setSupportHasChanges] = useState(false);
   const supportMaterialsRef = useRef<InterventionSupportMaterialsHandle>(null);
   const interventionId = detail?.intervention_id;
 
@@ -418,6 +419,7 @@ export default function InterventionModal({
                   })()
                 ) : detail.status === "ACTIVE" ? (
                   <InterventionSupportMaterials
+                    onChangesChange={setSupportHasChanges}
                     ref={supportMaterialsRef}
                     key={detail.intervention_id}
                     page={supportPage}
@@ -716,7 +718,7 @@ export default function InterventionModal({
           {isActive && (
             <Button
               variant={supportPage === "plan" ? "outline" : "default"}
-              disabled={activating || savingAdjustments}
+              disabled={activating || savingAdjustments || (supportPage === "plan" && !supportHasChanges)}
               onClick={async () => {
                 if (supportPage === "plan") {
                   if (supportMaterialsRef.current) {

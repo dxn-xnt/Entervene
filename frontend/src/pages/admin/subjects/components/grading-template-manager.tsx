@@ -4,7 +4,9 @@ import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/admin/button";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
-import { FormMessage } from "@/components/retroui/FormMessage";
+import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { unorderedValues } from "@/lib/form-changes";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
@@ -160,7 +162,33 @@ export function GradingTemplateManager({
       else subjectIds.add(id);
       return { ...current, subjectIds };
     });
+  const templateValues = (value: EditorState) => ({
+    subjects: unorderedValues([...value.subjectIds]),
+    ...(!editing?.is_locked ? {
+      name: value.name.trim(), description: value.description.trim(),
+      status: value.status,
+      weights: [Number(value.ww), Number(value.pt), Number(value.exams)],
+    } : {}),
+  });
+  const changes = useEditFormChanges({
+    enabled: !!editing,
+    resetKey: editing?.grading_template_id,
+    initialValues: editing ? templateValues({
+      ...form, name: editing.template_name, description: editing.description ?? "",
+      status: editing.status,
+      ww: String(weight(editing, "Written Work")),
+      pt: String(weight(editing, "Performance Tasks")),
+      exams: String(weight(editing, "Exams")),
+      subjectIds: new Set(editing.assigned_subjects.map(subject => subject.subject_id)),
+    }) : null,
+    values: templateValues(form),
+  });
+  const thresholdChanges = useEditFormChanges({
+    enabled: !!editing, resetKey: editing?.grading_template_id,
+    initialValues: Number(editing?.passing_threshold), values: Number(form.threshold),
+  });
   const save = async () => {
+    if (!changes.guardChanges()) return;
     const threshold = Number(form.threshold),
       ww = Number(form.ww),
       pt = Number(form.pt),
@@ -241,6 +269,7 @@ export function GradingTemplateManager({
     }
   };
   const saveThreshold = async () => {
+    if (!thresholdChanges.guardChanges()) return;
     if (!editing || !thresholdYearId || !thresholdReason.trim()) {
       setError("Select a year and enter an audit reason.");
       setValidationAttempt((attempt) => attempt + 1);
@@ -499,10 +528,11 @@ export function GradingTemplateManager({
                 </Field>
                 <Button
                   onClick={() => void saveThreshold()}
-                  disabled={thresholdSaving || !thresholdYearId}
+                  disabled={thresholdSaving || !thresholdYearId || !thresholdChanges.hasChanges}
                 >
                   {thresholdSaving ? "Saving..." : "Save Threshold with Audit"}
                 </Button>
+                <NoChangesMessage message={thresholdChanges.noChangesMessage} />
               </Card>
             ) : null}
 
@@ -724,10 +754,11 @@ export function GradingTemplateManager({
             </section>
           </div>
           <Dialog.Footer className="mt-0 border-t-2 border-black bg-white">
+            <NoChangesMessage message={changes.noChangesMessage} />
             <Button variant="outline" onClick={() => setEditing(undefined)}>
               Cancel
             </Button>
-            <Button onClick={() => void save()} disabled={saving}>
+            <Button onClick={() => void save()} disabled={saving || (!!editing && !changes.hasChanges)}>
               {saving ? "Saving..." : "Save Template"}
             </Button>
           </Dialog.Footer>

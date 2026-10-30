@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { NoChangesMessage } from "@/components/retroui/FormMessage";
 import {
   ArrowDown,
   ArrowUp,
@@ -234,7 +236,14 @@ export function SetLessonGoalModal({
     setSelectedItems((prev) => prev.filter((it) => it.id !== id));
   };
 
+  const changes = useEditFormChanges({
+    resetKey: `${isOpen}:${classId}:${subjectId}:${academicPeriodId}`,
+    // Goal order is persisted and can be changed with the reorder controls.
+    initialValues: currentGoals.map(item => [item.item_type, item.lesson_id || null, item.classwork_id || null]),
+    values: selectedItems.map(item => [item.item_type, item.lesson_id || null, item.classwork_id || null]),
+  });
   const handleSave = async () => {
+    if (!changes.guardChanges()) return;
     if (!academicPeriodId) {
       toast.error("Academic period is missing. Please refresh and try again.");
       return;
@@ -566,6 +575,7 @@ export function SetLessonGoalModal({
         </div>
 
         <Dialog.Footer className="mt-0 justify-end">
+          <NoChangesMessage message={changes.noChangesMessage} />
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
             <Button
               type="button"
@@ -578,7 +588,7 @@ export function SetLessonGoalModal({
             <Button
               type="button"
               onClick={handleSave}
-              disabled={isSaving}
+              disabled={isSaving || !changes.hasChanges}
             >
               Save Lesson Goals
             </Button>
