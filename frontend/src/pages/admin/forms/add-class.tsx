@@ -15,6 +15,7 @@ import { buildBatchCreatePayload } from "./classes/build-batch-create-payload";
 import { sortAssignmentStudents } from "@/components/admin/classes/assignment/studentSorting";
 import ImportClassWizard from "@/pages/admin/forms/classes/import-class-wizard";
 import ManualClassWizard from "@/pages/admin/forms/classes/manual-class-wizard";
+import ClassCard from "@/components/admin/classes/class-card";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/admin/button";
 import { Text } from "@/components/retroui/Text";
@@ -319,13 +320,61 @@ function ManualReview({ setup, assignmentState, skippedStudents, onSaved, onBack
       <AdminValidationAlert message={saveError?.message === "Review the class setup before saving." ? null : saveError?.message} attempt={validationAttempt} />
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {setup.sections.map((section) => (
-          <Card key={section.localId} className="p-3">
-            <h3 className="font-bold">{section.sectionName}</h3>
-            <p className="text-sm">Adviser: {section.adviserName || "Not available"}</p>
-            <p className="text-sm">Assigned Students: {assignmentState.assignmentsBySection[section.localId]?.length ?? 0}</p>
-          </Card>
-        ))}
+        {setup.sections.map((section) => {
+          const students = assignmentState.assignmentsBySection[section.localId] ?? [];
+          const femaleCount = students.filter(
+            (s) => s.gender?.toLowerCase() === "female" || s.gender?.toLowerCase() === "f"
+          ).length;
+          const maleCount = students.filter(
+            (s) => s.gender?.toLowerCase() === "male" || s.gender?.toLowerCase() === "m"
+          ).length;
+          const gradeLevel = parseInt(setup.academicLevelName.replace(/\D/g, ""), 10) || 7;
+
+          const previewClass: ClassListItem = {
+            class_id: 0,
+            section_name: section.sectionName,
+            class_status: "active",
+            academic_year: setup.academicYear,
+            academic_level: {
+              academic_level_id: setup.academicLevelId,
+              level_name: setup.academicLevelName,
+              grade_level: gradeLevel,
+              requires_pathway: gradeLevel >= 11,
+            },
+            pathway_id: null,
+            pathway: section.pathway && section.pathway !== "general"
+              ? {
+                  id: 0,
+                  code: section.pathway,
+                  name: section.pathway,
+                  is_enabled: true,
+                  sort_order: 1,
+                }
+              : null,
+            adviser: section.adviserName
+              ? {
+                  staff_id: section.adviserStaffId,
+                  first_name: section.adviserName,
+                  middle_name: null,
+                  last_name: "",
+                  suffix: null,
+                  avatar: null,
+                }
+              : null,
+            student_count: students.length,
+            female_count: femaleCount,
+            male_count: maleCount,
+            subject_count: 0,
+          };
+
+          return (
+            <ClassCard
+              key={section.localId}
+              item={previewClass}
+              preview
+            />
+          );
+        })}
       </div>
 
       <Text as="p" className="text-sm font-bold">

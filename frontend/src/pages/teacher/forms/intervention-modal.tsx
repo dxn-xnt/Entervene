@@ -20,7 +20,7 @@ import type {
   TeacherInterventionSummary,
   TeacherResolvedInterventionDetail,
 } from "@/lib/teacher-interventions-api";
-import { formatDate, formatToTitleCase } from "@/lib/formatters";
+import { formatDate, formatDateTime, formatToTitleCase } from "@/lib/formatters";
 
 const label = (value: string) =>
   value
@@ -476,23 +476,12 @@ export default function InterventionModal({
                               Trigger: <strong>{detail.triggering_predicted_grade.toFixed(2)}</strong>
                             </p>
                             <p>
-                              Created: <strong>{date(detail.created_at)}</strong>
+                              Created: <strong>{formatDateTime(detail.created_at)}</strong>
                             </p>
                           </div>
                         </div>
                       </div>
-                      <Alert status="warning">
-                        This is a saved review candidate. No teacher-approved active Intervention exists yet. Approval rechecks the current prediction, teaching scope, and authorization before support can begin.
-                      </Alert>
                     </Card>
-
-                    <p className="text-sm text-muted-foreground">
-                      Original source prediction #{detail.source_prediction_id}, revision{" "}
-                      {detail.source_prediction_revision} · {detail.academic_period_name}
-                    </p>
-
-                    <h3 className="font-black">Academic Diagnosis</h3>
-                    <AcademicDiagnosisCard diagnosis={detail.diagnosis_snapshot} />
 
                     <Card className="w-full space-y-2 border-2 border-primary/40 bg-primary/10">
                       <div className="flex items-center gap-2">
@@ -505,6 +494,14 @@ export default function InterventionModal({
                         evidence and teaching scope will be checked again.
                       </p>
                     </Card>
+
+                    <div className="flex flex-col gap-1">
+                      <h3 className="font-black">Academic Diagnosis</h3>
+                      <AcademicDiagnosisCard diagnosis={detail.diagnosis_snapshot} />
+                    </div>
+
+
+
                   </>
                 )}
 

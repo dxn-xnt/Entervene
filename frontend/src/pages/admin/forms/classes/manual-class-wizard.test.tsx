@@ -49,7 +49,7 @@ it("reviews a valid class without loading or assigning students", async () => {
   });
 });
 
-it("filters official sections by grade and clears the old section on a grade change", async () => {
+it("pre-populates official sections by grade and updates them on a grade change", async () => {
   const names = [
     ["Aristotle", "Galileo"], ["Newton", "Plato"], ["Archimedes", "Copernicus"],
     ["Einstein", "Socrates"], ["Campos", "Zara"], ["Del Mundo", "Reyes"],
@@ -72,10 +72,11 @@ it("filters official sections by grade and clears the old section on a grade cha
   for (let index = 0; index < names.length; index += 1) {
     const gradeSelect = screen.getAllByRole("combobox")[1] as HTMLSelectElement;
     fireEvent.change(gradeSelect, { target: { value: String(index + 1) } });
-    const sectionSelect = screen.getAllByRole("combobox")[2] as HTMLSelectElement;
-    expect(within(sectionSelect).getAllByRole("option").slice(1).map((option) => (option as HTMLOptionElement).value)).toEqual(names[index]);
-    if (index === 0) fireEvent.change(sectionSelect, { target: { value: "Aristotle" } });
-    if (index === 1) expect(sectionSelect.value).toBe("");
+    const sectionSelects = [
+      screen.getAllByRole("combobox")[2] as HTMLSelectElement,
+      screen.getAllByRole("combobox")[4] as HTMLSelectElement,
+    ];
+    expect(sectionSelects.map((select) => select.value)).toEqual(names[index]);
   }
 });
 
@@ -102,5 +103,47 @@ it("adds Reyes after Del Mundo and prevents a third Grade 12 section", async () 
   expect(sectionSelects.map((select) => select.value)).toEqual(["Del Mundo", "Reyes"]);
   expect(within(sectionSelects[0]).getAllByRole("option").slice(1).map((option) => (option as HTMLOptionElement).value)).toEqual(["Del Mundo"]);
   expect(within(sectionSelects[1]).getAllByRole("option").slice(1).map((option) => (option as HTMLOptionElement).value)).toEqual(["Reyes"]);
+  expect((screen.getByRole("button", { name: "All Available Sections Added" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("automatically pre-populates default grade sections on initial load and allows removing and re-adding", async () => {
+  const year = { academic_year_id: 1, year_label: "2025-2026" };
+  getClassFormOptions.mockResolvedValue({
+    academic_year: year,
+    academic_levels: [{ academic_level_id: 1, level_name: "Grade 7", grade_level: 7, requires_pathway: false }],
+    eligible_advisers: [{ staff_id: "T-1", first_name: "Ada", last_name: "Lovelace" }],
+    official_sections: [
+      { id: 1, academic_year_id: 1, academic_level_id: 1, section_name: "Aristotle", pathway_id: null, pathway_name: null, pathway_code: null, is_active: true, has_class: false },
+      { id: 2, academic_year_id: 1, academic_level_id: 1, section_name: "Galileo", pathway_id: null, pathway_name: null, pathway_code: null, is_active: true, has_class: false },
+    ],
+  });
+
+  render(<ManualClassWizard initialSetup={null} onComplete={vi.fn()} onSkipStudents={vi.fn()} onBack={vi.fn()} onClose={vi.fn()} />);
+
+  // Both sections pre-populated on initial load
+  await waitFor(() => {
+    const sectionSelects = [
+      screen.getAllByRole("combobox")[2] as HTMLSelectElement,
+      screen.getAllByRole("combobox")[4] as HTMLSelectElement,
+    ];
+    expect(sectionSelects.map((s) => s.value)).toEqual(["Aristotle", "Galileo"]);
+  });
+
+  // Remove Galileo
+  const removeButtons = screen.getAllByRole("button", { name: "Remove section" });
+  expect(removeButtons.length).toBe(2);
+  fireEvent.click(removeButtons[1]);
+
+  // Now only Aristotle remains and "Add Another Section" button is enabled
+  const addButton = await screen.findByRole("button", { name: "Add Another Section" });
+  expect((addButton as HTMLButtonElement).disabled).toBe(false);
+
+  // Click Add Another Section, Galileo is added back
+  fireEvent.click(addButton);
+  const updatedSelects = [
+    screen.getAllByRole("combobox")[2] as HTMLSelectElement,
+    screen.getAllByRole("combobox")[4] as HTMLSelectElement,
+  ];
+  expect(updatedSelects.map((s) => s.value)).toEqual(["Aristotle", "Galileo"]);
   expect((screen.getByRole("button", { name: "All Available Sections Added" }) as HTMLButtonElement).disabled).toBe(true);
 });

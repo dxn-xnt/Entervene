@@ -13,13 +13,15 @@ import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Switch } from "@/components/retroui/Switch";
-import { Checkbox } from "@/components/retroui/Checkbox";
 import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
 import { useToast } from "@/components/retroui/Toast";
-import { ArrowUpRight, Lock, Calendar, Save } from "lucide-react";
+import { ArrowUpRight, Lock, Calendar, Save, Pencil } from "lucide-react";
 import AddAcademicPeriodModal from "./forms/add-academic-period";
 import AddPathwayModal from "./forms/add-pathway";
+import ConfirmGeneralAverageModal, {
+  type GeneralAverageAction,
+} from "./forms/confirm-general-average-modal";
 import OfficialSectionsSettings from "./official-sections-settings";
 
 import {
@@ -75,8 +77,7 @@ export default function AdminSystemSettings() {
   const [averagePassing, setAveragePassing] = React.useState("");
   const [averageYearId, setAverageYearId] = React.useState("");
   const [averagePolicy, setAveragePolicy] = React.useState<YearGeneralAveragePolicy | null>(null);
-  const [averageReason, setAverageReason] = React.useState("");
-  const [averageConfirmed, setAverageConfirmed] = React.useState(false);
+  const [isAveragePolicyModalOpen, setIsAveragePolicyModalOpen] = React.useState(false);
   const [averageError, setAverageError] = React.useState("");
   const [averageValidationAttempt, setAverageValidationAttempt] = React.useState(0);
 
@@ -351,9 +352,12 @@ export default function AdminSystemSettings() {
       if (cancelled) return;
       setAveragePolicy(policy);
       setAveragePassing(policy.threshold ?? "");
-      setAverageReason(""); setAverageConfirmed(false);
     }).catch((error: unknown) => {
-      if (!cancelled) setAverageError(error instanceof Error ? error.message : "Unable to load year policy.");
+      if (!cancelled) {
+        setAverageError(
+          error instanceof Error ? error.message : "Unable to load year policy."
+        );
+      }
     });
     return () => { cancelled = true; };
   }, [averageYearId]);
@@ -368,40 +372,53 @@ export default function AdminSystemSettings() {
     }
   };
 
-  const handleSaveThresholds = async (action: "edit" | "confirm_legacy" | "initialize_manual" | "copy_previous") => {
-    if (action === "edit" && !policyChanges.guardChanges()) return;
-    if (!averagePolicy || !averageConfirmed || !averageReason.trim()) {
-      setAverageError("Select a year, enter an audit reason, and confirm this change.");
-      setAverageValidationAttempt((attempt) => attempt + 1);
-      return;
-    }
+  const handleConfirmAverageAction = async (
+    action: GeneralAverageAction,
+    reason: string,
+    thresholdValue?: string
+  ) => {
+    if (!averagePolicy) return;
     setIsSavingThresholds(true);
     setAverageError("");
     try {
-      let value = averagePassing;
+      let value = thresholdValue || averagePassing;
       let sourceYearId: number | undefined;
-      if (action === "confirm_legacy") value = averagePolicy.legacy_proposal ?? "";
+      if (action === "confirm_legacy") {
+        value = averagePolicy.legacy_proposal ?? "";
+      }
       if (action === "copy_previous") {
         sourceYearId = averagePolicy.previous_academic_year_id ?? undefined;
-        if (!sourceYearId) throw new Error("No previous academic year is available.");
+        if (!sourceYearId) {
+          throw new Error("No previous academic year is available.");
+        }
         const source = await getYearGeneralAveragePolicy(sourceYearId);
-        if (!source.configured || !source.threshold) throw new Error("Configure the previous academic year first.");
+        if (!source.configured || !source.threshold) {
+          throw new Error("Configure the previous academic year first.");
+        }
         value = source.threshold;
       }
       const saved = await saveYearGeneralAveragePolicy(Number(averageYearId), {
-        threshold: value, expected_version: averagePolicy.version,
-        reason: averageReason.trim(), action, confirmed: true,
+        threshold: value,
+        expected_version: averagePolicy.version,
+        reason,
+        action,
+        confirmed: true,
         ...(sourceYearId ? { source_year_id: sourceYearId } : {}),
       });
-      setAveragePolicy(saved); setAveragePassing(saved.threshold ?? "");
-      setAverageReason(""); setAverageConfirmed(false);
+      setAveragePolicy(saved);
+      setAveragePassing(saved.threshold ?? "");
+      setIsAveragePolicyModalOpen(false);
       showToast("Academic-year passing policy saved.");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save threshold.";
+      const message =
+        err instanceof Error ? err.message : "Failed to save threshold.";
       if (err instanceof ApiRequestError && (err.status === 400 || err.status === 422)) {
         setAverageError(message);
         setAverageValidationAttempt((attempt) => attempt + 1);
-      } else showToast(message, "error");
+      } else {
+        showToast(message, "error");
+      }
+      throw err;
     } finally {
       setIsSavingThresholds(false);
     }
@@ -629,7 +646,12 @@ export default function AdminSystemSettings() {
                           className="w-full min-w-0 shadow-none transition-all hover:shadow-md focus:shadow-md focus-visible:shadow-md"
                           type="time"
                           value={schoolDayStart}
-                          onChange={(e) => { setSchoolDayStart(e.target.value); if (e.target.value < schoolDayEnd) setSchoolHoursError(""); }}
+                          onChange={(e) => {
+                            setSchoolDayStart(e.target.value);
+                            if (e.target.value < schoolDayEnd) {
+                              setSchoolHoursError("");
+                            }
+                          }}
                         />
                       </div>
                       <div className="flex min-w-0 flex-col gap-1 sm:w-1/3">
@@ -643,7 +665,12 @@ export default function AdminSystemSettings() {
                           className="w-full min-w-0 shadow-none transition-all hover:shadow-md focus:shadow-md focus-visible:shadow-md"
                           type="time"
                           value={schoolDayEnd}
-                          onChange={(e) => { setSchoolDayEnd(e.target.value); if (schoolDayStart < e.target.value) setSchoolHoursError(""); }}
+                          onChange={(e) => {
+                            setSchoolDayEnd(e.target.value);
+                            if (schoolDayStart < e.target.value) {
+                              setSchoolHoursError("");
+                            }
+                          }}
                         />
                         <FormMessage id="school-day-end-error">{schoolHoursError}</FormMessage>
                       </div>
@@ -667,46 +694,104 @@ export default function AdminSystemSettings() {
                   <Button
                     size="sm"
                     className="w-full justify-center whitespace-nowrap sm:w-auto"
-                    onClick={() => void handleSaveThresholds("edit")}
-                    disabled={isSavingThresholds || !averagePolicy?.configured || !policyChanges.hasChanges}
+                    onClick={() => setIsAveragePolicyModalOpen(true)}
+                    disabled={isSavingThresholds || !averagePolicy?.configured}
                   >
-                    <Save className="mr-2 size-3.5" />
-                    Save Threshold
+                    <Pencil className="mr-2 size-3.5" />
+                    Edit Threshold
                   </Button>
                   <NoChangesMessage message={policyChanges.noChangesMessage} />
                 </Card.Header>
                 <Card.Content className="flex flex-col gap-4">
-                  <AdminValidationAlert message={averageError === "Select a year, enter an audit reason, and confirm this change." ? null : averageError} attempt={averageValidationAttempt} />
-                  <label className="flex flex-col gap-1 text-sm font-semibold">Academic year
-                    <Select value={averageYearId} onValueChange={(value) => { setAveragePolicy(null); setAverageYearId(value); }}><Select.Trigger className="w-full"><Select.Value placeholder="Select academic year" /></Select.Trigger><Select.Content><Select.Group>{academicYears.map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}{year.is_active ? " (active)" : ""}</Select.Item>)}</Select.Group></Select.Content></Select>
-                  </label>
-                  <p className="text-sm font-semibold">{averagePolicy?.configured ? `Confirmed for ${averagePolicy.year_label}: ${averagePolicy.threshold}%` : averagePolicy ? "Unconfigured for this academic year" : averageError ? "Passing grade status unavailable" : "Loading passing grade status..."}</p>
-                  {!averagePolicy?.configured && averagePolicy?.legacy_proposal ? <Button variant="outline" disabled={isSavingThresholds} onClick={() => void handleSaveThresholds("confirm_legacy")}>Confirm legacy proposal ({averagePolicy.legacy_proposal}%)</Button> : null}
-                  {averagePolicy && !averagePolicy.configured && !averagePolicy.legacy_proposal ? <Button variant="outline" disabled={isSavingThresholds} onClick={() => void handleSaveThresholds("initialize_manual")}>Set initial passing grade manually</Button> : null}
-                  {!averagePolicy?.configured && averagePolicy?.previous_academic_year_id ? <Button variant="outline" disabled={isSavingThresholds} onClick={() => void handleSaveThresholds("copy_previous")}>Copy from Previous Academic Year</Button> : null}
-                  {averagePolicy && !averagePolicy.configured && !averagePolicy.legacy_proposal ? <p className="text-sm">No validated legacy proposal is available. Enter a grade for this year, give an audit reason, and confirm it explicitly.</p> : null}
-                  {averagePolicy?.legacy_error ? <p role="alert" className="text-sm text-red-700">{averagePolicy.legacy_error}</p> : null}
-                  <div className="flex flex-col gap-2">
-                    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                      <span className="hidden sm:block" />
-                      <Input
-                        aria-label="General Average Passing Grade"
-                        className="w-full min-w-0 shadow-none transition-all hover:shadow-md focus:shadow-md focus-visible:shadow-md sm:w-32"
-                        type="number"
-                        placeholder="0-100"
-                        min={0}
-                        max={100}
-                        step="0.01"
-                        value={averagePassing}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                          setAveragePassing(e.target.value)
-                        }
-                      />
+                  <AdminValidationAlert
+                    message={
+                      averageError === "Select a year, enter an audit reason, and confirm this change."
+                        ? null
+                        : averageError
+                    }
+                    attempt={averageValidationAttempt}
+                  />
+                  <div className="grid grid-cols-10 gap-3">
+                    <div className="flex flex-col gap-4 col-span-7">
+                      <label className="flex flex-col gap-1 text-sm font-semibold">
+                        Academic Year
+                        <Select
+                          value={averageYearId}
+                          onValueChange={(value) => {
+                            setAveragePolicy(null);
+                            setAverageYearId(value);
+                          }}
+                        >
+                          <Select.Trigger className="w-full">
+                            <Select.Value placeholder="Select academic year" />
+                          </Select.Trigger>
+                          <Select.Content>
+                            <Select.Group>
+                              {academicYears.map((year) => (
+                                <Select.Item
+                                  key={year.academic_year_id}
+                                  value={String(year.academic_year_id)}
+                                >
+                                  {year.year_label}
+                                  {year.is_active ? " (active)" : ""}
+                                </Select.Item>
+                              ))}
+                            </Select.Group>
+                          </Select.Content>
+                        </Select>
+                      </label>
+                      <p className="text-sm text-muted-foreground -mt-1">
+                        {averagePolicy?.configured
+                          ? `Confirmed for ${averagePolicy.year_label}: ${averagePolicy.threshold}%`
+                          : averagePolicy
+                            ? "Unconfigured for this academic year"
+                            : averageError
+                              ? "Passing grade status unavailable"
+                              : "Loading passing grade status..."}
+                      </p>
+
+                      {!averagePolicy?.configured && averagePolicy ? (
+                        <Button
+                          variant="outline"
+                          disabled={isSavingThresholds}
+                          onClick={() => setIsAveragePolicyModalOpen(true)}
+                        >
+                          Configure Passing Grade
+                        </Button>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-col gap-4 col-span-3">
+                      <div className="flex flex-col gap-4">
+                        <label className="flex flex-col gap-1 text-sm font-semibold">
+                          Current Passing Threshold
+                          <Input
+                            aria-label="Current Passing Threshold"
+                            className="w-full! min-w-0 bg-background font-semibold cursor-default select-none transition-all sm:w-32"
+                            readOnly
+                            tabIndex={-1}
+                            value={averagePassing ? `${averagePassing}%` : "Not set"}
+                          />
+                        </label>
+                      </div>
                     </div>
                   </div>
-                  <label className="flex flex-col gap-1 text-sm font-semibold">Audit reason<Input id="average-audit-reason" value={averageReason} aria-invalid={averageError === "Select a year, enter an audit reason, and confirm this change." && !averageReason.trim()} aria-describedby={averageError === "Select a year, enter an audit reason, and confirm this change." && !averageReason.trim() ? "average-audit-reason-error" : undefined} onChange={(event) => { setAverageReason(event.target.value); if (event.target.value.trim() && averageConfirmed) setAverageError(""); }} />{averageError === "Select a year, enter an audit reason, and confirm this change." && !averageReason.trim() && <FormMessage id="average-audit-reason-error">Enter an audit reason.</FormMessage>}</label>
-                  <label className="flex items-center gap-2 text-sm"><Checkbox checked={averageConfirmed} onCheckedChange={(checked) => { const confirmed = checked === true; setAverageConfirmed(confirmed); if (confirmed && averageReason.trim()) setAverageError(""); }} /> I confirm this year-specific policy action.</label>
-                  {averageError === "Select a year, enter an audit reason, and confirm this change." && !averageConfirmed && <FormMessage>Confirm this policy action.</FormMessage>}
+
+                  <Dialog
+                    open={isAveragePolicyModalOpen}
+                    onOpenChange={setIsAveragePolicyModalOpen}
+                  >
+                    {isAveragePolicyModalOpen && (
+                      <ConfirmGeneralAverageModal
+                        policy={averagePolicy}
+                        yearLabel={averagePolicy?.year_label ?? ""}
+                        threshold={averagePassing}
+                        isSaving={isSavingThresholds}
+                        onClose={() => setIsAveragePolicyModalOpen(false)}
+                        onConfirm={handleConfirmAverageAction}
+                      />
+                    )}
+                  </Dialog>
                 </Card.Content>
               </Card>
 
@@ -714,7 +799,7 @@ export default function AdminSystemSettings() {
               <section id="grading-templates" aria-labelledby="grading-templates-title" className="space-y-4 rounded border-2 border-black bg-white p-4 shadow-[4px_4px_0_#000]">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <Text as="h2" id="grading-templates-title" className="text-2xl font-bold">Default Grading Templates</Text>
+                    <Text as="h2" id="grading-templates-title" className="text-3xl! font-bold">Default Grading Templates</Text>
                     <span className="sr-only">Grading Templates</span>
                     <Text as="p" className="text-sm text-muted-foreground">
                       Reusable grade weight templates stored in the database. Assign them to subjects during grading setup.
@@ -727,24 +812,39 @@ export default function AdminSystemSettings() {
                 <div className="grid grid-cols-1 items-stretch gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-3">
                   {templates.map((template) => {
                     return (
-                      <Card key={template.id} className="flex h-full min-w-0 flex-col overflow-hidden border-2 border-black bg-primary p-3 shadow-[4px_4px_0_#000]">
+                      <Card key={template.id} className="flex h-full min-w-0 flex-col overflow-hidden border-2 border-black bg-primary p-4 shadow-[4px_4px_0_#000]">
                         <Card.Header className="mb-0! p-0">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 <Card.Title className="min-w-0 break-words text-lg font-bold leading-tight">{template.name}</Card.Title>
-                                {template.is_locked ? <Badge className="bg-white" variant="outline"><Lock className="mr-1 size-3" /> Locked</Badge>
-                                  : <Badge className="bg-white capitalize" variant="outline">{template.status}</Badge>}
+                                {template.is_locked ? (
+                                  <Badge className="bg-white" variant="outline" size="sm">
+                                    <Lock className="mr-1 size-3" /> Locked
+                                  </Badge>
+                                ) : (
+                                  <Badge className="bg-white capitalize" variant="outline" size="sm">
+                                    {template.status}
+                                  </Badge>
+                                )}
                               </div>
-                              <Text as="p" className="mt-1 line-clamp-2 text-xs text-black/70">{template.description || "Custom grading template"}</Text>
+                              <Text as="p" className="mt-1 line-clamp-2 text-sm text-foreground">
+                                {template.description || "Custom grading template"}
+                              </Text>
                             </div>
-                            <Button aria-label={`Manage ${template.name}`} size="icon" variant="outline" className="size-8 shrink-0 bg-white p-1 shadow-[2px_2px_0_#000]" onClick={() => navigate("/admin/subjects?tab=grading")}>
+                            <Button
+                              aria-label={`Manage ${template.name}`}
+                              size="sm"
+                              variant="outline"
+                              className="size-7 shrink-0 bg-white p-1 mt-1"
+                              onClick={() => navigate("/admin/subjects?tab=grading")}
+                            >
                               <ArrowUpRight className="size-4" />
                             </Button>
                           </div>
                         </Card.Header>
                         <Card.Content className="mt-auto p-0 pt-2">
-                          <div className="mb-2 flex items-center justify-between text-xs text-black/70">
+                          <div className="mb-2 flex items-center justify-between text-sm text-foreground">
                             <span>Passing threshold: <strong>{template.passing_threshold}%</strong></span>
                             <span>{template.assigned_subject_count} assigned subjects</span>
                           </div>
@@ -841,7 +941,7 @@ export default function AdminSystemSettings() {
                       <Text as="h6" className="font-sans font-medium">
                         Period Type
                       </Text>
-                      <div className="h-10 border-2 border-black rounded flex items-center gap-2 px-3 text-md font-medium">
+                      <div className="h-10 border-2 border-black rounded flex items-center gap-2 px-3 text-sm font-medium">
                         <Lock className="w-3.5 h-3.5" />
                         Three-Term Academic Calendar
                       </div>
@@ -943,7 +1043,7 @@ export default function AdminSystemSettings() {
                       <Save className="size-3.5 mr-2" />
                       Save Scope
                     </Button>
-                  <NoChangesMessage message={scopeChanges.noChangesMessage} />
+                    <NoChangesMessage message={scopeChanges.noChangesMessage} />
                   </div>
                 </Card.Header>
                 <Card.Content className="flex flex-col gap-4">
@@ -1065,26 +1165,40 @@ export default function AdminSystemSettings() {
                   </Card.Title>
                 </Card.Header>
                 <Card.Content className="flex flex-col gap-4">
-                  <div className="grid gap-1 sm:max-w-xs">
+                  {/* <div className="grid gap-1 sm:max-w-xs">
                     <Text as="p" className="text-sm font-semibold">Configure academic year</Text>
-                    <Select value={scopeConfigYearId} onValueChange={(value) => {
-                      setScopeConfigYearId(value);
-                      void loadPathwayScopes(Number(value));
-                    }}>
-                      <Select.Trigger className="w-full"><Select.Value placeholder="Select academic year" /></Select.Trigger>
-                      <Select.Content><Select.Group>
-                        {academicYears.map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}</Select.Item>)}
-                      </Select.Group></Select.Content>
+                    <Select
+                      value={scopeConfigYearId}
+                      onValueChange={(value) => {
+                        setScopeConfigYearId(value);
+                        void loadPathwayScopes(Number(value));
+                      }}
+                    >
+                      <Select.Trigger className="w-full">
+                        <Select.Value placeholder="Select academic year" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Group>
+                          {academicYears.map((year) => (
+                            <Select.Item
+                              key={year.academic_year_id}
+                              value={String(year.academic_year_id)}
+                            >
+                              {year.year_label}
+                            </Select.Item>
+                          ))}
+                        </Select.Group>
+                      </Select.Content>
                     </Select>
                     <Text as="p" className="text-xs text-muted-foreground">Changing this configuration year does not activate it.</Text>
-                  </div>
+                  </div> */}
                   {isLoadingScopes && <Text as="p" className="text-sm">Loading pathway settings...</Text>}
                   <Table className="shadow-none" wrapperClassName="shadow-none">
                     <Table.Header>
                       <Table.Row>
                         <Table.Head>Level</Table.Head>
                         <Table.Head>School Stage</Table.Head>
-                        <Table.Head>Available Curriculum</Table.Head>
+                        <Table.Head className="text-center">Available Curriculum</Table.Head>
                         <Table.Head>SHS Pathways </Table.Head>
                         <Table.Head>Status</Table.Head>
                       </Table.Row>
@@ -1167,14 +1281,15 @@ export default function AdminSystemSettings() {
                   </Table>
                 </Card.Content>
               </Card>
-
-              {scopeConfigYearId && !isLoadingScopes && <OfficialSectionsSettings
-                key={scopeConfigYearId}
-                academicYearId={Number(scopeConfigYearId)}
-                levels={academicLevels}
-                pathways={pathways}
-                pathwayScopes={pathwayScopes}
-              />}
+              {scopeConfigYearId && !isLoadingScopes && (
+                <OfficialSectionsSettings
+                  key={scopeConfigYearId}
+                  academicYearId={Number(scopeConfigYearId)}
+                  levels={academicLevels}
+                  pathways={pathways}
+                  pathwayScopes={pathwayScopes}
+                />
+              )}
 
               {/* Teacher Workload Caps */}
               <Card className="@container/card w-full">
@@ -1213,7 +1328,12 @@ export default function AdminSystemSettings() {
                         min={0}
                         className="w-full"
                         value={minSubjects}
-                        onChange={(e) => { setMinSubjects(e.target.value); if (parseInt(e.target.value) <= parseInt(maxSubjects)) setTeacherCapsError(""); }}
+                        onChange={(e) => {
+                          setMinSubjects(e.target.value);
+                          if (parseInt(e.target.value) <= parseInt(maxSubjects)) {
+                            setTeacherCapsError("");
+                          }
+                        }}
                       />
                     </div>
                     <div className="flex flex-col gap-2 w-full">
@@ -1228,7 +1348,12 @@ export default function AdminSystemSettings() {
                         min={1}
                         className="w-full"
                         value={maxSubjects}
-                        onChange={(e) => { setMaxSubjects(e.target.value); if (parseInt(minSubjects) <= parseInt(e.target.value)) setTeacherCapsError(""); }}
+                        onChange={(e) => {
+                          setMaxSubjects(e.target.value);
+                          if (parseInt(minSubjects) <= parseInt(e.target.value)) {
+                            setTeacherCapsError("");
+                          }
+                        }}
                       />
                       {parseInt(minSubjects) > parseInt(maxSubjects) && <FormMessage id="teacher-max-subjects-error">Minimum subjects cannot exceed maximum subjects.</FormMessage>}
                     </div>

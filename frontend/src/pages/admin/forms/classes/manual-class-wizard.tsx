@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getClassFormOptions } from "@/lib/api";
 import type { AdviserOption, ClassFormOptions, ManualClassSetup, ManualSectionDraft } from "@/types/adminClasses";
 import Field from "@/components/admin/classes/fields/Field";
@@ -33,6 +33,18 @@ function adviserName(adviser?: AdviserOption) {
   return [adviser.first_name, adviser.middle_name, adviser.last_name, adviser.suffix].filter(Boolean).join(" ");
 }
 
+function getInitialSectionsForLevel(options: ClassFormOptions | null, levelId: string | number): ManualSectionDraft[] {
+  const available = (options?.official_sections ?? []).filter(
+    (section) => section.academic_level_id === Number(levelId) && section.is_active && !section.has_class
+  );
+  if (available.length > 0) {
+    return available.map((section) =>
+      createSectionDraft(section.section_name, "", section.pathway_code || "general")
+    );
+  }
+  return [createSectionDraft()];
+}
+
 export default function ManualClassWizard({ initialSetup, onComplete, onSkipStudents, onBack, onClose }: {
   initialSetup: ManualClassSetup | null;
   onComplete: (setup: ManualClassSetup) => void;
@@ -48,20 +60,28 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
   const [sections, setSections] = useState<ManualSectionDraft[]>(initialSetup?.sections ?? [createSectionDraft()]);
   const [errors, setErrors] = useState<SetupErrors>({ sectionRows: {} });
   const [retryKey, setRetryKey] = useState(0);
+  const loadedYearIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+
+    if (loadedYearIdRef.current && loadedYearIdRef.current === selectedYearId && options) {
+      return;
+    }
 
     getClassFormOptions(selectedYearId ? Number(selectedYearId) : undefined)
       .then((classData) => {
         if (cancelled) return;
         setOptions(classData);
-        if (!selectedYearId) setSelectedYearId(String(classData.academic_year.academic_year_id));
+        const resolvedYearId = String(classData.academic_year.academic_year_id);
+        loadedYearIdRef.current = resolvedYearId;
+        if (!selectedYearId) setSelectedYearId(resolvedYearId);
         const defaultLevelId = initialSetup?.academicLevelId ? String(initialSetup.academicLevelId) : String(classData.academic_levels[0]?.academic_level_id ?? "");
         setAcademicLevelId((current) => current || defaultLevelId);
 
         if (!initialSetup?.sections) {
-          setSections((current) => current.length ? current : [createSectionDraft()]);
+          const effectiveLevelId = academicLevelId || defaultLevelId;
+          setSections(getInitialSectionsForLevel(classData, effectiveLevelId));
         }
       })
       .catch((error: unknown) => {
@@ -80,6 +100,12 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
     setLoading(true);
     setLoadError("");
     setRetryKey((value) => value + 1);
+  }
+
+  function handleAcademicLevelChange(newLevelId: string) {
+    setAcademicLevelId(newLevelId);
+    setSections(getInitialSectionsForLevel(options, newLevelId));
+    setErrors((current) => ({ ...current, academicLevel: undefined, sectionRows: {} }));
   }
 
   const selectedLevel = options?.academic_levels.find((item) => String(item.academic_level_id) === academicLevelId);
@@ -202,14 +228,15 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
         <Select
           disabled={noLevels}
           value={academicLevelId}
-          onChange={(e) => {
-            const newLevelId = e.target.value;
-            setAcademicLevelId(newLevelId);
-            setSections((current) => current.map((s) => ({ ...s, sectionName: "", pathway: "general" })));
-            setErrors((current) => ({ ...current, academicLevel: undefined, sectionRows: {} }));
-          }}
+          onValueChange={handleAcademicLevelChange}
+          onChange={(e) => handleAcademicLevelChange(e.target.value)}
         >
-          <Select.Trigger id="new-class-academic-level" className="w-full aria-[invalid=true]:border-destructive" aria-invalid={!!errors.academicLevel} aria-describedby={errors.academicLevel ? "new-class-academic-level-error" : undefined}>
+          <Select.Trigger
+            id="new-class-academic-level"
+            className="w-full aria-[invalid=true]:border-destructive"
+            aria-invalid={!!errors.academicLevel}
+            aria-describedby={errors.academicLevel ? "new-class-academic-level-error" : undefined}
+          >
             <Select.Value placeholder="Select level" />
           </Select.Trigger>
           <Select.Content>
@@ -237,7 +264,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
           {errors.sections && <InlineError message={errors.sections} />}
         </div>
 
-        <div className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} gap-2 px-1 text-sm font-medium text-foreground`}>
+        <div className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} gap-2 px-1 text-sm font-medium text-foreground -mb-2`}>
           <span>Section Name <span className="text-red-500">*</span></span>
           {showPathwayColumn && <span>Strand / Pathway</span>}
           <span>Adviser <span className="text-red-500">*</span></span>
@@ -255,18 +282,46 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
           return (
             <div key={section.localId} className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} items-start gap-2`}>
               <div>
-                <Select value={section.sectionName} onValueChange={(name) => {
-                  const chosen = availableSections.find((option) => option.section_name === name);
-                  updateSection(section.localId, { sectionName: name, pathway: chosen?.pathway_code || "general" });
-                }}>
-                  <Select.Trigger id={`new-class-section-${section.localId}`} className="w-full aria-[invalid=true]:border-destructive" aria-invalid={!!rowErrors?.sectionName} aria-describedby={rowErrors?.sectionName ? `new-class-section-error-${section.localId}` : undefined}><Select.Value placeholder="Select official section" /></Select.Trigger>
-                  <Select.Content><Select.Group>
-                    {availableSections
-                      .filter((option) => option.section_name === section.sectionName || !sections.some((other) => other.localId !== section.localId && other.sectionName === option.section_name))
-                      .map((option) => <Select.Item key={option.id} value={option.section_name}>{option.section_name}{option.pathway_name ? ` — ${option.pathway_name}` : ""}</Select.Item>)}
-                  </Select.Group></Select.Content>
+                <Select
+                  value={section.sectionName}
+                  onValueChange={(name) => {
+                    const chosen = availableSections.find((option) => option.section_name === name);
+                    updateSection(section.localId, {
+                      sectionName: name,
+                      pathway: chosen?.pathway_code || "general",
+                    });
+                  }}
+                >
+                  <Select.Trigger
+                    id={`new-class-section-${section.localId}`}
+                    className="w-full aria-[invalid=true]:border-destructive"
+                    aria-invalid={!!rowErrors?.sectionName}
+                    aria-describedby={rowErrors?.sectionName ? `new-class-section-error-${section.localId}` : undefined}
+                  >
+                    <Select.Value placeholder="Select official section" />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Group>
+                      {availableSections
+                        .filter(
+                          (option) =>
+                            option.section_name === section.sectionName ||
+                            !sections.some(
+                              (other) => other.localId !== section.localId && other.sectionName === option.section_name
+                            )
+                        )
+                        .map((option) => (
+                          <Select.Item key={option.id} value={option.section_name}>
+                            {option.section_name}
+                            {option.pathway_name ? ` — ${option.pathway_name}` : ""}
+                          </Select.Item>
+                        ))}
+                    </Select.Group>
+                  </Select.Content>
                 </Select>
-                {rowErrors?.sectionName && <InlineError id={`new-class-section-error-${section.localId}`} message={rowErrors.sectionName} />}
+                {rowErrors?.sectionName && (
+                  <InlineError id={`new-class-section-error-${section.localId}`} message={rowErrors.sectionName} />
+                )}
               </div>
               {showPathwayColumn && (
                 <div>
