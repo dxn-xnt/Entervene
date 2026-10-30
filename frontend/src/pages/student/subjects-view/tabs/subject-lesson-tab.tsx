@@ -697,6 +697,7 @@ export default function SubjectLessonTab({
         onToggle={() => toggleLesson(lesson.lesson_id)}
         onOpenLessonDetail={() => void openLessonDetail(lesson)}
         showPublicationStatus={false}
+        showDeliveryStatus={false}
         badge={
           lesson.attachments.length > 0 ? (
             <Badge

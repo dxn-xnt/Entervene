@@ -131,7 +131,6 @@ export default function ClassworkView({
   const [gradeDraft, setGradeDraft] = useState("");
   const [feedbackDraft, setFeedbackDraft] = useState("");
   const [isPostingGrade, setIsPostingGrade] = useState(false);
-  const [gradeSuccess, setGradeSuccess] = useState("");
 
   // Sync internal selected state when prop changes or fetch if standalone
   useEffect(() => {
@@ -288,7 +287,6 @@ export default function ClassworkView({
     setSelectedSubmissionDetail(null);
     setSubmissionDetailError("");
     setGradeError("");
-    setGradeSuccess("");
     setGradeDraft(
       student.grade !== null && student.grade !== undefined
         ? String(student.grade)
@@ -355,7 +353,6 @@ export default function ClassworkView({
     setIsPostingGrade(true);
     setSubmissionDetailError("");
     setGradeError("");
-    setGradeSuccess("");
     try {
       const response = await apiFetch(
         `/api/v1/submissions/${selectedSubmissionDetail.submission_id}/grade`,
@@ -391,7 +388,6 @@ export default function ClassworkView({
           missing: current.missing.map(updateRow),
         };
       });
-      setGradeSuccess("Grade and feedback saved.");
       toast.success({ title: "Grade and feedback saved" });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to post grade.";
@@ -587,18 +583,15 @@ export default function ClassworkView({
         gradeDraft={gradeDraft}
         feedbackDraft={feedbackDraft}
         gradeError={gradeError}
-        gradeSuccess={gradeSuccess}
         isPostingGrade={isPostingGrade}
         onClose={closeStudentSubmission}
         onGradeChange={(value) => {
           setGradeDraft(value);
           setGradeError("");
-          setGradeSuccess("");
         }}
         onFeedbackChange={(value) => {
           setFeedbackDraft(value);
           setGradeError("");
-          setGradeSuccess("");
         }}
         onPostGrade={postGrade}
         onOpenQuizGrading={(submissionId) =>

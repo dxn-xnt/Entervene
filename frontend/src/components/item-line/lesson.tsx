@@ -80,6 +80,7 @@ export interface LessonItemLineProps<TLesson extends LessonItem = LessonItem> {
   onArchiveLesson?: (lesson: TLesson) => void;
   className?: string;
   showPublicationStatus?: boolean;
+  showDeliveryStatus?: boolean;
   /** Show the retro drop shadow on the lesson card. Defaults to true. */
   withShadow?: boolean;
   // Delivery status & actions
@@ -108,6 +109,7 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
   onArchiveLesson,
   className,
   showPublicationStatus = true,
+  showDeliveryStatus = true,
   withShadow = true,
   delivery,
   isDelivered,
@@ -176,7 +178,7 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
                   </Badge>
                 )}
                 {badge}
-                <Badge
+                {showDeliveryStatus && <Badge
                   variant={isTaught ? "success" : "outline"}
                   size="sm"
                   className={cn(
@@ -186,7 +188,7 @@ export const LessonItemLine = <TLesson extends LessonItem = LessonItem>({
                   data-testid={`badge-taught-${lesson.lesson_id}`}
                 >
                   {isTaught ? "Taught" : "Not Taught"}
-                </Badge>
+                </Badge>}
               </div>
             </div>
             {subtitle && (

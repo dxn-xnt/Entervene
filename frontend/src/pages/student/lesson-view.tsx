@@ -185,7 +185,7 @@ export function LessonView({
                 </div>
               )}
 
-              <div className="flex flex-row gap-3 px-2 justify-between -mt-1">
+              <div className="flex flex-row gap-3 justify-between -mt-1">
                 {(lesson.updated_at || lesson.created_at) && (
                   <p className="text-sm text-foreground/80">
                     {lesson.updated_at && (!lesson.created_at || lesson.updated_at !== lesson.created_at)

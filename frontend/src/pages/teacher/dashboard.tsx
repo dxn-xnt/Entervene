@@ -123,6 +123,28 @@ function reasonBadgeLabel(reason: SupportReason): string {
   }
 }
 
+function DashboardQueueSkeleton({ label }: { label: string }) {
+  return (
+    <Card className="@container/card flex animate-pulse flex-col gap-3 p-4 sm:p-5" role="status" aria-label={`Loading ${label}`} aria-busy="true">
+      <div className="flex items-center justify-between gap-3" aria-hidden="true">
+        <div className="h-5 w-2/3 bg-muted text-transparent" />
+        <div className="size-8 shrink-0 bg-muted text-transparent" />
+      </div>
+      <div className="flex flex-col gap-2.5" aria-hidden="true">
+        {Array.from({ length: 3 }, (_, index) => (
+          <div key={index} className="flex items-center justify-between gap-3 py-2.5">
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <div className="h-4 w-3/4 bg-muted text-transparent" />
+              <div className="h-3 w-1/2 bg-muted text-transparent" />
+            </div>
+            <div className="h-5 w-16 shrink-0 bg-muted text-transparent" />
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { selectedPeriodId, isLoading: isPeriodLoading } = useAcademicPeriod();
@@ -446,6 +468,7 @@ export default function Dashboard() {
                   {/* 1. Students Support, Top Performers, Due this Week, Topic Mastery */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {/* Observed check-in indicators, not AI or intervention eligibility */}
+                    {isLoading || isPeriodLoading ? <DashboardQueueSkeleton label="students to check in with" /> : (
                     <Card className="flex flex-col justify-between p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
                         <Card.Title className="text-base font-bold text-foreground sm:text-lg">
@@ -517,7 +540,9 @@ export default function Dashboard() {
                         )}
                       </Card.Content>
                     </Card>
+                    )}
                     {/* Submissions to Review */}
+                    {isLoading || isPeriodLoading ? <DashboardQueueSkeleton label="submissions to review" /> : (
                     <Card className="flex flex-col p-4 sm:p-5">
                       <Card.Header className="mb-0 p-0 flex flex-row items-center justify-between">
                         <Card.Title className="text-base font-bold text-foreground sm:text-lg">
@@ -594,6 +619,7 @@ export default function Dashboard() {
                         ))}
                       </Card.Content>
                     </Card>
+                    )}
                   </div>
 
                   {/* 2. Performance & Completion Trend Chart */}
