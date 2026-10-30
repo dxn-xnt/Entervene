@@ -2554,3 +2554,398 @@ describe("PR 2D.2B.3: Save AI remediation draft", () => {
   });
 });
 
+describe("PR 2D.2B.6: Lock Saved Remediation Settings", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.materials.mockResolvedValue({ items: [], total: 0 });
+    api.previewScore.mockResolvedValue({
+      score_adjustment_cap: 75,
+      previews: [{
+        assignment_id: 101,
+        title: "Worksheet 1",
+        original_score: 10,
+        max_points: 20,
+        max_adjusted_score: 15,
+        possible_gain: 5,
+        cap_percentage: 75,
+        was_adjusted: true,
+        was_capped: true,
+      }],
+      disclaimer: "Hypothetical maximum only",
+    });
+    api.projectGrade.mockResolvedValue({
+      status: "UNAVAILABLE",
+      grade_representation: "TRANSMUTED_TERM_GRADE",
+      target_projections: [],
+      eligible_target_gains: [],
+      additional_eligible_targets_have_positive_improvement: false,
+      assumptions: [],
+      unavailable_reasons: [],
+      ai_midterm_what_if: { status: "UNAVAILABLE", target_estimates: [], unavailable_reasons: [], limitations: [] },
+    });
+  });
+
+  afterEach(cleanup);
+
+  it("scenario 1: before assessment exists, preserves selectable format, grade treatment, targets, and cap", async () => {
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      plan: {
+        teacher_choice: "QUIZ",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        score_adjustment_cap: 75,
+        selected_resources: [],
+        ai_suggestion: null,
+      },
+      resources: [sampleReading],
+      progress: {
+        ...workspace.progress,
+        assigned_remediation: [],
+        completed_remediation: [],
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+
+    // Format delivery cards are interactive (not locked)
+    const quizCard = screen.getByRole("radio", { name: /^Quiz/i });
+    expect(quizCard.getAttribute("aria-disabled")).toBe("false");
+    expect(within(quizCard).queryByText("Locked")).toBeNull();
+
+    // Grade Treatment is interactive (selectable options, not read-only locked card)
+    expect(screen.queryByText("Saved Grade Treatment")).toBeNull();
+    expect(screen.getByText("How should this activity be treated?")).toBeTruthy();
+    expect(screen.getAllByText("Written Work").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Ungraded Activity")).toBeTruthy();
+
+    // Targeted classwork allows reselecting
+    expect(screen.getByRole("button", { name: "Reselect Activities" })).toBeTruthy();
+  });
+
+  it("scenario 2: locks academic settings immediately after saving assessment draft in modal", async () => {
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      plan: {
+        teacher_choice: "QUIZ",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        score_adjustment_cap: 75,
+        selected_resources: [{ kind: "CLASSWORK", id: 501 }],
+        ai_suggestion: null,
+      },
+      resources: [sampleReading],
+      focus: {
+        ...workspace.focus,
+        lesson_ids: [42],
+        competency_ids: [101],
+        question_evidence: [{ quiz_question_id: 999, score: 0, possible_score: 5 }],
+      },
+    });
+    api.savePlan.mockImplementation(async (_id, savedPlan) => ({
+      ...workspace,
+      plan: {
+        ...workspace.plan,
+        ...savedPlan,
+        teacher_choice: "QUIZ",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        score_adjustment_cap: 75,
+      },
+      resources: [sampleReading],
+      focus: workspace.focus,
+      progress: workspace.progress,
+      original_exams: [],
+    }));
+    api.generateDraft.mockResolvedValue(mockQuizDraft);
+    api.preflightDraft.mockResolvedValue({
+      is_valid: true,
+      draft_format: "QUIZ",
+      target_component: "WRITTEN_WORK",
+      grade_treatment: "WRITTEN_WORK",
+      total_points: 20,
+      authoritative_cap: 75,
+      target_assignment_ids: [101],
+      reading_prerequisites: [],
+    });
+    api.createAssessment.mockResolvedValue({
+      remediation_request_id: "00000000-0000-4000-8000-000000000001",
+      intervention_id: 12,
+      classwork_id: 900,
+      classwork_assignment_id: 901,
+      quiz_id: 902,
+      draft_format: "QUIZ",
+      grade_treatment: "WRITTEN_WORK",
+      is_published: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("75% Cap");
+    fireEvent.click(screen.getByRole("button", { name: /Generate with AI/i }));
+    const dialog = await screen.findByRole("dialog", { name: /AI Remediation Draft Preview/i });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save Assessment Draft" }));
+
+    await waitFor(() => expect(api.createAssessment).toHaveBeenCalledTimes(1));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close Preview" }));
+
+    // Now assessment is saved in session:
+    // 1. Grade treatment is read-only
+    expect(await screen.findByText("Saved Grade Treatment")).toBeTruthy();
+    expect(screen.getAllByText("Locked").length).toBeGreaterThanOrEqual(1);
+
+    // 2. Format delivery cards are locked
+    const quizCard = screen.getByRole("radio", { name: /^Quiz/i });
+    expect(quizCard.getAttribute("aria-disabled")).toBe("true");
+
+    // 3. Reselect Activities button is hidden
+    expect(screen.queryByRole("button", { name: "Reselect Activities" })).toBeNull();
+
+    // 4. Shows original target, max points, and saved cap
+    expect(screen.getByText(/Original max: 20 pts · Capped at 75%/i)).toBeTruthy();
+  });
+
+  it("scenario 3: persisted unpublished draft after reload locks format, grade treatment, targets, and cap", async () => {
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      plan: {
+        teacher_choice: "QUIZ",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        score_adjustment_cap: 75,
+        selected_resources: [{ kind: "CLASSWORK", id: 501 }],
+        ai_suggestion: null,
+      },
+      resources: [sampleReading],
+      progress: {
+        ...workspace.progress,
+        assigned_remediation: [{
+          title: mockQuizDraft.title,
+          assignment_id: 901,
+          classwork_id: 900,
+          classwork_type: "QUIZ",
+          is_published: false,
+          component: "WRITTEN_WORK",
+          is_graded: true,
+          submission_status: "draft",
+          grade: null,
+          total_points: 20,
+          original_assignment_id: 101,
+          original_title: "Worksheet 1",
+        }],
+      },
+    });
+
+    const onChangesChange = vi.fn();
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          detail={detailWithClassworks}
+          page="plan"
+          onChangesChange={onChangesChange}
+        />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Saved Grade Treatment")).toBeTruthy();
+    expect(screen.getAllByText("Locked").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Worksheet 1").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Original max: 20 pts · Capped at 75%/i)).toBeTruthy();
+
+    // Format cards are locked
+    const formatCards = screen.getAllByRole("radio");
+    formatCards.forEach((card) => {
+      expect(card.getAttribute("aria-disabled")).toBe("true");
+    });
+
+    // Clicking Classwork format card does NOT change selection or trigger dirty state
+    const classworkCard = screen.getByRole("radio", { name: /^Classwork/i });
+    fireEvent.click(classworkCard);
+    expect(classworkCard.getAttribute("aria-checked")).toBe("false");
+    expect(onChangesChange).not.toHaveBeenCalledWith(true);
+
+    // Reselect button is absent
+    expect(screen.queryByRole("button", { name: "Reselect Activities" })).toBeNull();
+  });
+
+  it("scenario 4: published assessment and student submissions preserve locks and assessment links", async () => {
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      plan: {
+        teacher_choice: "QUIZ",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        score_adjustment_cap: 75,
+        selected_resources: [{ kind: "CLASSWORK", id: 501 }],
+        ai_suggestion: null,
+      },
+      resources: [sampleReading],
+      progress: {
+        ...workspace.progress,
+        assigned_remediation: [{
+          title: "Final Remediation Quiz",
+          assignment_id: 901,
+          classwork_id: 900,
+          classwork_type: "QUIZ",
+          is_published: true,
+          component: "WRITTEN_WORK",
+          is_graded: true,
+          submission_status: "graded",
+          grade: 18,
+          total_points: 20,
+          original_assignment_id: 101,
+          original_title: "Worksheet 1",
+          original_grade: 10,
+          effective_grade: 15,
+        }],
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials detail={detailWithClassworks} page="plan" />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Saved Grade Treatment")).toBeTruthy();
+    expect(screen.getByText("Final Remediation Quiz")).toBeTruthy();
+    expect(screen.getAllByText("Published").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("button", { name: "View Assessment" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit Assessment" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Reselect Activities" })).toBeNull();
+    expect(screen.getByText(/Original max: 20 pts · Capped at 75%/i)).toBeTruthy();
+  });
+
+  it("scenario 5: locked settings do not become dirty, while permitted Reading changes save correctly", async () => {
+    const secondReading = {
+      id: 502,
+      kind: "CLASSWORK" as const,
+      classwork_type: "READING" as const,
+      title: "Algebraic Expressions Overview",
+      recommended: false,
+      match_level: "TOPIC" as const,
+      lesson: "Algebra Basics",
+      is_graded: false,
+    };
+
+    api.workspace.mockResolvedValue({
+      ...workspace,
+      plan: {
+        teacher_choice: "QUIZ",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        score_adjustment_cap: 75,
+        selected_resources: [{ kind: "CLASSWORK", id: 501 }],
+        ai_suggestion: null,
+      },
+      resources: [sampleReading, secondReading],
+      progress: {
+        ...workspace.progress,
+        assigned_remediation: [{
+          title: mockQuizDraft.title,
+          assignment_id: 901,
+          classwork_id: 900,
+          classwork_type: "QUIZ",
+          is_published: false,
+          component: "WRITTEN_WORK",
+          is_graded: true,
+          submission_status: "draft",
+          grade: null,
+          total_points: 20,
+          original_assignment_id: 101,
+          original_title: "Worksheet 1",
+        }],
+      },
+    });
+
+    api.savePlan.mockImplementation(async (_id, savedPlan) => ({
+      ...workspace,
+      plan: {
+        ...workspace.plan,
+        ...savedPlan,
+      },
+      resources: [sampleReading, secondReading],
+      progress: {
+        ...workspace.progress,
+        assigned_remediation: [{
+          title: mockQuizDraft.title,
+          assignment_id: 901,
+          classwork_id: 900,
+          classwork_type: "QUIZ",
+          is_published: false,
+          component: "WRITTEN_WORK",
+          is_graded: true,
+          submission_status: "draft",
+          grade: null,
+          total_points: 20,
+          original_assignment_id: 101,
+          original_title: "Worksheet 1",
+        }],
+      },
+      focus: workspace.focus,
+      original_exams: [],
+    }));
+
+    const onChangesChange = vi.fn();
+    const ref = createRef<InterventionSupportMaterialsHandle>();
+
+    render(
+      <MemoryRouter>
+        <InterventionSupportMaterials
+          ref={ref}
+          detail={detailWithClassworks}
+          page="plan"
+          onChangesChange={onChangesChange}
+        />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Saved Grade Treatment")).toBeTruthy();
+
+    // Clicking locked format cards does not trigger changes
+    const classworkCard = screen.getByRole("radio", { name: /^Classwork/i });
+    fireEvent.click(classworkCard);
+    expect(onChangesChange).not.toHaveBeenCalledWith(true);
+
+    // Permitted: toggle reading resource via Select resources modal
+    fireEvent.click(screen.getByRole("button", { name: "Select resources" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Supporting Resources" });
+    const matches = within(dialog).getAllByText("Algebraic Expressions Overview");
+    fireEvent.click(matches[0].closest(".cursor-pointer") as HTMLElement);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+
+    await waitFor(() => {
+      expect(onChangesChange).toHaveBeenCalledWith(true);
+    });
+
+    // Save adjustments saves reading changes while preserving locked academic settings
+    const saveSuccess = await ref.current?.saveAdjustments();
+    expect(saveSuccess).toBe(true);
+
+    expect(api.savePlan).toHaveBeenCalledTimes(1);
+    expect(api.savePlan).toHaveBeenCalledWith(
+      12,
+      expect.objectContaining({
+        teacher_choice: "QUIZ",
+        grade_treatment: "WRITTEN_WORK",
+        target_assignment_ids: [101],
+        score_adjustment_cap: 75,
+        selected_resources: expect.arrayContaining([
+          expect.objectContaining({ id: 501 }),
+          expect.objectContaining({ id: 502 }),
+        ]),
+      })
+    );
+  });
+});
+
