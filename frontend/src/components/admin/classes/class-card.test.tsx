@@ -35,4 +35,11 @@ describe("Classes pathway labels", () => {
     page.rerender(<MemoryRouter><ClassCard item={schoolClass(9, null)} onEdit={() => {}} onArchive={() => {}} /></MemoryRouter>);
     expect(screen.queryByText(/Academic Pathway:/)).toBeNull();
   });
+
+  it("renders in preview mode without links or dropdown actions", () => {
+    render(<ClassCard item={schoolClass(11, 1, "Medical Courses and Sciences Related")} preview />);
+    expect(screen.getByText("Zara")).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByRole("button", { name: "More options" })).toBeNull();
+  });
 });

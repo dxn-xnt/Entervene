@@ -69,8 +69,9 @@ describe("grading template settings overview", () => {
 
   it("saves a confirmed year-specific general-average edit with an audit reason", async () => {
     render(<AdminSystemSettings />);
-    const field = await screen.findByLabelText("General Average Passing Grade");
-    fireEvent.change(field, { target: { value: "83" } });
+    await screen.findByText("Confirmed for 2026-2027: 80.00%");
+    fireEvent.click(screen.getByRole("button", { name: "Edit Threshold" }));
+    fireEvent.change(screen.getByLabelText("Passing Threshold"), { target: { value: "83" } });
     fireEvent.change(screen.getByLabelText("Audit reason"), { target: { value: "Approved annual policy" } });
     fireEvent.click(screen.getByLabelText("I confirm this year-specific policy action."));
     fireEvent.click(screen.getByRole("button", { name: "Save Threshold" }));
@@ -85,7 +86,7 @@ describe("grading template settings overview", () => {
     render(<AdminSystemSettings />);
     expect(await screen.findByText("Passing grade status unavailable")).toBeTruthy();
     expect(screen.queryByText("Unconfigured for this academic year")).toBeNull();
-    expect(screen.getByRole("button", { name: "Save Threshold" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Edit Threshold" }).hasAttribute("disabled")).toBe(true);
   });
 
   it("requires explicit confirmation of the legacy proposal", async () => {
@@ -93,6 +94,8 @@ describe("grading template settings overview", () => {
       is_active: true, configured: false, threshold: null, version: 0,
       legacy_proposal: "80", previous_academic_year_id: null });
     render(<AdminSystemSettings />);
+    const configureButton = await screen.findByRole("button", { name: "Configure Passing Grade" });
+    fireEvent.click(configureButton);
     const button = await screen.findByRole("button", { name: "Confirm legacy proposal (80%)" });
     fireEvent.click(button);
     expect(saveYearPolicy).not.toHaveBeenCalled();
@@ -113,12 +116,14 @@ describe("grading template settings overview", () => {
       ...(legacyState === "invalid" ? { legacy_error: "The legacy value is invalid." } : {}),
     });
     render(<AdminSystemSettings />);
-    const button = await screen.findByRole("button", { name: "Set initial passing grade manually" });
-    expect(screen.getByText("Unconfigured for this academic year")).toBeTruthy();
+    expect(await screen.findByText("Unconfigured for this academic year")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Confirm legacy proposal/ })).toBeNull();
+    const configureButton = await screen.findByRole("button", { name: "Configure Passing Grade" });
+    fireEvent.click(configureButton);
+    const button = await screen.findByRole("button", { name: "Set initial passing grade manually" });
     fireEvent.click(button);
     expect(saveYearPolicy).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByLabelText("General Average Passing Grade"), { target: { value: "82.25" } });
+    fireEvent.change(screen.getByLabelText("Passing Threshold"), { target: { value: "82.25" } });
     fireEvent.change(screen.getByLabelText("Audit reason"), { target: { value: "Approved initial policy" } });
     fireEvent.click(screen.getByLabelText("I confirm this year-specific policy action."));
     fireEvent.click(button);
@@ -135,6 +140,8 @@ describe("grading template settings overview", () => {
       : { academic_year_id: 6, year_label: "2025-2026", is_active: false,
           configured: true, threshold: "80.00", version: 1 }));
     render(<AdminSystemSettings />);
+    const configureButton = await screen.findByRole("button", { name: "Configure Passing Grade" });
+    fireEvent.click(configureButton);
     const button = await screen.findByRole("button", { name: "Copy from Previous Academic Year" });
     fireEvent.change(screen.getByLabelText("Audit reason"), { target: { value: "Approved carry-forward" } });
     fireEvent.click(screen.getByLabelText("I confirm this year-specific policy action."));
