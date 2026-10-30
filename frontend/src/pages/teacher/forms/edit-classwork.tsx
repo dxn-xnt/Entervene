@@ -540,397 +540,89 @@ export default function EditClassworkModal({
 
   return (
     <>
-    <Dialog
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open && !isSavingEdit) {
-          onClose();
-        }
-      }}
-    >
-      {isOpen && (
-        <Dialog.Content size="lg">
-          <Dialog.Header position="fixed">
-            <Text as="h5" className="font-sans text-xl font-bold">
-              Edit Classwork
-            </Text>
-          </Dialog.Header>
+      <Dialog
+        open={isOpen}
+        onOpenChange={(open) => {
+          if (!open && !isSavingEdit) {
+            onClose();
+          }
+        }}
+      >
+        {isOpen && (
+          <Dialog.Content size="lg">
+            <Dialog.Header position="fixed">
+              <Text as="h5" className="font-sans text-xl font-bold">
+                Edit Classwork
+              </Text>
+            </Dialog.Header>
 
-          <section className="flex flex-col gap-4 p-5">
-            <div className="grid gap-3">
-              <Field label="Link Lesson">
-                <Select
-                  value={selectedLessonIds[0] ? String(selectedLessonIds[0]) : ""}
-                  onValueChange={(val) => {
-                    setSelectedLessonIds(val ? [Number(val)] : []);
-                  }}
-                  disabled={
-                    isSavingEdit ||
-                    !currentClasswork.subject_id ||
-                    isLessonLoading ||
-                    availableLessons.length === 0
-                  }
-                >
-                  <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
-                    <Select.Value
-                      className="text-muted-foreground"
-                      placeholder={
-                        !currentClasswork.subject_id
-                          ? "Select a subject first"
-                          : isLessonLoading
-                            ? "Loading lessons..."
-                            : availableLessons.length === 0
-                              ? "No lessons found for this subject"
-                              : "Choose lesson"
-                      }
-                    />
-                  </Select.Trigger>
-                  <Select.Content className="border-2 border-black rounded bg-white">
-                    <Select.Group>
-                      {availableLessons.map((lesson) => (
-                        <Select.Item
-                          key={lesson.lesson_id}
-                          value={String(lesson.lesson_id)}
-                        >
-                          {lesson.title}
-                          {!lesson.is_published ? " (Draft)" : ""}
-                        </Select.Item>
-                      ))}
-                    </Select.Group>
-                  </Select.Content>
-                </Select>
-              </Field>
-
-              <Field label="Topic Title" isRequired={true}>
-                <Input
-                  value={editDraft.title}
-                  onChange={(event) =>
-                    setEditDraft((current) => ({
-                      ...current,
-                      title: event.target.value,
-                    }))
-                  }
-                  disabled={isSavingEdit}
-                  placeholder="Classwork title"
-                  className="w-full bg-white border-2 border-black rounded shadow-md"
-                />
-              </Field>
-
-              <Field label="Type">
-                <Select
-                  value={editDraft.classwork_type}
-                  onValueChange={(v) =>
-                    setEditDraft((current) => ({
-                      ...current,
-                      classwork_type: v,
-                    }))
-                  }
-                  disabled={isSavingEdit}
-                >
-                  <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
-                    <Select.Value />
-                  </Select.Trigger>
-                  <Select.Content className="border-2 border-black rounded bg-white">
-                    <Select.Group>
-                      <Select.Item value="READING">Reading</Select.Item>
-                      <Select.Item value="ACTIVITY">Activity</Select.Item>
-                      <Select.Item value="ASSIGNMENT">Assignment</Select.Item>
-                      <Select.Item value="QUIZ">Quiz</Select.Item>
-                    </Select.Group>
-                  </Select.Content>
-                </Select>
-              </Field>
-
-              <Field label="Instructions">
-                <textarea
-                  value={editDraft.instructions}
-                  onChange={(event) =>
-                    setEditDraft((current) => ({
-                      ...current,
-                      instructions: event.target.value,
-                    }))
-                  }
-                  disabled={isSavingEdit}
-                  placeholder="What students need to read, answer, or submit"
-                  className="px-4 py-2 w-full rounded! border-2 border-black bg-white shadow-md transition focus:outline-hidden focus:shadow-xs min-h-20 text-sm"
-                />
-              </Field>
-
-              {!isReadingType(editDraft.classwork_type) && (
-                <div
-                  className={`grid gap-4 ${editDraft.classwork_category === "QUARTERLY_ASSESSMENT" ||
-                    editDraft.classwork_category === "EXAMS" ||
-                    (editDraft.classwork_type !== "ACTIVITY" &&
-                      editDraft.classwork_type !== "ASSIGNMENT")
-                    ? "sm:grid-cols-2"
-                    : ""
-                    }`}
-                >
-                  <Field label="Grading Component">
-                    <Select
-                      value={editDraft.classwork_category || "NONE"}
-                      onValueChange={(val) =>
-                        setEditDraft((current) => ({
-                          ...current,
-                          classwork_category: val === "NONE" ? "" : val,
-                        }))
-                      }
-                      disabled={isSavingEdit}
-                    >
-                      <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
-                        <Select.Value placeholder="Select Category" />
-                      </Select.Trigger>
-                      <Select.Content className="border-2 border-black rounded bg-white">
-                        <Select.Group>
-                          <Select.Item value="NONE">None</Select.Item>
-                          <Select.Item value="WRITTEN_WORK">
-                            Written Works
-                          </Select.Item>
-                          <Select.Item value="PERFORMANCE_TASK">
-                            Performance Task
-                          </Select.Item>
-                          <Select.Item value="QUARTERLY_ASSESSMENT">
-                            Exams
-                          </Select.Item>
-                        </Select.Group>
-                      </Select.Content>
-                    </Select>
-                  </Field>
-
-                  {(editDraft.classwork_category === "QUARTERLY_ASSESSMENT" ||
-                    editDraft.classwork_category === "EXAMS") && (
-                      <Field label="Exam Sub-type">
-                        <Select
-                          value={editDraft.exam_subtype || "SUMMATIVE_1"}
-                          onValueChange={(val) =>
-                            setEditDraft((current) => ({
-                              ...current,
-                              exam_subtype: val,
-                            }))
-                          }
-                          disabled={isSavingEdit}
-                        >
-                          <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
-                            <Select.Value placeholder="Select Sub-type" />
-                          </Select.Trigger>
-                          <Select.Content className="border-2 border-black rounded bg-white">
-                            <Select.Group>
-                              <Select.Item value="SUMMATIVE_1">
-                                Summative 1 (30%)
-                              </Select.Item>
-                              <Select.Item value="SUMMATIVE_2">
-                                Summative 2 (30%)
-                              </Select.Item>
-                              <Select.Item value="TERM_EXAM">
-                                Term Exam (40%)
-                              </Select.Item>
-                            </Select.Group>
-                          </Select.Content>
-                        </Select>
-                      </Field>
-                    )}
-
-                  {editDraft.classwork_type !== "ACTIVITY" &&
-                    editDraft.classwork_type !== "ASSIGNMENT" && (
-                      <Field label="Total points">
-                        <Input
-                          type="number"
-                          min="1"
-                          step="1"
-                          inputMode="decimal"
-                          value={editDraft.total_points}
-                          onChange={(event) =>
-                            setEditDraft((current) => ({
-                              ...current,
-                              total_points: event.target.value,
-                            }))
-                          }
-                          disabled={isSavingEdit}
-                          className="w-full bg-white border-2 border-black rounded shadow-md"
-                        />
-                      </Field>
-                    )}
-                </div>
-              )}
-
-              <Field label="Upload Material">
-                {currentClasswork.attachments.length === 0 &&
-                  editMaterials.length === 0 ? (
-                  <Empty className="shadow-md hover:shadow-none transition-shadow rounded!">
-                    <EmptyHeader>
-                      <EmptyTitle>No Materials Added</EmptyTitle>
-                      <EmptyDescription className="flex flex-col -gap-3 text-center whitespace-nowrap">
-                        <span className="font-semibold">Max 10mb</span>
-                        <span>(pdf, docx, pptx, jpg & png)</span>
-                      </EmptyDescription>
-                    </EmptyHeader>
-                    <EmptyContent>
-                      <Button
-                        asChild
-                        size="sm"
-                        variant="default"
-                        className="cursor-pointer rounded!"
-                        disabled={isSavingEdit}
-                      >
-                        <label>
-                          <Plus size={14} className="mr-1" />
-                          Add Materials
-                          <input
-                            type="file"
-                            multiple
-                            accept=".pdf,.docx,.ppt,.pptx,.jpg,.jpeg,.png"
-                            onChange={(event) => {
-                              addEditMaterials(event.target.files);
-                              event.target.value = "";
-                            }}
-                            disabled={isSavingEdit}
-                            className="hidden"
-                          />
-                        </label>
-                      </Button>
-                    </EmptyContent>
-                  </Empty>
-                ) : (
-                  <div className="w-full flex flex-wrap gap-3">
-                    {currentClasswork.attachments.map((attachment) => (
-                      <div
-                        key={attachment.classwork_attachment_id}
-                        className="relative flex h-32 w-28 border-2 border-border flex-col justify-between p-2 text-center shadow-none"
-                      >
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <span className="absolute right-1 top-1 inline-flex">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    removeSelectedAttachment(
-                                      attachment.classwork_attachment_id,
-                                    )
-                                  }
-                                  disabled={
-                                    isSavingEdit ||
-                                    removingAttachmentId ===
-                                    attachment.classwork_attachment_id
-                                  }
-                                  className="flex h-6 w-6 items-center justify-center rounded-full border border-black bg-white text-black hover:bg-destructive hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
-                                  aria-label={`Remove ${attachment.file_name}`}
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              </span>
-                            }
-                          />
-                          <TooltipContent>Remove file</TooltipContent>
-                        </Tooltip>
-                        <FileText className="mx-auto mt-5" size={22} />
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-semibold">
-                            {attachment.file_name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">Attached</p>
-                        </div>
-                      </div>
-                    ))}
-
-                    {editMaterials.map((material, index) => (
-                      <div
-                        key={`${material.name}-${material.size}`}
-                        className="relative flex h-32 w-28 border-2 border-border flex-col justify-between p-2 text-center shadow-none"
-                      >
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <span className="absolute right-1 top-1 inline-flex">
-                                <button
-                                  type="button"
-                                  onClick={() => removeEditMaterial(index)}
-                                  disabled={isSavingEdit}
-                                  className="flex h-6 w-6 items-center justify-center rounded-full border border-black bg-white text-black hover:bg-destructive hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
-                                  aria-label={`Remove ${material.name}`}
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              </span>
-                            }
-                          />
-                          <TooltipContent>Remove file</TooltipContent>
-                        </Tooltip>
-                        <FileText className="mx-auto mt-5" size={22} />
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-semibold">
-                            {material.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatFileSize(material.size)}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-
-                    <label className="flex h-32 w-28 cursor-pointer items-center justify-center border-2 border-dashed border-black bg-[#F6E9B2] text-sm font-bold shadow-md hover:bg-[#7ABA78] hover:shadow-none transition-all">
-                      <Plus size={20} />
-                      <input
-                        type="file"
-                        multiple
-                        accept=".pdf,.docx,.ppt,.pptx,.jpg,.jpeg,.png"
-                        onChange={(event) => {
-                          addEditMaterials(event.target.files);
-                          event.target.value = "";
-                        }}
-                        disabled={
-                          isSavingEdit || removingAttachmentId !== null
-                        }
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                )}
-              </Field>
-
-              {(editDraft.classwork_type === "ACTIVITY" ||
-                editDraft.classwork_type === "ASSIGNMENT") && (
-                  <ActivityRubricEditor
-                    levels={rubricLevels}
-                    onChange={setRubricLevels}
-                    disabled={isSavingEdit}
-                  />
-                )}
-            </div>
-
-            <div className="space-y-4">
-              <div
-                className={`grid gap-4 ${isReadingType(editDraft.classwork_type)
-                  ? ""
-                  : isQuizType(editDraft.classwork_type)
-                    ? "sm:grid-cols-3"
-                    : "sm:grid-cols-2"
-                  }`}
-              >
-                {!isReadingType(editDraft.classwork_type) && (
-                  <Field label="Due Date">
-                    <Input
-                      type="datetime-local"
-                      value={editDraft.due_date}
-                      onChange={(event) =>
-                        setEditDraft((current) => ({
-                          ...current,
-                          due_date: event.target.value,
-                        }))
-                      }
-                      disabled={isSavingEdit}
-                      className="w-full bg-white border-2 border-black rounded shadow-md"
-                    />
-                  </Field>
-                )}
-
-                <Field label="Publish Status">
+            <section className="flex flex-col gap-4 py-4 px-5 pr-3">
+              <div className="grid gap-3">
+                <Field label="Link Lesson">
                   <Select
-                    value={editDraft.is_published ? "published" : "draft"}
-                    onValueChange={(val) =>
+                    value={selectedLessonIds[0] ? String(selectedLessonIds[0]) : ""}
+                    onValueChange={(val) => {
+                      setSelectedLessonIds(val ? [Number(val)] : []);
+                    }}
+                    disabled={
+                      isSavingEdit ||
+                      !currentClasswork.subject_id ||
+                      isLessonLoading ||
+                      availableLessons.length === 0
+                    }
+                  >
+                    <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
+                      <Select.Value
+                        className="text-muted-foreground"
+                        placeholder={
+                          !currentClasswork.subject_id
+                            ? "Select a subject first"
+                            : isLessonLoading
+                              ? "Loading lessons..."
+                              : availableLessons.length === 0
+                                ? "No lessons found for this subject"
+                                : "Choose lesson"
+                        }
+                      />
+                    </Select.Trigger>
+                    <Select.Content className="border-2 border-black rounded bg-white">
+                      <Select.Group>
+                        {availableLessons.map((lesson) => (
+                          <Select.Item
+                            key={lesson.lesson_id}
+                            value={String(lesson.lesson_id)}
+                          >
+                            {lesson.title}
+                            {!lesson.is_published ? " (Draft)" : ""}
+                          </Select.Item>
+                        ))}
+                      </Select.Group>
+                    </Select.Content>
+                  </Select>
+                </Field>
+
+                <Field label="Topic Title" isRequired={true}>
+                  <Input
+                    value={editDraft.title}
+                    onChange={(event) =>
                       setEditDraft((current) => ({
                         ...current,
-                        is_published: val === "published",
+                        title: event.target.value,
+                      }))
+                    }
+                    disabled={isSavingEdit}
+                    placeholder="Classwork title"
+                    className="w-full bg-white border-2 border-black rounded shadow-md"
+                  />
+                </Field>
+
+                <Field label="Type">
+                  <Select
+                    value={editDraft.classwork_type}
+                    onValueChange={(v) =>
+                      setEditDraft((current) => ({
+                        ...current,
+                        classwork_type: v,
                       }))
                     }
                     disabled={isSavingEdit}
@@ -940,258 +632,566 @@ export default function EditClassworkModal({
                     </Select.Trigger>
                     <Select.Content className="border-2 border-black rounded bg-white">
                       <Select.Group>
-                        <Select.Item value="draft">Save as Draft</Select.Item>
-                        <Select.Item value="published">Publish Now</Select.Item>
+                        <Select.Item value="READING">Reading</Select.Item>
+                        <Select.Item value="ACTIVITY">Activity</Select.Item>
+                        <Select.Item value="ASSIGNMENT">Assignment</Select.Item>
+                        <Select.Item value="QUIZ">Quiz</Select.Item>
                       </Select.Group>
                     </Select.Content>
                   </Select>
                 </Field>
 
-                <Field label="Locked Until">
-                  <Input
-                    type="datetime-local"
-                    value={editDraft.lock_date}
+                <Field label="Instructions">
+                  <textarea
+                    value={editDraft.instructions}
                     onChange={(event) =>
                       setEditDraft((current) => ({
                         ...current,
-                        lock_date: event.target.value,
+                        instructions: event.target.value,
                       }))
                     }
-                    disabled={isSavingEdit || !editDraft.is_published}
-                    className="w-full bg-white border-2 border-black rounded shadow-md"
+                    disabled={isSavingEdit}
+                    placeholder="What students need to read, answer, or submit"
+                    className="px-4 py-2 w-full rounded! border-2 border-black bg-white shadow-md transition focus:outline-hidden focus:shadow-xs min-h-20 text-sm"
                   />
                 </Field>
 
-                {isQuizType(editDraft.classwork_type) && (
-                  <Field label="Allowed Attempts">
-                    <Input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={editDraft.max_attempts}
-                      onChange={(event) =>
-                        setEditDraft((current) => ({
-                          ...current,
-                          max_attempts: event.target.value,
-                        }))
-                      }
-                      disabled={isSavingEdit}
-                      className="w-full bg-white border-2 border-black rounded shadow-md"
-                    />
-                  </Field>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-3">
                 {!isReadingType(editDraft.classwork_type) && (
-                  <div className="flex items-center gap-2 w-full justify-between">
-                    <label className="text-sm font-medium text-foreground">
-                      Show scores to students
-                    </label>
-                    <Switch
-                      checked={editDraft.show_scores}
-                      onCheckedChange={(checked) =>
-                        setEditDraft((current) => ({
-                          ...current,
-                          show_scores: checked,
-                        }))
-                      }
-                      disabled={isSavingEdit}
-                    />
+                  <div
+                    className={`grid gap-4 ${editDraft.classwork_category === "QUARTERLY_ASSESSMENT" ||
+                      editDraft.classwork_category === "EXAMS" ||
+                      (editDraft.classwork_type !== "ACTIVITY" &&
+                        editDraft.classwork_type !== "ASSIGNMENT")
+                      ? "sm:grid-cols-2"
+                      : ""
+                      }`}
+                  >
+                    <Field label="Grading Component">
+                      <Select
+                        value={editDraft.classwork_category || "NONE"}
+                        onValueChange={(val) =>
+                          setEditDraft((current) => ({
+                            ...current,
+                            classwork_category: val === "NONE" ? "" : val,
+                          }))
+                        }
+                        disabled={isSavingEdit}
+                      >
+                        <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
+                          <Select.Value placeholder="Select Category" />
+                        </Select.Trigger>
+                        <Select.Content className="border-2 border-black rounded bg-white">
+                          <Select.Group>
+                            <Select.Item value="NONE">None</Select.Item>
+                            <Select.Item value="WRITTEN_WORK">
+                              Written Works
+                            </Select.Item>
+                            <Select.Item value="PERFORMANCE_TASK">
+                              Performance Task
+                            </Select.Item>
+                            <Select.Item value="QUARTERLY_ASSESSMENT">
+                              Exams
+                            </Select.Item>
+                          </Select.Group>
+                        </Select.Content>
+                      </Select>
+                    </Field>
+
+                    {(editDraft.classwork_category === "QUARTERLY_ASSESSMENT" ||
+                      editDraft.classwork_category === "EXAMS") && (
+                        <Field label="Exam Sub-type">
+                          <Select
+                            value={editDraft.exam_subtype || "SUMMATIVE_1"}
+                            onValueChange={(val) =>
+                              setEditDraft((current) => ({
+                                ...current,
+                                exam_subtype: val,
+                              }))
+                            }
+                            disabled={isSavingEdit}
+                          >
+                            <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
+                              <Select.Value placeholder="Select Sub-type" />
+                            </Select.Trigger>
+                            <Select.Content className="border-2 border-black rounded bg-white">
+                              <Select.Group>
+                                <Select.Item value="SUMMATIVE_1">
+                                  Summative 1 (30%)
+                                </Select.Item>
+                                <Select.Item value="SUMMATIVE_2">
+                                  Summative 2 (30%)
+                                </Select.Item>
+                                <Select.Item value="TERM_EXAM">
+                                  Term Exam (40%)
+                                </Select.Item>
+                              </Select.Group>
+                            </Select.Content>
+                          </Select>
+                        </Field>
+                      )}
+
+                    {editDraft.classwork_type !== "ACTIVITY" &&
+                      editDraft.classwork_type !== "ASSIGNMENT" && (
+                        <Field label="Total points">
+                          <Input
+                            type="number"
+                            min="1"
+                            step="1"
+                            inputMode="decimal"
+                            value={editDraft.total_points}
+                            onChange={(event) =>
+                              setEditDraft((current) => ({
+                                ...current,
+                                total_points: event.target.value,
+                              }))
+                            }
+                            disabled={isSavingEdit}
+                            className="w-full bg-white border-2 border-black rounded shadow-md"
+                          />
+                        </Field>
+                      )}
                   </div>
                 )}
 
-                {editDraft.due_date &&
-                  !isReadingType(editDraft.classwork_type) && (
+                <Field label="Upload Material">
+                  {currentClasswork.attachments.length === 0 &&
+                    editMaterials.length === 0 ? (
+                    <Empty className="shadow-md hover:shadow-none transition-shadow rounded!">
+                      <EmptyHeader>
+                        <EmptyTitle>No Materials Added</EmptyTitle>
+                        <EmptyDescription className="flex flex-col -gap-3 text-center whitespace-nowrap">
+                          <span className="font-semibold">Max 10mb</span>
+                          <span>(pdf, docx, pptx, jpg & png)</span>
+                        </EmptyDescription>
+                      </EmptyHeader>
+                      <EmptyContent>
+                        <Button
+                          asChild
+                          size="sm"
+                          variant="default"
+                          className="cursor-pointer rounded!"
+                          disabled={isSavingEdit}
+                        >
+                          <label>
+                            <Plus size={14} className="mr-1" />
+                            Add Materials
+                            <input
+                              type="file"
+                              multiple
+                              accept=".pdf,.docx,.ppt,.pptx,.jpg,.jpeg,.png"
+                              onChange={(event) => {
+                                addEditMaterials(event.target.files);
+                                event.target.value = "";
+                              }}
+                              disabled={isSavingEdit}
+                              className="hidden"
+                            />
+                          </label>
+                        </Button>
+                      </EmptyContent>
+                    </Empty>
+                  ) : (
+                    <div className="w-full flex flex-wrap gap-3">
+                      {currentClasswork.attachments.map((attachment) => (
+                        <div
+                          key={attachment.classwork_attachment_id}
+                          className="relative flex h-32 w-28 border-2 border-border flex-col justify-between p-2 text-center shadow-none"
+                        >
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <span className="absolute right-1 top-1 inline-flex">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      removeSelectedAttachment(
+                                        attachment.classwork_attachment_id,
+                                      )
+                                    }
+                                    disabled={
+                                      isSavingEdit ||
+                                      removingAttachmentId ===
+                                      attachment.classwork_attachment_id
+                                    }
+                                    className="flex h-6 w-6 items-center justify-center rounded-full border border-black bg-white text-black hover:bg-destructive hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                    aria-label={`Remove ${attachment.file_name}`}
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </span>
+                              }
+                            />
+                            <TooltipContent>Remove file</TooltipContent>
+                          </Tooltip>
+                          <FileText className="mx-auto mt-5" size={22} />
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-semibold">
+                              {attachment.file_name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">Attached</p>
+                          </div>
+                        </div>
+                      ))}
+
+                      {editMaterials.map((material, index) => (
+                        <div
+                          key={`${material.name}-${material.size}`}
+                          className="relative flex h-32 w-28 border-2 border-border flex-col justify-between p-2 text-center shadow-none"
+                        >
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <span className="absolute right-1 top-1 inline-flex">
+                                  <button
+                                    type="button"
+                                    onClick={() => removeEditMaterial(index)}
+                                    disabled={isSavingEdit}
+                                    className="flex h-6 w-6 items-center justify-center rounded-full border border-black bg-white text-black hover:bg-destructive hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                    aria-label={`Remove ${material.name}`}
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </span>
+                              }
+                            />
+                            <TooltipContent>Remove file</TooltipContent>
+                          </Tooltip>
+                          <FileText className="mx-auto mt-5" size={22} />
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-semibold">
+                              {material.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatFileSize(material.size)}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+
+                      <label className="flex h-32 w-28 cursor-pointer items-center justify-center border-2 border-dashed border-black bg-[#F6E9B2] text-sm font-bold shadow-md hover:bg-[#7ABA78] hover:shadow-none transition-all">
+                        <Plus size={20} />
+                        <input
+                          type="file"
+                          multiple
+                          accept=".pdf,.docx,.ppt,.pptx,.jpg,.jpeg,.png"
+                          onChange={(event) => {
+                            addEditMaterials(event.target.files);
+                            event.target.value = "";
+                          }}
+                          disabled={
+                            isSavingEdit || removingAttachmentId !== null
+                          }
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </Field>
+
+                {(editDraft.classwork_type === "ACTIVITY" ||
+                  editDraft.classwork_type === "ASSIGNMENT") && (
+                    <ActivityRubricEditor
+                      levels={rubricLevels}
+                      onChange={setRubricLevels}
+                      disabled={isSavingEdit}
+                    />
+                  )}
+              </div>
+
+              <div className="space-y-4">
+                <div
+                  className={`grid gap-4 ${isReadingType(editDraft.classwork_type)
+                    ? ""
+                    : isQuizType(editDraft.classwork_type)
+                      ? "sm:grid-cols-2"
+                      : "sm:grid-cols-2"
+                    }`}
+                >
+                  {!isReadingType(editDraft.classwork_type) && (
+                    <Field label="Due Date">
+                      <Input
+                        type="datetime-local"
+                        value={editDraft.due_date}
+                        onChange={(event) =>
+                          setEditDraft((current) => ({
+                            ...current,
+                            due_date: event.target.value,
+                          }))
+                        }
+                        disabled={isSavingEdit}
+                        className="w-full bg-white border-2 border-black rounded shadow-md"
+                      />
+                    </Field>
+                  )}
+
+                  <Field label="Publish Status">
+                    <Select
+                      value={editDraft.is_published ? "published" : "draft"}
+                      onValueChange={(val) =>
+                        setEditDraft((current) => ({
+                          ...current,
+                          is_published: val === "published",
+                        }))
+                      }
+                      disabled={isSavingEdit}
+                    >
+                      <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
+                        <Select.Value />
+                      </Select.Trigger>
+                      <Select.Content className="border-2 border-black rounded bg-white">
+                        <Select.Group>
+                          <Select.Item value="draft">Save as Draft</Select.Item>
+                          <Select.Item value="published">Publish Now</Select.Item>
+                        </Select.Group>
+                      </Select.Content>
+                    </Select>
+                  </Field>
+
+                  <Field label="Locked Until">
+                    <Input
+                      type="datetime-local"
+                      value={editDraft.lock_date}
+                      onChange={(event) =>
+                        setEditDraft((current) => ({
+                          ...current,
+                          lock_date: event.target.value,
+                        }))
+                      }
+                      disabled={isSavingEdit || !editDraft.is_published}
+                      className="w-full bg-white border-2 border-black rounded shadow-md"
+                    />
+                  </Field>
+
+                  {isQuizType(editDraft.classwork_type) && (
+                    <Field label="Allowed Attempts">
+                      <Input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={editDraft.max_attempts}
+                        onChange={(event) =>
+                          setEditDraft((current) => ({
+                            ...current,
+                            max_attempts: event.target.value,
+                          }))
+                        }
+                        disabled={isSavingEdit}
+                        className="w-full bg-white border-2 border-black rounded shadow-md"
+                      />
+                    </Field>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  {!isReadingType(editDraft.classwork_type) && (
                     <div className="flex items-center gap-2 w-full justify-between">
                       <label className="text-sm font-medium text-foreground">
-                        Allow late submissions
+                        Show scores to students
                       </label>
                       <Switch
-                        checked={editDraft.allow_late_submissions}
+                        checked={editDraft.show_scores}
                         onCheckedChange={(checked) =>
                           setEditDraft((current) => ({
                             ...current,
-                            allow_late_submissions: checked,
+                            show_scores: checked,
                           }))
                         }
                         disabled={isSavingEdit}
                       />
                     </div>
                   )}
-              </div>
 
-              <div className="mt-6">
-                {targetedAssignment ? (
-                  <Field label="Assigned student">
-                    <Card className="flex items-center gap-3 border-2 border-primary bg-primary/10 p-3 shadow-none">
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded border-2 border-black bg-primary">
-                        <UserCheck className="size-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-bold">
-                          {targetedAssignment.recipient_student_name || "Intervention student"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Automatically assigned only to this student through Intervention #{targetedAssignment.source_intervention_id}.
-                        </p>
-                      </div>
-                    </Card>
-                  </Field>
-                ) : (
-                  <Field label="Assign to sections">
-                    {selectedSubjectLoads.length > 0 && (
-                      <div className="flex items-center justify-end -mt-8 mb-2">
-                        <Button
-                          size="sm"
-                          className="shadow-none -mt-1"
-                          autoIcon={false}
-                          onClick={() =>
-                            setSelectedClassIds(
-                              selectedSubjectLoads.map((load) => load.class_id),
-                            )
+                  {editDraft.due_date &&
+                    !isReadingType(editDraft.classwork_type) && (
+                      <div className="flex items-center gap-2 w-full justify-between">
+                        <label className="text-sm font-medium text-foreground">
+                          Allow late submissions
+                        </label>
+                        <Switch
+                          checked={editDraft.allow_late_submissions}
+                          onCheckedChange={(checked) =>
+                            setEditDraft((current) => ({
+                              ...current,
+                              allow_late_submissions: checked,
+                            }))
                           }
                           disabled={isSavingEdit}
-                        >
-                          <CheckCheck className="size-4 mr-2" />
-                          Select All
-                        </Button>
+                        />
                       </div>
                     )}
+                </div>
 
-                  {selectedSubjectLoads.length > 0 ? (
-                    <Card className="-mt-1 grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                      {selectedSubjectLoads.map((load) => {
-                        const isSelected = selectedClassIds.includes(load.class_id);
-                        return (
-                          <button
-                            key={load.subject_load_id}
-                            type="button"
-                            onClick={() => toggleClass(load.class_id)}
-                            disabled={isSavingEdit}
-                            className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isSelected
-                              ? "bg-primary text-black"
-                              : "bg-white text-black hover:bg-accent"
-                              }`}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between">
-                                <p className="font-bold text-base truncate">
-                                  {load.section_name}
-                                </p>
-                                <div
-                                  className={`flex size-5 shrink-0 items-center justify-center rounded border-2 border-black transition-colors ${isSelected ? "bg-black text-white" : "bg-white text-transparent"
-                                    }`}
-                                >
-                                  <Check className="size-3.5 stroke-[3]" />
-                                </div>
-                              </div>
-
-                              <div className="mt-1 flex items-center justify-between w-full">
-                                <p
-                                  className={`text-xs font-medium ${isSelected
-                                    ? "text-foreground"
-                                    : "text-muted-foreground"
-                                    }`}
-                                >
-                                  {load.grade_level || "Active Section"}
-                                </p>
-                                {typeof load.student_count === "number" && (
-                                  <p
-                                    className={`text-xs font-medium ${isSelected
-                                      ? "text-foreground"
-                                      : "text-muted-foreground"
-                                      }`}
-                                  >
-                                    {load.student_count} {load.student_count === 1 ? "student" : "students"}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </Card>
+                <div className="mt-6">
+                  {targetedAssignment ? (
+                    <Field label="Assigned student">
+                      <Card className="flex items-center gap-3 border-2 border-primary bg-primary/10 p-3 shadow-none">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded border-2 border-black bg-primary">
+                          <UserCheck className="size-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold">
+                            {targetedAssignment.recipient_student_name || "Intervention student"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Automatically assigned only to this student through Intervention #{targetedAssignment.source_intervention_id}.
+                          </p>
+                        </div>
+                      </Card>
+                    </Field>
                   ) : (
-                    <Empty className="shadow-md hover:shadow-none transition-shadow">
-                      <EmptyHeader>
-                        <EmptyTitle>No Sections Found</EmptyTitle>
-                        <EmptyDescription className="text-center">
-                          No active sections are assigned to this subject.
-                        </EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
-                  )}
-                  </Field>
-                )}
-              </div>
-            </div>
-          </section>
+                    <Field label="Assign to sections">
+                      {selectedSubjectLoads.length > 0 && (
+                        <div className="flex items-center justify-end -mt-8 mb-2">
+                          <Button
+                            size="sm"
+                            className="shadow-none -mt-1"
+                            autoIcon={false}
+                            onClick={() =>
+                              setSelectedClassIds(
+                                selectedSubjectLoads.map((load) => load.class_id),
+                              )
+                            }
+                            disabled={isSavingEdit}
+                          >
+                            <CheckCheck className="size-4 mr-2" />
+                            Select All
+                          </Button>
+                        </div>
+                      )}
 
-          <Dialog.Footer position="fixed">
-            <NoChangesMessage message={changes.noChangesMessage} />
-            <div className="flex w-full justify-end gap-2">
-              <Button
+                      {selectedSubjectLoads.length > 0 ? (
+                        <Card className="-mt-1 grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                          {selectedSubjectLoads.map((load) => {
+                            const isSelected = selectedClassIds.includes(load.class_id);
+                            return (
+                              <button
+                                key={load.subject_load_id}
+                                type="button"
+                                onClick={() => toggleClass(load.class_id)}
+                                disabled={isSavingEdit}
+                                className={`group relative flex items-center justify-between gap-3 rounded! border-2 border-black p-3 text-left transition-all shadow-none hover:translate-y-0.5 active:translate-y-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isSelected
+                                  ? "bg-primary text-black"
+                                  : "bg-white text-black hover:bg-accent"
+                                  }`}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between">
+                                    <p className="font-bold text-base truncate">
+                                      {load.section_name}
+                                    </p>
+                                    <div
+                                      className={`flex size-5 shrink-0 items-center justify-center rounded border-2 border-black transition-colors ${isSelected ? "bg-black text-white" : "bg-white text-transparent"
+                                        }`}
+                                    >
+                                      <Check className="size-3.5 stroke-[3]" />
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-1 flex items-center justify-between w-full">
+                                    <p
+                                      className={`text-xs font-medium ${isSelected
+                                        ? "text-foreground"
+                                        : "text-muted-foreground"
+                                        }`}
+                                    >
+                                      {load.grade_level || "Active Section"}
+                                    </p>
+                                    {typeof load.student_count === "number" && (
+                                      <p
+                                        className={`text-xs font-medium ${isSelected
+                                          ? "text-foreground"
+                                          : "text-muted-foreground"
+                                          }`}
+                                      >
+                                        {load.student_count} {load.student_count === 1 ? "student" : "students"}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </Card>
+                      ) : (
+                        <Empty className="shadow-md hover:shadow-none transition-shadow">
+                          <EmptyHeader>
+                            <EmptyTitle>No Sections Found</EmptyTitle>
+                            <EmptyDescription className="text-center">
+                              No active sections are assigned to this subject.
+                            </EmptyDescription>
+                          </EmptyHeader>
+                        </Empty>
+                      )}
+                    </Field>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <Dialog.Footer position="fixed">
+              <NoChangesMessage message={changes.noChangesMessage} />
+              <div className="flex w-full justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={onClose}
+                  disabled={isSavingEdit}
+                  className="cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={() => void saveClassworkEdit()}
+                  disabled={isSavingEdit || removingAttachmentId !== null || !changes.hasChanges}
+                  className="cursor-pointer"
+                >
+                  <Check size={16} />
+                  Save Changes
+                </Button>
+              </div>
+            </Dialog.Footer>
+          </Dialog.Content>
+        )}
+      </Dialog>
+      <Dialog
+        open={rubricConfirmation !== null}
+        onOpenChange={(open) => {
+          if (!open && !isSavingEdit) setRubricConfirmation(null);
+        }}
+      >
+        {rubricConfirmation && (
+          <Dialog.Content className="max-w-md">
+            <Dialog.Header>
+              <Text as="h5" className="font-sans text-xl font-bold">
+                Update Rubric?
+              </Text>
+            </Dialog.Header>
+            <div className="px-5 py-5 text-sm text-foreground">
+              {rubricConfirmation === "graded"
+                ? "This classwork already has graded submissions. Updating the rubric will not change previously recorded grades."
+                : "This classwork already has student submissions. Rubric changes will apply when these submissions are graded."}
+            </div>
+            <Dialog.Footer className="mt-0">
+              <RetroButton
                 variant="outline"
-                onClick={onClose}
+                onClick={() => setRubricConfirmation(null)}
                 disabled={isSavingEdit}
-                className="cursor-pointer"
               >
                 Cancel
-              </Button>
-              <Button
-                variant="default"
-                onClick={() => void saveClassworkEdit()}
-                disabled={isSavingEdit || removingAttachmentId !== null || !changes.hasChanges}
-                className="cursor-pointer"
+              </RetroButton>
+              <RetroButton
+                onClick={() => {
+                  setRubricConfirmation(null);
+                  void saveClassworkEdit(true);
+                }}
+                disabled={isSavingEdit}
               >
-                <Check size={16} />
                 Save Changes
-              </Button>
-            </div>
-          </Dialog.Footer>
-        </Dialog.Content>
-      )}
-    </Dialog>
-    <Dialog
-      open={rubricConfirmation !== null}
-      onOpenChange={(open) => {
-        if (!open && !isSavingEdit) setRubricConfirmation(null);
-      }}
-    >
-      {rubricConfirmation && (
-        <Dialog.Content className="max-w-md">
-          <Dialog.Header>
-            <Text as="h5" className="font-sans text-xl font-bold">
-              Update Rubric?
-            </Text>
-          </Dialog.Header>
-          <div className="px-5 py-5 text-sm text-foreground">
-            {rubricConfirmation === "graded"
-              ? "This classwork already has graded submissions. Updating the rubric will not change previously recorded grades."
-              : "This classwork already has student submissions. Rubric changes will apply when these submissions are graded."}
-          </div>
-          <Dialog.Footer className="mt-0">
-            <RetroButton
-              variant="outline"
-              onClick={() => setRubricConfirmation(null)}
-              disabled={isSavingEdit}
-            >
-              Cancel
-            </RetroButton>
-            <RetroButton
-              onClick={() => {
-                setRubricConfirmation(null);
-                void saveClassworkEdit(true);
-              }}
-              disabled={isSavingEdit}
-            >
-              Save Changes
-            </RetroButton>
-          </Dialog.Footer>
-        </Dialog.Content>
-      )}
-    </Dialog>
+              </RetroButton>
+            </Dialog.Footer>
+          </Dialog.Content>
+        )}
+      </Dialog>
     </>
   );
 }

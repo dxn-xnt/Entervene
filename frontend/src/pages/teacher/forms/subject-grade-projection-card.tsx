@@ -1,4 +1,3 @@
-import { Info } from "lucide-react";
 import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
@@ -42,7 +41,7 @@ export function SubjectGradeProjectionCard({
     return (
       <Card className={shellClass} aria-label="Grade projection card">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-black uppercase tracking-wide">Projected Grade</span>
+          <span className="text-lg font-black">Projected Grade</span>
           <Badge variant="outline" size="sm">Calculating…</Badge>
         </div>
         <p className="animate-pulse text-xs text-muted-foreground">
@@ -56,7 +55,7 @@ export function SubjectGradeProjectionCard({
     return (
       <Card className={shellClass} aria-label="Grade projection card">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-black uppercase tracking-wide">Projected Grade</span>
+          <span className="text-lg font-black">Projected Grade</span>
           <Badge variant="outline" size="sm">Unavailable</Badge>
         </div>
         <Alert status="warning" className="py-2 text-xs">
@@ -75,7 +74,7 @@ export function SubjectGradeProjectionCard({
     return (
       <Card className={shellClass} aria-label="Grade projection card">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-black uppercase tracking-wide">Projected Grade</span>
+          <span className="text-lg font-black">Projected Grade</span>
           <Badge variant="outline" size="sm">Practice Only</Badge>
         </div>
         <Alert status="info" className="py-2 text-xs">
@@ -97,7 +96,7 @@ export function SubjectGradeProjectionCard({
     return (
       <Card className={shellClass} aria-label="Grade projection card">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-black uppercase tracking-wide">Projected Grade</span>
+          <span className="text-lg font-black">Projected Grade</span>
           <Badge variant="outline" size="sm">Remedial Exam</Badge>
         </div>
         <Alert status="info" className="py-2 text-xs">
@@ -116,7 +115,7 @@ export function SubjectGradeProjectionCard({
     return (
       <Card className={shellClass} aria-label="Grade projection card">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-black uppercase tracking-wide">Projected Grade</span>
+          <span className="text-lg font-black">Projected Grade</span>
           <Badge variant="outline" size="sm">No Treatment</Badge>
         </div>
         <p className="text-xs text-muted-foreground">
@@ -130,7 +129,7 @@ export function SubjectGradeProjectionCard({
     return (
       <Card className={shellClass} aria-label="Grade projection card">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-black uppercase tracking-wide">Projected Grade</span>
+          <span className="text-lg font-black">Projected Grade</span>
           <Badge variant="outline" size="sm">Unavailable</Badge>
         </div>
         <Alert status="warning" className="py-2 text-xs">
@@ -184,7 +183,7 @@ export function SubjectGradeProjectionCard({
     <Card className={shellClass} aria-label="Grade projection card">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-black uppercase tracking-wide">Projected Grade</span>
+          <span className="text-lg font-black">Projected Grade</span>
           <Badge variant={isAiWhatIf ? "surface" : isAuthoritative ? "solid" : "outline"} size="sm">
             {isFinalized ? "Final Grade" : isAiWhatIf ? "Provisional AI Estimate" : isAuthoritative ? "Authoritative" : "Unavailable"}
           </Badge>
@@ -195,28 +194,40 @@ export function SubjectGradeProjectionCard({
       {!isUnavailable && (
         <div className="border-2 border-border bg-background p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span className="text-xl text-muted-foreground">{gradeText(currentGrade)}</span>
-              <span className="text-xl text-muted-foreground" aria-hidden="true">→</span>
-              <strong className="text-4xl font-black leading-none sm:text-5xl">
-                {hasTargets ? gradeText(projectedGrade) : "—"}
-              </strong>
-              {hasTargets && estimatedDifference != null && (
-                <span className={`text-lg font-black ${estimatedDifference > 0 ? "text-success" : estimatedDifference < 0 ? "text-destructive" : "text-muted-foreground"}`}>
-                  {differenceText(estimatedDifference)}
-                </span>
+            <div className="flex min-w-0 flex-wrap items-center justify-between w-full">
+              <span className="text-xl text-foreground">{gradeText(currentGrade)}</span>
+              <span className="text-xl text-foreground" aria-hidden="true">→</span>
+
+              <div className="flex flex-row gap-2 items-center">
+                <strong className="text-4xl font-black">
+                  {hasTargets ? gradeText(projectedGrade) : gradeText(currentGrade)}
+                </strong>
+                {hasTargets && estimatedDifference != null && (
+                  <Badge
+                    variant={
+                      estimatedDifference > 0
+                        ? "success"
+                        : estimatedDifference < 0
+                          ? "destructive"
+                          : "outline"
+                    }
+                    size="sm"
+                  >
+                    {differenceText(estimatedDifference)}
+                  </Badge>
+                )}
+              </div>
+              {reachesThreshold != null && (
+                <Badge variant={reachesThreshold ? "success" : "destructive"} size="md" className="self-start whitespace-nowrap sm:self-center">
+                  {reachesThreshold
+                    ? isAiWhatIf ? "Est. Reaches Passing" : "Reaches Passing"
+                    : isAiWhatIf ? "Est. Below Passing" : "Below Passing"}
+                </Badge>
               )}
             </div>
-            {reachesThreshold != null && (
-              <Badge variant={reachesThreshold ? "success" : "destructive"} size="md" className="self-start whitespace-nowrap sm:self-center">
-                {reachesThreshold
-                  ? isAiWhatIf ? "Est. Reaches Passing" : "Reaches Passing"
-                  : isAiWhatIf ? "Est. Below Passing" : "Below Passing"}
-              </Badge>
-            )}
           </div>
 
-          <div className="mt-6">
+          <div className="mt-4">
             <div className="relative">
               <Progress
                 value={currentPosition}
@@ -246,20 +257,18 @@ export function SubjectGradeProjectionCard({
               )}
             </div>
           </div>
-
-          <div className="mt-5 flex items-start gap-2 text-xs text-muted-foreground">
-            <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            <p>
-              {isAiWhatIf
-                ? "Provisional AI Estimate: Based on current midterm performance evidence. This is an exploratory prediction and not an official grade or guaranteed result."
-                : isFinalized
-                  ? "This period grade is finalized. Hypothetical remediation is unavailable."
-                  : "Authoritative calculation based on official DepEd grading weights and transmutation table. Based on complete academic evidence."}
-            </p>
-          </div>
         </div>
-      )}
 
+      )}
+      <div className="flex items-start gap-2 text-xs text-muted-foreground">
+        <p>
+          {isAiWhatIf
+            ? "Based on current midterm performance evidence. This is an exploratory prediction and not an official grade or guaranteed result."
+            : isFinalized
+              ? "This period grade is finalized. Hypothetical remediation is unavailable."
+              : "Authoritative calculation based on official DepEd grading weights and transmutation table. Based on complete academic evidence."}
+        </p>
+      </div>
       {isUnavailable && (
         <div className="space-y-2">
           <Alert status="warning" className="py-2 text-xs">
