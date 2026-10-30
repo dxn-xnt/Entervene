@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { NoChangesMessage } from "@/components/retroui/FormMessage";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/teacher/button";
@@ -109,6 +110,8 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
   const navigate = useNavigate();
 
   const {
+    canSaveDraft,
+    noChangesMessage,
     draft,
     setField,
     setNestedField,
@@ -281,6 +284,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
           )}
 
         <div className="flex flex-wrap items-center justify-end gap-2">
+          <NoChangesMessage message={noChangesMessage} />
           <Button
             type="button"
             variant="outline"
@@ -295,7 +299,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
             type="button"
             variant="outline"
             onClick={handleSaveDraft}
-            disabled={isSaving || isSubmitting}
+            disabled={isSaving || isSubmitting || !canSaveDraft}
             className="w-full justify-center gap-2 sm:w-auto"
           >
             {isSaving ? (

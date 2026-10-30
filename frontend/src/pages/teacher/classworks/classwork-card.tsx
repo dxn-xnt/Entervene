@@ -439,7 +439,7 @@ export default function ClassworkCard({
         confirmationTitle={`Are you sure you want to archive "${item.title}"?`}
         description={`Archiving the classwork will move it to the archive and it can be restored later.`}
         confirmLabel={isArchiving ? "Archiving..." : "Archive"}
-        confirmVariant="default"
+        confirmVariant="destructive"
         isLoading={isArchiving}
         onCancel={() => setShowArchiveConfirm(false)}
         onConfirm={handleArchive}

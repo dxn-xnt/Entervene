@@ -12,6 +12,8 @@ import { Text } from "@/components/retroui/Text";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { RoleBadge } from "@/components/role-badge";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { NoChangesMessage } from "@/components/retroui/FormMessage";
 
 export default function EditClass({
   classId,
@@ -78,8 +80,16 @@ export default function EditClass({
     && ((section.is_active && !section.has_class) || section.section_name === classDetail?.section_name)
   );
 
+  const changes = useEditFormChanges({
+    enabled: !!classDetail && !loading,
+    resetKey: String(classId),
+    initialValues: [classDetail?.section_name.trim(), classDetail?.adviser?.staff_id || "__none__", classDetail?.pathway_id == null ? "__none__" : String(classDetail.pathway_id)],
+    values: [sectionName.trim(), adviserStaffId, pathwayId],
+  });
+
   async function saveClass() {
     if (!classDetail || saving) return;
+    if (!changes.guardChanges()) return;
     const trimmedSectionName = sectionName.trim();
     if (!trimmedSectionName) {
       setSaveError("Section name is required.");
@@ -99,12 +109,6 @@ export default function EditClass({
         return;
       }
       payload.pathway_id = pathwayId === "__none__" ? null : Number(pathwayId);
-    }
-
-    if (!Object.keys(payload).length) {
-      setSaveError("No changes to save.");
-      setValidationAttempt((attempt) => attempt + 1);
-      return;
     }
 
     setSaving(true);
@@ -236,10 +240,11 @@ export default function EditClass({
             </section>
 
             <Dialog.Footer>
+              <NoChangesMessage message={changes.noChangesMessage} />
               <Button variant="outline" disabled={saving} onClick={onClose}>
                 Cancel
               </Button>
-              <Button variant="default" disabled={saving} onClick={saveClass}>
+              <Button variant="default" disabled={saving || !changes.hasChanges} onClick={saveClass}>
                 Save Changes
               </Button>
             </Dialog.Footer>

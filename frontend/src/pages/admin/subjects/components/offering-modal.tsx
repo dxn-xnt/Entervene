@@ -6,7 +6,9 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
-import { FormMessage } from "@/components/retroui/FormMessage";
+import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { optionalNumber, unorderedValues } from "@/lib/form-changes";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { formatPeriodLabel } from "@/lib/academic-periods";
 import {
@@ -342,7 +344,21 @@ export function OfferingModal({
     return `${parts.join("; ")}.`;
   };
 
+  const changes = useEditFormChanges({
+    enabled: !!offering,
+    resetKey: `${open}:${offering?.subject_offering_id}`,
+    initialValues: offering ? [
+      String(offering.subject.subject_id), String(offering.academic_year.academic_year_id),
+      String(offering.academic_level.academic_level_id),
+      unorderedValues(existingSubjectOfferings.length ? existingSubjectOfferings.map(item => String(item.academic_period.academic_period_id)) : [String(offering.academic_period.academic_period_id)]),
+      offering.pathway, optionalNumber(offering.minutes), offering.status,
+    ] : null,
+    values: [form.subject_id, form.academic_year_id, form.academic_level_id,
+      unorderedValues(form.academic_period_ids), requiresPathway ? form.pathway : "general",
+      optionalNumber(form.minutes), form.status],
+  });
   const handleSubmit = async () => {
+    if (!changes.guardChanges()) return;
     setError(null);
     if (readOnly) {
       failValidation(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
@@ -728,8 +744,9 @@ export function OfferingModal({
           </div>
         </section>
         <Dialog.Footer>
+          <NoChangesMessage message={changes.noChangesMessage} />
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={isSaving || !options || readOnly} title={readOnly ? readOnlyReason : undefined}>
+          <Button onClick={handleSubmit} disabled={isSaving || !options || readOnly || (!!offering && !changes.hasChanges)} title={readOnly ? readOnlyReason : undefined}>
             {offering ? "Save Offering" : "Add Offerings"}
           </Button>
         </Dialog.Footer>

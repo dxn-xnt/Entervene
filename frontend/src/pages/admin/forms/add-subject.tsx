@@ -7,7 +7,8 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
-import { FormMessage } from "@/components/retroui/FormMessage";
+import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { useToast } from "@/components/retroui/Toast";
 import {
@@ -344,7 +345,28 @@ export default function AddSubjectModal({
     }));
   };
 
+  const subjectValues = (value: SubjectFormState) => [
+    value.subject_name.trim(), value.subject_codename.trim(),
+    value.grading_template_id, value.description.trim(), value.status,
+    value.is_math_or_science,
+  ];
+  const changes = useEditFormChanges({
+    enabled: !!subjectToEdit,
+    resetKey: `${open}:${subjectToEdit?.subject_id}`,
+    initialValues: subjectToEdit ? subjectValues({
+      ...form,
+      subject_name: subjectToEdit.subject_name,
+      subject_codename: subjectToEdit.subject_codename || "",
+      grading_template_id: String(subjectToEdit.grading_template_id ?? ""),
+      description: subjectToEdit.description || "",
+      status: subjectToEdit.status,
+      is_math_or_science: subjectToEdit.is_math_or_science || false,
+    }) : null,
+    values: subjectValues(form),
+  });
+
   const handleSubmit = async () => {
+    if (!changes.guardChanges()) return;
     setError(null);
     if (!form.academic_level_id) {
       failValidation("Select a grade level.");
@@ -387,6 +409,7 @@ export default function AddSubjectModal({
           is_math_or_science: form.is_math_or_science,
         });
         setSuccessMessage(`${form.subject_name.trim()} updated successfully.`);
+        changes.markSaved();
         toast.success({ title: "Subject updated" });
         await onCreated?.();
         return;
@@ -804,7 +827,8 @@ export default function AddSubjectModal({
             Cancel
           </Button>
         </Dialog.Close>
-        <Button onClick={handleSubmit} disabled={isSaving || isLoadingOptions}>
+        <NoChangesMessage message={changes.noChangesMessage} />
+        <Button onClick={handleSubmit} disabled={isSaving || isLoadingOptions || (!!subjectToEdit && !changes.hasChanges)}>
           {subjectToEdit ? "Save Changes" : "Add Subject"}
         </Button>
       </Dialog.Footer>

@@ -11,6 +11,8 @@ import { Badge } from "@/components/retroui/Badge";
 import { useToast } from "@/components/retroui/Toast";
 import { ApiRequestError, adjustSubstitutionEndDate, adjustBatchSubstitutionsEndDate, type TeacherSubstitution } from "@/lib/api";
 import { Calendar, Layers, Loader2 } from "lucide-react";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { NoChangesMessage } from "@/components/retroui/FormMessage";
 
 export interface AdjustModalTarget {
   type: "single" | "batch";
@@ -43,9 +45,15 @@ export default function AdjustSubstitutionModal({
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const [validationAttempt, setValidationAttempt] = React.useState(0);
+  const changes = useEditFormChanges({ initialValues: initialEndDate, values: endDate, resetKey: `${target.batchId ?? target.substitution?.substitution_id}` });
+  React.useEffect(() => {
+    setEndDate(initialEndDate);
+    setErrorMsg(null);
+  }, [initialEndDate, target.batchId, target.substitution?.substitution_id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!changes.guardChanges()) return;
     if (endDate && startDate && endDate < startDate) {
       setErrorMsg("End date cannot be earlier than start date.");
       setValidationAttempt((attempt) => attempt + 1);
@@ -151,10 +159,11 @@ export default function AdjustSubstitutionModal({
         </div>
 
         <Dialog.Footer position="static" className="pt-2">
+          <NoChangesMessage message={changes.noChangesMessage} />
           <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting || !changes.hasChanges}>
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

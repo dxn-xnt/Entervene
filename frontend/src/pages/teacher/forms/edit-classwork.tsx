@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { unorderedValues, optionalNumber } from "@/lib/form-changes";
+import { NoChangesMessage } from "@/components/retroui/FormMessage";
 import { Check, CheckCheck, FileText, Plus, Trash2, UserCheck } from "lucide-react";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/teacher/button";
@@ -310,8 +313,35 @@ export default function EditClassworkModal({
     }
   };
 
+  const draftValues = (draft: EditDraft, levels: ActivityRubricLevel[]) => {
+    const hasRubric = draft.classwork_type === "ACTIVITY" || draft.classwork_type === "ASSIGNMENT";
+    return {
+      ...draft,
+      title: draft.title.trim(), description: draft.description.trim(),
+      instructions: draft.instructions.trim(),
+      total_points: hasRubric ? activityRubricMaximum(levels) : isReadingType(draft.classwork_type) ? null : optionalNumber(draft.total_points),
+      max_attempts: isQuizType(draft.classwork_type) ? Number(draft.max_attempts) : null,
+      rubric: hasRubric ? levels : null,
+    };
+  };
+  const changes = useEditFormChanges({
+    resetKey: `${isOpen}:${classwork.classwork_id}`,
+    initialValues: {
+      draft: draftValues(classworkToEditDraft(classwork), classwork.rubric_levels?.length ? classwork.rubric_levels : defaultActivityRubric),
+      classes: unorderedValues([...new Set(classwork.assignments?.map(item => item.class_id) ?? [])]),
+      lessons: unorderedValues(classwork.linked_lessons?.map(item => item.lesson_id) ?? []),
+      files: [],
+    },
+    values: {
+      draft: draftValues(editDraft, rubricLevels),
+      classes: unorderedValues([...new Set(selectedClassIds)]),
+      lessons: unorderedValues(selectedLessonIds),
+      files: editMaterials.map(file => [file.name, file.size, file.lastModified, file.type]),
+    },
+  });
   const saveClassworkEdit = async (rubricConfirmed = false) => {
     if (!currentClasswork || !editDraft) return;
+    if (!changes.guardChanges()) return;
 
     const isReading = isReadingType(editDraft.classwork_type);
     const hasRubric =
@@ -1099,6 +1129,7 @@ export default function EditClassworkModal({
           </section>
 
           <Dialog.Footer position="fixed">
+            <NoChangesMessage message={changes.noChangesMessage} />
             <div className="flex w-full justify-end gap-2">
               <Button
                 variant="outline"
@@ -1111,7 +1142,7 @@ export default function EditClassworkModal({
               <Button
                 variant="default"
                 onClick={() => void saveClassworkEdit()}
-                disabled={isSavingEdit || removingAttachmentId !== null}
+                disabled={isSavingEdit || removingAttachmentId !== null || !changes.hasChanges}
                 className="cursor-pointer"
               >
                 <Check size={16} />

@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { NoChangesMessage } from "@/components/retroui/FormMessage";
 import { BookOpenCheck, Copy, ExternalLink, MoreVertical, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
@@ -114,7 +116,14 @@ export function RubricTemplateDialog({
     setView("form");
   };
 
+  const changes = useEditFormChanges({
+    enabled: !!selected,
+    resetKey: `${view}:${selected?.rubric_template_id}`,
+    initialValues: [selected?.name.trim(), selected ? copyRubricLevels(selected.levels) : []],
+    values: [name.trim(), copyRubricLevels(levels)],
+  });
   const save = async () => {
+    if (!changes.guardChanges()) return;
     const cleanName = name.trim();
     const validation = !cleanName
       ? "Template name is required."
@@ -497,6 +506,7 @@ export function RubricTemplateDialog({
 
         {view !== "list" && (
           <Dialog.Footer className="mt-0 flex w-full items-center justify-between gap-2">
+            <NoChangesMessage message={changes.noChangesMessage} />
             {view === "form" && (
               <div className="flex w-full items-center justify-between gap-2">
                 <Button
@@ -526,7 +536,7 @@ export function RubricTemplateDialog({
                   <Button
                     type="button"
                     size="sm"
-                    disabled={busy}
+                    disabled={busy || (!!selected && !changes.hasChanges)}
                     onClick={() => void save()}
                   >
                     {busy ? "Saving…" : "Save Template"}

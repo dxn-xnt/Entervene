@@ -10,6 +10,8 @@ import { getMySchedule, type DynamicScheduleResponse } from "@/lib/api";
 import { DynamicScheduleTable } from "@/components/dynamic-schedule-table";
 import { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { NoChangesMessage } from "@/components/retroui/FormMessage";
 import { Pencil, X } from "lucide-react";
 
 const weekDayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -110,6 +112,10 @@ export default function AdminProfile() {
   const [tempSelectedAvatar, setTempSelectedAvatar] = useState(user?.avatar || "/avatars/teacher-avatars/12.svg");
   const [scheduleData, setScheduleData] = useState<DynamicScheduleResponse | null>(null);
   const [isScheduleLoading, setIsScheduleLoading] = useState(true);
+  const changes = useEditFormChanges({ initialValues: user?.avatar || "/avatars/teacher-avatars/12.svg", values: tempSelectedAvatar, resetKey: String(isModalOpen) });
+  useEffect(() => {
+    if (isModalOpen) setTempSelectedAvatar(user?.avatar || "/avatars/teacher-avatars/12.svg");
+  }, [isModalOpen, user?.avatar]);
 
   useEffect(() => {
     let isMounted = true;
@@ -268,6 +274,7 @@ export default function AdminProfile() {
                 </div>
               </div>
 
+              <NoChangesMessage message={changes.noChangesMessage} />
               <div className="flex flex-row justify-end gap-3 mt-2 border-t border-black/10 pt-4">
                 <Button
                   variant="outline"
@@ -277,7 +284,9 @@ export default function AdminProfile() {
                   Cancel
                 </Button>
                 <Button
+                  disabled={!changes.hasChanges}
                   onClick={async () => {
+                    if (!changes.guardChanges()) return;
                     try {
                       await updateAvatar(tempSelectedAvatar);
                       toast.success({ title: "Avatar updated" });

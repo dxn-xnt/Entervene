@@ -8,7 +8,9 @@ import { Card } from "@/components/retroui/Card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
-import { FormMessage } from "@/components/retroui/FormMessage";
+import { FormMessage, NoChangesMessage } from "@/components/retroui/FormMessage";
+import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
+import { optionalNumber } from "@/lib/form-changes";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
 import { Progress } from "@/components/retroui/Progress";
 import { Select } from "@/components/retroui/Select";
@@ -237,7 +239,6 @@ export default function AdminUserDetail() {
       const updated = await updateUser(userId, payload);
       setUser(updated);
       setEditOpen(false);
-      setNotice("User updated successfully.");
       toast.success({ title: "User updated" });
     } catch (err) {
       if (
@@ -324,23 +325,25 @@ export default function AdminUserDetail() {
               </div>
 
               {user && (
-                <div className="flex w-full flex-wrap items-center gap-2 md:w-auto [&_button]:px-2 [&_button]:text-xs md:[&_button]:px-4 md:[&_button]:text-sm">
+                <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
                   {isPending && (
                     <Button
                       type="button"
+                      size="header"
                       variant="default"
                       onClick={handleResendInvitation}
                       disabled={resending}
                       className="gap-2"
                     >
                       <RefreshCw
-                        className={cn("size-3.5", resending && "animate-spin")}
+                        className={cn("size-4", resending && "animate-spin")}
                       />
                       Resend Invitation
                     </Button>
                   )}
                   <Button
                     type="button"
+                    size="header"
                     variant="default"
                     onClick={() => {
                       setEditError(null);
@@ -350,25 +353,26 @@ export default function AdminUserDetail() {
                     title={actionDisabledReason}
                     className="gap-2"
                   >
-                    <Pencil className="size-3.5" />
+                    <Pencil className="size-4" />
                     Edit
                   </Button>
                   <Button
                     type="button"
+                    size="header"
                     variant="outline"
                     onClick={() => setArchiveOpen(true)}
                     disabled={isPending || isArchived}
                     title={actionDisabledReason}
                     className="gap-2"
                   >
-                    <Archive className="size-3.5" />
+                    <Archive className="size-4" />
                     Archive
                   </Button>
                 </div>
               )}
             </header>
 
-            <div className="border-t border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
               {!loading && error && (
                 <Alert status="error">
                   <Alert.Description>{error}</Alert.Description>
@@ -454,6 +458,7 @@ export default function AdminUserDetail() {
 
       {user && editOpen && (
         <EditUserModal
+          key={user.id}
           user={user}
           saving={saving}
           error={editError}
@@ -525,6 +530,23 @@ function EditUserModal({
     Partial<Record<"first_name" | "last_name" | "email" | "prior_gwa", string>>
   >({});
   const [validationAttempt, setValidationAttempt] = useState(0);
+  const normalize = (value: UpdateUserPayload) => ({
+    ...value,
+    first_name: value.first_name.trim(),
+    middle_name: value.middle_name?.trim() || "",
+    last_name: value.last_name.trim(),
+    email: value.email.trim().toLowerCase(),
+    contact_number: value.contact_number?.trim() || "",
+    address: value.address?.trim() || "",
+    employment_status: value.employment_status?.trim() || "",
+    section: value.section?.trim() || null,
+    prior_gwa: optionalNumber(value.prior_gwa),
+  });
+  const changes = useEditFormChanges({
+    resetKey: user.id,
+    initialValues: normalize(initialEditForm(user)),
+    values: normalize(form),
+  });
   const isStudent = user.role === "student";
   const isTeacher = user.role === "teacher";
 
@@ -555,6 +577,7 @@ function EditUserModal({
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (!changes.guardChanges()) return;
     const errors: typeof fieldErrors = {};
     if (!form.first_name.trim()) errors.first_name = "Enter a first name.";
     if (!form.last_name.trim()) errors.last_name = "Enter a last name.";
@@ -822,10 +845,11 @@ function EditUserModal({
           </section>
 
           <Dialog.Footer position="static">
+            <NoChangesMessage message={changes.noChangesMessage} />
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || !changes.hasChanges}>
               {saving ? "Saving..." : "Save Changes"}
             </Button>
           </Dialog.Footer>
