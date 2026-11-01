@@ -365,7 +365,7 @@ function LegacyPredictionsDashboard() {
                         </div>
 
                         {gradeSummaries.length > 0 ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className={cn("grid grid-cols-1 gap-4", role !== "admin" && "md:grid-cols-2")}>
                             {gradeSummaries.map((group) => (
                               <PredictionGradeSection key={group.grade_level} group={group} />
                             ))}
