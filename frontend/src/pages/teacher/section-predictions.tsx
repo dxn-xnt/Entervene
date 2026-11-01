@@ -4,6 +4,7 @@ import { BookOpen } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
+import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 import { Progress } from "@/components/retroui/Progress";
 import { Empty } from "@/components/retroui/Empty";
 import IconContainer from "@/components/icon-container";
@@ -375,14 +376,11 @@ function LegacySectionPredictions() {
                     Loading {sectionDisplayName} predictions...
                   </div>
                 ) : sortedSubjects.length === 0 ? (
-                  <Card className="flex flex-col items-center justify-center gap-2 p-8 text-center">
-                    <p className="text-lg font-bold text-gray-900">
-                      No subjects available for {sectionDisplayName}.
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1 max-w-md mx-auto">
-                      There are no subjects offered or assigned for this section in the selected term.
-                    </p>
-                  </Card>
+                  <EmptyStateCard
+                    icon={<BookOpen />}
+                    title={`No subjects available for ${sectionDisplayName}.`}
+                    description="There are no subjects offered or assigned for this section in the selected term."
+                  />
                 ) : (
                   <PredictionTable
                     items={data?.items ?? []}
