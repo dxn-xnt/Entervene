@@ -137,3 +137,31 @@ export function formatPercentage(value?: number | null, decimals = 0, fallback =
   if (value === null || value === undefined || isNaN(value)) return fallback;
   return `${Number(value).toFixed(decimals)}%`;
 }
+
+/**
+ * Risk badge styling metadata and mappings for prediction interfaces.
+ */
+export interface RiskBadgeMeta {
+  bg: string;
+  text: string;
+}
+
+export const RISK_BADGE_VARIANTS: Record<string, RiskBadgeMeta> = {
+  HIGH_RISK: { bg: "bg-[#ff3333] text-black border-2 border-black font-bold", text: "High Risk" },
+  MODERATE_RISK: { bg: "bg-[#ff9233] text-black border-2 border-black font-bold", text: "Moderate" },
+  NEEDS_MONITORING: { bg: "bg-[#ffdb33] text-black border-2 border-black font-bold", text: "Needs Monitoring" },
+  LOW_RISK: { bg: "bg-[#00e65f] text-black border-2 border-black font-bold", text: "Low Risk" },
+  INSUFFICIENT_DATA: { bg: "bg-muted text-black border-2 border-black font-bold", text: "Insufficient Data" },
+};
+
+export function getRiskBadgeMeta(riskLevel?: string | null): RiskBadgeMeta {
+  if (!riskLevel) {
+    return { bg: "bg-muted text-black border-2 border-black font-bold", text: "—" };
+  }
+  return (
+    RISK_BADGE_VARIANTS[riskLevel] ?? {
+      bg: "bg-muted text-black border-2 border-black font-bold",
+      text: riskLevel,
+    }
+  );
+}
