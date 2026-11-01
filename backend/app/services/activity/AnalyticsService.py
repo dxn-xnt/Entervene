@@ -598,6 +598,8 @@ def build_teacher_dashboard_health(
     target_period: AcademicPeriod | None,
     class_id: int | None = None,
     subject_id: int | None = None,
+    dashboard_class_id: int | None = None,
+    dashboard_subject_id: int | None = None,
 ) -> dict[str, Any]:
     period_name = target_period.period_name if target_period else "Current Term"
     academic_year_label = ""
@@ -667,6 +669,17 @@ def build_teacher_dashboard_health(
                 "subject_name": s.subject_name if s else f"Subject {l.subject_id}",
             })
 
+    # Keep authorized options available when narrowing the analytics scope.
+    # The legacy class_id/subject_id parameters remain trend-only selectors.
+    dashboard_filters = list(available_filters)
+    available_filters = [
+        item for item in available_filters
+        if (dashboard_class_id is None or item["class_id"] == dashboard_class_id)
+        and (dashboard_subject_id is None or item["subject_id"] == dashboard_subject_id)
+    ]
+    seen_combos = {(item["class_id"], item["subject_id"]) for item in available_filters}
+    scoped_subject_ids = {item["subject_id"] for item in available_filters}
+    threshold_subjects = [item for item in threshold_subjects if item.subject_id in scoped_subject_ids]
     unique_class_ids = {f["class_id"] for f in available_filters}
 
     # Cache only canonical active enrollments for every denominator and numerator.
@@ -1076,6 +1089,7 @@ def build_teacher_dashboard_health(
             "academic_year": academic_year_label,
             "is_active": target_period.is_active if target_period else False,
         },
+        "dashboard_filters": dashboard_filters,
         "cards": cards,
         "kpis": {
             "active_classes": len(unique_class_ids),

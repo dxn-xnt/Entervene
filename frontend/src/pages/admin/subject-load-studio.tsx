@@ -1984,7 +1984,7 @@ export default function AdminSubjectLoadStudio() {
                               size="sm"
                               variant="outline"
                               disabled={isSaving}
-                              className="shadow-sm"
+                              className="rounded! shadow-sm"
                               onClick={() => void handleUnlockSection(cls.class_id)}
                             >
                               <Unlock className="size-3.5 mr-1" />
@@ -2038,7 +2038,7 @@ export default function AdminSubjectLoadStudio() {
                                     size="sm"
                                     variant="secondary"
                                     disabled={isSectionPublished || isSaving}
-                                    className="p-[7px] shadow-white"
+                                    className="rounded! bg-black p-[7px] text-white shadow-none hover:bg-black disabled:bg-black disabled:text-white disabled:opacity-100"
                                     aria-label="More options"
                                     onClick={(e) => e.preventDefault()}
                                   >
@@ -2048,7 +2048,7 @@ export default function AdminSubjectLoadStudio() {
                               </span>} />
                               <TooltipContent>Section actions</TooltipContent>
                             </Tooltip>
-                            <DropdownMenuContent align="end" className="border-2 min-w-[200px]">
+                            <DropdownMenuContent align="end" collisionPadding={12} className="w-max min-w-[200px] max-w-[calc(100vw-2rem)] rounded border-2 border-border">
                               <DropdownMenuItem
                                 className="gap-2 cursor-pointer"
                                 disabled={isSectionPublished || isSaving}
@@ -2069,12 +2069,12 @@ export default function AdminSubjectLoadStudio() {
                                   const sib = configuredSiblings[0];
                                   return (
                                     <DropdownMenuSub>
-                                      <DropdownMenuSubTrigger className="gap-2 cursor-pointer whitespace-nowrap">
+                                      <DropdownMenuSubTrigger className="gap-2 rounded cursor-pointer">
                                         <Copy className="size-4" />
-                                        <span>Copy from <span className="font-bold">{sib.section_name}{studioClassPathwayLabel(sib, studioData?.academic_levels) ? ` — ${studioClassPathwayLabel(sib, studioData?.academic_levels)}` : ""}</span></span>
+                                        <span className="min-w-0 whitespace-normal break-words">Copy from <span className="font-bold">{sib.section_name}{studioClassPathwayLabel(sib, studioData?.academic_levels) ? ` — ${studioClassPathwayLabel(sib, studioData?.academic_levels)}` : ""}</span></span>
                                       </DropdownMenuSubTrigger>
                                       <DropdownMenuPortal>
-                                        <DropdownMenuSubContent className="border-2 min-w-[210px]">
+                                        <DropdownMenuSubContent collisionPadding={12} className="rounded border-2 border-border min-w-[210px] max-w-[calc(100vw-2rem)] [&_[data-slot=dropdown-menu-item]]:whitespace-normal">
                                           <DropdownMenuItem
                                             className="font-bold"
                                             onClick={() =>
@@ -2100,19 +2100,19 @@ export default function AdminSubjectLoadStudio() {
                                 if (configuredSiblings.length > 1) {
                                   return (
                                     <DropdownMenuSub>
-                                      <DropdownMenuSubTrigger className="gap-2 cursor-pointer">
+                                      <DropdownMenuSubTrigger className="gap-2 rounded cursor-pointer">
                                         <Copy className="size-4" />
                                         <span>Copy Schedule</span>
                                       </DropdownMenuSubTrigger>
                                       <DropdownMenuPortal>
-                                        <DropdownMenuSubContent className="border-2 min-w-[210px]">
+                                        <DropdownMenuSubContent collisionPadding={12} className="rounded border-2 border-border min-w-[210px] max-w-[calc(100vw-2rem)]">
                                           {configuredSiblings.map((sib) => (
                                             <DropdownMenuSub key={sib.class_id}>
-                                              <DropdownMenuSubTrigger className="cursor-pointer font-bold focus:bg-gray-100">
+                                              <DropdownMenuSubTrigger className="rounded cursor-pointer whitespace-normal break-words font-bold focus:bg-gray-100">
                                                 {sib.section_name}{studioClassPathwayLabel(sib, studioData?.academic_levels) ? ` — ${studioClassPathwayLabel(sib, studioData?.academic_levels)}` : ""}
                                               </DropdownMenuSubTrigger>
                                               <DropdownMenuPortal>
-                                                <DropdownMenuSubContent className="border-2 min-w-[210px]">
+                                                <DropdownMenuSubContent collisionPadding={12} className="rounded border-2 border-border min-w-[210px] max-w-[calc(100vw-2rem)] [&_[data-slot=dropdown-menu-item]]:whitespace-normal">
                                                   <DropdownMenuItem
                                                     className="cursor-pointer font-bold focus:bg-gray-100"
                                                     onClick={() =>

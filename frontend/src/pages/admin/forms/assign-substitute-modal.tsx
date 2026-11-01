@@ -8,7 +8,7 @@ import { Button } from "@/components/admin/button";
 import { Card } from "@/components/retroui/Card";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Dialog } from "@/components/retroui/Dialog";
-import { Empty } from "@/components/retroui/Empty";
+import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 import { Input } from "@/components/retroui/Input";
 import { Loader } from "@/components/retroui/Loader";
 import { Select } from "@/components/retroui/Select";
@@ -21,7 +21,7 @@ import {
   type User,
   type TeacherLoadSummaryItem,
 } from "@/lib/api";
-import { Calendar, CheckSquare, Clock, Square, Users } from "lucide-react";
+import { BookOpen, Calendar, CheckSquare, Clock, Square, Users } from "lucide-react";
 import { RoleBadge } from "@/components/role-badge";
 
 
@@ -291,13 +291,12 @@ export default function AssignSubstituteModal({
 
             {selectedOriginalStaffId ? (
               teacherLoads.length === 0 && !isLoadingLoads ? (
-                <Empty className="p-4 border shadow-none bg-muted/20">
-                  <Empty.Content>
-                    <Empty.Description className="text-sm font-semibold">
-                      No active published subject loads found for this teacher.
-                    </Empty.Description>
-                  </Empty.Content>
-                </Empty>
+                <EmptyStateCard
+                  compact
+                  icon={<BookOpen />}
+                  title="No teaching program available"
+                  description="No active published subject loads found for this teacher."
+                />
               ) : (
                 <div className="flex flex-col gap-2">
                   <div className="text-xs text-muted-foreground flex justify-between items-center px-1">

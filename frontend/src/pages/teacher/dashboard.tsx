@@ -10,6 +10,7 @@ import { Select } from "@/components/retroui/Select";
 import { Progress } from "@/components/retroui/Progress";
 import { OverviewCard } from "@/components/overview-cards";
 import { Empty } from "@/components/retroui/Empty";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { routes } from "@/../routes";
@@ -17,6 +18,7 @@ import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import {
   getTeacherDashboardHealth,
   type TeacherDashboardHealthResponse,
+  type TeacherDashboardHealthFilter,
   type TeacherDashboardSupportSummary,
   type OverviewCardData,
 } from "@/lib/api";
@@ -153,6 +155,22 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const requestedPeriodId = useRef(selectedPeriodId);
+  const [dashboardClass, setDashboardClass] = useState("all");
+  const [dashboardSubject, setDashboardSubject] = useState("all");
+  const [dashboardFilters, setDashboardFilters] = useState<TeacherDashboardHealthFilter[]>([]);
+  const classOptions = [...new Map(dashboardFilters.map(item => [item.class_id, item])).values()];
+  const subjectOptions = [...new Map(dashboardFilters
+    .filter(item => dashboardClass === "all" || String(item.class_id) === dashboardClass)
+    .map(item => [item.subject_id, item])).values()];
+  const changeDashboardScope = (classValue: string, subjectValue: string) => {
+    setIsLoading(true);
+    setData(null);
+    setDashboardClass(classValue);
+    setDashboardSubject(subjectValue);
+    setSelectedFilterKey("");
+    setSubjectFilter("");
+    setShowAllSectionHealth(false);
+  };
 
   // Only real selected-period subjects can become a lesson filter.
   const [subjectFilter, setSubjectFilter] = useState<string>("");
@@ -172,8 +190,11 @@ export default function Dashboard() {
       if (requestedPeriodId.current !== selectedPeriodId) {
         requestedPeriodId.current = selectedPeriodId;
         setData(null);
+        setDashboardFilters([]);
+        setDashboardClass("all");
+        setDashboardSubject("all");
         setSubjectFilter("");
-        if (selectedFilterKey) {
+        if (selectedFilterKey || dashboardClass !== "all" || dashboardSubject !== "all") {
           setSelectedFilterKey("");
           return;
         }
@@ -195,14 +216,14 @@ export default function Dashboard() {
           academic_period_id: selectedPeriodId ?? undefined,
           class_id: classId,
           subject_id: subjectId,
+          ...(dashboardClass !== "all" ? { dashboard_class_id: Number(dashboardClass) } : {}),
+          ...(dashboardSubject !== "all" ? { dashboard_subject_id: Number(dashboardSubject) } : {}),
         });
 
         if (!cancelled) {
           setData(res);
-          if (
-            !selectedFilterKey &&
-            res.trend_chart.available_filters.length > 0
-          ) {
+          setDashboardFilters(res.dashboard_filters ?? res.trend_chart.available_filters);
+          if (!selectedFilterKey && res.trend_chart.available_filters.length > 0) {
             const first = res.trend_chart.available_filters[0];
             setSelectedFilterKey(`${first.class_id}-${first.subject_id}`);
           }
@@ -225,7 +246,7 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [selectedPeriodId, selectedFilterKey, isPeriodLoading]);
+  }, [selectedPeriodId, selectedFilterKey, isPeriodLoading, dashboardClass, dashboardSubject]);
 
   // Derived 8 Stat Cards
   const statCards = useMemo<OverviewCardData[]>(() => {
@@ -373,7 +394,7 @@ export default function Dashboard() {
     day,
     count: visiblePhaseTwo?.weekdays.days.find((item) => item.day_index === dayIndex)?.count ?? null,
   }));
-  const pendingGrading = data?.action_queue?.pending_grading ?? [];
+  const pendingGrading = useMemo(() => isLoading || isPeriodLoading || error ? [] : data?.action_queue?.pending_grading ?? [], [data, isLoading, isPeriodLoading, error]);
   const classworkUngradedCounts = useMemo(() => {
     const counts = new Map<number | string, number>();
     for (const item of pendingGrading) {
@@ -452,6 +473,32 @@ export default function Dashboard() {
             </header>
 
             <main className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-3 md:gap-6 md:px-6">
+              <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:max-w-2xl" aria-label="Dashboard filters">
+                <div className="flex min-w-0 flex-col gap-2">
+                  <label htmlFor="dashboard-class" className="text-sm font-medium">Class</label>
+                  <Select name="dashboard-class" value={dashboardClass} onValueChange={(value) => changeDashboardScope(value,
+                    dashboardSubject === "all" || dashboardFilters.some(item => (value === "all" || String(item.class_id) === value) && String(item.subject_id) === dashboardSubject)
+                      ? dashboardSubject : "all")}
+                    disabled={isPeriodLoading || (!dashboardFilters.length && isLoading)}>
+                    <Select.Trigger id="dashboard-class" className="w-full"><Select.Value /></Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="all">All Classes</Select.Item>
+                      {classOptions.map(item => <Select.Item key={item.class_id} value={String(item.class_id)}>{item.section_name}</Select.Item>)}
+                    </Select.Content>
+                  </Select>
+                </div>
+                <div className="flex min-w-0 flex-col gap-2">
+                  <label htmlFor="dashboard-subject" className="text-sm font-medium">Subject</label>
+                  <Select name="dashboard-subject" value={dashboardSubject} onValueChange={(value) => changeDashboardScope(dashboardClass, value)}
+                    disabled={isPeriodLoading || (!dashboardFilters.length && isLoading)}>
+                    <Select.Trigger id="dashboard-subject" className="w-full"><Select.Value /></Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="all">All Subjects</Select.Item>
+                      {subjectOptions.map(item => <Select.Item key={item.subject_id} value={String(item.subject_id)}>{item.subject_name}</Select.Item>)}
+                    </Select.Content>
+                  </Select>
+                </div>
+              </div>
               {error && (
                 <Alert status="error" className="flex items-center gap-2">
                   <AlertCircle className="size-4 shrink-0" />
@@ -459,6 +506,15 @@ export default function Dashboard() {
                     {error}
                   </Alert.Description>
                 </Alert>
+              )}
+              {!isLoading && !isPeriodLoading && !error && data && !data.trend_chart.available_filters.length && (
+                <TeacherEmptyState
+                  compact
+                  icon={<BookOpen />}
+                  title={dashboardClass !== "all" || dashboardSubject !== "all" ? "No data for this selection" : "No classes assigned"}
+                  description={dashboardClass !== "all" || dashboardSubject !== "all" ? "Choose another class or subject to view its analytics." : "Dashboard analytics will appear when you have assigned classes and subjects for this academic period."}
+                  action={dashboardClass !== "all" || dashboardSubject !== "all" ? { label: "Clear filters", onClick: () => changeDashboardScope("all", "all") } : undefined}
+                />
               )}
 
               {/* 2-Column Responsive Layout: Left/Center Main Analytics & Right Overview Cards */}
@@ -636,7 +692,7 @@ export default function Dashboard() {
                           data.trend_chart.available_filters.length > 0 && (
                             <div className="flex items-center gap-1.5 sm:w-auto">
                               <Select
-                                value={selectedFilterKey}
+                                value={selectedFilterKey || `${data.trend_chart.selected_class_id}-${data.trend_chart.selected_subject_id}`}
                                 onValueChange={setSelectedFilterKey}
                               >
                                 <Select.Trigger
@@ -935,7 +991,7 @@ export default function Dashboard() {
                                 {emptyMessage("No classes for this academic period.")}
                               </Card.Description>
                             )}
-                            {displayed.map((sec: any, idx: number) => (
+                            {displayed.map((sec, idx: number) => (
                               <Card
                                 key={idx}
                                 className="shadow-none p-4 text-xs hover:bg-retro hover:-translate-y-1 cursor-pointer transition-all"
