@@ -92,6 +92,8 @@ def get_teacher_dashboard_health(
     academic_period_id: int | None = Query(default=None),
     class_id: int | None = Query(default=None),
     subject_id: int | None = Query(default=None),
+    dashboard_class_id: int | None = Query(default=None, gt=0),
+    dashboard_subject_id: int | None = Query(default=None, gt=0),
     staff_id: str | None = Query(default=None),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -130,5 +132,7 @@ def get_teacher_dashboard_health(
             target_period=target_period,
             class_id=class_id,
             subject_id=subject_id,
+            dashboard_class_id=dashboard_class_id,
+            dashboard_subject_id=dashboard_subject_id,
         )
 

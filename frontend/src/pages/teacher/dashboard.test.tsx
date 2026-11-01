@@ -26,8 +26,8 @@ vi.mock("@/components/retroui/tooltip", () => ({
 }));
 vi.mock("@/components/retroui/Select", () => ({
   Select: Object.assign(
-    ({ children, value, onValueChange }: { children: ReactNode; value: string; onValueChange: (value: string) => void }) =>
-      <select aria-label="Trend section" value={value} onChange={(event) => onValueChange(event.target.value)}>{children}</select>,
+    ({ children, value, onValueChange, name }: { children: ReactNode; value: string; name?: string; onValueChange: (value: string) => void }) =>
+      <select aria-label={name ?? "Trend section"} value={value} onChange={(event) => onValueChange(event.target.value)}>{children}</select>,
     {
       Trigger: () => null,
       Value: () => null,
@@ -1222,4 +1222,65 @@ describe("teacher dashboard Phase 5 mocked component behavior", () => {
     expect(screen.getByText("Second lesson")).toBeTruthy();
     expect(screen.queryByText("Actual quiz lesson")).toBeNull();
   });
+});
+
+describe("dashboard-wide filters", () => {
+  it("scopes all dashboard requests and resets an incompatible subject on class change", async () => {
+    const filters = [
+      { class_id: 10, section_name: "Archimedes", subject_id: 20, subject_name: "Mathematics" },
+      { class_id: 11, section_name: "Newton", subject_id: 21, subject_name: "Science" },
+    ];
+    mocks.load.mockImplementation(async (params) => {
+      const scoped = filters.filter(item => (!params.dashboard_class_id || item.class_id === params.dashboard_class_id)
+        && (!params.dashboard_subject_id || item.subject_id === params.dashboard_subject_id));
+      const result = response({ dashboard_filters: filters });
+      result.kpis.active_classes = scoped.length;
+      result.trend_chart.available_filters = scoped;
+      result.trend_chart.selected_class_id = scoped[0]?.class_id ?? null;
+      result.trend_chart.selected_subject_id = scoped[0]?.subject_id ?? null;
+      return result;
+    });
+    render(<Dashboard />);
+    await screen.findByRole("option", { name: "Archimedes" });
+    fireEvent.change(screen.getByRole("combobox", { name: "dashboard-subject" }), { target: { value: "20" } });
+    await waitFor(() => expect(mocks.load).toHaveBeenLastCalledWith(expect.objectContaining({ dashboard_subject_id: 20 })));
+    fireEvent.change(screen.getByRole("combobox", { name: "dashboard-class" }), { target: { value: "11" } });
+    await waitFor(() => expect(mocks.load).toHaveBeenLastCalledWith(expect.objectContaining({ dashboard_class_id: 11 })));
+    expect((screen.getByRole("combobox", { name: "dashboard-subject" }) as HTMLSelectElement).value).toBe("all");
+    expect(within(screen.getByRole("combobox", { name: "dashboard-subject" })).queryByRole("option", { name: "Mathematics" })).toBeNull();
+    fireEvent.change(screen.getByRole("combobox", { name: "dashboard-subject" }), { target: { value: "21" } });
+    await waitFor(() => expect(mocks.load).toHaveBeenLastCalledWith(expect.objectContaining({ dashboard_class_id: 11, dashboard_subject_id: 21 })));
+    fireEvent.change(screen.getByRole("combobox", { name: "dashboard-class" }), { target: { value: "all" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "dashboard-subject" }), { target: { value: "all" } });
+    await waitFor(() => {
+      const last = mocks.load.mock.calls.at(-1)?.[0];
+      expect(last.dashboard_class_id).toBeUndefined();
+      expect(last.dashboard_subject_id).toBeUndefined();
+    });
+  });
+});
+
+it("ignores a stale dashboard scope response after a newer subject selection", async () => {
+  const filters = [
+    { class_id: 10, section_name: "Archimedes", subject_id: 20, subject_name: "Mathematics" },
+    { class_id: 10, section_name: "Archimedes", subject_id: 21, subject_name: "Science" },
+  ];
+  let resolveOld: ((value: TeacherDashboardHealthResponse) => void) | undefined;
+  const oldResponse = new Promise<TeacherDashboardHealthResponse>(resolve => { resolveOld = resolve; });
+  mocks.load.mockImplementation((params) => {
+    if (params.dashboard_subject_id === 20) return oldResponse;
+    const result = response({ dashboard_filters: filters });
+    result.kpis.active_classes = params.dashboard_subject_id === 21 ? 1 : 2;
+    return Promise.resolve(result);
+  });
+  render(<Dashboard />);
+  await screen.findByRole("option", { name: "Mathematics" });
+  fireEvent.change(screen.getByRole("combobox", { name: "dashboard-subject" }), { target: { value: "20" } });
+  await waitFor(() => expect(mocks.load).toHaveBeenLastCalledWith(expect.objectContaining({ dashboard_subject_id: 20 })));
+  fireEvent.change(screen.getByRole("combobox", { name: "dashboard-subject" }), { target: { value: "21" } });
+  await waitFor(() => expect(cardFor("Active Classes").textContent).toContain("1 sections"));
+  const stale = response({ dashboard_filters: filters });
+  stale.kpis.active_classes = 99;
+  await act(async () => { resolveOld?.(stale); });
+  expect(cardFor("Active Classes").textContent).not.toContain("99");
 });

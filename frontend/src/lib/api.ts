@@ -3035,6 +3035,7 @@ export interface TeacherDashboardSupportSummary {
 }
 
 export interface TeacherDashboardHealthResponse {
+  dashboard_filters?: TeacherDashboardHealthFilter[];
   term_info: {
     period_id: number | null;
     period_name: string;
@@ -3081,11 +3082,15 @@ export async function getTeacherDashboardHealth(params: {
   academic_period_id?: number;
   class_id?: number;
   subject_id?: number;
+  dashboard_class_id?: number;
+  dashboard_subject_id?: number;
 } = {}): Promise<TeacherDashboardHealthResponse> {
   const query = new URLSearchParams();
   if (params.academic_period_id) query.set("academic_period_id", String(params.academic_period_id));
   if (params.class_id) query.set("class_id", String(params.class_id));
   if (params.subject_id) query.set("subject_id", String(params.subject_id));
+  if (params.dashboard_class_id) query.set("dashboard_class_id", String(params.dashboard_class_id));
+  if (params.dashboard_subject_id) query.set("dashboard_subject_id", String(params.dashboard_subject_id));
 
   const res = await apiFetch(`/api/v1/analytics/teacher/dashboard-health${query.toString() ? `?${query.toString()}` : ""}`);
   if (!res.ok) {
