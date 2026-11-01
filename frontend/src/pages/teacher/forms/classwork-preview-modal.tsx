@@ -303,7 +303,7 @@ export default function ClassworkDetailModal({
               </Card>
 
               {/* Tracking Overview Card */}
-              <Card className="block bg-primary">
+              <Card className="block bg-white">
                 <Card.Content className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
@@ -359,7 +359,7 @@ export default function ClassworkDetailModal({
 
                   <Button
                     size="sm"
-                    variant="secondary"
+                    variant="default"
                     onClick={() =>
                       navigate(
                         `/teacher/classworks/${selectedClasswork.classwork_id}`
