@@ -6,6 +6,8 @@ export interface TeacherInterventionSummary {
   student_id: string;
   student_name: string;
   student_lrn: string;
+  grade_level?: number | string | null;
+  level_name?: string | null;
   class_id: number;
   class_name: string;
   subject_id: number;

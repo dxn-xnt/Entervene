@@ -19,7 +19,7 @@ vi.mock("@/layouts/app-layout", () => ({ default: ({ children }: { children: Rea
 vi.mock("@/components/ui/sidebar", () => ({ SidebarTrigger: () => null }));
 
 const candidate = {
-  intervention_id: 12, student_id: "s1", student_name: "Alex Rivera", student_lrn: "123", class_id: 7,
+  intervention_id: 12, student_id: "s1", student_name: "Alex Rivera", student_lrn: "123", grade_level: 9, level_name: "Grade 9", class_id: 7,
   class_name: "Archimedes", subject_id: 5, subject_name: "Mathematics", academic_period_id: 3,
   academic_period_name: "Term 1", status: "CANDIDATE", source_prediction_id: 41,
   source_prediction_revision: 2, triggering_predicted_grade: 74, triggering_intervention_level: "HIGH_RISK",
@@ -101,6 +101,7 @@ describe("teacher candidate review", () => {
     await screen.findByText("Alex Rivera");
     expect(screen.getAllByText("Weakest supported: Written Work")).toHaveLength(2);
     expect(screen.getAllByRole("row")[1].textContent).toContain("Alex Rivera");
+    expect(screen.getAllByRole("row")[1].textContent).toContain("Grade 9");
   });
   it("shows an empty state", async () => {
     api.list.mockResolvedValue({ items: [], total: 0 }); mount();
@@ -297,7 +298,7 @@ describe("teacher active intervention review", () => {
     expect(within(sheet).getAllByText("Monitoring")).toHaveLength(2);
     await openSupportPlan(sheet);
     expect(within(sheet).queryByText("Term Exam")).toBeNull();
-    expect(within(sheet).getAllByText("Unrelated Geometry")).toHaveLength(1);
+    expect(within(sheet).queryByText("Unrelated Geometry")).toBeNull();
     expect(within(sheet).queryByText("Teacher selected")).toBeNull();
     fireEvent.click(within(sheet).getByRole("button", { name: "Select resources" }));
     const resourcesDialog = await screen.findByRole("dialog", { name: "Add Supporting Resources" });
@@ -307,6 +308,32 @@ describe("teacher active intervention review", () => {
     expect(within(sheet).getByText(/No scored original Examination is available for this student and period/)).toBeTruthy();
     expect(api.advisory).not.toHaveBeenCalled();
   });
+  it("opens the create classwork reading modal from Add Additional Resources and attaches the newly created reading", async () => {
+    const resource = { kind: "CLASSWORK", id: 4, title: "Fractions guide", description: "Practice guide", lesson: "Fractions",
+      topic: "Fractions", attachments: [], access: "PLANNING_ONLY", ai_read: "METADATA_ONLY", recommended: true,
+      classwork_type: "READING", is_graded: false, match_reason: "Matched lesson: Fractions", match_level: "LESSON", match_rank: 80 };
+
+    api.workspace.mockResolvedValue({
+      plan: { teacher_choice: null, selected_resources: [], ai_suggestion: null },
+      resources: [resource],
+      focus: { basis: "FROZEN_TRIGGER_DIAGNOSIS", evidence_level: "SCORED_COMPETENCY", component: "WRITTEN_WORK", exam_subtype: null, competency_ids: [2], competencies: [{ id: 2, label: "Add fractions" }], lesson_ids: [], lessons: [], source_classwork_ids: [], topics: [], question_evidence: [], coverage_is_context_only: false },
+      progress: { triggering_projection: 74, latest_projection: 74, latest_revision: 2, completed_remediation: [], assigned_remediation: [], status: "ACTIVE", status_reason: "Latest projected final grade remains below 85." },
+    });
+
+    mount("/teacher/interventions?active=12");
+    const sheet = await screen.findByRole("dialog");
+    await openSupportPlan(sheet);
+    fireEvent.click(await within(sheet).findByRole("button", { name: "Select resources" }));
+    const resourcesDialog = await screen.findByRole("dialog", { name: "Add Supporting Resources" });
+
+    const addBtn = within(resourcesDialog).getByRole("button", { name: "Add Additional Resources" });
+    expect(addBtn).toBeTruthy();
+    fireEvent.click(addBtn);
+
+    expect(await screen.findByText("Create Reading")).toBeTruthy();
+    expect(screen.getByText("Step 1 of 2")).toBeTruthy();
+  });
+
   it("selects a scored original Examination for the higher-score treatment", async () => {
     const workspace = {
       plan: { teacher_choice: "CLASSWORK", grade_treatment: "PRACTICE_ONLY", selected_resources: [], ai_suggestion: null },
@@ -363,5 +390,74 @@ describe("teacher active intervention review", () => {
     expect(await screen.findByText(/Active list unavailable/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("No active interventions")).toBeTruthy();
+  });
+});
+
+describe("teacher interventions filters", () => {
+  const candidate1 = {
+    ...candidate,
+    intervention_id: 101,
+    student_name: "Alex Rivera",
+    student_lrn: "123",
+    grade_level: 9,
+    level_name: "Grade 9",
+    class_id: 7,
+    class_name: "Archimedes",
+    subject_id: 5,
+    subject_name: "Mathematics",
+    triggering_intervention_level: "HIGH_RISK",
+  };
+  const candidate2 = {
+    ...candidate,
+    intervention_id: 102,
+    student_name: "Bianca Santos",
+    student_lrn: "456",
+    grade_level: 10,
+    level_name: "Grade 10",
+    class_id: 8,
+    class_name: "Galileo",
+    subject_id: 6,
+    subject_name: "Science",
+    triggering_intervention_level: "MODERATE_RISK",
+  };
+
+  it("filters items by search input and clears filter with Clear Filters button", async () => {
+    api.list.mockResolvedValue({ items: [candidate1, candidate2], total: 2 });
+    mount();
+    expect(await screen.findByText("Alex Rivera")).toBeTruthy();
+    expect(screen.getByText("Bianca Santos")).toBeTruthy();
+
+    const searchInput = screen.getByPlaceholderText("Search student, subject, or class...");
+    fireEvent.change(searchInput, { target: { value: "Bianca" } });
+
+    expect(screen.queryByText("Alex Rivera")).toBeNull();
+    expect(screen.getByText("Bianca Santos")).toBeTruthy();
+
+    const clearButton = screen.getByRole("button", { name: /Clear Filters/i });
+    fireEvent.click(clearButton);
+
+    expect(await screen.findByText("Alex Rivera")).toBeTruthy();
+    expect(screen.getByText("Bianca Santos")).toBeTruthy();
+  });
+
+  it("shows empty state when no interventions match the search query and allows clearing", async () => {
+    api.list.mockResolvedValue({ items: [candidate1, candidate2], total: 2 });
+    mount();
+    expect(await screen.findByText("Alex Rivera")).toBeTruthy();
+
+    const searchInput = screen.getByPlaceholderText("Search student, subject, or class...");
+    fireEvent.change(searchInput, { target: { value: "NonExistentStudent" } });
+
+    expect(screen.queryByText("Alex Rivera")).toBeNull();
+    expect(screen.queryByText("Bianca Santos")).toBeNull();
+    expect(screen.getByText("No interventions match your filters")).toBeTruthy();
+
+    // Both the filter bar and the empty-state action offer "Clear Filters"
+    const clearButtons = screen.getAllByRole("button", { name: "Clear Filters" });
+    expect(clearButtons.length).toBeGreaterThanOrEqual(2);
+    fireEvent.click(clearButtons[1]);
+
+    expect(await screen.findByText("Alex Rivera")).toBeTruthy();
+    expect(screen.getByText("Bianca Santos")).toBeTruthy();
   });
 });

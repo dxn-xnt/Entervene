@@ -10,6 +10,8 @@ class TeacherInterventionSummary(BaseModel):
     student_id: UUID
     student_name: str
     student_lrn: str
+    grade_level: int | None = None
+    level_name: str | None = None
     class_id: int
     class_name: str
     subject_id: int

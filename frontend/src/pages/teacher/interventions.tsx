@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/teacher/button";
+import { Input } from "@/components/retroui/Input";
+import { Select } from "@/components/retroui/Select";
 import { Skeleton } from "@/components/retroui/Skeleton";
 import { Table } from "@/components/retroui/Table";
 import { Tabs } from "@/components/retroui/Tabs";
 import { useToast } from "@/components/retroui/Toast";
-import { Activity, AlertTriangle, CheckCircle2, HeartHandshake, UserCheck } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, HeartHandshake, Search, UserCheck, X } from "lucide-react";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import InterventionModal from "./forms/intervention-modal";
 import {
@@ -106,6 +108,27 @@ export default function TeacherInterventions() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [activating, setActivating] = useState(false);
   const [reviewStale, setReviewStale] = useState(false);
+
+  const [search, setSearch] = useState("");
+  const [subjectFilter, setSubjectFilter] = useState("all");
+  const [classFilter, setClassFilter] = useState("all");
+  const [gradeFilter, setGradeFilter] = useState("all");
+  const [riskFilter, setRiskFilter] = useState("all");
+
+  const hasActiveFilters =
+    search.trim().length > 0 ||
+    subjectFilter !== "all" ||
+    classFilter !== "all" ||
+    gradeFilter !== "all" ||
+    riskFilter !== "all";
+
+  const clearFilters = () => {
+    setSearch("");
+    setSubjectFilter("all");
+    setClassFilter("all");
+    setGradeFilter("all");
+    setRiskFilter("all");
+  };
 
   const refresh = async () => {
     setLoading(true);
@@ -299,17 +322,120 @@ export default function TeacherInterventions() {
     }
   };
 
-  const sorted = [
-    ...(resolvedView ? resolvedItems : activeView ? activeItems : items),
-  ].sort((a, b) =>
-    resolvedView
-      ? (b.resolved_at || "").localeCompare(a.resolved_at || "")
-      : activeView
-        ? (b.activated_at || "").localeCompare(a.activated_at || "")
-        : (a.triggering_intervention_level === "HIGH_RISK" ? 0 : 1) -
-        (b.triggering_intervention_level === "HIGH_RISK" ? 0 : 1) ||
-        b.created_at.localeCompare(a.created_at)
-  );
+  const rawList = resolvedView
+    ? resolvedItems
+    : activeView
+      ? activeItems
+      : items;
+
+  const availableSubjects = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const item of rawList) {
+      if (item.subject_id && item.subject_name) {
+        map.set(item.subject_id, item.subject_name);
+      }
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [rawList]);
+
+  const availableClasses = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const item of rawList) {
+      if (item.class_id && item.class_name) {
+        map.set(item.class_id, item.class_name);
+      }
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [rawList]);
+
+  const availableGrades = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of rawList) {
+      const gl =
+        item.level_name ||
+        (item.grade_level != null
+          ? String(item.grade_level).startsWith("Grade")
+            ? String(item.grade_level)
+            : `Grade ${item.grade_level}`
+          : null);
+      if (gl) set.add(gl);
+    }
+    return Array.from(set).sort();
+  }, [rawList]);
+
+  const availableRiskLevels = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of rawList) {
+      if (item.triggering_intervention_level) {
+        set.add(item.triggering_intervention_level);
+      }
+    }
+    return Array.from(set);
+  }, [rawList]);
+
+  const sorted = useMemo(() => {
+    return [...rawList].sort((a, b) =>
+      resolvedView
+        ? (b.resolved_at || "").localeCompare(a.resolved_at || "")
+        : activeView
+          ? (b.activated_at || "").localeCompare(a.activated_at || "")
+          : (a.triggering_intervention_level === "HIGH_RISK" ? 0 : 1) -
+            (b.triggering_intervention_level === "HIGH_RISK" ? 0 : 1) ||
+            b.created_at.localeCompare(a.created_at)
+    );
+  }, [rawList, resolvedView, activeView]);
+
+  const filtered = useMemo(() => {
+    return sorted.filter((candidate) => {
+      if (search.trim()) {
+        const query = search.trim().toLowerCase();
+        const studentName = (candidate.student_name || "").toLowerCase();
+        const lrn = (candidate.student_lrn || "").toLowerCase();
+        const subject = (candidate.subject_name || "").toLowerCase();
+        const className = (candidate.class_name || "").toLowerCase();
+        const gradeText = (
+          candidate.level_name ||
+          (candidate.grade_level != null ? `Grade ${candidate.grade_level}` : "")
+        ).toLowerCase();
+        const matches =
+          studentName.includes(query) ||
+          lrn.includes(query) ||
+          subject.includes(query) ||
+          className.includes(query) ||
+          gradeText.includes(query);
+        if (!matches) return false;
+      }
+
+      if (subjectFilter !== "all" && String(candidate.subject_id) !== subjectFilter) {
+        return false;
+      }
+
+      if (classFilter !== "all" && String(candidate.class_id) !== classFilter) {
+        return false;
+      }
+
+      if (gradeFilter !== "all") {
+        const gl =
+          candidate.level_name ||
+          (candidate.grade_level != null
+            ? String(candidate.grade_level).startsWith("Grade")
+              ? String(candidate.grade_level)
+              : `Grade ${candidate.grade_level}`
+            : "");
+        if (gl !== gradeFilter) return false;
+      }
+
+      if (riskFilter !== "all" && candidate.triggering_intervention_level !== riskFilter) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [sorted, search, subjectFilter, classFilter, gradeFilter, riskFilter]);
 
   const showingLoading = resolvedView
     ? resolvedLoading
@@ -403,7 +529,7 @@ export default function TeacherInterventions() {
                         : refresh()),
                   }}
                 />
-              ) : sorted.length === 0 ? (
+              ) : rawList.length === 0 && !hasActiveFilters ? (
                 <TeacherEmptyState
                   icon={<HeartHandshake />}
                   title={resolvedView ? "No resolved interventions" : activeView ? "No active interventions" : "No candidates to review"}
@@ -414,31 +540,143 @@ export default function TeacherInterventions() {
                       : "New candidates will appear when a current corrected prediction qualifies."}
                 />
               ) : (
-                <Table wrapperClassName="h-auto">
-                  <Table.Header>
-                    <Table.Row>
-                      <Table.Head>Student</Table.Head>
-                      <Table.Head>Subject</Table.Head>
-                      <Table.Head className="text-center">Trigger</Table.Head>
-                      <Table.Head className="text-center">Status</Table.Head>
-                      <Table.Head>Saved reason</Table.Head>
-                      <Table.Head>
-                        {resolvedView
-                          ? "Resolved"
-                          : activeView
-                            ? "Activated"
-                            : "Created"}
-                      </Table.Head>
-                      <Table.Head className="w-10">Review</Table.Head>
-                    </Table.Row>
-                  </Table.Header>
-                  <Table.Body>
-                    {sorted.map((candidate) => (
+                <>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                      {/* Search Input */}
+                      <div className="relative min-w-[200px] flex-1">
+                        <Search
+                          size={16}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground z-10"
+                        />
+                        <Input
+                          variant="search"
+                          placeholder="Search student, subject, or class..."
+                          value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+
+                      {/* Subject Filter */}
+                      {availableSubjects.length > 0 && (
+                        <Select value={subjectFilter} onValueChange={setSubjectFilter}>
+                          <Select.Trigger className="w-full sm:w-44">
+                            <Select.Value placeholder="All Subjects" />
+                          </Select.Trigger>
+                          <Select.Content>
+                            <Select.Item value="all">All Subjects</Select.Item>
+                            {availableSubjects.map((s) => (
+                              <Select.Item key={s.id} value={String(s.id)}>
+                                {s.name}
+                              </Select.Item>
+                            ))}
+                          </Select.Content>
+                        </Select>
+                      )}
+
+                      {/* Class / Section Filter */}
+                      {availableClasses.length > 0 && (
+                        <Select value={classFilter} onValueChange={setClassFilter}>
+                          <Select.Trigger className="w-full sm:w-44">
+                            <Select.Value placeholder="All Classes" />
+                          </Select.Trigger>
+                          <Select.Content>
+                            <Select.Item value="all">All Classes</Select.Item>
+                            {availableClasses.map((c) => (
+                              <Select.Item key={c.id} value={String(c.id)}>
+                                {c.name}
+                              </Select.Item>
+                            ))}
+                          </Select.Content>
+                        </Select>
+                      )}
+
+                      {/* Grade Level Filter */}
+                      {availableGrades.length > 0 && (
+                        <Select value={gradeFilter} onValueChange={setGradeFilter}>
+                          <Select.Trigger className="w-full sm:w-36">
+                            <Select.Value placeholder="All Grades" />
+                          </Select.Trigger>
+                          <Select.Content>
+                            <Select.Item value="all">All Grades</Select.Item>
+                            {availableGrades.map((g) => (
+                              <Select.Item key={g} value={g}>
+                                {g}
+                              </Select.Item>
+                            ))}
+                          </Select.Content>
+                        </Select>
+                      )}
+
+                      {/* Risk Level Filter */}
+                      {availableRiskLevels.length > 0 && (
+                        <Select value={riskFilter} onValueChange={setRiskFilter}>
+                          <Select.Trigger className="w-full sm:w-44">
+                            <Select.Value placeholder="All Risk Levels" />
+                          </Select.Trigger>
+                          <Select.Content>
+                            <Select.Item value="all">All Risk Levels</Select.Item>
+                            {availableRiskLevels.map((lvl) => (
+                              <Select.Item key={lvl} value={lvl}>
+                                {label(lvl)}
+                              </Select.Item>
+                            ))}
+                          </Select.Content>
+                        </Select>
+                      )}
+
+                      {/* Clear Filters Button */}
+                      {hasActiveFilters && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={clearFilters}
+                          className="h-10 border-2 border-black bg-yellow-300 hover:bg-yellow-400 text-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer"
+                        >
+                          <X size={14} className="stroke-[3]" />
+                          Clear Filters
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {filtered.length === 0 ? (
+                    <TeacherEmptyState
+                      icon={<Search />}
+                      title="No interventions match your filters"
+                      description="Try another search term or clear your filters to view interventions."
+                      action={{
+                        label: "Clear Filters",
+                        onClick: clearFilters,
+                      }}
+                    />
+                  ) : (
+                    <Table wrapperClassName="h-auto">
+                      <Table.Header>
+                        <Table.Row>
+                          <Table.Head>Student</Table.Head>
+                          <Table.Head>Subject</Table.Head>
+                          <Table.Head className="text-center">Trigger</Table.Head>
+                          <Table.Head className="text-center">Status</Table.Head>
+                          <Table.Head>Saved reason</Table.Head>
+                          <Table.Head>
+                            {resolvedView
+                              ? "Resolved"
+                              : activeView
+                                ? "Activated"
+                                : "Created"}
+                          </Table.Head>
+                          <Table.Head className="w-10">Review</Table.Head>
+                        </Table.Row>
+                      </Table.Header>
+                      <Table.Body>
+                        {filtered.map((candidate) => (
                       <Table.Row key={candidate.intervention_id}>
                         <Table.Cell className="font-semibold">
                           {candidate.student_name}
                           <span className="block text-xs text-muted-foreground">
-                            {candidate.student_lrn}
+                            {candidate.level_name || (candidate.grade_level != null ? (String(candidate.grade_level).startsWith("Grade") ? candidate.grade_level : `Grade ${candidate.grade_level}`) : "—")}
                           </span>
                         </Table.Cell>
                         <Table.Cell>
@@ -497,6 +735,8 @@ export default function TeacherInterventions() {
                     ))}
                   </Table.Body>
                 </Table>
+                  )}
+                </>
               )}
             </main>
           </div>
