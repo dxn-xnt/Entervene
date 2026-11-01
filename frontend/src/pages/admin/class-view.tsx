@@ -528,7 +528,7 @@ function OverviewTab({
           {/* Performance chart */}
           <RetroCard className="p-4">
             <div className="mb-2">
-              <Text as="h4" className="font-sans text-lg font-bold">
+            <Text as="h4" className="font-sans text-lg font-bold">
                 Period Class Performance
               </Text>
               <Text as="p" className="text-sm text-muted-foreground">
