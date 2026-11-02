@@ -92,6 +92,7 @@ export type RequesterVisiblePackageSummary = {
     classwork_count: number;
     attachment_count: number;
   };
+  source_academic_period_ids: number[];
   items: PackagePreviewItem[];
 };
 

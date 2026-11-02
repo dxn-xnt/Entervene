@@ -226,6 +226,50 @@ def test_adviser_access_success(advisory_grades_setup):
     assert res["total_students"] == 2
 
 
+def test_advisory_grades_do_not_reuse_subject_loads_from_another_term(advisory_grades_setup):
+    env = advisory_grades_setup
+    res = get_teacher_advisory_class_grades_data(
+        db=env["db"],
+        class_id=env["cls"].class_id,
+        staff_id=env["staff_adv"].staff_id,
+        academic_period_id=env["p2"].academic_period_id,
+    )
+
+    assert res["academic_period_id"] == env["p2"].academic_period_id
+    assert res["subjects"] == []
+    assert all(student["grades"] == {} for student in res["students"])
+
+
+def test_advisory_grades_reject_period_from_another_academic_year(advisory_grades_setup):
+    env = advisory_grades_setup
+    other_year = AcademicYear(
+        year_label="2027-2028",
+        start_date=date(2027, 6, 1),
+        end_date=date(2028, 3, 31),
+    )
+    env["db"].add(other_year)
+    env["db"].flush()
+    other_period = AcademicPeriod(
+        academic_year_id=other_year.academic_year_id,
+        period_name="Term 1",
+        period_sequence=1,
+        start_date=date(2027, 6, 1),
+        end_date=date(2027, 8, 31),
+    )
+    env["db"].add(other_period)
+    env["db"].commit()
+
+    with pytest.raises(HTTPException) as exc:
+        get_teacher_advisory_class_grades_data(
+            db=env["db"],
+            class_id=env["cls"].class_id,
+            staff_id=env["staff_adv"].staff_id,
+            academic_period_id=other_period.academic_period_id,
+        )
+
+    assert exc.value.status_code == 400
+
+
 def test_non_adviser_access_forbidden(advisory_grades_setup):
     """Unassigned teacher gets 403 Forbidden."""
     env = advisory_grades_setup

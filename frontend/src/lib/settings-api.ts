@@ -101,9 +101,15 @@ export async function getAcademicLevelsSettings(): Promise<AcademicLevelSettingI
   return data.levels || [];
 }
 
-/** Fetch all academic periods (admin only). */
-export async function getAcademicPeriodsSettings(academicYearId?: number): Promise<AcademicPeriodSettingItem[]> {
-  const query = academicYearId ? `?academic_year_id=${academicYearId}` : "";
+/** Fetch academic periods for a year, or explicitly across every configured year. */
+export async function getAcademicPeriodsSettings(
+  academicYearId?: number,
+  includeAll = false,
+): Promise<AcademicPeriodSettingItem[]> {
+  const params = new URLSearchParams();
+  if (academicYearId) params.set("academic_year_id", String(academicYearId));
+  if (includeAll) params.set("include_all", "true");
+  const query = params.size > 0 ? `?${params.toString()}` : "";
   const res = await apiFetch(`/api/v1/settings/academic-periods${query}`);
   if (!res.ok) throw new Error("Failed to load academic periods");
   const data = await res.json();

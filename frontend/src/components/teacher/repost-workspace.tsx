@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   Award,
@@ -65,6 +65,10 @@ export interface RepostWorkspaceProps {
   onCloseDialog?: () => void;
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 export function RepostWorkspace({
   initialTab = "reuse",
   destinationClassId: propClassId,
@@ -79,6 +83,11 @@ export function RepostWorkspace({
 }: RepostWorkspaceProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const selfLoadSequence = useRef(0);
+  const teacherLoadSequence = useRef(0);
+  const requestLoadSequence = useRef({ incoming: 0, outgoing: 0 });
+  const materialLoadSequence = useRef(0);
+  const previewLoadSequence = useRef(0);
 
   // URL query parameter resolution
   const urlBox = searchParams.get("box");
@@ -177,21 +186,25 @@ export function RepostWorkspace({
 
   const loadSelfMaterials = useCallback(async () => {
     if (!activeDestination) return;
+    const sequence = ++selfLoadSequence.current;
     setSelfLoading(true);
     setSelfError("");
     setCloneSuccessResult(null);
+    setSelfMaterials([]);
+    setSelectedTokens(new Set());
     try {
       const res = await getSelfCloneMaterials({
         destination_class_id: activeDestination.classId,
         destination_subject_id: activeDestination.subjectId,
         destination_academic_period_id: activeDestination.periodId,
       });
-      setSelfMaterials(res.items || []);
-      setSelectedTokens(new Set());
-    } catch (err: any) {
-      setSelfError(err.message || "Unable to load prior materials for self-cloning.");
+      if (sequence === selfLoadSequence.current) setSelfMaterials(res.items || []);
+    } catch (error: unknown) {
+      if (sequence === selfLoadSequence.current) {
+        setSelfError(errorMessage(error, "Unable to load prior materials for self-cloning."));
+      }
     } finally {
-      setSelfLoading(false);
+      if (sequence === selfLoadSequence.current) setSelfLoading(false);
     }
   }, [activeDestination]);
 
@@ -239,18 +252,31 @@ export function RepostWorkspace({
           source_entity_id: item.source_entity_id,
           source_revision_token: item.source_revision_token,
         }));
+      const selectedSourcePeriodIds = Array.from(new Set(
+        selfMaterials
+          .filter((item) => selectedTokens.has(item.source_revision_token))
+          .map((item) => item.academic_period_id)
+          .filter((periodId): periodId is number => Number.isInteger(periodId)),
+      ));
+      const periodMappings = selectedSourcePeriodIds.length > 1
+        ? selectedSourcePeriodIds.map((sourcePeriodId) => ({
+            source_academic_period_id: sourcePeriodId,
+            destination_academic_period_id: activeDestination.periodId,
+          }))
+        : undefined;
 
       const op = await cloneSelfMaterials({
         destination_class_id: activeDestination.classId,
         destination_subject_id: activeDestination.subjectId,
         destination_academic_period_id: activeDestination.periodId,
         items: itemsToClone,
+        ...(periodMappings ? { period_mappings: periodMappings } : {}),
       });
 
       setCloneSuccessResult(op);
       onClonedSuccess?.();
-    } catch (err: any) {
-      setSelfError(err.message || "Failed to clone selected materials.");
+    } catch (error: unknown) {
+      setSelfError(errorMessage(error, "Failed to clone selected materials."));
     } finally {
       setCloningInProgress(false);
     }
@@ -271,7 +297,7 @@ export function RepostWorkspace({
   useEffect(() => {
     let active = true;
     setLoadingCalendar(true);
-    Promise.all([getAcademicYearsSettings(), getAcademicPeriodsSettings()])
+    Promise.all([getAcademicYearsSettings(), getAcademicPeriodsSettings(undefined, true)])
       .then(([years, periods]) => {
         if (!active) return;
         setAllAcademicYears(years || []);
@@ -390,13 +416,18 @@ export function RepostWorkspace({
   const loadSourceTeachers = useCallback(async () => {
     if (!activeDestination) return;
     if (!isSourceScopeValid) {
+      teacherLoadSequence.current += 1;
       setSourceTeachers([]);
       setSelectedTeacherId("");
+      setTeachersLoading(false);
       return;
     }
+    const sequence = ++teacherLoadSequence.current;
     setTeachersLoading(true);
     setTeachersError("");
     setRequestSentSuccess(null);
+    setSourceTeachers([]);
+    setSelectedTeacherId("");
     try {
       const teachers = await getSourceTeachers({
         destination_class_id: activeDestination.classId,
@@ -406,16 +437,16 @@ export function RepostWorkspace({
         source_academic_year_id: selectedSourceYearId ? Number(selectedSourceYearId) : undefined,
         source_academic_period_id: selectedSourcePeriodId ? Number(selectedSourcePeriodId) : undefined,
       });
-      setSourceTeachers(teachers || []);
-      if (teachers && teachers.length > 0) {
-        setSelectedTeacherId(teachers[0].staff_id);
-      } else {
-        setSelectedTeacherId("");
+      if (sequence === teacherLoadSequence.current) {
+        setSourceTeachers(teachers || []);
+        setSelectedTeacherId(teachers?.[0]?.staff_id || "");
       }
-    } catch (err: any) {
-      setTeachersError(err.message || "Unable to check eligible teachers.");
+    } catch (error: unknown) {
+      if (sequence === teacherLoadSequence.current) {
+        setTeachersError(errorMessage(error, "Unable to check eligible teachers."));
+      }
     } finally {
-      setTeachersLoading(false);
+      if (sequence === teacherLoadSequence.current) setTeachersLoading(false);
     }
   }, [activeDestination, isSourceScopeValid, scopeMode, selectedSourceYearId, selectedSourcePeriodId]);
 
@@ -442,8 +473,8 @@ export function RepostWorkspace({
         message: requestMessage.trim() || undefined,
       });
       setRequestSentSuccess(req);
-    } catch (err: any) {
-      setTeachersError(err.message || "Failed to send request.");
+    } catch (error: unknown) {
+      setTeachersError(errorMessage(error, "Failed to send request."));
     } finally {
       setSendingRequest(false);
     }
@@ -458,16 +489,21 @@ export function RepostWorkspace({
   const [requestsError, setRequestsError] = useState("");
 
   const loadRequests = useCallback(async (boxToLoad: "incoming" | "outgoing") => {
+    const sequence = ++requestLoadSequence.current[boxToLoad];
     setLoadingRequests(true);
     setRequestsError("");
     try {
       const data = await getContentRequests(boxToLoad, 1, 50);
-      if (boxToLoad === "incoming") setIncomingData(data);
-      else setOutgoingData(data);
-    } catch (err: any) {
-      setRequestsError(err.message || "Failed to load requests.");
+      if (sequence === requestLoadSequence.current[boxToLoad]) {
+        if (boxToLoad === "incoming") setIncomingData(data);
+        else setOutgoingData(data);
+      }
+    } catch (error: unknown) {
+      if (sequence === requestLoadSequence.current[boxToLoad]) {
+        setRequestsError(errorMessage(error, "Failed to load requests."));
+      }
     } finally {
-      setLoadingRequests(false);
+      if (sequence === requestLoadSequence.current[boxToLoad]) setLoadingRequests(false);
     }
   }, []);
 
@@ -512,17 +548,20 @@ export function RepostWorkspace({
 
   // Packaging Modal Handlers (Starts with 0 items selected)
   const openPackageModal = async (req: ContentShareRequest) => {
+    const sequence = ++materialLoadSequence.current;
     setPackagingRequest(req);
     setPackagingTokens(new Set()); // Starts with 0 selected
     setPackageError("");
     setLoadingMaterials(true);
     try {
       const res = await getEligibleMaterials(req.request_id);
-      setEligibleMaterials(res.items || []);
-    } catch (err: any) {
-      setPackageError(err.message || "Unable to load eligible materials.");
+      if (sequence === materialLoadSequence.current) setEligibleMaterials(res.items || []);
+    } catch (error: unknown) {
+      if (sequence === materialLoadSequence.current) {
+        setPackageError(errorMessage(error, "Unable to load eligible materials."));
+      }
     } finally {
-      setLoadingMaterials(false);
+      if (sequence === materialLoadSequence.current) setLoadingMaterials(false);
     }
   };
 
@@ -554,8 +593,8 @@ export function RepostWorkspace({
 
       setPackagingRequest(null);
       void loadRequests("incoming");
-    } catch (err: any) {
-      setPackageError(err.message || "Failed to freeze and send package.");
+    } catch (error: unknown) {
+      setPackageError(errorMessage(error, "Failed to freeze and send package."));
     } finally {
       setSubmittingPackage(false);
     }
@@ -563,6 +602,7 @@ export function RepostWorkspace({
 
   // Preview & Decision Handlers
   const openPreviewModal = async (req: ContentShareRequest) => {
+    const sequence = ++previewLoadSequence.current;
     setPreviewRequest(req);
     setPackagePreview(null);
     setPreviewError("");
@@ -570,30 +610,38 @@ export function RepostWorkspace({
     setLoadingPreview(true);
     try {
       const prev = await getPackagePreview(req.request_id);
-      setPackagePreview(prev);
-    } catch (err: any) {
-      setPreviewError(err.message || "Unable to load package preview.");
+      if (sequence === previewLoadSequence.current) setPackagePreview(prev);
+    } catch (error: unknown) {
+      if (sequence === previewLoadSequence.current) {
+        setPreviewError(errorMessage(error, "Unable to load package preview."));
+      }
     } finally {
-      setLoadingPreview(false);
+      if (sequence === previewLoadSequence.current) setLoadingPreview(false);
     }
   };
 
   const handleAcceptPackage = async () => {
-    if (!previewRequest) return;
+    if (!previewRequest || !packagePreview) return;
     setDecisionInProgress(true);
     setPreviewError("");
     try {
       const res = await decidePackage(previewRequest.request_id, {
         decision: "ACCEPT",
         expected_version: previewRequest.version,
+        period_mappings: packagePreview.source_academic_period_ids.length > 1
+          ? packagePreview.source_academic_period_ids.map((sourcePeriodId) => ({
+              source_academic_period_id: sourcePeriodId,
+              destination_academic_period_id: previewRequest.destination_academic_period_id,
+            }))
+          : undefined,
       });
       if ("operation_id" in res) {
         setCloneOperationResult(res as ContentCloneOperation);
       }
       void loadRequests("outgoing");
       onClonedSuccess?.();
-    } catch (err: any) {
-      setPreviewError(err.message || "Failed to accept and clone package.");
+    } catch (error: unknown) {
+      setPreviewError(errorMessage(error, "Failed to accept and clone package."));
     } finally {
       setDecisionInProgress(false);
     }
@@ -610,8 +658,8 @@ export function RepostWorkspace({
       });
       setPreviewRequest(null);
       void loadRequests("outgoing");
-    } catch (err: any) {
-      setPreviewError(err.message || "Failed to decline package.");
+    } catch (error: unknown) {
+      setPreviewError(errorMessage(error, "Failed to decline package."));
     } finally {
       setDecisionInProgress(false);
     }
@@ -624,8 +672,8 @@ export function RepostWorkspace({
       await declineContentRequest(declineTarget.request_id, declineTarget.version);
       setDeclineTarget(null);
       void loadRequests("incoming");
-    } catch (err: any) {
-      setRequestsError(err.message || "Failed to decline request.");
+    } catch (error: unknown) {
+      setRequestsError(errorMessage(error, "Failed to decline request."));
     } finally {
       setDecliningInProgress(false);
     }
@@ -1043,15 +1091,15 @@ export function RepostWorkspace({
                     Source Search Mode
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {[
+                    {([
                       { mode: "ANY", label: "Any Prior Term", desc: "Search all historical teaching records" },
                       { mode: "ALL_TERMS", label: "Any Term in Year", desc: "Filter by academic year" },
                       { mode: "PERIOD", label: "Specific Term", desc: "Exact academic period match" },
-                    ].map((item) => (
+                    ] satisfies Array<{ mode: "ANY" | "ALL_TERMS" | "PERIOD"; label: string; desc: string }>).map((item) => (
                       <button
                         key={item.mode}
                         type="button"
-                        onClick={() => handleScopeModeChange(item.mode as any)}
+                        onClick={() => handleScopeModeChange(item.mode)}
                         className={`rounded! border-2 border-border p-2.5 text-left transition-all ${
                           scopeMode === item.mode
                             ? "bg-primary font-bold shadow-sm"
@@ -1665,6 +1713,12 @@ export function RepostWorkspace({
                   </div>
                 ) : packagePreview ? (
                   <>
+                    {packagePreview.source_academic_period_ids.length > 1 && (
+                      <div className="border-2 border-black bg-muted p-3 text-xs font-semibold">
+                        Materials from {packagePreview.source_academic_period_ids.length} historical terms will be
+                        mapped to {previewRequest?.destination_period_name || "the authorized destination term"}.
+                      </div>
+                    )}
                     <div className="grid grid-cols-4 gap-2">
                       <div className="border-2 border-black p-2.5 rounded bg-white text-center">
                         <p className="text-xs text-gray-500 font-bold">Competencies</p>

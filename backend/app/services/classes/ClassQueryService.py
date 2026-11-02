@@ -478,6 +478,7 @@ def get_teacher_advisory_class_grades_data(
 
     selected_period = None
     if academic_period_id is not None:
+
         period_obj = db.get(AcademicPeriod, academic_period_id)
         if period_obj is None:
             raise HTTPException(

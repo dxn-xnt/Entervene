@@ -1,19 +1,33 @@
-#backend
-pip install -r requirements.txt
+# ==============================================================================
+# 1. ORIGINAL APP (Database: activity_db)
+# ==============================================================================
+# Backend (Port 8000):
+# cd backend
+# .\venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
-.venv\Scripts\activate
+# Frontend (Port 5173):
+# cd frontend
+# npm run dev
 
-uvicorn app.main:app
-uvicorn app.main:app --host 0.0.0.0 --reload
+# ==============================================================================
+# 2. CLONING DEMO (Database: Entervene_Demo - Carlos & Mara Repost Demo)
+# ==============================================================================
+# Demo Backend (Port 8001):
+# .\backend\venv\Scripts\python.exe backend\run_demo_server.py 8001
 
-entervenemnsts@gmail.com
-mnsts2000
+# Demo Frontend (Port 5174):
+# cd frontend
+# npm run dev:demo
 
-password in the app password for the google account
-kpjc wnfa ckzv cast
+# Kill port 8000 or 8001 if locked:
+# Get-Process -Id (Get-NetTCPConnection -LocalPort 8000).OwningProcess | Stop-Process -Force
+# Get-Process -Id (Get-NetTCPConnection -LocalPort 8001).OwningProcess | Stop-Process -Force
 
-#frontend
-npm run dev
+# Demo Accounts:
+# Teacher A (Mara Santos - Requester): demo-teacher@example.com / TeacherPassword123!
+# Teacher B (Carlos Reyes - Content Owner): demo-teacher-b@example.com / TeacherPassword123!
+# Admin: demo-admin@example.com / AdminPassword123!
+# ==============================================================================
 
 #mobile
 npx expo start
