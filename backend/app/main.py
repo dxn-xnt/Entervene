@@ -14,6 +14,10 @@ from app.api.v1.routes.CurrentTermPredictions import router as current_term_rout
 from app.api.v1.routes.TeacherInterventions import router as teacher_interventions_router
 from app.api.v1.routes.StudentInterventionReviewers import router as student_intervention_reviewers_router
 from app.api.v1.routes.StudentPersistentInterventions import router as student_persistent_interventions_router
+from app.api.v1.routes.PracticeAssessments import (
+    student_practice_router,
+    teacher_practice_router,
+)
 from app.api.v1.routes.Auth import router as auth_router
 from app.api.v1.routes.Students import router as students_router
 from app.api.v1.routes.Classworks import router as classworks_router
@@ -110,6 +114,8 @@ app.include_router(current_term_router, prefix="/api/v1/current-term-predictions
 app.include_router(teacher_interventions_router, prefix="/api/v1/teacher/interventions", tags=["Teacher Interventions"])
 app.include_router(student_intervention_reviewers_router, prefix="/api/v1/student/intervention-reviewers", tags=["Student Intervention Reviewers"])
 app.include_router(student_persistent_interventions_router, prefix="/api/v1/student/interventions", tags=["Student Interventions"])
+app.include_router(teacher_practice_router, prefix="/api/v1/teacher/interventions/{intervention_id}/practice-assessment", tags=["Teacher Practice Assessments"])
+app.include_router(student_practice_router, prefix="/api/v1/student/interventions/{intervention_id}/practice-assessment", tags=["Student Practice Assessments"])
 app.include_router(students_router,    prefix="/api/v1/students",              tags=["Students"])
 app.include_router(
     classworks_router,
