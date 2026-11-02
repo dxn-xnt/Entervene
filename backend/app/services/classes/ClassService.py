@@ -13,7 +13,7 @@ from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.schemas.Class import ClassUpdateRequest
 from app.services.classes.ClassQueryService import get_class_detail_data
-from app.services.classes.OfficialSectionService import selected_official_section
+from app.services.classes.OfficialSectionService import selected_official_section, get_or_create_official_section
 from app.services.pathways.PathwayScopeService import resolve_pathway_scope
 from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 from app.services.classes.ClassShared import (
@@ -350,7 +350,7 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                 academic_year_id=academic_year.academic_year_id,
                 academic_level_id=academic_level.academic_level_id,
             )
-            official = selected_official_section(db, academic_year.academic_year_id, academic_level.academic_level_id, section_name) if section_name else None
+            official = get_or_create_official_section(db, academic_year.academic_year_id, academic_level.academic_level_id, section_name, pw_id) if section_name else None
             if official is not None:
                 if pw_id != official.pathway_id:
                     raise HTTPException(status_code=422, detail="Section and pathway do not match the official academic-year configuration.")
