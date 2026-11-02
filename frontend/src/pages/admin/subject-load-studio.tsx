@@ -2352,7 +2352,7 @@ export default function AdminSubjectLoadStudio() {
                                 </div> */}
 
                                 {classSubjects.length === 0 ? (
-                                  <Empty className="my-2 transition-shadow hover:shadow-none">
+                                  <Empty className="my-2 shadow-none hover:shadow-none">
                                     <EmptyHeader>
                                       <EmptyMedia><div className="flex size-10 items-center justify-center border-2 border-black bg-primary text-black" aria-hidden="true"><Search className="size-5" /></div></EmptyMedia>
                                       <EmptyTitle>No eligible subject offerings</EmptyTitle>

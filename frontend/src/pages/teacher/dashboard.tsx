@@ -149,12 +149,21 @@ function DashboardQueueSkeleton({ label }: { label: string }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { selectedPeriodId, isLoading: isPeriodLoading } = useAcademicPeriod();
+  const {
+    selectedPeriodId,
+    selectedYearId,
+    selectedYear,
+    selectedPeriod,
+    periods,
+    isLoading: isPeriodLoading,
+  } = useAcademicPeriod();
 
   const [data, setData] = useState<TeacherDashboardHealthResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const requestedPeriodId = useRef(selectedPeriodId);
+  const requestedYearId = useRef(selectedYearId);
+  const requestIdRef = useRef(0);
   const [dashboardClass, setDashboardClass] = useState("all");
   const [dashboardSubject, setDashboardSubject] = useState("all");
   const [dashboardFilters, setDashboardFilters] = useState<TeacherDashboardHealthFilter[]>([]);
@@ -181,14 +190,20 @@ export default function Dashboard() {
   // Section health display limit state
   const [showAllSectionHealth, setShowAllSectionHealth] = useState<boolean>(false);
 
+  const hasNoPeriods = !isPeriodLoading && selectedYearId != null && periods.length === 0;
+
   useEffect(() => {
     let cancelled = false;
 
     async function fetchDashboard() {
       setIsLoading(true);
       setError(null);
-      if (requestedPeriodId.current !== selectedPeriodId) {
+      if (
+        requestedPeriodId.current !== selectedPeriodId ||
+        requestedYearId.current !== selectedYearId
+      ) {
         requestedPeriodId.current = selectedPeriodId;
+        requestedYearId.current = selectedYearId;
         setData(null);
         setDashboardFilters([]);
         setDashboardClass("all");
@@ -199,7 +214,20 @@ export default function Dashboard() {
           return;
         }
       }
-      if (isPeriodLoading) return;
+
+      if (hasNoPeriods) {
+        setData(null);
+        setIsLoading(false);
+        setError(null);
+        return;
+      }
+
+      if (isPeriodLoading || (selectedYearId != null && periods.length > 0 && selectedPeriodId == null)) {
+        return;
+      }
+
+      const currentRequestId = ++requestIdRef.current;
+
       try {
         let classId: number | undefined;
         let subjectId: number | undefined;
@@ -213,6 +241,7 @@ export default function Dashboard() {
         }
 
         const res = await getTeacherDashboardHealth({
+          academic_year_id: selectedYearId ?? undefined,
           academic_period_id: selectedPeriodId ?? undefined,
           class_id: classId,
           subject_id: subjectId,
@@ -220,7 +249,7 @@ export default function Dashboard() {
           ...(dashboardSubject !== "all" ? { dashboard_subject_id: Number(dashboardSubject) } : {}),
         });
 
-        if (!cancelled) {
+        if (!cancelled && currentRequestId === requestIdRef.current) {
           setData(res);
           setDashboardFilters(res.dashboard_filters ?? res.trend_chart.available_filters);
           if (!selectedFilterKey && res.trend_chart.available_filters.length > 0) {
@@ -229,7 +258,7 @@ export default function Dashboard() {
           }
         }
       } catch (err: unknown) {
-        if (!cancelled) {
+        if (!cancelled && currentRequestId === requestIdRef.current) {
           console.error("Failed to load teacher dashboard health:", err);
           setError(
             err instanceof Error
@@ -238,7 +267,9 @@ export default function Dashboard() {
           );
         }
       } finally {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled && currentRequestId === requestIdRef.current) {
+          setIsLoading(false);
+        }
       }
     }
 
@@ -246,11 +277,34 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [selectedPeriodId, selectedFilterKey, isPeriodLoading, dashboardClass, dashboardSubject]);
+  }, [
+    selectedPeriodId,
+    selectedYearId,
+    selectedFilterKey,
+    isPeriodLoading,
+    dashboardClass,
+    dashboardSubject,
+    hasNoPeriods,
+    periods.length,
+  ]);
+
+  const isHistorical = Boolean(
+    (selectedYear && !selectedYear.is_active) ||
+    (selectedPeriod && !selectedPeriod.is_active) ||
+    (data?.term_info && data.term_info.is_active === false)
+  );
+
+  const isDataMatchingPeriod =
+    data != null &&
+    !isLoading &&
+    !isPeriodLoading &&
+    !error &&
+    (selectedPeriodId == null || data.term_info?.period_id === selectedPeriodId) &&
+    (selectedYearId == null || data.term_info?.academic_year_id == null || data.term_info.academic_year_id === selectedYearId);
 
   // Derived 8 Stat Cards
   const statCards = useMemo<OverviewCardData[]>(() => {
-    if (!data || isLoading || isPeriodLoading || error) return defaultTeacherCards;
+    if (!data || isLoading || isPeriodLoading || error || !isDataMatchingPeriod) return defaultTeacherCards;
 
     const phaseOneCards: OverviewCardData[] = [
       {
@@ -364,10 +418,9 @@ export default function Dashboard() {
       }
       return card;
     });
-  }, [data, isLoading, isPeriodLoading, error]);
+  }, [data, isLoading, isPeriodLoading, error, isDataMatchingPeriod]);
 
-  const lessonPerformance = isLoading || isPeriodLoading || error ||
-    (selectedPeriodId != null && data?.term_info.period_id !== selectedPeriodId)
+  const lessonPerformance = !isDataMatchingPeriod
     ? undefined : data?.details?.lesson_performance;
   const subjects = useMemo(() => lessonPerformance?.subjects ?? [], [lessonPerformance]);
   const lessonSubject = subjects.find((subject) => String(subject.subject_id) === subjectFilter) ?? subjects[0];
@@ -382,19 +435,22 @@ export default function Dashboard() {
       setSubjectFilter(subjects.length ? String(subjects[0].subject_id) : "");
   }, [subjects, subjectFilter, lessonPerformance]);
 
-  const visibleGradeData = isLoading || isPeriodLoading || error ? undefined : data?.details;
+  const visibleGradeData = !isDataMatchingPeriod ? undefined : data?.details;
   const support = visibleGradeData?.students_to_check_in_with;
   const gradeDetails = visibleGradeData?.grade_details;
   const topPerformers = gradeDetails ? visibleGradeData?.top_performers ?? [] : [];
-  const trendPoints = isLoading || isPeriodLoading || error ? [] : data?.trend_chart.points ?? [];
-  const visiblePhaseTwo = isLoading || isPeriodLoading || error ? undefined : data?.phase_two;
-  const visibleEngagement = isLoading || isPeriodLoading || error ? undefined : data?.engagement;
+  const trendPoints = !isDataMatchingPeriod ? [] : data?.trend_chart.points ?? [];
+  const visiblePhaseTwo = !isDataMatchingPeriod ? undefined : data?.phase_two;
+  const visibleEngagement = !isDataMatchingPeriod ? undefined : data?.engagement;
   const reviewWarnings = visibleEngagement?.warnings.filter((warning) => warning.code === "ambiguous_submission_attempts") ?? [];
   const submissionsWeekday = weekdayLabels.map((day, dayIndex) => ({
     day,
     count: visiblePhaseTwo?.weekdays.days.find((item) => item.day_index === dayIndex)?.count ?? null,
   }));
-  const pendingGrading = useMemo(() => isLoading || isPeriodLoading || error ? [] : data?.action_queue?.pending_grading ?? [], [data, isLoading, isPeriodLoading, error]);
+  const pendingGrading = useMemo(
+    () => !isDataMatchingPeriod ? [] : data?.action_queue?.pending_grading ?? [],
+    [data, isDataMatchingPeriod]
+  );
   const classworkUngradedCounts = useMemo(() => {
     const counts = new Map<number | string, number>();
     for (const item of pendingGrading) {
@@ -411,12 +467,12 @@ export default function Dashboard() {
       ...item,
       title: item.classwork_title,
       section: [item.student_name, item.section_name].filter(Boolean).join(" · "),
-      badge: `${count} ungraded`,
-      variant: "destructive",
+      badge: isHistorical ? `${count} historical` : `${count} ungraded`,
+      variant: isHistorical ? "default" : "destructive",
     };
   });
   const gradeDistribution = gradeDetails ? visibleGradeData?.grade_distribution ?? [] : [];
-  const attendanceSections = isLoading || isPeriodLoading || error ? [] : data?.details?.attendance_by_section ?? [];
+  const attendanceSections = !isDataMatchingPeriod ? [] : data?.details?.attendance_by_section ?? [];
 
   const maxWeekdayCount = Math.max(
     ...submissionsWeekday.map((item) => item.count ?? 0),
@@ -455,10 +511,15 @@ export default function Dashboard() {
             <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
-                <div>
+                <div className="flex items-center gap-2.5">
                   <h1 className="text-xl font-bold sm:text-2xl md:text-4xl font-head">
                     Dashboard
                   </h1>
+                  {isHistorical && (
+                    <Badge variant="surface" size="sm" className="font-semibold">
+                      Historical · Read-Only
+                    </Badge>
+                  )}
                 </div>
               </div>
               <Button
@@ -473,7 +534,15 @@ export default function Dashboard() {
             </header>
 
             <main className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-3 md:gap-6 md:px-6">
-              <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:max-w-2xl" aria-label="Dashboard filters">
+              {hasNoPeriods ? (
+                <TeacherEmptyState
+                  icon={<BookOpen />}
+                  title="No academic periods available"
+                  description="There are no academic periods configured for this academic year."
+                />
+              ) : (
+                <>
+                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:max-w-2xl" aria-label="Dashboard filters">
                 <div className="flex min-w-0 flex-col gap-2">
                   <label htmlFor="dashboard-class" className="text-sm font-medium">Class</label>
                   <Select name="dashboard-class" value={dashboardClass} onValueChange={(value) => changeDashboardScope(value,
@@ -634,7 +703,13 @@ export default function Dashboard() {
                                 )}
                               </Empty.Icon>
                               <Empty.Title>
-                                {emptyMessage(reviewWarnings.length ? "Review queue incomplete." : "No submissions need grading.")}
+                                {emptyMessage(
+                                  reviewWarnings.length
+                                    ? "Review queue incomplete."
+                                    : isHistorical
+                                      ? "No historical submissions to review."
+                                      : "No submissions need grading."
+                                )}
                               </Empty.Title>
                             </Empty.Content>
                           </Empty>
@@ -981,7 +1056,7 @@ export default function Dashboard() {
 
                     <Card.Content className="mt-1 flex flex-col gap-3 p-0">
                       {(() => {
-                        const sections = data?.section_matrix ?? [];
+                        const sections = isDataMatchingPeriod ? (data?.section_matrix ?? []) : [];
                         const displayed = showAllSectionHealth ? sections : sections.slice(0, 2);
 
                         return (
@@ -1288,6 +1363,8 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
+              </>
+              )}
             </main>
           </div>
         </div>

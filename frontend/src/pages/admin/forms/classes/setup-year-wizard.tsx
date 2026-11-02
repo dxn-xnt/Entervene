@@ -10,6 +10,8 @@ import {
   setupAcademicYearClasses,
 } from "@/lib/api";
 import { Button } from "@/components/admin/button";
+import { Dialog } from "@/components/retroui/Dialog";
+import { Card } from "@/components/retroui/Card";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
 import { Alert } from "@/components/retroui/Alert";
@@ -127,7 +129,8 @@ export default function SetupYearWizard({
 
   if (currentStep === "success" && setupResult) {
     return (
-      <div className="flex flex-col gap-4">
+      <>
+      <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
         <div className="flex flex-col items-center justify-center gap-3 py-4 text-center">
           <div className="flex size-12 items-center justify-center rounded-full border-2 border-black bg-primary text-black">
             <CheckCircle2 className="size-6" />
@@ -142,35 +145,37 @@ export default function SetupYearWizard({
           </div>
         </div>
 
-        <div className="rounded border-2 border-border bg-card p-4 text-sm shadow-sm space-y-2">
-          <div className="flex justify-between border-b pb-2">
+        <Card className="flex flex-col gap-4 rounded! p-4 text-sm shadow-none">
+          <div className="flex justify-between gap-2">
             <span className="text-muted-foreground">Sections created:</span>
             <span className="font-bold">{setupResult.sections_created}</span>
           </div>
-          <div className="flex justify-between border-b pb-2">
+          <div className="flex justify-between gap-2">
             <span className="text-muted-foreground">Sections reused:</span>
             <span className="font-bold">{setupResult.sections_reused}</span>
           </div>
-          <div className="flex justify-between border-b pb-2">
+          <div className="flex justify-between gap-2">
             <span className="text-muted-foreground">Classes created:</span>
             <span className="font-bold">{setupResult.classes_created}</span>
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between gap-2">
             <span className="text-muted-foreground">Classes reused:</span>
             <span className="font-bold">{setupResult.classes_reused}</span>
           </div>
-        </div>
+        </Card>
 
-        <div className="flex justify-end pt-4 border-t">
+      </section>
+        <Dialog.Footer>
           <Button onClick={onClose}>Done</Button>
-        </div>
-      </div>
+        </Dialog.Footer>
+      </>
     );
   }
 
   if (currentStep === "confirm") {
     return (
-      <div className="flex flex-col gap-4">
+      <>
+      <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
         {error && (
           <Alert status="error">
             {error}
@@ -183,33 +188,34 @@ export default function SetupYearWizard({
           </p>
         </div>
 
-        <div className="rounded border-2 border-border bg-card p-4 text-sm shadow-sm space-y-3">
-          <div className="flex justify-between border-b pb-2">
+        <Card className="flex flex-col gap-4 rounded! p-4 text-sm shadow-none">
+          <div className="flex flex-wrap justify-between gap-2">
             <span className="text-muted-foreground">Source Academic Year:</span>
             <span className="font-bold">{sourceYearLabel}</span>
           </div>
-          <div className="flex justify-between border-b pb-2">
+          <div className="flex flex-wrap justify-between gap-2">
             <span className="text-muted-foreground">Target Academic Year:</span>
-            <span className="font-bold text-primary">{targetYearLabel}</span>
+            <span className="font-bold text-foreground">{targetYearLabel}</span>
           </div>
-          <div className="flex flex-col gap-1 border-b pb-2">
+          <div className="flex flex-col gap-1">
             <span className="text-muted-foreground">Setup Mode:</span>
             <span className="font-bold">{modeDescriptions[mode].title}</span>
-            <span className="text-xs text-muted-foreground">{modeDescriptions[mode].subtitle}</span>
+            <span className="text-sm text-muted-foreground">{modeDescriptions[mode].subtitle}</span>
           </div>
 
-          <div className="rounded border border-black/10 bg-muted/40 p-3 space-y-1 text-xs">
+          <div className="space-y-1 text-sm">
             <p className="font-semibold text-foreground flex items-center gap-1.5">
-              <ShieldCheck className="size-4 text-primary" /> Data Safety Guarantees
+              <ShieldCheck className="size-4 shrink-0" /> Data Safety Guarantees
             </p>
             <p className="text-muted-foreground">• Student enrollments and grades are never copied.</p>
             <p className="text-muted-foreground">• Subject Loads are not carried over; assign loads cleanly in Studio.</p>
             <p className="text-muted-foreground">• Source-year records ({sourceYearLabel}) remain completely unmodified.</p>
             <p className="text-muted-foreground">• Repeated setup is idempotent and will not create duplicates.</p>
           </div>
-        </div>
+        </Card>
 
-        <div className="flex justify-between pt-4 border-t">
+      </section>
+        <Dialog.Footer className="sm:justify-between">
           <Button
             variant="outline"
             onClick={() => changeStep("configure")}
@@ -225,14 +231,15 @@ export default function SetupYearWizard({
           >
             {isSubmitting ? "Setting up..." : "Confirm & Set Up"}
           </Button>
-        </div>
-      </div>
+        </Dialog.Footer>
+      </>
     );
   }
 
   // Configuration step (currentStep === "configure")
   return (
-    <div className="flex flex-col gap-4">
+    <>
+    <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
       {error && (
         <Alert status="error">
           {error}
@@ -293,24 +300,26 @@ export default function SetupYearWizard({
                 key={m}
                 type="button"
                 onClick={() => setMode(m)}
-                className={`flex flex-col items-start gap-1 rounded border-2 p-3 text-left transition-all ${
+                aria-pressed={isSelected}
+                className={`flex flex-col items-start gap-1 rounded! border-2 border-border p-3 text-left transition-colors ${
                   isSelected
-                    ? "border-primary bg-primary/10 shadow-sm"
+                    ? "bg-primary text-primary-foreground"
                     : "border-border bg-background hover:bg-muted/50"
                 }`}
               >
                 <div className="flex items-center justify-between w-full">
                   <span className="font-bold text-sm text-foreground">{item.title}</span>
-                  {isSelected && <Check className="size-4 text-primary" />}
+                  {isSelected && <Check className="size-4 text-current" />}
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">{item.subtitle}</p>
+                <p className={`text-sm leading-relaxed ${isSelected ? "text-primary-foreground" : "text-muted-foreground"}`}>{item.subtitle}</p>
               </button>
             );
           })}
         </div>
       </div>
 
-      <div className="flex justify-between pt-4 border-t">
+    </section>
+      <Dialog.Footer className="sm:justify-between">
         <Button variant="outline" onClick={onBack} className="gap-2">
           <ArrowLeft className="size-4" /> Back
         </Button>
@@ -327,7 +336,7 @@ export default function SetupYearWizard({
         >
           Continue to Summary
         </Button>
-      </div>
-    </div>
+      </Dialog.Footer>
+    </>
   );
 }

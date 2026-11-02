@@ -3,12 +3,30 @@
 Role-based dependency factories.
 Reuse get_current_user from Auth.py and add role enforcement.
 """
-from fastapi import Depends, HTTPException
+import uuid as _uuid
+from fastapi import Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.db.Session import get_db
-from app.api.v1.routes.Auth import get_current_user
+from app.api.v1.routes.Auth import get_current_user, bearer_scheme, ACCESS_COOKIE_NAME
+from app.core.Security import decode_access_token
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
+
+
+def get_optional_current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> dict | None:
+    """Safely extracts the current authenticated user payload if a valid access token exists; returns None otherwise."""
+    token = request.cookies.get(ACCESS_COOKIE_NAME)
+    if not token and credentials:
+        token = credentials.credentials
+    if not token:
+        return None
+
+    return decode_access_token(token)
 
 
 def require_role(*allowed_roles: str):
@@ -30,8 +48,6 @@ def require_role(*allowed_roles: str):
         return current_user
     return _dependency
 
-
-import uuid as _uuid
 
 def get_staff_id(
     current_user: dict = Depends(require_role("teacher", "admin")),
