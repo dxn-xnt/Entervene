@@ -255,7 +255,7 @@ export default function AddClassModal({
         </div>
       </Dialog.Header>
 
-      <section className="flex flex-col gap-4 p-4">
+      <section className={mode === "setup_year" ? "contents" : "flex flex-col gap-4 p-4"}>
         {saveSuccess ? (
           <ManualSaveSuccess
             result={saveSuccess}
