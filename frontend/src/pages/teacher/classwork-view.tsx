@@ -32,6 +32,8 @@ import { Card } from "@/components/retroui/Card";
 import { Progress } from "@/components/retroui/Progress";
 import { Select } from "@/components/retroui/Select";
 import { Alert } from "@/components/retroui/Alert";
+import { Skeleton } from "@/components/retroui/Skeleton";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { Avatar } from "@/components/retroui/Avatar";
 import QuizAnalysisView from "./classworks/quiz-analysis-view";
 import StudentSubmissionView from "./student-submission-view";
@@ -1121,7 +1123,7 @@ export default function ClassworkView({
               ) : (
                 <>
                   {/* Submissions & Grading Progress Card */}
-                  <Card className="w-full bg-primary shadow-none hover:shadow-none">
+                  <Card className="w-full bg-white shadow-none hover:shadow-none">
                     <Card.Content className="space-y-3">
                       {/* Submission Rate */}
                       <div className="space-y-1.5">
@@ -1223,7 +1225,13 @@ export default function ClassworkView({
                         </Table.Row>
                       </Table.Header>
                       <Table.Body>
-                        {detailError ? (
+                        {isTrackingLoading ? (
+                          <Table.Row className="hover:bg-transparent">
+                            <Table.Cell colSpan={3} className="p-4" aria-label="Loading submissions">
+                              <Skeleton className="h-28 w-full" />
+                            </Table.Cell>
+                          </Table.Row>
+                        ) : detailError ? (
                           <Table.Row className="hover:bg-accent">
                             <Table.Cell colSpan={3} className="p-4">
                               <Alert status="error">
@@ -1266,7 +1274,7 @@ export default function ClassworkView({
                                 </Table.Cell>
                                 <Table.Cell className="text-center">
                                   <Badge
-                                    variant="outline"
+                                    variant={getStudentSubmissionStatus(student) === "on_time" ? "success" : "destructive"}
                                     size="sm"
                                     className="w-fit rounded font-medium"
                                   >
@@ -1287,11 +1295,15 @@ export default function ClassworkView({
                           <Table.Row className="hover:bg-transparent">
                             <Table.Cell
                               colSpan={3}
-                              className="py-6 text-center text-sm font-semibold text-gray-500"
+                              className="p-0 whitespace-normal"
                             >
-                              {statusFilter === "all"
-                                ? "No submissions found for this classwork yet."
-                                : `No students match the "${statusFilter.replace("_", " ")}" filter.`}
+                              <TeacherEmptyState
+                                compact
+                                className="rounded! border-0 bg-card shadow-none hover:shadow-none"
+                                icon={<ClipboardList />}
+                                title={statusFilter === "all" ? "No students found" : statusFilter === "late" ? "No late submissions" : statusFilter === "on_time" ? "No on-time submissions" : "No missing submissions"}
+                                description={statusFilter === "all" ? "Students assigned to this classwork will appear here." : "No students match this status filter. Try viewing all statuses."}
+                              />
                             </Table.Cell>
                           </Table.Row>
                         )}

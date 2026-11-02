@@ -66,7 +66,7 @@ interface CreateClassworkModalProps {
   initialTargetAssignmentId?: number | null;
   remediationReferences?: RemediationResource[];
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (created?: unknown) => void;
   onBack: () => void;
 }
 
@@ -463,10 +463,10 @@ export default function CreateClassworkModal({
         }
         throw new Error(typeof detail === "string" ? detail : "Unable to create classwork.");
       }
-      await createResponse.json();
+      const createdData = await createResponse.json();
 
       toast.success({ title: "Classwork created successfully." });
-      onSuccess();
+      onSuccess(createdData);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to create classwork.";
       setFormError(message);

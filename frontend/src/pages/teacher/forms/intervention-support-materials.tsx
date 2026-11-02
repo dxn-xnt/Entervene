@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from "react";
+import { Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from "react";
 import { useEditFormChanges } from "@/hooks/use-edit-form-changes";
 import { unorderedValues } from "@/lib/form-changes";
 import { NoChangesMessage } from "@/components/retroui/FormMessage";
@@ -63,6 +63,9 @@ import {
 } from "@/lib/teacher-interventions-api";
 import { SubjectGradeProjectionCard } from "./subject-grade-projection-card";
 import { formatToTitleCase } from "@/lib/formatters";
+import CreateClassworkModal from "./create-classwork";
+import { getTeacherClasses } from "@/lib/api";
+import type { TeacherClassLoad } from "@/types/classwork";
 import Field from "@/components/admin/classes/fields/Field";
 import IconContainer from "@/components/icon-container";
 
@@ -358,6 +361,94 @@ const InterventionSupportMaterials = forwardRef<
   const [recommendationPreviewReady, setRecommendationPreviewReady] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [working, setWorking] = useState(false);
+  const [isCreatingReading, setIsCreatingReading] = useState(false);
+  const [teacherLoads, setTeacherLoads] = useState<TeacherClassLoad[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    getTeacherClasses(detail.academic_period_id)
+      .then((data) => {
+        if (active && Array.isArray(data)) {
+          setTeacherLoads(data as unknown as TeacherClassLoad[]);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [detail.academic_period_id]);
+
+  const effectiveLoads = useMemo<TeacherClassLoad[]>(() => {
+    if (teacherLoads.length > 0) return teacherLoads;
+    return [
+      {
+        subject_load_id: 0,
+        subject_id: detail.subject_id,
+        subject_name: detail.subject_name,
+        class_id: detail.class_id,
+        section_name: detail.class_name,
+        academic_period_id: detail.academic_period_id,
+      } as unknown as TeacherClassLoad,
+    ];
+  }, [teacherLoads, detail]);
+
+  const teacherSubjects = useMemo(() => {
+    const map = new Map<number, { id: number; name: string }>();
+    map.set(detail.subject_id, { id: detail.subject_id, name: detail.subject_name });
+    for (const load of teacherLoads) {
+      if (load.subject_id && load.subject_name) {
+        map.set(load.subject_id, { id: load.subject_id, name: load.subject_name });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [teacherLoads, detail]);
+
+  const handleReadingCreated = async (createdData?: unknown) => {
+    setIsCreatingReading(false);
+    try {
+      const updatedWorkspace = await getRemediationWorkspace(interventionId);
+      setResources(updatedWorkspace.resources);
+
+      const createdObj = createdData as { classwork_id?: number; id?: number; title?: string } | undefined;
+      const createdId = createdObj?.classwork_id ?? createdObj?.id;
+      const newResource = createdId != null
+        ? updatedWorkspace.resources.find((r) => r.kind === "CLASSWORK" && r.id === createdId)
+        : (createdObj?.title
+          ? updatedWorkspace.resources.find((r) => r.kind === "CLASSWORK" && r.title === createdObj.title)
+          : updatedWorkspace.resources.find(
+              (r) => !resources.some((existing) => existing.kind === r.kind && existing.id === r.id)
+            ));
+
+      if (newResource) {
+        setPlan((current) => {
+          if (
+            current.selected_resources.some(
+              (r) => r.kind === newResource.kind && r.id === newResource.id
+            )
+          ) {
+            return current;
+          }
+          return {
+            ...current,
+            selected_resources: [
+              ...current.selected_resources,
+              {
+                kind: newResource.kind,
+                id: newResource.id,
+                title: newResource.title,
+                lesson: newResource.lesson,
+              },
+            ],
+          };
+        });
+        toast.success({ title: `Added "${newResource.title}" to supporting readings.` });
+      } else {
+        toast.success({ title: "Reading created and updated in resources." });
+      }
+    } catch {
+      toast.error({ title: "Reading created, but failed to refresh workspace resources." });
+    }
+  };
   const [loading, setLoading] = useState(true);
   const [advisoryError, setAdvisoryError] = useState<string | null>(null);
   const choiceOrigin = useRef<"none" | "manual" | "ai">("none");
@@ -575,6 +666,17 @@ const InterventionSupportMaterials = forwardRef<
         left.title.localeCompare(right.title)
     );
   }, [resources]);
+
+  const linkedReadingLessons = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of selectedResources) {
+      const lessonName = item.lesson?.trim();
+      if (lessonName && lessonName !== NO_LESSON) {
+        set.add(lessonName);
+      }
+    }
+    return Array.from(set);
+  }, [selectedResources]);
   const lessonOptions = Array.from(new Set(materialPool.map(lessonKey)));
   const visible = materialPool.filter(
     (item) => lessonFilter === "ALL" || lessonKey(item) === lessonFilter
@@ -992,10 +1094,11 @@ const InterventionSupportMaterials = forwardRef<
         ? componentLabel(focus.exam_subtype)
         : "Subtype requires teacher confirmation"
       : null;
+
+
   const focusPercent = focus?.component
     ? detail.diagnosis_snapshot.components?.[focus.component]?.percent
     : null;
-
 
   const strongestEvidenceText =
     focus?.evidence_level === "QUESTION_SCORE"
@@ -1525,10 +1628,10 @@ const InterventionSupportMaterials = forwardRef<
           selectedActivityIds.length === 0)));
 
   return (
-    <section className="flex flex-col gap-4" aria-label="Intervention workflow">
+    <section className="flex flex-col gap-3" aria-label="Intervention workflow">
       <NoChangesMessage message={changes.noChangesMessage} />
       <div className="flex flex-col gap-2">
-        <Card className="w-full space-y-2 border-2 border-black bg-primary">
+        <Card className="w-full space-y-2 border-2 p-3 border-black bg-primary">
           <div className="flex items-start gap-4">
             <div className="flex flex-col mt-3 items-center h-full">
               <Avatar variant="student" className="size-14  shrink-0">
@@ -1555,7 +1658,7 @@ const InterventionSupportMaterials = forwardRef<
                 </div>
               </div>
 
-              <div className="mt-2 grid grid-cols-2 gap-1 text-sm">
+              <div className="mt- grid grid-cols-2 gap-1 text-sm">
                 <p className="text-sm">
                   Subject: <span className="text-base font-semibold">{subjectName}</span>
                 </p>
@@ -1573,10 +1676,6 @@ const InterventionSupportMaterials = forwardRef<
             </div>
           </div>
         </Card>
-
-        <p className="text-sm text-muted-foreground px-1">
-          {progress?.status_reason ?? "Loading current progress."}
-        </p>
       </div>
 
       {previousResolved && (
@@ -1606,12 +1705,12 @@ const InterventionSupportMaterials = forwardRef<
             <>
               <div className="flex flex-col gap-1">
                 <h3 className="font-black">Academic Diagnosis</h3>
-                <Card className="space-y-2 w-full mb-1">
-                  <p className="text-base">
+                <Card className="grid grid-cols-4 w-full mb-1">
+                  <p className="text-base cols-span-1">
                     Support focus: <strong>{focusName}</strong>
                     <span className="text-sm text-muted-foreground ml-1">{sourceName ? `(${sourceName})` : ""}</span>
                   </p>
-                  <p className="text-base">
+                  <p className="text-base col-span-3">
                     Strongest available evidence: <strong>{strongestEvidenceText}</strong>
                   </p>
                   {focus?.evidence_level === "QUESTION_SCORE" && (
@@ -1638,13 +1737,13 @@ const InterventionSupportMaterials = forwardRef<
                     </p>
                   )}
                   {focus?.evidence_level === "ACTIVITY_COVERAGE" && (
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-muted-foreground col-span-4">
                       Covered competencies are study context. The assessment total does not
                       identify which one was difficult.
                     </p>
                   )}
                   {focusPercent != null && (
-                    <p className="text-base">
+                    <p className="text-base col-span-4">
                       Weakest component:{" "}
                       <strong>{focusName}{" "}</strong>
                       <span className="text-sm text-muted-foreground">({focusPercent.toFixed(0)}%)</span>
@@ -1706,23 +1805,23 @@ const InterventionSupportMaterials = forwardRef<
                                   : "grid grid-cols-1 sm:grid-cols-2 gap-2"
                               }
                             >
-                              <p>
+                              <p className="col-span-full">
                                 Activity: <strong>{item.title}</strong>
                               </p>
-                              <p>
-                                Method: <strong>{methodLabel}</strong>
-                              </p>
-                              <p>
-                                Grade Treatment: <strong>{treatmentLabel}</strong>
-                              </p>
+                              <div className="grid grid-cols-2 col-span-full w-full">
+                                <p>
+                                  Method: <strong>{methodLabel}</strong>
+                                </p>
+                                <p>
+                                  Grade Treatment: <strong>{treatmentLabel}</strong>
+                                </p>
+                              </div>
+
                               {item.original_assignment_id && examLabel && (
                                 <p className="col-span-full">
                                   Original Exam: <strong>{examLabel}</strong>
                                 </p>
                               )}
-                              <p className="col-span-full">
-                                Recipient: <strong>This student only</strong>
-                              </p>
                             </div>
                           );
                         })}
@@ -1834,51 +1933,44 @@ const InterventionSupportMaterials = forwardRef<
                             }
                           />
 
-                          {item.original_assignment_id && (
-                            <div className="text-sm text-muted-foreground px-2 py-1 flex flex-wrap gap-x-3 gap-y-0.5">
-                              <span>
-                                Original: {item.original_title} ·{" "}
-                                {componentLabel(item.exam_subtype || "Examination")}
-                              </span>
-                              <span>
-                                Original: {item.original_grade ?? "—"}/{item.total_points ?? "—"}
-                              </span>
-                              <span>
-                                Remedial: {item.grade ?? "Pending"}/{item.total_points ?? "—"}
-                              </span>
-                              <span>
-                                Effective:{" "}
-                                <strong>
-                                  {item.effective_grade ?? "—"}/{item.total_points ?? "—"}
-                                </strong>
-                              </span>
-                            </div>
-                          )}
                         </div>
                       ))}
 
-                      <Card className="border-2! w-full space-y-1.5 p-3 text-sm border-2 border-border">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-bold text-sm">Official Academic Outcome</h4>
-                          <Badge variant="outline" size="sm">{phase}</Badge>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-sm pt-1">
-                          <p>
-                            Trigger projection: <strong>{progress?.triggering_projection.toFixed(2)}</strong>
-                          </p>
-                          <p>
-                            Latest projected grade:{" "}
-                            <strong>{progress?.latest_projection?.toFixed(2) ?? "Unavailable"}</strong>
-                          </p>
-                        </div>
-
+                      <h4 className="font-normal text-base flex gap-2 items-center w-full justify-between">Official Academic Outcome <div className="flex items-center justify-between">
+                        <Badge variant="outline" size="sm">{phase}</Badge>
+                      </div></h4>
+                      <Card className="border-2! w-full grid grid-cols-3 p-3 text-base bg-primary border-2 border-border">
+                        {assigned
+                          .filter((item) => item.original_assignment_id)
+                          .map((item) => (
+                            <Fragment key={item.assignment_id}>
+                              <div className="text-foreground">
+                                <span>
+                                  Remedial: <strong>{item.grade ?? "Pending"} / {item.total_points ?? "—"}</strong>
+                                </span>
+                              </div>
+                              <div className="text-foreground">
+                                <span>
+                                  Effective:{" "}
+                                  <strong>
+                                    {item.effective_grade ?? "—"} / {item.total_points ?? "—"}
+                                  </strong>
+                                </span>
+                              </div>
+                            </Fragment>
+                          ))}
+                        <p>
+                          Latest projected grade:{" "}
+                          <strong>{progress?.latest_projection?.toFixed(2) ?? "Unavailable"}</strong>
+                        </p>
+                        <p className="text-sm text-foreground col-span-full">
+                          {progress?.completed_remediation.length
+                            ? "The student completed the support activity. "
+                            : ""}
+                          {progress?.status_reason} Completion alone does not resolve the Intervention.
+                        </p>
                       </Card>
-                      <p className="text-xs text-muted-foreground px-2">
-                        {progress?.completed_remediation.length
-                          ? "The student completed the support activity. "
-                          : ""}
-                        {progress?.status_reason} Completion alone does not resolve the Intervention.
-                      </p>
+
                     </div>
                   ) : (
                     <div className="flex flex-col gap-1">
@@ -1988,52 +2080,49 @@ const InterventionSupportMaterials = forwardRef<
 
                   <div className="flex flex-col gap-1">
                     <p className="text-base font-semibold">Supporting Readings</p>
-                    {materialPool.length ? (
+                    {selectedResources.length ? (
                       <>
                         <div className="flex flex-col gap-2">
-                          {materialPool.map((item) => {
-                            const isChecked = selected.has(`${item.kind}:${item.id}`);
-                            return (
-                              <ClassworkItemLine
-                                key={`supporting:${item.kind}:${item.id}`}
-                                className="border-2! shadow-none!"
-                                size="sm"
-                                item={{
-                                  classwork_id: item.id,
-                                  title: item.title,
-                                  classwork_type: item.classwork_type ?? item.kind,
-                                }}
-                                showPublicationStatus={false}
-                                showCategory={false}
-                                rightContent={
-                                  <div className="flex items-center gap-1.5">
-                                    {item.recommended && (
-                                      <Badge variant="solid" size="sm">
-                                        Recommended
-                                      </Badge>
-                                    )}
-                                    {isChecked && (
-                                      <Badge variant="solid" size="sm">
-                                        Teacher selected
-                                      </Badge>
-                                    )}
-                                  </div>
-                                }
-                              />
-                            );
-                          })}
+                          {selectedResources.map((item) => (
+                            <ClassworkItemLine
+                              key={`supporting:${item.kind}:${item.id}`}
+                              className="border-2! shadow-none!"
+                              size="sm"
+                              item={{
+                                classwork_id: item.id,
+                                title: item.title,
+                                classwork_type: item.classwork_type ?? item.kind,
+                              }}
+                              showPublicationStatus={false}
+                              showCategory={false}
+                              rightContent={
+                                <div className="flex items-center gap-1.5">
+                                  {item.recommended && (
+                                    <Badge variant="solid" size="sm">
+                                      Recommended
+                                    </Badge>
+                                  )}
+                                </div>
+                              }
+                            />
+                          ))}
                         </div>
                         <p className="text-sm text-muted-foreground px-1">
-                          {materialPool.length} eligible {materialPool.length === 1 ? "reading" : "readings"};{" "}
-                          {selectedResources.length} teacher selected.
+                          {linkedReadingLessons.length > 0
+                            ? `Readings are linked to ${linkedReadingLessons.join(", ")} lesson/s`
+                            : "Readings are not linked to any lesson/s"}
                         </p>
                       </>
                     ) : (
                       <TeacherEmptyState
                         compact
                         icon={<BookOpen />}
-                        title="No supporting readings"
-                        description="No eligible Reading is available in this teaching scope."
+                        title={materialPool.length > 0 ? "No supporting readings selected" : "No supporting readings"}
+                        description={
+                          materialPool.length > 0
+                            ? "Click Select resources below to add readings for student review."
+                            : "No eligible Reading is available in this teaching scope."
+                        }
                       />
                     )}
                   </div>
@@ -2194,7 +2283,7 @@ const InterventionSupportMaterials = forwardRef<
                 open={panel === "materials"}
                 onOpenChange={(open) => setPanel(open ? "materials" : "")}
               >
-                <Dialog.Content size="md" className="max-h-[85vh]">
+                <Dialog.Content size="xl" className="max-h-[85vh]">
                   <Dialog.Header>
                     <Dialog.Title className="text-lg font-bold">
                       Add Supporting Resources
@@ -2207,7 +2296,7 @@ const InterventionSupportMaterials = forwardRef<
                           <Select.Value placeholder="Filter by linked lesson" />
                         </Select.Trigger>
                         <Select.Content>
-                          <Select.Item value="ALL">All Readings</Select.Item>
+                          <Select.Item value="ALL">All Lessons</Select.Item>
                           {lessonOptions.map((lesson) => (
                             <Select.Item key={lesson} value={lesson}>
                               {lesson === NO_LESSON ? "No linked lesson" : lesson}
@@ -2239,7 +2328,7 @@ const InterventionSupportMaterials = forwardRef<
                                   onClick={() => !working && toggleResource(item)}
                                   rightContent={
                                     <div className="flex items-center gap-2">
-                                      <Badge variant="secondary" size="sm">
+                                      <Badge variant="solid" size="sm">
                                         Recommended
                                       </Badge>
                                       <Badge variant={isChecked ? "solid" : "surface"} size="sm">
@@ -2258,12 +2347,36 @@ const InterventionSupportMaterials = forwardRef<
                                 />
                               );
                             })}
-                            <p className="text-sm text-muted-foreground">
-                              Recommended materials are automatically suggested based on student performance data and diagnostic evidence.
-                            </p>
+
+                            <div className="w-full flex flex-row justify-between gap-8 mt-1">
+                              <p className="text-sm text-muted-foreground -mt-1.5">
+                                Suggested materials based on student performance data and diagnostic evidence.
+                              </p>
+                              <Button
+                                className="justify-end whitespace-nowrap h-fit w-fit"
+                                variant="default"
+                                size="sm"
+                                onClick={() => setIsCreatingReading(true)}
+                              >
+                                Add Additional Resources
+                              </Button>
+                            </div>
                           </div>
                         )}
 
+
+                        {visibleRecommended.length === 0 && (
+                          <div className="flex justify-end mb-2">
+                            <Button
+                              className="justify-end whitespace-nowrap h-fit w-fit"
+                              variant="default"
+                              size="sm"
+                              onClick={() => setIsCreatingReading(true)}
+                            >
+                              Add Additional Resources
+                            </Button>
+                          </div>
+                        )}
 
                         {groupedRemaining.map(([lesson, items]) => (
                           <div key={lesson} className="flex flex-col gap-2">
@@ -2314,6 +2427,14 @@ const InterventionSupportMaterials = forwardRef<
                           <Empty.Description className="max-w-md text-sm">
                             No eligible reading materials match this filter.
                           </Empty.Description>
+                          <Button
+                            className="mt-2"
+                            variant="default"
+                            size="sm"
+                            onClick={() => setIsCreatingReading(true)}
+                          >
+                            Add Additional Resources
+                          </Button>
                         </Empty.Content>
                       </Empty>
                     )}
@@ -2322,6 +2443,35 @@ const InterventionSupportMaterials = forwardRef<
                     <Button onClick={() => setPanel("")}>Done</Button>
                   </Dialog.Footer>
                 </Dialog.Content>
+              </Dialog>
+
+              <Dialog
+                open={isCreatingReading}
+                onOpenChange={(open) => !open && setIsCreatingReading(false)}
+              >
+                {isCreatingReading && (
+                  <CreateClassworkModal
+                    selectedType="READING"
+                    subjects={teacherSubjects}
+                    loads={effectiveLoads}
+                    initialSubjectId={String(detail.subject_id)}
+                    initialClassId={detail.class_id}
+                    initialLessonId={
+                      lessonFilter !== "ALL"
+                        ? focus?.lessons.find((l) => l.title === lessonFilter)?.id ??
+                          resources.find(
+                            (r) =>
+                              r.kind === "LESSON" &&
+                              (r.title === lessonFilter || r.lesson === lessonFilter)
+                          )?.id ??
+                          undefined
+                        : undefined
+                    }
+                    onClose={() => setIsCreatingReading(false)}
+                    onBack={() => setIsCreatingReading(false)}
+                    onSuccess={handleReadingCreated}
+                  />
+                )}
               </Dialog>
 
               <Dialog
@@ -2705,12 +2855,12 @@ const InterventionSupportMaterials = forwardRef<
                           aria-disabled={hasSavedAssessment}
                           tabIndex={working || hasSavedAssessment ? -1 : 0}
                           className={`p-3 border-2! transition-all ${hasSavedAssessment
-                              ? isSelected
-                                ? "border-primary bg-primary cursor-default"
-                                : "opacity-50 cursor-not-allowed pointer-events-none bg-muted/20"
-                              : isSelected
-                                ? "border-primary bg-primary cursor-pointer"
-                                : "hover:bg-retro cursor-pointer"
+                            ? isSelected
+                              ? "border-primary bg-primary cursor-default"
+                              : "opacity-50 cursor-not-allowed pointer-events-none bg-muted/20"
+                            : isSelected
+                              ? "border-primary bg-primary cursor-pointer"
+                              : "hover:bg-retro cursor-pointer"
                             }`}
                           onClick={selectMethod}
                           onKeyDown={(event) => {
@@ -2998,7 +3148,7 @@ const InterventionSupportMaterials = forwardRef<
                       </div>
                     )}
 
-                    {!hasSavedAssessment && focus?.component === "EXAMINATION" && originalExams.length === 0 && (
+                    {focus?.component === "EXAMINATION" && originalExams.length === 0 && (
                       <p className="text-sm text-destructive px-1">
                         No scored original Examination is available for this student and
                         period.
