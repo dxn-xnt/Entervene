@@ -386,6 +386,7 @@ export default function BreakConfigDrawer({
                   onTabChange={setActiveGroup}
                   counts={groupSlotCounts}
                   className="!mx-0 !border-b-0 text-xs"
+                  tabClassName="rounded-t-[var(--radius)]!"
                 />
               </div>
 
@@ -436,10 +437,10 @@ export default function BreakConfigDrawer({
                       }}
                       disabled={isReassigning}
                     >
-                      <Select.Trigger className="min-w-48 shadow-none">
+                      <Select.Trigger className="rounded! min-w-48 shadow-none">
                         <Select.Value placeholder="Assign Section to Template..." />
                       </Select.Trigger>
-                      <Select.Content>
+                      <Select.Content className="rounded!">
                         {otherClasses.map((c) => (
                           <Select.Item key={c.class_id} value={String(c.class_id)}>
                             {sectionLabel(c, studioData?.academic_levels)} ({c.period_template_group ? formatGroupName(c.period_template_group) : "Unassigned"})
@@ -503,7 +504,7 @@ export default function BreakConfigDrawer({
                           onChange={(e) =>
                             handleSlotFieldChange(slot.slot_id ?? undefined, slot.display_order, "slot_name", e.target.value)
                           }
-                          className="h-8 text-xs font-bold w-full bg-background shadow-none "
+                          className="rounded! h-8 text-xs font-bold w-full bg-background shadow-none"
                           placeholder="Slot Label (e.g. Morning Recess)"
                         />
 
@@ -515,10 +516,10 @@ export default function BreakConfigDrawer({
                             handleSlotFieldChange(slot.slot_id ?? undefined, slot.display_order, "is_locked_break", isLocked);
                           }}
                         >
-                          <Select.Trigger className="min-w-28 shadow-none">
+                          <Select.Trigger className="rounded! min-w-28 shadow-none">
                             <Select.Value />
                           </Select.Trigger>
-                          <Select.Content>
+                          <Select.Content className="rounded!">
                             <Select.Item value="CLASS">Class</Select.Item>
                             <Select.Item value="RECESS">Recess</Select.Item>
                             <Select.Item value="LUNCH">Lunch</Select.Item>
@@ -529,7 +530,8 @@ export default function BreakConfigDrawer({
                         {/* Start and End Pickers */}
                         <div className="flex items-center gap-2">
                           <TimePickerSingle
-                            className="shadow-none"
+                            className="rounded! shadow-none"
+                            wrapperClassName="[&>div]:rounded!"
                             value={stringToTimeValue(slot.start_time, 8)}
                             onChange={(newStart) =>
                               handleSlotFieldChange(
@@ -542,7 +544,8 @@ export default function BreakConfigDrawer({
                           />
                           <Text as="p" className="text-xs font-bold">to</Text>
                           <TimePickerSingle
-                            className="shadow-none"
+                            className="rounded! shadow-none"
+                            wrapperClassName="[&>div]:rounded!"
                             value={stringToTimeValue(slot.end_time, 9)}
                             onChange={(newEnd) =>
                               handleSlotFieldChange(
@@ -577,7 +580,7 @@ export default function BreakConfigDrawer({
                       variant="outline"
                       type="button"
                       onClick={handleAddSlot}
-                      className="w-full border-dashed text-xs font-bold shadow-none"
+                      className="w-full rounded! border-dashed text-xs font-bold shadow-none hover:translate-x-0 hover:translate-y-0 hover:bg-background hover:shadow-none"
                     >
                       <Plus className="size-4 mr-1.5 text-foreground" />
                       <span>Add Time Slot to {formatGroupName(activeGroup)}</span>

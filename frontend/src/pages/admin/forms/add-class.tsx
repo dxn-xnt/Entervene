@@ -186,7 +186,7 @@ export default function AddClassModal({
 
   if (mode === "choice") {
     return (
-      <Dialog.Content size="lg">
+      <Dialog.Content size="2xl">
         <Dialog.Header asChild>
           <div className="flex items-center justify-between w-full">
             <Text as="h5" className="font-sans text-xl font-bold">Add New Classes</Text>
