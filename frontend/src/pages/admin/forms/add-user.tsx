@@ -519,8 +519,8 @@ export default function AddUserModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }} >
-      <Dialog.Content size="md" data-admin-user-import={step === "import" ? "" : undefined} className="w-[calc(100vw-1.5rem)] max-w-lg rounded font-sans lg:max-w-[40%]">
-        <Dialog.Header asChild className="bg-primary text-black font-sans flex items-center justify-between">
+      <Dialog.Content size="md" data-admin-user-import={step === "import" ? "" : undefined} className="w-[calc(100vw-1.5rem)] max-w-lg rounded-none font-sans lg:max-w-[40%]">
+        <Dialog.Header className="bg-primary text-black font-sans flex items-center justify-between">
           <div>
             <span className="text-xl font-bold normal-case">
               {step === "choose" && "Add New Users"}
