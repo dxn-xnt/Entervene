@@ -23,6 +23,7 @@ from app.models.classwork.Classwork import Classwork
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.attendance.Attendance import AttendanceRecord
 from app.models.quiz.QuizAnswer import QuizAnswer
+from app.services.academic.AcademicLifecycleService import resolve_active_academic_year
 
 router = APIRouter()
 
@@ -46,8 +47,19 @@ def get_my_studyboard_metrics(
     friday = monday + timedelta(days=4)
     six_weeks_ago = monday - timedelta(weeks=5)
 
+    selected_year_id = None
+    if academic_period_id is not None:
+        selected_period = db.get(AcademicPeriod, academic_period_id)
+        if selected_period is None:
+            raise HTTPException(status_code=404, detail="Academic period not found")
+        selected_year_id = selected_period.academic_year_id
+
     try:
-        _, current_class, _, _, _ = _current_class_row(db, student)
+        _, current_class, _, _, _ = _current_class_row(
+            db,
+            student,
+            academic_year_id=selected_year_id,
+        )
         class_id = current_class.class_id
     except HTTPException as exc:
         if exc.status_code != 404:
@@ -191,8 +203,21 @@ def _resolve_student(db: Session, user_id: str) -> Student:
     return student
 
 
-def _current_class_row(db: Session, student: Student):
-    row = (
+def _current_class_row(
+    db: Session,
+    student: Student,
+    *,
+    academic_year_id: int | None = None,
+):
+    explicit_year = academic_year_id is not None
+    if explicit_year:
+        year = db.get(AcademicYear, academic_year_id)
+        if year is None:
+            raise HTTPException(status_code=404, detail="Academic year not found")
+    else:
+        year = resolve_active_academic_year(db)
+
+    query = (
         db.query(StudentClass, Class, AcademicLevel, AcademicYear, AcademicStaff)
         .join(Class, Class.class_id == StudentClass.class_id)
         .join(AcademicLevel, AcademicLevel.academic_level_id == Class.academic_level_id)
@@ -201,14 +226,22 @@ def _current_class_row(db: Session, student: Student):
         .filter(
             StudentClass.student_id == student.student_id,
             StudentClass.enrollment_status == "enrolled",
-            Class.class_status != "archived",
+            StudentClass.academic_year_id == year.academic_year_id,
+            Class.academic_year_id == year.academic_year_id,
         )
-        .order_by(AcademicYear.is_active.desc(), StudentClass.enrolled_at.desc())
-        .first()
     )
-    if not row:
+    if not explicit_year:
+        query = query.filter(Class.class_status != "archived")
+
+    rows = query.order_by(StudentClass.enrolled_at.desc(), StudentClass.student_class_id.desc()).limit(2).all()
+    if not rows:
         raise HTTPException(status_code=404, detail="Student class not found")
-    return row
+    if len(rows) > 1:
+        raise HTTPException(
+            status_code=409,
+            detail="Student enrollment is inconsistent: multiple classes exist in the selected academic year.",
+        )
+    return rows[0]
 
 
 def _classmate_count(db: Session, student: Student, class_: Class, assignment: StudentClass) -> int:
@@ -239,7 +272,9 @@ def get_my_profile(
         assignment, class_, level, year, adviser = _current_class_row(db, student)
         grade_level = level.level_name or (f"Grade {level.grade_level}" if level.grade_level else None)
         section_name = class_.section_name
-    except HTTPException:
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
         grade_level = None
         section_name = None
 
@@ -327,16 +362,14 @@ def get_my_subjects(
 
     Reusable for both mobile and web clients.
     """
+    _require_student(current_user)
     user_id = current_user["sub"]
+    student = _resolve_student(db, user_id)
 
-    # Resolve student from user account
-    student = (
-        db.query(Student)
-        .filter(Student.user_id == user_id)
-        .first()
-    )
-    if not student:
-        raise HTTPException(status_code=404, detail="Student profile not found")
+    from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
+
+    active_period = resolve_active_academic_period(db, required=False)
+    active_period_id = active_period.academic_period_id if active_period else None
 
     # select_from(Student) makes the left-most table explicit so SQLAlchemy
     # doesn't get confused by the multiple column sources in db.query().
@@ -352,7 +385,6 @@ def get_my_subjects(
             UserAccount.avatar_path.label("teacher_avatar"),
             AcademicPeriod.academic_period_id,
             AcademicPeriod.period_name,
-            AcademicPeriod.is_active.label("is_current_period"),
             Class.section_name,
             AcademicYear.year_label,
         )
@@ -368,7 +400,10 @@ def get_my_subjects(
         .filter(
             Student.student_id == student.student_id,
             StudentClass.enrollment_status == "enrolled",
+            StudentClass.academic_year_id == Class.academic_year_id,
+            Class.academic_year_id == AcademicPeriod.academic_year_id,
             SubjectLoad.status.in_(["active", "published"]),
+            SubjectLoad.is_active_version.is_(True),
         )
     )
 
@@ -388,8 +423,8 @@ def get_my_subjects(
             "teacher_avatar":     row.teacher_avatar,
             "period_id":          row.academic_period_id,
             "period_name":        row.period_name,
-            "is_current_period":  row.is_current_period,
-            "is_current_quarter": row.is_current_period,
+            "is_current_period":  bool(active_period_id is not None and row.academic_period_id == active_period_id),
+            "is_current_quarter": bool(active_period_id is not None and row.academic_period_id == active_period_id),
             "section_name":       row.section_name,
             "year_label":         row.year_label,
         }
@@ -403,69 +438,15 @@ def get_active_period(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    user_id = current_user["sub"]
-    try:
-        parsed_user_id = uuid.UUID(str(user_id))
-    except (TypeError, ValueError):
-        parsed_user_id = None
+    from app.services.academic.AcademicLifecycleService import (
+        resolve_active_academic_period,
+        resolve_active_academic_year,
+    )
 
-    student = None
-    if parsed_user_id is not None:
-        student = (
-            db.query(Student)
-            .filter(Student.user_id == parsed_user_id)
-            .first()
-        )
+    active_year = resolve_active_academic_year(db, required=False)
+    active_period = resolve_active_academic_period(db, required=False)
 
-    row = None
-
-    # Only attempt the class-specific lookup for students
-    if student:
-        row = (
-            db.query(
-                AcademicPeriod.academic_period_id,
-                AcademicPeriod.period_name,
-                AcademicPeriod.period_type,
-                AcademicPeriod.period_sequence,
-                AcademicPeriod.total_periods_in_year,
-                AcademicPeriod.period_progress_ratio,
-                AcademicPeriod.is_active,
-                AcademicYear.year_label,
-            )
-            .select_from(Student)
-            .join(StudentClass, StudentClass.student_id == Student.student_id)
-            .join(Class, Class.class_id == StudentClass.class_id)
-            .join(SubjectLoad, SubjectLoad.class_id == Class.class_id)
-            .join(AcademicPeriod, AcademicPeriod.academic_period_id == SubjectLoad.academic_period_id)
-            .join(AcademicYear, AcademicYear.academic_year_id == AcademicPeriod.academic_year_id)
-            .filter(
-                Student.student_id == student.student_id,
-                StudentClass.enrollment_status == "enrolled",
-                AcademicPeriod.is_active == True,
-            )
-            .first()
-        )
-
-    # Global fallback — used for teachers, or students with no active class period
-    if not row:
-        row = (
-            db.query(
-                AcademicPeriod.academic_period_id,
-                AcademicPeriod.period_name,
-                AcademicPeriod.period_type,
-                AcademicPeriod.period_sequence,
-                AcademicPeriod.total_periods_in_year,
-                AcademicPeriod.period_progress_ratio,
-                AcademicPeriod.is_active,
-                AcademicYear.year_label,
-            )
-            .select_from(AcademicPeriod)
-            .join(AcademicYear, AcademicYear.academic_year_id == AcademicPeriod.academic_year_id)
-            .filter(AcademicPeriod.is_active == True)
-            .first()
-        )
-
-    if not row:
+    if not active_period or not active_year:
         return {
             "period_id": None,
             "period_name": "No active period",
@@ -478,14 +459,14 @@ def get_active_period(
         }
 
     return {
-        "period_id": row.academic_period_id,
-        "period_name": row.period_name,
-        "period_type": row.period_type,
-        "period_sequence": row.period_sequence,
-        "total_periods_in_year": row.total_periods_in_year,
-        "period_progress_ratio": str(row.period_progress_ratio),
-        "is_active": row.is_active,
-        "year_label": row.year_label,
+        "period_id": active_period.academic_period_id,
+        "period_name": active_period.period_name,
+        "period_type": active_period.period_type,
+        "period_sequence": active_period.period_sequence,
+        "total_periods_in_year": active_period.total_periods_in_year,
+        "period_progress_ratio": str(active_period.period_progress_ratio),
+        "is_active": bool(active_period.is_active),
+        "year_label": active_year.year_label,
     }
 
 
@@ -558,11 +539,18 @@ def get_my_todos(
     )
 
     if academic_period_id is not None:
-        # We need to join SubjectLoad to filter by period
-        results = results.join(
-            SubjectLoad, 
-            (SubjectLoad.class_id == ClassworkAssignment.class_id) & (SubjectLoad.subject_id == Classwork.subject_id)
-        ).filter(SubjectLoad.academic_period_id == academic_period_id)
+        results = (
+            results
+            .join(Class, Class.class_id == ClassworkAssignment.class_id)
+            .join(
+                AcademicPeriod,
+                AcademicPeriod.academic_period_id == ClassworkAssignment.academic_period_id,
+            )
+            .filter(
+                ClassworkAssignment.academic_period_id == academic_period_id,
+                Class.academic_year_id == AcademicPeriod.academic_year_id,
+            )
+        )
 
     results = results.order_by(ClassworkAssignment.due_date.asc().nulls_last()).all()
 

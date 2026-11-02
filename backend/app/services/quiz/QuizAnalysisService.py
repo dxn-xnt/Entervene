@@ -6,6 +6,9 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.academic.StudentCLass import StudentClass
+from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.Class_ import Class
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.Student import Student
@@ -307,7 +310,12 @@ def get_teacher_quiz_submission_detail(
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
-    classwork = get_teacher_quiz_classwork(db, staff_id, assignment.classwork_id)
+    classwork = get_teacher_quiz_classwork(
+        db,
+        staff_id,
+        assignment.classwork_id,
+        assignment_scope=assignment,
+    )
     quiz = _quiz_with_questions(db, classwork.classwork_id)
     if not quiz:
         raise HTTPException(status_code=404, detail="Quiz not found")
@@ -401,15 +409,48 @@ def grade_teacher_quiz_submission(
     submission = db.query(StudentSubmission).filter(StudentSubmission.submission_id == submission_id).first()
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    previous_grade = submission.grade
-
     assignment = db.query(ClassworkAssignment).filter(
         ClassworkAssignment.classwork_assignment_id == submission.classwork_assignment_id
     ).first()
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
-    classwork = get_teacher_quiz_classwork(db, staff_id, assignment.classwork_id)
+    classwork = get_teacher_quiz_classwork(
+        db,
+        staff_id,
+        assignment.classwork_id,
+        write_required=True,
+        assignment_scope=assignment,
+        live_operation=True,
+    )
+    if not assignment_allows_student(assignment, submission.student_id):
+        raise HTTPException(status_code=403, detail="Student is not assigned to this quiz")
+
+    class_ = db.get(Class, assignment.class_id)
+    period = db.get(AcademicPeriod, assignment.academic_period_id)
+    if class_ is None or period is None or class_.academic_year_id != period.academic_year_id:
+        raise HTTPException(status_code=403, detail="Quiz academic context is invalid")
+    enrolled = db.query(StudentClass.student_class_id).filter(
+        StudentClass.student_id == submission.student_id,
+        StudentClass.class_id == assignment.class_id,
+        StudentClass.academic_year_id == period.academic_year_id,
+        StudentClass.enrollment_status == "enrolled",
+    ).first()
+    if enrolled is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Student is not enrolled in this class for this academic year",
+        )
+    finalized = db.query(StudentPeriodGrade.period_grade_id).filter(
+        StudentPeriodGrade.student_id == submission.student_id,
+        StudentPeriodGrade.class_id == assignment.class_id,
+        StudentPeriodGrade.subject_id == classwork.subject_id,
+        StudentPeriodGrade.academic_period_id == assignment.academic_period_id,
+        StudentPeriodGrade.is_finalized.is_(True),
+    ).first()
+    if finalized is not None:
+        raise HTTPException(status_code=409, detail="The period grade is finalized")
+
     ensure_remedial_period_open(db, assignment, submission.student_id)
     quiz = _quiz_with_questions(db, classwork.classwork_id)
     if not quiz:
@@ -421,9 +462,22 @@ def grade_teacher_quiz_submission(
         for ans in db.query(QuizAnswer).filter(QuizAnswer.submission_id == submission.submission_id).all()
     }
 
+    if payload.override_total_grade is not None:
+        if payload.override_total_grade < 0:
+            raise HTTPException(status_code=400, detail="Grade cannot be negative")
+        if classwork.total_points is not None and payload.override_total_grade > float(classwork.total_points):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Grade cannot be greater than total points ({classwork.total_points})",
+            )
+
+    seen_question_ids: set[int] = set()
     for grade_item in payload.answers:
+        if grade_item.quiz_question_id in seen_question_ids:
+            raise HTTPException(status_code=400, detail="Each quiz question can be graded only once")
+        seen_question_ids.add(grade_item.quiz_question_id)
         if grade_item.quiz_question_id not in question_map:
-            continue
+            raise HTTPException(status_code=400, detail="Graded question does not belong to this quiz")
         question = question_map[grade_item.quiz_question_id]
         if grade_item.points_awarded < 0:
             raise HTTPException(status_code=400, detail="Points awarded cannot be negative")
@@ -433,6 +487,9 @@ def grade_teacher_quiz_submission(
                 detail=f"Points awarded cannot exceed question maximum ({question.points})",
             )
 
+    previous_grade = submission.grade
+    for grade_item in payload.answers:
+        question = question_map[grade_item.quiz_question_id]
         pts_decimal = Decimal(str(grade_item.points_awarded))
         is_corr = grade_item.is_correct
         if is_corr is None:
@@ -456,13 +513,6 @@ def grade_teacher_quiz_submission(
     db.flush()
 
     if payload.override_total_grade is not None:
-        if payload.override_total_grade < 0:
-            raise HTTPException(status_code=400, detail="Grade cannot be negative")
-        if classwork.total_points is not None and payload.override_total_grade > float(classwork.total_points):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Grade cannot be greater than total points ({classwork.total_points})",
-            )
         submission.grade = Decimal(str(payload.override_total_grade))
     else:
         all_answers = db.query(QuizAnswer).filter(QuizAnswer.submission_id == submission.submission_id).all()

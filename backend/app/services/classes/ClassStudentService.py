@@ -8,6 +8,7 @@ from app.models.people.Student import Student
 from app.schemas.Class import UpdateClassStudentListRequest
 from app.services.classes.ClassShared import normalized_text
 from app.services.classes.ClassService import build_student_class_assignment
+from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 
 # CLASS ROSTER WRITE FLOW
 # The admin submits additions, removals, and transfers together. This service
@@ -27,6 +28,9 @@ def update_class_student_assignments(
     class_ = db.query(Class).filter(Class.class_id == class_id).with_for_update().first()
     if class_ is None:
         raise HTTPException(status_code=404, detail="Class not found.")
+    SubjectLoadAuthorizationService.assert_context_configurable(
+        db, class_id=class_id
+    )
     if normalized_text(class_.class_status or "active") == "archived":
         raise HTTPException(
             status_code=409,

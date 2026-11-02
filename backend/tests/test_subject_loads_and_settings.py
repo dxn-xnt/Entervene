@@ -356,6 +356,25 @@ def test_publish_section_isolated_conflicts(db):
     db.add_all([sub1, sub2])
     db.flush()
 
+    db.add_all([
+        SubjectOffering(
+            subject_id=sub1.subject_id,
+            academic_year_id=year.academic_year_id,
+            academic_level_id=level.academic_level_id,
+            academic_period_id=period.academic_period_id,
+            minutes=60,
+            status="active",
+        ),
+        SubjectOffering(
+            subject_id=sub2.subject_id,
+            academic_year_id=year.academic_year_id,
+            academic_level_id=level.academic_level_id,
+            academic_period_id=period.academic_period_id,
+            minutes=60,
+            status="active",
+        ),
+    ])
+
     staff1 = AcademicStaff(staff_id="STF1001", first_name="John", last_name="Doe", employment_status="active")
     staff2 = AcademicStaff(staff_id="STF1002", first_name="Jane", last_name="Roe", employment_status="active")
     db.add_all([staff1, staff2])

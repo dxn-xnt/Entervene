@@ -84,6 +84,7 @@ from app.services.academic.SubjectLoadAuthorizationService import (
     SubjectLoadAuthorizationService,
     SubjectAccessLevel,
 )
+from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
 
 
 COMPLETED_STATUSES = {"submitted", "graded", "late"}
@@ -195,8 +196,14 @@ def teacher_period_options(
     query = (
         db.query(AcademicPeriod, AcademicYear)
         .join(SubjectLoad, SubjectLoad.academic_period_id == AcademicPeriod.academic_period_id)
+        .join(Class, Class.class_id == SubjectLoad.class_id)
         .join(AcademicYear, AcademicYear.academic_year_id == AcademicPeriod.academic_year_id)
-        .filter(load_filter, SubjectLoad.is_active_version.is_(True), SubjectLoad.status.in_(["active", "published"]))
+        .filter(
+            load_filter,
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(["active", "published"]),
+            Class.academic_year_id == AcademicPeriod.academic_year_id,
+        )
     )
     if class_id is not None:
         query = query.filter(SubjectLoad.class_id == class_id)
@@ -217,7 +224,12 @@ def teacher_period_options(
         )
         for period, year in rows
     ]
-    default_period = next((item.academic_period_id for item in options if item.is_active), None)
+    active_period = resolve_active_academic_period(db, required=False)
+    active_period_id = active_period.academic_period_id if active_period else None
+    default_period = next(
+        (item.academic_period_id for item in options if item.academic_period_id == active_period_id),
+        None,
+    )
     if default_period is None and options:
         default_period = options[0].academic_period_id
     return StudentRecordPeriodOptionsResponse(
@@ -908,6 +920,11 @@ def finalize_student_period_grade(
     if period_grade is None:
         raise HTTPException(status_code=404, detail="Student period grade not found")
 
+    SubjectLoadAuthorizationService.assert_context_writable(
+        db,
+        class_id=period_grade.class_id,
+        academic_period_id=period_grade.academic_period_id,
+    )
     if finalized_by_staff_id:
         SubjectLoadAuthorizationService.assert_can_write(
             db,
@@ -1731,7 +1748,11 @@ def _teacher_scope(
     subject_id: int,
     academic_period_id: int | None,
 ) -> TeacherRecordScope:
-    period_id = academic_period_id or _default_period_id(db, staff_id)
+    period_id = (
+        academic_period_id
+        if academic_period_id is not None
+        else _default_period_id(db, staff_id, class_id, subject_id)
+    )
     if period_id is None:
         raise HTTPException(status_code=404, detail="No active or recent academic period found")
 
@@ -1754,7 +1775,8 @@ def _teacher_scope(
             SubjectLoad.academic_period_id == period_id,
             SubjectLoad.is_active_version.is_(True),
             SubjectLoad.status.in_(["active", "published"]),
-            Class.class_status != "archived",
+            SubjectLoad.status.in_(["active", "published"]),
+            Class.academic_year_id == AcademicPeriod.academic_year_id,
         )
         .first()
     )
@@ -1794,8 +1816,13 @@ def _teacher_scope(
 
 
 
-def _default_period_id(db: Session, staff_id: str) -> int | None:
-    options = teacher_period_options(db, staff_id)
+def _default_period_id(
+    db: Session,
+    staff_id: str,
+    class_id: int,
+    subject_id: int,
+) -> int | None:
+    options = teacher_period_options(db, staff_id, class_id, subject_id)
     return options.default_academic_period_id
 
 

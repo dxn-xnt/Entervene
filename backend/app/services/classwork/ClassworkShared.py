@@ -180,6 +180,11 @@ def ensure_class_targets(
     }
     if len(target_years) != 1 or period.academic_year_id not in target_years:
         raise HTTPException(status_code=400, detail="Academic period does not belong to the target class year")
+    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+    for cid in class_ids:
+        SubjectLoadAuthorizationService.assert_can_write(
+            db, staff_id, cid, subject_id, academic_period_id
+        )
 
 
 def cleanup_saved_files(file_paths: list[str]) -> None:

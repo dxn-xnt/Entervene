@@ -11,7 +11,10 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from app.core.FileUpload import delete_file, save_file
 from app.core.Security import decode_access_token
+from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.AcademicStaff import AcademicStaff
@@ -30,6 +33,7 @@ from app.services.classwork.ClassworkShared import (
     cleanup_saved_files,
 )
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
+from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 from app.services.intervention.RemediationPrerequisiteService import require_remediation_prerequisite
 
 
@@ -75,6 +79,47 @@ def require_assignment_recipient(assignment: ClassworkAssignment, student: Stude
         raise HTTPException(status_code=404, detail="Assignment not found")
 
 
+def _assert_student_submission_mutation_scope(
+    db: Session,
+    student: Student,
+    assignment: ClassworkAssignment,
+    classwork: Classwork,
+) -> None:
+    if assignment.academic_period_id is None:
+        raise HTTPException(status_code=403, detail="Assignment has an unscoped academic period")
+
+    class_ = db.get(Class, assignment.class_id)
+    period = db.get(AcademicPeriod, assignment.academic_period_id)
+    if class_ is None or period is None or class_.academic_year_id != period.academic_year_id:
+        raise HTTPException(status_code=403, detail="Assignment academic context is invalid")
+
+    SubjectLoadAuthorizationService.assert_context_writable(
+        db,
+        class_id=assignment.class_id,
+        academic_period_id=assignment.academic_period_id,
+        block_future_period_in_current_year=True,
+    )
+
+    enrollment = db.query(StudentClass.student_class_id).filter(
+        StudentClass.student_id == student.student_id,
+        StudentClass.class_id == assignment.class_id,
+        StudentClass.academic_year_id == period.academic_year_id,
+        StudentClass.enrollment_status == "enrolled",
+    ).first()
+    if enrollment is None:
+        raise HTTPException(status_code=403, detail="Not enrolled in this class for this academic year")
+
+    finalized = db.query(StudentPeriodGrade.period_grade_id).filter(
+        StudentPeriodGrade.student_id == student.student_id,
+        StudentPeriodGrade.class_id == assignment.class_id,
+        StudentPeriodGrade.subject_id == classwork.subject_id,
+        StudentPeriodGrade.academic_period_id == assignment.academic_period_id,
+        StudentPeriodGrade.is_finalized.is_(True),
+    ).first()
+    if finalized is not None:
+        raise HTTPException(status_code=409, detail="The period grade is finalized")
+
+
 def teacher_owns_assignment(assignment_id: int, staff_id: str, db: Session, write_required: bool = False) -> ClassworkAssignment:
     assignment = db.query(ClassworkAssignment).filter(
         ClassworkAssignment.classwork_assignment_id == assignment_id
@@ -92,6 +137,7 @@ def teacher_owns_assignment(assignment_id: int, staff_id: str, db: Session, writ
         .filter(
             SubjectLoad.class_id == assignment.class_id,
             SubjectLoad.subject_id == classwork.subject_id,
+            *((SubjectLoad.academic_period_id == assignment.academic_period_id,) if assignment.academic_period_id is not None else ()),
             SubjectLoad.is_active_version.is_(True),
             SubjectLoad.status.in_(["active", "published"]),
         )
@@ -193,15 +239,9 @@ def assert_student_can_modify_submission(
     if not classwork or classwork.is_archived:
         raise HTTPException(status_code=404, detail="Classwork not found")
     require_assignment_recipient(assignment, student)
+    _assert_student_submission_mutation_scope(db, student, assignment, classwork)
     ensure_remedial_period_open(db, assignment, student.student_id)
     require_remediation_prerequisite(db, assignment, student)
-    enrollment = db.query(StudentClass).filter(
-        StudentClass.student_id == student.student_id,
-        StudentClass.class_id == assignment.class_id,
-        StudentClass.enrollment_status == "enrolled",
-    ).first()
-    if not enrollment:
-        raise HTTPException(status_code=403, detail="Not enrolled in this class")
     now = datetime.now(timezone.utc)
     if not assignment_is_available(assignment, now):
         raise HTTPException(status_code=403, detail="This assignment is not available")
@@ -255,15 +295,9 @@ async def submit_student_work(
     if not classwork or classwork.is_archived:
         raise HTTPException(status_code=404, detail="Classwork not found")
     require_assignment_recipient(assignment, student)
+    _assert_student_submission_mutation_scope(db, student, assignment, classwork)
     ensure_remedial_period_open(db, assignment, student.student_id)
     require_remediation_prerequisite(db, assignment, student)
-    enrollment = db.query(StudentClass).filter(
-        StudentClass.student_id == student.student_id,
-        StudentClass.class_id == assignment.class_id,
-        StudentClass.enrollment_status == "enrolled",
-    ).first()
-    if not enrollment:
-        raise HTTPException(status_code=403, detail="Not enrolled in this class")
     now = datetime.now(timezone.utc)
     if not assignment_is_available(assignment, now):
         raise HTTPException(status_code=403, detail="This assignment is not available")
@@ -387,12 +421,7 @@ def _student_reading_scope(
     if classwork is None or classwork.is_archived:
         raise HTTPException(status_code=404, detail="Classwork not found")
     require_assignment_recipient(assignment, student)
-    if not db.query(StudentClass.student_class_id).filter(
-        StudentClass.student_id == student.student_id,
-        StudentClass.class_id == assignment.class_id,
-        StudentClass.enrollment_status == "enrolled",
-    ).first():
-        raise HTTPException(status_code=403, detail="Not enrolled in this class")
+    _assert_student_submission_mutation_scope(db, student, assignment, classwork)
     if not classwork.is_published or not assignment_is_available(assignment):
         raise HTTPException(status_code=403, detail="This reading is not available")
     if assignment_is_locked(assignment):
@@ -797,6 +826,23 @@ def grade_student_submission(
     if not assignment_allows_student(assignment, submission.student_id):
         raise HTTPException(status_code=403, detail="Student is not assigned to this activity")
     ensure_remedial_period_open(db, assignment, submission.student_id)
+    if assignment and assignment.academic_period_id is not None:
+        from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
+        cw_obj = assignment.classwork or db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
+        if cw_obj is not None:
+            finalized_pg = (
+                db.query(StudentPeriodGrade.period_grade_id)
+                .filter(
+                    StudentPeriodGrade.student_id == submission.student_id,
+                    StudentPeriodGrade.class_id == assignment.class_id,
+                    StudentPeriodGrade.subject_id == cw_obj.subject_id,
+                    StudentPeriodGrade.academic_period_id == assignment.academic_period_id,
+                    StudentPeriodGrade.is_finalized.is_(True),
+                )
+                .first()
+            )
+            if finalized_pg is not None:
+                raise HTTPException(status_code=409, detail="The period grade is finalized")
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first() if assignment else None
     if classwork and (classwork.classwork_type or "").upper() == "READING":
         raise HTTPException(status_code=400, detail="Reading classworks cannot be graded")

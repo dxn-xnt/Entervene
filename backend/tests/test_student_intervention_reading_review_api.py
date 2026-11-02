@@ -69,6 +69,9 @@ def _create_active_intervention(
     subject_id: int | None = None,
     source_prediction_id: int | None = None,
 ) -> Intervention:
+    # Reading-review mutations are live-period actions. Keep this shared setup
+    # explicit so successful API cases do not rely on an inactive test period.
+    c["period"].is_active = True
     sid = subject_id or c["subject"].subject_id
     pid = source_prediction_id or intervention_id
     intervention = Intervention(

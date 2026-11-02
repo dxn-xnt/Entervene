@@ -155,8 +155,9 @@ def fetch_academic_periods(
     if academic_year_id is not None:
         query = query.filter(AcademicPeriod.academic_year_id == academic_year_id)
     elif not include_all:
-        # Default to active academic year if not specified
-        active_year = db.query(AcademicYear).filter(AcademicYear.is_active == True).first()
+        from app.services.academic.AcademicLifecycleService import resolve_active_academic_year
+
+        active_year = resolve_active_academic_year(db, required=False)
         if active_year:
             query = query.filter(AcademicPeriod.academic_year_id == active_year.academic_year_id)
 
@@ -187,24 +188,21 @@ def set_active_academic_year(
     db: Session = Depends(get_db),
 ):
     """Admin only — set the active academic year."""
-    from fastapi import HTTPException
-    from app.models.academic.AcademicYear import AcademicYear
+    from app.services.academic.AcademicLifecycleService import activate_academic_year
 
-    target_year = db.query(AcademicYear).filter(AcademicYear.academic_year_id == academic_year_id).first()
-    if not target_year:
-        raise HTTPException(status_code=404, detail="Academic year not found.")
-
-    # Deactivate all, activate target
-    all_years = db.query(AcademicYear).all()
-    for y in all_years:
-        y.is_active = (y.academic_year_id == academic_year_id)
-
-    # Sync setting
-    user_id = UUID(str(current_user.get("sub") or current_user.get("user_id")))
-    update_setting(db=db, key="current_school_year", value=target_year.year_label, user_id=user_id)
-
-    db.commit()
-    return {"message": f"Academic year {target_year.year_label} set as active.", "academic_year_id": academic_year_id}
+    raw_user_id = current_user.get("sub") or current_user.get("user_id")
+    user_id = UUID(str(raw_user_id)) if raw_user_id else None
+    target_year, target_period = activate_academic_year(
+        db,
+        academic_year_id=academic_year_id,
+        actor_user_id=user_id,
+    )
+    return {
+        "message": f"Academic year {target_year.year_label} set as active.",
+        "academic_year_id": target_year.academic_year_id,
+        "academic_period_id": target_period.academic_period_id,
+        "period_sequence": target_period.period_sequence,
+    }
 
 
 @router.put("/active-period/{academic_period_id}")
@@ -214,23 +212,15 @@ def set_active_academic_period(
     db: Session = Depends(get_db),
 ):
     """Admin only — set the active academic period."""
-    from fastapi import HTTPException
-    from app.models.academic.AcademicPeriod import AcademicPeriod
+    from app.services.academic.AcademicLifecycleService import activate_academic_period
 
-    target_period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == academic_period_id).first()
-    if not target_period:
-        raise HTTPException(status_code=404, detail="Academic period not found.")
-
-    # Deactivate other periods in the same academic year, activate target
-    year_periods = db.query(AcademicPeriod).filter(AcademicPeriod.academic_year_id == target_period.academic_year_id).all()
-    for p in year_periods:
-        p.is_active = (p.academic_period_id == academic_period_id)
-
-    # Sync setting
-    user_id = UUID(str(current_user.get("sub") or current_user.get("user_id")))
-    update_setting(db=db, key="active_term", value=str(target_period.period_sequence), user_id=user_id)
-
-    db.commit()
+    raw_user_id = current_user.get("sub") or current_user.get("user_id")
+    user_id = UUID(str(raw_user_id)) if raw_user_id else None
+    _active_year, target_period = activate_academic_period(
+        db,
+        academic_period_id=academic_period_id,
+        actor_user_id=user_id,
+    )
     return {
         "message": f"Period {target_period.period_name} set as active.",
         "academic_period_id": academic_period_id,
@@ -246,7 +236,8 @@ def update_single_setting(
     db: Session = Depends(get_db),
 ):
     """Admin only — update a setting value with strict type validation."""
-    user_id = UUID(str(current_user.get("sub") or current_user.get("user_id")))
+    raw_user_id = current_user.get("sub") or current_user.get("user_id")
+    user_id = UUID(str(raw_user_id)) if raw_user_id else None
     return update_setting(db=db, key=key, value=payload.value, user_id=user_id)
 
 

@@ -652,16 +652,18 @@ def test_noncurrent_load_version_draft_and_inactive_class_are_excluded(db, data)
 
 def test_teacher_route_ignores_staff_override_and_other_teacher_filter(db, data):
     client = create_client(db, {"sub": str(data["teacher"].user_id), "role": "teacher"})
+    own = client.get("/analytics/teacher/dashboard-health", params={
+        "academic_period_id": data["period"].academic_period_id,
+        "staff_id": data["other_teacher"].staff_id,
+    })
+    assert own.status_code == 200
+    assert own.json()["kpis"]["ungraded_count"] == 1
     response = client.get("/analytics/teacher/dashboard-health", params={
         "academic_period_id": data["period"].academic_period_id,
         "staff_id": data["other_teacher"].staff_id,
         "class_id": data["other_class"].class_id, "subject_id": data["other_subject"].subject_id,
     })
-    assert response.status_code == 200
-    body = response.json()
-    assert body["kpis"]["ungraded_count"] == 1
-    assert body["trend_chart"]["selected_class_id"] == data["class_"].class_id
-    assert body["action_queue"]["pending_grading"][0]["submission_id"] == data["submissions"]["pending_active"].submission_id
+    assert response.status_code == 403
 
 
 def test_admin_route_can_select_teacher_without_other_teacher_data(db, data):
@@ -949,11 +951,10 @@ def test_phase_three_preserves_same_student_subject_in_two_active_classes(db, da
 
 
 def test_phase_three_is_not_scoped_to_the_trend_selector(db, data):
-    """Mocked-behavior: an invalid trend tuple cannot filter grade details."""
-    baseline = dashboard(db, data)
-    selected = dashboard(db, data, class_id=data["other_class"].class_id, subject_id=data["other_subject"].subject_id)
-    for key in ("top_performers", "grade_distribution", "grade_details"):
-        assert selected["details"][key] == baseline["details"][key]
+    """An explicit unauthorized trend tuple is rejected rather than replaced."""
+    with pytest.raises(HTTPException) as error:
+        dashboard(db, data, class_id=data["other_class"].class_id, subject_id=data["other_subject"].subject_id)
+    assert error.value.status_code == 403
 
 
 def test_phase_three_missing_names_keep_available_grades_and_warn(db, data, monkeypatch):
@@ -1360,10 +1361,67 @@ def test_phase_five_bulk_reader_accepts_ready_and_published_but_not_draft_or_arc
 
 
 def test_phase_five_lesson_data_not_tied_to_trend_filter_and_subjects_are_real(db, data):
-    """Mocked-behavior: lesson performance pools all authorized classes."""
+    """An unauthorized explicit filter cannot expose pooled lesson analytics."""
     seed_dashboard_lesson_data(db, data)
     first = dashboard(db, data)["details"]["lesson_performance"]
-    filtered = dashboard(db, data, class_id=99999, subject_id=99999)["details"]["lesson_performance"]
-    assert first == filtered
+    with pytest.raises(HTTPException) as error:
+        dashboard(db, data, class_id=99999, subject_id=99999)
+    assert error.value.status_code == 403
     assert [(s["subject_id"], s["class_ids"]) for s in first["subjects"]] == [
         (data["subject"].subject_id, [data["class_"].class_id])]
+
+@pytest.mark.parametrize('scope', ['class', 'subject', 'combination'])
+def test_dashboard_scope_limits_all_analytics_and_keeps_authorized_options(db, data, scope):
+    db.add(SubjectLoad(
+        staff_id=data['teacher'].staff_id, class_id=data['other_class'].class_id,
+        subject_id=data['other_subject'].subject_id,
+        academic_period_id=data['period'].academic_period_id,
+        status='published', is_active_version=True,
+    ))
+    db.flush()
+    baseline = dashboard(db, data)
+    params = {}
+    if scope in ('class', 'combination'):
+        params['dashboard_class_id'] = data['class_'].class_id
+    if scope in ('subject', 'combination'):
+        params['dashboard_subject_id'] = data['subject'].subject_id
+    scoped = dashboard(db, data, **params)
+    assert baseline['kpis']['active_classes'] == 2
+    assert scoped['kpis']['active_classes'] == 1
+    assert scoped['kpis']['enrolled_students'] == 2
+    assert len(scoped['dashboard_filters']) == 2
+    assert all(item['class_id'] == data['class_'].class_id for item in scoped['section_matrix'])
+    assert all(item['subject_id'] == data['subject'].subject_id for item in scoped['section_matrix'])
+    assert scoped['kpis']['ungraded_count'] == 1
+    assert scoped['trend_chart']['selected_subject_id'] == data['subject'].subject_id
+    assert all(item['class_id'] == data['class_'].class_id for item in scoped['details']['attendance_by_section'])
+
+
+@pytest.mark.parametrize('scope', ['class', 'subject', 'combination'])
+def test_dashboard_scope_cannot_include_unhandled_loads(db, data, scope):
+    params = {}
+    if scope in ('class', 'combination'):
+        params['dashboard_class_id'] = data['other_class'].class_id
+    if scope in ('subject', 'combination'):
+        params['dashboard_subject_id'] = data['other_subject'].subject_id
+    result = dashboard(db, data, **params)
+    assert result['kpis']['active_classes'] == 0
+    assert result['kpis']['enrolled_students'] == 0
+    assert result['section_matrix'] == []
+    assert result['action_queue']['pending_grading'] == []
+    assert result['action_queue']['upcoming_deadlines'] == []
+    assert result['trend_chart']['points'] == []
+    assert len(result['dashboard_filters']) == 1
+
+def test_dashboard_scope_route_preserves_teacher_authorization(db, data):
+    client = create_client(db, {'sub': str(data['teacher'].user_id), 'role': 'teacher'})
+    response = client.get('/analytics/teacher/dashboard-health', params={
+        'academic_period_id': data['period'].academic_period_id,
+        'dashboard_class_id': data['other_class'].class_id,
+        'dashboard_subject_id': data['other_subject'].subject_id,
+        'staff_id': data['other_teacher'].staff_id,
+    })
+    assert response.status_code == 200
+    assert response.json()['kpis']['active_classes'] == 0
+    assert response.json()['action_queue']['pending_grading'] == []
+    assert client.get('/analytics/teacher/dashboard-health', params={'dashboard_class_id': 0}).status_code == 422

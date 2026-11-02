@@ -81,6 +81,8 @@ import {
   type SubjectOfferingListItem,
 } from "@/lib/api";
 
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+
 const MODULE_TABS: Array<TabItem<AdminSubjectSection>> = [
   { id: "catalog", label: "Subject Catalog", icon: BookOpen },
   { id: "offerings", label: "Curriculum Plan", icon: Calendar },
@@ -90,6 +92,7 @@ const MODULE_TABS: Array<TabItem<AdminSubjectSection>> = [
 
 export default function AdminSubjects() {
   const toast = useToast();
+  const { selectedYearId } = useAcademicPeriod();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab") as AdminSubjectSection | null;
   const initialSection = tabParam && ["catalog", "offerings", "grading", "archived"].includes(tabParam)
@@ -231,7 +234,7 @@ export default function AdminSubjects() {
     if (!offeringOptions) return;
     setOfferingFilters((current) => {
       if (current.academic_year_id !== ALL_VALUE && current.grade !== ALL_VALUE) return current;
-      const defaults = defaultOfferingFilters(offeringOptions);
+      const defaults = defaultOfferingFilters(offeringOptions, selectedYearId);
       return {
         ...defaults, ...current,
         academic_year_id: current.academic_year_id !== ALL_VALUE ? current.academic_year_id : defaults.academic_year_id,
@@ -239,7 +242,20 @@ export default function AdminSubjects() {
         pathway: current.pathway !== ALL_VALUE ? current.pathway : defaults.pathway
       };
     });
-  }, [offeringOptions]);
+  }, [offeringOptions, selectedYearId]);
+
+  useEffect(() => {
+    if (selectedYearId != null) {
+      setOfferingFilters((current) => {
+        const nextYearStr = String(selectedYearId);
+        if (current.academic_year_id === nextYearStr) return current;
+        return {
+          ...current,
+          academic_year_id: nextYearStr,
+        };
+      });
+    }
+  }, [selectedYearId]);
 
   const availableGradingTemplates = useMemo(() => {
     const names = new Set<string>();
@@ -317,13 +333,36 @@ export default function AdminSubjects() {
     () => offeringOptions?.academic_years.find((year) => year.is_active) ?? null,
     [offeringOptions]
   );
-  const isViewingInactiveAcademicYear = selectedAcademicYear?.is_active === false;
+  const academicYearState = useMemo(() => {
+    if (!selectedAcademicYear || !activeAcademicYear) return "CURRENT";
+    if (selectedAcademicYear.is_active || selectedAcademicYear.academic_year_id === activeAcademicYear.academic_year_id) {
+      return "CURRENT";
+    }
+    if (selectedAcademicYear.end_date && activeAcademicYear.start_date && selectedAcademicYear.end_date <= activeAcademicYear.start_date) {
+      return "HISTORICAL";
+    }
+    if (selectedAcademicYear.start_date && activeAcademicYear.end_date && selectedAcademicYear.start_date >= activeAcademicYear.end_date) {
+      return "FUTURE";
+    }
+    if (selectedAcademicYear.start_date && activeAcademicYear.start_date && selectedAcademicYear.start_date !== activeAcademicYear.start_date) {
+      return selectedAcademicYear.start_date < activeAcademicYear.start_date ? "HISTORICAL" : "FUTURE";
+    }
+    const selStart = parseInt(selectedAcademicYear.year_label.match(/\d{4}/)?.[0] ?? "0", 10);
+    const actStart = parseInt(activeAcademicYear.year_label.match(/\d{4}/)?.[0] ?? "0", 10);
+    if (selStart && actStart && selStart !== actStart) {
+      return selStart < actStart ? "HISTORICAL" : "FUTURE";
+    }
+    return selectedAcademicYear.academic_year_id < activeAcademicYear.academic_year_id ? "HISTORICAL" : "FUTURE";
+  }, [activeAcademicYear, selectedAcademicYear]);
+
+  const isHistoricalYear = academicYearState === "HISTORICAL";
+  const isViewingInactiveAcademicYear = isHistoricalYear;
   const readOnlyReason = isViewingInactiveAcademicYear
-    ? `Viewing previous academic year: ${selectedAcademicYear?.year_label}. Curriculum setup is read-only to protect historical grades and prediction records.`
+    ? `Viewing historical academic year: ${selectedAcademicYear?.year_label}. Curriculum setup is read-only to protect historical grades and prediction records.`
     : undefined;
-  const readOnlyHelper = activeAcademicYear
-    ? `Create or copy a setup into the active academic year (${activeAcademicYear.year_label}) before making changes.`
-    : "Create or copy a setup into the active academic year before making changes.";
+
+
+
 
   const selectedAcademicLevel = useMemo(() => {
     if (!offeringOptions || offeringFilters.grade === ALL_VALUE) return null;
@@ -365,7 +404,7 @@ export default function AdminSubjects() {
 
   const openCreateOffering = () => {
     if (isViewingInactiveAcademicYear) {
-      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
+      setError(readOnlyReason ?? "Historical academic years are locked in the UI to protect historical records.");
       return;
     }
     setEditingOffering(null);
@@ -374,7 +413,7 @@ export default function AdminSubjects() {
 
   const openEditOffering = (offering: SubjectOfferingListItem) => {
     if (isViewingInactiveAcademicYear) {
-      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
+      setError(readOnlyReason ?? "Historical academic years are locked in the UI to protect historical records.");
       return;
     }
     setEditingOffering(offering);
@@ -384,7 +423,7 @@ export default function AdminSubjects() {
   const handlePendingAction = async () => {
     if (!pendingAction) return;
     if (isViewingInactiveAcademicYear && pendingAction.kind === "offering") {
-      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
+      setError(readOnlyReason ?? "Historical academic years are locked in the UI to protect historical records.");
       setPendingAction(null);
       return;
     }
@@ -432,7 +471,7 @@ export default function AdminSubjects() {
   const handleOfferingImport = async (file: File | undefined) => {
     if (!file) return;
     if (isViewingInactiveAcademicYear) {
-      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
+      setError(readOnlyReason ?? "Historical academic years are locked in the UI to protect historical records.");
       if (offeringImportInputRef.current) offeringImportInputRef.current.value = "";
       return;
     }
@@ -469,7 +508,7 @@ export default function AdminSubjects() {
   };
 
   const resetOfferingFilters = () => {
-    setOfferingFilters(defaultOfferingFilters(offeringOptions));
+    setOfferingFilters(defaultOfferingFilters(offeringOptions, selectedYearId));
   };
 
   const handleDownloadCatalogTemplate = async () => {
@@ -680,28 +719,6 @@ export default function AdminSubjects() {
             </div>
 
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 [&_table]:min-w-[720px] sm:px-4 sm:py-4 md:px-6">
-              {isViewingInactiveAcademicYear && activeSection === "offerings" ? (
-                <div className="rounded border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
-                  <p className="font-bold">{readOnlyReason}</p>
-                  <p className="text-black/70">
-                    {readOnlyHelper} Previous academic years are locked in the UI to protect historical grades and prediction records.
-                  </p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="mt-3"
-                    disabled={isLoadingOptions || !activeAcademicYear}
-                    onClick={() => {
-                      setError(null);
-                      setCopyResult(null);
-                      setIsCopySetupModalOpen(true);
-                    }}
-                  >
-                    Copy Previous Year Setup
-                  </Button>
-                </div>
-              ) : null}
 
               {error ? (
                 <div className="flex flex-col gap-2 rounded border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000] md:flex-row md:items-center md:justify-between">
@@ -901,18 +918,6 @@ export default function AdminSubjects() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => {
-                          setError(null);
-                          setCopyResult(null);
-                          setIsCopySetupModalOpen(true);
-                        }}
-                        disabled={isLoadingOptions || !activeAcademicYear}
-                      >
-                        Copy Previous Year Setup
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
                         onClick={() => offeringImportInputRef.current?.click()}
                         disabled={isImportingOfferings || isViewingInactiveAcademicYear}
                         title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
@@ -1102,7 +1107,8 @@ export default function AdminSubjects() {
         open={isCopySetupModalOpen}
         onOpenChange={setIsCopySetupModalOpen}
         options={offeringOptions}
-        defaultSourceAcademicYearId={isViewingInactiveAcademicYear ? selectedAcademicYear?.academic_year_id : undefined}
+        defaultTargetAcademicYearId={isHistoricalYear ? undefined : selectedAcademicYear?.academic_year_id}
+        defaultSourceAcademicYearId={isHistoricalYear ? selectedAcademicYear?.academic_year_id : undefined}
         onCopied={handleCopySetupComplete}
       />
 

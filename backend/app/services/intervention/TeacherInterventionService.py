@@ -71,7 +71,17 @@ def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
             threshold_val = float(res.threshold)
     except Exception:
         threshold_val = None
+    academic_level = None
+    if row.student and row.student.academic_level:
+        academic_level = row.student.academic_level
+    elif row.class_ and row.class_.academic_level:
+        academic_level = row.class_.academic_level
+    grade_level_val = academic_level.grade_level if academic_level else None
+    level_name_val = academic_level.level_name if academic_level else (f"Grade {grade_level_val}" if grade_level_val is not None else None)
+
     return TeacherInterventionSummary(
+        grade_level=grade_level_val,
+        level_name=level_name_val,
         intervention_id=row.intervention_id,
         student_id=row.student_id,
         student_name=" ".join(part for part in (row.student.first_name, row.student.middle_name, row.student.last_name, row.student.suffix) if part),

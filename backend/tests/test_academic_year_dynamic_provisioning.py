@@ -122,3 +122,89 @@ def test_create_academic_periods_invalid_dates_rejected(db_session):
             periods_data=invalid_periods_data,
         )
     assert exc_info.value.status_code == 400
+
+
+def test_admin_can_configure_future_year_periods_without_activating_year(db_session):
+    current = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 8, 1),
+        end_date=date(2027, 5, 31),
+        is_active=True,
+    )
+    future = AcademicYear(
+        year_label="2027-2028",
+        start_date=date(2027, 8, 1),
+        end_date=date(2028, 5, 31),
+        is_active=False,
+    )
+    db_session.add_all([current, future])
+    db_session.commit()
+
+    periods = create_or_update_academic_periods(
+        db=db_session,
+        academic_year_id=future.academic_year_id,
+        period_type="TERM",
+        periods_data=[
+            {"period_sequence": 1, "start_date": "2027-08-01", "end_date": "2027-11-15"},
+        ],
+    )
+
+    assert len(periods) == 1
+    assert periods[0].academic_year_id == future.academic_year_id
+    db_session.refresh(future)
+    assert future.is_active is False
+
+
+def test_historical_period_configuration_and_invalid_batches_do_not_partially_mutate(db_session):
+    historical = AcademicYear(
+        year_label="2025-2026",
+        start_date=date(2025, 8, 1),
+        end_date=date(2026, 5, 31),
+        is_active=False,
+    )
+    current = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 8, 1),
+        end_date=date(2027, 5, 31),
+        is_active=True,
+    )
+    existing = AcademicPeriod(
+        academic_year=historical,
+        period_name="Term 1",
+        period_type="TERM",
+        period_sequence=1,
+        total_periods_in_year=3,
+        start_date=date(2025, 8, 1),
+        end_date=date(2025, 11, 15),
+        is_active=False,
+    )
+    db_session.add_all([historical, current, existing])
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as historical_error:
+        create_or_update_academic_periods(
+            db=db_session,
+            academic_year_id=historical.academic_year_id,
+            period_type="TERM",
+            periods_data=[
+                {"period_sequence": 1, "start_date": "2025-08-10", "end_date": "2025-11-15"},
+            ],
+        )
+    assert historical_error.value.status_code == 403
+    db_session.refresh(existing)
+    assert existing.start_date == date(2025, 8, 1)
+
+    with pytest.raises(HTTPException) as batch_error:
+        create_or_update_academic_periods(
+            db=db_session,
+            academic_year_id=current.academic_year_id,
+            period_type="TERM",
+            periods_data=[
+                {"period_sequence": 1, "start_date": "2026-08-01", "end_date": "2026-11-15"},
+                {"period_sequence": 2, "start_date": "2027-02-01", "end_date": "2026-12-01"},
+            ],
+        )
+    assert batch_error.value.status_code == 400
+    assert db_session.query(AcademicPeriod).filter(
+        AcademicPeriod.academic_year_id == current.academic_year_id
+    ).count() == 0

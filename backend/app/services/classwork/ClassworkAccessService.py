@@ -5,6 +5,8 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.academic.StudentCLass import StudentClass
+from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.Class_ import Class
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.Student import Student
@@ -61,10 +63,13 @@ def authorize_classwork_access(
             query = (
                 db.query(ClassworkAssignment)
                 .join(StudentClass, StudentClass.class_id == ClassworkAssignment.class_id)
+                .join(Class, Class.class_id == ClassworkAssignment.class_id)
+                .join(AcademicPeriod, AcademicPeriod.academic_period_id == ClassworkAssignment.academic_period_id)
                 .filter(
                     ClassworkAssignment.classwork_id == cw.classwork_id,
                     StudentClass.student_id == student.student_id,
                     StudentClass.enrollment_status == "enrolled",
+                    Class.academic_year_id == AcademicPeriod.academic_year_id,
                 )
             )
             if class_id is not None:
@@ -110,11 +115,18 @@ def authorize_assignment_access(
         raise HTTPException(status_code=404, detail="Classwork not found")
     if role == "student" and assignment_is_available(assignment):
         student = db.query(Student).filter(Student.user_id == user_id).first()
-        if student and assignment_allows_student(assignment, student.student_id) and db.query(StudentClass).filter(
-            StudentClass.student_id == student.student_id,
-            StudentClass.class_id == assignment.class_id,
-            StudentClass.enrollment_status == "enrolled",
-        ).first():
+        if student and assignment_allows_student(assignment, student.student_id) and (
+            db.query(StudentClass)
+            .join(Class, Class.class_id == StudentClass.class_id)
+            .join(AcademicPeriod, AcademicPeriod.academic_period_id == assignment.academic_period_id)
+            .filter(
+                StudentClass.student_id == student.student_id,
+                StudentClass.class_id == assignment.class_id,
+                StudentClass.enrollment_status == "enrolled",
+                Class.academic_year_id == AcademicPeriod.academic_year_id,
+            )
+            .first()
+        ):
             if assignment_is_locked(assignment):
                 raise HTTPException(status_code=403, detail="This assignment is locked")
             require_remediation_prerequisite(db, assignment, student)

@@ -103,7 +103,13 @@ def upsert_quiz(
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    classwork = get_teacher_quiz_classwork(db, staff_id, classwork_id)
+    classwork = get_teacher_quiz_classwork(
+        db,
+        staff_id,
+        classwork_id,
+        write_required=True,
+        proposed_status=body.status,
+    )
     try:
         response = upsert_quiz_builder(db, classwork, body)
         db.commit()
@@ -119,7 +125,12 @@ def delete_quiz(
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    classwork = get_teacher_quiz_classwork(db, staff_id, classwork_id)
+    classwork = get_teacher_quiz_classwork(
+        db,
+        staff_id,
+        classwork_id,
+        write_required=True,
+    )
     try:
         delete_quiz_builder(db, classwork)
         db.commit()

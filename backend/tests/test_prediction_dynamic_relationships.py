@@ -33,7 +33,7 @@ from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
-from app.models.ai.AIModelVersion import AIModelVersion
+from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
@@ -169,6 +169,7 @@ def rel_context():
         model_version_id=1,
         model_name="Grade9-Risk-v1",
         model_type="CLASSIFIER",
+        model_purpose=ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value,
         algorithm="RandomForestClassifier",
         is_active=True,
     )
@@ -479,6 +480,199 @@ def test_substitute_teacher_authorization(rel_context):
     assert data["teacher_status_label"] == "SUBSTITUTE_ACTIVE"
 
 
+def _add_historical_scope(rel_context):
+    db = rel_context["db"]
+    historical_year = AcademicYear(
+        academic_year_id=2,
+        year_label="2024-2025",
+        start_date=date(2024, 6, 1),
+        end_date=date(2025, 3, 31),
+        is_active=False,
+    )
+    historical_period = AcademicPeriod(
+        academic_period_id=3,
+        academic_year_id=2,
+        period_sequence=1,
+        period_name="Historical Term 1",
+        start_date=date(2024, 6, 1),
+        end_date=date(2024, 9, 30),
+        is_active=False,
+    )
+    historical_class = Class(
+        class_id=15,
+        section_name="Historical Archimedes",
+        academic_year_id=2,
+        academic_level_id=1,
+    )
+    db.add_all([historical_year, historical_period, historical_class])
+    db.flush()
+    db.add(StudentClass(
+        student_id=rel_context["student1"].student_id,
+        class_id=historical_class.class_id,
+        academic_year_id=historical_year.academic_year_id,
+        enrollment_status="enrolled",
+    ))
+    db.flush()
+    return historical_period, historical_class
+
+
+def test_cross_year_primary_and_substitute_loads_never_authorize_prediction_access(rel_context):
+    db = rel_context["db"]
+    client = rel_context["client"]
+    auth = rel_context["auth"]
+    historical_period, _ = _add_historical_scope(rel_context)
+
+    invalid_primary = SubjectLoad(
+        subject_load_id=70,
+        class_id=8,
+        subject_id=7,
+        academic_period_id=historical_period.academic_period_id,
+        staff_id=rel_context["maria"].staff_id,
+        status="published",
+        is_active_version=True,
+    )
+    invalid_substituted = SubjectLoad(
+        subject_load_id=71,
+        class_id=8,
+        subject_id=8,
+        academic_period_id=historical_period.academic_period_id,
+        staff_id=rel_context["maria"].staff_id,
+        status="published",
+        is_active_version=True,
+    )
+    db.add_all([invalid_primary, invalid_substituted])
+    db.flush()
+    today = date.today()
+    db.add(TeacherSubstitution(
+        substitution_id=2,
+        subject_load_id=invalid_substituted.subject_load_id,
+        original_staff_id=rel_context["maria"].staff_id,
+        substitute_staff_id=rel_context["sub"].staff_id,
+        status="active",
+        start_date=today - timedelta(days=1),
+        end_date=today + timedelta(days=1),
+    ))
+    invalid_primary_prediction = AIPrediction(
+        prediction_id=801,
+        student_id=rel_context["student1"].student_id,
+        class_id=8,
+        subject_id=7,
+        source_period_id=historical_period.academic_period_id,
+        target_period_id=historical_period.academic_period_id,
+        risk_level="HIGH_RISK",
+        data_status="SUFFICIENT",
+    )
+    invalid_substitute_prediction = AIPrediction(
+        prediction_id=802,
+        student_id=rel_context["student1"].student_id,
+        class_id=8,
+        subject_id=8,
+        source_period_id=historical_period.academic_period_id,
+        target_period_id=historical_period.academic_period_id,
+        risk_level="MODERATE_RISK",
+        data_status="SUFFICIENT",
+    )
+    db.add_all([invalid_primary_prediction, invalid_substitute_prediction])
+    db.flush()
+
+    primary_triplet = (8, 7, historical_period.academic_period_id)
+    substitute_triplet = (8, 8, historical_period.academic_period_id)
+    resolved = resolve_teachers_for_loads(db, [primary_triplet, substitute_triplet])
+    assert resolved[primary_triplet].is_assigned is False
+    assert resolved[substitute_triplet].is_assigned is False
+    assert primary_triplet not in get_teacher_assigned_triplets(db, rel_context["maria"].staff_id)
+    assert substitute_triplet not in get_teacher_assigned_triplets(db, rel_context["sub"].staff_id)
+
+    auth["user"] = {"role": "teacher"}
+    auth["staff_id"] = rel_context["maria"].staff_id
+    assert client.get("/api/v1/predictions/801/detail").status_code == 403
+    auth["staff_id"] = rel_context["sub"].staff_id
+    assert client.get("/api/v1/predictions/802/detail").status_code == 403
+
+
+def test_valid_historical_primary_and_substitute_assignments_remain_authorized(rel_context):
+    db = rel_context["db"]
+    client = rel_context["client"]
+    auth = rel_context["auth"]
+    historical_period, historical_class = _add_historical_scope(rel_context)
+
+    primary_load = SubjectLoad(
+        subject_load_id=72,
+        class_id=historical_class.class_id,
+        subject_id=7,
+        academic_period_id=historical_period.academic_period_id,
+        staff_id=rel_context["maria"].staff_id,
+        status="published",
+        is_active_version=True,
+    )
+    substituted_load = SubjectLoad(
+        subject_load_id=73,
+        class_id=historical_class.class_id,
+        subject_id=8,
+        academic_period_id=historical_period.academic_period_id,
+        staff_id=rel_context["maria"].staff_id,
+        status="published",
+        is_active_version=True,
+    )
+    db.add_all([primary_load, substituted_load])
+    db.flush()
+    today = date.today()
+    db.add(TeacherSubstitution(
+        substitution_id=3,
+        subject_load_id=substituted_load.subject_load_id,
+        original_staff_id=rel_context["maria"].staff_id,
+        substitute_staff_id=rel_context["sub"].staff_id,
+        status="active",
+        start_date=today - timedelta(days=1),
+        end_date=today + timedelta(days=1),
+    ))
+    db.add_all([
+        AIPrediction(
+            prediction_id=803,
+            student_id=rel_context["student1"].student_id,
+            class_id=historical_class.class_id,
+            subject_id=7,
+            source_period_id=historical_period.academic_period_id,
+            target_period_id=historical_period.academic_period_id,
+            risk_level="HIGH_RISK",
+            data_status="SUFFICIENT",
+        ),
+        AIPrediction(
+            prediction_id=804,
+            student_id=rel_context["student1"].student_id,
+            class_id=historical_class.class_id,
+            subject_id=8,
+            source_period_id=historical_period.academic_period_id,
+            target_period_id=historical_period.academic_period_id,
+            risk_level="MODERATE_RISK",
+            data_status="SUFFICIENT",
+        ),
+    ])
+    db.flush()
+
+    primary_triplet = (historical_class.class_id, 7, historical_period.academic_period_id)
+    substitute_triplet = (historical_class.class_id, 8, historical_period.academic_period_id)
+    assert primary_triplet in get_teacher_assigned_triplets(
+        db,
+        rel_context["maria"].staff_id,
+        academic_period_id=historical_period.academic_period_id,
+    )
+    assert substitute_triplet in get_teacher_assigned_triplets(
+        db,
+        rel_context["sub"].staff_id,
+        academic_period_id=historical_period.academic_period_id,
+    )
+
+    auth["user"] = {"role": "teacher"}
+    auth["staff_id"] = rel_context["maria"].staff_id
+    assert client.get("/api/v1/predictions/803/detail").status_code == 200
+    auth["staff_id"] = rel_context["sub"].staff_id
+    assert client.get("/api/v1/predictions/804/detail").status_code == 200
+    auth["staff_id"] = rel_context["miguel"].staff_id
+    assert client.get("/api/v1/predictions/803/detail").status_code == 403
+    assert client.get("/api/v1/predictions/804/detail").status_code == 403
+
+
 def test_grade_summaries_scoping(rel_context):
     """Verifies /dashboard/grade-summaries properly scopes for teachers and admins."""
     db = rel_context["db"]
@@ -579,6 +773,7 @@ def test_grade_summaries_at_risk_counts_distinct_students(rel_context):
             target_period_id=1,
             risk_level="HIGH_RISK" if i % 3 == 0 else "MODERATE_RISK",
             data_status="SUFFICIENT",
+            revision=i + 1,
         )
         db.add(pred)
 
@@ -593,6 +788,7 @@ def test_grade_summaries_at_risk_counts_distinct_students(rel_context):
             target_period_id=1,
             risk_level="NEEDS_MONITORING",
             data_status="SUFFICIENT",
+            revision=i + 1,
         )
         db.add(pred)
 
@@ -666,6 +862,7 @@ def test_grade_summaries_dedup_across_subjects_and_periods(rel_context):
                     target_period_id=period_id,
                     risk_level="HIGH_RISK" if run % 2 == 0 else "MODERATE_RISK",
                     data_status="SUFFICIENT",
+                    revision=run + 1,
                 ))
                 pred_id += 1
 
@@ -681,6 +878,7 @@ def test_grade_summaries_dedup_across_subjects_and_periods(rel_context):
                 target_period_id=period_id,
                 risk_level="NEEDS_MONITORING",
                 data_status="SUFFICIENT",
+                revision=run + 1,
             ))
             pred_id += 1
 

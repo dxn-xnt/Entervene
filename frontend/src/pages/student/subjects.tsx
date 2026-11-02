@@ -1,61 +1,61 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 
 import { routes } from "@/../routes";
-import { apiFetch, getStudentTodos, type TodoItem } from "@/lib/api";
+import {
+  getMySubjects,
+  getStudentTodos,
+  type StudentSubjectItem,
+  type TodoItem,
+} from "@/lib/api";
 import { LoadingPanel } from "@/components/loading-panel";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { BookOpen } from "lucide-react";
 import { Button } from "@/components/student/button";
 import { StudentSubjectSectionCard } from "@/components/student/student-subject-section-card";
-
-interface EnrolledSubject {
-  subject_load_id: number;
-  class_id: number;
-  subject_id: number;
-  subject_name: string;
-  subject_codename?: string;
-  teacher_name: string;
-  teacher_avatar?: string | null;
-  period_name: string;
-  is_current_period: boolean;
-  is_current_quarter: boolean;
-  section_name: string;
-  year_label: string;
-}
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 const Subjects = () => {
-
-  const [subjects, setSubjects] = useState<EnrolledSubject[]>([]);
+  const { selectedPeriodId } = useAcademicPeriod();
+  const requestVersionRef = useRef(0);
+  const [subjects, setSubjects] = useState<StudentSubjectItem[]>([]);
   const [classworks, setClassworks] = useState<TodoItem[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    fetchSubjects();
-  }, []);
-
-  const fetchSubjects = async () => {
+  const fetchSubjects = useCallback(async () => {
+    const requestVersion = ++requestVersionRef.current;
     setIsLoading(true);
     setError("");
+    setSubjects([]);
+    setClassworks(null);
     try {
-      const [res, todos] = await Promise.all([
-        apiFetch("/api/v1/students/me/subjects"),
-        getStudentTodos().catch(() => null),
+      const [data, todos] = await Promise.all([
+        getMySubjects(selectedPeriodId ?? undefined),
+        getStudentTodos(selectedPeriodId ?? undefined).catch(() => null),
       ]);
-      if (!res.ok) throw new Error("Failed to load subjects");
-      const data = (await res.json()) as EnrolledSubject[];
+      if (requestVersion !== requestVersionRef.current) return;
       setSubjects(data);
       setClassworks(todos?.all ?? null);
     } catch (err) {
+      if (requestVersion !== requestVersionRef.current) return;
       setError(err instanceof Error ? err.message : "Failed to load subjects");
     } finally {
-      setIsLoading(false);
+      if (requestVersion === requestVersionRef.current) {
+        setIsLoading(false);
+      }
     }
-  };
+  }, [selectedPeriodId]);
 
-  const subjectHref = (subject: EnrolledSubject): string =>
+  useEffect(() => {
+    void fetchSubjects();
+    return () => {
+      requestVersionRef.current += 1;
+    };
+  }, [fetchSubjects]);
+
+  const subjectHref = (subject: StudentSubjectItem): string =>
     routes.student.subjectDetail
       .replace(":classId", String(subject.class_id))
       .replace(":subjectId", String(subject.subject_id));

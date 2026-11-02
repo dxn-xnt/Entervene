@@ -66,6 +66,7 @@ type AttendanceTarget = {
   key: string;
   class_id: number;
   subject_id?: number;
+  academic_period_id: number;
   section_name: string;
   subject_name?: string;
   academic_level?: string;
@@ -133,6 +134,7 @@ export default function TeacherAttendancePage() {
     isLoading: loadingClasses,
     error: classesError,
     refetch: refetchClasses,
+    selectedPeriodId,
   } = useTeacherClasses();
   const [selectedTargetKey, setSelectedTargetKey] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -181,9 +183,11 @@ export default function TeacherAttendancePage() {
 
     // 1. Advisory classes (Homeroom / Daily)
     advisoryClasses.forEach((c) => {
+      if (!selectedPeriodId) return;
       list.push({
         key: `adv-${c.class_id}`,
         class_id: c.class_id,
+        academic_period_id: selectedPeriodId,
         section_name: c.section_name,
         academic_level: c.academic_level,
         label: `${c.section_name} (${c.academic_level || "Advisory"})`,
@@ -193,10 +197,12 @@ export default function TeacherAttendancePage() {
 
     // 2. Subject Teaching Loads
     teachingClasses.forEach((l) => {
+      if (!l.academic_period_id) return;
       list.push({
         key: `subj-${l.class_id}-${l.subject_id}`,
         class_id: l.class_id,
         subject_id: l.subject_id,
+        academic_period_id: l.academic_period_id,
         section_name: l.section_name,
         subject_name: l.subject_name,
         academic_level: l.grade_level,
@@ -206,7 +212,7 @@ export default function TeacherAttendancePage() {
     });
 
     return list;
-  }, [teachingClasses, advisoryClasses]);
+  }, [teachingClasses, advisoryClasses, selectedPeriodId]);
 
   // Compute if current student marks differ from saved baseline
   const isDirty = useMemo(() => {
@@ -271,6 +277,7 @@ export default function TeacherAttendancePage() {
   );
   const selectedClassId = selectedTarget?.class_id || null;
   const selectedSubjectId = selectedTarget?.subject_id || undefined;
+  const selectedAcademicPeriodId = selectedTarget?.academic_period_id || undefined;
 
   // Register term-switch dirty guard with AcademicPeriodContext
   useRegisterDirtyGuard(isDirty, {
@@ -313,6 +320,7 @@ export default function TeacherAttendancePage() {
           selectedClassId!,
           undefined,
           selectedSubjectId,
+          selectedAcademicPeriodId,
         );
         setAllClassLogs(fullLogs);
 
@@ -354,7 +362,7 @@ export default function TeacherAttendancePage() {
     }
 
     loadAttendanceData();
-  }, [selectedClassId, selectedSubjectId, selectedDate]);
+  }, [selectedClassId, selectedSubjectId, selectedAcademicPeriodId, selectedDate]);
 
   // Unique recorded dates sorted chronologically
   const uniqueDates = useMemo(() => {
@@ -394,6 +402,7 @@ export default function TeacherAttendancePage() {
       await recordBatchAttendance({
         class_id: selectedClassId,
         subject_id: selectedSubjectId,
+        academic_period_id: selectedAcademicPeriodId,
         date: selectedDate,
         records: studentList.map((s) => ({
           student_id: s.student_id,
@@ -407,6 +416,7 @@ export default function TeacherAttendancePage() {
         selectedClassId,
         undefined,
         selectedSubjectId,
+        selectedAcademicPeriodId,
       );
       setAllClassLogs(fullLogs);
 
@@ -448,6 +458,7 @@ export default function TeacherAttendancePage() {
         student_id: decodedText,
         class_id: selectedClassId,
         subject_id: selectedSubjectId,
+        academic_period_id: selectedAcademicPeriodId,
       });
 
       const isExcused = res.status === "excused";

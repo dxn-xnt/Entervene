@@ -10,6 +10,7 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.academic.StudentCLass import StudentClass
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.AcademicStaff import AcademicStaff
@@ -88,8 +89,15 @@ def test_quiz_manual_grading_essay_questions(db_session):
         class_id=cls.class_id,
         subject_id=subject.subject_id,
         academic_period_id=period.academic_period_id,
+        status="active",
     )
-    db_session.add(load)
+    enrollment = StudentClass(
+        student_id=student.student_id,
+        class_id=cls.class_id,
+        academic_year_id=year.academic_year_id,
+        enrollment_status="enrolled",
+    )
+    db_session.add_all([load, enrollment])
     db_session.flush()
 
     # 2. Create quiz classwork and questions
@@ -107,6 +115,7 @@ def test_quiz_manual_grading_essay_questions(db_session):
     assignment = ClassworkAssignment(
         classwork_id=classwork.classwork_id,
         class_id=cls.class_id,
+        academic_period_id=period.academic_period_id,
         assigned_by_staff_id=staff.staff_id,
         is_published=True,
     )

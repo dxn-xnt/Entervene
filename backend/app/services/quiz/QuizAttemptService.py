@@ -4,7 +4,10 @@ from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.Student import Student
@@ -29,6 +32,7 @@ from app.services.classwork.ClassworkShared import (
     is_quiz_type,
 )
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
+from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
 from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
 from app.services.intervention.RemediationPrerequisiteService import require_remediation_prerequisite
@@ -52,6 +56,7 @@ def start_student_quiz_attempt(
     assignment_id: int,
 ) -> QuizAttemptResponse:
     assignment, classwork, quiz = _student_quiz_scope(db, student, assignment_id)
+    _assert_student_quiz_write_scope(db, student, assignment, classwork)
     require_remediation_prerequisite(db, assignment, student)
     _ensure_before_due(assignment)
     ensure_remedial_period_open(db, assignment, student.student_id)
@@ -98,6 +103,7 @@ def submit_student_quiz_attempt(
     payload: QuizSubmitRequest,
 ) -> QuizAttemptResponse:
     assignment, classwork, quiz = _student_quiz_scope(db, student, assignment_id)
+    _assert_student_quiz_write_scope(db, student, assignment, classwork)
     require_remediation_prerequisite(db, assignment, student)
     ensure_remedial_period_open(db, assignment, student.student_id)
     submission = _submission_for(db, student, assignment_id)
@@ -293,6 +299,47 @@ def _student_quiz_scope(
     if not quiz.questions:
         raise HTTPException(status_code=400, detail="Quiz has no questions")
     return assignment, classwork, quiz
+
+
+def _assert_student_quiz_write_scope(
+    db: Session,
+    student: Student,
+    assignment: ClassworkAssignment,
+    classwork: Classwork,
+) -> None:
+    if assignment.academic_period_id is None:
+        raise HTTPException(status_code=403, detail="Quiz has an unscoped academic period")
+
+    class_ = db.get(Class, assignment.class_id)
+    period = db.get(AcademicPeriod, assignment.academic_period_id)
+    if class_ is None or period is None or class_.academic_year_id != period.academic_year_id:
+        raise HTTPException(status_code=403, detail="Quiz academic context is invalid")
+
+    SubjectLoadAuthorizationService.assert_context_writable(
+        db,
+        class_id=assignment.class_id,
+        academic_period_id=assignment.academic_period_id,
+        block_future_period_in_current_year=True,
+    )
+
+    enrollment = db.query(StudentClass.student_class_id).filter(
+        StudentClass.student_id == student.student_id,
+        StudentClass.class_id == assignment.class_id,
+        StudentClass.academic_year_id == period.academic_year_id,
+        StudentClass.enrollment_status == "enrolled",
+    ).first()
+    if enrollment is None:
+        raise HTTPException(status_code=403, detail="Not enrolled in this class for this academic year")
+
+    finalized = db.query(StudentPeriodGrade.period_grade_id).filter(
+        StudentPeriodGrade.student_id == student.student_id,
+        StudentPeriodGrade.class_id == assignment.class_id,
+        StudentPeriodGrade.subject_id == classwork.subject_id,
+        StudentPeriodGrade.academic_period_id == assignment.academic_period_id,
+        StudentPeriodGrade.is_finalized.is_(True),
+    ).first()
+    if finalized is not None:
+        raise HTTPException(status_code=409, detail="The period grade is finalized")
 
 
 def _submission_for(db: Session, student: Student, assignment_id: int) -> StudentSubmission | None:

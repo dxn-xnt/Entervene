@@ -7,6 +7,7 @@ import pytest
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
+from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.ai.AIModelVersion import AIModelVersion
 from tests.test_current_period_live_feature_builder import current_period_context
@@ -133,8 +134,12 @@ def test_active_substitute_and_view_only_primary_can_read(current_period_context
     ctx = current_period_context
     version = _approve_model(ctx)
     substitute = _add_teacher(ctx, "T-PROD-SUB", "prod.substitute@example.test")
-    load = _add_load(ctx, ctx["staff"])
-    _enroll(ctx, ctx["student"])
+    load = ctx["db"].query(SubjectLoad).filter(
+        SubjectLoad.class_id == ctx["class"].class_id,
+        SubjectLoad.subject_id == ctx["subject"].subject_id,
+        SubjectLoad.academic_period_id == ctx["period"].academic_period_id,
+        SubjectLoad.is_active_version.is_(True),
+    ).one()
     _insert_development_prediction(ctx, model_version_id=version.model_version_id)
     ctx["db"].add(TeacherSubstitution(
         subject_load_id=load.subject_load_id,

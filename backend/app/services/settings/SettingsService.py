@@ -46,7 +46,15 @@ def get_public_settings(db: Session) -> dict:
 # ── Write ────────────────────────────────────────────────────────────
 
 
-def update_setting(db: Session, key: str, value: str, user_id: str) -> dict:
+def update_setting(
+    db: Session,
+    key: str,
+    value: str,
+    user_id: str,
+    *,
+    commit: bool = True,
+    allow_lifecycle_update: bool = False,
+) -> dict:
     """Validate type, update the row, and invalidate the cache.
 
     Raises 404 if the key does not exist.
@@ -56,6 +64,11 @@ def update_setting(db: Session, key: str, value: str, user_id: str) -> dict:
         raise HTTPException(status_code=422, detail={
             "code": "YEAR_POLICY_REQUIRED",
             "message": "Use the audited academic-year general-average policy action.",
+        })
+    if key in {"current_school_year", "active_term"} and not allow_lifecycle_update:
+        raise HTTPException(status_code=422, detail={
+            "code": "ACADEMIC_LIFECYCLE_ACTION_REQUIRED",
+            "message": "Use the academic-year or academic-period activation action.",
         })
     row = db.query(Setting).filter(Setting.key == key).first()
     if row is None:
@@ -71,9 +84,10 @@ def update_setting(db: Session, key: str, value: str, user_id: str) -> dict:
                 updated_by=user_id,
             )
             db.add(row)
-            db.commit()
-            db.refresh(row)
-            settings_cache.invalidate()
+            if commit:
+                db.commit()
+                db.refresh(row)
+                settings_cache.invalidate()
             return {
                 "key": row.key,
                 "value": row.value,
@@ -92,12 +106,13 @@ def update_setting(db: Session, key: str, value: str, user_id: str) -> dict:
 
     row.value = value
     row.updated_by = user_id
-    db.commit()
-    db.refresh(row)
+    if commit:
+        db.commit()
+        db.refresh(row)
 
-    # Invalidate the cache on THIS worker immediately.
-    # Other workers will self-heal within the TTL window.
-    settings_cache.invalidate()
+        # Invalidate the cache on THIS worker immediately.
+        # Other workers will self-heal within the TTL window.
+        settings_cache.invalidate()
 
     return {
         "key": row.key,

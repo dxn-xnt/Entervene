@@ -29,10 +29,13 @@ router = APIRouter()
 @router.post("/", response_model=CompetencyResponse, status_code=status.HTTP_201_CREATED)
 def create_competency(
     body: CompetencyCreate,
+    current_user: dict = Depends(require_role("teacher", "admin")),
     staff_id: Optional[str] = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
-    return create_competency_record(body, staff_id, db)
+    return create_competency_record(
+        body, staff_id, db, is_admin=current_user.get("role") == "admin"
+    )
 
 
 @router.get("/subject/{subject_id}", response_model=List[CompetencyResponse])

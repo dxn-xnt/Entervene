@@ -12,6 +12,8 @@ import SubjectClassworkTab from "./subjects-view/tabs/subject-classwork-tab";
 import { routes } from "@/../routes";
 import { getMySubjects, type StudentSubjectItem } from "@/lib/api";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { LoadingPanel } from "@/components/loading-panel";
+import { StudentEmptyState } from "@/components/student/student-empty-state";
 
 const tabs: TabItem<"lessons" | "classwork">[] = [
   { id: "lessons", label: "Lessons", icon: BookOpen },
@@ -32,11 +34,18 @@ const StudentSubjectDetail = () => {
     | "classwork";
   const isLessonDetailScreen =
     activeTab === "lessons" && Boolean(searchParams.get("lessonId"));
-  const [subjectInfo, setSubjectInfo] = useState<StudentSubjectItem | null>(null);
-  const [, setIsLoading] = useState(true);
-
   const numericClassId = classId ? parseInt(classId, 10) : undefined;
   const numericSubjectId = subjectId ? parseInt(subjectId, 10) : undefined;
+  const requestKey = `${numericClassId ?? "invalid"}:${numericSubjectId ?? "invalid"}:${selectedPeriodId ?? "all"}`;
+  const [subjectResult, setSubjectResult] = useState<{
+    key: string;
+    subject: StudentSubjectItem | null;
+  } | null>(null);
+  const subjectInfo = subjectResult?.key === requestKey
+    ? subjectResult.subject
+    : null;
+  const isResolved = subjectResult?.key === requestKey;
+  const isLoading = !isResolved;
 
   const handleTabChange = (tabId: "lessons" | "classwork") => {
     const nextParams = new URLSearchParams(searchParams);
@@ -48,7 +57,7 @@ const StudentSubjectDetail = () => {
   useEffect(() => {
     if (!numericClassId || !numericSubjectId) return;
     let isMounted = true;
-    setIsLoading(true);
+    const activeRequestKey = requestKey;
 
     getMySubjects(selectedPeriodId ?? undefined)
       .then((data) => {
@@ -57,31 +66,18 @@ const StudentSubjectDetail = () => {
           (s) =>
             s.class_id === numericClassId && s.subject_id === numericSubjectId,
         );
-        if (match) {
-          setSubjectInfo(match);
-        } else {
-          return getMySubjects().then((allData) => {
-            if (!isMounted) return;
-            const fallbackMatch = allData.find(
-              (s) =>
-                s.class_id === numericClassId &&
-                s.subject_id === numericSubjectId,
-            );
-            if (fallbackMatch) setSubjectInfo(fallbackMatch);
-          });
-        }
+        setSubjectResult({ key: activeRequestKey, subject: match ?? null });
       })
       .catch((err) => {
+        if (!isMounted) return;
         console.error("Failed to load subject info", err);
-      })
-      .finally(() => {
-        if (isMounted) setIsLoading(false);
+        setSubjectResult({ key: activeRequestKey, subject: null });
       });
 
     return () => {
       isMounted = false;
     };
-  }, [numericClassId, numericSubjectId, selectedPeriodId]);
+  }, [numericClassId, numericSubjectId, requestKey, selectedPeriodId]);
 
   // Guard: invalid URL params
   if (!numericClassId || !numericSubjectId) {
@@ -151,46 +147,58 @@ const StudentSubjectDetail = () => {
                 </div>
 
                 <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-                  {/* Subject Banner Header */}
-                  <SubjectClassHeader
-                    detail={{
-                      class_id: numericClassId,
-                      section_name: subjectInfo?.section_name,
-                      academic_level: academicLevel || undefined,
-                    }}
-                    currentSubject={{
-                      subject_id: numericSubjectId,
-                      subject_name: subjectName,
-                    }}
-                    teacherName={subjectInfo?.teacher_name}
-                    statusLabel={
-                      subjectInfo?.is_current_period ? "Active" : "Enrolled"
-                    }
-                    showViewSubjectButton={false}
-                  />
+                  {isLoading ? (
+                    <LoadingPanel label="Loading subject..." />
+                  ) : isResolved && !subjectInfo ? (
+                    <StudentEmptyState
+                      icon={<BookOpen />}
+                      title="Subject unavailable for this term"
+                      description="This subject is not assigned to you in the selected academic period."
+                    />
+                  ) : subjectInfo ? (
+                    <>
+                      {/* Subject Banner Header */}
+                      <SubjectClassHeader
+                        detail={{
+                          class_id: numericClassId,
+                          section_name: subjectInfo.section_name,
+                          academic_level: academicLevel || undefined,
+                        }}
+                        currentSubject={{
+                          subject_id: numericSubjectId,
+                          subject_name: subjectName,
+                        }}
+                        teacherName={subjectInfo.teacher_name}
+                        statusLabel={
+                          subjectInfo.is_current_period ? "Active" : "Enrolled"
+                        }
+                        showViewSubjectButton={false}
+                      />
 
-                  {/* ── Tab content ── */}
-                  <div className="min-w-0 py-2">
-                    {activeTab === "lessons" && (
-                      <SubjectLessonTab
-                        classId={numericClassId}
-                        subjectId={numericSubjectId}
-                        subjectName={subjectInfo?.subject_name}
-                        teacherName={subjectInfo?.teacher_name}
-                      />
-                    )}
-                    {activeTab === "classwork" && (
-                      <SubjectClassworkTab
-                        classId={numericClassId}
-                        subjectId={numericSubjectId}
-                      />
-                    )}
-                  </div>
+                      {/* ── Tab content ── */}
+                      <div className="min-w-0 py-2">
+                        {activeTab === "lessons" && (
+                          <SubjectLessonTab
+                            classId={numericClassId}
+                            subjectId={numericSubjectId}
+                            subjectName={subjectInfo.subject_name}
+                            teacherName={subjectInfo.teacher_name}
+                          />
+                        )}
+                        {activeTab === "classwork" && (
+                          <SubjectClassworkTab
+                            classId={numericClassId}
+                            subjectId={numericSubjectId}
+                          />
+                        )}
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               </>
             ) : (
               <div className="min-w-0">
-                {activeTab === "lessons" && (
+                {subjectInfo && activeTab === "lessons" && (
                   <SubjectLessonTab
                     classId={numericClassId}
                     subjectId={numericSubjectId}

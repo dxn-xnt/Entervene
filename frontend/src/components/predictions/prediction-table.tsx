@@ -4,6 +4,8 @@ import { Button } from "@/components/teacher/button";
 import { Table } from "@/components/retroui/Table";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { ArrowUpDown, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { getRiskBadgeMeta } from "@/lib/formatters";
 
 interface PredictionTableProps {
   items: DashboardPredictionItem[];
@@ -21,14 +23,6 @@ interface PredictionTableProps {
   currentTerm?: boolean;
   onClearFilters?: () => void;
 }
-
-const RISK_BADGE_VARIANTS: Record<string, { bg: string; text: string }> = {
-  HIGH_RISK: { bg: "bg-red-500 text-white border-2 border-black font-extrabold", text: "High Risk" },
-  MODERATE_RISK: { bg: "bg-amber-500 text-white border-2 border-black font-extrabold", text: "Moderate" },
-  NEEDS_MONITORING: { bg: "bg-yellow-400 text-black border-2 border-black font-extrabold", text: "Needs Monitoring" },
-  LOW_RISK: { bg: "bg-emerald-500 text-white border-2 border-black font-extrabold", text: "Low Risk" },
-  INSUFFICIENT_DATA: { bg: "bg-gray-300 text-black border-2 border-black font-extrabold", text: "Insufficient Data" },
-};
 
 function SortableHeader({
   label,
@@ -146,10 +140,7 @@ export default function PredictionTable({
             </Table.Row>
           ) : (
             items.map((item) => {
-              const riskMeta = RISK_BADGE_VARIANTS[item.risk_level] ?? {
-                bg: "bg-gray-300 text-black",
-                text: item.risk_level,
-              };
+              const riskMeta = getRiskBadgeMeta(item.risk_level);
 
               return (
                 <Table.Row
@@ -168,8 +159,12 @@ export default function PredictionTable({
                   <Table.Cell className="whitespace-nowrap text-center">
                     <Badge
                       size="sm"
-                      variant="surface"
-                      className="whitespace-nowrap"
+                      className={cn(
+                        "whitespace-nowrap",
+                        currentTerm && item.historical_projection
+                          ? "bg-sky-200 text-black border-2 border-black font-bold"
+                          : riskMeta.bg
+                      )}
                     >
                       {currentTerm && item.historical_projection ? "Historical projection" : riskMeta.text}
                     </Badge>

@@ -20,6 +20,66 @@ from app.schemas.Competency import (
 )
 from app.services.lesson.LessonResponseService import build_lesson_response
 from app.services.academic.ContentAuthorizationService import authorize_teacher_content, resolve_content_staff_id
+from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+
+
+def _assert_competency_configurable(
+    db: Session,
+    *,
+    subject_id: int,
+    academic_period_id: int | None,
+    staff_id: str | None,
+    is_admin: bool,
+) -> None:
+    if academic_period_id is None and is_admin:
+        return
+    period = db.get(AcademicPeriod, academic_period_id) if academic_period_id is not None else None
+    if academic_period_id is not None and period is None:
+        raise HTTPException(status_code=404, detail="Academic period not found")
+
+    if is_admin and academic_period_id is not None:
+        SubjectLoadAuthorizationService.assert_context_configurable(
+            db, academic_period_id=academic_period_id
+        )
+        return
+
+    if not staff_id:
+        raise HTTPException(status_code=403, detail="Teacher profile is required")
+
+    load_scopes = [
+        (class_id, period_id)
+        for class_id, period_id in db.query(
+            SubjectLoad.class_id, SubjectLoad.academic_period_id
+        )
+        .join(Class, Class.class_id == SubjectLoad.class_id)
+        .filter(
+            SubjectLoad.subject_id == subject_id,
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(["published", "active"]),
+        )
+        .filter(
+            SubjectLoad.academic_period_id == academic_period_id
+            if academic_period_id is not None
+            else True
+        )
+        .filter(
+            Class.academic_year_id == period.academic_year_id
+            if period is not None
+            else True
+        )
+        .distinct()
+        .all()
+    ]
+    if not any(
+        SubjectLoadAuthorizationService.can_write(
+            db, staff_id, class_id, subject_id, period_id
+        )
+        for class_id, period_id in load_scopes
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="You are not authorized to configure competencies for this subject and period.",
+        )
 
 
 def build_competency_response(competency: Competency, db: Session) -> CompetencyResponse:
@@ -50,11 +110,24 @@ def build_competency_response(competency: Competency, db: Session) -> Competency
     )
 
 
-def create_competency_record(body: CompetencyCreate, staff_id: Optional[str], db: Session) -> CompetencyResponse:
+def create_competency_record(
+    body: CompetencyCreate,
+    staff_id: Optional[str],
+    db: Session,
+    *,
+    is_admin: bool = False,
+) -> CompetencyResponse:
     subject = db.query(Subject).filter(Subject.subject_id == body.subject_id).first()
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
 
+    _assert_competency_configurable(
+        db,
+        subject_id=body.subject_id,
+        academic_period_id=body.academic_period_id,
+        staff_id=staff_id,
+        is_admin=is_admin,
+    )
     competency = Competency(
         competency_code=body.competency_code,
         statement=body.statement,
@@ -195,7 +268,24 @@ def update_competency_record(
             detail="Competency not found", owner_only=True,
         )
 
-    for field, value in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    target_period_id = data.get("academic_period_id", competency.academic_period_id)
+    _assert_competency_configurable(
+        db,
+        subject_id=competency.subject_id,
+        academic_period_id=competency.academic_period_id,
+        staff_id=staff_id,
+        is_admin=is_admin,
+    )
+    if target_period_id != competency.academic_period_id:
+        _assert_competency_configurable(
+            db,
+            subject_id=competency.subject_id,
+            academic_period_id=target_period_id,
+            staff_id=staff_id,
+            is_admin=is_admin,
+        )
+    for field, value in data.items():
         setattr(competency, field, value)
 
     db.commit()
@@ -219,6 +309,13 @@ def archive_competency_record(
             detail="Competency not found", owner_only=True,
         )
 
+    _assert_competency_configurable(
+        db,
+        subject_id=competency.subject_id,
+        academic_period_id=competency.academic_period_id,
+        staff_id=staff_id,
+        is_admin=is_admin,
+    )
     competency.is_archived = True
     db.commit()
     return {"message": "Competency archived", "competency_id": competency_id, "is_archived": True}

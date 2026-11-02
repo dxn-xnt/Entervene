@@ -37,6 +37,10 @@ from app.models.ai.AIPrediction import AIPrediction
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
+from app.services.prediction.DashboardPredictionService import (
+    get_dashboard_at_risk_predictions,
+    get_dashboard_grade_summaries,
+)
 
 TABLES = [
     AcademicYear.__table__,
@@ -81,6 +85,7 @@ def dashboard_context():
         year_label="2026-2027",
         start_date=date(2026, 6, 1),
         end_date=date(2027, 3, 31),
+        is_active=True,
     )
     level = AcademicLevel(
         grade_level=10,
@@ -118,6 +123,7 @@ def dashboard_context():
         period_sequence=1,
         start_date=date(2026, 6, 1),
         end_date=date(2026, 8, 31),
+        is_active=True,
     )
     term2 = AcademicPeriod(
         academic_year_id=year.academic_year_id,
@@ -813,3 +819,347 @@ def test_dashboard_filters_without_class_id_unchanged(dashboard_context):
     data = r.json()
     for s in data["subjects"]:
         assert s["period_index"] is None
+
+
+DASHBOARD_PERIOD_ENDPOINTS = (
+    "/api/v1/predictions/dashboard/at-risk",
+    "/api/v1/predictions/dashboard/at-risk/historical",
+    "/api/v1/predictions/dashboard/grade-summaries",
+)
+
+
+def _grade_summary_at_risk_count(response) -> int:
+    return sum(group["at_risk_count"] for group in response.json())
+
+
+def _seed_prior_year_predictions(dashboard_context) -> AcademicPeriod:
+    db = dashboard_context["db"]
+    prior_year = AcademicYear(
+        year_label="2025-2026",
+        start_date=date(2025, 6, 1),
+        end_date=date(2026, 3, 31),
+        is_active=False,
+    )
+    db.add(prior_year)
+    db.flush()
+    prior_term2 = AcademicPeriod(
+        academic_year_id=prior_year.academic_year_id,
+        period_name="Quarter 2",
+        period_sequence=2,
+        start_date=date(2025, 9, 1),
+        end_date=date(2025, 11, 30),
+        is_active=False,
+    )
+    db.add(prior_term2)
+    db.flush()
+
+    prior_class = Class(
+        academic_year_id=prior_year.academic_year_id,
+        academic_level_id=db.query(AcademicLevel.academic_level_id).scalar(),
+        section_name="Historical Rizal",
+    )
+    db.add(prior_class)
+    db.flush()
+
+    for student_key in ("b", "c"):
+        db.add(StudentClass(
+            student_id=dashboard_context["students"][student_key].student_id,
+            class_id=prior_class.class_id,
+            academic_year_id=prior_year.academic_year_id,
+            enrollment_status="enrolled",
+        ))
+
+    for prediction_id, student_key, risk_level in (
+        (9001, "b", "HIGH_RISK"),
+        (9002, "c", "MODERATE_RISK"),
+    ):
+        db.add(AIPrediction(
+            prediction_id=prediction_id,
+            student_id=dashboard_context["students"][student_key].student_id,
+            class_id=prior_class.class_id,
+            subject_id=dashboard_context["subjects"]["math"].subject_id,
+            source_period_id=prior_term2.academic_period_id,
+            target_period_id=prior_term2.academic_period_id,
+            predicted_period_grade=Decimal("74.00"),
+            risk_score=Decimal("0.75"),
+            risk_level=risk_level,
+            data_status="SUFFICIENT",
+            model_version_id=1,
+        ))
+    db.commit()
+    return prior_term2
+
+
+def _seed_cross_year_mismatch(dashboard_context, period: AcademicPeriod) -> AIPrediction:
+    prediction = AIPrediction(
+        prediction_id=9003,
+        student_id=dashboard_context["students"]["a"].student_id,
+        class_id=dashboard_context["classes"]["rizal"].class_id,
+        subject_id=dashboard_context["subjects"]["math"].subject_id,
+        source_period_id=period.academic_period_id,
+        target_period_id=period.academic_period_id,
+        predicted_period_grade=Decimal("70.00"),
+        risk_score=Decimal("0.90"),
+        risk_level="HIGH_RISK",
+        data_status="SUFFICIENT",
+        model_version_id=1,
+    )
+    dashboard_context["db"].add(prediction)
+    dashboard_context["db"].commit()
+    return prediction
+
+
+def test_legacy_term_resolves_current_and_future_periods_in_active_year(dashboard_context):
+    client = dashboard_context["client"]
+
+    current = client.get("/api/v1/predictions/dashboard/at-risk?term=1")
+    future = client.get("/api/v1/predictions/dashboard/at-risk?term=2")
+
+    assert current.status_code == 200
+    assert current.json()["total"] == 3
+    assert future.status_code == 200
+    assert future.json()["total"] == 1
+
+
+def test_explicit_period_id_wins_over_conflicting_legacy_term(dashboard_context):
+    client = dashboard_context["client"]
+    term2_id = dashboard_context["terms"]["t2"].academic_period_id
+
+    current = client.get(
+        f"/api/v1/predictions/dashboard/at-risk?academic_period_id={term2_id}&term=1"
+    )
+    historical = client.get(
+        f"/api/v1/predictions/dashboard/at-risk/historical?academic_period_id={term2_id}&term=1"
+    )
+    summaries = client.get(
+        f"/api/v1/predictions/dashboard/grade-summaries?academic_period_id={term2_id}&term=1"
+    )
+
+    assert current.status_code == historical.status_code == summaries.status_code == 200
+    assert current.json()["total"] == 1
+    assert historical.json()["total"] == 1
+    assert _grade_summary_at_risk_count(summaries) == 1
+
+
+def test_legacy_term_never_falls_back_to_same_sequence_in_prior_year(dashboard_context):
+    prior_term2 = _seed_prior_year_predictions(dashboard_context)
+    client = dashboard_context["client"]
+
+    current = client.get("/api/v1/predictions/dashboard/at-risk?term=2")
+    historical = client.get("/api/v1/predictions/dashboard/at-risk/historical?term=2")
+    summaries = client.get("/api/v1/predictions/dashboard/grade-summaries?term=2")
+
+    assert current.status_code == historical.status_code == summaries.status_code == 200
+    assert current.json()["total"] == 1
+    assert historical.json()["total"] == 1
+    assert _grade_summary_at_risk_count(summaries) == 1
+
+    explicit_history = client.get(
+        f"/api/v1/predictions/dashboard/at-risk/historical?academic_period_id={prior_term2.academic_period_id}"
+    )
+    assert explicit_history.status_code == 200
+    assert explicit_history.json()["total"] == 2
+
+
+@pytest.mark.parametrize("endpoint", DASHBOARD_PERIOD_ENDPOINTS)
+def test_legacy_term_rejects_missing_active_year_period(dashboard_context, endpoint):
+    response = dashboard_context["client"].get(f"{endpoint}?term=3")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Term 3 is not configured in the active academic year."
+
+
+@pytest.mark.parametrize("endpoint", DASHBOARD_PERIOD_ENDPOINTS)
+def test_legacy_term_rejects_missing_active_lifecycle(dashboard_context, endpoint):
+    db = dashboard_context["db"]
+    db.query(AcademicYear).update({AcademicYear.is_active: False})
+    db.query(AcademicPeriod).update({AcademicPeriod.is_active: False})
+    db.commit()
+
+    response = dashboard_context["client"].get(f"{endpoint}?term=1")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "No active academic year is configured."
+
+
+@pytest.mark.parametrize("endpoint", DASHBOARD_PERIOD_ENDPOINTS)
+def test_legacy_term_rejects_missing_active_period(dashboard_context, endpoint):
+    db = dashboard_context["db"]
+    db.query(AcademicPeriod).update({AcademicPeriod.is_active: False})
+    db.commit()
+
+    response = dashboard_context["client"].get(f"{endpoint}?term=1")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "No active grading period is configured."
+
+
+@pytest.mark.parametrize("endpoint", DASHBOARD_PERIOD_ENDPOINTS)
+def test_legacy_term_rejects_duplicate_active_years(dashboard_context, endpoint):
+    db = dashboard_context["db"]
+    db.add(AcademicYear(
+        year_label="2027-2028",
+        start_date=date(2027, 6, 1),
+        end_date=date(2028, 3, 31),
+        is_active=True,
+    ))
+    db.commit()
+
+    response = dashboard_context["client"].get(f"{endpoint}?term=1")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Academic lifecycle is inconsistent: multiple academic years are active."
+
+
+@pytest.mark.parametrize("endpoint", DASHBOARD_PERIOD_ENDPOINTS)
+def test_legacy_term_rejects_duplicate_active_periods(dashboard_context, endpoint):
+    db = dashboard_context["db"]
+    dashboard_context["terms"]["t2"].is_active = True
+    db.commit()
+
+    response = dashboard_context["client"].get(f"{endpoint}?term=1")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Academic lifecycle is inconsistent: multiple grading periods are active."
+
+
+def test_legacy_term_rejects_active_period_from_another_year(dashboard_context):
+    db = dashboard_context["db"]
+    prior_term2 = _seed_prior_year_predictions(dashboard_context)
+    dashboard_context["terms"]["t1"].is_active = False
+    prior_term2.is_active = True
+    db.commit()
+
+    response = dashboard_context["client"].get(
+        "/api/v1/predictions/dashboard/at-risk?term=2"
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Academic lifecycle is inconsistent: the active grading period is not in the active academic year."
+    )
+
+
+def test_legacy_term_rejects_multiple_period_types_with_same_sequence(dashboard_context):
+    db = dashboard_context["db"]
+    active_year_id = dashboard_context["terms"]["t1"].academic_year_id
+    db.add(AcademicPeriod(
+        academic_year_id=active_year_id,
+        period_name="Semester 2",
+        period_type="SEMESTER",
+        period_sequence=2,
+        total_periods_in_year=2,
+        start_date=date(2027, 1, 1),
+        end_date=date(2027, 3, 31),
+        is_active=False,
+    ))
+    db.commit()
+
+    response = dashboard_context["client"].get(
+        "/api/v1/predictions/dashboard/at-risk?term=2"
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Academic lifecycle is ambiguous: multiple active-year periods use term sequence 2."
+    )
+
+
+def test_dashboard_lists_exclude_cross_year_class_period_mismatches(dashboard_context):
+    prior_period = _seed_prior_year_predictions(dashboard_context)
+    mismatched = _seed_cross_year_mismatch(dashboard_context, prior_period)
+    client = dashboard_context["client"]
+
+    current = client.get("/api/v1/predictions/dashboard/at-risk")
+    historical = client.get("/api/v1/predictions/dashboard/at-risk/historical")
+    explicit_current = client.get(
+        f"/api/v1/predictions/dashboard/at-risk?academic_period_id={prior_period.academic_period_id}"
+    )
+    explicit_historical = client.get(
+        f"/api/v1/predictions/dashboard/at-risk/historical?academic_period_id={prior_period.academic_period_id}"
+    )
+
+    assert current.status_code == historical.status_code == 200
+    assert explicit_current.status_code == explicit_historical.status_code == 200
+    assert current.json()["total"] == historical.json()["total"] == 6
+    assert explicit_current.json()["total"] == explicit_historical.json()["total"] == 2
+    for response in (current, historical, explicit_current, explicit_historical):
+        assert mismatched.prediction_id not in {
+            item["prediction_id"] for item in response.json()["items"]
+        }
+
+
+def test_grade_summaries_scope_classes_and_students_to_selected_period_year(dashboard_context):
+    prior_period = _seed_prior_year_predictions(dashboard_context)
+    _seed_cross_year_mismatch(dashboard_context, prior_period)
+    client = dashboard_context["client"]
+    current_period = dashboard_context["terms"]["t1"]
+
+    current = client.get(
+        f"/api/v1/predictions/dashboard/grade-summaries?academic_period_id={current_period.academic_period_id}"
+    )
+    historical = client.get(
+        f"/api/v1/predictions/dashboard/grade-summaries?academic_period_id={prior_period.academic_period_id}"
+    )
+    unscoped = client.get("/api/v1/predictions/dashboard/grade-summaries")
+
+    assert current.status_code == historical.status_code == unscoped.status_code == 200
+    current_grade = next(group for group in current.json() if group["grade_level"] == 10)
+    historical_grade = next(group for group in historical.json() if group["grade_level"] == 10)
+    unscoped_grade = next(group for group in unscoped.json() if group["grade_level"] == 10)
+
+    assert current_grade["total_students"] == 3
+    assert current_grade["at_risk_count"] == 2
+    assert {section["section_name"] for section in current_grade["sections"]} == {"Rizal", "Mabini"}
+
+    assert historical_grade["total_students"] == 2
+    assert historical_grade["at_risk_count"] == 2
+    assert [section["section_name"] for section in historical_grade["sections"]] == ["Historical Rizal"]
+
+    assert unscoped_grade["total_students"] == 5
+    assert unscoped_grade["at_risk_count"] == 4
+    assert {section["section_name"] for section in unscoped_grade["sections"]} == {
+        "Rizal",
+        "Mabini",
+        "Historical Rizal",
+    }
+
+
+def test_teacher_dashboard_rejects_cross_year_subject_load_scope(dashboard_context):
+    db = dashboard_context["db"]
+    prior_period = _seed_prior_year_predictions(dashboard_context)
+    _seed_cross_year_mismatch(dashboard_context, prior_period)
+    staff = AcademicStaff(
+        staff_id="2026-0999",
+        first_name="Invalid",
+        last_name="Scope",
+        email="invalid.scope@example.test",
+    )
+    db.add(staff)
+    db.flush()
+    db.add(SubjectLoad(
+        class_id=dashboard_context["classes"]["rizal"].class_id,
+        subject_id=dashboard_context["subjects"]["math"].subject_id,
+        academic_period_id=prior_period.academic_period_id,
+        staff_id=staff.staff_id,
+        status="published",
+        is_active_version=True,
+    ))
+    db.commit()
+
+    at_risk = get_dashboard_at_risk_predictions(
+        db,
+        staff_id=staff.staff_id,
+        is_admin=False,
+        academic_period_id=prior_period.academic_period_id,
+    )
+    summaries = get_dashboard_grade_summaries(
+        db,
+        staff_id=staff.staff_id,
+        is_admin=False,
+        academic_period_id=prior_period.academic_period_id,
+    )
+
+    assert at_risk["items"] == []
+    assert at_risk["total"] == 0
+    assert summaries == []

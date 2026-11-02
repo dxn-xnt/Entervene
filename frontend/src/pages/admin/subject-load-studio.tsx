@@ -20,7 +20,6 @@ import { LoadingPanel } from "@/components/loading-panel";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
-import { Text } from "@/components/retroui/Text";
 import { Alert } from "@/components/retroui/Alert";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { AdminValidationAlert } from "@/components/admin/AdminValidationAlert";
@@ -41,7 +40,7 @@ import {
   type ConflictItem,
   type TeacherWorkloadItem,
 } from "@/lib/api";
-import { canonicalizePathway, isOfferingCompatibleWithClass } from "@/lib/pathways";
+import { canonicalizePathway } from "@/lib/pathways";
 import BreakConfigDrawer, { type PeriodTemplateSlotItem } from "@/pages/admin/forms/break-config-drawer";
 import AssignTeacherModal, { type TeacherModalTarget } from "@/pages/admin/forms/assign-teacher-modal";
 import {
@@ -106,22 +105,33 @@ function formatTime12h(str?: string | null): string {
 }
 
 function isSubjectOfferedForClass(
-  sub: { subject_id: number; academic_level_id: number; is_core?: boolean },
-  cls: { academic_level_id: number; pathway?: string | null; pathway_id?: number | null },
-  offerings: Array<{ subject_id: number; academic_level_id: number; pathway?: string | null; pathway_ids?: number[] }>
+  sub: { subject_id: number; academic_level_id: number },
+  cls: { academic_level_id: number; academic_year_id: number; pathway_id?: number | null },
+  offerings: Array<{
+    subject_id: number;
+    academic_year_id: number;
+    academic_level_id: number;
+    academic_period_id: number;
+    pathway_ids?: number[];
+  }>,
+  academicPeriodId: number,
 ): boolean {
   if (sub.academic_level_id !== cls.academic_level_id) return false;
-  if (!offerings || offerings.length === 0) return true;
 
   return offerings.some((so) => {
-    if (so.subject_id !== sub.subject_id || so.academic_level_id !== cls.academic_level_id) {
+    if (
+      so.subject_id !== sub.subject_id ||
+      so.academic_level_id !== cls.academic_level_id ||
+      so.academic_year_id !== cls.academic_year_id ||
+      so.academic_period_id !== academicPeriodId
+    ) {
       return false;
     }
-    if (sub.is_core) return true;
-    if (so.pathway_ids?.length && cls.pathway_id != null) {
-      return so.pathway_ids.includes(cls.pathway_id);
-    }
-    return isOfferingCompatibleWithClass(so.pathway, cls.pathway);
+
+    const eligiblePathwayIds = so.pathway_ids || [];
+    return eligiblePathwayIds.length === 0 || (
+      cls.pathway_id != null && eligiblePathwayIds.includes(cls.pathway_id)
+    );
   });
 }
 
@@ -513,11 +523,40 @@ export default function AdminSubjectLoadStudio() {
       const initialLoads: SubjectLoadItem[] = [];
 
       const offerings = data.subject_offerings || [];
+      const includedExisting = new Set<SubjectLoadItem>();
+
+      const appendExistingLoad = (m: SubjectLoadItem, idx: number, isOfferingEligible: boolean) => {
+        includedExisting.add(m);
+        initialLoads.push({
+          _key: m.subject_load_id
+            ? `sl_${m.subject_load_id}`
+            : `slot_${m.class_id}_${m.subject_id}_${idx}`,
+          _offering_eligible: isOfferingEligible,
+          subject_load_id: m.subject_load_id,
+          class_id: m.class_id,
+          subject_id: m.subject_id,
+          staff_id: m.staff_id || null,
+          academic_period_id: periodIdToUse,
+          slot_id: m.slot_id,
+          start_time: m.start_time || null,
+          end_time: m.end_time || null,
+          days_of_week: m.days_of_week || [],
+          status: m.status || "draft",
+          is_locked: Boolean(m.is_locked || m.status === "published"),
+          logical_load_id: m.logical_load_id,
+          section_revision: m.section_revision,
+          base_revision: m.status === "published" || m.status === "active"
+            ? m.section_revision
+            : m.base_revision,
+          has_live_data: m.has_live_data,
+          dependencies: m.dependencies,
+        });
+      };
 
       (data.classes || []).forEach((cls) => {
         // Find subjects matching class academic level & pathway offering for this period
         const levelSubjects = (data.subjects || []).filter((sub) =>
-          isSubjectOfferedForClass(sub, cls, offerings)
+          isSubjectOfferedForClass(sub, cls, offerings, periodIdToUse)
         );
 
         levelSubjects.forEach((sub) => {
@@ -527,34 +566,13 @@ export default function AdminSubjectLoadStudio() {
 
           if (matched.length > 0) {
             matched.forEach((m, idx) => {
-              initialLoads.push({
-                _key: m.subject_load_id
-                  ? `sl_${m.subject_load_id}`
-                  : `slot_${cls.class_id}_${sub.subject_id}_${idx}`,
-                subject_load_id: m.subject_load_id,
-                class_id: m.class_id,
-                subject_id: m.subject_id,
-                staff_id: m.staff_id || null,
-                academic_period_id: periodIdToUse,
-                slot_id: m.slot_id,
-                start_time: m.start_time || null,
-                end_time: m.end_time || null,
-                days_of_week: m.days_of_week || [],
-                status: m.status || "draft",
-                is_locked: Boolean(m.is_locked || m.status === "published"),
-                logical_load_id: m.logical_load_id,
-                section_revision: m.section_revision,
-                base_revision: m.status === "published" || m.status === "active"
-                  ? m.section_revision
-                  : m.base_revision,
-                has_live_data: m.has_live_data,
-                dependencies: m.dependencies,
-              });
+              appendExistingLoad(m, idx, true);
             });
           } else {
             // No DB record yet — create synthetic draft load so unassigned counts are accurate
             initialLoads.push({
               _key: `new_${cls.class_id}_${sub.subject_id}`,
+              _offering_eligible: true,
               subject_load_id: undefined,
               class_id: cls.class_id,
               subject_id: sub.subject_id,
@@ -570,6 +588,13 @@ export default function AdminSubjectLoadStudio() {
         });
       });
 
+      // Keep existing rows whose offering was removed or changed visible for
+      // review/correction. They are not synthesized as eligible rows and the
+      // shared backend validator will continue to block their publication.
+      existing.forEach((load, idx) => {
+        if (!includedExisting.has(load)) appendExistingLoad(load, idx, false);
+      });
+
       setLoads(initialLoads);
 
       // Trigger initial conflict validation
@@ -577,6 +602,9 @@ export default function AdminSubjectLoadStudio() {
         const valRes = await validateSubjectLoads(periodIdToUse, initialLoads);
         setConflicts(valRes.conflicts);
         setTeacherWorkloads(valRes.teacher_workloads);
+      } else {
+        setConflicts([]);
+        setTeacherWorkloads([]);
       }
     } catch (err) {
       setLoadError(true);
@@ -762,7 +790,7 @@ export default function AdminSubjectLoadStudio() {
         const offerings = studioData?.subject_offerings || [];
 
         const levelSubjects = (studioData?.subjects || []).filter((sub) =>
-          isSubjectOfferedForClass(sub, cls, offerings)
+          isSubjectOfferedForClass(sub, cls, offerings, selectedPeriodId)
         );
         levelSubjects.forEach((sub) => {
           const hasSlot = currentLoads.some(
@@ -771,6 +799,7 @@ export default function AdminSubjectLoadStudio() {
           if (!hasSlot) {
             currentLoads.push({
               _key: `slot_${cls.class_id}_${sub.subject_id}_${Date.now()}`,
+              _offering_eligible: true,
               class_id: cls.class_id,
               subject_id: sub.subject_id,
               staff_id: null,
@@ -786,8 +815,8 @@ export default function AdminSubjectLoadStudio() {
       });
 
       const loadsToProcess = targetClassId
-        ? currentLoads.filter((l) => targetClassIds.includes(l.class_id))
-        : currentLoads;
+        ? currentLoads.filter((l) => targetClassIds.includes(l.class_id) && l._offering_eligible !== false)
+        : currentLoads.filter((l) => l._offering_eligible !== false);
 
       const res = await autoScheduleSubjectLoads(selectedPeriodId, loadsToProcess, "standard");
 
@@ -887,13 +916,32 @@ export default function AdminSubjectLoadStudio() {
         currentLoads = currentLoads.filter((l) => isSectionLocked(l.class_id));
       }
 
-      const newLoads: SubjectLoadItem[] = sourceLoads.filter((sl) => !isSectionLocked(sl.class_id)).map(sl => ({
-        ...sl,
-        _key: `copy_${sl.class_id}_${sl.subject_id}_${Math.random().toString(36).substr(2, 5)}`,
-        academic_period_id: selectedPeriodId || 1,
-        status: "draft",
-        is_locked: false,
-      }));
+      const destinationPeriodId = studioData?.active_period_id;
+      const destinationOfferings = studioData?.subject_offerings || [];
+      const newLoads: SubjectLoadItem[] = !destinationPeriodId ? [] : sourceLoads
+        .filter((sl) => {
+          if (isSectionLocked(sl.class_id)) return false;
+          const destinationClass = studioData?.classes.find((cls) => cls.class_id === sl.class_id);
+          const destinationSubject = studioData?.subjects.find((sub) => sub.subject_id === sl.subject_id);
+          return Boolean(
+            destinationClass &&
+            destinationSubject &&
+            isSubjectOfferedForClass(
+              destinationSubject,
+              destinationClass,
+              destinationOfferings,
+              destinationPeriodId,
+            )
+          );
+        })
+        .map(sl => ({
+          ...sl,
+          _key: `copy_${sl.class_id}_${sl.subject_id}_${Math.random().toString(36).substr(2, 5)}`,
+          _offering_eligible: true,
+          academic_period_id: destinationPeriodId,
+          status: "draft",
+          is_locked: false,
+        }));
 
       const finalLoads = [...currentLoads, ...newLoads];
       setLoads(finalLoads);
@@ -925,7 +973,8 @@ export default function AdminSubjectLoadStudio() {
     // ── Step 0: Data-driven bell-schedule compatibility guard ──
     const sourceClass = studioData?.classes.find((c) => c.class_id === sourceClassId);
     const targetClass = studioData?.classes.find((c) => c.class_id === targetClassId);
-    if (!sourceClass || !targetClass) return;
+    const studioPeriodId = studioData?.active_period_id;
+    if (!sourceClass || !targetClass || !studioPeriodId) return;
 
     const sourceGroup = sourceClass.period_template_group;
     const targetGroup = targetClass.period_template_group;
@@ -1018,7 +1067,7 @@ export default function AdminSubjectLoadStudio() {
 
     const offerings = studioData?.subject_offerings || [];
     const targetSubjects = (studioData?.subjects || []).filter((sub) =>
-      isSubjectOfferedForClass(sub, targetClass, offerings)
+      isSubjectOfferedForClass(sub, targetClass, offerings, studioPeriodId)
     );
 
     const currentLoads = [...loads];
@@ -1921,7 +1970,7 @@ export default function AdminSubjectLoadStudio() {
                         <EmptyTitle>Unable to load class sections</EmptyTitle>
                         <EmptyDescription>Please try again.</EmptyDescription>
                       </EmptyHeader>
-                      <Button size="sm" className="gap-1.5" onClick={() => void loadStudio(selectedPeriodId)}>Retry</Button>
+                      <Button size="sm" className="gap-1.5" onClick={() => void loadStudio(selectedPeriodId ?? undefined)}>Retry</Button>
                     </Empty>
                   ) : filteredClasses.length === 0 ? (
                     <Empty className="transition-shadow hover:shadow-none">
@@ -1984,7 +2033,7 @@ export default function AdminSubjectLoadStudio() {
                               size="sm"
                               variant="outline"
                               disabled={isSaving}
-                              className="shadow-sm"
+                              className="rounded! shadow-sm"
                               onClick={() => void handleUnlockSection(cls.class_id)}
                             >
                               <Unlock className="size-3.5 mr-1" />
@@ -2038,7 +2087,7 @@ export default function AdminSubjectLoadStudio() {
                                     size="sm"
                                     variant="secondary"
                                     disabled={isSectionPublished || isSaving}
-                                    className="p-[7px] shadow-white"
+                                    className="rounded! bg-black p-[7px] text-white shadow-none hover:bg-black disabled:bg-black disabled:text-white disabled:opacity-100"
                                     aria-label="More options"
                                     onClick={(e) => e.preventDefault()}
                                   >
@@ -2048,7 +2097,7 @@ export default function AdminSubjectLoadStudio() {
                               </span>} />
                               <TooltipContent>Section actions</TooltipContent>
                             </Tooltip>
-                            <DropdownMenuContent align="end" className="border-2 min-w-[200px]">
+                            <DropdownMenuContent align="end" collisionPadding={12} className="w-max min-w-[200px] max-w-[calc(100vw-2rem)] rounded border-2 border-border">
                               <DropdownMenuItem
                                 className="gap-2 cursor-pointer"
                                 disabled={isSectionPublished || isSaving}
@@ -2069,12 +2118,12 @@ export default function AdminSubjectLoadStudio() {
                                   const sib = configuredSiblings[0];
                                   return (
                                     <DropdownMenuSub>
-                                      <DropdownMenuSubTrigger className="gap-2 cursor-pointer whitespace-nowrap">
+                                      <DropdownMenuSubTrigger className="gap-2 rounded cursor-pointer">
                                         <Copy className="size-4" />
-                                        <span>Copy from <span className="font-bold">{sib.section_name}{studioClassPathwayLabel(sib, studioData?.academic_levels) ? ` — ${studioClassPathwayLabel(sib, studioData?.academic_levels)}` : ""}</span></span>
+                                        <span className="min-w-0 whitespace-normal break-words">Copy from <span className="font-bold">{sib.section_name}{studioClassPathwayLabel(sib, studioData?.academic_levels) ? ` — ${studioClassPathwayLabel(sib, studioData?.academic_levels)}` : ""}</span></span>
                                       </DropdownMenuSubTrigger>
                                       <DropdownMenuPortal>
-                                        <DropdownMenuSubContent className="border-2 min-w-[210px]">
+                                        <DropdownMenuSubContent collisionPadding={12} className="rounded border-2 border-border min-w-[210px] max-w-[calc(100vw-2rem)] [&_[data-slot=dropdown-menu-item]]:whitespace-normal">
                                           <DropdownMenuItem
                                             className="font-bold"
                                             onClick={() =>
@@ -2100,19 +2149,19 @@ export default function AdminSubjectLoadStudio() {
                                 if (configuredSiblings.length > 1) {
                                   return (
                                     <DropdownMenuSub>
-                                      <DropdownMenuSubTrigger className="gap-2 cursor-pointer">
+                                      <DropdownMenuSubTrigger className="gap-2 rounded cursor-pointer">
                                         <Copy className="size-4" />
                                         <span>Copy Schedule</span>
                                       </DropdownMenuSubTrigger>
                                       <DropdownMenuPortal>
-                                        <DropdownMenuSubContent className="border-2 min-w-[210px]">
+                                        <DropdownMenuSubContent collisionPadding={12} className="rounded border-2 border-border min-w-[210px] max-w-[calc(100vw-2rem)]">
                                           {configuredSiblings.map((sib) => (
                                             <DropdownMenuSub key={sib.class_id}>
-                                              <DropdownMenuSubTrigger className="cursor-pointer font-bold focus:bg-gray-100">
+                                              <DropdownMenuSubTrigger className="rounded cursor-pointer whitespace-normal break-words font-bold focus:bg-gray-100">
                                                 {sib.section_name}{studioClassPathwayLabel(sib, studioData?.academic_levels) ? ` — ${studioClassPathwayLabel(sib, studioData?.academic_levels)}` : ""}
                                               </DropdownMenuSubTrigger>
                                               <DropdownMenuPortal>
-                                                <DropdownMenuSubContent className="border-2 min-w-[210px]">
+                                                <DropdownMenuSubContent collisionPadding={12} className="rounded border-2 border-border min-w-[210px] max-w-[calc(100vw-2rem)] [&_[data-slot=dropdown-menu-item]]:whitespace-normal">
                                                   <DropdownMenuItem
                                                     className="cursor-pointer font-bold focus:bg-gray-100"
                                                     onClick={() =>
@@ -2202,11 +2251,16 @@ export default function AdminSubjectLoadStudio() {
                       >
                         {filteredClasses.map((cls) => {
                           const offerings = studioData?.subject_offerings || [];
-                          const classSubjects = (studioData?.subjects || []).filter((sub) =>
-                            isSubjectOfferedForClass(sub, cls, offerings)
-                          );
-
                           const sectionLoads = loads.filter((l) => l.class_id === cls.class_id);
+                          const invalidDraftSubjectIds = new Set(
+                            sectionLoads
+                              .filter((load) => load._offering_eligible === false)
+                              .map((load) => load.subject_id)
+                          );
+                          const classSubjects = (studioData?.subjects || []).filter((sub) =>
+                            isSubjectOfferedForClass(sub, cls, offerings, studioData?.active_period_id ?? -1) ||
+                            invalidDraftSubjectIds.has(sub.subject_id)
+                          );
                           const sectionLocked = isSectionLocked(cls.class_id);
 
                           const timesBySubject = new Map<string, { start: number; end: number }>();
@@ -2241,6 +2295,11 @@ export default function AdminSubjectLoadStudio() {
                                 key={cls.class_id}
                                 className="block min-w-0 overflow-hidden shadow-none"
                               >
+                                {invalidDraftSubjectIds.size > 0 && (
+                                  <AdminValidationAlert
+                                    message={`${invalidDraftSubjectIds.size} existing subject load${invalidDraftSubjectIds.size === 1 ? " is" : "s are"} no longer eligible for this year, term, grade, and pathway. ${invalidDraftSubjectIds.size === 1 ? "It is" : "They are"} shown for review but cannot be published until the offering is corrected.`}
+                                  />
+                                )}
                                 {/* <div className="flex items-center justify-between pb-1 flex-wrap gap-2">
                                   <div className="flex items-center gap-2 flex-wrap">
 
@@ -2261,14 +2320,15 @@ export default function AdminSubjectLoadStudio() {
                                 </div> */}
 
                                 {classSubjects.length === 0 ? (
-                                  <div className="p-6 text-center border-2 border-dashed my-2">
-                                    <Text as="p" className="text-sm font-bold text-muted-foreground">
-                                      No subjects offered in Curriculum Plan for {cls.section_name} in this term.
-                                    </Text>
-                                    <Text as="p" className="text-xs text-muted-foreground mt-1">
-                                      Go to &quot;Subjects &rarr; Curriculum Plan&quot; to enable subject offerings.
-                                    </Text>
-                                  </div>
+                                  <Empty className="my-2 transition-shadow hover:shadow-none">
+                                    <EmptyHeader>
+                                      <EmptyMedia><div className="flex size-10 items-center justify-center border-2 border-black bg-primary text-black" aria-hidden="true"><Search className="size-5" /></div></EmptyMedia>
+                                      <EmptyTitle>No eligible subject offerings</EmptyTitle>
+                                      <EmptyDescription>
+                                        Configure active offerings for {cls.section_name}&apos;s academic year, term, grade level, and pathway in Subjects &rarr; Curriculum Plan.
+                                      </EmptyDescription>
+                                    </EmptyHeader>
+                                  </Empty>
                                 ) : (sectionViewModes[cls.class_id] || "grid") === "grid" ? (
                                   <Table
                                     className="w-full min-w-[700px] border-collapse bg-white text-sm border-0 shadow-none"
@@ -2461,6 +2521,7 @@ export default function AdminSubjectLoadStudio() {
                                         });
 
                                         const conflict = getLoadConflict(cls.class_id, sub.subject_id);
+                                        const isOfferingEligible = !invalidDraftSubjectIds.has(sub.subject_id);
                                         const isHighlighted =
                                           highlightedKey === `${cls.class_id}_${sub.subject_id}`;
 
@@ -2486,6 +2547,11 @@ export default function AdminSubjectLoadStudio() {
                                                   <span className="font-bold text-base text-black">
                                                     {sub.subject_name}
                                                   </span>
+                                                  {!isOfferingEligible && (
+                                                    <Badge variant="outline" size="sm" className="bg-red-50 text-red-900 border-red-400 font-bold">
+                                                      Not offered — cannot publish
+                                                    </Badge>
+                                                  )}
                                                   {conflict && (
                                                     <span className="rounded border border-black bg-red-100 px-1.5 py-0.5 text-[11px] font-bold" title={conflict.message}>
                                                       {conflict.severity === "error" ? "Conflict" : "Warning"}: {conflict.message}

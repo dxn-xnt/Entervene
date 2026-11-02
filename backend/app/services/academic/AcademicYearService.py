@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.models.academic.AcademicYear import AcademicYear
+from app.services.academic.AcademicLifecycleService import resolve_active_academic_year
 
 
 def _parse_start_year(year_label: str) -> int | None:
@@ -20,12 +21,7 @@ def ensure_future_academic_years(db: Session, years_ahead: int = 2) -> list[Acad
     Repeated calls target the same active/calendar year range.
     """
     # 1. Determine base start year
-    active_year = (
-        db.query(AcademicYear)
-        .filter(AcademicYear.is_active.is_(True))
-        .order_by(AcademicYear.start_date.desc())
-        .first()
-    )
+    active_year = resolve_active_academic_year(db, required=False)
 
     base_start_year: int | None = None
 

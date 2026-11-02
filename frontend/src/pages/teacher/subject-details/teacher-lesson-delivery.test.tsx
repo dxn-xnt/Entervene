@@ -7,7 +7,6 @@ import LessonItemLine from "@/components/item-line/lesson";
 import LessonDeliveryCorrectionModal from "@/pages/teacher/forms/lesson-delivery-correction-modal";
 import SubjectDetails from "@/pages/teacher/subject-view";
 import TeacherClassDetail from "@/pages/teacher/class-view";
-import * as lessonDeliveryApi from "@/lib/lesson-delivery-api";
 import * as apiModule from "@/lib/api";
 
 // ── Mock Sonner Toast ──
@@ -620,7 +619,7 @@ describe("PR 2B.2A: Teacher → Classes → Mathematics → Demo Archimedes (Tea
     vi.spyOn(apiModule, "getTeacherClasses").mockResolvedValue(mockTeacherClassLoads as any);
     vi.spyOn(apiModule, "getTeacherAdvisoryClasses").mockResolvedValue([]);
     vi.spyOn(apiModule, "getTeacherDashboardHealth").mockResolvedValue({ section_matrix: [] } as any);
-    vi.spyOn(apiModule, "apiFetch").mockImplementation(async (path: string, options?: any) => {
+    vi.spyOn(apiModule, "apiFetch").mockImplementation(async (path: string) => {
       const p = String(path);
       if (p.includes("/api/v1/lessons/my-class/10/subject/20")) {
         return new Response(

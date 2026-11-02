@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -35,9 +36,11 @@ import { Accordion } from "@/components/retroui/Accordion";
 import { useToast } from "@/components/retroui/Toast";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { LoadingPanel } from "@/components/loading-panel";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 export default function AdminClasses() {
   const toast = useToast();
+  const { selectedYearId, selectedYear, isLoading: isContextLoading } = useAcademicPeriod();
   const [search, setSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState("All");
   const [yearFilter, setYearFilter] = useState("All");
@@ -54,25 +57,75 @@ export default function AdminClasses() {
   const [isArchiving, setIsArchiving] = useState(false);
   const [notice, setNotice] = useState("");
 
-  const refreshClasses = useCallback(async () => {
-    setIsLoading(true);
-    setLoadError("");
-    try {
-      setClassList(
-        await getClasses(statusFilter === "Archived" ? "archived" : "active"),
-      );
-    } catch (error: unknown) {
-      setLoadError(
-        error instanceof Error ? error.message : "Unable to load classes.",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [statusFilter]);
+  const currentRequestIdRef = useRef(0);
+
+  const loadClassesForYear = useCallback(
+    async (yearId: number | null, status: StatusFilter) => {
+      const requestId = ++currentRequestIdRef.current;
+      setIsLoading(true);
+      setLoadError("");
+      // Immediately clear the previous year's class list so old data is never shown
+      setClassList(null);
+
+      if (yearId == null) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const response = await getClasses(
+          status === "Archived" ? "archived" : "active",
+          yearId
+        );
+        if (requestId === currentRequestIdRef.current) {
+          const strictlyYearClasses = (response.classes ?? []).filter(
+            (c) => c.academic_year.academic_year_id === yearId
+          );
+          const hasAlienClasses = strictlyYearClasses.length !== (response.classes ?? []).length;
+          const sanitizedResponse: GetClassesResponse = hasAlienClasses
+            ? {
+                summary: {
+                  total_classes: strictlyYearClasses.length,
+                  active_classes: strictlyYearClasses.filter(
+                    (c) => normalizedStatus(c.class_status) === "active"
+                  ).length,
+                  archived_classes: strictlyYearClasses.filter(
+                    (c) => normalizedStatus(c.class_status) === "archived"
+                  ).length,
+                  students_assigned: strictlyYearClasses.reduce(
+                    (sum, c) => sum + (c.student_count || 0),
+                    0
+                  ),
+                },
+                classes: strictlyYearClasses,
+              }
+            : response;
+
+          setClassList(sanitizedResponse);
+        }
+      } catch (error: unknown) {
+        if (requestId === currentRequestIdRef.current) {
+          setLoadError(
+            error instanceof Error ? error.message : "Unable to load classes."
+          );
+        }
+      } finally {
+        if (requestId === currentRequestIdRef.current) {
+          setIsLoading(false);
+        }
+      }
+    },
+    []
+  );
 
   useEffect(() => {
-    void refreshClasses();
-  }, [refreshClasses]);
+    setYearFilter("All");
+    void loadClassesForYear(selectedYearId, statusFilter);
+  }, [selectedYearId, statusFilter, loadClassesForYear]);
+
+  const refreshClasses = useCallback(() => {
+    return loadClassesForYear(selectedYearId, statusFilter);
+  }, [loadClassesForYear, selectedYearId, statusFilter]);
 
   const handleArchive = useCallback(async () => {
     if (!archiveTarget || isArchiving) return;
@@ -96,7 +149,12 @@ export default function AdminClasses() {
     }
   }, [archiveTarget, isArchiving, refreshClasses, toast]);
 
-  const classes = useMemo(() => classList?.classes ?? [], [classList]);
+  const classes = useMemo(() => {
+    if (!classList || selectedYearId == null) return [];
+    return (classList.classes ?? []).filter(
+      (item) => item.academic_year.academic_year_id === selectedYearId
+    );
+  }, [classList, selectedYearId]);
 
   const gradeOptions = useMemo(() => {
     const byLevel = new Map<number, { label: string; gradeLevel: number }>();
@@ -175,12 +233,41 @@ export default function AdminClasses() {
       .sort((a, b) => a.gradeLevel - b.gradeLevel);
   }, [filteredClasses]);
 
-  const summary = classList?.summary ?? {
-    total_classes: 0,
-    active_classes: 0,
-    archived_classes: 0,
-    students_assigned: 0,
-  };
+  const summary = useMemo(() => {
+    if (!classList || selectedYearId == null) {
+      return {
+        total_classes: 0,
+        active_classes: 0,
+        archived_classes: 0,
+        students_assigned: 0,
+      };
+    }
+    const allMatch = (classList.classes ?? []).every(
+      (item) => item.academic_year.academic_year_id === selectedYearId
+    );
+    if (allMatch && classList.summary) {
+      return classList.summary;
+    }
+    const matchingClasses = (classList.classes ?? []).filter(
+      (item) => item.academic_year.academic_year_id === selectedYearId
+    );
+    const activeCount = matchingClasses.filter(
+      (c) => normalizedStatus(c.class_status) === "active"
+    ).length;
+    const archivedCount = matchingClasses.filter(
+      (c) => normalizedStatus(c.class_status) === "archived"
+    ).length;
+    const studentsAssigned = matchingClasses.reduce(
+      (sum, c) => sum + (c.student_count || 0),
+      0
+    );
+    return {
+      total_classes: matchingClasses.length,
+      active_classes: activeCount,
+      archived_classes: archivedCount,
+      students_assigned: studentsAssigned,
+    };
+  }, [classList, selectedYearId]);
 
   return (
     <AppLayout>
@@ -203,11 +290,13 @@ export default function AdminClasses() {
                       <Plus className="size-4" /> New Class
                     </Button>
                   </Dialog.Trigger>
-                  <AddClassModal
-                    classes={classes}
-                    onClose={() => setShowNewClass(false)}
-                    onClassesCreated={() => { toast.success({ title: "Classes created" }); void refreshClasses(); }}
-                  />
+                  {showNewClass && (
+                    <AddClassModal
+                      classes={classes}
+                      onClose={() => setShowNewClass(false)}
+                      onClassesCreated={() => { toast.success({ title: "Classes created" }); void refreshClasses(); }}
+                    />
+                  )}
                 </Dialog>
                 <Link to={routes.admin.subjectLoadStudio} className="w-full md:w-auto">
                   <Button size="header" variant={"outline"} className="w-full justify-center whitespace-nowrap md:w-auto">
@@ -309,12 +398,22 @@ export default function AdminClasses() {
               </div>
 
               <section className="grid gap-4">
-                {isLoading ? (
+                {isLoading || isContextLoading ? (
                   <LoadingPanel label="Loading classes..." />
                 ) : loadError ? (
                   <ClassesEmptyState icon={<AlertTriangle />} title="Unable to load classes" description={loadError} actionLabel="Retry" onAction={() => void refreshClasses()} />
                 ) : !classes.length ? (
-                  <ClassesEmptyState icon={<School />} title="No classes yet" description="Create a class to start organizing students and subjects." actionLabel="New Class" onAction={() => setShowNewClass(true)} />
+                  <ClassesEmptyState
+                    icon={<School />}
+                    title={selectedYear ? `No classes in ${selectedYear.year_label}` : "No classes yet"}
+                    description={
+                      selectedYear
+                        ? `There are no classes configured for academic year ${selectedYear.year_label}. Create a class to start organizing students and subjects.`
+                        : "Create a class to start organizing students and subjects."
+                    }
+                    actionLabel="New Class"
+                    onAction={() => setShowNewClass(true)}
+                  />
                 ) : grouped.length === 0 ? (
                   <ClassesEmptyState icon={<Search />} title={search.trim() ? "No classes match your search" : "No classes match these filters"} description={search.trim() ? "Try another class or adviser name, or clear your filters." : "Choose another grade, year, or status to see classes."} actionLabel="Clear filters" onAction={() => { setSearch(""); setGradeFilter("All"); setYearFilter("All"); setStatusFilter("All"); }} />
                 ) : (

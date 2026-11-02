@@ -12,6 +12,7 @@ import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Card } from "@/components/retroui/Card";
+import { Badge } from "@/components/retroui/Badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -501,8 +502,12 @@ const TeacherGradeView = () => {
                   "—"
                 )}
               </Table.Cell>
-              <Table.Cell className={`text-center font-bold ${item.remark === 'PASSED' ? 'text-green-600' : item.remark === 'FAILED' ? 'text-red-600' : 'text-yellow-600'}`}>
-                {item.remark || "—"}
+              <Table.Cell className="text-center">
+                {item.remark ? (
+                  <Badge size="sm" variant={item.remark === "PASSED" ? "success" : item.remark === "FAILED" ? "destructive" : "outline"}>
+                    {item.remark}
+                  </Badge>
+                ) : "—"}
               </Table.Cell>
             </Table.Row>
           ))}

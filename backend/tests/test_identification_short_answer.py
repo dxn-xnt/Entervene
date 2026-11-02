@@ -26,6 +26,7 @@ from app.api.v1.routes.Quizzes import router as quizzes_router
 from app.db.Base import Base
 from app.db.Session import get_db
 from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
@@ -70,6 +71,7 @@ from app.services.quiz.quiz_normalization import (
 
 TABLES = [
     AcademicYear.__table__,
+    AcademicPeriod.__table__,
     AcademicLevel.__table__,
     UserAccount.__table__,
     AcademicStaff.__table__,
@@ -381,6 +383,16 @@ def db_session():
     level = AcademicLevel(level_name="Grade 7", grade_level=7)
     db.add_all([year, level])
     db.flush()
+    period = AcademicPeriod(
+        period_name="First Quarter",
+        academic_year_id=year.academic_year_id,
+        period_sequence=1,
+        start_date=date(2025, 6, 1),
+        end_date=date(2025, 8, 31),
+        is_active=True,
+    )
+    db.add(period)
+    db.flush()
 
     teacher_account = UserAccount(user_id=uuid.uuid4(), email="teacher@example.test", password_hash="x")
     student_account = UserAccount(user_id=uuid.uuid4(), email="student@example.test", password_hash="x")
@@ -431,6 +443,7 @@ def db_session():
     assignment = ClassworkAssignment(
         classwork_id=cw.classwork_id,
         class_id=class_.class_id,
+        academic_period_id=period.academic_period_id,
         assigned_by_staff_id=teacher.staff_id,
         is_published=True,
         max_attempts=2,

@@ -206,10 +206,17 @@ def assign_classwork(
 def get_cw_for_class(
     class_id: int,
     subject_id: int,
+    academic_period_id: int | None = None,
     student=Depends(get_student_record),
     db: Session = Depends(get_db),
 ):
-    return student_classworks_for_subject(class_id, subject_id, student, db)
+    return student_classworks_for_subject(
+        class_id,
+        subject_id,
+        student,
+        db,
+        academic_period_id=academic_period_id,
+    )
 
 
 @router.get("/assignment/{assignment_id}", response_model=ClassworkAssignmentResponse)

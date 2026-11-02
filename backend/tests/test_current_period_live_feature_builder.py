@@ -16,8 +16,10 @@ from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
+from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
+from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
@@ -87,6 +89,23 @@ def current_period_context():
     ])
     subject = Subject(subject_name="Science", subject_codename="SCIENCE", academic_level_id=level.academic_level_id, grading_template_id=template.grading_template_id)
     db.add_all([account, staff, student, period1, period2, class_, subject])
+    db.flush()
+    db.add(StudentClass(
+        student_id=student.student_id,
+        class_id=class_.class_id,
+        academic_year_id=year.academic_year_id,
+        enrollment_status="enrolled",
+    ))
+    db.add(
+        SubjectLoad(
+            staff_id=staff.staff_id,
+            subject_id=subject.subject_id,
+            class_id=class_.class_id,
+            academic_period_id=period1.academic_period_id,
+            status="active",
+            is_active_version=True,
+        )
+    )
     db.commit()
     yield {"db": db, "student": student, "class": class_, "subject": subject, "staff": staff, "period": period1, "next_period": period2, "template": template, "level": level}
     db.close()

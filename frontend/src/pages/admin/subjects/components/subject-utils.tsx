@@ -59,8 +59,14 @@ export type OfferingFilters = {
   search: string;
 };
 
-export function defaultOfferingFilters(options: SubjectOfferingFormOptions | null): OfferingFilters {
-  const activeYear = options?.academic_years.find((year) => year.is_active) ?? options?.academic_years[0];
+export function defaultOfferingFilters(
+  options: SubjectOfferingFormOptions | null,
+  preferredYearId?: number | null
+): OfferingFilters {
+  const preferred = preferredYearId != null
+    ? options?.academic_years.find((year) => year.academic_year_id === preferredYearId)
+    : undefined;
+  const activeYear = preferred ?? options?.academic_years.find((year) => year.is_active) ?? options?.academic_years[0];
   const defaultLevel = targetLevels(options?.academic_levels ?? [])[0];
   const defaultGrade = gradeValueForLevel(defaultLevel);
   return {

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.core.FileUpload import delete_file, save_file
 from app.core.Security import decode_access_token
 from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
@@ -65,6 +66,7 @@ from app.services.classwork.ClassworkShared import (
     validate_schedule,
 )
 from app.services.quiz.QuizBuilderService import upsert_quiz_builder
+from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
 
 
 def build_classwork_notification_details(
@@ -273,28 +275,7 @@ async def create_classwork_wizard_record(
     ensure_lessons_owned(db, staff_id, subject_id, selected_lesson_ids)
 
     if academic_period_id is None:
-        from app.models.academic.SubjectLoad import SubjectLoad
-        from app.models.academic.AcademicPeriod import AcademicPeriod
-
-        # Resolve from the teacher's active teaching load for this subject and selected classes
-        active_load = (
-            db.query(SubjectLoad.academic_period_id)
-            .filter(
-                SubjectLoad.subject_id == subject_id,
-                SubjectLoad.class_id.in_(selected_class_ids),
-                SubjectLoad.status.in_(["active", "published"]),
-                SubjectLoad.is_active_version.is_(True),
-            )
-            .first()
-        )
-        if active_load:
-            academic_period_id = active_load[0]
-        else:
-            active_period = db.query(AcademicPeriod).filter(AcademicPeriod.is_active.is_(True)).first()
-            if active_period:
-                academic_period_id = active_period.academic_period_id
-            else:
-                raise HTTPException(400, detail="Academic period was not found")
+        academic_period_id = resolve_active_academic_period(db).academic_period_id
 
     ensure_class_targets(db, staff_id, subject_id, selected_class_ids, academic_period_id)
     quiz_builder = _parse_quiz_payload(quiz_payload, normalized_type)
@@ -719,6 +700,21 @@ def classwork_detail(
     return result
 
 
+def _assert_classwork_writable(db: Session, classwork: Classwork) -> None:
+    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+    assignments = (
+        db.query(ClassworkAssignment)
+        .filter(ClassworkAssignment.classwork_id == classwork.classwork_id)
+        .all()
+    )
+    for assignment in assignments:
+        SubjectLoadAuthorizationService.assert_context_writable(
+            db,
+            class_id=assignment.class_id,
+            academic_period_id=assignment.academic_period_id,
+        )
+
+
 def update_classwork_record(
     classwork_id: int,
     body: ClassworkUpdate,
@@ -739,6 +735,7 @@ def update_classwork_record(
     )
     if not classwork:
         raise HTTPException(status_code=404, detail="Classwork not found or not yours")
+    _assert_classwork_writable(db, classwork)
     values = body.model_dump(exclude_unset=True)
     linked_exam = any(a.original_exam_assignment_id is not None for a in classwork.assignments) or db.query(
         ClassworkAssignment.classwork_assignment_id,
@@ -840,6 +837,7 @@ def archive_classwork_record(classwork_id: int, staff_id: str, db: Session) -> d
     ).first()
     if not classwork:
         raise HTTPException(status_code=404, detail="Classwork not found or not yours")
+    _assert_classwork_writable(db, classwork)
     if classwork_has_submissions(db, classwork_id):
         raise HTTPException(status_code=409, detail="Classwork has turned-in submissions and cannot be archived")
     classwork.is_archived = True
@@ -854,6 +852,7 @@ def unarchive_classwork_record(classwork_id: int, staff_id: str, db: Session) ->
     ).first()
     if not classwork:
         raise HTTPException(status_code=404, detail="Classwork not found or not yours")
+    _assert_classwork_writable(db, classwork)
     classwork.is_archived = False
     db.commit()
     return {"message": "Classwork restored", "classwork_id": classwork_id, "is_archived": False}
@@ -875,6 +874,7 @@ async def add_classwork_attachment(
         raise HTTPException(status_code=404, detail="Classwork not found or not yours")
     if classwork.is_archived:
         raise HTTPException(status_code=400, detail="Cannot attach files to archived classwork")
+    _assert_classwork_writable(db, classwork)
     info = normalize_uploaded_path(await save_file_func(file, "classworks"))
     try:
         attachment = ClassworkAttachment(classwork_id=classwork_id, **info)
@@ -903,6 +903,7 @@ def remove_classwork_attachment(
         raise HTTPException(status_code=404, detail="Classwork not found or not yours")
     if classwork.is_archived:
         raise HTTPException(status_code=400, detail="Cannot remove files from archived classwork")
+    _assert_classwork_writable(db, classwork)
 
     attachment = db.query(ClassworkAttachment).filter(
         ClassworkAttachment.classwork_attachment_id == attachment_id,
@@ -997,39 +998,27 @@ def assign_classwork_to_classes(
     validate_schedule(None, body.due_date, body.lock_date)
 
     academic_period_id = body.academic_period_id
-    if not academic_period_id:
-        from app.models.academic.AcademicPeriod import AcademicPeriod
-        from app.models.academic.SubjectLoad import SubjectLoad
-
+    if academic_period_id is None:
         # 1. Try existing assignments for this classwork
-        existing_assignment = (
-            db.query(ClassworkAssignment.academic_period_id)
-            .filter(ClassworkAssignment.classwork_id == classwork_id)
-            .first()
-        )
-        if existing_assignment and existing_assignment[0]:
-            academic_period_id = existing_assignment[0]
-        else:
-            # 2. Try teacher's active teaching load for this subject and class_ids
-            active_load = (
-                db.query(SubjectLoad.academic_period_id)
-                .filter(
-                    SubjectLoad.subject_id == classwork.subject_id,
-                    SubjectLoad.class_id.in_(class_ids),
-                    SubjectLoad.status.in_(["active", "published"]),
-                    SubjectLoad.is_active_version.is_(True),
-                )
-                .first()
+        existing_period_ids = [
+            row[0]
+            for row in (
+                db.query(ClassworkAssignment.academic_period_id)
+                .filter(ClassworkAssignment.classwork_id == classwork_id)
+                .filter(ClassworkAssignment.academic_period_id.isnot(None))
+                .distinct()
+                .all()
             )
-            if active_load and active_load[0]:
-                academic_period_id = active_load[0]
-            else:
-                # 3. Fallback to current active academic period
-                active_period = db.query(AcademicPeriod).filter(AcademicPeriod.is_active.is_(True)).first()
-                if active_period:
-                    academic_period_id = active_period.academic_period_id
-                else:
-                    raise HTTPException(400, detail="Academic period was not found")
+        ]
+        if len(existing_period_ids) > 1:
+            raise HTTPException(
+                status_code=409,
+                detail="Classwork has assignments in multiple academic periods; select a period explicitly",
+            )
+        if existing_period_ids:
+            academic_period_id = existing_period_ids[0]
+        else:
+            academic_period_id = resolve_active_academic_period(db).academic_period_id
 
     ensure_class_targets(db, staff_id, classwork.subject_id, class_ids, academic_period_id)
     created = []
@@ -1135,6 +1124,7 @@ def student_classworks_for_subject(
     subject_id: int,
     student,
     db: Session,
+    academic_period_id: int | None = None,
 ) -> list[ClassworkAssignmentResponse]:
     enrollment = db.query(StudentClass).filter(
         StudentClass.student_id == student.student_id,
@@ -1143,19 +1133,24 @@ def student_classworks_for_subject(
     ).first()
     if not enrollment:
         raise HTTPException(status_code=403, detail="Not enrolled in this class")
-    rows = (
+    query = (
         db.query(ClassworkAssignment, Classwork, Class)
         .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
         .join(Class, Class.class_id == ClassworkAssignment.class_id)
+        .join(AcademicPeriod, AcademicPeriod.academic_period_id == ClassworkAssignment.academic_period_id)
         .filter(
             ClassworkAssignment.class_id == class_id,
             Classwork.subject_id == subject_id,
             Classwork.is_archived == False,
             ClassworkAssignment.is_published == True,
+            Class.academic_year_id == AcademicPeriod.academic_year_id,
         )
-        .order_by(ClassworkAssignment.created_at.desc())
-        .all()
     )
+    if academic_period_id is not None:
+        query = query.filter(
+            ClassworkAssignment.academic_period_id == academic_period_id
+        )
+    rows = query.order_by(ClassworkAssignment.created_at.desc()).all()
     results = []
     now = datetime.now(timezone.utc)
     for assignment, classwork, class_ in rows:
@@ -1220,11 +1215,13 @@ def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None =
         db.query(SubjectLoad, Subject, Class, AcademicLevel)
         .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
         .join(Class, Class.class_id == SubjectLoad.class_id)
+        .join(AcademicPeriod, AcademicPeriod.academic_period_id == SubjectLoad.academic_period_id)
         .outerjoin(AcademicLevel, AcademicLevel.academic_level_id == Class.academic_level_id)
         .filter(
             load_filter,
             SubjectLoad.is_active_version.is_(True),
             SubjectLoad.status.in_(["active", "published"]),
+            Class.academic_year_id == AcademicPeriod.academic_year_id,
         )
     )
     if academic_period_id is not None:
@@ -1262,10 +1259,7 @@ def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None =
     )
     if academic_period_id is not None:
         assignments_query = assignments_query.filter(
-            or_(
-                ClassworkAssignment.academic_period_id == academic_period_id,
-                ClassworkAssignment.academic_period_id.is_(None),
-            )
+            ClassworkAssignment.academic_period_id == academic_period_id,
         )
     assignments_rows = assignments_query.all()
 
@@ -1450,12 +1444,15 @@ def student_assignments(student, db: Session) -> dict:
     assignments = (
         db.query(ClassworkAssignment, Classwork, Subject, AcademicStaff)
         .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
+        .join(Class, Class.class_id == ClassworkAssignment.class_id)
+        .join(AcademicPeriod, AcademicPeriod.academic_period_id == ClassworkAssignment.academic_period_id)
         .outerjoin(Subject, Subject.subject_id == Classwork.subject_id)
         .outerjoin(AcademicStaff, AcademicStaff.staff_id == Classwork.created_by_staff_id)
         .filter(
             ClassworkAssignment.class_id.in_(class_ids),
             Classwork.is_archived == False,
             ClassworkAssignment.is_published == True,
+            Class.academic_year_id == AcademicPeriod.academic_year_id,
         )
         .order_by(ClassworkAssignment.due_date.asc())
         .all()

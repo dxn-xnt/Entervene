@@ -37,7 +37,7 @@ TABLES = [
     AcademicLevelPathwayScope.__table__,
 ]
 
-READ_ONLY_DETAIL = "Subject offerings for inactive academic years are read-only to protect historical records."
+READ_ONLY_DETAIL = "Subject offerings for historical academic years or periods are read-only."
 
 
 @pytest.fixture
@@ -85,12 +85,18 @@ def offering_context(db):
         end_date=date(2028, 3, 31),
         is_active=False,
     )
+    historical_year = AcademicYear(
+        year_label="2025-2026",
+        start_date=date(2025, 6, 1),
+        end_date=date(2026, 3, 31),
+        is_active=False,
+    )
     grade_7 = AcademicLevel(level_name="Grade 7", grade_level=7)
     grade_11 = AcademicLevel(level_name="Grade 11", grade_level=11)
     grade_12 = AcademicLevel(level_name="Grade 12", grade_level=12)
     med_pathway = AcademicPathway(code="medical-courses", name="Medical Courses", is_enabled=True)
     eng_pathway = AcademicPathway(code="engineering-math", name="Engineering & Math", is_enabled=True)
-    db.add_all([year, other_year, grade_7, grade_11, grade_12, med_pathway, eng_pathway])
+    db.add_all([year, other_year, historical_year, grade_7, grade_11, grade_12, med_pathway, eng_pathway])
     db.flush()
 
     term_1 = AcademicPeriod(
@@ -123,7 +129,17 @@ def offering_context(db):
         is_active=False,
         academic_year_id=other_year.academic_year_id,
     )
-    db.add_all([term_1, term_2, other_year_term])
+    historical_term = AcademicPeriod(
+        period_name="Term 1",
+        period_type="TERM",
+        period_sequence=1,
+        total_periods_in_year=3,
+        start_date=date(2025, 6, 1),
+        end_date=date(2025, 8, 31),
+        is_active=False,
+        academic_year_id=historical_year.academic_year_id,
+    )
+    db.add_all([term_1, term_2, other_year_term, historical_term])
     db.flush()
 
     template = GradingTemplate(template_name="Core", passing_threshold=85, status="active")
@@ -183,12 +199,14 @@ def offering_context(db):
     return {
         "year": year,
         "other_year": other_year,
+        "historical_year": historical_year,
         "grade_7": grade_7,
         "grade_11": grade_11,
         "grade_12": grade_12,
         "term_1": term_1,
         "term_2": term_2,
         "other_year_term": other_year_term,
+        "historical_term": historical_term,
         "math_7": math_7,
         "biology": biology,
         "precal": precal,
@@ -314,7 +332,7 @@ def test_copy_source_inactive_year_to_active_target_year_succeeds(client, db, of
     assert copied.status == "archived"
 
 
-def test_copy_to_inactive_target_year_fails(client, db, offering_context):
+def test_copy_to_future_target_year_succeeds(client, db, offering_context):
     ctx = offering_context
     create_offering(db, ctx)
     db.commit()
@@ -328,8 +346,8 @@ def test_copy_to_inactive_target_year_fails(client, db, offering_context):
         ),
     )
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == READ_ONLY_DETAIL
+    assert response.status_code == 200
+    assert response.json()["created_count"] == 1
 
 
 def test_copy_same_source_and_target_year_fails(client, offering_context):
@@ -473,7 +491,7 @@ def test_active_target_future_terms_remain_editable_after_copy(client, db, offer
     assert create_future_term.json()["academic_period"]["period_name"] == "Term 2"
 
 
-def test_create_offering_in_inactive_academic_year_fails(client, db, offering_context):
+def test_create_offering_in_future_academic_year_succeeds(client, db, offering_context):
     ctx = offering_context
 
     response = client.post(
@@ -485,9 +503,9 @@ def test_create_offering_in_inactive_academic_year_fails(client, db, offering_co
         ),
     )
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == READ_ONLY_DETAIL
-    assert db.query(SubjectOffering).count() == 0
+    assert response.status_code == 201
+    assert response.json()["academic_year"]["academic_year_id"] == ctx["other_year"].academic_year_id
+    assert db.query(SubjectOffering).count() == 1
 
 
 def test_create_offering_for_future_term_in_active_academic_year_works(client, db, offering_context):
@@ -696,7 +714,7 @@ def test_update_offering_works_and_revalidates_conflicts(client, db, offering_co
     assert body["pathways"][0]["code"] == "engineering-math"
 
 
-def test_update_offering_in_inactive_academic_year_fails(client, db, offering_context):
+def test_update_offering_in_future_academic_year_succeeds(client, db, offering_context):
     ctx = offering_context
     offering = create_offering(
         db,
@@ -711,11 +729,11 @@ def test_update_offering_in_inactive_academic_year_fails(client, db, offering_co
         json={"pathway": "stem_engineering"},
     )
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == READ_ONLY_DETAIL
+    assert response.status_code == 200
+    assert response.json()["pathways"][0]["code"] == "engineering-math"
 
 
-def test_update_offering_to_inactive_academic_year_fails(client, db, offering_context):
+def test_update_offering_to_future_academic_year_succeeds(client, db, offering_context):
     ctx = offering_context
     offering = create_offering(db, ctx)
     db.commit()
@@ -728,8 +746,8 @@ def test_update_offering_to_inactive_academic_year_fails(client, db, offering_co
         },
     )
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == READ_ONLY_DETAIL
+    assert response.status_code == 200
+    assert response.json()["academic_year"]["academic_year_id"] == ctx["other_year"].academic_year_id
 
 
 def test_archive_and_restore_offering_work(client, db, offering_context):
@@ -745,7 +763,7 @@ def test_archive_and_restore_offering_work(client, db, offering_context):
     assert restored.json()["status"] == "active"
 
 
-def test_archive_and_restore_offering_in_inactive_academic_year_fail(client, db, offering_context):
+def test_archive_and_restore_offering_in_future_academic_year_work(client, db, offering_context):
     ctx = offering_context
     active_offering = create_offering(
         db,
@@ -767,10 +785,51 @@ def test_archive_and_restore_offering_in_inactive_academic_year_fail(client, db,
     archived = client.patch(f"/api/v1/subject-offerings/{active_offering.subject_offering_id}/archive")
     restored = client.patch(f"/api/v1/subject-offerings/{archived_offering.subject_offering_id}/restore")
 
-    assert archived.status_code == 409
-    assert archived.json()["detail"] == READ_ONLY_DETAIL
-    assert restored.status_code == 409
-    assert restored.json()["detail"] == READ_ONLY_DETAIL
+    assert archived.status_code == 200
+    assert archived.json()["status"] == "archived"
+    assert restored.status_code == 200
+    assert restored.json()["status"] == "active"
+
+
+def test_historical_subject_offering_mutations_are_read_only(client, db, offering_context):
+    ctx = offering_context
+    offering = create_offering(
+        db,
+        ctx,
+        academic_year_id=ctx["historical_year"].academic_year_id,
+        academic_period_id=ctx["historical_term"].academic_period_id,
+    )
+    db.commit()
+
+    before = offering.status
+    response = client.patch(
+        f"/api/v1/subject-offerings/{offering.subject_offering_id}",
+        json={"minutes": 60},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == READ_ONLY_DETAIL
+    db.refresh(offering)
+    assert offering.status == before
+    assert offering.minutes is None
+
+
+def test_closed_period_offering_is_read_only_inside_active_year(client, db, offering_context):
+    ctx = offering_context
+    offering = create_offering(db, ctx)
+    ctx["term_1"].is_active = False
+    ctx["term_2"].is_active = True
+    db.commit()
+
+    response = client.patch(
+        f"/api/v1/subject-offerings/{offering.subject_offering_id}",
+        json={"minutes": 55},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == READ_ONLY_DETAIL
+    db.refresh(offering)
+    assert offering.minutes is None
 
 
 def test_non_admin_cannot_create_update_or_archive(client, db, offering_context):

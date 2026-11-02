@@ -130,6 +130,7 @@ def authz_context(tmp_path):
         start_date=date(2025, 6, 1),
         end_date=date(2025, 8, 31),
         academic_year_id=year.academic_year_id,
+        is_active=True,
     )
     subject = Subject(
         subject_name="Science",
@@ -331,6 +332,240 @@ def _valid_quiz_payload() -> dict:
             }
         ],
     }
+
+
+def _add_period_load(authz_context, *, sequence: int, is_active: bool = False):
+    c = authz_context
+    period = AcademicPeriod(
+        period_name=f"Q{sequence}",
+        period_type="QUARTER",
+        period_sequence=sequence,
+        total_periods_in_year=4,
+        start_date=date(2025, 6 + ((sequence - 1) * 2), 1),
+        end_date=date(2025, 7 + ((sequence - 1) * 2), 28),
+        academic_year_id=c["period"].academic_year_id,
+        is_active=is_active,
+    )
+    c["db"].add(period)
+    c["db"].flush()
+    c["db"].add(SubjectLoad(
+        staff_id=c["owner"].staff_id,
+        subject_id=c["subject"].subject_id,
+        class_id=c["allowed_class"].class_id,
+        academic_period_id=period.academic_period_id,
+        status="published",
+        is_active_version=True,
+    ))
+    c["db"].commit()
+    return period
+
+
+def _wizard_payload(
+    authz_context,
+    title: str,
+    academic_period_id: int | None = None,
+    class_id: int | None = None,
+):
+    c = authz_context
+    payload = {
+        "title": title,
+        "classwork_type": "ASSIGNMENT",
+        "subject_id": str(c["subject"].subject_id),
+        "classwork_category": "PERFORMANCE_TASK",
+        "total_points": "100",
+        "is_published": "false",
+        "class_ids": json.dumps([class_id or c["allowed_class"].class_id]),
+        "lesson_ids": json.dumps([]),
+        "max_attempts": "1",
+    }
+    if academic_period_id is not None:
+        payload["academic_period_id"] = str(academic_period_id)
+    return payload
+
+
+def test_default_classwork_creation_tracks_canonical_period_switch(authz_context):
+    c = authz_context
+    c["period"].is_active = False
+    next_period = _add_period_load(c, sequence=2, is_active=True)
+
+    response = c["client"].post(
+        "/api/v1/classwork-assignments/with-assignments",
+        data=_wizard_payload(c, "Canonical Q2 work"),
+    )
+
+    assert response.status_code == 200, response.text
+    assignment = c["db"].query(ClassworkAssignment).filter_by(
+        classwork_id=response.json()["classwork_id"],
+    ).one()
+    assert assignment.academic_period_id == next_period.academic_period_id
+
+
+def test_explicit_future_period_planning_is_preserved(authz_context):
+    c = authz_context
+    future_period = _add_period_load(c, sequence=2)
+
+    response = c["client"].post(
+        "/api/v1/classwork-assignments/with-assignments",
+        data=_wizard_payload(c, "Planned Q2 work", future_period.academic_period_id),
+    )
+
+    assert response.status_code == 200, response.text
+    assignment = c["db"].query(ClassworkAssignment).filter_by(
+        classwork_id=response.json()["classwork_id"],
+    ).one()
+    assert assignment.academic_period_id == future_period.academic_period_id
+
+
+def test_default_classwork_creation_rejects_missing_and_inconsistent_lifecycle(authz_context):
+    c = authz_context
+    c["period"].is_active = False
+    c["db"].commit()
+
+    missing = c["client"].post(
+        "/api/v1/classwork-assignments/with-assignments",
+        data=_wizard_payload(c, "Missing active period"),
+    )
+    assert missing.status_code == 409
+    assert missing.json()["detail"] == "No active grading period is configured."
+
+    c["period"].is_active = True
+    _add_period_load(c, sequence=2, is_active=True)
+    inconsistent = c["client"].post(
+        "/api/v1/classwork-assignments/with-assignments",
+        data=_wizard_payload(c, "Ambiguous active period"),
+    )
+    assert inconsistent.status_code == 409
+    assert "multiple grading periods are active" in inconsistent.json()["detail"]
+
+
+def test_default_classwork_creation_tracks_academic_year_switch(authz_context):
+    c = authz_context
+    current_year = c["period"].academic_year
+    current_year.is_active = False
+    c["period"].is_active = False
+    next_year = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=True,
+    )
+    c["db"].add(next_year)
+    c["db"].flush()
+    next_period = AcademicPeriod(
+        period_name="Q1",
+        period_type="QUARTER",
+        period_sequence=1,
+        total_periods_in_year=4,
+        start_date=date(2026, 6, 1),
+        end_date=date(2026, 8, 31),
+        academic_year_id=next_year.academic_year_id,
+        is_active=True,
+    )
+    next_class = Class(
+        section_name="Next Year",
+        academic_year_id=next_year.academic_year_id,
+        academic_level_id=c["allowed_class"].academic_level_id,
+    )
+    c["db"].add_all([next_period, next_class])
+    c["db"].flush()
+    c["db"].add(SubjectLoad(
+        staff_id=c["owner"].staff_id,
+        subject_id=c["subject"].subject_id,
+        class_id=next_class.class_id,
+        academic_period_id=next_period.academic_period_id,
+        status="published",
+        is_active_version=True,
+    ))
+    c["db"].commit()
+
+    response = c["client"].post(
+        "/api/v1/classwork-assignments/with-assignments",
+        data=_wizard_payload(c, "Next-year current work", class_id=next_class.class_id),
+    )
+
+    assert response.status_code == 200, response.text
+    assignment = c["db"].query(ClassworkAssignment).filter_by(
+        classwork_id=response.json()["classwork_id"],
+    ).one()
+    assert assignment.class_id == next_class.class_id
+    assert assignment.academic_period_id == next_period.academic_period_id
+
+
+def test_default_classwork_creation_rejects_period_outside_active_year(authz_context):
+    c = authz_context
+    c["period"].is_active = False
+    future_year = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=False,
+    )
+    c["db"].add(future_year)
+    c["db"].flush()
+    future_period = AcademicPeriod(
+        period_name="Future Q1",
+        period_type="QUARTER",
+        period_sequence=1,
+        total_periods_in_year=4,
+        start_date=date(2026, 6, 1),
+        end_date=date(2026, 8, 31),
+        academic_year_id=future_year.academic_year_id,
+        is_active=True,
+    )
+    c["db"].add(future_period)
+    c["db"].commit()
+
+    response = c["client"].post(
+        "/api/v1/classwork-assignments/with-assignments",
+        data=_wizard_payload(c, "Wrong-year active work"),
+    )
+
+    assert response.status_code == 409
+    assert "active grading period is not in the active academic year" in response.json()["detail"]
+
+
+def test_cross_year_assignment_is_hidden_from_student_reads(authz_context):
+    c = authz_context
+    future_year = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=False,
+    )
+    c["db"].add(future_year)
+    c["db"].flush()
+    future_period = AcademicPeriod(
+        period_name="Future Q1",
+        period_type="QUARTER",
+        period_sequence=1,
+        total_periods_in_year=4,
+        start_date=date(2026, 6, 1),
+        end_date=date(2026, 8, 31),
+        academic_year_id=future_year.academic_year_id,
+    )
+    c["db"].add(future_period)
+    c["db"].flush()
+    c["assignment"].academic_period_id = future_period.academic_period_id
+    c["db"].commit()
+    _act_as(c, "student", "student")
+
+    class_list = c["client"].get(
+        f"/api/v1/classwork-assignments/class/{c['allowed_class'].class_id}"
+        f"/subject/{c['subject'].subject_id}"
+    )
+    assignment_detail = c["client"].get(
+        f"/api/v1/classwork-assignments/assignment/{c['assignment'].classwork_assignment_id}"
+    )
+    classwork_detail = c["client"].get(
+        f"/api/v1/classwork-assignments/classwork/{c['classwork'].classwork_id}"
+    )
+    all_assignments = c["client"].get("/api/v1/classwork-assignments/my-assignments")
+
+    assert class_list.status_code == 200
+    assert class_list.json() == []
+    assert assignment_detail.status_code == classwork_detail.status_code == 403
+    assert all_assignments.status_code == 200
+    assert all_assignments.json() == {"pending": [], "submitted": [], "graded": []}
 
 
 def test_quiz_classwork_creation_saves_builder_atomically(authz_context):

@@ -202,7 +202,7 @@ export default function InterventionModal({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Content
-        size="xl"
+        size="2xl"
         className="max-h-[90vh] flex flex-col p-0 overflow-hidden"
       >
         <Dialog.Header className="">

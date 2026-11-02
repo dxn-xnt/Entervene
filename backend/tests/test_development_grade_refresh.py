@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
+from app.models.academic.StudentCLass import StudentClass
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.schemas.Activity import BulkScoreItem, BulkScoreUpdateRequest
@@ -126,7 +127,15 @@ def test_insufficient_and_unrelated_student_do_not_create_prediction(current_per
         student_id=uuid4(), student_lrn="300000000002", first_name="Other",
         last_name="Learner", academic_level_id=ctx["level"].academic_level_id,
     )
-    ctx["db"].add(other)
+    ctx["db"].add_all([
+        other,
+        StudentClass(
+            student_id=other.student_id,
+            class_id=ctx["class"].class_id,
+            academic_year_id=ctx["class"].academic_year_id,
+            enrollment_status="enrolled",
+        ),
+    ])
     ctx["db"].commit()
     _save_score(ctx, monkeypatch, assignment, 21, student_id=other.student_id)
     assert [row.prediction_id for row in _rows(ctx, model.model_version_id)] == [first["prediction_id"]]

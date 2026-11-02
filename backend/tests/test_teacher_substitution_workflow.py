@@ -18,6 +18,7 @@ from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
+from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
@@ -70,8 +71,20 @@ def sub_context():
         academic_year_id=year.academic_year_id,
         is_active=True,
     )
-    subject = Subject(subject_name="Filipino 7", subject_codename="FIL7", academic_level_id=level.academic_level_id)
-    db.add_all([period, subject])
+    template = GradingTemplate(
+        template_name="Substitution Workflow Core",
+        passing_threshold=75.0,
+        status="active",
+    )
+    db.add_all([period, template])
+    db.flush()
+    subject = Subject(
+        subject_name="Filipino 7",
+        subject_codename="FIL7",
+        academic_level_id=level.academic_level_id,
+        grading_template_id=template.grading_template_id,
+    )
+    db.add(subject)
     db.flush()
 
     admin_user = UserAccount(user_id=uuid.uuid4(), email="admin@school.test", password_hash="hash")
@@ -180,6 +193,313 @@ def test_create_substitution_success(sub_context):
     assert data["substitute_staff_name"] == "Juan Bautista"
     assert data["status"] == "active"
     assert data["is_currently_active"] is True
+
+
+def _add_period_load(
+    sub_context,
+    *,
+    year_label: str,
+    period_name: str,
+    is_year_active: bool = False,
+    is_period_active: bool = False,
+):
+    db = sub_context["db"]
+    start_year = int(year_label.split("-", 1)[0])
+    year = AcademicYear(
+        year_label=year_label,
+        start_date=date(start_year, 6, 1),
+        end_date=date(start_year + 1, 3, 31),
+        is_active=is_year_active,
+    )
+    db.add(year)
+    db.flush()
+    period = AcademicPeriod(
+        period_name=period_name,
+        period_type="QUARTER",
+        period_sequence=1,
+        total_periods_in_year=4,
+        period_progress_ratio=0.25,
+        start_date=date(start_year, 6, 1),
+        end_date=date(start_year, 8, 31),
+        academic_year_id=year.academic_year_id,
+        is_active=is_period_active,
+    )
+    cls = Class(
+        section_name=f"{period_name} Section",
+        academic_level_id=sub_context["class"].academic_level_id,
+        academic_year_id=year.academic_year_id,
+        class_status="active",
+    )
+    db.add_all([period, cls])
+    db.flush()
+    load = SubjectLoad(
+        class_id=cls.class_id,
+        subject_id=sub_context["subject"].subject_id,
+        academic_period_id=period.academic_period_id,
+        staff_id=sub_context["maria_staff"].staff_id,
+        status="published",
+        start_time="10:00",
+        end_time="11:00",
+        days_of_week=["TUESDAY"],
+    )
+    db.add(load)
+    db.commit()
+    return year, period, load
+
+
+def test_teacher_loads_default_to_canonical_active_period(sub_context):
+    db = sub_context["db"]
+    client = _make_client(db, user_role="admin", user_sub=str(sub_context["admin_staff"].user_id))
+    _, historical_period, _ = _add_period_load(
+        sub_context,
+        year_label="2025-2026",
+        period_name="Historical Quarter",
+    )
+    _, future_period, _ = _add_period_load(
+        sub_context,
+        year_label="2027-2028",
+        period_name="Future Quarter",
+    )
+
+    response = client.get(f"/api/v1/substitutions/teacher-loads/{sub_context['maria_staff'].staff_id}")
+
+    assert response.status_code == 200, response.text
+    assert [row["academic_period_id"] for row in response.json()] == [sub_context["period"].academic_period_id]
+    assert response.json()[0]["is_active_period"] is True
+    assert historical_period.academic_period_id != sub_context["period"].academic_period_id
+    assert future_period.academic_period_id != sub_context["period"].academic_period_id
+
+
+@pytest.mark.parametrize("year_label,period_name", [
+    ("2025-2026", "Historical Quarter"),
+    ("2027-2028", "Future Quarter"),
+])
+def test_teacher_loads_honor_explicit_historical_and_future_periods(
+    sub_context,
+    year_label,
+    period_name,
+):
+    db = sub_context["db"]
+    client = _make_client(db, user_role="admin", user_sub=str(sub_context["admin_staff"].user_id))
+    _, period, load = _add_period_load(
+        sub_context,
+        year_label=year_label,
+        period_name=period_name,
+    )
+
+    response = client.get(
+        f"/api/v1/substitutions/teacher-loads/{sub_context['maria_staff'].staff_id}",
+        params={"academic_period_id": period.academic_period_id},
+    )
+
+    assert response.status_code == 200, response.text
+    assert [row["subject_load_id"] for row in response.json()] == [load.subject_load_id]
+    assert response.json()[0]["is_active_period"] is False
+
+
+def test_teacher_loads_missing_active_context_does_not_fall_back(sub_context):
+    db = sub_context["db"]
+    client = _make_client(db, user_role="admin", user_sub=str(sub_context["admin_staff"].user_id))
+    sub_context["year"].is_active = False
+    sub_context["period"].is_active = False
+    db.commit()
+
+    response = client.get(f"/api/v1/substitutions/teacher-loads/{sub_context['maria_staff'].staff_id}")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "No active academic year is configured."
+
+    explicit_response = client.get(
+        f"/api/v1/substitutions/teacher-loads/{sub_context['maria_staff'].staff_id}",
+        params={"academic_period_id": sub_context["period"].academic_period_id},
+    )
+    assert explicit_response.status_code == 200, explicit_response.text
+    assert [row["subject_load_id"] for row in explicit_response.json()] == [sub_context["load"].subject_load_id]
+
+
+def test_create_substitution_preserves_explicit_future_period_planning(sub_context):
+    db = sub_context["db"]
+    client = _make_client(db, user_role="admin", user_sub=str(sub_context["admin_staff"].user_id))
+    _, future_period, future_load = _add_period_load(
+        sub_context,
+        year_label="2027-2028",
+        period_name="Future Quarter",
+    )
+
+    response = client.post("/api/v1/substitutions", json={
+        "subject_load_id": future_load.subject_load_id,
+        "substitute_staff_id": sub_context["juan_staff"].staff_id,
+        "start_date": future_period.start_date.isoformat(),
+        "end_date": future_period.end_date.isoformat(),
+        "reason": "Planned future coverage",
+    })
+
+    assert response.status_code == 201, response.text
+    assert response.json()["academic_period_id"] == future_period.academic_period_id
+
+
+def test_create_substitution_preserves_explicit_historical_period_planning(sub_context):
+    db = sub_context["db"]
+    client = _make_client(db, user_role="admin", user_sub=str(sub_context["admin_staff"].user_id))
+    _, historical_period, historical_load = _add_period_load(
+        sub_context,
+        year_label="2025-2026",
+        period_name="Historical Quarter",
+    )
+
+    response = client.post("/api/v1/substitutions", json={
+        "subject_load_id": historical_load.subject_load_id,
+        "substitute_staff_id": sub_context["juan_staff"].staff_id,
+        "start_date": historical_period.start_date.isoformat(),
+        "end_date": historical_period.end_date.isoformat(),
+        "reason": "Recorded historical coverage",
+    })
+
+    assert response.status_code == 201, response.text
+    assert response.json()["academic_period_id"] == historical_period.academic_period_id
+    assert response.json()["is_currently_active"] is False
+
+
+def test_teacher_loads_reject_inconsistent_default_lifecycle(sub_context):
+    db = sub_context["db"]
+    client = _make_client(db, user_role="admin", user_sub=str(sub_context["admin_staff"].user_id))
+    second_period = AcademicPeriod(
+        period_name="Quarter 2",
+        period_type="QUARTER",
+        period_sequence=2,
+        total_periods_in_year=4,
+        period_progress_ratio=0.5,
+        start_date=date.today() + timedelta(days=61),
+        end_date=date.today() + timedelta(days=120),
+        academic_year_id=sub_context["year"].academic_year_id,
+        is_active=True,
+    )
+    db.add(second_period)
+    db.commit()
+
+    response = client.get(f"/api/v1/substitutions/teacher-loads/{sub_context['maria_staff'].staff_id}")
+
+    assert response.status_code == 409
+    assert "multiple grading periods are active" in response.json()["detail"]
+
+
+def test_teacher_loads_reject_active_period_outside_active_year(sub_context):
+    db = sub_context["db"]
+    client = _make_client(db, user_role="admin", user_sub=str(sub_context["admin_staff"].user_id))
+    sub_context["period"].is_active = False
+    _, _, _ = _add_period_load(
+        sub_context,
+        year_label="2027-2028",
+        period_name="Inconsistent Active Quarter",
+        is_period_active=True,
+    )
+
+    response = client.get(f"/api/v1/substitutions/teacher-loads/{sub_context['maria_staff'].staff_id}")
+
+    assert response.status_code == 409
+    assert "active grading period is not in the active academic year" in response.json()["detail"]
+
+
+def test_substitution_creation_rejects_cross_year_load_context(sub_context):
+    db = sub_context["db"]
+    client = _make_client(db, user_role="admin", user_sub=str(sub_context["admin_staff"].user_id))
+    _, future_period, _ = _add_period_load(
+        sub_context,
+        year_label="2027-2028",
+        period_name="Future Quarter",
+    )
+    inconsistent_load = SubjectLoad(
+        class_id=sub_context["class"].class_id,
+        subject_id=sub_context["subject"].subject_id,
+        academic_period_id=future_period.academic_period_id,
+        staff_id=sub_context["maria_staff"].staff_id,
+        status="published",
+        start_time="12:00",
+        end_time="13:00",
+        days_of_week=["THURSDAY"],
+    )
+    db.add(inconsistent_load)
+    db.commit()
+
+    payload = {
+        "subject_load_id": inconsistent_load.subject_load_id,
+        "substitute_staff_id": sub_context["juan_staff"].staff_id,
+        "start_date": future_period.start_date.isoformat(),
+        "end_date": future_period.end_date.isoformat(),
+    }
+    create_response = client.post("/api/v1/substitutions", json=payload)
+    bulk_response = client.post("/api/v1/substitutions/bulk", json={
+        "subject_load_ids": [inconsistent_load.subject_load_id],
+        "substitute_staff_id": sub_context["juan_staff"].staff_id,
+        "start_date": future_period.start_date.isoformat(),
+        "end_date": future_period.end_date.isoformat(),
+    })
+
+    assert create_response.status_code == 409
+    assert bulk_response.status_code == 409
+    assert "different academic years" in create_response.json()["detail"]
+    assert "different academic years" in bulk_response.json()["detail"]
+    assert db.query(TeacherSubstitution).count() == 0
+
+
+def test_teacher_loads_unknown_explicit_period_returns_404(sub_context):
+    client = _make_client(
+        sub_context["db"],
+        user_role="admin",
+        user_sub=str(sub_context["admin_staff"].user_id),
+    )
+
+    response = client.get(
+        f"/api/v1/substitutions/teacher-loads/{sub_context['maria_staff'].staff_id}",
+        params={"academic_period_id": 999999},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Academic period not found."
+
+
+def test_substitutions_reject_superseded_load_revisions(sub_context):
+    db = sub_context["db"]
+    client = _make_client(db, user_role="admin", user_sub=str(sub_context["admin_staff"].user_id))
+    stale_load = SubjectLoad(
+        class_id=sub_context["class"].class_id,
+        subject_id=sub_context["subject"].subject_id,
+        academic_period_id=sub_context["period"].academic_period_id,
+        staff_id=sub_context["maria_staff"].staff_id,
+        status="published",
+        is_active_version=False,
+        start_time="12:00",
+        end_time="13:00",
+        days_of_week=["THURSDAY"],
+    )
+    db.add(stale_load)
+    db.commit()
+
+    loads_response = client.get(
+        f"/api/v1/substitutions/teacher-loads/{sub_context['maria_staff'].staff_id}"
+    )
+    assert loads_response.status_code == 200, loads_response.text
+    assert stale_load.subject_load_id not in {
+        row["subject_load_id"] for row in loads_response.json()
+    }
+
+    payload = {
+        "subject_load_id": stale_load.subject_load_id,
+        "substitute_staff_id": sub_context["juan_staff"].staff_id,
+        "start_date": date.today().isoformat(),
+        "end_date": (date.today() + timedelta(days=30)).isoformat(),
+    }
+    create_response = client.post("/api/v1/substitutions", json=payload)
+    assert create_response.status_code == 404
+
+    bulk_response = client.post("/api/v1/substitutions/bulk", json={
+        "subject_load_ids": [stale_load.subject_load_id],
+        "substitute_staff_id": sub_context["juan_staff"].staff_id,
+        "start_date": date.today().isoformat(),
+        "end_date": (date.today() + timedelta(days=30)).isoformat(),
+    })
+    assert bulk_response.status_code == 404
+    assert db.query(TeacherSubstitution).count() == 0
 
 
 def test_create_substitution_overlap_conflict(sub_context):
