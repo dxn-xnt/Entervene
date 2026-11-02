@@ -12,7 +12,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/admin/button";
 import { useToast } from "@/components/retroui/Toast";
 import { Card as RetroCard } from "@/components/retroui/Card";
-import { Empty } from "@/components/retroui/Empty";
+import { EmptyStateCard } from "@/pages/admin/subjects/components/empty-state-card";
 import { Empty as EmptyState, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Input } from "@/components/retroui/Input";
 import { Loader } from "@/components/retroui/Loader";
@@ -649,11 +649,11 @@ function OverviewTab({
                 </RetroCard>
               ))
             ) : (
-              <Empty>
-                <Empty.Content>
-                  <Empty.Title>No published subjects for this section yet.</Empty.Title>
-                </Empty.Content>
-              </Empty>
+              <EmptyStateCard
+                icon={<BookOpen />}
+                title="No published subjects for this section yet"
+                description="Subjects will appear here once their subject loads are published."
+              />
             )}
           </div>
         </section>
