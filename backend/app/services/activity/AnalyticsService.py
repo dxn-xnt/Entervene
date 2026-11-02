@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.Lesson import Lesson
 from app.models.academic.StudentCLass import StudentClass
@@ -59,12 +60,37 @@ def format_count(val: int | float | None) -> str:
     return f"{val:,}"
 
 
-def get_target_period(db: Session, academic_period_id: int | None = None) -> AcademicPeriod:
-    """Resolve an explicit period exactly, otherwise require the canonical active period."""
+def get_target_period(
+    db: Session,
+    academic_period_id: int | None = None,
+    academic_year_id: int | None = None,
+) -> AcademicPeriod:
+    """Resolve an explicit period or period within an academic year; otherwise require the canonical active period."""
     if academic_period_id is not None:
         period = db.get(AcademicPeriod, academic_period_id)
         if period is None:
             raise HTTPException(status_code=404, detail="Academic period not found")
+        if academic_year_id is not None and period.academic_year_id != academic_year_id:
+            raise HTTPException(status_code=400, detail="Academic period does not belong to specified academic year")
+        return period
+    if academic_year_id is not None:
+        year = db.get(AcademicYear, academic_year_id)
+        if year is None:
+            raise HTTPException(status_code=404, detail="Academic year not found")
+        period = (
+            db.query(AcademicPeriod)
+            .filter(AcademicPeriod.academic_year_id == academic_year_id, AcademicPeriod.is_active.is_(True))
+            .first()
+        )
+        if period is None:
+            period = (
+                db.query(AcademicPeriod)
+                .filter(AcademicPeriod.academic_year_id == academic_year_id)
+                .order_by(AcademicPeriod.period_sequence.asc(), AcademicPeriod.academic_period_id.asc())
+                .first()
+            )
+        if period is None:
+            raise HTTPException(status_code=404, detail="No academic periods found for this academic year")
         return period
     return resolve_active_academic_period(db)
 
@@ -206,6 +232,7 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
             "period_id": target_period.academic_period_id if target_period else None,
             "period_name": period_name,
             "academic_year": academic_year_label,
+            "academic_year_id": target_period.academic_year_id if target_period else None,
             "is_active": target_period.is_active if target_period else False,
         },
         "cards": cards,
@@ -346,6 +373,7 @@ def build_teacher_overview(
             "period_id": target_period.academic_period_id if target_period else None,
             "period_name": period_name,
             "academic_year": academic_year_label,
+            "academic_year_id": target_period.academic_year_id if target_period else None,
             "is_active": target_period.is_active if target_period else False,
         },
         "cards": cards,
@@ -430,6 +458,7 @@ def build_class_overview(
             "period_id": target_period.academic_period_id if target_period else None,
             "period_name": period_name,
             "academic_year": academic_year_label,
+            "academic_year_id": target_period.academic_year_id if target_period else None,
             "is_active": target_period.is_active if target_period else False,
         },
         "cards": cards,
@@ -534,6 +563,7 @@ def build_subject_overview(
             "period_id": target_period.academic_period_id if target_period else None,
             "period_name": period_name,
             "academic_year": academic_year_label,
+            "academic_year_id": target_period.academic_year_id if target_period else None,
             "is_active": target_period.is_active if target_period else False,
         },
         "cards": cards,
@@ -1064,6 +1094,7 @@ def build_teacher_dashboard_health(
             "period_id": target_period.academic_period_id if target_period else None,
             "period_name": period_name,
             "academic_year": academic_year_label,
+            "academic_year_id": target_period.academic_year_id if target_period else None,
             "is_active": target_period.is_active if target_period else False,
         },
         "dashboard_filters": dashboard_filters,

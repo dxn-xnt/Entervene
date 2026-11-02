@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 import app.models  # noqa: F401
 from app.api.v1.routes.Auth import get_current_user
 from app.db.Session import get_db
+from app.services.academic.AcademicYearService import is_academic_year_authorized
 from app.services.activity.AnalyticsService import (
     build_class_overview,
     build_subject_overview,
@@ -28,6 +29,7 @@ def get_overview_metrics(
     class_id: int | None = Query(default=None),
     subject_id: int | None = Query(default=None),
     academic_period_id: int | None = Query(default=None),
+    academic_year_id: int | None = Query(default=None),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -44,7 +46,17 @@ def get_overview_metrics(
     if user_role not in {"admin", "teacher"}:
         raise HTTPException(status_code=403, detail="Staff analytics access required")
 
-    target_period = get_target_period(db, academic_period_id)
+    if academic_year_id is not None:
+        if not is_academic_year_authorized(db, academic_year_id, current_user):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
+    target_period = get_target_period(
+        db,
+        academic_period_id=academic_period_id,
+        academic_year_id=academic_year_id,
+    )
+    if target_period and not is_academic_year_authorized(db, target_period.academic_year_id, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
 
     if scope == "system":
         if user_role != "admin":
@@ -93,6 +105,7 @@ def get_overview_metrics(
 @router.get("/teacher/dashboard-health")
 def get_teacher_dashboard_health(
     academic_period_id: int | None = Query(default=None),
+    academic_year_id: int | None = Query(default=None),
     class_id: int | None = Query(default=None),
     subject_id: int | None = Query(default=None),
     dashboard_class_id: int | None = Query(default=None, gt=0),
@@ -117,10 +130,21 @@ def get_teacher_dashboard_health(
     if user_role not in ["admin", "teacher"]:
         raise HTTPException(status_code=403, detail="Teacher or Admin access required")
 
+    if academic_year_id is not None:
+        if not is_academic_year_authorized(db, academic_year_id, current_user):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
     target_staff_id = staff_id if (user_role == "admin" and staff_id) else user_id
     # Include the route's period lookup in the read-only/no-autoflush boundary.
     with db.no_autoflush:
-        target_period = get_target_period(db, academic_period_id)
+        target_period = get_target_period(
+            db,
+            academic_period_id=academic_period_id,
+            academic_year_id=academic_year_id,
+        )
+
+        if target_period and not is_academic_year_authorized(db, target_period.academic_year_id, current_user):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
 
         return build_teacher_dashboard_health(
             db=db,

@@ -94,6 +94,51 @@ function saveYearToStorage(yearId: number | null, userId?: string | null) {
   } catch (_) {}
 }
 
+/**
+ * Enforces role-based visibility rules as defense-in-depth:
+ * - Admin: historical, active, future
+ * - Teacher/Student/Unauthenticated: active + historical only. Never future years.
+ */
+export function filterAuthorizedYears(
+  years: AcademicYearItem[],
+  role?: string | null
+): AcademicYearItem[] {
+  if (role === "admin") {
+    return years;
+  }
+  // Teachers, Students, and Unauthenticated callers must never see future years
+  const activeYear = years.find((y) => y.is_active);
+  if (!activeYear) {
+    return years;
+  }
+
+  const parseStartYear = (y: AcademicYearItem): number | null => {
+    if (y.start_date) {
+      const d = new Date(y.start_date);
+      if (!isNaN(d.getFullYear())) return d.getFullYear();
+    }
+    const match = y.year_label?.match(/^(\d{4})/);
+    if (match) return parseInt(match[1], 10);
+    return null;
+  };
+
+  const activeStartYear = parseStartYear(activeYear);
+
+  return years.filter((year) => {
+    if (year.is_active || year.academic_year_id === activeYear.academic_year_id) {
+      return true;
+    }
+    const startYear = parseStartYear(year);
+    if (activeStartYear !== null && startYear !== null) {
+      return startYear <= activeStartYear;
+    }
+    if (year.start_date && activeYear.end_date) {
+      return new Date(year.start_date).getTime() < new Date(activeYear.end_date).getTime();
+    }
+    return year.academic_year_id <= activeYear.academic_year_id;
+  });
+}
+
 function savePeriodToStorage(
   periodId: number | null,
   userId?: string | null,
@@ -131,10 +176,18 @@ type PendingSwitch =
 export const AcademicPeriodProvider = ({ children }: { children: ReactNode }) => {
   const auth = useOptionalAuth();
   const userId = auth?.user?.userId ?? null;
+  const role = auth?.role ?? auth?.user?.role ?? null;
+
   const userIdRef = useRef<string | null>(userId);
   userIdRef.current = userId;
 
+  const roleRef = useRef<string | null>(role);
+  roleRef.current = role;
+
   const [academicYears, setAcademicYears] = useState<AcademicYearItem[]>([]);
+  const academicYearsRef = useRef<AcademicYearItem[]>([]);
+  academicYearsRef.current = academicYears;
+
   const [selectedYearId, setSelectedYearIdState] = useState<number | null>(() => {
     try {
       const stored = localStorage.getItem(getAcademicYearStorageKey(userId));
@@ -145,8 +198,13 @@ export const AcademicPeriodProvider = ({ children }: { children: ReactNode }) =>
     } catch (_) {}
     return null;
   });
+  const selectedYearIdRef = useRef<number | null>(selectedYearId);
+  selectedYearIdRef.current = selectedYearId;
 
   const [periods, setPeriods] = useState<AcademicPeriodItem[]>([]);
+  const periodsRef = useRef<AcademicPeriodItem[]>([]);
+  periodsRef.current = periods;
+
   const [selectedPeriodId, setSelectedPeriodIdState] = useState<number | null>(() => {
     try {
       const stored = localStorage.getItem(getAcademicPeriodStorageKey(userId));
@@ -196,28 +254,31 @@ export const AcademicPeriodProvider = ({ children }: { children: ReactNode }) =>
           const data = await res.json();
           const loadedPeriods: AcademicPeriodItem[] = data.periods || [];
           setPeriods(loadedPeriods);
+          periodsRef.current = loadedPeriods;
 
           setSelectedPeriodIdState((currentPeriodId) => {
             let chosenId: number | null = null;
 
-            // 1. If currentPeriodId belongs to loadedPeriods, retain it
-            if (currentPeriodId !== null && loadedPeriods.some((p) => p.id === currentPeriodId)) {
-              chosenId = currentPeriodId;
-            }
-
-            // 2. Try year-specific user storage
-            if (chosenId === null) {
-              try {
-                const yearStored = localStorage.getItem(
-                  getAcademicPeriodStorageKey(uid ?? userIdRef.current, yearId)
-                );
-                if (yearStored) {
-                  const parsed = parseInt(yearStored, 10);
-                  if (!isNaN(parsed) && loadedPeriods.some((p) => p.id === parsed)) {
-                    chosenId = parsed;
-                  }
+            // 1. Try year-specific user storage first
+            try {
+              const yearStored = localStorage.getItem(
+                getAcademicPeriodStorageKey(uid ?? userIdRef.current, yearId)
+              );
+              if (yearStored) {
+                const parsed = parseInt(yearStored, 10);
+                if (!isNaN(parsed) && loadedPeriods.some((p) => p.id === parsed)) {
+                  chosenId = parsed;
                 }
-              } catch (_) {}
+              }
+            } catch (_) {}
+
+            // 2. If current in-memory period belongs to loadedPeriods, retain it
+            if (
+              chosenId === null &&
+              currentPeriodId !== null &&
+              loadedPeriods.some((p) => p.id === currentPeriodId)
+            ) {
+              chosenId = currentPeriodId;
             }
 
             // 3. Try general user storage
@@ -246,8 +307,28 @@ export const AcademicPeriodProvider = ({ children }: { children: ReactNode }) =>
           });
 
           return loadedPeriods;
+        } else if (res.status === 403) {
+          // Explicit unauthorized academic year requested!
+          console.warn(`Access forbidden for academic year ${yearId}. Resetting selection.`);
+          setPeriods([]);
+          periodsRef.current = [];
+          setSelectedPeriodIdState(null);
+
+          // Fall back to active authorized year if available
+          const activeYear = academicYearsRef.current.find((y) => y.is_active);
+          const fallbackYearId = activeYear
+            ? activeYear.academic_year_id
+            : (academicYearsRef.current[0]?.academic_year_id ?? null);
+          if (fallbackYearId !== null && fallbackYearId !== yearId) {
+            setSelectedYearIdState(fallbackYearId);
+            selectedYearIdRef.current = fallbackYearId;
+            saveYearToStorage(fallbackYearId, uid ?? userIdRef.current);
+            void fetchPeriodsForYear(fallbackYearId, uid ?? userIdRef.current);
+          }
+          return [];
         } else {
           setPeriods([]);
+          periodsRef.current = [];
           setSelectedPeriodIdState(null);
           return [];
         }
@@ -255,6 +336,7 @@ export const AcademicPeriodProvider = ({ children }: { children: ReactNode }) =>
         if (currentRequestId === periodRequestIdRef.current) {
           console.error("Failed to load academic periods:", err);
           setPeriods([]);
+          periodsRef.current = [];
           setSelectedPeriodIdState(null);
         }
         return [];
@@ -267,121 +349,126 @@ export const AcademicPeriodProvider = ({ children }: { children: ReactNode }) =>
     []
   );
 
-  const fetchYearsAndPeriods = useCallback(async () => {
-    const currentYearsRequestId = ++yearsRequestIdRef.current;
-    setIsLoading(true);
-    try {
-      const res = await apiFetch("/api/v1/settings/academic-years");
-      if (currentYearsRequestId !== yearsRequestIdRef.current) {
-        return;
-      }
+  const fetchYearsAndPeriods = useCallback(
+    async (options?: { isAuthChange?: boolean; wasInitialAuth?: boolean }) => {
+      const currentYearsRequestId = ++yearsRequestIdRef.current;
+      const currentUid = userIdRef.current;
+      const currentRole = roleRef.current;
+      setIsLoading(true);
 
-      let loadedYears: AcademicYearItem[] = [];
-      if (res.ok) {
-        const data = await res.json();
-        loadedYears = data.years || [];
-        setAcademicYears(loadedYears);
-      }
-
-      let targetYearId: number | null = null;
-      setSelectedYearIdState((currentYearId) => {
-        // 1. Retain current if valid
-        if (currentYearId !== null && loadedYears.some((y) => y.academic_year_id === currentYearId)) {
-          targetYearId = currentYearId;
-          return currentYearId;
+      try {
+        const res = await apiFetch("/api/v1/settings/academic-years");
+        if (currentYearsRequestId !== yearsRequestIdRef.current) {
+          return;
         }
 
-        // 2. Try user-scoped storage
-        try {
-          const stored = localStorage.getItem(getAcademicYearStorageKey(userIdRef.current));
-          if (stored) {
-            const parsed = parseInt(stored, 10);
-            if (!isNaN(parsed) && loadedYears.some((y) => y.academic_year_id === parsed)) {
-              targetYearId = parsed;
-              return parsed;
-            }
-          }
-        } catch (_) {}
-
-        // 3. Fallback to active year or first available year
-        if (loadedYears.length > 0) {
-          const activeYear = loadedYears.find((y) => y.is_active);
-          targetYearId = activeYear ? activeYear.academic_year_id : loadedYears[0].academic_year_id;
+        let loadedYears: AcademicYearItem[] = [];
+        if (res.ok) {
+          const data = await res.json();
+          loadedYears = data.years || [];
         } else {
-          targetYearId = null;
+          loadedYears = [];
         }
 
-        saveYearToStorage(targetYearId, userIdRef.current);
-        return targetYearId;
-      });
+        // Defense-in-depth: Never show future years to Teacher, Student, or Unauthenticated callers
+        loadedYears = filterAuthorizedYears(loadedYears, currentRole);
 
-      await fetchPeriodsForYear(targetYearId, userIdRef.current);
-    } catch (err) {
-      if (currentYearsRequestId === yearsRequestIdRef.current) {
-        console.error("Failed to load academic context:", err);
-        await fetchPeriodsForYear(null, userIdRef.current);
-      }
-    }
-  }, [fetchPeriodsForYear]);
+        setAcademicYears(loadedYears);
+        academicYearsRef.current = loadedYears;
 
-  useEffect(() => {
-    void fetchYearsAndPeriods();
-  }, [fetchYearsAndPeriods]);
+        const isAuthChange = options?.isAuthChange ?? false;
+        const wasInitialAuth = options?.wasInitialAuth ?? false;
 
-  // Handle user account switch / login / logout to re-scope stored selections
-  const prevUserIdRef = useRef<string | null>(userId);
-  useEffect(() => {
-    if (prevUserIdRef.current !== userId) {
-      const wasInitialAuth = prevUserIdRef.current === null;
-      prevUserIdRef.current = userId;
-
-      if (academicYears.length > 0) {
         let targetYearId: number | null = null;
-        try {
-          const stored = localStorage.getItem(getAcademicYearStorageKey(userId));
-          if (stored) {
-            const parsed = parseInt(stored, 10);
-            if (!isNaN(parsed) && academicYears.some((y) => y.academic_year_id === parsed)) {
-              targetYearId = parsed;
-            }
-          }
-        } catch (_) {}
 
-        // Fallback 1: Retain current selected year if valid (initial auth resolution only, avoid cross-user leak)
+        // If not an auth change and current selection is still valid in loadedYears, retain it
         if (
-          wasInitialAuth &&
-          targetYearId === null &&
-          selectedYearId !== null &&
-          academicYears.some((y) => y.academic_year_id === selectedYearId)
+          !isAuthChange &&
+          selectedYearIdRef.current !== null &&
+          loadedYears.some((y) => y.academic_year_id === selectedYearIdRef.current)
         ) {
-          targetYearId = selectedYearId;
+          targetYearId = selectedYearIdRef.current;
         }
 
-        // Fallback 2: Check unscoped storage key (initial auth resolution only)
-        if (wasInitialAuth && targetYearId === null) {
+        // 1. Try user-scoped storage for the current user
+        if (targetYearId === null) {
           try {
-            const unscoped = localStorage.getItem(ACADEMIC_YEAR_STORAGE_KEY);
-            if (unscoped) {
-              const parsed = parseInt(unscoped, 10);
-              if (!isNaN(parsed) && academicYears.some((y) => y.academic_year_id === parsed)) {
+            const stored = localStorage.getItem(getAcademicYearStorageKey(currentUid));
+            if (stored) {
+              const parsed = parseInt(stored, 10);
+              if (!isNaN(parsed) && loadedYears.some((y) => y.academic_year_id === parsed)) {
                 targetYearId = parsed;
               }
             }
           } catch (_) {}
         }
 
-        // Fallback 3: Active year or first available year
-        if (targetYearId === null) {
-          const activeYear = academicYears.find((y) => y.is_active);
-          targetYearId = activeYear ? activeYear.academic_year_id : (academicYears[0]?.academic_year_id ?? null);
+        // 2. Initial auth resolution: retain current selection or unscoped storage if valid
+        if (targetYearId === null && wasInitialAuth) {
+          if (
+            selectedYearIdRef.current !== null &&
+            loadedYears.some((y) => y.academic_year_id === selectedYearIdRef.current)
+          ) {
+            targetYearId = selectedYearIdRef.current;
+          } else {
+            try {
+              const unscoped = localStorage.getItem(ACADEMIC_YEAR_STORAGE_KEY);
+              if (unscoped) {
+                const parsed = parseInt(unscoped, 10);
+                if (!isNaN(parsed) && loadedYears.some((y) => y.academic_year_id === parsed)) {
+                  targetYearId = parsed;
+                }
+              }
+            } catch (_) {}
+          }
         }
 
+        // 3. Fallback to active year or first available authorized year
+        if (targetYearId === null) {
+          if (loadedYears.length > 0) {
+            const activeYear = loadedYears.find((y) => y.is_active);
+            targetYearId = activeYear ? activeYear.academic_year_id : loadedYears[0].academic_year_id;
+          } else {
+            targetYearId = null;
+          }
+        }
+
+        // Reject/reset stored selection if no longer authorized or update storage with chosen year
+        saveYearToStorage(targetYearId, currentUid);
         setSelectedYearIdState(targetYearId);
-        saveYearToStorage(targetYearId, userId);
-        void fetchPeriodsForYear(targetYearId, userId);
+        selectedYearIdRef.current = targetYearId;
+
+        if (currentYearsRequestId === yearsRequestIdRef.current) {
+          await fetchPeriodsForYear(targetYearId, currentUid);
+        }
+      } catch (err) {
+        if (currentYearsRequestId === yearsRequestIdRef.current) {
+          console.error("Failed to load academic context:", err);
+          await fetchPeriodsForYear(null, currentUid);
+        }
       }
+    },
+    [fetchPeriodsForYear]
+  );
+
+  useEffect(() => {
+    void fetchYearsAndPeriods();
+  }, [fetchYearsAndPeriods]);
+
+  // Handle user account switch / login / logout to re-fetch authorized years and re-scope stored selections
+  const currentAuthKey = `${userId ?? ""}:${role ?? ""}`;
+  const prevAuthKeyRef = useRef<string>(currentAuthKey);
+  const prevUserIdRef = useRef<string | null>(userId);
+
+  useEffect(() => {
+    if (prevAuthKeyRef.current !== currentAuthKey) {
+      const wasInitialAuth = prevUserIdRef.current === null && userId !== null;
+      prevAuthKeyRef.current = currentAuthKey;
+      prevUserIdRef.current = userId;
+
+      void fetchYearsAndPeriods({ isAuthChange: true, wasInitialAuth });
     }
-  }, [userId, academicYears, fetchPeriodsForYear, selectedYearId]);
+  }, [currentAuthKey, userId, fetchYearsAndPeriods]);
 
   const applyPeriodChange = useCallback(
     (nextId: number | null) => {
@@ -394,6 +481,13 @@ export const AcademicPeriodProvider = ({ children }: { children: ReactNode }) =>
   const requestPeriodChange = useCallback(
     (nextId: number | null) => {
       if (nextId === selectedPeriodId) return;
+
+      if (nextId !== null && periodsRef.current.length > 0) {
+        if (!periodsRef.current.some((p) => p.id === nextId)) {
+          console.warn(`Attempted to select unauthorized academic period: ${nextId}`);
+          return;
+        }
+      }
 
       const guards = Array.from(dirtyGuardsRef.current.values());
       const activeGuard = guards.find((g) => g.isDirty());
@@ -416,6 +510,7 @@ export const AcademicPeriodProvider = ({ children }: { children: ReactNode }) =>
   const applyYearChange = useCallback(
     (nextYearId: number | null) => {
       setSelectedYearIdState(nextYearId);
+      selectedYearIdRef.current = nextYearId;
       saveYearToStorage(nextYearId, userIdRef.current);
       void fetchPeriodsForYear(nextYearId, userIdRef.current);
     },
@@ -425,6 +520,14 @@ export const AcademicPeriodProvider = ({ children }: { children: ReactNode }) =>
   const requestYearChange = useCallback(
     (nextYearId: number | null) => {
       if (nextYearId === selectedYearId) return;
+
+      // Reject selecting an unauthorized academic year
+      if (nextYearId !== null && academicYearsRef.current.length > 0) {
+        if (!academicYearsRef.current.some((y) => y.academic_year_id === nextYearId)) {
+          console.warn(`Attempted to select unauthorized academic year: ${nextYearId}`);
+          return;
+        }
+      }
 
       const guards = Array.from(dirtyGuardsRef.current.values());
       const activeGuard = guards.find((g) => g.isDirty());
