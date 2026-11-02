@@ -47,7 +47,12 @@ from app.services.classes.ExistingClassDistributionService import preview_existi
 from app.schemas.OfficialSection import OfficialSectionCreate, OfficialSectionUpdate, OfficialSectionRead, OfficialSectionList
 from app.schemas.ClassSetup import AcademicYearSetupRequest, AcademicYearSetupResponse
 from app.services.classes.ClassSetupService import setup_academic_year
-from app.services.classes.OfficialSectionService import list_official_sections, create_official_section, update_official_section
+from app.services.classes.OfficialSectionService import (
+    list_official_sections,
+    create_official_section,
+    update_official_section,
+    delete_official_section,
+)
 
 # CLASS MANAGEMENT FLOW
 # 1. The admin frontend sends a request to one of the endpoints in this file.
@@ -98,6 +103,15 @@ def edit_official_section(
     db: Session = Depends(get_db),
 ):
     return update_official_section(db, section_id, payload)
+
+
+@router.delete("/official-sections/{section_id}")
+def remove_official_section(
+    section_id: int,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return delete_official_section(db, section_id)
 
 
 @router.get("", response_model=ClassListResponse)

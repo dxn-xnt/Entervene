@@ -2,16 +2,19 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { getClassFormOptions } from "@/lib/api";
-import type { AdviserOption, ClassFormOptions, ManualClassSetup, ManualSectionDraft } from "@/types/adminClasses";
+import { deleteOfficialSection, fetchPathways, getClassFormOptions, type AcademicPathwayRead } from "@/lib/api";
+import type { AdviserOption, ClassFormOptions, ManualClassSetup, ManualSectionDraft, OfficialSectionOption } from "@/types/adminClasses";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/admin/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Select } from "@/components/retroui/Select";
+import { Input } from "@/components/retroui/Input";
+import { Badge } from "@/components/retroui/Badge";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
 import { FormMessage } from "@/components/retroui/FormMessage";
 import { RoleBadge } from "@/components/role-badge";
+import { useToast } from "@/components/retroui/Toast";
 
 type SetupErrors = {
   academicLevel?: string;
@@ -33,18 +36,6 @@ function adviserName(adviser?: AdviserOption) {
   return [adviser.first_name, adviser.middle_name, adviser.last_name, adviser.suffix].filter(Boolean).join(" ");
 }
 
-function getInitialSectionsForLevel(options: ClassFormOptions | null, levelId: string | number): ManualSectionDraft[] {
-  const available = (options?.official_sections ?? []).filter(
-    (section) => section.academic_level_id === Number(levelId) && section.is_active && !section.has_class
-  );
-  if (available.length > 0) {
-    return available.map((section) =>
-      createSectionDraft(section.section_name, "", section.pathway_code || "general")
-    );
-  }
-  return [createSectionDraft()];
-}
-
 export default function ManualClassWizard({ initialSetup, onComplete, onSkipStudents, onBack, onClose }: {
   initialSetup: ManualClassSetup | null;
   onComplete: (setup: ManualClassSetup) => void;
@@ -52,6 +43,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
   onBack: () => void;
   onClose: () => void;
 }) {
+  const toast = useToast();
   const [options, setOptions] = useState<ClassFormOptions | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -60,6 +52,9 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
   const [sections, setSections] = useState<ManualSectionDraft[]>(initialSetup?.sections ?? [createSectionDraft()]);
   const [errors, setErrors] = useState<SetupErrors>({ sectionRows: {} });
   const [retryKey, setRetryKey] = useState(0);
+  const [availablePathways, setAvailablePathways] = useState<AcademicPathwayRead[]>([]);
+  const [sectionToDelete, setSectionToDelete] = useState<OfficialSectionOption | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const loadedYearIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -80,8 +75,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
         setAcademicLevelId((current) => current || defaultLevelId);
 
         if (!initialSetup?.sections) {
-          const effectiveLevelId = academicLevelId || defaultLevelId;
-          setSections(getInitialSectionsForLevel(classData, effectiveLevelId));
+          setSections([createSectionDraft()]);
         }
       })
       .catch((error: unknown) => {
@@ -96,6 +90,14 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
     };
   }, [retryKey, selectedYearId]);
 
+  useEffect(() => {
+    fetchPathways(true)
+      .then((res) => {
+        if (res?.pathways) setAvailablePathways(res.pathways);
+      })
+      .catch(() => {});
+  }, []);
+
   function retryLoading() {
     setLoading(true);
     setLoadError("");
@@ -104,7 +106,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
 
   function handleAcademicLevelChange(newLevelId: string) {
     setAcademicLevelId(newLevelId);
-    setSections(getInitialSectionsForLevel(options, newLevelId));
+    setSections([createSectionDraft()]);
     setErrors((current) => ({ ...current, academicLevel: undefined, sectionRows: {} }));
   }
 
@@ -112,17 +114,32 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
   const isSeniorHigh = selectedLevel ? selectedLevel.grade_level >= 11 : false;
   const needsPathway = isSeniorHigh && (selectedLevel?.requires_pathway ?? false);
   const showPathwayColumn = needsPathway;
-  const configuredSections = (options?.official_sections ?? []).filter((section) => section.academic_level_id === Number(academicLevelId) && section.is_active);
-  const availableSections = configuredSections.filter((section) => !section.has_class);
-  const selectedSectionNames = new Set(sections.map((section) => section.sectionName).filter(Boolean));
-  const nextUnusedSection = availableSections.find((section) => !selectedSectionNames.has(section.section_name));
-  const canAddSection = sections.every((section) => Boolean(section.sectionName)) && Boolean(nextUnusedSection);
+
+  // Existing sections for this grade level in the active academic year
+  const existingGradeSections = (options?.official_sections ?? []).filter(
+    (sec) => sec.academic_level_id === Number(academicLevelId) && sec.is_active
+  );
+
+  // Pathway options for senior high
+  const pathwayOptions = availablePathways.length > 0
+    ? availablePathways
+    : (options?.official_sections ?? [])
+        .filter((sec) => sec.pathway_code && sec.pathway_name)
+        .map((sec) => ({
+          id: sec.pathway_id || 0,
+          code: sec.pathway_code || "",
+          name: sec.pathway_name || "",
+          is_enabled: true,
+          sort_order: 0,
+        }));
+
+  const canAddSection = sections.every((section) => Boolean(section.sectionName.trim()));
 
   function addSection() {
     setSections((current) => {
-      if (current.some((section) => !section.sectionName)) return current;
-      const next = availableSections.find((option) => !current.some((section) => section.sectionName === option.section_name));
-      return next ? [...current, createSectionDraft(next.section_name, "", next.pathway_code || "general")] : current;
+      if (current.some((section) => !section.sectionName.trim())) return current;
+      const defaultPathway = showPathwayColumn && pathwayOptions[0] ? pathwayOptions[0].code : "general";
+      return [...current, createSectionDraft("", "", defaultPathway)];
     });
   }
 
@@ -130,7 +147,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
     setSections((current) => current.map((section) => section.localId === localId ? { ...section, ...changes } : section));
     setErrors((current) => {
       const row = { ...current.sectionRows[localId] };
-      if (changes.sectionName && availableSections.some((item) => item.section_name === changes.sectionName)) delete row.sectionName;
+      if (changes.sectionName && changes.sectionName.trim()) delete row.sectionName;
       if (changes.adviserStaffId) delete row.adviserStaffId;
       const sectionRows = { ...current.sectionRows };
       if (Object.keys(row).length) sectionRows[localId] = row;
@@ -139,15 +156,35 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
     });
   }
 
+  async function handleConfirmDelete() {
+    if (!sectionToDelete) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteOfficialSection(sectionToDelete.id);
+      toast.success({ title: res.message || "Section deleted" });
+      setSectionToDelete(null);
+      const classData = await getClassFormOptions(selectedYearId ? Number(selectedYearId) : undefined);
+      setOptions(classData);
+    } catch (err: unknown) {
+      toast.error({
+        title: "Unable to delete section",
+        description: err instanceof Error ? err.message : "Error deleting section",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   function validate() {
     const nextErrors: SetupErrors = { sectionRows: {} };
     if (!academicLevelId) nextErrors.academicLevel = "Select an academic level.";
-    if (!configuredSections.length) {
-      nextErrors.academicLevel = "No official sections are configured for this grade and academic year. Configure them in System Settings or use another year.";
-    } else if (!availableSections.length) {
-      nextErrors.academicLevel = `All configured ${selectedLevel?.level_name || "Grade"} sections for this academic year already have classes. You can manage the existing classes or configure another authorized section.`;
-    }
     if (!sections.length) nextErrors.sections = "Add at least one section.";
+
+    const existingClassNames = new Set(
+      existingGradeSections
+        .filter((sec) => sec.has_class)
+        .map((sec) => sec.section_name.trim().toLowerCase())
+    );
 
     const names = new Map<string, string>();
     const advisers = new Set<string>();
@@ -156,13 +193,24 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
       const trimmedName = section.sectionName.trim();
       const normalizedName = trimmedName.toLocaleLowerCase();
 
-      if (!trimmedName) rowErrors.sectionName = "Enter a section name.";
-      else if (!availableSections.some((option) => option.section_name === trimmedName && option.pathway_code === (section.pathway === "general" ? null : section.pathway))) rowErrors.sectionName = "Select an available official section.";
-      else if (names.has(normalizedName)) rowErrors.sectionName = `Section name duplicates "${names.get(normalizedName)}".`;
-      else names.set(normalizedName, trimmedName);
-      if (!section.adviserStaffId) rowErrors.adviserStaffId = "Select an adviser.";
-      else if (advisers.has(section.adviserStaffId)) rowErrors.adviserStaffId = "Each adviser can only be assigned to one section per academic year.";
-      else advisers.add(section.adviserStaffId);
+      if (!trimmedName) {
+        rowErrors.sectionName = "Enter a section name.";
+      } else if (existingClassNames.has(normalizedName)) {
+        rowErrors.sectionName = `A class with section name "${trimmedName}" already exists for this grade.`;
+      } else if (names.has(normalizedName)) {
+        rowErrors.sectionName = `Section name duplicates "${names.get(normalizedName)}".`;
+      } else {
+        names.set(normalizedName, trimmedName);
+      }
+
+      if (!section.adviserStaffId) {
+        rowErrors.adviserStaffId = "Select an adviser.";
+      } else if (advisers.has(section.adviserStaffId)) {
+        rowErrors.adviserStaffId = "Each adviser can only be assigned to one section per academic year.";
+      } else {
+        advisers.add(section.adviserStaffId);
+      }
+
       if (Object.keys(rowErrors).length) nextErrors.sectionRows[section.localId] = rowErrors;
     });
 
@@ -181,7 +229,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
       sections: sections.map((section) => ({
         ...section,
         sectionName: section.sectionName.trim(),
-        pathway: availableSections.find((option) => option.section_name === section.sectionName)?.pathway_code || "general",
+        pathway: section.pathway || "general",
         adviserName: adviserName(options.eligible_advisers.find((adviser) => adviser.staff_id === section.adviserStaffId)),
       })),
     });
@@ -204,63 +252,102 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
 
   return (
     <div className="grid gap-5">
-      <Field label="Academic Year" isRequired>
-        <Select value={selectedYearId} onValueChange={(value) => {
-          setSelectedYearId(value);
-          setOptions(null);
-          setLoading(true);
-          setSections([createSectionDraft()]);
-          setErrors({ sectionRows: {} });
-        }}>
-          <Select.Trigger className="w-full"><Select.Value placeholder="Select academic year" /></Select.Trigger>
-          <Select.Content><Select.Group>
-            {(options.academic_years ?? [options.academic_year]).map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}</Select.Item>)}
-          </Select.Group></Select.Content>
-        </Select>
-      </Field>
-      {noAdvisers && (
-        <Text as="p" className="text-xs text-muted-foreground">
-          All advisers are currently assigned for the active academic year. You can create sections after freeing an adviser slot.
-        </Text>
+      <div className="grid grid-cols-2 gap-4 -mb-3">
+        <div className="flex flex-col gap-1">
+          <Field label="Academic Year" isRequired>
+            <Select value={selectedYearId} onValueChange={(value) => {
+              setSelectedYearId(value);
+              setOptions(null);
+              setLoading(true);
+              setSections([createSectionDraft()]);
+              setErrors({ sectionRows: {} });
+            }}>
+              <Select.Trigger className="w-full"><Select.Value placeholder="Select academic year" /></Select.Trigger>
+              <Select.Content><Select.Group>
+                {(options.academic_years ?? [options.academic_year]).map((year) => <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>{year.year_label}</Select.Item>)}
+              </Select.Group></Select.Content>
+            </Select>
+          </Field>
+          {noAdvisers && (
+            <Text as="p" className="text-xs text-muted-foreground">
+              All advisers are currently assigned for the active academic year.
+            </Text>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <Field label="Academic Level" isRequired>
+            <Select
+              disabled={noLevels}
+              value={academicLevelId}
+              onValueChange={handleAcademicLevelChange}
+              onChange={(e) => handleAcademicLevelChange(e.target.value)}
+            >
+              <Select.Trigger
+                id="new-class-academic-level"
+                className="w-full aria-[invalid=true]:border-destructive"
+                aria-invalid={!!errors.academicLevel}
+                aria-describedby={errors.academicLevel ? "new-class-academic-level-error" : undefined}
+              >
+                <Select.Value placeholder="Select level" />
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Group>
+                  {options.academic_levels.map((level) => (
+                    <Select.Item key={level.academic_level_id} value={String(level.academic_level_id)}>
+                      {level.level_name}
+                    </Select.Item>
+                  ))}
+                </Select.Group>
+              </Select.Content>
+            </Select>
+            {errors.academicLevel && <InlineError id="new-class-academic-level-error" message={errors.academicLevel} />}
+          </Field>
+        </div>
+      </div>
+
+      {/* Existing Sections for this Grade Level (Read-only list with Delete confirmation) */}
+      {existingGradeSections.length > 0 && (
+        <div className="flex flex-col gap-2 rounded border-2 border-border bg-muted/20 p-3">
+          <div className="flex items-center justify-between">
+            <Text className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              Existing {selectedLevel?.level_name || "Grade"} Sections ({existingGradeSections.length})
+            </Text>
+          </div>
+          <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
+            {existingGradeSections.map((sec) => (
+              <div key={sec.id} className="flex items-center justify-between gap-2 rounded border-2 border-border bg-background p-2 text-sm shadow-none">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-bold truncate">{sec.section_name}</span>
+                  {sec.pathway_name && (
+                    <Badge variant="outline" size="sm" className="truncate text-xs">
+                      {sec.pathway_name}
+                    </Badge>
+                  )}
+                  <Badge variant={sec.has_class ? "secondary" : "outline"} size="sm">
+                    {sec.has_class ? "In use" : "Configured"}
+                  </Badge>
+                </div>
+                {/* Unable to edit; can be deleted with confirmation dialog */}
+                <Button
+                  aria-label={`Delete ${sec.section_name}`}
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive h-7 px-2 text-xs shrink-0"
+                  onClick={() => setSectionToDelete(sec)}
+                >
+                  <Trash2 className="size-3.5 mr-1" /> Delete
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
-      <Field label="Academic Level" isRequired>
-        <Select
-          disabled={noLevels}
-          value={academicLevelId}
-          onValueChange={handleAcademicLevelChange}
-          onChange={(e) => handleAcademicLevelChange(e.target.value)}
-        >
-          <Select.Trigger
-            id="new-class-academic-level"
-            className="w-full aria-[invalid=true]:border-destructive"
-            aria-invalid={!!errors.academicLevel}
-            aria-describedby={errors.academicLevel ? "new-class-academic-level-error" : undefined}
-          >
-            <Select.Value placeholder="Select level" />
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Group>
-              {options.academic_levels.map((level) => (
-                <Select.Item key={level.academic_level_id} value={String(level.academic_level_id)}>
-                  {level.level_name}
-                </Select.Item>
-              ))}
-            </Select.Group>
-          </Select.Content>
-        </Select>
-        {errors.academicLevel && <InlineError id="new-class-academic-level-error" message={errors.academicLevel} />}
-        {!errors.academicLevel && !configuredSections.length && (
-          <InlineError message="No official sections are configured for this grade and academic year. Configure them in System Settings or use another year." />
-        )}
-        {!errors.academicLevel && configuredSections.length > 0 && !availableSections.length && (
-          <InlineError message={`All configured ${selectedLevel?.level_name || "Grade"} sections for this academic year already have classes. You can manage the existing classes or configure another authorized section.`} />
-        )}
-      </Field>
-
+      {/* New Sections & Advisers input table */}
       <section className="grid gap-3">
         <div className="flex items-center justify-between">
-          <Text className="text-sm font-semibold">Sections & Advisers</Text>
+          <Text className="text-sm font-semibold">New Sections & Advisers</Text>
           {errors.sections && <InlineError message={errors.sections} />}
         </div>
 
@@ -282,50 +369,38 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
           return (
             <div key={section.localId} className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} items-start gap-2`}>
               <div>
-                <Select
+                <Input
+                  id={`new-class-section-${section.localId}`}
                   value={section.sectionName}
-                  onValueChange={(name) => {
-                    const chosen = availableSections.find((option) => option.section_name === name);
-                    updateSection(section.localId, {
-                      sectionName: name,
-                      pathway: chosen?.pathway_code || "general",
-                    });
-                  }}
-                >
-                  <Select.Trigger
-                    id={`new-class-section-${section.localId}`}
-                    className="w-full aria-[invalid=true]:border-destructive"
-                    aria-invalid={!!rowErrors?.sectionName}
-                    aria-describedby={rowErrors?.sectionName ? `new-class-section-error-${section.localId}` : undefined}
-                  >
-                    <Select.Value placeholder="Select official section" />
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Group>
-                      {availableSections
-                        .filter(
-                          (option) =>
-                            option.section_name === section.sectionName ||
-                            !sections.some(
-                              (other) => other.localId !== section.localId && other.sectionName === option.section_name
-                            )
-                        )
-                        .map((option) => (
-                          <Select.Item key={option.id} value={option.section_name}>
-                            {option.section_name}
-                            {option.pathway_name ? ` — ${option.pathway_name}` : ""}
-                          </Select.Item>
-                        ))}
-                    </Select.Group>
-                  </Select.Content>
-                </Select>
+                  placeholder="e.g. Diamond, Archimedes"
+                  className="w-full h-10 aria-[invalid=true]:border-destructive"
+                  aria-invalid={!!rowErrors?.sectionName}
+                  aria-describedby={rowErrors?.sectionName ? `new-class-section-error-${section.localId}` : undefined}
+                  onChange={(e) => updateSection(section.localId, { sectionName: e.target.value })}
+                />
                 {rowErrors?.sectionName && (
                   <InlineError id={`new-class-section-error-${section.localId}`} message={rowErrors.sectionName} />
                 )}
               </div>
               {showPathwayColumn && (
                 <div>
-                  <div className="flex min-h-10 items-center border-2 border-black px-2 text-xs">{availableSections.find((option) => option.section_name === section.sectionName)?.pathway_name ?? "Choose a section"}</div>
+                  <Select
+                    value={section.pathway || ""}
+                    onValueChange={(val) => updateSection(section.localId, { pathway: val })}
+                  >
+                    <Select.Trigger className="w-full">
+                      <Select.Value placeholder="Select pathway" />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Group>
+                        {pathwayOptions.map((pw) => (
+                          <Select.Item key={pw.code} value={pw.code}>
+                            {pw.name}
+                          </Select.Item>
+                        ))}
+                      </Select.Group>
+                    </Select.Content>
+                  </Select>
                 </div>
               )}
               <div>
@@ -375,9 +450,34 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
           disabled={!canAddSection}
           onClick={addSection}
         >
-          <Plus className="size-4 mr-2" />{nextUnusedSection ? "Add Another Section" : "All Available Sections Added"}
+          <Plus className="size-4 mr-2" />Add Another Section
         </Button>
       </section>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!sectionToDelete} onOpenChange={(open) => !open && setSectionToDelete(null)}>
+        <Dialog.Content size="sm">
+          <Dialog.Header>
+            <Dialog.Title>Delete Section</Dialog.Title>
+            <Dialog.Description>
+              Are you sure you want to delete section <strong>{sectionToDelete?.section_name}</strong>?
+              {sectionToDelete?.has_class ? " This section has an active class. Safe deletion will remove it if no active student records or grades exist, or archive it if records are present." : ""}
+            </Dialog.Description>
+          </Dialog.Header>
+          <Dialog.Footer className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setSectionToDelete(null)} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={isDeleting}
+              onClick={handleConfirmDelete}
+            >
+              {isDeleting ? "Deleting..." : "Delete Section"}
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
 
       <Dialog.Footer className="-mx-4 -mb-4 w-[calc(100%+2rem)] justify-between border-t-2 px-4 py-4">
         <Button variant="outline" onClick={onClose}>Close</Button>
@@ -385,14 +485,14 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
           <Button variant="outline" onClick={onBack}>Back</Button>
           <Button
             variant="outline"
-            disabled={noLevels || noAdvisers || !availableSections.length}
+            disabled={noLevels || noAdvisers || !sections.length}
             onClick={() => completeDetails(onSkipStudents)}
           >
             Review without Students
           </Button>
           <Button
             variant="default"
-            disabled={noLevels || noAdvisers || !availableSections.length}
+            disabled={noLevels || noAdvisers || !sections.length}
             onClick={() => completeDetails(onComplete)}
           >
             Assign Students
