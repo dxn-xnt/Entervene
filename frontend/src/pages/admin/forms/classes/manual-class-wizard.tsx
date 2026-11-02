@@ -306,48 +306,10 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
         </div>
       </div>
 
-      {/* Existing Sections for this Grade Level (Read-only list with Delete confirmation) */}
-      {existingGradeSections.length > 0 && (
-        <div className="flex flex-col gap-2 rounded border-2 border-border bg-muted/20 p-3">
-          <div className="flex items-center justify-between">
-            <Text className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-              Existing {selectedLevel?.level_name || "Grade"} Sections ({existingGradeSections.length})
-            </Text>
-          </div>
-          <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
-            {existingGradeSections.map((sec) => (
-              <div key={sec.id} className="flex items-center justify-between gap-2 rounded border-2 border-border bg-background p-2 text-sm shadow-none">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-bold truncate">{sec.section_name}</span>
-                  {sec.pathway_name && (
-                    <Badge variant="outline" size="sm" className="truncate text-xs">
-                      {sec.pathway_name}
-                    </Badge>
-                  )}
-                  <Badge variant={sec.has_class ? "secondary" : "outline"} size="sm">
-                    {sec.has_class ? "In use" : "Configured"}
-                  </Badge>
-                </div>
-                {/* Unable to edit; can be deleted with confirmation dialog */}
-                <Button
-                  aria-label={`Delete ${sec.section_name}`}
-                  variant="outline"
-                  size="sm"
-                  className="text-destructive hover:bg-destructive/10 hover:text-destructive h-7 px-2 text-xs shrink-0"
-                  onClick={() => setSectionToDelete(sec)}
-                >
-                  <Trash2 className="size-3.5 mr-1" /> Delete
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* New Sections & Advisers input table */}
+      {/* Sections & Advisers table */}
       <section className="grid gap-3">
         <div className="flex items-center justify-between">
-          <Text className="text-sm font-semibold">New Sections & Advisers</Text>
+          <Text className="text-sm font-semibold">Sections & Advisers</Text>
           {errors.sections && <InlineError message={errors.sections} />}
         </div>
 
@@ -357,6 +319,65 @@ export default function ManualClassWizard({ initialSetup, onComplete, onSkipStud
           <span>Adviser <span className="text-red-500">*</span></span>
           <span />
         </div>
+
+        {/* Existing sections of this grade level (read-only with delete action) */}
+        {existingGradeSections.map((sec) => (
+          <div
+            key={`existing-${sec.id}`}
+            className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} items-center gap-2`}
+          >
+            <div className="relative flex items-center">
+              <Input
+                value={sec.section_name}
+                disabled
+                readOnly
+                aria-label={`Existing section ${sec.section_name}`}
+                className="w-full h-10 bg-muted/30 text-foreground font-semibold cursor-not-allowed pr-20"
+              />
+              <Badge
+                variant={sec.has_class ? "secondary" : "outline"}
+                size="sm"
+                className="absolute right-2 text-xs select-none pointer-events-none"
+              >
+                {sec.has_class ? "In use" : "Configured"}
+              </Badge>
+            </div>
+
+            {showPathwayColumn && (
+              <div>
+                <Input
+                  value={sec.pathway_name || "General"}
+                  disabled
+                  readOnly
+                  aria-label={`Pathway for ${sec.section_name}`}
+                  className="w-full h-10 bg-muted/30 text-muted-foreground cursor-not-allowed text-xs"
+                />
+              </div>
+            )}
+
+            <div>
+              <Input
+                value={sec.adviser_name || (sec.has_class ? "Assigned" : "Unassigned")}
+                disabled
+                readOnly
+                aria-label={`Adviser for ${sec.section_name}`}
+                className="w-full h-10 bg-muted/30 text-muted-foreground cursor-not-allowed text-sm"
+              />
+            </div>
+
+            <Button
+              type="button"
+              aria-label={`Delete ${sec.section_name}`}
+              variant="outline"
+              size="sm"
+              className="h-10 w-9 p-0 text-destructive border-border hover:border-destructive hover:bg-destructive/10 shrink-0"
+              onClick={() => setSectionToDelete(sec)}
+              title={`Delete ${sec.section_name}`}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </div>
+        ))}
 
         {sections.map((section) => {
           const rowErrors = errors.sectionRows[section.localId];

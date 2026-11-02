@@ -8,18 +8,36 @@ from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.OfficialSection import OfficialSection
+from app.models.people.AcademicStaff import AcademicStaff
 from app.services.classes.ClassShared import normalized_text, readable_text
 from app.services.pathways.PathwayScopeService import resolve_pathway_scope
 from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 
 
 def section_read(db: Session, section: OfficialSection) -> dict:
-    existing_class = db.query(Class.class_id, Class.class_status).filter(
-        Class.academic_year_id == section.academic_year_id,
-        Class.academic_level_id == section.academic_level_id,
-        func.lower(Class.section_name) == section.normalized_name,
-    ).first()
+    existing_class = (
+        db.query(
+            Class.class_id,
+            Class.class_status,
+            Class.adviser_staff_id,
+            AcademicStaff.first_name,
+            AcademicStaff.middle_name,
+            AcademicStaff.last_name,
+            AcademicStaff.suffix,
+        )
+        .outerjoin(AcademicStaff, Class.adviser_staff_id == AcademicStaff.staff_id)
+        .filter(
+            Class.academic_year_id == section.academic_year_id,
+            Class.academic_level_id == section.academic_level_id,
+            func.lower(Class.section_name) == section.normalized_name,
+        )
+        .first()
+    )
     has_class = existing_class is not None
+    adviser_name = None
+    if existing_class and existing_class[2]:
+        name_parts = [existing_class[3], existing_class[4], existing_class[5], existing_class[6]]
+        adviser_name = " ".join(part for part in name_parts if part)
     return {
         "id": section.id,
         "academic_year_id": section.academic_year_id,
@@ -32,6 +50,8 @@ def section_read(db: Session, section: OfficialSection) -> dict:
         "has_class": has_class,
         "class_id": existing_class[0] if existing_class else None,
         "class_status": existing_class[1] if existing_class else None,
+        "adviser_staff_id": existing_class[2] if existing_class else None,
+        "adviser_name": adviser_name,
     }
 
 

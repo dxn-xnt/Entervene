@@ -67,11 +67,11 @@ it("displays existing sections for selected grade level as read-only and deletes
 
   render(<ManualClassWizard initialSetup={null} onComplete={vi.fn()} onSkipStudents={vi.fn()} onBack={vi.fn()} onClose={vi.fn()} />);
 
-  // Existing sections displayed
+  // Existing sections displayed on Sections & Advisers
   await waitFor(() => {
-    expect(screen.getByText("Existing Grade 7 Sections (2)")).toBeTruthy();
-    expect(screen.getByText("Aristotle")).toBeTruthy();
-    expect(screen.getByText("Galileo")).toBeTruthy();
+    expect(screen.getByText("Sections & Advisers")).toBeTruthy();
+    expect(screen.getByDisplayValue("Aristotle")).toBeTruthy();
+    expect(screen.getByDisplayValue("Galileo")).toBeTruthy();
   });
 
   // Click delete on Galileo

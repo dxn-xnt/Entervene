@@ -194,3 +194,81 @@ describe("Subject Load Studio offering eligibility", () => {
     ]));
   });
 });
+
+describe("Subject Load Studio Grade and Status filters", () => {
+  it("renders Grade pill buttons and filters displayed section by grade level", async () => {
+    const multiGradeData = {
+      active_period_id: 1,
+      academic_years: [{ academic_year_id: 1, year_label: "2026-2027", is_active: true }],
+      academic_periods: [{ academic_period_id: 1, period_name: "Term 1", is_active: true }],
+      academic_levels: [
+        { academic_level_id: 7, level_name: "Grade 7", grade_level: 7 },
+        { academic_level_id: 8, level_name: "Grade 8", grade_level: 8 },
+      ],
+      classes: [
+        { class_id: 101, section_name: "Apollo", academic_level_id: 7, academic_year_id: 1 },
+        { class_id: 102, section_name: "Zeus", academic_level_id: 8, academic_year_id: 1 },
+      ],
+      subjects: [
+        { subject_id: 1, subject_name: "Science 7", subject_codename: "SCI7", academic_level_id: 7 },
+        { subject_id: 2, subject_name: "Science 8", subject_codename: "SCI8", academic_level_id: 8 },
+      ],
+      subject_offerings: [
+        { subject_offering_id: 1, subject_id: 1, academic_year_id: 1, academic_level_id: 7, academic_period_id: 1 },
+        { subject_offering_id: 2, subject_id: 2, academic_year_id: 1, academic_level_id: 8, academic_period_id: 1 },
+      ],
+      teachers: [{ staff_id: "T1", name: "Teacher One", department: "Science", specialization: "Science" }],
+      existing_loads: [],
+      has_pending_draft_by_class: {},
+    };
+
+    getStudio.mockResolvedValue(multiGradeData);
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+
+    render(<AdminSubjectLoadStudio />);
+
+    await waitFor(() => expect(screen.getByText("Grade:")).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Grade 7" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Grade 8" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "All" })).toBeTruthy();
+
+    expect(screen.getByText("Apollo")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next section" }));
+    await waitFor(() => expect(screen.getByText("Zeus")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Grade 7" }));
+    await waitFor(() => expect(screen.getByText("Apollo")).toBeTruthy());
+    expect(screen.queryByText("Zeus")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Grade 8" }));
+    await waitFor(() => expect(screen.getByText("Zeus")).toBeTruthy());
+    expect(screen.queryByText("Apollo")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    await waitFor(() => expect(screen.getByText("Apollo")).toBeTruthy());
+  });
+
+  it("renders Status filter dropdown with options replacing the grade select", async () => {
+    const statusData = {
+      active_period_id: 1,
+      academic_years: [{ academic_year_id: 1, year_label: "2026-2027", is_active: true }],
+      academic_periods: [{ academic_period_id: 1, period_name: "Term 1", is_active: true }],
+      academic_levels: [{ academic_level_id: 7, level_name: "Grade 7", grade_level: 7 }],
+      classes: [{ class_id: 101, section_name: "Apollo", academic_level_id: 7, academic_year_id: 1 }],
+      subjects: [{ subject_id: 1, subject_name: "Science 7", subject_codename: "SCI7", academic_level_id: 7 }],
+      subject_offerings: [{ subject_offering_id: 1, subject_id: 1, academic_year_id: 1, academic_level_id: 7, academic_period_id: 1 }],
+      teachers: [{ staff_id: "T1", name: "Teacher One", department: "Science", specialization: "Science" }],
+      existing_loads: [],
+      has_pending_draft_by_class: {},
+    };
+
+    getStudio.mockResolvedValue(statusData);
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+
+    render(<AdminSubjectLoadStudio />);
+
+    await waitFor(() => expect(screen.getByText("All Statuses")).toBeTruthy());
+    expect(screen.queryByText("All Grade Levels")).toBeNull();
+  });
+});
