@@ -71,12 +71,17 @@ def create_or_update_academic_periods(
     if not academic_year:
         raise HTTPException(status_code=404, detail="Academic year not found")
 
+    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+    SubjectLoadAuthorizationService.assert_context_configurable(
+        db, academic_year_id=academic_year_id
+    )
+
     p_type = (period_type or "TERM").upper()
     if p_type not in PERIOD_TOTALS:
         raise HTTPException(status_code=400, detail=f"Invalid period type '{period_type}'. Must be TERM, QUARTER, or SEMESTER.")
 
     expected_total = PERIOD_TOTALS[p_type]
-    results = []
+    validated_periods = []
 
     for item in periods_data:
         seq = item.get("period_sequence")
@@ -95,17 +100,28 @@ def create_or_update_academic_periods(
             raise HTTPException(status_code=400, detail=f"Start date cannot be after end date for period {seq}")
 
         p_name = f"{p_type.capitalize()} {seq}"
+        validated_periods.append((seq, start_d, end_d, p_name))
+
+    results = []
+    existing_by_sequence = {
+        period.period_sequence: period
+        for period in db.query(AcademicPeriod).filter(
+            AcademicPeriod.academic_year_id == academic_year_id,
+            AcademicPeriod.period_type == p_type,
+            AcademicPeriod.period_sequence.in_([item[0] for item in validated_periods]),
+        ).all()
+    }
+    for existing in existing_by_sequence.values():
+        SubjectLoadAuthorizationService.assert_context_configurable(
+            db,
+            academic_year_id=academic_year_id,
+            academic_period_id=existing.academic_period_id,
+        )
+
+    for seq, start_d, end_d, p_name in validated_periods:
 
         # Check existing
-        existing = (
-            db.query(AcademicPeriod)
-            .filter(
-                AcademicPeriod.academic_year_id == academic_year_id,
-                AcademicPeriod.period_type == p_type,
-                AcademicPeriod.period_sequence == seq,
-            )
-            .first()
-        )
+        existing = existing_by_sequence.get(seq)
 
         if existing:
             existing.period_name = p_name

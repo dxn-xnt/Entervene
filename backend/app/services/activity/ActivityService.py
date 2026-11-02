@@ -1,7 +1,6 @@
 # app/services/activity/ActivityService.py
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -9,9 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.Class_ import Class
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.StudentCLass import StudentClass
-from app.models.academic.Subject import Subject
-from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.Student import Student
@@ -25,45 +23,64 @@ from app.schemas.Activity import (
 from app.services.prediction.DevelopmentGradeRefreshService import refresh_after_committed_grade_change
 from app.services.classwork.ClassworkAccessService import assignment_allows_student
 from app.services.grading.RemedialExamination import effective_grade_changed, ensure_remedial_period_open
+from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 
 
-def _verify_teacher_scope(
+def _authorize_assignment(
     db: Session,
     staff_id: str,
-    class_id: int,
-    subject_id: int,
-    academic_period_id: int | None = None,
-):
-    if academic_period_id is not None:
-        period = db.get(AcademicPeriod, academic_period_id)
-        class_ = db.get(Class, class_id)
-        if period is None:
-            raise HTTPException(status_code=400, detail="Academic period was not found")
-        if class_ is None or class_.academic_year_id != period.academic_year_id:
-            raise HTTPException(status_code=400, detail="Academic period does not belong to the target class year")
-    row = (
-        db.query(SubjectLoad)
-        .filter(
-            SubjectLoad.staff_id == staff_id,
-            SubjectLoad.class_id == class_id,
-            SubjectLoad.subject_id == subject_id,
-            SubjectLoad.status.in_(["active", "published"]),
-            SubjectLoad.is_active_version.is_(True),
-        )
+    classwork: Classwork,
+    assignment: ClassworkAssignment,
+    *,
+    write: bool,
+) -> None:
+    if assignment.academic_period_id is None:
+        raise HTTPException(status_code=403, detail="Activity has an unscoped academic period")
+    assertion = (
+        SubjectLoadAuthorizationService.assert_can_write
+        if write
+        else SubjectLoadAuthorizationService.assert_can_view
     )
-    if academic_period_id is not None:
-        row = row.filter(SubjectLoad.academic_period_id == academic_period_id)
-    row = row.first()
-    if not row:
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have active teaching permissions for this class and subject",
+    assertion(
+        db,
+        staff_id,
+        assignment.class_id,
+        classwork.subject_id,
+        assignment.academic_period_id,
+    )
+
+
+def _assert_students_not_finalized(
+    db: Session,
+    classwork: Classwork,
+    assignment: ClassworkAssignment,
+    student_ids: list[UUID],
+) -> None:
+    if not student_ids:
+        return
+    finalized = (
+        db.query(StudentPeriodGrade.period_grade_id)
+        .filter(
+            StudentPeriodGrade.student_id.in_(student_ids),
+            StudentPeriodGrade.class_id == assignment.class_id,
+            StudentPeriodGrade.subject_id == classwork.subject_id,
+            StudentPeriodGrade.academic_period_id == assignment.academic_period_id,
+            StudentPeriodGrade.is_finalized.is_(True),
         )
-    return row
+        .first()
+    )
+    if finalized is not None:
+        raise HTTPException(status_code=409, detail="The period grade is finalized")
 
 
 def create_activity(db: Session, staff_id: str, payload: ActivityCreateRequest):
-    _verify_teacher_scope(
+    period = db.get(AcademicPeriod, payload.academic_period_id)
+    class_ = db.get(Class, payload.class_id)
+    if period is None:
+        raise HTTPException(status_code=400, detail="Academic period was not found")
+    if class_ is None or class_.academic_year_id != period.academic_year_id:
+        raise HTTPException(status_code=400, detail="Academic period does not belong to the target class year")
+    SubjectLoadAuthorizationService.assert_can_write(
         db,
         staff_id,
         payload.class_id,
@@ -130,8 +147,7 @@ def _resolve_activity_and_assignment(
     # 1. Try treating activity_id as Classwork.classwork_id
     classwork = db.query(Classwork).filter(Classwork.classwork_id == activity_id).first()
     assignment = None
-    if classwork:
-        _verify_teacher_scope(db, staff_id, class_id, classwork.subject_id)
+    if classwork and not classwork.is_archived:
         assignment = (
             db.query(ClassworkAssignment)
             .filter(
@@ -153,10 +169,11 @@ def _resolve_activity_and_assignment(
         )
         if assignment:
             classwork = assignment.classwork
-            _verify_teacher_scope(db, staff_id, class_id, classwork.subject_id)
 
-    if not classwork or not assignment:
+    if not classwork or classwork.is_archived or not assignment:
         raise HTTPException(status_code=404, detail="Activity not found or not assigned to this class")
+
+    _authorize_assignment(db, staff_id, classwork, assignment, write=False)
 
     return classwork, assignment
 
@@ -215,17 +232,25 @@ def bulk_update_activity_scores(
     payload: BulkScoreUpdateRequest,
 ) -> ActivityScoresResponse:
     classwork, assignment = _resolve_activity_and_assignment(db, staff_id, activity_id, payload.class_id)
+    _authorize_assignment(db, staff_id, classwork, assignment, write=True)
     max_score = float(classwork.total_points or 100)
 
     # Validate the complete request before touching submissions. A targeted
     # assignment must never gain a classmate's grade through this bulk endpoint.
     enrolled_ids = {row.student_id for row in db.query(StudentClass).filter_by(
         class_id=payload.class_id, enrollment_status="enrolled",
-    ).all()} if assignment.recipient_student_id else None
+    ).all()}
     for item in payload.scores:
-        if (enrolled_ids is not None and item.student_id not in enrolled_ids) or not assignment_allows_student(assignment, item.student_id):
+        if item.student_id not in enrolled_ids or not assignment_allows_student(assignment, item.student_id):
             raise HTTPException(status_code=403, detail="Student is not assigned to this activity")
         ensure_remedial_period_open(db, assignment, item.student_id)
+
+    _assert_students_not_finalized(
+        db,
+        classwork,
+        assignment,
+        [item.student_id for item in payload.scores],
+    )
 
     # Validate each score input before modifying database
     for item in payload.scores:
@@ -305,6 +330,29 @@ def delete_activity(db: Session, staff_id: str, activity_id: int):
     classwork = db.query(Classwork).filter(Classwork.classwork_id == activity_id).first()
     if not classwork:
         raise HTTPException(status_code=404, detail="Activity not found")
+
+    assignments = (
+        db.query(ClassworkAssignment)
+        .filter(ClassworkAssignment.classwork_id == classwork.classwork_id)
+        .all()
+    )
+    if not assignments:
+        raise HTTPException(status_code=403, detail="Activity has no authorized academic scope")
+
+    for assignment in assignments:
+        _authorize_assignment(db, staff_id, classwork, assignment, write=True)
+        finalized = (
+            db.query(StudentPeriodGrade.period_grade_id)
+            .filter(
+                StudentPeriodGrade.class_id == assignment.class_id,
+                StudentPeriodGrade.subject_id == classwork.subject_id,
+                StudentPeriodGrade.academic_period_id == assignment.academic_period_id,
+                StudentPeriodGrade.is_finalized.is_(True),
+            )
+            .first()
+        )
+        if finalized is not None:
+            raise HTTPException(status_code=409, detail="The period grade is finalized")
 
     classwork.is_archived = True
     db.commit()

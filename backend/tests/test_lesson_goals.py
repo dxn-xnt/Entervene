@@ -169,8 +169,8 @@ def goal_context():
     db.flush()
 
     # Assignments to class
-    asgn1 = ClassworkAssignment(classwork_id=cw1.classwork_id, class_id=cls.class_id, assigned_by_staff_id=teacher.staff_id, is_published=True, due_date=datetime(2025, 7, 1, 12, 0, tzinfo=timezone.utc))
-    asgn_exam = ClassworkAssignment(classwork_id=cw_exam.classwork_id, class_id=cls.class_id, assigned_by_staff_id=teacher.staff_id, is_published=True, due_date=datetime(2025, 8, 20, 12, 0, tzinfo=timezone.utc))
+    asgn1 = ClassworkAssignment(classwork_id=cw1.classwork_id, class_id=cls.class_id, academic_period_id=period1.academic_period_id, assigned_by_staff_id=teacher.staff_id, is_published=True, due_date=datetime(2025, 7, 1, 12, 0, tzinfo=timezone.utc))
+    asgn_exam = ClassworkAssignment(classwork_id=cw_exam.classwork_id, class_id=cls.class_id, academic_period_id=period1.academic_period_id, assigned_by_staff_id=teacher.staff_id, is_published=True, due_date=datetime(2025, 8, 20, 12, 0, tzinfo=timezone.utc))
     db.add_all([asgn1, asgn_exam])
     db.flush()
 
@@ -297,3 +297,271 @@ def test_lesson_goal_per_period_no_carryover(goal_context):
     data_term2 = res_term2.json()
     assert data_term2["goal_id"] is None
     assert data_term2["items"] == []
+
+
+def test_default_lesson_goal_tracks_canonical_period_switch(goal_context):
+    ctx = goal_context
+    db = ctx["db"]
+    periods = {
+        period.academic_period_id: period
+        for period in db.query(AcademicPeriod).all()
+    }
+    periods[ctx["period1_id"]].is_active = False
+    periods[ctx["period2_id"]].is_active = True
+    db.commit()
+
+    client = create_client(
+        db,
+        {"sub": str(ctx["user_teacher"].user_id), "role": "teacher"},
+        ctx["teacher"].staff_id,
+    )
+    response = client.get(
+        f"/api/v1/lesson-goals/class/{ctx['class_id']}/subject/{ctx['subject_id']}"
+    )
+    assert response.status_code == 200
+    assert response.json()["academic_period_id"] == ctx["period2_id"]
+
+
+@pytest.mark.parametrize("lifecycle_state", ["missing", "multiple", "wrong_year"])
+def test_default_lesson_goal_rejects_inconsistent_lifecycle(goal_context, lifecycle_state):
+    ctx = goal_context
+    db = ctx["db"]
+    period1 = db.get(AcademicPeriod, ctx["period1_id"])
+    period2 = db.get(AcademicPeriod, ctx["period2_id"])
+    if lifecycle_state == "missing":
+        period1.is_active = False
+    elif lifecycle_state == "multiple":
+        period2.is_active = True
+    else:
+        period1.is_active = False
+        other_year = AcademicYear(
+            year_label="AY2026-2027",
+            start_date=date(2026, 6, 1),
+            end_date=date(2027, 3, 31),
+            is_active=False,
+        )
+        db.add(other_year)
+        db.flush()
+        db.add(AcademicPeriod(
+            period_name="Term 1",
+            period_type="TERM",
+            period_sequence=1,
+            academic_year_id=other_year.academic_year_id,
+            is_active=True,
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 8, 31),
+        ))
+    db.commit()
+
+    client = create_client(
+        db,
+        {"sub": str(ctx["user_teacher"].user_id), "role": "teacher"},
+        ctx["teacher"].staff_id,
+    )
+    response = client.get(
+        f"/api/v1/lesson-goals/class/{ctx['class_id']}/subject/{ctx['subject_id']}"
+    )
+    assert response.status_code == 409
+
+
+def test_explicit_lesson_goal_period_rejects_cross_year_class(goal_context):
+    ctx = goal_context
+    db = ctx["db"]
+    other_year = AcademicYear(
+        year_label="AY2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=False,
+    )
+    db.add(other_year)
+    db.flush()
+    other_period = AcademicPeriod(
+        period_name="Term 1",
+        period_type="TERM",
+        period_sequence=1,
+        academic_year_id=other_year.academic_year_id,
+        is_active=False,
+        start_date=date(2026, 6, 1),
+        end_date=date(2026, 8, 31),
+    )
+    db.add(other_period)
+    db.commit()
+
+    admin = create_client(db, {"sub": str(uuid.uuid4()), "role": "admin"})
+    response = admin.get(
+        f"/api/v1/lesson-goals/class/{ctx['class_id']}/subject/{ctx['subject_id']}",
+        params={"academic_period_id": other_period.academic_period_id},
+    )
+    assert response.status_code == 404
+
+
+def test_admin_cannot_curate_cross_subject_goal_item(goal_context):
+    ctx = goal_context
+    db = ctx["db"]
+    other_subject = Subject(
+        subject_name="Science",
+        subject_codename="SCI8",
+        status="active",
+        academic_level_id=ctx["student"].academic_level_id,
+    )
+    db.add(other_subject)
+    db.flush()
+    other_lesson = Lesson(
+        title="Cells",
+        subject_id=other_subject.subject_id,
+        is_published=False,
+        created_by_staff_id=ctx["teacher"].staff_id,
+    )
+    db.add(other_lesson)
+    db.commit()
+
+    admin = create_client(db, {"sub": str(uuid.uuid4()), "role": "admin"})
+    response = admin.put(
+        f"/api/v1/lesson-goals/class/{ctx['class_id']}/subject/{ctx['subject_id']}",
+        json={
+            "academic_period_id": ctx["period1_id"],
+            "items": [{"item_type": "LESSON", "lesson_id": other_lesson.lesson_id}],
+        },
+    )
+    assert response.status_code == 404
+    assert db.query(LessonGoal).count() == 0
+
+
+def test_student_goal_read_requires_enrollment_and_period_published_items(goal_context):
+    ctx = goal_context
+    db = ctx["db"]
+    ctx["lesson1"].is_published = False
+    exam_assignment = db.query(ClassworkAssignment).filter_by(
+        classwork_id=ctx["cw_exam"].classwork_id
+    ).one()
+    exam_assignment.academic_period_id = ctx["period2_id"]
+    goal = LessonGoal(
+        class_id=ctx["class_id"],
+        subject_id=ctx["subject_id"],
+        academic_period_id=ctx["period1_id"],
+        created_by_staff_id=ctx["teacher"].staff_id,
+    )
+    db.add(goal)
+    db.flush()
+    db.add_all([
+        LessonGoalItem(
+            goal_id=goal.goal_id,
+            item_type="LESSON",
+            lesson_id=ctx["lesson1"].lesson_id,
+            order_index=1,
+        ),
+        LessonGoalItem(
+            goal_id=goal.goal_id,
+            item_type="CLASSWORK",
+            classwork_id=ctx["cw_exam"].classwork_id,
+            order_index=2,
+        ),
+    ])
+
+    outsider_account = UserAccount(
+        user_id=uuid.uuid4(), email="outsider@entervene.edu", password_hash="hash"
+    )
+    db.add(outsider_account)
+    db.flush()
+    outsider = Student(
+        student_id=uuid.uuid4(),
+        student_lrn="987654321098",
+        first_name="Not",
+        last_name="Enrolled",
+        gender="Female",
+        email=outsider_account.email,
+        user_id=outsider_account.user_id,
+        academic_level_id=ctx["student"].academic_level_id,
+    )
+    db.add(outsider)
+    db.commit()
+
+    enrolled = create_client(
+        db, {"sub": str(ctx["user_student"].user_id), "role": "student"}
+    )
+    enrolled_response = enrolled.get(
+        f"/api/v1/lesson-goals/class/{ctx['class_id']}/subject/{ctx['subject_id']}",
+        params={"academic_period_id": ctx["period1_id"]},
+    )
+    assert enrolled_response.status_code == 200
+    assert enrolled_response.json()["items"] == []
+
+    outsider_client = create_client(
+        db, {"sub": str(outsider_account.user_id), "role": "student"}
+    )
+    outsider_response = outsider_client.get(
+        f"/api/v1/lesson-goals/class/{ctx['class_id']}/subject/{ctx['subject_id']}",
+        params={"academic_period_id": ctx["period1_id"]},
+    )
+    assert outsider_response.status_code == 403
+
+
+def test_admin_future_year_lesson_goal_planning_and_historical_protection(goal_context):
+    ctx = goal_context
+    db = ctx["db"]
+    level = db.query(AcademicLevel).filter(AcademicLevel.grade_level == 8).one()
+    future_year = AcademicYear(
+        year_label="AY2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=False,
+    )
+    historical_year = AcademicYear(
+        year_label="AY2024-2025",
+        start_date=date(2024, 6, 1),
+        end_date=date(2025, 3, 31),
+        is_active=False,
+    )
+    db.add_all([future_year, historical_year])
+    db.flush()
+    future_period = AcademicPeriod(
+        period_name="Term 1", period_type="TERM", period_sequence=1,
+        academic_year_id=future_year.academic_year_id, is_active=False,
+        start_date=date(2026, 6, 1), end_date=date(2026, 8, 31),
+    )
+    historical_period = AcademicPeriod(
+        period_name="Term 1", period_type="TERM", period_sequence=1,
+        academic_year_id=historical_year.academic_year_id, is_active=False,
+        start_date=date(2024, 6, 1), end_date=date(2024, 8, 31),
+    )
+    db.add_all([future_period, historical_period])
+    db.flush()
+    future_class = Class(
+        section_name="Future Rizal", academic_year_id=future_year.academic_year_id,
+        academic_level_id=level.academic_level_id, class_status="active",
+    )
+    historical_class = Class(
+        section_name="Historical Rizal", academic_year_id=historical_year.academic_year_id,
+        academic_level_id=level.academic_level_id, class_status="archived",
+    )
+    db.add_all([future_class, historical_class])
+    db.commit()
+
+    admin = create_client(db, {"sub": str(uuid.uuid4()), "role": "admin"})
+    ctx["lesson1"].is_published = False
+    future_response = admin.put(
+        f"/api/v1/lesson-goals/class/{future_class.class_id}/subject/{ctx['subject_id']}",
+        json={
+            "academic_period_id": future_period.academic_period_id,
+            "items": [{"item_type": "LESSON", "lesson_id": ctx["lesson1"].lesson_id, "order_index": 1}],
+        },
+    )
+    assert future_response.status_code == 200, future_response.text
+    assert future_response.json()["goal_id"] is not None
+    assert len(future_response.json()["items"]) == 1
+    assert future_year.is_active is False
+
+    before = db.query(LessonGoal).count()
+    historical_response = admin.put(
+        f"/api/v1/lesson-goals/class/{historical_class.class_id}/subject/{ctx['subject_id']}",
+        json={"academic_period_id": historical_period.academic_period_id, "items": []},
+    )
+    assert historical_response.status_code == 403
+    assert db.query(LessonGoal).count() == before
+
+    mismatch_response = admin.put(
+        f"/api/v1/lesson-goals/class/{future_class.class_id}/subject/{ctx['subject_id']}",
+        json={"academic_period_id": ctx["period1_id"], "items": []},
+    )
+    assert mismatch_response.status_code == 403
+    assert db.query(LessonGoal).count() == before

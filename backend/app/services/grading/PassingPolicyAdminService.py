@@ -54,8 +54,19 @@ def _year(db: Session, year_id: int, *, lock: bool = False) -> AcademicYear:
     year = query.one_or_none()
     if year is None:
         raise _error(404, "ACADEMIC_YEAR_MISSING", "Academic year not found.")
-    # This schema has no closed-year state. All existing years are open until PR 2.
     return year
+
+
+def _assert_year_configurable(db: Session, year: AcademicYear) -> None:
+    from app.services.academic.SubjectLoadAuthorizationService import (
+        SubjectLoadAuthorizationService,
+    )
+
+    reason = SubjectLoadAuthorizationService.get_configuration_restriction_reason(
+        db, academic_year_id=year.academic_year_id
+    )
+    if reason:
+        raise _error(403, "HISTORICAL_CONFIGURATION_READ_ONLY", reason)
 
 
 def _policy_item(year: AcademicYear, policy: AcademicYearPassingPolicy | None) -> dict:
@@ -112,7 +123,8 @@ def edit_template_threshold(db: Session, *, template_id: int, year_id: int,
 
     value = _value(raw_threshold)
     note = _reason(reason)
-    _year(db, year_id, lock=True)
+    year = _year(db, year_id, lock=True)
+    _assert_year_configurable(db, year)
     template = db.query(GradingTemplate).filter(
         GradingTemplate.grading_template_id == template_id,
     ).with_for_update().one_or_none()
@@ -160,6 +172,7 @@ def save_year_general_average_policy(
     value = _value(raw_threshold)
     note = _reason(reason)
     year = _year(db, year_id, lock=True)
+    _assert_year_configurable(db, year)
     policy = db.query(AcademicYearPassingPolicy).filter(
         AcademicYearPassingPolicy.academic_year_id == year_id,
     ).with_for_update().one_or_none()

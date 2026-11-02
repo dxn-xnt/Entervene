@@ -13,7 +13,7 @@ from app.models.academic.SubjectOffering import SubjectOffering
 from app.services.subject_offerings.SubjectOfferingShared import (
     ALLOWED_PATHWAYS,
     GENERAL_PATHWAY,
-    INACTIVE_ACADEMIC_YEAR_READ_ONLY_MESSAGE,
+    HISTORICAL_ACADEMIC_YEAR_READ_ONLY_MESSAGE,
     normalize_pathway,
     normalized_text,
     validate_pathway_for_grade,
@@ -174,8 +174,12 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
         academic_year = years.get(year_label.casefold()) if year_label else None
         if academic_year is None:
             row_errors.append("academic_year must match an existing academic year.")
-        elif not academic_year.is_active:
-            row_errors.append(INACTIVE_ACADEMIC_YEAR_READ_ONLY_MESSAGE)
+        else:
+            from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+            if SubjectLoadAuthorizationService.get_configuration_restriction_reason(
+                db, academic_year_id=academic_year.academic_year_id
+            ):
+                row_errors.append(HISTORICAL_ACADEMIC_YEAR_READ_ONLY_MESSAGE)
 
         academic_level = None
         if not grade_level_text:
@@ -196,6 +200,14 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
             academic_period = _find_period(periods, term, academic_year.academic_year_id)
             if academic_period is None:
                 row_errors.append("term must match an academic period in the selected academic year.")
+            else:
+                from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+                if SubjectLoadAuthorizationService.get_configuration_restriction_reason(
+                    db,
+                    academic_year_id=academic_year.academic_year_id,
+                    academic_period_id=academic_period.academic_period_id,
+                ) and HISTORICAL_ACADEMIC_YEAR_READ_ONLY_MESSAGE not in row_errors:
+                    row_errors.append(HISTORICAL_ACADEMIC_YEAR_READ_ONLY_MESSAGE)
 
         pathway_ids: list[int] = []
         if not pathway_text:

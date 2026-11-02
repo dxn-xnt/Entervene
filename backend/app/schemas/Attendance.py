@@ -30,6 +30,7 @@ class BatchAttendanceItem(BaseModel):
 class BatchAttendanceCreate(BaseModel):
     class_id: int
     subject_id: int | None = None
+    academic_period_id: int | None = None
     date: date
     records: list[BatchAttendanceItem]
 
@@ -47,6 +48,7 @@ class QRScanAttendanceRequest(BaseModel):
     student_id: UUID
     class_id: int
     subject_id: int | None = None
+    academic_period_id: int | None = None
 
 
 class QRScanAttendanceResponse(BaseModel):

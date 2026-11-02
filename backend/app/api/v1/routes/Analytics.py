@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 import app.models  # noqa: F401
 from app.api.v1.routes.Auth import get_current_user
 from app.db.Session import get_db
-from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.services.activity.AnalyticsService import (
     build_class_overview,
     build_subject_overview,
@@ -42,8 +41,10 @@ def get_overview_metrics(
     """
     user_role = current_user.get("role")
     user_id = current_user.get("user_id") or current_user.get("sub")
+    if user_role not in {"admin", "teacher"}:
+        raise HTTPException(status_code=403, detail="Staff analytics access required")
 
-    target_period = get_target_period(db, academic_period_id=academic_period_id)
+    target_period = get_target_period(db, academic_period_id)
 
     if scope == "system":
         if user_role != "admin":
@@ -51,14 +52,12 @@ def get_overview_metrics(
         return build_system_overview(db=db, target_period=target_period)
 
     elif scope == "teacher":
-        target_staff_id = staff_id
-        if not target_staff_id:
-            # Fallback to current authenticated user's ID
+        if user_role == "admin":
+            if not staff_id:
+                raise HTTPException(status_code=400, detail="staff_id is required for Admin teacher analytics")
+            target_staff_id = staff_id
+        else:
             target_staff_id = user_id
-
-        # Non-admins can only see their own teacher overview
-        if user_role not in ["admin", "teacher"]:
-            raise HTTPException(status_code=403, detail="Teacher or Admin access required")
 
         return build_teacher_overview(
             db=db,
@@ -67,6 +66,8 @@ def get_overview_metrics(
         )
 
     elif scope == "class":
+        if user_role != "admin":
+            raise HTTPException(status_code=403, detail="Admin access required for class overview")
         if not class_id:
             raise HTTPException(status_code=400, detail="class_id is required for class scope")
         return build_class_overview(
@@ -76,6 +77,8 @@ def get_overview_metrics(
         )
 
     elif scope == "subject":
+        if user_role != "admin":
+            raise HTTPException(status_code=403, detail="Admin access required for subject overview")
         if not subject_id:
             raise HTTPException(status_code=400, detail="subject_id is required for subject scope")
         return build_subject_overview(
@@ -117,14 +120,7 @@ def get_teacher_dashboard_health(
     target_staff_id = staff_id if (user_role == "admin" and staff_id) else user_id
     # Include the route's period lookup in the read-only/no-autoflush boundary.
     with db.no_autoflush:
-        if academic_period_id is not None:
-            target_period = db.query(AcademicPeriod).filter(
-                AcademicPeriod.academic_period_id == academic_period_id,
-            ).first()
-            if target_period is None:
-                raise HTTPException(status_code=404, detail="Academic period not found")
-        else:
-            target_period = get_target_period(db)
+        target_period = get_target_period(db, academic_period_id)
 
         return build_teacher_dashboard_health(
             db=db,

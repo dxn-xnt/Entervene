@@ -1487,8 +1487,14 @@ export async function editGradingTemplateThreshold(
   return (await response.json()) as GradingTemplateResponse;
 }
 
-export async function getClasses(status: "active" | "archived" = "active"): Promise<GetClassesResponse> {
+export async function getClasses(
+  status: "active" | "archived" = "active",
+  academic_year_id?: number | null
+): Promise<GetClassesResponse> {
   const query = new URLSearchParams({ status });
+  if (academic_year_id != null) {
+    query.set("academic_year_id", String(academic_year_id));
+  }
   const response = await apiFetch(`/api/v1/classes?${query.toString()}`);
 
   if (!response.ok) {
@@ -1907,6 +1913,65 @@ export async function updateOfficialSection(id: number, payload: { is_active?: b
   return (await response.json()) as OfficialSectionOption;
 }
 
+export type AcademicYearSetupMode =
+  | "sections_only"
+  | "retain_classes_and_advisers"
+  | "retain_classes_without_advisers";
+
+export interface AcademicYearSetupRequest {
+  source_academic_year_id: number;
+  target_academic_year_id: number;
+  mode: AcademicYearSetupMode;
+  academic_level_ids?: number[];
+}
+
+export interface AcademicYearSetupSectionItem {
+  id: number;
+  academic_year_id: number;
+  academic_level_id: number;
+  section_name: string;
+  pathway_id: number | null;
+  is_active: boolean;
+  is_created: boolean;
+}
+
+export interface AcademicYearSetupClassItem {
+  class_id: number;
+  academic_year_id: number;
+  academic_level_id: number;
+  section_name: string;
+  adviser_staff_id: string | null;
+  pathway_id: number | null;
+  is_created: boolean;
+}
+
+export interface AcademicYearSetupResponse {
+  source_academic_year_id: number;
+  target_academic_year_id: number;
+  mode: string;
+  sections_created: number;
+  sections_reused: number;
+  classes_created: number;
+  classes_reused: number;
+  sections: AcademicYearSetupSectionItem[];
+  classes: AcademicYearSetupClassItem[];
+}
+
+export async function setupAcademicYearClasses(
+  payload: AcademicYearSetupRequest
+): Promise<AcademicYearSetupResponse> {
+  const response = await apiFetch("/api/v1/classes/setup-academic-year", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(apiErrorMessage(data, "Unable to set up academic year classes."));
+  }
+  return (await response.json()) as AcademicYearSetupResponse;
+}
+
 function classListErrorMessage(data: unknown, status: number): string {
   if (status === 401) return "Your session has expired. Please sign in again.";
   if (status === 403) return "You do not have permission to view classes.";
@@ -2046,6 +2111,8 @@ function classImportErrorMessage(data: unknown, status: number): string {
 
 export type SubjectLoadItem = {
   _key?: string;
+  /** Studio-only eligibility marker; omitted by backend responses. */
+  _offering_eligible?: boolean;
   subject_load_id?: number | null;
   class_id: number;
   subject_id: number;

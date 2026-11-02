@@ -10,6 +10,7 @@ from app.models.academic.Class_ import Class
 from app.models.academic.OfficialSection import OfficialSection
 from app.services.classes.ClassShared import normalized_text, readable_text
 from app.services.pathways.PathwayScopeService import resolve_pathway_scope
+from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 
 
 def section_read(db: Session, section: OfficialSection) -> dict:
@@ -61,6 +62,9 @@ def _validate_pathway(db: Session, year_id: int, level_id: int, pathway_id: int 
 
 
 def create_official_section(db: Session, payload) -> dict:
+    SubjectLoadAuthorizationService.assert_context_configurable(
+        db, academic_year_id=payload.academic_year_id
+    )
     name = readable_text(payload.section_name)
     if not name:
         raise HTTPException(status_code=422, detail="Section name is required.")
@@ -94,6 +98,9 @@ def update_official_section(db: Session, section_id: int, payload) -> dict:
     section = db.get(OfficialSection, section_id)
     if section is None:
         raise HTTPException(status_code=404, detail="Official section not found.")
+    SubjectLoadAuthorizationService.assert_context_configurable(
+        db, academic_year_id=section.academic_year_id
+    )
     changes = payload.model_dump(exclude_unset=True)
     if not changes:
         raise HTTPException(status_code=400, detail="Provide at least one change.")

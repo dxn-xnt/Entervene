@@ -19,6 +19,7 @@ from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectOffering import SubjectOffering
 from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.auth.UserAccount import UserAccount
 
@@ -62,7 +63,7 @@ def db():
         engine.dispose()
 
 
-def test_term_specific_subject_offering_studio_and_validation(db):
+def test_term_specific_subject_offering_studio_and_validation(db, monkeypatch):
     # Setup test data
     admin_id = uuid.uuid4()
     admin_user = UserAccount(user_id=admin_id, email="admin_term@example.com", account_status="active")
@@ -101,7 +102,13 @@ def test_term_specific_subject_offering_studio_and_validation(db):
     db.flush()
 
     g11 = AcademicLevel(level_name="Grade 11", grade_level=11)
-    db.add(g11)
+    template = GradingTemplate(
+        grading_template_id=1,
+        template_name="Core",
+        passing_threshold=75.0,
+        status="active",
+    )
+    db.add_all([g11, template])
     db.flush()
 
     med_pathway = AcademicPathway(code="stem_medical", name="STEM Medical", is_enabled=True)
@@ -118,8 +125,8 @@ def test_term_specific_subject_offering_studio_and_validation(db):
     db.add(stem_class)
     db.flush()
 
-    gen_math = Subject(subject_name="General Mathematics", subject_codename="GENMATH", academic_level_id=g11.academic_level_id, status="active")
-    stat_prob = Subject(subject_name="Statistics and Probability", subject_codename="STATPROB", academic_level_id=g11.academic_level_id, status="active")
+    gen_math = Subject(subject_name="General Mathematics", subject_codename="GENMATH", academic_level_id=g11.academic_level_id, grading_template_id=template.grading_template_id, status="active")
+    stat_prob = Subject(subject_name="Statistics and Probability", subject_codename="STATPROB", academic_level_id=g11.academic_level_id, grading_template_id=template.grading_template_id, status="active")
     db.add_all([gen_math, stat_prob])
     db.flush()
 
@@ -129,6 +136,7 @@ def test_term_specific_subject_offering_studio_and_validation(db):
         academic_year_id=year.academic_year_id,
         academic_level_id=g11.academic_level_id,
         academic_period_id=term1.academic_period_id,
+        minutes=60,
         status="active",
     )
     offering_t2 = SubjectOffering(
@@ -136,10 +144,41 @@ def test_term_specific_subject_offering_studio_and_validation(db):
         academic_year_id=year.academic_year_id,
         academic_level_id=g11.academic_level_id,
         academic_period_id=term2.academic_period_id,
+        minutes=60,
         status="active",
     )
     db.add_all([offering_t1, offering_t2])
     db.flush()
+
+    future_year = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=False,
+    )
+    term3 = AcademicPeriod(
+        academic_year_id=year.academic_year_id,
+        period_name="Term 3",
+        period_type="TERM",
+        period_sequence=3,
+        total_periods_in_year=3,
+        period_progress_ratio=1.0,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 3, 31),
+        is_active=False,
+    )
+    db.add_all([future_year, term3])
+    db.flush()
+    # Deliberately inconsistent legacy data: the offering points at the
+    # selected term but claims a different academic year. Studio must not leak it.
+    db.add(SubjectOffering(
+        subject_id=stat_prob.subject_id,
+        academic_year_id=future_year.academic_year_id,
+        academic_level_id=g11.academic_level_id,
+        academic_period_id=term1.academic_period_id,
+        minutes=60,
+        status="active",
+    ))
 
     teacher = AcademicStaff(staff_id="STF1111", first_name="Maria", last_name="Santos", employment_status="active")
     db.add(teacher)
@@ -157,6 +196,20 @@ def test_term_specific_subject_offering_studio_and_validation(db):
     assert "subject_offerings" in body1
     assert len(body1["subject_offerings"]) == 1
     assert body1["subject_offerings"][0]["subject_id"] == gen_math.subject_id
+
+    term2_studio = client.get(
+        f"/api/v1/subject-loads/studio-data?academic_period_id={term2.academic_period_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert term2_studio.status_code == 200
+    assert [item["subject_id"] for item in term2_studio.json()["subject_offerings"]] == [stat_prob.subject_id]
+
+    empty_term_studio = client.get(
+        f"/api/v1/subject-loads/studio-data?academic_period_id={term3.academic_period_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert empty_term_studio.status_code == 200
+    assert empty_term_studio.json()["subject_offerings"] == []
 
     # 2. Batch save load in Term 1 for Gen Math
     payload_t1 = {
@@ -211,3 +264,47 @@ def test_term_specific_subject_offering_studio_and_validation(db):
     assert save_res2.status_code == 200
     t2_load = db.query(SubjectLoad).filter(SubjectLoad.subject_id == stat_prob.subject_id).first()
     assert t2_load.continued_from_load_id == t1_load_id
+
+    # Drafts are returned independently of current offering eligibility so the
+    # Studio can show and correct them; publication validation remains blocking.
+    invalid_draft = SubjectLoad(
+        class_id=stem_class.class_id,
+        subject_id=stat_prob.subject_id,
+        staff_id=teacher.staff_id,
+        academic_period_id=term1.academic_period_id,
+        start_time="09:00",
+        end_time="10:00",
+        days_of_week=["TUE"],
+        status="draft",
+    )
+    db.add(invalid_draft)
+    db.commit()
+    stat_prob.status = "archived"
+    db.commit()
+    invalid_draft_studio = client.get(
+        f"/api/v1/subject-loads/studio-data?academic_period_id={term1.academic_period_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert invalid_draft_studio.status_code == 200
+    assert {item["subject_id"] for item in invalid_draft_studio.json()["existing_loads"]} == {
+        gen_math.subject_id,
+        stat_prob.subject_id,
+    }
+    assert stat_prob.subject_id in {
+        item["subject_id"] for item in invalid_draft_studio.json()["subjects"]
+    }
+
+    original_query = db.query
+
+    def fail_offering_query(*entities, **kwargs):
+        if entities and entities[0] is SubjectOffering:
+            raise RuntimeError("offering query unavailable")
+        return original_query(*entities, **kwargs)
+
+    monkeypatch.setattr(db, "query", fail_offering_query)
+    failing_client = TestClient(app, raise_server_exceptions=False)
+    failed = failing_client.get(
+        f"/api/v1/subject-loads/studio-data?academic_period_id={term1.academic_period_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert failed.status_code == 500

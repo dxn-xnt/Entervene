@@ -16,7 +16,7 @@ from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
 from app.models.academic.Subject import Subject
 from app.services.subject_offerings.SubjectOfferingShared import (
     DEFAULT_OFFERING_STATUS,
-    ensure_academic_year_is_active,
+    ensure_academic_year_is_configurable,
     ensure_offering_available,
     get_academic_year_or_404,
     get_offering_legacy_pathway,
@@ -82,14 +82,14 @@ def _resolve_pathway_ids(db: Session, pathway_ids: list[int] | None, legacy_path
 
 
 def create_subject_offering_record(db: Session, payload: SubjectOfferingCreate) -> dict:
-    subject, academic_year, academic_level, _period = validate_offering_scope(
+    subject, academic_year, academic_level, period = validate_offering_scope(
         db,
         payload.subject_id,
         payload.academic_year_id,
         payload.academic_level_id,
         payload.academic_period_id,
     )
-    ensure_academic_year_is_active(academic_year)
+    ensure_academic_year_is_configurable(db, academic_year, period)
     pathway_ids = _resolve_pathway_ids(db, payload.pathway_ids, payload.pathway, academic_level, payload.academic_year_id, subject)
     validate_core_subject_pathway_restriction(subject, pathway_ids)
 
@@ -129,7 +129,11 @@ def update_subject_offering_record(db: Session, subject_offering_id: int, payloa
     offering = db.query(SubjectOffering).filter(SubjectOffering.subject_offering_id == subject_offering_id).first()
     if offering is None:
         raise HTTPException(status_code=404, detail="Subject offering not found.")
-    ensure_academic_year_is_active(get_academic_year_or_404(db, offering.academic_year_id))
+    ensure_academic_year_is_configurable(
+        db,
+        get_academic_year_or_404(db, offering.academic_year_id),
+        db.get(AcademicPeriod, offering.academic_period_id),
+    )
 
     data = payload.model_dump(exclude_unset=True)
     target_subject_id = data.get("subject_id", offering.subject_id)
@@ -137,8 +141,8 @@ def update_subject_offering_record(db: Session, subject_offering_id: int, payloa
     target_level_id = data.get("academic_level_id", offering.academic_level_id)
     target_period_id = data.get("academic_period_id", offering.academic_period_id)
 
-    subject, academic_year, academic_level, _period = validate_offering_scope(db, target_subject_id, target_year_id, target_level_id, target_period_id)
-    ensure_academic_year_is_active(academic_year)
+    subject, academic_year, academic_level, period = validate_offering_scope(db, target_subject_id, target_year_id, target_level_id, target_period_id)
+    ensure_academic_year_is_configurable(db, academic_year, period)
 
     if "pathway_ids" in data or "pathway" in data:
         target_pathway_ids = _resolve_pathway_ids(db, data.get("pathway_ids"), data.get("pathway"), academic_level, target_year_id, subject)
@@ -219,7 +223,11 @@ def archive_subject_offering_record(db: Session, subject_offering_id: int) -> di
     offering = db.query(SubjectOffering).filter(SubjectOffering.subject_offering_id == subject_offering_id).first()
     if offering is None:
         raise HTTPException(status_code=404, detail="Subject offering not found.")
-    ensure_academic_year_is_active(get_academic_year_or_404(db, offering.academic_year_id))
+    ensure_academic_year_is_configurable(
+        db,
+        get_academic_year_or_404(db, offering.academic_year_id),
+        db.get(AcademicPeriod, offering.academic_period_id),
+    )
     if (offering.status or DEFAULT_OFFERING_STATUS).casefold() == "archived":
         raise HTTPException(status_code=409, detail="Subject offering is already archived.")
     validate_subject_offering_can_be_archived(db, offering)
@@ -233,14 +241,14 @@ def restore_subject_offering_record(db: Session, subject_offering_id: int) -> di
     offering = db.query(SubjectOffering).filter(SubjectOffering.subject_offering_id == subject_offering_id).first()
     if offering is None:
         raise HTTPException(status_code=404, detail="Subject offering not found.")
-    _subject, academic_year, academic_level, _period = validate_offering_scope(
+    _subject, academic_year, academic_level, period = validate_offering_scope(
         db,
         offering.subject_id,
         offering.academic_year_id,
         offering.academic_level_id,
         offering.academic_period_id,
     )
-    ensure_academic_year_is_active(academic_year)
+    ensure_academic_year_is_configurable(db, academic_year, period)
     pathway_ids = [p.pathway_id for p in db.query(SubjectOfferingPathway).filter(SubjectOfferingPathway.subject_offering_id == offering.subject_offering_id).all()]
     validate_core_subject_pathway_restriction(_subject, pathway_ids)
     offering.status = "active"
@@ -255,13 +263,10 @@ def copy_subject_offerings_between_academic_years(
 ) -> dict:
     source_year = get_academic_year_or_404(db, payload.source_academic_year_id)
     target_year = get_academic_year_or_404(db, payload.target_academic_year_id)
-    ensure_academic_year_is_active(target_year)
+    ensure_academic_year_is_configurable(db, target_year)
 
     if source_year.academic_year_id == target_year.academic_year_id:
         raise HTTPException(status_code=409, detail="Source and target academic years must be different.")
-
-    from app.services.pathways.PathwayScopeService import clone_prior_year_pathway_scopes
-    clone_prior_year_pathway_scopes(db, target_year.academic_year_id)
 
     target_periods_by_sequence = {
         period.period_sequence: period
@@ -269,6 +274,11 @@ def copy_subject_offerings_between_academic_years(
         .filter(AcademicPeriod.academic_year_id == target_year.academic_year_id)
         .all()
     }
+    for target_period in target_periods_by_sequence.values():
+        ensure_academic_year_is_configurable(db, target_year, target_period)
+
+    from app.services.pathways.PathwayScopeService import clone_prior_year_pathway_scopes
+    clone_prior_year_pathway_scopes(db, target_year.academic_year_id, commit=False)
     source_offerings = (
         db.query(SubjectOffering)
         .join(AcademicPeriod, SubjectOffering.academic_period_id == AcademicPeriod.academic_period_id)

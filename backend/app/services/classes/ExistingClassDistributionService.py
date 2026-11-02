@@ -18,6 +18,7 @@ from app.services.classes.ClassShared import normalized_text, readable_text
 from app.services.classes.OfficialSectionService import selected_official_section
 from app.services.classes.StudentDistributionService import distribute_students_balanced, resolve_student_gwa
 from app.services.pathways.PathwayScopeService import resolve_pathway_scope
+from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 
 
 def format_student_display_name(student: Student) -> str:
@@ -162,6 +163,9 @@ def commit_existing_class_distribution(
 ) -> dict:
     try:
         preview = preview_existing_class_distribution(db, source_class_id, class_ids, mode, lock=True)
+        SubjectLoadAuthorizationService.assert_context_configurable(
+            db, academic_year_id=preview["academic_year_id"]
+        )
         if preview["snapshot"] != snapshot:
             raise HTTPException(status_code=409, detail="The available students or selected rosters changed. Recalculate the preview before saving.")
         if assignment_overrides is not None:

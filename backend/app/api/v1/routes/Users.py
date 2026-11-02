@@ -56,11 +56,12 @@ def list_users(
 @router.get("/users/{user_id}")
 def get_user_detail(
     user_id: uuid.UUID,
+    academic_year_id: int | None = Query(default=None),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _require_admin(current_user)
-    return query_user_detail(db, user_id)
+    return query_user_detail(db, user_id, academic_year_id=academic_year_id)
 
 
 @router.put("/users/{user_id}")

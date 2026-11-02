@@ -1065,7 +1065,7 @@ export function TOSGeneratorScreen({
                 size="header"
                 variant="outline"
                 disabled={isSaving || (!!examId && !changes.hasChanges)}
-                onClick={() => questions.length > 0 ? guardShortExam(handleSaveDraft) : void handleSaveDraft()}
+                onClick={() => questions.length > 0 ? guardShortExam(async () => { await handleSaveDraft(); }) : void handleSaveDraft()}
                 className="min-w-0 whitespace-nowrap"
               >
                 <Save className="size-4" />

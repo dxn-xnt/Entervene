@@ -1,10 +1,10 @@
 import io
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import CheckConstraint, create_engine
 from sqlalchemy.orm import sessionmaker
@@ -20,6 +20,7 @@ from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
+from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
@@ -254,6 +255,157 @@ def test_prior_year_gwa_resolution(db):
     assert computed_gwa == 90.0
 
 
+def test_gwa_resolution_requires_one_canonical_active_year(db):
+    student = _make_student(db, "Lifecycle", "Check", "Male", prior_gwa=88.00)
+
+    db.query(AcademicYear).update({AcademicYear.is_active: False})
+    db.commit()
+    with pytest.raises(HTTPException) as missing:
+        resolve_student_gwa(db, student)
+    assert missing.value.status_code == 409
+    assert missing.value.detail == "No active academic year is configured."
+
+    db.query(AcademicYear).update({AcademicYear.is_active: True})
+    db.commit()
+    with pytest.raises(HTTPException) as duplicate:
+        resolve_student_gwa(db, student)
+    assert duplicate.value.status_code == 409
+    assert "multiple academic years are active" in duplicate.value.detail
+
+
+def test_gwa_resolution_rejects_unknown_explicit_year(db):
+    student = _make_student(db, "Unknown", "Year", "Female", prior_gwa=91.00)
+
+    with pytest.raises(HTTPException) as exc_info:
+        resolve_student_gwa(db, student, active_academic_year_id=9999)
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Academic year not found."
+
+
+def test_gwa_resolution_supports_explicit_prepared_future_year(db):
+    student = _make_student(db, "Future", "Student", "Female", prior_gwa=None)
+    future_year = AcademicYear(
+        academic_year_id=3,
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=False,
+    )
+    prior_class = Class(
+        class_id=103,
+        section_name="Grade 7 - Future Source",
+        academic_level_id=1,
+        academic_year_id=1,
+        class_status="archived",
+    )
+    subject = Subject(subject_id=12, subject_name="Future Math", academic_level_id=1)
+    period = AcademicPeriod(
+        academic_period_id=12,
+        academic_year_id=1,
+        period_name="Q1",
+        period_type="TERM",
+        period_sequence=1,
+        total_periods_in_year=3,
+        period_progress_ratio=Decimal("0.3333"),
+        start_date=date(2024, 6, 1),
+        end_date=date(2024, 8, 31),
+    )
+    db.add_all([future_year, prior_class, subject, period])
+    db.flush()
+    db.add(build_student_class_assignment(student.student_id, prior_class))
+    db.add(StudentPeriodGrade(
+        period_grade_id=12,
+        student_id=student.student_id,
+        class_id=prior_class.class_id,
+        subject_id=subject.subject_id,
+        academic_period_id=period.academic_period_id,
+        final_period_grade=Decimal("93.00"),
+    ))
+    db.commit()
+
+    assert resolve_student_gwa(db, student, active_academic_year_id=future_year.academic_year_id) == 93.0
+
+
+def test_gwa_resolution_ignores_grade_period_from_another_year(db):
+    student = _make_student(db, "Cross", "Period", "Male", prior_gwa=84.00)
+    prior_class = Class(
+        class_id=104,
+        section_name="Grade 7 - Cross Period",
+        academic_level_id=1,
+        academic_year_id=1,
+        class_status="archived",
+    )
+    subject = Subject(subject_id=13, subject_name="Cross Period Math", academic_level_id=1)
+    wrong_period = AcademicPeriod(
+        academic_period_id=13,
+        academic_year_id=2,
+        period_name="Q1",
+        period_type="TERM",
+        period_sequence=1,
+        total_periods_in_year=3,
+        period_progress_ratio=Decimal("0.3333"),
+        start_date=date(2025, 6, 1),
+        end_date=date(2025, 8, 31),
+    )
+    db.add_all([prior_class, subject, wrong_period])
+    db.flush()
+    db.add(build_student_class_assignment(student.student_id, prior_class))
+    db.add(StudentPeriodGrade(
+        period_grade_id=13,
+        student_id=student.student_id,
+        class_id=prior_class.class_id,
+        subject_id=subject.subject_id,
+        academic_period_id=wrong_period.academic_period_id,
+        final_period_grade=Decimal("99.00"),
+    ))
+    db.commit()
+
+    assert resolve_student_gwa(db, student, active_academic_year_id=2) == 84.0
+
+
+def test_gwa_resolution_ignores_mismatched_enrollment_year(db):
+    student = _make_student(db, "Cross", "Enrollment", "Female", prior_gwa=82.00)
+    prior_class = Class(
+        class_id=105,
+        section_name="Grade 7 - Cross Enrollment",
+        academic_level_id=1,
+        academic_year_id=1,
+        class_status="archived",
+    )
+    subject = Subject(subject_id=14, subject_name="Cross Enrollment Math", academic_level_id=1)
+    period = AcademicPeriod(
+        academic_period_id=14,
+        academic_year_id=1,
+        period_name="Q1",
+        period_type="TERM",
+        period_sequence=1,
+        total_periods_in_year=3,
+        period_progress_ratio=Decimal("0.3333"),
+        start_date=date(2024, 6, 1),
+        end_date=date(2024, 8, 31),
+    )
+    db.add_all([prior_class, subject, period])
+    db.flush()
+    db.add(StudentClass(
+        student_id=student.student_id,
+        class_id=prior_class.class_id,
+        academic_year_id=2,
+        enrollment_status="enrolled",
+    ))
+    db.add(StudentPeriodGrade(
+        period_grade_id=14,
+        student_id=student.student_id,
+        class_id=prior_class.class_id,
+        subject_id=subject.subject_id,
+        academic_period_id=period.academic_period_id,
+        final_period_grade=Decimal("98.00"),
+    ))
+    db.commit()
+
+    assert resolve_student_gwa(db, student, active_academic_year_id=2) == 82.0
+
+
 # 6. test_partial_completion_gwa: Student with 2 of 5 subjects finalized gets computed GWA from those 2 — does not fall back to prior_gwa or null
 def test_partial_completion_gwa(db):
     student = _make_student(db, "Maria", "Clara", "Female", prior_gwa=75.00)
@@ -359,6 +511,28 @@ def test_distribute_endpoint_requires_gwa_instead_of_silent_fallback(client, db)
     assert db.query(StudentClass).count() == 0
 
 
+@pytest.mark.parametrize("role", ["teacher", "student"])
+def test_distribute_endpoint_remains_admin_only(client, db, role):
+    student = _make_student(db, "Unauthorized", role.title(), "Male", prior_gwa=86.00)
+    initial_assignments_count = db.query(StudentClass).count()
+    client.app.dependency_overrides[get_current_user] = lambda: {
+        "sub": str(uuid.uuid4()),
+        "role": role,
+    }
+
+    response = client.post("/api/v1/classes/distribute-students", json={
+        "academic_year_id": 2,
+        "academic_level_id": 2,
+        "mode": "gwa",
+        "sections": [{"local_id": "first", "section_name": "First"}],
+        "unassigned_student_ids": [str(student.student_id)],
+        "assignments_by_section": {"first": []},
+    })
+
+    assert response.status_code == 403
+    assert db.query(StudentClass).count() == initial_assignments_count
+
+
 # 9. test_prior_gwa_not_in_list_users: prior_gwa does not appear in the list_users response
 def test_prior_gwa_not_in_list_users(db):
     u_id = uuid.uuid4()
@@ -448,3 +622,214 @@ def test_prior_gwa_used_when_no_computed_grades(db):
     student = _make_student(db, "Transferee", "Student", "Male", prior_gwa=88.50)
     gwa = resolve_student_gwa(db, student, active_academic_year_id=2)
     assert gwa == 88.50
+
+
+def _make_student_detail_account(db, *, email: str, first_name: str = "Admin", last_name: str = "View"):
+    user_id = uuid.uuid4()
+    student = Student(
+        student_id=uuid.uuid4(),
+        user_id=user_id,
+        first_name=first_name,
+        last_name=last_name,
+        gender="Female",
+        student_lrn=f"77{user_id.hex[:10]}",
+        academic_level_id=1,
+    )
+    db.add_all([
+        UserAccount(user_id=user_id, email=email, password_hash="hash", account_status="active"),
+        UserRoles(user_id=user_id, role_id=3),
+        student,
+    ])
+    db.flush()
+    return user_id, student
+
+
+def test_admin_student_detail_orders_historical_gwa_by_year_dates_not_ids(db):
+    db.query(AcademicYear).delete()
+    historical_year = AcademicYear(
+        academic_year_id=50,
+        year_label="2023-2024",
+        start_date=date(2023, 6, 1),
+        end_date=date(2024, 3, 31),
+        is_active=False,
+    )
+    active_year = AcademicYear(
+        academic_year_id=10,
+        year_label="2025-2026",
+        start_date=date(2025, 6, 1),
+        end_date=date(2026, 3, 31),
+        is_active=True,
+    )
+    template = GradingTemplate(
+        grading_template_id=90,
+        template_name="Detail Test",
+        passing_threshold=Decimal("75.00"),
+    )
+    db.add_all([historical_year, active_year, template])
+    db.flush()
+    user_id, student = _make_student_detail_account(db, email="date-order@test.com")
+    historical_class = Class(
+        class_id=901,
+        section_name="Historical Pearl",
+        academic_level_id=1,
+        academic_year_id=historical_year.academic_year_id,
+        class_status="archived",
+    )
+    subject = Subject(
+        subject_id=901,
+        subject_name="Historical Mathematics",
+        academic_level_id=1,
+        grading_template_id=template.grading_template_id,
+    )
+    period = AcademicPeriod(
+        academic_period_id=901,
+        academic_year_id=historical_year.academic_year_id,
+        period_name="Historical Term",
+        period_type="TERM",
+        period_sequence=1,
+        total_periods_in_year=3,
+        period_progress_ratio=Decimal("0.3333"),
+        start_date=historical_year.start_date,
+        end_date=historical_year.end_date,
+    )
+    db.add_all([historical_class, subject, period])
+    db.flush()
+    db.add_all([
+        StudentClass(
+            student_id=student.student_id,
+            class_id=historical_class.class_id,
+            academic_year_id=historical_year.academic_year_id,
+            enrollment_status="enrolled",
+        ),
+        StudentPeriodGrade(
+            student_id=student.student_id,
+            class_id=historical_class.class_id,
+            subject_id=subject.subject_id,
+            academic_period_id=period.academic_period_id,
+            final_period_grade=Decimal("91.00"),
+            is_finalized=True,
+        ),
+    ])
+    db.commit()
+
+    detail = get_user_detail(db, user_id)
+
+    assert detail["section"] is None
+    assert detail["has_computed_gwa"] is True
+
+
+def test_admin_student_detail_rejects_missing_and_duplicate_active_years(db):
+    user_id, _ = _make_student_detail_account(db, email="lifecycle@test.com")
+    db.query(AcademicYear).update({AcademicYear.is_active: False})
+    db.commit()
+
+    with pytest.raises(HTTPException) as missing:
+        get_user_detail(db, user_id)
+    assert missing.value.status_code == 409
+    assert "No active academic year" in str(missing.value.detail)
+
+    years = db.query(AcademicYear).order_by(AcademicYear.academic_year_id).all()
+    for year in years:
+        year.is_active = True
+    db.commit()
+
+    with pytest.raises(HTTPException) as duplicate:
+        get_user_detail(db, user_id)
+    assert duplicate.value.status_code == 409
+    assert "multiple academic years" in str(duplicate.value.detail)
+
+
+def test_admin_student_detail_respects_explicit_historical_year(client, db):
+    user_id, student = _make_student_detail_account(db, email="historical-selection@test.com")
+    historical_year = db.get(AcademicYear, 1)
+    current_year = db.get(AcademicYear, 2)
+    historical_class = Class(
+        class_id=910,
+        section_name="Historical Ruby",
+        academic_level_id=1,
+        academic_year_id=historical_year.academic_year_id,
+        class_status="archived",
+    )
+    current_class = Class(
+        class_id=911,
+        section_name="Current Emerald",
+        academic_level_id=2,
+        academic_year_id=current_year.academic_year_id,
+        class_status="active",
+    )
+    db.add_all([historical_class, current_class])
+    db.flush()
+    db.add_all([
+        StudentClass(
+            student_id=student.student_id,
+            class_id=historical_class.class_id,
+            academic_year_id=historical_year.academic_year_id,
+            enrollment_status="enrolled",
+            enrolled_at=datetime(2024, 6, 1, tzinfo=timezone.utc),
+        ),
+        StudentClass(
+            student_id=student.student_id,
+            class_id=current_class.class_id,
+            academic_year_id=current_year.academic_year_id,
+            enrollment_status="enrolled",
+            enrolled_at=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        ),
+    ])
+    db.commit()
+
+    response = client.get(
+        f"/api/v1/users/{user_id}?academic_year_id={historical_year.academic_year_id}"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["section"] == "Historical Ruby"
+
+
+def test_admin_student_detail_does_not_leak_cross_year_period_grade(db):
+    user_id, student = _make_student_detail_account(db, email="cross-year-grade@test.com")
+    historical_year = db.get(AcademicYear, 1)
+    active_year = db.get(AcademicYear, 2)
+    template = GradingTemplate(
+        grading_template_id=91,
+        template_name="Cross Year Test",
+        passing_threshold=Decimal("75.00"),
+    )
+    historical_class = Class(
+        class_id=920,
+        section_name="Historical Class",
+        academic_level_id=1,
+        academic_year_id=historical_year.academic_year_id,
+        class_status="archived",
+    )
+    subject = Subject(
+        subject_id=920,
+        subject_name="Cross Year Subject",
+        academic_level_id=1,
+        grading_template_id=template.grading_template_id,
+    )
+    active_period = AcademicPeriod(
+        academic_period_id=920,
+        academic_year_id=active_year.academic_year_id,
+        period_name="Current Term",
+        period_type="TERM",
+        period_sequence=1,
+        total_periods_in_year=3,
+        period_progress_ratio=Decimal("0.3333"),
+        start_date=active_year.start_date,
+        end_date=active_year.end_date,
+    )
+    db.add_all([template, historical_class, subject, active_period])
+    db.flush()
+    db.add(StudentPeriodGrade(
+        student_id=student.student_id,
+        class_id=historical_class.class_id,
+        subject_id=subject.subject_id,
+        academic_period_id=active_period.academic_period_id,
+        final_period_grade=Decimal("95.00"),
+        is_finalized=True,
+    ))
+    db.commit()
+
+    detail = get_user_detail(db, user_id)
+
+    assert detail["has_computed_gwa"] is False

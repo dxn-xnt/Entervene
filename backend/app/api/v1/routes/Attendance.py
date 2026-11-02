@@ -25,6 +25,14 @@ from app.services.attendance.AttendanceService import (
 router = APIRouter()
 
 
+def _attendance_staff_id(db: Session, current_user: dict) -> str | None:
+    user_id = UUID(str(current_user["sub"]))
+    staff_id = _get_staff_id_from_user_id(db, user_id)
+    if str(current_user.get("role", "")).lower() == "teacher" and not staff_id:
+        raise HTTPException(status_code=403, detail="Teacher staff profile is required for attendance access.")
+    return staff_id
+
+
 # ---------------------------------------------------------------------------
 # Teacher Attendance Management Endpoints
 # ---------------------------------------------------------------------------
@@ -38,8 +46,7 @@ def scan_qr_attendance(
     """
     Record attendance via QR code scan for the current teacher's selected class session.
     """
-    user_id = UUID(current_user["sub"])
-    staff_id = _get_staff_id_from_user_id(db, user_id)
+    staff_id = _attendance_staff_id(db, current_user)
     return record_qr_scan_attendance(db=db, payload=payload, recorded_by_staff_id=staff_id)
 
 
@@ -52,8 +59,7 @@ def record_batch_attendance(
     """
     Batch mark or update daily attendance for a class (including marking status as 'excused' with remarks).
     """
-    user_id = UUID(current_user["sub"])
-    staff_id = _get_staff_id_from_user_id(db, user_id)
+    staff_id = _attendance_staff_id(db, current_user)
     return batch_mark_attendance(db=db, payload=payload, recorded_by_staff_id=staff_id)
 
 
@@ -62,26 +68,41 @@ def list_class_attendance_logs(
     class_id: int,
     date_val: Optional[date] = Query(None, alias="date", description="Filter by specific date (YYYY-MM-DD)"),
     subject_id: Optional[int] = Query(None, description="Filter by specific subject ID"),
+    academic_period_id: Optional[int] = Query(None, description="Filter by academic period ID"),
     current_user: dict = Depends(require_role("teacher", "admin")),
     db: Session = Depends(get_db),
 ):
     """
     Retrieve attendance logs for a class, optionally filtered by date or subject.
     """
-    return get_class_attendance_logs(db=db, class_id=class_id, date_val=date_val, subject_id=subject_id)
+    staff_id = None
+    if str(current_user.get("role", "")).lower() == "teacher":
+        staff_id = _attendance_staff_id(db, current_user)
+    return get_class_attendance_logs(
+        db=db, class_id=class_id, date_val=date_val, subject_id=subject_id,
+        academic_period_id=academic_period_id, staff_id=staff_id
+    )
 
 
 @router.get("/student/{student_id}/summary", response_model=AttendanceSummaryResponse)
 def get_student_summary(
     student_id: UUID,
     class_id: Optional[int] = Query(None, description="Filter summary by class ID"),
+    subject_id: Optional[int] = Query(None, description="Filter summary by subject ID"),
+    academic_period_id: Optional[int] = Query(None, description="Filter summary by academic period ID"),
     current_user: dict = Depends(require_role("teacher", "admin")),
     db: Session = Depends(get_db),
 ):
     """
     Get overall attendance statistics and rate (%) for a student by UUID (teacher/admin only).
     """
-    return get_student_attendance_summary(db=db, student_id=student_id, class_id=class_id)
+    staff_id = None
+    if str(current_user.get("role", "")).lower() == "teacher":
+        staff_id = _attendance_staff_id(db, current_user)
+    return get_student_attendance_summary(
+        db=db, student_id=student_id, class_id=class_id, subject_id=subject_id,
+        academic_period_id=academic_period_id, staff_id=staff_id
+    )
 
 
 # ---------------------------------------------------------------------------

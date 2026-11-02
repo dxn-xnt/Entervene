@@ -401,6 +401,104 @@ def test_teacher_period_options_can_be_scoped_to_class_subject(student_record_co
     assert [item["period_name"] for item in scoped.json()["periods"]] == ["Term 1"]
 
 
+def test_default_student_record_period_does_not_fall_back_from_another_class(student_record_context):
+    ctx = student_record_context
+    ctx["period"].is_active = False
+    ctx["db"].add(
+        SubjectLoad(
+            staff_id=ctx["owner"].staff_id,
+            subject_id=ctx["subject"].subject_id,
+            class_id=ctx["other_class"].class_id,
+            academic_period_id=ctx["old_period"].academic_period_id,
+            status="active",
+        )
+    )
+    ctx["db"].commit()
+
+    response = ctx["client"].get(
+        f"/api/v1/student-records/teacher/classes/{ctx['class'].class_id}"
+        f"/subjects/{ctx['subject'].subject_id}/roster"
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["scope"]["academic_period_id"] == ctx["period"].academic_period_id
+
+
+def test_default_student_record_tracks_canonical_period_switch(student_record_context):
+    ctx = student_record_context
+    ctx["period"].is_active = False
+    ctx["old_period"].is_active = True
+    ctx["db"].add(SubjectLoad(
+        staff_id=ctx["owner"].staff_id,
+        subject_id=ctx["subject"].subject_id,
+        class_id=ctx["class"].class_id,
+        academic_period_id=ctx["old_period"].academic_period_id,
+        status="active",
+    ))
+    ctx["db"].commit()
+
+    response = ctx["client"].get(
+        f"/api/v1/student-records/teacher/classes/{ctx['class'].class_id}"
+        f"/subjects/{ctx['subject'].subject_id}/roster"
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["scope"]["academic_period_id"] == ctx["old_period"].academic_period_id
+    assert all(row["official_period_grade"] is None for row in response.json()["students"])
+
+
+def test_teacher_period_options_reject_inconsistent_active_lifecycle(student_record_context):
+    ctx = student_record_context
+    ctx["old_period"].is_active = True
+    ctx["db"].commit()
+
+    response = ctx["client"].get("/api/v1/student-records/teacher/periods")
+
+    assert response.status_code == 409
+    assert "multiple grading periods are active" in response.json()["detail"]
+
+
+def test_teacher_period_options_exclude_cross_year_loads(student_record_context):
+    ctx = student_record_context
+    future_year = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=False,
+    )
+    ctx["db"].add(future_year)
+    ctx["db"].flush()
+    future_period = AcademicPeriod(
+        period_name="Future Term",
+        period_type="TERM",
+        period_sequence=1,
+        start_date=date(2026, 6, 1),
+        end_date=date(2026, 8, 31),
+        academic_year_id=future_year.academic_year_id,
+        is_active=False,
+    )
+    ctx["db"].add(future_period)
+    ctx["db"].flush()
+    ctx["db"].add(SubjectLoad(
+        staff_id=ctx["owner"].staff_id,
+        subject_id=ctx["subject"].subject_id,
+        class_id=ctx["class"].class_id,
+        academic_period_id=future_period.academic_period_id,
+        status="active",
+    ))
+    ctx["db"].commit()
+
+    response = ctx["client"].get(
+        "/api/v1/student-records/teacher/periods",
+        params={"class_id": ctx["class"].class_id, "subject_id": ctx["subject"].subject_id},
+    )
+
+    assert response.status_code == 200
+    assert [item["academic_period_id"] for item in response.json()["periods"]] == [
+        ctx["period"].academic_period_id
+    ]
+
+
 def test_student_record_does_not_fall_back_to_other_period_work(student_record_context):
     ctx = student_record_context
     ctx["db"].add(

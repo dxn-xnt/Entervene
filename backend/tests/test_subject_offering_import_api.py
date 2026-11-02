@@ -31,7 +31,7 @@ TABLES = [
 ]
 
 HEADER = "academic_year,grade_level,pathway,term,subject_code"
-READ_ONLY_DETAIL = "Subject offerings for inactive academic years are read-only to protect historical records."
+READ_ONLY_DETAIL = "Subject offerings for historical academic years or periods are read-only."
 
 
 @pytest.fixture
@@ -69,10 +69,11 @@ def client(db):
 def offering_data(db):
     year = AcademicYear(year_label="2026-2027", start_date=date(2026, 6, 1), end_date=date(2027, 3, 31), is_active=True)
     other_year = AcademicYear(year_label="2027-2028", start_date=date(2027, 6, 1), end_date=date(2028, 3, 31), is_active=False)
+    historical_year = AcademicYear(year_label="2025-2026", start_date=date(2025, 6, 1), end_date=date(2026, 3, 31), is_active=False)
     grade_7 = AcademicLevel(level_name="Grade 7", grade_level=7)
     grade_11 = AcademicLevel(level_name="Grade 11", grade_level=11)
     grade_12 = AcademicLevel(level_name="Grade 12", grade_level=12)
-    db.add_all([year, other_year, grade_7, grade_11, grade_12])
+    db.add_all([year, other_year, historical_year, grade_7, grade_11, grade_12])
     db.flush()
     term_1 = AcademicPeriod(
         period_name="Term 1",
@@ -101,7 +102,16 @@ def offering_data(db):
         end_date=date(2027, 8, 31),
         academic_year_id=other_year.academic_year_id,
     )
-    db.add_all([term_1, term_2, other_term])
+    historical_term = AcademicPeriod(
+        period_name="Term 1",
+        period_type="TERM",
+        period_sequence=1,
+        total_periods_in_year=3,
+        start_date=date(2025, 6, 1),
+        end_date=date(2025, 8, 31),
+        academic_year_id=historical_year.academic_year_id,
+    )
+    db.add_all([term_1, term_2, other_term, historical_term])
     db.flush()
     math_7 = Subject(subject_name="Mathematics 7", subject_codename="MATH7", status="active", academic_level_id=grade_7.academic_level_id)
     biology = Subject(subject_name="General Biology 1", subject_codename="GENBIO1", status="active", academic_level_id=grade_11.academic_level_id)
@@ -114,12 +124,14 @@ def offering_data(db):
     return {
         "year": year,
         "other_year": other_year,
+        "historical_year": historical_year,
         "grade_7": grade_7,
         "grade_11": grade_11,
         "grade_12": grade_12,
         "term_1": term_1,
         "term_2": term_2,
         "other_term": other_term,
+        "historical_term": historical_term,
         "math_7": math_7,
         "biology": biology,
         "precal": precal,
@@ -211,7 +223,7 @@ def test_subject_offering_import_enforces_grade_pathway_rules(client, db, offeri
     assert any("Grade 11 and Grade 12" in message for message in messages)
 
 
-def test_subject_offering_import_rejects_inactive_academic_year(client, db, offering_data):
+def test_subject_offering_import_allows_prepared_future_academic_year(client, db, offering_data):
     content = "\n".join([
         HEADER,
         "2027-2028,11,both,Term 1,GENBIO1",
@@ -221,8 +233,21 @@ def test_subject_offering_import_rejects_inactive_academic_year(client, db, offe
 
     assert response.status_code == 200
     body = response.json()
+    assert body["created_count"] == 1
+    assert body["skipped_count"] == 0
+    assert body["error_count"] == 0
+    assert db.query(SubjectOffering).count() == 1
+
+
+def test_subject_offering_import_rejects_historical_academic_year(client, db, offering_data):
+    response = upload(client, "\n".join([
+        HEADER,
+        "2025-2026,11,both,Term 1,GENBIO1",
+    ]))
+
+    assert response.status_code == 200
+    body = response.json()
     assert body["created_count"] == 0
-    assert body["skipped_count"] == 1
     assert body["error_count"] == 1
     assert body["errors"][0]["message"] == READ_ONLY_DETAIL
     assert db.query(SubjectOffering).count() == 0

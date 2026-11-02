@@ -77,10 +77,17 @@ def get_teacher_lesson_linked_classwork(
 def get_lessons_for_class_subject(
     class_id: int,
     subject_id: int,
+    academic_period_id: Optional[int] = None,
     student=Depends(get_student_record),
     db: Session = Depends(get_db),
 ):
-    return student_lessons_for_class_subject(class_id, subject_id, student, db)
+    return student_lessons_for_class_subject(
+        class_id,
+        subject_id,
+        student,
+        db,
+        academic_period_id=academic_period_id,
+    )
 
 
 # Static routes must remain above this lesson_id wildcard section.
@@ -135,10 +142,17 @@ def assign_lesson(
 def get_lesson_classwork_assignments(
     lesson_id: int,
     class_id: int,
+    academic_period_id: Optional[int] = None,
     student=Depends(get_student_record),
     db: Session = Depends(get_db),
 ):
-    return lesson_classwork_assignments(lesson_id, class_id, student, db)
+    return lesson_classwork_assignments(
+        lesson_id,
+        class_id,
+        student,
+        db,
+        academic_period_id=academic_period_id,
+    )
 
 
 @router.put("/{lesson_id}/archive")

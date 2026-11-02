@@ -50,6 +50,20 @@ def ensure_teacher_class_subject(
     ).first()
     if not load:
         raise HTTPException(status_code=403, detail="Not assigned to this class/subject")
+    loads = db.query(SubjectLoad).filter(
+        SubjectLoad.class_id == class_id,
+        SubjectLoad.subject_id == subject_id,
+        SubjectLoad.is_active_version.is_(True),
+        SubjectLoad.status.in_(["active", "published"]),
+    ).all()
+    if any(
+        SubjectLoadAuthorizationService.can_write(
+            db, staff_id, l.class_id, l.subject_id, l.academic_period_id
+        )
+        for l in loads
+    ):
+        return
+    load = next((l for l in loads if l.staff_id == staff_id), load)
     authorize = (
         SubjectLoadAuthorizationService.assert_can_view
         if read_only else SubjectLoadAuthorizationService.assert_can_write
@@ -67,6 +81,42 @@ def ensure_student_enrolled(db: Session, student_id: str, class_id: int) -> None
     ).first()
     if not enrollment:
         raise HTTPException(status_code=403, detail="Not enrolled in this class")
+
+
+def student_has_subject_period(
+    db: Session,
+    *,
+    student_id: str,
+    class_id: int,
+    subject_id: int,
+    academic_period_id: int,
+) -> bool:
+    """Return whether a selected period is a published student subject scope.
+
+    Enrollment remains the authorization boundary. A missing, wrong-year, or
+    unpublished period is an empty subject context rather than a fallback to a
+    different term.
+    """
+    ensure_student_enrolled(db, student_id, class_id)
+    return db.query(SubjectLoad.subject_load_id).join(
+        Class, Class.class_id == SubjectLoad.class_id
+    ).join(
+        AcademicPeriod,
+        AcademicPeriod.academic_period_id == SubjectLoad.academic_period_id,
+    ).join(
+        StudentClass,
+        (StudentClass.class_id == Class.class_id)
+        & (StudentClass.academic_year_id == Class.academic_year_id),
+    ).filter(
+        StudentClass.student_id == student_id,
+        StudentClass.enrollment_status == "enrolled",
+        SubjectLoad.class_id == class_id,
+        SubjectLoad.subject_id == subject_id,
+        SubjectLoad.academic_period_id == academic_period_id,
+        SubjectLoad.is_active_version.is_(True),
+        SubjectLoad.status.in_(["active", "published"]),
+        Class.academic_year_id == AcademicPeriod.academic_year_id,
+    ).first() is not None
 
 
 def get_owned_lesson(db: Session, staff_id: str, lesson_id: int) -> Lesson:

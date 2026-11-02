@@ -6,7 +6,10 @@ from hashlib import sha256
 import json
 
 import pytest
+from fastapi import HTTPException
 
+from app.models.academic.AcademicYear import AcademicYear
+from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.AIPrediction import AIPrediction
@@ -313,6 +316,31 @@ def test_inactive_term_blocks_persistence_even_with_ready_evidence(current_perio
     assert ctx["db"].query(DevelopmentCurrentTermPrediction).count() == 0
 
 
+def test_mismatched_class_year_cannot_be_persisted(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    model_version_id = _register_test_model(ctx)
+    future = AcademicYear(
+        year_label="2027-2028",
+        start_date=ctx["period"].start_date.replace(year=2027),
+        end_date=ctx["period"].end_date.replace(year=2028),
+        is_active=False,
+    )
+    ctx["db"].add(future)
+    ctx["db"].flush()
+    ctx["class"].academic_year_id = future.academic_year_id
+    ctx["db"].commit()
+    monkeypatch.setattr(scorer, "score_development_current_term", lambda _features: 84.6)
+
+    result = _run(ctx, model_version_id)
+
+    assert result["persisted"] is False
+    assert result["prediction_status"] == "INVALID_PERIOD_SCOPE"
+    assert result["reason_codes"] == ["CLASS_PERIOD_YEAR_MISMATCH"]
+    assert ctx["db"].query(DevelopmentCurrentTermPrediction).count() == 0
+
+
 @pytest.mark.parametrize("blocker", ["insufficient", "subject", "weight", "finalized"])
 def test_blocked_results_are_not_persisted(current_period_context, monkeypatch, blocker):
     ctx = current_period_context
@@ -366,4 +394,115 @@ def test_model_version_is_required_and_development_only(current_period_context):
     ctx["db"].commit()
     with pytest.raises(ValueError, match="inactive development V3 contract"):
         _run(ctx, model_version_id)
+    assert ctx["db"].query(DevelopmentCurrentTermPrediction).count() == 0
+
+
+def test_missing_active_subject_load_cannot_be_persisted(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    model_version_id = _register_test_model(ctx)
+    load = ctx["db"].query(SubjectLoad).filter(
+        SubjectLoad.class_id == ctx["class"].class_id,
+        SubjectLoad.subject_id == ctx["subject"].subject_id,
+        SubjectLoad.academic_period_id == ctx["period"].academic_period_id,
+    ).one()
+    load.is_active_version = False
+    ctx["db"].commit()
+    monkeypatch.setattr(scorer, "score_development_current_term", lambda _features: 84.6)
+
+    result = _run(ctx, model_version_id)
+
+    assert result["persisted"] is False
+    assert result["prediction_status"] == "INVALID_PERIOD_SCOPE"
+    assert result["reason_codes"] == ["ACTIVE_SUBJECT_LOAD_NOT_FOUND"]
+    assert ctx["db"].query(DevelopmentCurrentTermPrediction).count() == 0
+
+
+@pytest.mark.parametrize("inconsistency", ["period_inactive", "class_year_mismatch", "subject_load_inactive", "year_inactive"])
+def test_inconsistent_lifecycle_never_reuses_existing_prediction(current_period_context, monkeypatch, inconsistency):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    model_version_id = _register_test_model(ctx)
+    monkeypatch.setattr(scorer, "score_development_current_term", lambda _features: 84.6)
+
+    # 1. Successful first run creates revision 1
+    first = _run(ctx, model_version_id)
+    assert first["persisted"] is True
+    assert first["revision"] == 1
+    assert ctx["db"].query(DevelopmentCurrentTermPrediction).count() == 1
+
+    # 2. Make scope inconsistent
+    if inconsistency == "period_inactive":
+        ctx["period"].is_active = False
+        ctx["db"].commit()
+        result = _run(ctx, model_version_id)
+        assert result["persisted"] is False
+        assert result.get("unchanged") is not True
+        assert result["prediction_status"] == "PERIOD_NOT_ACTIVE"
+        assert result["reason_codes"] == ["PERIOD_NOT_ACTIVE"]
+    elif inconsistency == "class_year_mismatch":
+        future = AcademicYear(
+            year_label="2028-2029",
+            start_date=ctx["period"].start_date.replace(year=2028),
+            end_date=ctx["period"].end_date.replace(year=2029),
+            is_active=False,
+        )
+        ctx["db"].add(future)
+        ctx["db"].flush()
+        ctx["class"].academic_year_id = future.academic_year_id
+        ctx["db"].commit()
+        result = _run(ctx, model_version_id)
+        assert result["persisted"] is False
+        assert result.get("unchanged") is not True
+        assert result["prediction_status"] == "INVALID_PERIOD_SCOPE"
+        assert result["reason_codes"] == ["CLASS_PERIOD_YEAR_MISMATCH"]
+    elif inconsistency == "subject_load_inactive":
+        load = ctx["db"].query(SubjectLoad).filter(
+            SubjectLoad.class_id == ctx["class"].class_id,
+            SubjectLoad.subject_id == ctx["subject"].subject_id,
+            SubjectLoad.academic_period_id == ctx["period"].academic_period_id,
+        ).one()
+        load.is_active_version = False
+        ctx["db"].commit()
+        result = _run(ctx, model_version_id)
+        assert result["persisted"] is False
+        assert result.get("unchanged") is not True
+        assert result["prediction_status"] == "INVALID_PERIOD_SCOPE"
+        assert result["reason_codes"] == ["ACTIVE_SUBJECT_LOAD_NOT_FOUND"]
+    elif inconsistency == "year_inactive":
+        year = ctx["db"].get(AcademicYear, ctx["period"].academic_year_id)
+        year.is_active = False
+        ctx["db"].commit()
+        with pytest.raises(HTTPException) as exc_info:
+            _run(ctx, model_version_id)
+        assert exc_info.value.status_code == 409
+
+    # Existing prediction record remains unmodified at revision 1, no new rows
+    assert ctx["db"].query(DevelopmentCurrentTermPrediction).count() == 1
+
+
+def test_concurrent_lifecycle_scope_change_before_persistence_raises_value_error(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    model_version_id = _register_test_model(ctx)
+    monkeypatch.setattr(scorer, "score_development_current_term", lambda _features: 84.6)
+
+    orig_reason_codes = service.prediction_service.current_term_lifecycle_reason_codes
+    calls = []
+
+    def mocked_reason_codes(db, *, class_id, subject_id, period_id, lock=False):
+        calls.append(lock)
+        if lock:
+            # Simulate lifecycle scope invalidation between prepare and locked persistence
+            return ["ACTIVE_SUBJECT_LOAD_NOT_FOUND"]
+        return orig_reason_codes(db, class_id=class_id, subject_id=subject_id, period_id=period_id, lock=lock)
+
+    monkeypatch.setattr(service.prediction_service, "current_term_lifecycle_reason_codes", mocked_reason_codes)
+
+    with pytest.raises(ValueError, match="The current-term academic lifecycle scope changed before persistence"):
+        _run(ctx, model_version_id)
+
     assert ctx["db"].query(DevelopmentCurrentTermPrediction).count() == 0

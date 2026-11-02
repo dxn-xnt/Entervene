@@ -40,18 +40,26 @@ def candidate_context(current_period_context, monkeypatch):
     ctx = current_period_context
     model_id = _setup(ctx, monkeypatch, [84, 84])
     db = ctx["db"]
-    db.add_all([
-        StudentClass(
+    if not db.query(StudentClass).filter_by(
+        student_id=ctx["student"].student_id,
+        academic_year_id=ctx["class"].academic_year_id,
+    ).first():
+        db.add(StudentClass(
             student_id=ctx["student"].student_id, class_id=ctx["class"].class_id,
             academic_year_id=ctx["class"].academic_year_id, enrollment_status="enrolled",
-        ),
-        SubjectLoad(
+        ))
+    if not db.query(SubjectLoad).filter_by(
+        staff_id=ctx["staff"].staff_id,
+        class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        academic_period_id=ctx["period"].academic_period_id,
+    ).first():
+        db.add(SubjectLoad(
             staff_id=ctx["staff"].staff_id, class_id=ctx["class"].class_id,
             subject_id=ctx["subject"].subject_id,
             academic_period_id=ctx["period"].academic_period_id,
             status="published", is_active_version=True,
-        ),
-    ])
+        ))
     db.commit()
     result = _run(ctx, model_id)
     ctx["candidate"] = db.query(Intervention).filter_by(source_prediction_id=result["prediction_id"]).one()

@@ -15,8 +15,8 @@ SHS_PATHWAYS = {"both", "stem_medical", "stem_engineering"}
 ALLOWED_PATHWAYS = [GENERAL_PATHWAY, "both", "stem_medical", "stem_engineering"]
 ALLOWED_OFFERING_STATUSES = ["active", "archived"]
 DEFAULT_OFFERING_STATUS = "active"
-INACTIVE_ACADEMIC_YEAR_READ_ONLY_MESSAGE = (
-    "Subject offerings for inactive academic years are read-only to protect historical records."
+HISTORICAL_ACADEMIC_YEAR_READ_ONLY_MESSAGE = (
+    "Subject offerings for historical academic years or periods are read-only."
 )
 
 
@@ -88,9 +88,28 @@ def get_academic_year_or_404(db: Session, academic_year_id: int) -> AcademicYear
     return academic_year
 
 
-def ensure_academic_year_is_active(academic_year: AcademicYear) -> None:
-    if not academic_year.is_active:
-        raise HTTPException(status_code=409, detail=INACTIVE_ACADEMIC_YEAR_READ_ONLY_MESSAGE)
+def ensure_academic_year_is_configurable(
+    db: Session,
+    academic_year: AcademicYear,
+    academic_period: AcademicPeriod | None = None,
+) -> None:
+    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+
+    try:
+        SubjectLoadAuthorizationService.assert_context_configurable(
+            db,
+            academic_year_id=academic_year.academic_year_id,
+            academic_period_id=(
+                academic_period.academic_period_id
+                if academic_period is not None
+                else None
+            ),
+        )
+    except HTTPException as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=HISTORICAL_ACADEMIC_YEAR_READ_ONLY_MESSAGE,
+        ) from exc
 
 
 def get_academic_level_or_404(db: Session, academic_level_id: int) -> AcademicLevel:

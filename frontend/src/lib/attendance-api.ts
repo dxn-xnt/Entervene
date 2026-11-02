@@ -27,6 +27,7 @@ export type BatchAttendanceItem = {
 export type BatchAttendancePayload = {
   class_id: number;
   subject_id?: number;
+  academic_period_id?: number;
   date: string;
   records: BatchAttendanceItem[];
 };
@@ -44,6 +45,7 @@ export type QRScanAttendancePayload = {
   student_id: string;
   class_id: number;
   subject_id?: number;
+  academic_period_id?: number;
 };
 
 export type QRScanAttendanceResponse = {
@@ -86,11 +88,13 @@ export async function recordBatchAttendance(payload: BatchAttendancePayload): Pr
 export async function getClassAttendanceLogs(
   classId: number,
   dateStr?: string,
-  subjectId?: number
+  subjectId?: number,
+  academicPeriodId?: number,
 ): Promise<AttendanceRecordItem[]> {
   const params = new URLSearchParams();
   if (dateStr) params.append("date", dateStr);
   if (subjectId) params.append("subject_id", String(subjectId));
+  if (academicPeriodId) params.append("academic_period_id", String(academicPeriodId));
 
   const queryString = params.toString() ? `?${params.toString()}` : "";
   const res = await apiFetch(`/api/v1/attendance/class/${classId}${queryString}`);

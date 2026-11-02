@@ -170,11 +170,30 @@ def _add_teacher(ctx, staff_id: str, email: str):
 
 
 def _add_load(ctx, staff, *, class_=None, subject=None, period=None):
+    class_id = (class_ or ctx["class"]).class_id
+    subject_id = (subject or ctx["subject"]).subject_id
+    period_id = (period or ctx["period"]).academic_period_id
+    existing = (
+        ctx["db"]
+        .query(SubjectLoad)
+        .filter(
+            SubjectLoad.class_id == class_id,
+            SubjectLoad.subject_id == subject_id,
+            SubjectLoad.academic_period_id == period_id,
+            SubjectLoad.is_active_version.is_(True),
+        )
+        .first()
+    )
+    if existing is not None:
+        existing.staff_id = staff.staff_id
+        existing.status = "published"
+        ctx["db"].commit()
+        return existing
     load = SubjectLoad(
         staff_id=staff.staff_id,
-        class_id=(class_ or ctx["class"]).class_id,
-        subject_id=(subject or ctx["subject"]).subject_id,
-        academic_period_id=(period or ctx["period"]).academic_period_id,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=period_id,
         status="published",
         is_active_version=True,
     )
@@ -185,6 +204,20 @@ def _add_load(ctx, staff, *, class_=None, subject=None, period=None):
 
 def _enroll(ctx, student, *, class_=None, status="enrolled"):
     class_ = class_ or ctx["class"]
+    existing = (
+        ctx["db"]
+        .query(StudentClass)
+        .filter(
+            StudentClass.student_id == student.student_id,
+            StudentClass.academic_year_id == class_.academic_year_id,
+        )
+        .first()
+    )
+    if existing is not None:
+        existing.class_id = class_.class_id
+        existing.enrollment_status = status
+        ctx["db"].commit()
+        return existing
     enrollment = StudentClass(
         student_id=student.student_id,
         class_id=class_.class_id,

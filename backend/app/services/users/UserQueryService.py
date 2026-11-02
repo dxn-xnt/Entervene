@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, aliased
 
 from app.models.academic.AcademicLevel import AcademicLevel
@@ -24,6 +24,7 @@ from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.users.UserShared import capitalize_name
+from app.services.academic.AcademicLifecycleService import resolve_active_academic_year
 
 # READ SIDE OF USER MANAGEMENT
 # User data is spread across authentication, role, staff/student profile, class,
@@ -381,7 +382,11 @@ def _get_teacher_handled_data(db: Session, staff_id: str) -> dict[str, Any]:
     }
 
 
-def get_user_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any]:
+def get_user_detail(
+    db: Session,
+    user_id: uuid.UUID,
+    academic_year_id: int | None = None,
+) -> dict[str, Any]:
     user = _base_user_query(db).filter(UserAccount.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -419,48 +424,73 @@ def get_user_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any]:
         item["handled_classes"] = tdata["handled_classes"]
 
     if client_role == "student" and user.student_id:
+        if academic_year_id is not None:
+            selected_year = db.get(AcademicYear, academic_year_id)
+            if selected_year is None:
+                raise HTTPException(status_code=404, detail="Academic year not found")
+        else:
+            selected_year = resolve_active_academic_year(db)
+
         class_row = (
-            db.query(Class.section_name)
+            db.query(Class.section_name, AcademicLevel.grade_level)
             .join(StudentClass, Class.class_id == StudentClass.class_id)
+            .outerjoin(AcademicLevel, AcademicLevel.academic_level_id == Class.academic_level_id)
             .filter(StudentClass.student_id == user.student_id)
             .filter(StudentClass.enrollment_status == "enrolled")
+            .filter(StudentClass.academic_year_id == selected_year.academic_year_id)
+            .filter(Class.academic_year_id == selected_year.academic_year_id)
             .order_by(StudentClass.enrolled_at.desc())
             .first()
         )
         average = (
             db.query(func.avg(StudentSubmission.grade))
+            .join(
+                ClassworkAssignment,
+                ClassworkAssignment.classwork_assignment_id == StudentSubmission.classwork_assignment_id,
+            )
+            .join(Class, Class.class_id == ClassworkAssignment.class_id)
             .filter(StudentSubmission.student_id == user.student_id)
             .filter(StudentSubmission.status == "graded")
             .filter(StudentSubmission.grade.isnot(None))
+            .filter(Class.academic_year_id == selected_year.academic_year_id)
             .scalar()
         )
         student_obj = db.query(Student.prior_gwa).filter(Student.student_id == user.student_id).first()
-        active_ay = db.query(AcademicYear.academic_year_id).filter(AcademicYear.is_active.is_(True)).first()
-        has_computed = False
-        if active_ay is not None:
-            has_computed = bool(
-                db.query(
-                    db.query(StudentPeriodGrade.period_grade_id)
-                    .join(Class, Class.class_id == StudentPeriodGrade.class_id)
-                    .filter(StudentPeriodGrade.student_id == user.student_id)
-                    .filter(Class.academic_year_id < active_ay[0])
-                    .filter(
-                        or_(
-                            StudentPeriodGrade.final_period_grade.isnot(None),
-                            StudentPeriodGrade.transmuted_grade.isnot(None),
-                            StudentPeriodGrade.initial_grade.isnot(None),
-                        )
+        has_computed = bool(
+            db.query(
+                db.query(StudentPeriodGrade.period_grade_id)
+                .join(Class, Class.class_id == StudentPeriodGrade.class_id)
+                .join(AcademicPeriod, AcademicPeriod.academic_period_id == StudentPeriodGrade.academic_period_id)
+                .join(AcademicYear, AcademicYear.academic_year_id == Class.academic_year_id)
+                .join(
+                    StudentClass,
+                    and_(
+                        StudentClass.student_id == StudentPeriodGrade.student_id,
+                        StudentClass.class_id == StudentPeriodGrade.class_id,
+                        StudentClass.academic_year_id == Class.academic_year_id,
+                    ),
+                )
+                .filter(StudentPeriodGrade.student_id == user.student_id)
+                .filter(StudentClass.enrollment_status == "enrolled")
+                .filter(AcademicYear.end_date < selected_year.start_date)
+                .filter(AcademicPeriod.academic_year_id == Class.academic_year_id)
+                .filter(
+                    or_(
+                        StudentPeriodGrade.final_period_grade.isnot(None),
+                        StudentPeriodGrade.transmuted_grade.isnot(None),
+                        StudentPeriodGrade.initial_grade.isnot(None),
                     )
-                    .exists()
-                ).scalar()
-            )
+                )
+                .exists()
+            ).scalar()
+        )
 
         item["student_id"] = str(user.student_id)
         item["section"] = class_row.section_name if class_row else None
-        item["grade_level"] = user.grade_level
+        item["grade_level"] = class_row.grade_level if class_row else user.grade_level
         item["student_status"] = "No Section Assigned" if not class_row else user.account_status
         item["graduation_year"] = None
-        item["last_grade_level"] = user.grade_level
+        item["last_grade_level"] = class_row.grade_level if class_row else user.grade_level
         item["last_section"] = class_row.section_name if class_row else None
         item["average"] = round(float(average)) if average is not None else None
         item["prior_gwa"] = float(student_obj.prior_gwa) if student_obj and student_obj.prior_gwa is not None else None

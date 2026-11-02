@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 
 from app.core.Config import settings
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
-from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.services.prediction import DevelopmentCurrentTermPredictionService as prediction_service
@@ -231,11 +230,18 @@ def _persist_successful_result(
         StudentPeriodGrade.final_period_grade.isnot(None),
     ).first() is not None:
         raise ValueError("A finalized same-term grade exists; development prediction was not persisted.")
-    period = db.query(AcademicPeriod).filter(
-        AcademicPeriod.academic_period_id == period_id
-    ).with_for_update(read=True).one_or_none()
-    if period is None or not period.is_active:
-        raise ValueError("The academic period is no longer active; development prediction was not persisted.")
+    lifecycle_reasons = prediction_service.current_term_lifecycle_reason_codes(
+        db,
+        class_id=class_id,
+        subject_id=subject_id,
+        period_id=period_id,
+        lock=True,
+    )
+    if lifecycle_reasons:
+        raise ValueError(
+            "The current-term academic lifecycle scope changed; development prediction was not persisted "
+            f"({', '.join(lifecycle_reasons)})."
+        )
 
     scope_result = prediction_service.resolve_v3_scope(db, student_id, class_id, subject_id)
     if not scope_result["supported"]:
@@ -376,6 +382,18 @@ def generate_and_persist_development_current_term(
             model_name=version.model_name,
         )
         if prepared is not None:
+            lifecycle_reasons = prediction_service.current_term_lifecycle_reason_codes(
+                db,
+                class_id=class_id,
+                subject_id=subject_id,
+                period_id=period_id,
+                lock=True,
+            )
+            if lifecycle_reasons:
+                raise ValueError(
+                    "The current-term academic lifecycle scope changed before persistence "
+                    f"({', '.join(lifecycle_reasons)})."
+                )
             material_evidence = _material_evidence(
                 version,
                 prepared["features"],

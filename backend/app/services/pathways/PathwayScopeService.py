@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import List
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -101,6 +102,23 @@ def get_pathway_scopes_for_year(db: Session, academic_year_id: int) -> PathwaySc
 
 
 def upsert_pathway_scopes(db: Session, payload: PathwayScopeBatchPayload) -> PathwayScopeListResponse:
+    if db.get(AcademicYear, payload.academic_year_id) is None:
+        raise HTTPException(status_code=404, detail="Academic year not found")
+    level_ids = {item.academic_level_id for item in payload.scopes}
+    existing_level_ids = {
+        row[0]
+        for row in db.query(AcademicLevel.academic_level_id)
+        .filter(AcademicLevel.academic_level_id.in_(level_ids))
+        .all()
+    }
+    if existing_level_ids != level_ids:
+        raise HTTPException(status_code=404, detail="Academic level not found")
+
+    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+    SubjectLoadAuthorizationService.assert_context_configurable(
+        db, academic_year_id=payload.academic_year_id
+    )
+
     for item in payload.scopes:
         scope = (
             db.query(AcademicLevelPathwayScope)
@@ -125,7 +143,9 @@ def upsert_pathway_scopes(db: Session, payload: PathwayScopeBatchPayload) -> Pat
     return get_pathway_scopes_for_year(db, payload.academic_year_id)
 
 
-def clone_prior_year_pathway_scopes(db: Session, target_academic_year_id: int) -> int:
+def clone_prior_year_pathway_scopes(
+    db: Session, target_academic_year_id: int, *, commit: bool = True
+) -> int:
     target_year = (
         db.query(AcademicYear)
         .filter(AcademicYear.academic_year_id == target_academic_year_id)
@@ -133,6 +153,11 @@ def clone_prior_year_pathway_scopes(db: Session, target_academic_year_id: int) -
     )
     if target_year is None:
         return 0
+
+    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+    SubjectLoadAuthorizationService.assert_context_configurable(
+        db, academic_year_id=target_academic_year_id
+    )
 
     prior_year = (
         db.query(AcademicYear)
@@ -170,7 +195,7 @@ def clone_prior_year_pathway_scopes(db: Session, target_academic_year_id: int) -
         db.add(new_scope)
         created_count += 1
 
-    if created_count > 0:
+    if created_count > 0 and commit:
         db.commit()
 
     return created_count

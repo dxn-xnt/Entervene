@@ -41,8 +41,22 @@ from app.services.academic.AutoSchedulerService import AutoSchedulerService
 from app.services.classes.ClassQueryService import class_pathway_code
 from app.services.pathways.PathwayScopeService import resolve_pathway_scope
 from app.services.academic.SubstitutionService import SubstitutionService
+from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
 
 router = APIRouter()
+
+
+def _resolve_requested_or_active_period(
+    db: Session,
+    academic_period_id: int | None,
+) -> AcademicPeriod:
+    if academic_period_id is not None:
+        period = db.get(AcademicPeriod, academic_period_id)
+        if period is None:
+            raise HTTPException(status_code=404, detail="Academic period not found.")
+        return period
+    return resolve_active_academic_period(db)
 
 
 
@@ -285,21 +299,15 @@ def get_subject_load_studio_data(
     years = db.query(AcademicYear).all()
     periods = db.query(AcademicPeriod).all()
     
-    selected_period = None
-    if academic_period_id:
-        selected_period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == academic_period_id).first()
-    if not selected_period:
-        selected_period = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first() or (periods[0] if periods else None)
-
-    selected_period_id = selected_period.academic_period_id if selected_period else 1
+    selected_period = _resolve_requested_or_active_period(db, academic_period_id)
+    selected_period_id = selected_period.academic_period_id
 
     levels = db.query(AcademicLevel).order_by(AcademicLevel.grade_level).all()
     classes = db.query(Class).filter(
         Class.class_status == "active",
         Class.academic_year_id == selected_period.academic_year_id,
-    ).all() if selected_period else []
+    ).all()
     pathway_by_id = {pathway.id: pathway for pathway in db.query(AcademicPathway).all()}
-    subjects = db.query(Subject).filter(Subject.status == "active").all()
     teachers = (
         db.query(AcademicStaff)
         .filter(
@@ -339,18 +347,30 @@ def get_subject_load_studio_data(
             for pl in published_active_loads:
                 existing_loads.append(_serialize_load_item(pl, period_deps))
 
-    try:
-        offerings = (
-            db.query(SubjectOffering)
-            .filter(
-                SubjectOffering.academic_period_id == selected_period_id,
-                SubjectOffering.status == "active",
-            )
-            .all()
+    # Active catalog subjects are selectable. Subjects referenced by the
+    # returned snapshot remain present solely so an archived/invalid existing
+    # load can still be displayed and corrected rather than disappearing.
+    existing_subject_ids = {
+        item["subject_id"] for item in existing_loads if item.get("subject_id") is not None
+    }
+    subject_filter = Subject.status == "active"
+    if existing_subject_ids:
+        subject_filter = or_(subject_filter, Subject.subject_id.in_(existing_subject_ids))
+    subjects = db.query(Subject).filter(subject_filter).all()
+
+    # Studio eligibility must use the same exact year/term offering scope as
+    # publication validation.  Let database failures surface to the client;
+    # an unavailable query is not equivalent to a successfully configured
+    # period with zero offerings.
+    offerings = (
+        db.query(SubjectOffering)
+        .filter(
+            SubjectOffering.academic_year_id == selected_period.academic_year_id,
+            SubjectOffering.academic_period_id == selected_period_id,
+            SubjectOffering.status == "active",
         )
-    except Exception:
-        db.rollback()
-        offerings = []
+        .all()
+    )
 
     return {
         "active_period_id": selected_period_id,
@@ -508,16 +528,22 @@ def update_period_templates(
                 # Class-slot edits cascade into loads. Never change a published
                 # section through the global template editor.
                 if db_slot.slot_type == "CLASS" and (old_start != new_start or old_end != new_end):
-                    target_classes = db.query(Class).filter(
+                    candidate_classes = db.query(Class).filter(
                         (Class.period_template_group == grp) | ((Class.period_template_group == None) & (grp == "JHS_45MIN"))
                     ).order_by(Class.class_id).with_for_update().all()
-                    target_class_ids = [c.class_id for c in target_classes]
+                    target_class_ids = [
+                        class_.class_id
+                        for class_ in candidate_classes
+                        if SubjectLoadAuthorizationService.get_configuration_restriction_reason(
+                            db, class_id=class_.class_id
+                        ) is None
+                    ]
 
                     if target_class_ids:
                         affected = db.query(SubjectLoad).filter(
+                            SubjectLoad.class_id.in_(target_class_ids),
                             (SubjectLoad.slot_id == db_slot.slot_id) | (
                                 (SubjectLoad.slot_id == None) &
-                                (SubjectLoad.class_id.in_(target_class_ids)) &
                                 (SubjectLoad.start_time == old_start) &
                                 (SubjectLoad.end_time == old_end)
                             ),
@@ -572,6 +598,9 @@ def update_class_template_group(
     cls = db.query(Class).filter(Class.class_id == class_id).with_for_update().first()
     if not cls:
         raise HTTPException(status_code=404, detail="Class not found")
+    SubjectLoadAuthorizationService.assert_context_configurable(
+        db, class_id=class_id
+    )
 
     if cls.period_template_group != payload.template_group and db.query(SubjectLoad).filter(
         SubjectLoad.class_id == class_id,
@@ -583,39 +612,52 @@ def update_class_template_group(
     cls.period_template_group = payload.template_group
     db.commit()
 
-    # Re-validate loads for this class against the new template
-    period = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
-    period_id = period.academic_period_id if period else 1
-
-    class_loads = db.query(SubjectLoad).filter(
+    # A template group belongs to the class, not the globally active year.
+    # Re-validate every configured period for this class without crossing years.
+    class_loads = db.query(SubjectLoad).join(
+        AcademicPeriod,
+        AcademicPeriod.academic_period_id == SubjectLoad.academic_period_id,
+    ).filter(
         SubjectLoad.class_id == class_id,
-        SubjectLoad.academic_period_id == period_id,
+        AcademicPeriod.academic_year_id == cls.academic_year_id,
     ).all()
+    loads_by_period: dict[int, list[SubjectLoad]] = {}
+    for load in class_loads:
+        loads_by_period.setdefault(load.academic_period_id, []).append(load)
 
-    load_items = [
-        SubjectLoadItem(
-            subject_load_id=l.subject_load_id,
-            class_id=l.class_id,
-            subject_id=l.subject_id,
-            staff_id=l.staff_id,
-            academic_period_id=l.academic_period_id,
-            start_time=l.start_time,
-            end_time=l.end_time,
-            days_of_week=l.days_of_week or [],
-            status=l.status or "draft",
-            is_locked=bool(l.is_locked),
+    conflicts = []
+    is_valid = True
+    for period_id, period_loads in loads_by_period.items():
+        period = db.get(AcademicPeriod, period_id)
+        load_items = [
+            SubjectLoadItem(
+                subject_load_id=load.subject_load_id,
+                class_id=load.class_id,
+                subject_id=load.subject_id,
+                staff_id=load.staff_id,
+                academic_period_id=load.academic_period_id,
+                start_time=load.start_time,
+                end_time=load.end_time,
+                days_of_week=load.days_of_week or [],
+                status=load.status or "draft",
+                is_locked=bool(load.is_locked),
+            )
+            for load in period_loads
+        ]
+        validation_res = ConflictDetectorService.validate_loads(
+            db=db,
+            loads=load_items,
+            academic_period=period,
         )
-        for l in class_loads
-    ]
-
-    validation_res = ConflictDetectorService.validate_loads(db=db, loads=load_items, academic_period=period)
+        is_valid = is_valid and validation_res.is_valid
+        conflicts.extend(validation_res.conflicts)
 
     return {
         "message": f"Successfully updated bell schedule template for section '{cls.section_name}'.",
         "class_id": cls.class_id,
         "period_template_group": cls.period_template_group,
-        "conflicts": [c.dict() if hasattr(c, "dict") else c for c in validation_res.conflicts],
-        "is_valid": validation_res.is_valid,
+        "conflicts": [c.dict() if hasattr(c, "dict") else c for c in conflicts],
+        "is_valid": is_valid,
     }
 
 
@@ -698,6 +740,13 @@ def unlock_section(
     cls = db.query(Class).filter(Class.class_id == payload.class_id).with_for_update().first()
     if not cls:
         raise HTTPException(status_code=404, detail="Class section not found.")
+    if db.get(AcademicPeriod, payload.academic_period_id) is None:
+        raise HTTPException(status_code=404, detail="Academic period not found.")
+    SubjectLoadAuthorizationService.assert_context_configurable(
+        db,
+        class_id=payload.class_id,
+        academic_period_id=payload.academic_period_id,
+    )
 
     # Idempotent safeguard: check if a working draft already exists
     existing_drafts = (
@@ -789,6 +838,13 @@ def discard_draft(
     cls = db.query(Class).filter(Class.class_id == payload.class_id).with_for_update().first()
     if not cls:
         raise HTTPException(status_code=404, detail="Class section not found.")
+    if db.get(AcademicPeriod, payload.academic_period_id) is None:
+        raise HTTPException(status_code=404, detail="Academic period not found.")
+    SubjectLoadAuthorizationService.assert_context_configurable(
+        db,
+        class_id=payload.class_id,
+        academic_period_id=payload.academic_period_id,
+    )
 
     # Delete all draft rows for this section and period
     db.query(SubjectLoad).filter(
@@ -830,6 +886,16 @@ def batch_save_subject_loads(
     db: Session = Depends(get_db),
 ):
     period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == payload.academic_period_id).first()
+    if period is None:
+        raise HTTPException(status_code=404, detail="Academic period not found.")
+    if payload.action not in {"draft", "publish"}:
+        raise HTTPException(status_code=422, detail="Action must be draft or publish.")
+    for load in payload.loads:
+        if load.academic_period_id != payload.academic_period_id:
+            raise HTTPException(
+                status_code=422,
+                detail="Every subject load must use the requested academic period.",
+            )
 
     start_str, end_str = get_school_hours_settings(db)
     min_mins = time_str_to_mins(start_str)
@@ -853,12 +919,24 @@ def batch_save_subject_loads(
     scope = payload.publish_scope or "all"
     if scope == "level":
         target_lvl = payload.target_level_id or payload.academic_level_id
-        matching_classes = db.query(Class.class_id).filter(Class.academic_level_id == target_lvl).all()
+        matching_classes = db.query(Class.class_id).filter(
+            Class.academic_level_id == target_lvl,
+            Class.academic_year_id == period.academic_year_id,
+        ).all()
         target_class_ids = {c[0] for c in matching_classes}
     elif scope == "section" and payload.target_class_id is not None:
         target_class_ids = {payload.target_class_id}
     else:
         target_class_ids = set(affected_class_ids)
+
+    for cid in sorted(target_class_ids | affected_class_ids):
+        if db.get(Class, cid) is None:
+            raise HTTPException(status_code=404, detail=f"Class {cid} not found.")
+        SubjectLoadAuthorizationService.assert_context_configurable(
+            db,
+            class_id=cid,
+            academic_period_id=payload.academic_period_id,
+        )
 
     # Lock the section rows before deciding whether a published revision may be
     # changed. The request's status/is_locked fields are never authoritative.
@@ -1273,6 +1351,57 @@ def format_time_str(t: str | None) -> str:
         return t or ""
 
 
+def _assert_can_view_class_schedule(
+    db: Session,
+    *,
+    current_user: dict,
+    class_: Class,
+    period: AcademicPeriod,
+) -> None:
+    role = (current_user.get("role") or "").lower()
+    if role == "admin":
+        return
+
+    if role == "teacher":
+        staff_id = get_optional_staff_id(current_user=current_user, db=db)
+        if staff_id and class_.adviser_staff_id == staff_id:
+            return
+
+        published_loads = db.query(SubjectLoad).filter(
+            SubjectLoad.class_id == class_.class_id,
+            SubjectLoad.academic_period_id == period.academic_period_id,
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(["published", "active"]),
+        ).all()
+        if staff_id and any(
+            SubjectLoadAuthorizationService.can_view(
+                db,
+                staff_id,
+                load.class_id,
+                load.subject_id,
+                load.academic_period_id,
+            )
+            for load in published_loads
+        ):
+            return
+
+    elif role == "student":
+        student = get_student_record(current_user=current_user, db=db)
+        enrollment = db.query(StudentClass.student_class_id).filter(
+            StudentClass.student_id == student.student_id,
+            StudentClass.class_id == class_.class_id,
+            StudentClass.academic_year_id == period.academic_year_id,
+            StudentClass.enrollment_status == "enrolled",
+        ).first()
+        if enrollment is not None:
+            return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You are not authorized to view this class schedule.",
+    )
+
+
 @router.get("/class-schedule/{class_id}")
 def get_class_schedule(
     class_id: int,
@@ -1284,13 +1413,19 @@ def get_class_schedule(
     if not cls:
         raise HTTPException(status_code=404, detail="Class section not found")
 
-    period = None
-    if academic_period_id:
-        period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == academic_period_id).first()
-    if not period:
-        period = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
-
-    period_id = period.academic_period_id if period else 1
+    period = _resolve_requested_or_active_period(db, academic_period_id)
+    if period.academic_year_id != cls.academic_year_id:
+        raise HTTPException(
+            status_code=409,
+            detail="The requested academic period does not belong to the class academic year.",
+        )
+    _assert_can_view_class_schedule(
+        db,
+        current_user=current_user,
+        class_=cls,
+        period=period,
+    )
+    period_id = period.academic_period_id
 
     published_loads = (
         db.query(SubjectLoad)
@@ -1374,12 +1509,8 @@ def get_my_schedule(
     db: Session = Depends(get_db),
 ):
     role = current_user.get("role", "")
-    period = None
-    if academic_period_id:
-        period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == academic_period_id).first()
-    if not period:
-        period = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
-    period_id = period.academic_period_id if period else 1
+    period = _resolve_requested_or_active_period(db, academic_period_id)
+    period_id = period.academic_period_id
 
     if role == "student":
         try:
@@ -1388,6 +1519,7 @@ def get_my_schedule(
                 db.query(StudentClass)
                 .filter(
                     StudentClass.student_id == student_obj.student_id,
+                    StudentClass.academic_year_id == period.academic_year_id,
                     StudentClass.enrollment_status == "enrolled",
                 )
                 .first()

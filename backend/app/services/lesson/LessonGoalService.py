@@ -10,6 +10,7 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.Class_ import Class
 from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonGoal import LessonGoal, LessonGoalItem
+from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
@@ -23,9 +24,40 @@ from app.schemas.lesson_goal import (
     LessonGoalSetRequest,
 )
 from app.services.classwork.ClassworkShared import aware_utc
+from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
 from app.services.academic.ContentAuthorizationService import authorize_teacher_content, resolve_content_staff_id
 from app.services.lesson.LessonShared import authorize_lesson_access
-from app.services.classwork.ClassworkAccessService import authorize_classwork_access
+from app.services.classwork.ClassworkAccessService import (
+    authorize_assignment_access,
+    authorize_classwork_access,
+    user_id_from_claims,
+)
+
+
+def _resolve_goal_read_context(
+    db: Session,
+    *,
+    class_id: int,
+    subject_id: int,
+    academic_period_id: int | None,
+) -> tuple[Class, Subject, AcademicPeriod]:
+    class_obj = db.get(Class, class_id)
+    if class_obj is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+    subject_obj = db.get(Subject, subject_id)
+    if subject_obj is None:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    period_obj = (
+        db.get(AcademicPeriod, academic_period_id)
+        if academic_period_id is not None
+        else resolve_active_academic_period(db)
+    )
+    if period_obj is None:
+        raise HTTPException(status_code=404, detail="Academic period not found")
+    if class_obj.academic_year_id != period_obj.academic_year_id:
+        raise HTTPException(status_code=404, detail="Lesson goal not found")
+    return class_obj, subject_obj, period_obj
 
 
 def get_curated_lesson_goal(
@@ -35,16 +67,32 @@ def get_curated_lesson_goal(
     current_user: dict,
     db: Session,
 ) -> LessonGoalResponse:
-    # 1. Resolve Academic Period if not provided
-    if not academic_period_id:
-        active_period = (
-            db.query(AcademicPeriod)
-            .filter(AcademicPeriod.is_active == True)
-            .first()
-        )
-        if not active_period:
-            active_period = db.query(AcademicPeriod).order_by(AcademicPeriod.academic_period_id.desc()).first()
-        academic_period_id = active_period.academic_period_id if active_period else 0
+    # 1. Resolve the canonical current period only when the caller did not
+    # explicitly select a historical/future context.
+    _class_obj, _subject_obj, period_obj = _resolve_goal_read_context(
+        db,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=academic_period_id,
+    )
+    academic_period_id = period_obj.academic_period_id
+
+    user_role = current_user.get("role")
+    student_obj: Student | None = None
+    if user_role == "student":
+        student_obj = db.query(Student).filter(
+            Student.user_id == user_id_from_claims(current_user)
+        ).first()
+        if student_obj is None:
+            raise HTTPException(status_code=404, detail="Student profile not found")
+        enrollment = db.query(StudentClass).filter(
+            StudentClass.student_id == student_obj.student_id,
+            StudentClass.class_id == class_id,
+            StudentClass.academic_year_id == period_obj.academic_year_id,
+            StudentClass.enrollment_status == "enrolled",
+        ).first()
+        if enrollment is None:
+            raise HTTPException(status_code=403, detail="Not enrolled in this class")
 
     # 2. Query LessonGoal
     goal = (
@@ -74,19 +122,6 @@ def get_curated_lesson_goal(
             items=[],
         )
 
-    # 3. Check student context for submissions
-    user_role = current_user.get("role")
-    student_obj: Student | None = None
-    if user_role == "student":
-        raw_uid = current_user.get("sub") or current_user.get("user_id")
-        if raw_uid:
-            import uuid as _uuid
-            try:
-                target_uid = _uuid.UUID(str(raw_uid)) if isinstance(raw_uid, str) else raw_uid
-            except (ValueError, TypeError):
-                target_uid = raw_uid
-            student_obj = db.query(Student).filter(Student.user_id == target_uid).first()
-
     # Pre-fetch ClassworkAssignments for this class
     classwork_ids = [it.classwork_id for it in goal.items if it.classwork_id]
     asgn_map: dict[int, ClassworkAssignment] = {}
@@ -96,6 +131,7 @@ def get_curated_lesson_goal(
             .filter(
                 ClassworkAssignment.class_id == class_id,
                 ClassworkAssignment.classwork_id.in_(classwork_ids),
+                ClassworkAssignment.academic_period_id == academic_period_id,
             )
             .all()
         )
@@ -122,8 +158,9 @@ def get_curated_lesson_goal(
         lesson_detail: LessonGoalItemDetailLesson | None = None
         classwork_detail: LessonGoalItemDetailClasswork | None = None
 
-        # Curated summaries must not bypass the detail policy for teachers.
-        # Preserve the established administrator and student visibility paths.
+        # Curated summaries must not bypass detail policy. Teachers retain
+        # ownership/assignment reads; students only receive published content
+        # in their enrolled class and the selected period.
         if user_role == "teacher":
             try:
                 if it.lesson:
@@ -132,6 +169,22 @@ def get_curated_lesson_goal(
                     authorize_classwork_access(it.classwork, current_user, db, class_id)
             except HTTPException as error:
                 if error.status_code != 404:
+                    raise
+                continue
+        elif user_role == "student":
+            try:
+                if it.lesson:
+                    if not it.lesson.is_published or it.lesson.is_locked:
+                        continue
+                if it.classwork:
+                    assignment = asgn_map.get(it.classwork.classwork_id)
+                    if assignment is None:
+                        continue
+                    authorize_assignment_access(
+                        assignment, it.classwork, current_user, db
+                    )
+            except HTTPException as error:
+                if error.status_code not in (403, 404):
                     raise
                 continue
 
@@ -208,6 +261,18 @@ def save_curated_lesson_goal(
     if not period_obj:
         raise HTTPException(status_code=404, detail="Academic period not found")
 
+    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+    if current_user.get("role") == "teacher" and staff_id:
+        SubjectLoadAuthorizationService.assert_can_write(
+            db, staff_id, class_id, subject_id, request.academic_period_id
+        )
+    else:
+        SubjectLoadAuthorizationService.assert_context_configurable(
+            db,
+            class_id=class_id,
+            academic_period_id=request.academic_period_id,
+        )
+
     # 2. Find or create LessonGoal
     goal = (
         db.query(LessonGoal)
@@ -219,6 +284,14 @@ def save_curated_lesson_goal(
         .first()
     )
 
+    for item in request.items:
+        item_type = item.item_type.upper().strip()
+        model = Lesson if item_type == "LESSON" else Classwork if item_type == "CLASSWORK" else None
+        content_id = item.lesson_id if model is Lesson else item.classwork_id if model is Classwork else None
+        content = db.get(model, content_id) if model is not None and content_id is not None else None
+        if content is None or content.subject_id != subject_id:
+            raise HTTPException(status_code=404, detail="Lesson goal item not found")
+
     if current_user.get("role") == "teacher":
         # Authorize before creating, replacing, flushing, or deleting any row.
         authorize_teacher_content(
@@ -229,9 +302,7 @@ def save_curated_lesson_goal(
         for item in request.items:
             model = Lesson if item.item_type.upper().strip() == "LESSON" else Classwork
             content_id = item.lesson_id if model is Lesson else item.classwork_id
-            content = db.get(model, content_id) if content_id is not None else None
-            if not content or content.subject_id != subject_id:
-                raise HTTPException(status_code=404, detail="Lesson goal item not found")
+            content = db.get(model, content_id)
             authorize_teacher_content(
                 db, staff_id=staff_id, owner_staff_id=content.created_by_staff_id,
                 detail="Lesson goal item not found", owner_only=True,
@@ -286,6 +357,17 @@ def clear_curated_lesson_goal(
     db: Session,
     current_user: dict,
 ) -> None:
+    class_obj = db.get(Class, class_id)
+    if class_obj is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+    if db.get(Subject, subject_id) is None:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    period_obj = db.get(AcademicPeriod, academic_period_id)
+    if period_obj is None:
+        raise HTTPException(status_code=404, detail="Academic period not found")
+    if class_obj.academic_year_id != period_obj.academic_year_id:
+        raise HTTPException(status_code=404, detail="Lesson goal not found")
+
     goal = (
         db.query(LessonGoal)
         .filter(
@@ -295,12 +377,25 @@ def clear_curated_lesson_goal(
         )
         .first()
     )
+    if current_user.get("role") == "teacher":
+        staff_id = resolve_content_staff_id(db, current_user)
+        authorize_teacher_content(
+            db,
+            staff_id=staff_id,
+            owner_staff_id=goal.created_by_staff_id if goal else None,
+            detail="Lesson goal not found",
+            owner_only=goal is not None,
+            read_scopes=[(class_id, subject_id, academic_period_id)],
+        )
+    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+    if current_user.get("role") == "teacher":
+        SubjectLoadAuthorizationService.assert_can_write(
+            db, staff_id, class_id, subject_id, academic_period_id,
+        )
+    else:
+        SubjectLoadAuthorizationService.assert_context_configurable(
+            db, class_id=class_id, academic_period_id=academic_period_id
+        )
     if goal:
-        if current_user.get("role") == "teacher":
-            authorize_teacher_content(
-                db, staff_id=resolve_content_staff_id(db, current_user),
-                owner_staff_id=goal.created_by_staff_id,
-                detail="Lesson goal not found", owner_only=True,
-            )
         db.delete(goal)
         db.commit()

@@ -30,6 +30,7 @@ const baseline = {
   academic_levels: [{ academic_level_id: 9, level_name: "Grade 9", grade_level: 9 }],
   classes: [{ class_id: 8, section_name: "Archimedes", academic_level_id: 9, academic_year_id: 1, period_template_group: "JHS_45MIN" }],
   subjects: [{ subject_id: 3, subject_name: "Filipino 9", subject_codename: "F9", academic_level_id: 9, subject_group: "Core" }],
+  subject_offerings: [{ subject_offering_id: 30, subject_id: 3, academic_year_id: 1, academic_level_id: 9, academic_period_id: 1, pathway: "both", pathway_ids: [] }],
   teachers: [{ staff_id: "T1", name: "Maria Cruz", department: "Filipino", specialization: "Filipino" }],
   existing_loads: [{ subject_load_id: 12, class_id: 8, subject_id: 3, staff_id: "T1", academic_period_id: 1,
     start_time: "08:00", end_time: "08:45", days_of_week: ["MON"], status: "published", is_locked: true, section_revision: 1 }],
@@ -111,5 +112,85 @@ describe("Subject Load Studio locked section", () => {
     await waitFor(() => expect(screen.getByText("Engineering and Mathematics Related")).toBeTruthy());
     fireEvent.click(screen.getByText("List"));
     expect(screen.getByText("Engineering and Mathematics Related")).toBeTruthy();
+  });
+});
+
+describe("Subject Load Studio offering eligibility", () => {
+  it("shows a configured empty state instead of treating zero offerings as all subjects", async () => {
+    getStudio.mockResolvedValue({
+      ...baseline,
+      subject_offerings: [],
+      existing_loads: [],
+    });
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+
+    render(<AdminSubjectLoadStudio />);
+
+    await waitFor(() => expect(screen.getByText("No eligible subject offerings")).toBeTruthy());
+    expect(screen.queryByText("Filipino 9")).toBeNull();
+    expect(validate).not.toHaveBeenCalled();
+  });
+
+  it("shows the API failure state separately from an empty configuration", async () => {
+    getStudio.mockRejectedValue(new Error("Offering query unavailable"));
+
+    render(<AdminSubjectLoadStudio />);
+
+    await waitFor(() => expect(screen.getByText("Unable to load class sections")).toBeTruthy());
+    expect(screen.getByText("Offering query unavailable")).toBeTruthy();
+    expect(screen.queryByText("No eligible subject offerings")).toBeNull();
+  });
+
+  it("filters offerings by year, term, grade, and pathway", async () => {
+    getStudio.mockResolvedValue({
+      ...baseline,
+      classes: [{ ...baseline.classes[0], pathway_id: 7, pathway: "engineering-math" }],
+      subjects: [
+        baseline.subjects[0],
+        { subject_id: 4, subject_name: "Wrong pathway", subject_codename: "WP", academic_level_id: 9 },
+        { subject_id: 5, subject_name: "Wrong term", subject_codename: "WT", academic_level_id: 9 },
+        { subject_id: 6, subject_name: "Wrong year", subject_codename: "WY", academic_level_id: 9 },
+      ],
+      subject_offerings: [
+        { subject_offering_id: 30, subject_id: 3, academic_year_id: 1, academic_level_id: 9, academic_period_id: 1, pathway_ids: [7] },
+        { subject_offering_id: 31, subject_id: 4, academic_year_id: 1, academic_level_id: 9, academic_period_id: 1, pathway_ids: [8] },
+        { subject_offering_id: 32, subject_id: 5, academic_year_id: 1, academic_level_id: 9, academic_period_id: 2, pathway_ids: [7] },
+        { subject_offering_id: 33, subject_id: 6, academic_year_id: 2, academic_level_id: 9, academic_period_id: 1, pathway_ids: [7] },
+      ],
+      existing_loads: [],
+    });
+    validate.mockResolvedValue({ conflicts: [], teacher_workloads: [], is_valid: true });
+
+    render(<AdminSubjectLoadStudio />);
+    fireEvent.click(await screen.findByText("List"));
+
+    expect(await screen.findByText("Filipino 9")).toBeTruthy();
+    expect(screen.queryByText("Wrong pathway")).toBeNull();
+    expect(screen.queryByText("Wrong term")).toBeNull();
+    expect(screen.queryByText("Wrong year")).toBeNull();
+  });
+
+  it("keeps an ineligible existing draft visible and marks it non-publishable", async () => {
+    getStudio.mockResolvedValue({
+      ...baseline,
+      subject_offerings: [],
+      existing_loads: [{ ...baseline.existing_loads[0], status: "draft", is_locked: false }],
+      has_pending_draft_by_class: { 8: true },
+    });
+    validate.mockResolvedValue({
+      conflicts: [{ rule: "SUBJECT_NOT_OFFERED", severity: "error", message: "Subject is not offered", class_id: 8, subject_id: 3 }],
+      teacher_workloads: [],
+      is_valid: false,
+    });
+
+    render(<AdminSubjectLoadStudio />);
+
+    await waitFor(() => expect(screen.getByText(/existing subject load is no longer eligible/i)).toBeTruthy());
+    fireEvent.click(screen.getByText("List"));
+    expect(await screen.findByText("Filipino 9")).toBeTruthy();
+    expect(screen.getByText(/Not offered.*cannot publish/i)).toBeTruthy();
+    expect(validate).toHaveBeenCalledWith(1, expect.arrayContaining([
+      expect.objectContaining({ subject_load_id: 12, _offering_eligible: false }),
+    ]));
   });
 });

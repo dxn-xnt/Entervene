@@ -32,6 +32,7 @@ import { LoadingPanel } from "@/components/loading-panel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import IconContainer from "@/components/icon-container";
 import { StudentDialogCloseButton } from "@/components/student/student-dialog-close-button";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 interface Attachment {
   classwork_attachment_id: number;
@@ -276,10 +277,12 @@ export default function SubjectClassworkTab({
   subjectId,
 }: SubjectClassworkTabProps) {
   const toast = useToast();
+  const { selectedPeriodId } = useAcademicPeriod();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const autoOpenedAssignmentRef = useRef<number | null>(null);
+  const classworkRequestVersionRef = useRef(0);
   const [classworks, setClassworks] = useState<ClassworkAssignment[]>([]);
   const [submissions, setSubmissions] = useState<Record<number, Submission>>(
     {},
@@ -335,21 +338,27 @@ export default function SubjectClassworkTab({
   const fetchClassworks = useCallback(async () => {
     if (!classId || !subjectId) return;
 
+    const requestVersion = ++classworkRequestVersionRef.current;
     setIsLoading(true);
     setError("");
     setNotice(null);
+    setClassworks([]);
+    setSubmissions({});
 
     try {
+      const periodQuery = selectedPeriodId === null
+        ? ""
+        : `?academic_period_id=${encodeURIComponent(String(selectedPeriodId))}`;
       const response = await apiFetch(
-        `/api/v1/classwork-assignments/class/${classId}/subject/${subjectId}`,
+        `/api/v1/classwork-assignments/class/${classId}/subject/${subjectId}${periodQuery}`,
       );
 
       if (!response.ok) {
         throw new Error("Failed to fetch classworks");
       }
 
-      const data = await response.json();
-      setClassworks(data);
+      const data = (await response.json()) as ClassworkAssignment[];
+      if (requestVersion !== classworkRequestVersionRef.current) return;
 
       const submissionsData: Record<number, Submission> = {};
       const submissionsResponse = await apiFetch(
@@ -358,7 +367,8 @@ export default function SubjectClassworkTab({
       const allSubmissions = submissionsResponse.ok
         ? ((await submissionsResponse.json()) as Submission[])
         : [];
-      for (const cw of data as ClassworkAssignment[]) {
+      if (requestVersion !== classworkRequestVersionRef.current) return;
+      for (const cw of data) {
         const sub = allSubmissions.find(
           (submission) =>
             submission.classwork_assignment_id === cw.classwork_assignment_id,
@@ -367,20 +377,27 @@ export default function SubjectClassworkTab({
           submissionsData[cw.classwork_assignment_id] = sub;
         }
       }
+      setClassworks(data);
       setSubmissions(submissionsData);
     } catch (err) {
+      if (requestVersion !== classworkRequestVersionRef.current) return;
       setError(
         err instanceof Error ? err.message : "Failed to fetch classworks",
       );
     } finally {
-      setIsLoading(false);
+      if (requestVersion === classworkRequestVersionRef.current) {
+        setIsLoading(false);
+      }
     }
-  }, [classId, subjectId]);
+  }, [classId, subjectId, selectedPeriodId]);
 
   useEffect(() => {
     if (classId && subjectId) {
       fetchClassworks();
     }
+    return () => {
+      classworkRequestVersionRef.current += 1;
+    };
   }, [classId, subjectId, fetchClassworks]);
 
   useEffect(() => {

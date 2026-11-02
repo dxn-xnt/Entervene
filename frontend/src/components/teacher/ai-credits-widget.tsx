@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Sparkles } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { Progress } from "@/components/retroui/Progress";
 

@@ -15,6 +15,7 @@ from app.schemas.Class import ClassUpdateRequest
 from app.services.classes.ClassQueryService import get_class_detail_data
 from app.services.classes.OfficialSectionService import selected_official_section
 from app.services.pathways.PathwayScopeService import resolve_pathway_scope
+from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 from app.services.classes.ClassShared import (
     ClassManagementError,
     eligible_advisers_query,
@@ -73,6 +74,9 @@ def _resolve_class_pathway_id(
 
 def archive_class_record(db: Session, class_id: int) -> dict:
     class_ = _get_class_or_404(db, class_id)
+    SubjectLoadAuthorizationService.assert_context_configurable(
+        db, class_id=class_id
+    )
     if normalized_text(class_.class_status or "active") == "archived":
         raise HTTPException(status_code=409, detail="Class is already archived.")
 
@@ -104,6 +108,9 @@ def update_class_record(
         raise HTTPException(status_code=400, detail="Provide at least one editable field.")
 
     class_ = _get_class_or_404(db, class_id)
+    SubjectLoadAuthorizationService.assert_context_configurable(
+        db, class_id=class_id
+    )
     if normalized_text(class_.class_status or "active") == "archived":
         raise HTTPException(
             status_code=409,
@@ -236,6 +243,9 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
     # one section rejects the batch so classes and rosters cannot be half-created.
     try:
         academic_year = resolve_class_academic_year(db, getattr(payload, "academic_year_id", None))
+        SubjectLoadAuthorizationService.assert_context_configurable(
+            db, academic_year_id=academic_year.academic_year_id
+        )
         academic_level = (
             db.query(AcademicLevel)
             .filter(AcademicLevel.academic_level_id == payload.academic_level_id)

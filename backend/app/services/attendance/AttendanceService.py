@@ -55,26 +55,303 @@ def _to_attendance_response(
     )
 
 
+def _resolve_attendance_period_id(
+    db: Session,
+    class_id: int,
+    subject_id: int | None,
+    target_date: date | None,
+    academic_period_id: int | None = None,
+) -> int | None:
+    from app.models.academic.AcademicPeriod import AcademicPeriod
+    from app.models.academic.Class_ import Class
+    from app.models.academic.SubjectLoad import SubjectLoad
+
+    class_obj = db.get(Class, class_id)
+    if class_obj is None:
+        raise HTTPException(status_code=404, detail="Class not found.")
+
+    requested_period = db.get(AcademicPeriod, academic_period_id) if academic_period_id is not None else None
+    if academic_period_id is not None and requested_period is None:
+        raise HTTPException(status_code=404, detail="Academic period not found.")
+    if requested_period is not None:
+        if requested_period.academic_year_id != class_obj.academic_year_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Academic class and period must belong to the same academic year.",
+            )
+        if target_date is not None and not (requested_period.start_date <= target_date <= requested_period.end_date):
+            raise HTTPException(
+                status_code=400,
+                detail="Attendance date must fall within the selected academic period.",
+            )
+
+    if subject_id is not None:
+        load_query = (
+            db.query(SubjectLoad)
+            .filter(
+                SubjectLoad.class_id == class_id,
+                SubjectLoad.subject_id == subject_id,
+                SubjectLoad.is_active_version.is_(True),
+                SubjectLoad.status.in_(["active", "published"]),
+            )
+        )
+        if requested_period is not None:
+            if load_query.filter(SubjectLoad.academic_period_id == requested_period.academic_period_id).first() is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No published subject load exists in the selected academic period.",
+                )
+            return requested_period.academic_period_id
+
+        loads = load_query.all()
+        matching_loads = []
+        for load in loads:
+            period = db.get(AcademicPeriod, load.academic_period_id)
+            if target_date is not None and period and period.start_date <= target_date <= period.end_date:
+                matching_loads.append(load)
+        if len(matching_loads) == 1:
+            return matching_loads[0].academic_period_id
+        if len(matching_loads) > 1:
+            raise HTTPException(status_code=409, detail="Attendance period is ambiguous for this date.")
+        raise HTTPException(
+            status_code=400,
+            detail="Attendance date does not belong to a published subject load period.",
+        )
+
+    if requested_period is not None:
+        return requested_period.academic_period_id
+
+    if class_obj.academic_year_id is not None and target_date is not None:
+        matching_periods = (
+            db.query(AcademicPeriod)
+            .filter(
+                AcademicPeriod.academic_year_id == class_obj.academic_year_id,
+                AcademicPeriod.start_date <= target_date,
+                AcademicPeriod.end_date >= target_date,
+            )
+            .all()
+        )
+        if len(matching_periods) == 1:
+            return matching_periods[0].academic_period_id
+        if len(matching_periods) > 1:
+            raise HTTPException(status_code=409, detail="Attendance period is ambiguous for this date.")
+    raise HTTPException(
+        status_code=400,
+        detail="Attendance date does not belong to an academic period for this class year.",
+    )
+
+
+def _assert_attendance_write_access(
+    db: Session,
+    class_id: int,
+    subject_id: int | None,
+    target_date: date,
+    recorded_by_staff_id: str | None,
+    academic_period_id: int | None = None,
+) -> int:
+    from app.models.academic.Class_ import Class
+    from app.models.academic.SubjectLoad import SubjectLoad
+    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+
+    period_id = _resolve_attendance_period_id(
+        db, class_id, subject_id, target_date, academic_period_id=academic_period_id
+    )
+    SubjectLoadAuthorizationService.assert_context_writable(
+        db,
+        class_id=class_id,
+        academic_period_id=period_id,
+        as_of=target_date,
+        block_future_period_in_current_year=True,
+    )
+    if not recorded_by_staff_id:
+        return period_id
+
+    class_obj = db.get(Class, class_id)
+    if subject_id is not None:
+        if period_id is not None:
+            SubjectLoadAuthorizationService.assert_can_write(
+                db,
+                recorded_by_staff_id,
+                class_id,
+                subject_id,
+                period_id,
+                as_of=target_date,
+            )
+            return period_id
+        class_loads = (
+            db.query(SubjectLoad)
+            .filter(
+                SubjectLoad.class_id == class_id,
+                SubjectLoad.is_active_version.is_(True),
+                SubjectLoad.status.in_(["active", "published"]),
+            )
+            .all()
+        )
+        if (class_obj and class_obj.adviser_staff_id) or class_loads:
+            raise HTTPException(
+                status_code=403,
+                detail="You are not authorized to modify records for this class and subject.",
+            )
+        return period_id
+
+    class_loads = (
+        db.query(SubjectLoad)
+        .filter(
+            SubjectLoad.class_id == class_id,
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(["active", "published"]),
+        )
+        .all()
+    )
+    if (class_obj and class_obj.adviser_staff_id) or class_loads:
+        if class_obj and class_obj.adviser_staff_id == recorded_by_staff_id:
+            return period_id
+        if any(
+            SubjectLoadAuthorizationService.can_write(
+                db, recorded_by_staff_id, l.class_id, l.subject_id, l.academic_period_id, as_of=target_date
+            )
+            for l in class_loads
+        ):
+            return period_id
+        raise HTTPException(
+            status_code=403,
+            detail="You are not authorized to modify attendance records for this class.",
+        )
+    return period_id
+
+
+def _assert_attendance_read_access(
+    db: Session,
+    class_id: int | None,
+    subject_id: int | None,
+    staff_id: str | None,
+    student_id: UUID | None = None,
+    academic_period_id: int | None = None,
+) -> None:
+    if not staff_id:
+        return
+    from app.models.academic.Class_ import Class
+    from app.models.academic.SubjectLoad import SubjectLoad
+    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+
+    if class_id is not None:
+        class_obj = db.get(Class, class_id)
+        if subject_id is not None:
+            load_query = (
+                db.query(SubjectLoad)
+                .filter(
+                    SubjectLoad.class_id == class_id,
+                    SubjectLoad.subject_id == subject_id,
+                    SubjectLoad.is_active_version.is_(True),
+                    SubjectLoad.status.in_(["active", "published"]),
+                )
+            )
+            if academic_period_id is not None:
+                load_query = load_query.filter(SubjectLoad.academic_period_id == academic_period_id)
+            loads = load_query.all()
+            if loads:
+                if (class_obj and class_obj.adviser_staff_id == staff_id) or any(
+                    SubjectLoadAuthorizationService.can_view(
+                        db, staff_id, l.class_id, l.subject_id, l.academic_period_id
+                    )
+                    for l in loads
+                ):
+                    return
+                raise HTTPException(
+                    status_code=403,
+                    detail="You do not have access to view attendance records for this class and subject.",
+                )
+        all_class_loads_query = (
+            db.query(SubjectLoad)
+            .filter(
+                SubjectLoad.class_id == class_id,
+                SubjectLoad.is_active_version.is_(True),
+                SubjectLoad.status.in_(["active", "published"]),
+            )
+        )
+        if academic_period_id is not None:
+            all_class_loads_query = all_class_loads_query.filter(
+                SubjectLoad.academic_period_id == academic_period_id
+            )
+        all_class_loads = all_class_loads_query.all()
+        if (class_obj and class_obj.adviser_staff_id) or all_class_loads:
+            if (class_obj and class_obj.adviser_staff_id == staff_id) or any(
+                SubjectLoadAuthorizationService.can_view(
+                    db, staff_id, l.class_id, l.subject_id, l.academic_period_id
+                )
+                for l in all_class_loads
+            ):
+                return
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have access to view attendance records for this class.",
+            )
+        return
+
+    if student_id is not None:
+        enrolled_class_ids = [
+            row[0]
+            for row in db.query(StudentClass.class_id)
+            .filter(StudentClass.student_id == student_id)
+            .all()
+        ]
+        if not enrolled_class_ids:
+            return
+        classes = db.query(Class).filter(Class.class_id.in_(enrolled_class_ids)).all()
+        loads = (
+            db.query(SubjectLoad)
+            .filter(
+                SubjectLoad.class_id.in_(enrolled_class_ids),
+                SubjectLoad.is_active_version.is_(True),
+                SubjectLoad.status.in_(["active", "published"]),
+            )
+            .all()
+        )
+        if any(c.adviser_staff_id for c in classes) or loads:
+            if any(c.adviser_staff_id == staff_id for c in classes) or any(
+                SubjectLoadAuthorizationService.can_view(
+                    db, staff_id, l.class_id, l.subject_id, l.academic_period_id
+                )
+                for l in loads
+            ):
+                return
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have access to view attendance records for this student.",
+            )
+
+
 def batch_mark_attendance(
     db: Session,
     payload: BatchAttendanceCreate,
     recorded_by_staff_id: str | None = None,
 ) -> list[AttendanceRecordResponse]:
     """Upsert daily attendance records for a batch of students in a class."""
-    if recorded_by_staff_id and payload.subject_id:
-        from app.models.academic.SubjectLoad import SubjectLoad
-        from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
-        load = db.query(SubjectLoad).filter(
-            SubjectLoad.class_id == payload.class_id,
-            SubjectLoad.subject_id == payload.subject_id,
-            SubjectLoad.is_active_version.is_(True),
-            SubjectLoad.status.in_(["active", "published"]),
-        ).first()
-        if load:
-            SubjectLoadAuthorizationService.assert_can_write(
-                db, recorded_by_staff_id, load.class_id, load.subject_id, load.academic_period_id, as_of=payload.date
+    _assert_attendance_write_access(
+        db,
+        class_id=payload.class_id,
+        subject_id=payload.subject_id,
+        target_date=payload.date,
+        recorded_by_staff_id=recorded_by_staff_id,
+        academic_period_id=payload.academic_period_id,
+    )
+    requested_student_ids = {item.student_id for item in payload.records}
+    if requested_student_ids:
+        enrolled_student_ids = {
+            row[0]
+            for row in db.query(StudentClass.student_id)
+            .filter(
+                StudentClass.class_id == payload.class_id,
+                StudentClass.student_id.in_(requested_student_ids),
+                StudentClass.enrollment_status == "enrolled",
             )
-
+            .all()
+        }
+        if enrolled_student_ids != requested_student_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="Attendance can only be recorded for students actively enrolled in this class.",
+            )
     results: list[AttendanceRecordResponse] = []
 
 
@@ -166,20 +443,14 @@ def record_qr_scan_attendance(
         )
 
     # 3. Check substitution / teacher write permissions
-    if recorded_by_staff_id and payload.subject_id:
-        from app.models.academic.SubjectLoad import SubjectLoad
-        from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
-        load = db.query(SubjectLoad).filter(
-            SubjectLoad.class_id == payload.class_id,
-            SubjectLoad.subject_id == payload.subject_id,
-            SubjectLoad.is_active_version.is_(True),
-            SubjectLoad.status.in_(["active", "published"]),
-        ).first()
-        if load:
-            SubjectLoadAuthorizationService.assert_can_write(
-                db, recorded_by_staff_id, load.class_id, load.subject_id, load.academic_period_id, as_of=today
-            )
-
+    _assert_attendance_write_access(
+        db,
+        class_id=payload.class_id,
+        subject_id=payload.subject_id,
+        target_date=today,
+        recorded_by_staff_id=recorded_by_staff_id,
+        academic_period_id=payload.academic_period_id,
+    )
     # 4. Check existing attendance record for (student_id, class_id, subject_id, today)
     existing_q = db.query(AttendanceRecord).filter(
         AttendanceRecord.student_id == payload.student_id,
@@ -249,8 +520,21 @@ def get_class_attendance_logs(
     class_id: int,
     date_val: Optional[date] = None,
     subject_id: Optional[int] = None,
+    academic_period_id: Optional[int] = None,
+    staff_id: Optional[str] = None,
 ) -> list[AttendanceRecordResponse]:
     """Retrieve attendance logs for a specific class, optionally filtered by date or subject."""
+    period = None
+    if academic_period_id is not None:
+        _resolve_attendance_period_id(
+            db, class_id, subject_id, date_val, academic_period_id=academic_period_id
+        )
+        from app.models.academic.AcademicPeriod import AcademicPeriod
+        period = db.get(AcademicPeriod, academic_period_id)
+    _assert_attendance_read_access(
+        db, class_id=class_id, subject_id=subject_id, staff_id=staff_id,
+        academic_period_id=academic_period_id,
+    )
     query = (
         db.query(AttendanceRecord, Student)
         .join(Student, Student.student_id == AttendanceRecord.student_id)
@@ -261,6 +545,8 @@ def get_class_attendance_logs(
         query = query.filter(AttendanceRecord.date == date_val)
     if subject_id:
         query = query.filter(AttendanceRecord.subject_id == subject_id)
+    if period is not None:
+        query = query.filter(AttendanceRecord.date >= period.start_date, AttendanceRecord.date <= period.end_date)
 
     query = query.order_by(AttendanceRecord.date.desc(), Student.last_name.asc())
     rows = query.all()
@@ -276,13 +562,35 @@ def get_student_attendance_summary(
     student_id: UUID,
     class_id: Optional[int] = None,
     subject_id: Optional[int] = None,
+    academic_period_id: Optional[int] = None,
+    staff_id: Optional[str] = None,
 ) -> AttendanceSummaryResponse:
     """Calculate attendance statistics and overall rate for a student."""
+    period = None
+    if academic_period_id is not None:
+        from app.models.academic.AcademicPeriod import AcademicPeriod
+        period = db.get(AcademicPeriod, academic_period_id)
+        if period is None:
+            raise HTTPException(status_code=404, detail="Academic period not found.")
+        if class_id is not None:
+            _resolve_attendance_period_id(
+                db, class_id, subject_id, None, academic_period_id=academic_period_id
+            )
+    _assert_attendance_read_access(
+        db,
+        class_id=class_id,
+        subject_id=subject_id,
+        staff_id=staff_id,
+        student_id=student_id,
+        academic_period_id=academic_period_id,
+    )
     query = db.query(AttendanceRecord).filter(AttendanceRecord.student_id == student_id)
     if class_id:
         query = query.filter(AttendanceRecord.class_id == class_id)
     if subject_id:
         query = query.filter(AttendanceRecord.subject_id == subject_id)
+    if period is not None:
+        query = query.filter(AttendanceRecord.date >= period.start_date, AttendanceRecord.date <= period.end_date)
 
     records = query.all()
     total_days = len(records)
@@ -310,6 +618,7 @@ def get_risk_adjusted_attendance_rate(
     student_id: UUID,
     class_id: Optional[int] = None,
     subject_id: Optional[int] = None,
+    staff_id: Optional[str] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     cutoff_date: Optional[date] = None,
@@ -373,6 +682,7 @@ def get_student_attendance_logs(
     student_id: UUID,
     class_id: Optional[int] = None,
     subject_id: Optional[int] = None,
+    staff_id: Optional[str] = None,
 ) -> list[AttendanceRecordResponse]:
     """Retrieve attendance record history for a specific student."""
     from app.models.academic.Subject import Subject

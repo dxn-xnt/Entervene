@@ -361,7 +361,7 @@ export function OfferingModal({
     if (!changes.guardChanges()) return;
     setError(null);
     if (readOnly) {
-      failValidation(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
+      failValidation(readOnlyReason ?? "Historical academic years are locked in the UI to protect historical records.");
       return;
     }
     const selectedIds = isCreateMode ? form.subject_ids : [form.subject_id].filter(Boolean);

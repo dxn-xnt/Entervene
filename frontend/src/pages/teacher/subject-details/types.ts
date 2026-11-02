@@ -1,4 +1,5 @@
 import type { ClassworkAttachment, TeacherClassLoad } from "@/types/classwork";
+import type { LessonDeliveryRecord } from "@/lib/lesson-delivery-api";
 
 export type { TeacherClassLoad };
 
@@ -48,7 +49,7 @@ export type Lesson = {
   is_taught?: boolean;
 };
 
-export type { LessonDeliveryRecord } from "@/lib/lesson-delivery-api";
+export type { LessonDeliveryRecord };
 
 export type LessonDraft = {
   title: string;

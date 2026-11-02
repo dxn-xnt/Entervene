@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
-from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.Lesson import Lesson
 from app.models.academic.StudentCLass import StudentClass
@@ -23,6 +22,7 @@ from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.attendance.Attendance import AttendanceRecord
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
@@ -46,6 +46,7 @@ from app.services.activity.TeacherDashboardMetrics import (
     summarize_dashboard_lesson_performance,
     summarize_dashboard_support,
 )
+from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
 
 
 def format_count(val: int | float | None) -> str:
@@ -58,29 +59,14 @@ def format_count(val: int | float | None) -> str:
     return f"{val:,}"
 
 
-def get_target_period(db: Session, academic_period_id: int | None = None) -> AcademicPeriod | None:
-    """Finds the specified period, or active period, or latest period in database."""
-    if academic_period_id:
-        p = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == academic_period_id).first()
-        if p:
-            return p
-
-    active_p = (
-        db.query(AcademicPeriod)
-        .join(AcademicYear, AcademicPeriod.academic_year_id == AcademicYear.academic_year_id)
-        .filter(AcademicPeriod.is_active.is_(True))
-        .first()
-    )
-    if active_p:
-        return active_p
-
-    # Fallback to any active period
-    any_active = db.query(AcademicPeriod).filter(AcademicPeriod.is_active.is_(True)).first()
-    if any_active:
-        return any_active
-
-    # Fallback to first/latest period
-    return db.query(AcademicPeriod).order_by(AcademicPeriod.academic_period_id.desc()).first()
+def get_target_period(db: Session, academic_period_id: int | None = None) -> AcademicPeriod:
+    """Resolve an explicit period exactly, otherwise require the canonical active period."""
+    if academic_period_id is not None:
+        period = db.get(AcademicPeriod, academic_period_id)
+        if period is None:
+            raise HTTPException(status_code=404, detail="Academic period not found")
+        return period
+    return resolve_active_academic_period(db)
 
 
 def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> dict[str, Any]:
@@ -89,120 +75,129 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
     if target_period and target_period.academic_year:
         academic_year_label = target_period.academic_year.year_label
 
-    total_students = db.query(Student).count()
-    enrolled_students = db.query(func.count(distinct(StudentClass.student_id))).scalar() or 0
-
-    total_staff = db.query(AcademicStaff).count()
-    active_staff_loads = (
-        db.query(func.count(distinct(SubjectLoad.staff_id)))
-        .filter(SubjectLoad.status.in_(["active", "published"]))
-        .scalar()
-        or 0
-    )
-
-    total_classes = db.query(Class).count()
-    active_classes = db.query(Class).filter(Class.class_status == "active").count()
-
-    total_subjects = db.query(Subject).count()
-    active_subjects = db.query(Subject).filter(Subject.status == "active").count()
+    period_id = target_period.academic_period_id if target_period else None
+    year_id = target_period.academic_year_id if target_period else None
+    enrolled_students = db.query(func.count(distinct(StudentClass.student_id))).filter(
+        StudentClass.enrollment_status == "enrolled",
+        *((StudentClass.academic_year_id == year_id,) if year_id is not None else ()),
+    ).scalar() or 0
+    total_students = enrolled_students
+    load_filters = [SubjectLoad.is_active_version.is_(True), SubjectLoad.status.in_(["active", "published"])]
+    if period_id is not None:
+        load_filters.append(SubjectLoad.academic_period_id == period_id)
+    active_staff_loads = db.query(func.count(distinct(SubjectLoad.staff_id))).join(
+        Class, Class.class_id == SubjectLoad.class_id,
+    ).filter(
+        *load_filters,
+        *((Class.academic_year_id == year_id,) if year_id is not None else ()),
+    ).scalar() or 0
+    total_staff = active_staff_loads
+    total_classes = db.query(Class).filter(*((Class.academic_year_id == year_id,) if year_id is not None else ())).count()
+    active_classes = db.query(Class).filter(
+        Class.class_status == "active", *((Class.academic_year_id == year_id,) if year_id is not None else ()),
+    ).count()
+    active_subjects = db.query(func.count(distinct(SubjectLoad.subject_id))).join(
+        Class, Class.class_id == SubjectLoad.class_id,
+    ).filter(
+        *load_filters,
+        *((Class.academic_year_id == year_id,) if year_id is not None else ()),
+    ).scalar() or 0
+    total_subjects = active_subjects
 
     # Ungraded submissions count
     ungraded_count = (
         db.query(StudentSubmission)
+        .join(ClassworkAssignment, StudentSubmission.classwork_assignment_id == ClassworkAssignment.classwork_assignment_id)
+        .join(Class, Class.class_id == ClassworkAssignment.class_id)
         .filter(
             StudentSubmission.status == "submitted",
             StudentSubmission.grade.is_(None),
+            *((ClassworkAssignment.academic_period_id == period_id,) if period_id is not None else ()),
+            *((Class.academic_year_id == year_id,) if year_id is not None else ()),
         )
         .count()
     )
 
     # Assessments published
-    cw_count = db.query(Classwork).filter(Classwork.is_archived.is_(False), func.upper(Classwork.classwork_type) != "QUIZ").count()
-    quiz_count = db.query(Classwork).filter(Classwork.is_archived.is_(False), func.upper(Classwork.classwork_type) == "QUIZ").count()
+    assessment_query = db.query(Classwork).join(
+        ClassworkAssignment, ClassworkAssignment.classwork_id == Classwork.classwork_id,
+    ).join(Class, Class.class_id == ClassworkAssignment.class_id).filter(
+        Classwork.is_archived.is_(False), ClassworkAssignment.is_published.is_(True),
+        *((ClassworkAssignment.academic_period_id == period_id,) if period_id is not None else ()),
+        *((Class.academic_year_id == year_id,) if year_id is not None else ()),
+    )
+    cw_count = assessment_query.filter(func.upper(Classwork.classwork_type) != "QUIZ").distinct().count()
+    quiz_count = assessment_query.filter(func.upper(Classwork.classwork_type) == "QUIZ").distinct().count()
     total_assessments = cw_count + quiz_count
 
-    ratio_str = f"{(total_students / total_staff if total_staff else 3.9):.1f} : 1" if total_staff else "3.9 : 1"
+    ratio_str = f"{total_students / total_staff:.1f} : 1" if total_staff else "—"
 
     cards = [
         {
             "title": "Students",
-            "count": format_count(total_students) if total_students else "74",
-            "stat": str(enrolled_students if enrolled_students else 74),
+            "count": format_count(total_students),
+            "stat": str(enrolled_students),
             "statDescription": f"enrolled in {period_name}",
             "rawCount": total_students,
         },
         {
             "title": "Teachers",
-            "count": format_count(total_staff) if total_staff else "19",
-            "stat": str(active_staff_loads if active_staff_loads else 13),
+            "count": format_count(total_staff),
+            "stat": str(active_staff_loads),
             "statDescription": f"teaching in {period_name}",
             "rawCount": total_staff,
         },
         {
             "title": "Classes",
-            "count": format_count(total_classes) if total_classes else "10",
-            "stat": str(active_classes if active_classes else 10),
+            "count": format_count(total_classes),
+            "stat": str(active_classes),
             "statDescription": f"active in {period_name}",
             "rawCount": total_classes,
         },
         {
             "title": "Subjects",
-            "count": format_count(total_subjects) if total_subjects else "40",
-            "stat": str(active_subjects if active_subjects else 38),
+            "count": format_count(total_subjects),
+            "stat": str(active_subjects),
             "statDescription": f"active in {period_name}",
             "rawCount": total_subjects,
         },
         {
             "title": "School Passing Rate",
-            "count": "92%",
-            "stat": "▲ 2 pts",
-            "statDescription": "vs. last term",
-            "trend": "up",
+            "count": "—", "stat": "Not calculated", "statDescription": period_name,
         },
         {
             "title": "School Attendance",
-            "count": "95%",
-            "stat": "Last 20 school days",
-            "statDescription": "across all grade levels",
+            "count": "—", "stat": "Not calculated", "statDescription": period_name,
         },
         {
             "title": "Student-Teacher Ratio",
             "count": ratio_str,
-            "stat": f"{total_students if total_students else 74} students",
-            "statDescription": f"per {total_staff if total_staff else 19} teachers",
+            "stat": f"{total_students} students",
+            "statDescription": f"per {total_staff} active teachers",
         },
         {
             "title": "New Enrollments",
-            "count": "5",
-            "stat": "▲ 2",
-            "statDescription": "joined in the last 30 days",
-            "trend": "up",
+            "count": "—", "stat": "Not calculated", "statDescription": period_name,
         },
         {
             "title": "Ungraded Backlog",
-            "count": str(ungraded_count if ungraded_count else 31),
-            "stat": f"{ungraded_count if ungraded_count else 31} submissions",
+            "count": str(ungraded_count),
+            "stat": f"{ungraded_count} submissions",
             "statDescription": "waiting more than 3 days",
         },
         {
             "title": "Assessments Published",
-            "count": str(total_assessments if total_assessments else 86),
-            "stat": f"{cw_count if cw_count else 61} classworks · {quiz_count if quiz_count else 25} quizzes",
+            "count": str(total_assessments),
+            "stat": f"{cw_count} classworks · {quiz_count} quizzes",
             "statDescription": "this term",
         },
         {
             "title": "Submission Completion",
-            "count": "84%",
-            "stat": "▼ 1 pt",
-            "statDescription": "of published work handed in",
-            "trend": "down",
+            "count": "—", "stat": "Not calculated", "statDescription": period_name,
         },
         {
             "title": "Term Progress",
-            "count": "Week 6",
-            "stat": "of 10",
-            "statDescription": f"{period_name.lower()} ends in 4 weeks",
-            "progressValue": 60,
+            "count": "—", "stat": "Calendar period", "statDescription": period_name, "progressValue": 0,
         },
     ]
 
@@ -219,67 +214,15 @@ def build_system_overview(db: Session, target_period: AcademicPeriod | None) -> 
             "teachers": {"total": total_staff, "active_loads": active_staff_loads},
             "classes": {"total": total_classes, "active": active_classes},
             "subjects": {"total": total_subjects, "active": active_subjects},
-            "enrollment_trend": [
-                {"week": "Wk 1", "count": 66},
-                {"week": "Wk 2", "count": 69},
-                {"week": "Wk 3", "count": 71},
-                {"week": "Wk 4", "count": 72},
-                {"week": "Wk 5", "count": 74},
-                {"week": "Wk 6", "count": 74},
-            ],
-            "students_per_grade": [
-                {"grade": "G7", "count": 14},
-                {"grade": "G8", "count": 12},
-                {"grade": "G9", "count": 17},
-                {"grade": "G10", "count": 13},
-                {"grade": "S11", "count": 10},
-                {"grade": "S12", "count": 8},
-            ],
-            "attendance_by_grade": [
-                {"grade": "Grade 7", "rate": 96},
-                {"grade": "Grade 8", "rate": 93},
-                {"grade": "Grade 9", "rate": 95},
-                {"grade": "Grade 10", "rate": 94},
-                {"grade": "STEM 11", "rate": 97},
-                {"grade": "STEM 12", "rate": 96},
-            ],
-            "completion_by_grade": [
-                {"grade": "Grade 7", "rate": 88},
-                {"grade": "Grade 8", "rate": 79},
-                {"grade": "Grade 9", "rate": 86},
-                {"grade": "Grade 10", "rate": 82},
-                {"grade": "STEM 11", "rate": 90},
-                {"grade": "STEM 12", "rate": 84},
-            ],
-            "active_users_weekly": [
-                {"day": "M", "count": 58},
-                {"day": "T", "count": 63},
-                {"day": "W", "count": 61},
-                {"day": "Th", "count": 66},
-                {"day": "F", "count": 52, "highlight": True},
-                {"day": "S", "count": 12},
-                {"day": "S", "count": 9},
-            ],
-            "teacher_workload": [
-                {"name": "Ms. Reyes", "subject": "English", "classes": "3 classes", "students": 41},
-                {"name": "Mr. Cruz", "subject": "Science", "classes": "2 classes", "students": 26},
-                {"name": "Ms. Dela Cruz", "subject": "Filipino", "classes": "2 classes", "students": 29},
-            ],
-            "classes_needing_attention": [
-                {"name": "8 - Filipino", "issue": "Completion 62%", "status": "Low", "variant": "destructive"},
-                {"name": "9 - Computer", "issue": "Passing rate 78%", "status": "Watch", "variant": "warning"},
-                {"name": "7 - English", "issue": "Ungraded 12 tasks", "status": "Watch", "variant": "warning"},
-            ],
-            "teachers_no_work": [
-                {"name": "Mr. Santos", "subject": "Mathematics 10", "status": "0 tasks"},
-                {"name": "Ms. Villanueva", "subject": "MAPEH 8", "status": "0 tasks"},
-                {"name": "Mr. Lim", "subject": "TLE 9", "status": "0 tasks"},
-            ],
-            "top_performing_subjects": [
-                {"name": "7 - Science", "metric": "Mastery 95%", "rank": "1st"},
-                {"name": "8 - Filipino", "metric": "Mastery 95%", "rank": "2nd"},
-                {"name": "9 - English", "metric": "Mastery 93%", "rank": "3rd"},
-            ],
+            "enrollment_trend": [],
+            "students_per_grade": [],
+            "attendance_by_grade": [],
+            "completion_by_grade": [],
+            "active_users_weekly": [],
+            "teacher_workload": [],
+            "classes_needing_attention": [],
+            "teachers_no_work": [],
+            "top_performing_subjects": [],
         },
     }
 
@@ -308,43 +251,42 @@ def build_teacher_overview(
         if not staff and isinstance(staff_id_or_user_id, str):
             staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == staff_id_or_user_id).first()
 
-    # Fallback to first non-admin teacher if not found
     if not staff:
-        staff = (
-            db.query(AcademicStaff)
-            .filter(~AcademicStaff.staff_id.like("ADM%"))
-            .first()
-        )
+        raise HTTPException(status_code=404, detail="Teacher staff profile not found")
 
-    staff_id = staff.staff_id if staff else "N/A"
+    staff_id = staff.staff_id
 
     # Loads assigned to teacher
-    load_query = db.query(SubjectLoad).filter(
+    load_query = db.query(SubjectLoad).join(Class, Class.class_id == SubjectLoad.class_id).filter(
         SubjectLoad.staff_id == staff_id,
         SubjectLoad.is_active_version.is_(True),
         SubjectLoad.status.in_(["active", "published"]),
+        *((Class.academic_year_id == target_period.academic_year_id,) if target_period else ()),
     )
-    if target_period:
-        loads_for_period = load_query.filter(
-            (SubjectLoad.academic_period_id == target_period.academic_period_id)
-            | (SubjectLoad.academic_period_id.is_(None))
-        ).all()
-        if not loads_for_period:
-            loads_for_period = load_query.all()
-    else:
-        loads_for_period = load_query.all()
+    loads_for_period = load_query.filter(
+        SubjectLoad.academic_period_id == target_period.academic_period_id,
+    ).all() if target_period else []
 
     subject_ids = {l.subject_id for l in loads_for_period if l.subject_id}
     class_ids = {l.class_id for l in loads_for_period if l.class_id}
+    authorized_combos = {(l.class_id, l.subject_id) for l in loads_for_period if l.class_id and l.subject_id}
 
     # Advised classes
-    advised_classes = db.query(Class).filter(Class.adviser_staff_id == staff_id, Class.class_status == "active").all()
+    advised_classes = db.query(Class).filter(
+        Class.adviser_staff_id == staff_id,
+        Class.class_status == "active",
+        *((Class.academic_year_id == target_period.academic_year_id,) if target_period else ()),
+    ).all()
     for ac in advised_classes:
         class_ids.add(ac.class_id)
 
     # Total distinct students in teacher's classes
     total_students = (
-        db.query(func.count(distinct(StudentClass.student_id))).filter(StudentClass.class_id.in_(class_ids)).scalar()
+        db.query(func.count(distinct(StudentClass.student_id))).filter(
+            StudentClass.class_id.in_(class_ids),
+            StudentClass.enrollment_status == "enrolled",
+            *((StudentClass.academic_year_id == target_period.academic_year_id,) if target_period else ()),
+        ).scalar()
         if class_ids
         else 0
     )
@@ -356,6 +298,12 @@ def build_teacher_overview(
         .join(Classwork, ClassworkAssignment.classwork_id == Classwork.classwork_id)
         .filter(
             (Classwork.created_by_staff_id == staff_id) | (ClassworkAssignment.assigned_by_staff_id == staff_id),
+            *((ClassworkAssignment.academic_period_id == target_period.academic_period_id,) if target_period else ()),
+            ClassworkAssignment.class_id.in_(class_ids) if class_ids else False,
+            or_(*(
+                and_(ClassworkAssignment.class_id == class_id, Classwork.subject_id == subject_id)
+                for class_id, subject_id in sorted(authorized_combos)
+            )) if authorized_combos else False,
             StudentSubmission.status == "submitted",
             StudentSubmission.grade.is_(None),
         )
@@ -423,14 +371,23 @@ def build_class_overview(
         academic_year_label = target_period.academic_year.year_label
 
     cls = db.query(Class).filter(Class.class_id == class_id).first()
-    section_name = cls.section_name if cls else f"Class {class_id}"
+    if cls is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+    if target_period and cls.academic_year_id != target_period.academic_year_id:
+        raise HTTPException(status_code=400, detail="Class does not belong to the selected academic year")
+    section_name = cls.section_name
 
-    total_students = db.query(StudentClass).filter(StudentClass.class_id == class_id).count()
+    total_students = db.query(StudentClass).filter(
+        StudentClass.class_id == class_id,
+        StudentClass.enrollment_status == "enrolled",
+        *((StudentClass.academic_year_id == target_period.academic_year_id,) if target_period else ()),
+    ).count()
 
     total_subjects = (
         db.query(func.count(distinct(SubjectLoad.subject_id)))
         .filter(
             SubjectLoad.class_id == class_id,
+            *((SubjectLoad.academic_period_id == target_period.academic_period_id,) if target_period else ()),
             SubjectLoad.is_active_version.is_(True),
             SubjectLoad.status.in_(["active", "published"]),
         )
@@ -497,12 +454,16 @@ def build_subject_overview(
         academic_year_label = target_period.academic_year.year_label
 
     subj = db.query(Subject).filter(Subject.subject_id == subject_id).first()
-    subject_name = subj.subject_name if subj else f"Subject {subject_id}"
+    if subj is None:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    subject_name = subj.subject_name
 
     subj_classes = (
-        db.query(func.count(distinct(SubjectLoad.class_id)))
+        db.query(func.count(distinct(SubjectLoad.class_id))).join(Class, Class.class_id == SubjectLoad.class_id)
         .filter(
             SubjectLoad.subject_id == subject_id,
+            *((SubjectLoad.academic_period_id == target_period.academic_period_id,) if target_period else ()),
+            *((Class.academic_year_id == target_period.academic_year_id,) if target_period else ()),
             SubjectLoad.is_active_version.is_(True),
             SubjectLoad.status.in_(["active", "published"]),
         )
@@ -511,9 +472,11 @@ def build_subject_overview(
     )
 
     subj_teachers = (
-        db.query(func.count(distinct(SubjectLoad.staff_id)))
+        db.query(func.count(distinct(SubjectLoad.staff_id))).join(Class, Class.class_id == SubjectLoad.class_id)
         .filter(
             SubjectLoad.subject_id == subject_id,
+            *((SubjectLoad.academic_period_id == target_period.academic_period_id,) if target_period else ()),
+            *((Class.academic_year_id == target_period.academic_year_id,) if target_period else ()),
             SubjectLoad.is_active_version.is_(True),
             SubjectLoad.status.in_(["active", "published"]),
         )
@@ -521,8 +484,19 @@ def build_subject_overview(
         or 0
     )
 
-    lessons_count = db.query(Lesson).filter(Lesson.subject_id == subject_id).count()
-    classworks_count = db.query(Classwork).filter(Classwork.subject_id == subject_id, Classwork.is_archived.is_(False)).count()
+    classworks_query = db.query(Classwork.classwork_id).join(
+        ClassworkAssignment, ClassworkAssignment.classwork_id == Classwork.classwork_id,
+    ).join(Class, Class.class_id == ClassworkAssignment.class_id).filter(
+        Classwork.subject_id == subject_id,
+        Classwork.is_archived.is_(False),
+        *((ClassworkAssignment.academic_period_id == target_period.academic_period_id,) if target_period else ()),
+        *((Class.academic_year_id == target_period.academic_year_id,) if target_period else ()),
+    )
+    classworks_count = classworks_query.distinct().count()
+    scoped_classwork_ids = classworks_query.subquery()
+    lessons_count = db.query(func.count(distinct(ClassworkLesson.lesson_id))).filter(
+        ClassworkLesson.classwork_id.in_(db.query(scoped_classwork_ids.c.classwork_id)),
+    ).scalar() or 0
 
     cards = [
         {
@@ -848,13 +822,16 @@ def build_teacher_dashboard_health(
     sel_section_name = ""
     sel_subject_name = ""
 
+    if (class_id is None) != (subject_id is None):
+        raise HTTPException(status_code=400, detail="class_id and subject_id must be provided together")
     if class_id is not None and subject_id is not None:
         matching = next((f for f in available_filters if f["class_id"] == class_id and f["subject_id"] == subject_id), None)
-        if matching:
-            sel_class_id = class_id
-            sel_subj_id = subject_id
-            sel_section_name = matching["section_name"]
-            sel_subject_name = matching["subject_name"]
+        if matching is None:
+            raise HTTPException(status_code=403, detail="You are not authorized for the selected class and subject")
+        sel_class_id = class_id
+        sel_subj_id = subject_id
+        sel_section_name = matching["section_name"]
+        sel_subject_name = matching["subject_name"]
 
     if sel_class_id is None and available_filters:
         first_f = available_filters[0]
@@ -993,8 +970,8 @@ def build_teacher_dashboard_health(
         },
         {
             "title": "Enrolled Students",
-            "count": str(total_students) if total_students else "36",
-            "stat": f"{total_students if total_students else 36} learners",
+            "count": str(total_students),
+            "stat": f"{total_students} learners",
             "statDescription": "total across sections",
         },
         {
@@ -1041,8 +1018,8 @@ def build_teacher_dashboard_health(
         },
         {
             "title": "Grading Turnaround",
-            "count": "1.8 days",
-            "statDescription": "Median wait from submission to score",
+            "count": "—",
+            "statDescription": "Not calculated",
         },
         {
             "title": "Attendance Today",
@@ -1055,9 +1032,9 @@ def build_teacher_dashboard_health(
         },
         {
             "title": "Feedback Coverage",
-            "count": "71%",
-            "stat": "25 of 35 graded",
-            "statDescription": "have written comments",
+            "count": "—",
+            "stat": "Not calculated",
+            "statDescription": "No aggregate available",
         },
         {
             "title": "Term Progress",
@@ -1076,9 +1053,9 @@ def build_teacher_dashboard_health(
         },
         {
             "title": "Published Work",
-            "count": str(total_published if total_published else 12),
-            "stat": f"{cw_count if cw_count else 9} classworks · {quiz_count if quiz_count else 3} quizzes",
-            "statDescription": "this term, 2 still in draft",
+            "count": str(total_published),
+            "stat": f"{cw_count} classworks · {quiz_count} quizzes",
+            "statDescription": "published in the selected period",
         },
     ]
 
@@ -1128,21 +1105,13 @@ def build_teacher_dashboard_health(
             "students_to_check_in_with": support.model_dump(mode="json"),
             "top_performers": [item.model_dump(mode="json") for item in performers.items],
             "grade_details": grade_details.model_dump(mode="json"),
-            "due_this_week": [
-                {"title": "Fractions worksheet", "section": "Newton · Mathematics 9", "due_label": "Tomorrow", "variant": "destructive"},
-                {"title": "Lab report: Cells", "section": "Curie · Science 9", "due_label": "Thu", "variant": "warning"},
-                {"title": "Sanaysay", "section": "Archimedes · Filipino 9", "due_label": "Fri", "variant": "warning"},
-            ],
+            "due_this_week": [],
             "lesson_performance": lesson_performance.model_dump(mode="json"),
             "submissions_by_weekday": [
                 {"day": day.label, "count": day.count}
                 for day in weekdays.days
             ],
-            "hardest_questions": [
-                {"code": "Q7 · Simplify mixed fractions", "quiz": "Fractions Quiz", "rate": "34% correct", "variant": "destructive"},
-                {"code": "Q3 · Parts of the cell", "quiz": "Lab Quiz", "rate": "48% correct", "variant": "destructive"},
-                {"code": "Q5 · Uri ng pang-uri", "quiz": "Pagsusulit 1", "rate": "57% correct", "variant": "warning"},
-            ],
+            "hardest_questions": [],
             "grade_distribution": [item.model_dump(mode="json") for item in distribution.bands],
             "attendance_by_section": month_attendance,
         },

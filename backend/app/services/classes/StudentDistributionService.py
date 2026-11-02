@@ -1,14 +1,17 @@
 import uuid
 from decimal import Decimal
 from typing import Any, Literal
+from fastapi import HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.people.Student import Student
+from app.services.academic.AcademicLifecycleService import resolve_active_academic_year
 from app.services.classes.ClassShared import normalized_text, readable_text
 
 
@@ -17,6 +20,15 @@ def _official_grade_value(row: StudentPeriodGrade) -> float | None:
         if value is not None:
             return round(float(value), 2)
     return None
+
+
+def _resolve_academic_year(db: Session, academic_year_id: int | None) -> AcademicYear:
+    if academic_year_id is None:
+        return resolve_active_academic_year(db)
+    academic_year = db.get(AcademicYear, academic_year_id)
+    if academic_year is None:
+        raise HTTPException(status_code=404, detail="Academic year not found.")
+    return academic_year
 
 
 def resolve_student_gwa(
@@ -40,30 +52,36 @@ def resolve_student_gwa(
 
     student_id = student_obj.student_id
 
-    # Resolve active academic year if not provided
-    if active_academic_year_id is None:
-        active_ay = db.query(AcademicYear.academic_year_id).filter(AcademicYear.is_active.is_(True)).first()
-        active_academic_year_id = active_ay[0] if active_ay else None
+    selected_year = _resolve_academic_year(db, active_academic_year_id)
 
     # 1. Look up student's most recently completed academic year prior to active year
     prior_classes_query = (
         db.query(Class.class_id, Class.academic_year_id, AcademicYear.start_date)
         .join(StudentClass, Class.class_id == StudentClass.class_id)
         .join(AcademicYear, Class.academic_year_id == AcademicYear.academic_year_id)
-        .filter(StudentClass.student_id == student_id)
+        .filter(
+            StudentClass.student_id == student_id,
+            StudentClass.academic_year_id == Class.academic_year_id,
+            AcademicYear.end_date < selected_year.start_date,
+        )
     )
-    if active_academic_year_id is not None:
-        selected_year = db.get(AcademicYear, active_academic_year_id)
-        if selected_year is not None:
-            prior_classes_query = prior_classes_query.filter(AcademicYear.end_date < selected_year.start_date)
 
-    prior_class = prior_classes_query.order_by(AcademicYear.start_date.desc()).first()
+    prior_class = prior_classes_query.order_by(
+        AcademicYear.start_date.desc(),
+        AcademicYear.end_date.desc(),
+        Class.class_id,
+    ).first()
 
     if prior_class is not None:
         grades = (
             db.query(StudentPeriodGrade)
+            .join(
+                AcademicPeriod,
+                AcademicPeriod.academic_period_id == StudentPeriodGrade.academic_period_id,
+            )
             .filter(StudentPeriodGrade.student_id == student_id)
             .filter(StudentPeriodGrade.class_id == prior_class.class_id)
+            .filter(AcademicPeriod.academic_year_id == prior_class.academic_year_id)
             .all()
         )
 
@@ -158,12 +176,15 @@ def distribute_students_balanced(
     student_rows = db.query(Student).filter(Student.student_id.in_(all_student_ids)).all()
     students_map: dict[uuid.UUID, dict[str, Any]] = {}
 
-    # Resolve active academic year once for GWA lookups
-    active_ay = db.query(AcademicYear.academic_year_id).filter(AcademicYear.is_active.is_(True)).first()
-    active_ay_id = academic_year_id if academic_year_id is not None else (active_ay[0] if active_ay else None)
+    # Resolve the year once so every GWA lookup uses the same validated context.
+    resolved_year_id = (
+        _resolve_academic_year(db, academic_year_id).academic_year_id
+        if mode == "gwa"
+        else academic_year_id
+    )
 
     for s in student_rows:
-        gwa = resolve_student_gwa(db, s, active_ay_id) if mode == "gwa" else None
+        gwa = resolve_student_gwa(db, s, resolved_year_id) if mode == "gwa" else None
         students_map[s.student_id] = {
             "student_id": s.student_id,
             "first_name": s.first_name,

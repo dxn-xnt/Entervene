@@ -15,7 +15,6 @@ from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.Subject import Subject
 from app.models.academic.Class_ import Class
 from app.models.academic.AcademicPeriod import AcademicPeriod
-from app.models.academic.AcademicYear import AcademicYear
 from app.models.people.AcademicStaff import AcademicStaff
 from app.schemas.SubjectLoad import SubjectLoadItem, ConflictItem
 from app.schemas.TeacherSubstitution import (
@@ -27,9 +26,41 @@ from app.schemas.TeacherSubstitution import (
     TeacherLoadSummaryItem,
 )
 from app.services.academic.ConflictDetectorService import ConflictDetectorService
+from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
 from app.services.academic.SubstitutionService import SubstitutionService, _staff_full_name
 
 router = APIRouter()
+
+
+def _resolve_requested_or_active_period(
+    db: Session,
+    academic_period_id: int | None,
+) -> AcademicPeriod:
+    if academic_period_id is not None:
+        period = db.get(AcademicPeriod, academic_period_id)
+        if period is None:
+            raise HTTPException(status_code=404, detail="Academic period not found.")
+        return period
+    return resolve_active_academic_period(db)
+
+
+def _resolve_load_academic_context(
+    db: Session,
+    load: SubjectLoad,
+) -> tuple[AcademicPeriod, Class]:
+    period = db.get(AcademicPeriod, load.academic_period_id)
+    cls = db.get(Class, load.class_id)
+    if period is None or cls is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Subject load has an incomplete academic context.",
+        )
+    if cls.academic_year_id != period.academic_year_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Subject load class and grading period belong to different academic years.",
+        )
+    return period, cls
 
 
 def _format_substitution_response(
@@ -86,9 +117,15 @@ def create_substitution(
     admin_staff_id = get_optional_staff_id(current_user=current_user, db=db)
 
     # 1. Load target subject_load
-    load = db.query(SubjectLoad).filter(SubjectLoad.subject_load_id == payload.subject_load_id).first()
+    load = db.query(SubjectLoad).filter(
+        SubjectLoad.subject_load_id == payload.subject_load_id,
+        SubjectLoad.is_active_version.is_(True),
+        SubjectLoad.status.in_(["published", "active"]),
+    ).first()
     if not load:
         raise HTTPException(status_code=404, detail="Target subject load not found")
+
+    period, cls = _resolve_load_academic_context(db, load)
 
     original_staff_id = load.staff_id
     if not original_staff_id:
@@ -133,7 +170,6 @@ def create_substitution(
             )
 
     # 5. Conflict Check on Substitute's Own Schedule
-    period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == load.academic_period_id).first()
     sub_existing_loads = (
         db.query(SubjectLoad)
         .filter(
@@ -200,7 +236,6 @@ def create_substitution(
     db.refresh(new_sub)
 
     subject = db.query(Subject).filter(Subject.subject_id == load.subject_id).first()
-    cls = db.query(Class).filter(Class.class_id == load.class_id).first()
 
     warnings = [c for c in val_res.conflicts if c.severity == "warning" and c.staff_id == payload.substitute_staff_id]
     return _format_substitution_response(new_sub, load, orig_staff, sub_staff, subject, cls, period, conflicts=warnings)
@@ -227,9 +262,18 @@ def create_bulk_substitutions(
         raise HTTPException(status_code=400, detail="End date must be greater than or equal to start date")
 
     # 3. Load all target subject_loads
-    loads = db.query(SubjectLoad).filter(SubjectLoad.subject_load_id.in_(payload.subject_load_ids)).all()
+    loads = db.query(SubjectLoad).filter(
+        SubjectLoad.subject_load_id.in_(payload.subject_load_ids),
+        SubjectLoad.is_active_version.is_(True),
+        SubjectLoad.status.in_(["published", "active"]),
+    ).all()
     if len(loads) != len(payload.subject_load_ids):
         raise HTTPException(status_code=404, detail="One or more selected subject loads were not found")
+
+    load_contexts = {
+        load.subject_load_id: _resolve_load_academic_context(db, load)
+        for load in loads
+    }
 
     # Verify all loads have an assigned teacher and belong to the same original teacher
     original_staff_ids = {l.staff_id for l in loads if l.staff_id}
@@ -275,7 +319,7 @@ def create_bulk_substitutions(
 
     all_warnings: list[ConflictItem] = []
     for period_id, period_loads in loads_by_period.items():
-        period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == period_id).first()
+        period = load_contexts[period_loads[0].subject_load_id][0]
         sub_existing_loads = (
             db.query(SubjectLoad)
             .filter(
@@ -440,7 +484,7 @@ def get_teacher_loads(
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    active_period = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
+    selected_period = _resolve_requested_or_active_period(db, academic_period_id)
 
     query = (
         db.query(SubjectLoad, Subject, Class, AcademicPeriod)
@@ -449,12 +493,12 @@ def get_teacher_loads(
         .join(AcademicPeriod, AcademicPeriod.academic_period_id == SubjectLoad.academic_period_id)
         .filter(
             SubjectLoad.staff_id == staff_id,
+            SubjectLoad.academic_period_id == selected_period.academic_period_id,
+            SubjectLoad.is_active_version.is_(True),
             SubjectLoad.status.in_(["active", "published"]),
             Class.class_status != "archived",
         )
     )
-    if academic_period_id is not None:
-        query = query.filter(SubjectLoad.academic_period_id == academic_period_id)
 
     rows = query.order_by(AcademicPeriod.period_sequence.asc(), Class.section_name.asc(), Subject.subject_name.asc()).all()
 
@@ -479,7 +523,6 @@ def get_teacher_loads(
     items: list[TeacherLoadSummaryItem] = []
     for load, subject, cls, period in rows:
         sub_name = active_sub_map.get(load.subject_load_id)
-        is_active_term = bool(period.is_active or (active_period and period.academic_period_id == active_period.academic_period_id))
         items.append(
             TeacherLoadSummaryItem(
                 subject_load_id=load.subject_load_id,
@@ -490,7 +533,7 @@ def get_teacher_loads(
                 section_name=cls.section_name,
                 academic_period_id=period.academic_period_id,
                 period_name=period.period_name,
-                is_active_period=is_active_term,
+                is_active_period=bool(period.is_active and period.academic_year.is_active),
                 start_time=load.start_time,
                 end_time=load.end_time,
                 days_of_week=load.days_of_week or [],

@@ -45,6 +45,8 @@ from app.services.classes.ClassStudentService import update_class_student_assign
 from app.services.classes.StudentDistributionService import distribute_students_balanced, resolve_student_gwa
 from app.services.classes.ExistingClassDistributionService import preview_existing_class_distribution, commit_existing_class_distribution
 from app.schemas.OfficialSection import OfficialSectionCreate, OfficialSectionUpdate, OfficialSectionRead, OfficialSectionList
+from app.schemas.ClassSetup import AcademicYearSetupRequest, AcademicYearSetupResponse
+from app.services.classes.ClassSetupService import setup_academic_year
 from app.services.classes.OfficialSectionService import list_official_sections, create_official_section, update_official_section
 
 # CLASS MANAGEMENT FLOW
@@ -101,10 +103,20 @@ def edit_official_section(
 @router.get("", response_model=ClassListResponse)
 def list_classes(
     status: str = Query("active", pattern="^(active|archived)$"),
+    academic_year_id: int | None = Query(None),
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    return list_classes_data(db=db, status=status)
+    return list_classes_data(db=db, status=status, academic_year_id=academic_year_id)
+
+
+@router.post("/setup-academic-year", response_model=AcademicYearSetupResponse, status_code=200)
+def setup_academic_year_endpoint(
+    payload: AcademicYearSetupRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return setup_academic_year(db=db, payload=payload)
 
 
 # Class creation has two entry paths. Manual creation sends this payload
