@@ -1,5 +1,6 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import FastAPI
@@ -20,6 +21,7 @@ from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.attendance.Attendance import AttendanceRecord
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
@@ -206,6 +208,7 @@ def test_student_can_fetch_only_own_classmates(client, db, identity):
 
 
 def test_student_with_no_class_gets_safe_404(client, db, identity):
+    add_year(db)
     level = add_level(db)
     account = add_account(db, "student@example.test")
     identity["sub"] = str(account.user_id)
@@ -313,3 +316,130 @@ def test_non_student_cannot_fetch_student_class(client, identity):
     response = client.get("/api/v1/students/me/class")
 
     assert response.status_code == 403
+
+
+def test_current_class_rejects_missing_active_year_instead_of_using_historical_enrollment(client, db, identity):
+    _, _, _ = seed_class(db, identity)
+    db.query(AcademicYear).update({AcademicYear.is_active: False})
+    db.commit()
+
+    response = client.get("/api/v1/students/me/class")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "No active academic year is configured."
+
+
+def test_current_class_rejects_duplicate_active_years(client, db, identity):
+    _, student, _ = seed_class(db, identity)
+    future_year = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=True,
+    )
+    future_level = AcademicLevel(level_name="Grade 8", grade_level=8)
+    db.add_all([future_year, future_level])
+    db.flush()
+    future_class = Class(
+        section_name="Newton",
+        class_status="active",
+        academic_year_id=future_year.academic_year_id,
+        academic_level_id=future_level.academic_level_id,
+    )
+    db.add(future_class)
+    db.flush()
+    db.add(build_student_class_assignment(student.student_id, future_class))
+    db.commit()
+
+    response = client.get("/api/v1/students/me/class")
+
+    assert response.status_code == 409
+    assert "multiple academic years are active" in response.json()["detail"]
+
+
+def test_current_class_does_not_fallback_to_historical_or_future_enrollment(client, db, identity):
+    historical_class, student, _ = seed_class(db, identity)
+    historical_year = db.get(AcademicYear, historical_class.academic_year_id)
+    historical_year.is_active = False
+
+    current_year = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=True,
+    )
+    future_year = AcademicYear(
+        year_label="2027-2028",
+        start_date=date(2027, 6, 1),
+        end_date=date(2028, 3, 31),
+        is_active=False,
+    )
+    future_level = AcademicLevel(level_name="Grade 9", grade_level=9)
+    db.add_all([current_year, future_year, future_level])
+    db.flush()
+    future_class = Class(
+        section_name="Faraday",
+        class_status="active",
+        academic_year_id=future_year.academic_year_id,
+        academic_level_id=future_level.academic_level_id,
+    )
+    db.add(future_class)
+    db.flush()
+    db.add(build_student_class_assignment(student.student_id, future_class))
+    db.commit()
+
+    response = client.get("/api/v1/students/me/class")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Student class not found"
+
+
+def test_explicit_historical_period_uses_that_years_enrollment(client, db, identity):
+    historical_class, student, _ = seed_class(db, identity)
+    historical_year = db.get(AcademicYear, historical_class.academic_year_id)
+    historical_year.is_active = False
+    historical_class.class_status = "archived"
+    historical_period = AcademicPeriod(
+        period_name="Historical Term",
+        period_type="TERM",
+        period_sequence=1,
+        total_periods_in_year=3,
+        academic_year_id=historical_year.academic_year_id,
+        start_date=historical_year.start_date,
+        end_date=historical_year.end_date,
+        is_active=False,
+    )
+    current_year = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=True,
+    )
+    current_level = AcademicLevel(level_name="Grade 8", grade_level=8)
+    db.add_all([historical_period, current_year, current_level])
+    db.flush()
+    current_class = Class(
+        section_name="Newton",
+        class_status="active",
+        academic_year_id=current_year.academic_year_id,
+        academic_level_id=current_level.academic_level_id,
+    )
+    db.add(current_class)
+    db.flush()
+    db.add(build_student_class_assignment(student.student_id, current_class))
+    today = datetime.now(ZoneInfo("Asia/Manila")).date()
+    db.add(AttendanceRecord(
+        student_id=student.student_id,
+        class_id=historical_class.class_id,
+        date=today,
+        status="present",
+    ))
+    db.commit()
+
+    response = client.get(
+        f"/api/v1/students/me/studyboard-metrics?academic_period_id={historical_period.academic_period_id}"
+    )
+
+    assert response.status_code == 200
+    today_row = next(row for row in response.json()["attendance"] if row["date"] == today.isoformat())
+    assert today_row["status"] == "present"

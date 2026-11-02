@@ -66,6 +66,9 @@ def _create_active_intervention(
     *,
     subject_id: int | None = None,
 ) -> Intervention:
+    # Reading-review mutations are live-period actions. Keep this shared setup
+    # explicit so unlock-flow tests model the active grading period.
+    c["period"].is_active = True
     intervention = Intervention(
         intervention_id=intervention_id,
         student_id=c["student"].student_id,

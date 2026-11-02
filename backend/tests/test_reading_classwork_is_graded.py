@@ -840,6 +840,17 @@ def test_complete_reading_assignment_marks_reading_as_submitted_and_increments_c
     )
     db.add(year)
     db.flush()
+    period = AcademicPeriod(
+        period_name="First Quarter",
+        period_type="QUARTER",
+        period_sequence=1,
+        start_date=date(2026, 6, 1),
+        end_date=date(2026, 8, 31),
+        academic_year_id=year.academic_year_id,
+        is_active=True,
+    )
+    db.add(period)
+    db.flush()
 
     cls = Class(
         section_name="Emerald",
@@ -890,6 +901,7 @@ def test_complete_reading_assignment_marks_reading_as_submitted_and_increments_c
     asgn_reading = ClassworkAssignment(
         classwork_id=cw_reading.classwork_id,
         class_id=cls.class_id,
+        academic_period_id=period.academic_period_id,
         assigned_by_staff_id=staff.staff_id,
         is_published=True,
     )
@@ -961,6 +973,17 @@ def test_record_reading_focus_accumulates_seconds_and_preserves_isolation(db_ses
     )
     db.add(year)
     db.flush()
+    period = AcademicPeriod(
+        period_name="First Quarter",
+        period_type="QUARTER",
+        period_sequence=1,
+        start_date=date(2026, 6, 1),
+        end_date=date(2026, 8, 31),
+        academic_year_id=year.academic_year_id,
+        is_active=True,
+    )
+    db.add(period)
+    db.flush()
 
     cls = Class(
         section_name="Emerald",
@@ -1011,6 +1034,7 @@ def test_record_reading_focus_accumulates_seconds_and_preserves_isolation(db_ses
     asgn_reading = ClassworkAssignment(
         classwork_id=cw_reading.classwork_id,
         class_id=cls.class_id,
+        academic_period_id=period.academic_period_id,
         assigned_by_staff_id=staff.staff_id,
         is_published=True,
     )

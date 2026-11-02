@@ -375,3 +375,196 @@ def test_send_grade_and_advisory_view_sync(advisory_grades_setup):
     assert stu1_row2["is_all_finalized"] is True
     assert stu1_row2["gwa"] == 88.0
     assert stu1_row2["gwa_descriptor"] == "Benchmarking"
+
+def test_advisory_grades_period_isolation_across_terms(advisory_grades_setup):
+    """Term 1 and Term 2 subjects and grades remain isolated without cross-term leakage."""
+    env = advisory_grades_setup
+    db = env["db"]
+
+    # Add Subject 3 (English 7) only to Term 2 (p2)
+    s3 = Subject(subject_name="English 7", subject_codename="ENG-7", academic_level_id=env["level"].academic_level_id)
+    db.add(s3)
+    db.flush()
+    sl3 = SubjectLoad(
+        class_id=env["cls"].class_id,
+        subject_id=s3.subject_id,
+        staff_id=env["staff_sub"].staff_id,
+        academic_period_id=env["p2"].academic_period_id,
+        status="active",
+        is_active_version=True,
+    )
+    db.add(sl3)
+
+    # Finalize Subject 1 for stu1 in Term 1 only
+    pg1 = StudentPeriodGrade(
+        student_id=env["stu1"].student_id,
+        class_id=env["cls"].class_id,
+        subject_id=env["s1"].subject_id,
+        academic_period_id=env["p1"].academic_period_id,
+        final_period_grade=Decimal("95.00"),
+        is_finalized=True,
+        finalized_at=datetime.now(timezone.utc),
+        finalized_by_staff_id=env["staff_adv"].staff_id,
+    )
+    # Finalize Subject 3 for stu1 in Term 2 only
+    pg3 = StudentPeriodGrade(
+        student_id=env["stu1"].student_id,
+        class_id=env["cls"].class_id,
+        subject_id=s3.subject_id,
+        academic_period_id=env["p2"].academic_period_id,
+        final_period_grade=Decimal("88.00"),
+        is_finalized=True,
+        finalized_at=datetime.now(timezone.utc),
+        finalized_by_staff_id=env["staff_sub"].staff_id,
+    )
+    db.add_all([pg1, pg3])
+    db.commit()
+
+    # Query Term 1
+    res1 = get_teacher_advisory_class_grades_data(
+        db=db,
+        class_id=env["cls"].class_id,
+        staff_id=env["staff_adv"].staff_id,
+        academic_period_id=env["p1"].academic_period_id,
+    )
+    t1_subj_ids = [s["subject_id"] for s in res1["subjects"]]
+    assert env["s1"].subject_id in t1_subj_ids
+    assert env["s2"].subject_id in t1_subj_ids
+    assert s3.subject_id not in t1_subj_ids
+    assert len(res1["subjects"]) == 2
+
+    stu1_t1 = next(s for s in res1["students"] if s["student_id"] == str(env["stu1"].student_id))
+    assert stu1_t1["total_subjects_count"] == 2
+    assert stu1_t1["finalized_count"] == 1
+    assert stu1_t1["is_all_finalized"] is False
+    assert s3.subject_id not in stu1_t1["grades"]
+
+    # Query Term 2
+    res2 = get_teacher_advisory_class_grades_data(
+        db=db,
+        class_id=env["cls"].class_id,
+        staff_id=env["staff_adv"].staff_id,
+        academic_period_id=env["p2"].academic_period_id,
+    )
+    t2_subj_ids = [s["subject_id"] for s in res2["subjects"]]
+    assert t2_subj_ids == [s3.subject_id]
+    assert len(res2["subjects"]) == 1
+
+    stu1_t2 = next(s for s in res2["students"] if s["student_id"] == str(env["stu1"].student_id))
+    assert stu1_t2["total_subjects_count"] == 1
+    assert stu1_t2["finalized_count"] == 1
+    assert stu1_t2["is_all_finalized"] is True
+    assert stu1_t2["gwa"] == 88.0
+    assert env["s1"].subject_id not in stu1_t2["grades"]
+    assert env["s2"].subject_id not in stu1_t2["grades"]
+
+
+def test_advisory_grades_historical_and_future_periods(advisory_grades_setup):
+    """Historical and future periods in the same year are accessible without error."""
+    env = advisory_grades_setup
+    db = env["db"]
+
+    # Historical read: p1 marked inactive
+    env["p1"].is_active = False
+    db.commit()
+
+    res_hist = get_teacher_advisory_class_grades_data(
+        db=db,
+        class_id=env["cls"].class_id,
+        staff_id=env["staff_adv"].staff_id,
+        academic_period_id=env["p1"].academic_period_id,
+    )
+    assert res_hist["academic_period_id"] == env["p1"].academic_period_id
+    assert len(res_hist["subjects"]) == 2
+
+    # Future period: p3 created with future dates and no subject loads yet
+    p3 = AcademicPeriod(
+        academic_year_id=env["ay"].academic_year_id,
+        period_name="Term 3",
+        period_sequence=3,
+        start_date=date(2026, 12, 1),
+        end_date=date(2027, 2, 28),
+        is_active=False,
+    )
+    db.add(p3)
+    db.commit()
+
+    res_future = get_teacher_advisory_class_grades_data(
+        db=db,
+        class_id=env["cls"].class_id,
+        staff_id=env["staff_adv"].staff_id,
+        academic_period_id=p3.academic_period_id,
+    )
+    assert res_future["academic_period_id"] == p3.academic_period_id
+    assert res_future["subjects"] == []
+    for s in res_future["students"]:
+        assert s["total_subjects_count"] == 0
+        assert s["finalized_count"] == 0
+        assert s["is_all_finalized"] is False
+
+
+def test_advisory_grades_missing_period_rejected(advisory_grades_setup):
+    """Missing academic period raises 404 rather than silently falling back."""
+    env = advisory_grades_setup
+    db = env["db"]
+
+    with pytest.raises(HTTPException) as exc:
+        get_teacher_advisory_class_grades_data(
+            db=db,
+            class_id=env["cls"].class_id,
+            staff_id=env["staff_adv"].staff_id,
+            academic_period_id=999_999,
+        )
+    assert exc.value.status_code == 404
+    assert "not found" in exc.value.detail.lower()
+
+
+def test_advisory_grades_mismatched_academic_year_period_rejected(advisory_grades_setup):
+    """Period belonging to a different academic year raises 400 rather than falling back."""
+    env = advisory_grades_setup
+    db = env["db"]
+
+    ay_other = AcademicYear(
+        year_label="2025-2026",
+        start_date=date(2025, 6, 1),
+        end_date=date(2026, 3, 31),
+        is_active=False,
+    )
+    db.add(ay_other)
+    db.flush()
+
+    p_other = AcademicPeriod(
+        academic_year_id=ay_other.academic_year_id,
+        period_name="Prior Year Q1",
+        period_sequence=1,
+        start_date=date(2025, 6, 1),
+        end_date=date(2025, 8, 31),
+        is_active=False,
+    )
+    db.add(p_other)
+    db.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        get_teacher_advisory_class_grades_data(
+            db=db,
+            class_id=env["cls"].class_id,
+            staff_id=env["staff_adv"].staff_id,
+            academic_period_id=p_other.academic_period_id,
+        )
+    assert exc.value.status_code == 400
+    assert "different academic years" in exc.value.detail.lower()
+
+
+def test_advisory_grades_default_period_resolution(advisory_grades_setup):
+    """When academic_period_id is omitted, resolves the active period for the class's academic year."""
+    env = advisory_grades_setup
+    db = env["db"]
+
+    res = get_teacher_advisory_class_grades_data(
+        db=db,
+        class_id=env["cls"].class_id,
+        staff_id=env["staff_adv"].staff_id,
+        academic_period_id=None,
+    )
+    assert res["academic_period_id"] == env["p1"].academic_period_id
+    assert res["period_name"] == "Term 1"

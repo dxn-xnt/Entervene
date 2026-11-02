@@ -7,6 +7,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 from sqlalchemy import tuple_, desc, or_
 
+from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.Class_ import Class
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.academic.Subject import Subject
@@ -74,6 +76,12 @@ def resolve_teachers_for_loads(
     loads = (
         db.query(SubjectLoad, AcademicStaff)
         .outerjoin(AcademicStaff, SubjectLoad.staff_id == AcademicStaff.staff_id)
+        .join(Class, SubjectLoad.class_id == Class.class_id)
+        .join(
+            AcademicPeriod,
+            (SubjectLoad.academic_period_id == AcademicPeriod.academic_period_id)
+            & (Class.academic_year_id == AcademicPeriod.academic_year_id),
+        )
         .filter(
             tuple_(SubjectLoad.class_id, SubjectLoad.subject_id, SubjectLoad.academic_period_id).in_(unique_triplets),
             SubjectLoad.is_active_version == True,
@@ -236,6 +244,13 @@ def get_teacher_assigned_triplets(
         SubjectLoad.class_id,
         SubjectLoad.subject_id,
         SubjectLoad.academic_period_id,
+    ).join(
+        Class,
+        SubjectLoad.class_id == Class.class_id,
+    ).join(
+        AcademicPeriod,
+        (SubjectLoad.academic_period_id == AcademicPeriod.academic_period_id)
+        & (Class.academic_year_id == AcademicPeriod.academic_year_id),
     ).filter(
         SubjectLoad.staff_id == staff_id,
         SubjectLoad.status.in_(["active", "published"]),
@@ -252,6 +267,12 @@ def get_teacher_assigned_triplets(
             SubjectLoad.class_id,
             SubjectLoad.subject_id,
             SubjectLoad.academic_period_id,
+        )
+        .join(Class, SubjectLoad.class_id == Class.class_id)
+        .join(
+            AcademicPeriod,
+            (SubjectLoad.academic_period_id == AcademicPeriod.academic_period_id)
+            & (Class.academic_year_id == AcademicPeriod.academic_year_id),
         )
         .join(TeacherSubstitution, TeacherSubstitution.subject_load_id == SubjectLoad.subject_load_id)
         .filter(

@@ -17,12 +17,14 @@ export function CopyPreviousYearSetupModal({
   onOpenChange,
   options,
   defaultSourceAcademicYearId,
+  defaultTargetAcademicYearId,
   onCopied,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   options: SubjectOfferingFormOptions | null;
   defaultSourceAcademicYearId?: number;
+  defaultTargetAcademicYearId?: number;
   onCopied: (result: SubjectOfferingCopyAcademicYearResult) => Promise<void>;
 }) {
   const [sourceAcademicYearId, setSourceAcademicYearId] = useState("");
@@ -36,36 +38,51 @@ export function CopyPreviousYearSetupModal({
     () => options?.academic_years.filter((year) => year.is_active) ?? [],
     [options?.academic_years]
   );
-  const targetYears = activeYears;
+  const configurableYears = useMemo(() => {
+    const years = options?.academic_years ?? [];
+    const active = years.find((y) => y.is_active);
+    if (!active) return years;
+    const actStart = parseInt(active.year_label.match(/\d{4}/)?.[0] ?? "0", 10);
+    return years.filter((y) => {
+      if (y.is_active) return true;
+      const yStart = parseInt(y.year_label.match(/\d{4}/)?.[0] ?? "0", 10);
+      if (yStart && actStart) return yStart > actStart;
+      if (y.start_date && active.start_date) return y.start_date > active.start_date;
+      return y.academic_year_id > active.academic_year_id;
+    });
+  }, [options?.academic_years]);
+  const targetYears = configurableYears;
   const selectedTargetYearId = Number(targetAcademicYearId);
   const sourceYears = useMemo(() => {
     const years = options?.academic_years ?? [];
-    const inactiveYears = years.filter((year) => !year.is_active && year.academic_year_id !== selectedTargetYearId);
-    return inactiveYears.length
-      ? inactiveYears
-      : years.filter((year) => year.academic_year_id !== selectedTargetYearId);
+    return years.filter((year) => year.academic_year_id !== selectedTargetYearId);
+
+
+
   }, [options?.academic_years, selectedTargetYearId]);
 
   useEffect(() => {
     if (!open) return;
-    const defaultTarget = activeYears[0];
+    const defaultTarget = (defaultTargetAcademicYearId
+      ? targetYears.find((year) => year.academic_year_id === defaultTargetAcademicYearId)
+      : null) ?? activeYears[0] ?? targetYears[0];
     const sourceCandidates = options?.academic_years.filter((year) =>
       year.academic_year_id !== defaultTarget?.academic_year_id
     ) ?? [];
     const defaultSource = sourceCandidates.find((year) => year.academic_year_id === defaultSourceAcademicYearId)
-      ?? sourceCandidates.find((year) => !year.is_active)
+      ?? sourceCandidates.find((year) => year.is_active)
       ?? sourceCandidates[0];
 
     setTargetAcademicYearId(defaultTarget ? String(defaultTarget.academic_year_id) : "");
     setSourceAcademicYearId(defaultSource ? String(defaultSource.academic_year_id) : "");
     setOverwriteExisting(false);
     setError(null);
-  }, [activeYears, defaultSourceAcademicYearId, open, options?.academic_years]);
+  }, [activeYears, defaultSourceAcademicYearId, defaultTargetAcademicYearId, open, options?.academic_years, targetYears]);
 
   const handleCopy = async () => {
     setError(null);
     if (!sourceAcademicYearId || !targetAcademicYearId) {
-      setError("Select a source academic year and active target academic year.");
+      setError("Select a source academic year and target academic year.");
       setValidationAttempt((attempt) => attempt + 1);
       return;
     }
@@ -128,7 +145,7 @@ export function CopyPreviousYearSetupModal({
                 </Select.Content>
               </Select>
               {error && !sourceAcademicYearId && <FormMessage id="copy-source-year-error">Select a source academic year.</FormMessage>}
-              <p className="text-xs text-muted-foreground">Previous or inactive years are allowed as the copy source.</p>
+              <p className="text-xs text-muted-foreground">Previous or active academic years are allowed as the copy source.</p>
             </div>
 
             <div className="flex flex-col gap-1">
@@ -139,7 +156,7 @@ export function CopyPreviousYearSetupModal({
                 disabled={targetYears.length <= 1}
               >
                 <Select.Trigger id="copy-target-year" aria-invalid={!!error && (!targetAcademicYearId || sourceAcademicYearId === targetAcademicYearId)} aria-describedby={error && (!targetAcademicYearId || sourceAcademicYearId === targetAcademicYearId) ? "copy-target-year-error" : undefined} className="w-full aria-[invalid=true]:border-destructive">
-                  <Select.Value placeholder="Select active year" />
+                  <Select.Value placeholder="Select target year" />
                 </Select.Trigger>
                 <Select.Content>
                   <Select.Group>
@@ -151,7 +168,7 @@ export function CopyPreviousYearSetupModal({
                   </Select.Group>
                 </Select.Content>
               </Select>
-              {error && (!targetAcademicYearId || sourceAcademicYearId === targetAcademicYearId) && <FormMessage id="copy-target-year-error">{sourceAcademicYearId === targetAcademicYearId ? "Choose a different target year." : "Select an active target year."}</FormMessage>}
+              {error && (!targetAcademicYearId || sourceAcademicYearId === targetAcademicYearId) && <FormMessage id="copy-target-year-error">{sourceAcademicYearId === targetAcademicYearId ? "Choose a different target year." : "Select a target academic year."}</FormMessage>}
               <p className="text-xs text-muted-foreground">Target year must be active. Future terms remain editable.</p>
             </div>
           </div>

@@ -125,6 +125,25 @@ def create_client(db, current_user_dict):
     return TestClient(app)
 
 
+def assign_teacher_b_to_subject(db, ctx):
+    assigned_class = Class(
+        section_name="Grade 8 - Curie",
+        academic_year_id=1,
+        academic_level_id=1,
+    )
+    db.add(assigned_class)
+    db.flush()
+    db.add(SubjectLoad(
+        staff_id=ctx["staff_b_id"],
+        subject_id=ctx["subject_id"],
+        class_id=assigned_class.class_id,
+        academic_period_id=1,
+        status="active",
+        is_active_version=True,
+    ))
+    db.commit()
+
+
 def test_competency_lifecycle():
     db, ctx = setup_test_db()
     client = create_client(db, {
@@ -174,6 +193,7 @@ def test_competency_lifecycle():
 
 def test_competency_per_teacher_scoping_and_cross_teacher_isolation():
     db, ctx = setup_test_db()
+    assign_teacher_b_to_subject(db, ctx)
 
     client_a = create_client(db, {
         "sub": str(ctx["user_a_id"]),
@@ -279,6 +299,7 @@ def test_competency_multi_section_shared_for_same_teacher():
 def test_competency_admin_scoping_and_filtering():
     """Admin can view all competencies or filter by teacher staff_id."""
     db, ctx = setup_test_db()
+    assign_teacher_b_to_subject(db, ctx)
 
     client_a = create_client(db, {"sub": str(ctx["user_a_id"]), "user_id": str(ctx["user_a_id"]), "role": "teacher"})
     client_b = create_client(db, {"sub": str(ctx["user_b_id"]), "user_id": str(ctx["user_b_id"]), "role": "teacher"})
@@ -382,4 +403,140 @@ def test_competency_detail_authorization():
     resp_sub = client_sub.get(f"/api/v1/competencies/{comp_id}")
     assert resp_sub.status_code == 200
     assert resp_sub.json()["statement"] == "Private Competency by Teacher A"
+
+
+def test_competency_configuration_respects_role_assignment_and_academic_context():
+    db, ctx = setup_test_db()
+    current_year = db.get(AcademicYear, 1)
+    subject = db.get(Subject, ctx["subject_id"])
+
+    future_current_year_period = AcademicPeriod(
+        academic_period_id=2,
+        academic_year_id=current_year.academic_year_id,
+        period_name="Quarter 2",
+        period_type="QUARTER",
+        period_sequence=2,
+        total_periods_in_year=4,
+        start_date=date(2026, 11, 1),
+        end_date=date(2027, 1, 31),
+        is_active=False,
+    )
+    future_year = AcademicYear(
+        academic_year_id=2,
+        year_label="2027-2028",
+        start_date=date(2027, 8, 1),
+        end_date=date(2028, 5, 31),
+        is_active=False,
+    )
+    future_year_period = AcademicPeriod(
+        academic_period_id=3,
+        academic_year_id=2,
+        period_name="Quarter 1",
+        period_type="QUARTER",
+        period_sequence=1,
+        total_periods_in_year=4,
+        start_date=date(2027, 8, 1),
+        end_date=date(2027, 10, 31),
+        is_active=False,
+    )
+    historical_year = AcademicYear(
+        academic_year_id=3,
+        year_label="2025-2026",
+        start_date=date(2025, 8, 1),
+        end_date=date(2026, 5, 31),
+        is_active=False,
+    )
+    historical_period = AcademicPeriod(
+        academic_period_id=4,
+        academic_year_id=3,
+        period_name="Quarter 1",
+        period_type="QUARTER",
+        period_sequence=1,
+        total_periods_in_year=4,
+        start_date=date(2025, 8, 1),
+        end_date=date(2025, 10, 31),
+        is_active=False,
+    )
+    future_class = Class(
+        class_id=40,
+        section_name="Future Newton",
+        academic_year_id=2,
+        academic_level_id=1,
+        class_status="active",
+    )
+    db.add_all([
+        future_current_year_period,
+        future_year,
+        future_year_period,
+        historical_year,
+        historical_period,
+        future_class,
+        SubjectLoad(
+            staff_id=ctx["staff_a_id"], subject_id=subject.subject_id,
+            class_id=10, academic_period_id=2, status="active", is_active_version=True,
+        ),
+        SubjectLoad(
+            staff_id=ctx["staff_a_id"], subject_id=subject.subject_id,
+            class_id=40, academic_period_id=3, status="active", is_active_version=True,
+        ),
+    ])
+    db.commit()
+
+    teacher_a = create_client(db, {"sub": str(ctx["user_a_id"]), "role": "teacher"})
+    teacher_b = create_client(db, {"sub": str(ctx["user_b_id"]), "role": "teacher"})
+    admin = create_client(db, {"sub": str(ctx["user_admin_id"]), "role": "admin"})
+    student = create_client(db, {"sub": str(uuid.uuid4()), "role": "student"})
+
+    assigned_draft = teacher_a.post("/api/v1/competencies/", json={
+        "statement": "Prepared Quarter 2 competency",
+        "subject_id": subject.subject_id,
+        "academic_period_id": 2,
+    })
+    assert assigned_draft.status_code == 201, assigned_draft.text
+
+    before = db.query(Competency).count()
+    unauthorized_unscoped = teacher_b.post("/api/v1/competencies/", json={
+        "statement": "Unauthorized unscoped competency",
+        "subject_id": subject.subject_id,
+    })
+    assert unauthorized_unscoped.status_code == 403
+    assert db.query(Competency).count() == before
+
+    unauthorized = teacher_b.post("/api/v1/competencies/", json={
+        "statement": "Unauthorized competency",
+        "subject_id": subject.subject_id,
+        "academic_period_id": 2,
+    })
+    assert unauthorized.status_code == 403
+    assert db.query(Competency).count() == before
+
+    future_teacher = teacher_a.post("/api/v1/competencies/", json={
+        "statement": "Premature future-year teacher competency",
+        "subject_id": subject.subject_id,
+        "academic_period_id": 3,
+    })
+    assert future_teacher.status_code == 403
+    assert db.query(Competency).count() == before
+
+    future_admin = admin.post("/api/v1/competencies/", json={
+        "statement": "Admin future-year curriculum",
+        "subject_id": subject.subject_id,
+        "academic_period_id": 3,
+    })
+    assert future_admin.status_code == 201, future_admin.text
+
+    historical_admin = admin.post("/api/v1/competencies/", json={
+        "statement": "Historical rewrite",
+        "subject_id": subject.subject_id,
+        "academic_period_id": 4,
+    })
+    assert historical_admin.status_code == 403
+
+    student_attempt = student.post("/api/v1/competencies/", json={
+        "statement": "Student configuration",
+        "subject_id": subject.subject_id,
+        "academic_period_id": 2,
+    })
+    assert student_attempt.status_code == 403
+    assert db.query(Competency).count() == before + 1
 

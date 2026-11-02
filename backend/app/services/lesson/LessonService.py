@@ -10,6 +10,8 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from app.core.FileUpload import delete_file, save_file
 from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAssignment import LessonAssignment
+from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.Class_ import Class
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkLesson import ClassworkLesson
@@ -24,6 +26,7 @@ from app.services.lesson.LessonShared import (
     ensure_teacher_class_subject,
     ensure_teacher_subject,
     get_owned_lesson,
+    student_has_subject_period,
 )
 
 
@@ -169,8 +172,17 @@ def student_lessons_for_class_subject(
     subject_id: int,
     student,
     db: Session,
+    academic_period_id: int | None = None,
 ) -> list[LessonResponse]:
     ensure_student_enrolled(db, student.student_id, class_id)
+    if academic_period_id is not None and not student_has_subject_period(
+        db,
+        student_id=student.student_id,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=academic_period_id,
+    ):
+        return []
     assigned_subquery = (
         db.query(LessonAssignment.lesson_id)
         .filter(
@@ -205,6 +217,30 @@ def lesson_detail(lesson_id: int, current_user: dict, db: Session) -> LessonResp
     return build_lesson_response(lesson, db)
 
 
+def _assert_lesson_writable(db: Session, lesson: Lesson) -> None:
+    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+    assignments = (
+        db.query(LessonAssignment)
+        .filter(LessonAssignment.lesson_id == lesson.lesson_id)
+        .all()
+    )
+    for assignment in assignments:
+        SubjectLoadAuthorizationService.assert_context_writable(
+            db,
+            class_id=assignment.class_id,
+            academic_period_id=None,
+        )
+    if lesson.competency_id is not None:
+        from app.models.academic.Competency import Competency
+        comp = db.get(Competency, lesson.competency_id)
+        if comp is not None and comp.academic_period_id is not None:
+            SubjectLoadAuthorizationService.assert_context_writable(
+                db,
+                class_id=None,
+                academic_period_id=comp.academic_period_id,
+            )
+
+
 def update_lesson_record(
     lesson_id: int,
     body: LessonUpdate,
@@ -212,6 +248,7 @@ def update_lesson_record(
     db: Session,
 ) -> LessonResponse:
     lesson = get_owned_lesson(db, staff_id, lesson_id)
+    _assert_lesson_writable(db, lesson)
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(lesson, field, value)
     db.commit()
@@ -221,6 +258,7 @@ def update_lesson_record(
 
 def archive_lesson_record(lesson_id: int, staff_id: str, db: Session) -> dict:
     lesson = get_owned_lesson(db, staff_id, lesson_id)
+    _assert_lesson_writable(db, lesson)
     lesson.is_archived = True
     db.commit()
     return {"message": "Lesson archived", "lesson_id": lesson_id, "is_archived": True}
@@ -228,6 +266,7 @@ def archive_lesson_record(lesson_id: int, staff_id: str, db: Session) -> dict:
 
 def publish_lesson_record(lesson_id: int, staff_id: str, db: Session) -> dict:
     lesson = get_owned_lesson(db, staff_id, lesson_id)
+    _assert_lesson_writable(db, lesson)
     lesson.is_published = True
     lesson.is_locked = False
     lesson.is_draft = False
@@ -282,21 +321,63 @@ def assign_lesson_to_classes(
 
 
 
-def lesson_classwork_assignments(lesson_id: int, class_id: int, student, db: Session) -> list[dict]:
+def lesson_classwork_assignments(
+    lesson_id: int,
+    class_id: int,
+    student,
+    db: Session,
+    academic_period_id: int | None = None,
+) -> list[dict]:
     from app.services.classwork.ClassworkAccessService import assignment_allows_student
     ensure_student_enrolled(db, student.student_id, class_id)
+    lesson = db.query(Lesson).filter(
+        Lesson.lesson_id == lesson_id,
+        Lesson.is_published == True,
+        Lesson.is_locked == False,
+        Lesson.is_archived == False,
+    ).first()
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    assigned_here = db.query(LessonAssignment.lesson_assignment_id).filter(
+        LessonAssignment.lesson_id == lesson_id,
+        LessonAssignment.class_id == class_id,
+        LessonAssignment.is_published == True,
+    ).first()
+    if assigned_here is None and db.query(LessonAssignment.lesson_assignment_id).filter(
+        LessonAssignment.lesson_id == lesson_id,
+    ).first() is not None:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    if academic_period_id is not None and not student_has_subject_period(
+        db,
+        student_id=student.student_id,
+        class_id=class_id,
+        subject_id=lesson.subject_id,
+        academic_period_id=academic_period_id,
+    ):
+        return []
     rows = (
         db.query(ClassworkAssignment)
         .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
         .join(ClassworkLesson, ClassworkLesson.classwork_id == Classwork.classwork_id)
+        .join(Class, Class.class_id == ClassworkAssignment.class_id)
+        .join(
+            AcademicPeriod,
+            AcademicPeriod.academic_period_id == ClassworkAssignment.academic_period_id,
+        )
         .filter(
             ClassworkLesson.lesson_id == lesson_id,
             ClassworkAssignment.class_id == class_id,
+            Classwork.subject_id == lesson.subject_id,
             Classwork.is_archived == False,
             ClassworkAssignment.is_published == True,
+            Class.academic_year_id == AcademicPeriod.academic_year_id,
         )
-        .all()
     )
+    if academic_period_id is not None:
+        rows = rows.filter(
+            ClassworkAssignment.academic_period_id == academic_period_id
+        )
+    rows = rows.all()
     results = []
     now = datetime.now(timezone.utc)
     for assignment in rows:
@@ -324,6 +405,7 @@ def lesson_classwork_assignments(lesson_id: int, class_id: int, student, db: Ses
 
 def unarchive_lesson_record(lesson_id: int, staff_id: str, db: Session) -> dict:
     lesson = get_owned_lesson(db, staff_id, lesson_id)
+    _assert_lesson_writable(db, lesson)
     lesson.is_archived = False
     db.commit()
     db.refresh(lesson)
@@ -331,7 +413,8 @@ def unarchive_lesson_record(lesson_id: int, staff_id: str, db: Session) -> dict:
 
 
 def unlink_classwork(lesson_id: int, classwork_id: int, staff_id: str, db: Session) -> dict:
-    get_owned_lesson(db, staff_id, lesson_id)
+    lesson = get_owned_lesson(db, staff_id, lesson_id)
+    _assert_lesson_writable(db, lesson)
     classwork_lesson = db.query(ClassworkLesson).filter(
         ClassworkLesson.lesson_id == lesson_id,
         ClassworkLesson.classwork_id == classwork_id,

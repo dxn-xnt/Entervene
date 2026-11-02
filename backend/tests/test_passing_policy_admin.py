@@ -48,8 +48,9 @@ def policy_db():
     with Session(engine, autoflush=False) as db:
         actor = uuid4()
         db.add_all([
-            AcademicYear(academic_year_id=1, year_label="2025-2026", start_date=date(2025, 8, 1), end_date=date(2026, 5, 31), is_active=False),
-            AcademicYear(academic_year_id=2, year_label="2026-2027", start_date=date(2026, 8, 1), end_date=date(2027, 5, 31), is_active=True),
+            AcademicYear(academic_year_id=1, year_label="2025-2026", start_date=date(2025, 8, 1), end_date=date(2026, 5, 31), is_active=True),
+            AcademicYear(academic_year_id=2, year_label="2026-2027", start_date=date(2026, 8, 1), end_date=date(2027, 5, 31), is_active=False),
+            AcademicYear(academic_year_id=3, year_label="2024-2025", start_date=date(2024, 8, 1), end_date=date(2025, 5, 31), is_active=False),
             AcademicLevel(academic_level_id=1, level_name="Grade 11", grade_level=11),
             Setting(key="general_average_passing_grade", value="80", type=SettingType.STRING, group="academic", is_public=False),
         ])
@@ -282,10 +283,31 @@ def test_copy_previous_year_is_explicit_and_audited(policy_db):
     assert_error("POLICY_CONFIRMATION_REQUIRED", lambda: save(db, actor, 2,
         action="copy_previous", source_year_id=1, confirmed=False), 422)
     copied = save(db, actor, 2, action="copy_previous", source_year_id=1)
-    assert copied["threshold"] == "80.00" and copied["is_active"] is True
+    assert copied["threshold"] == "80.00" and copied["is_active"] is False
     audits = db.query(PassingPolicyAudit).order_by(PassingPolicyAudit.audit_id).all()
     assert [audit.action for audit in audits] == ["confirm_legacy", "copy_previous"]
     assert (audits[1].source_academic_year_id, audits[1].source_version) == (1, 1)
+
+
+def test_historical_year_policy_and_template_edits_are_read_only(policy_db):
+    db, actor, core, *_ = policy_db
+    before_threshold = core.passing_threshold
+
+    assert_error(
+        "HISTORICAL_CONFIGURATION_READ_ONLY",
+        lambda: save(db, actor, 3),
+        403,
+    )
+    assert_error(
+        "HISTORICAL_CONFIGURATION_READ_ONLY",
+        lambda: edit(db, actor, core, year_id=3),
+        403,
+    )
+
+    db.refresh(core)
+    assert core.passing_threshold == before_threshold
+    assert db.get(AcademicYearPassingPolicy, 3) is None
+    assert db.query(PassingPolicyAudit).count() == 0
 
 
 def test_year_policy_version_and_legacy_bypass_protection(policy_db):

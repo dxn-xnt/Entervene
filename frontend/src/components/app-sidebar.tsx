@@ -23,7 +23,14 @@ import { useUnreadNotificationCount } from "@/hooks/use-unread-notification-coun
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { role } = useAuth()
   const navRole = (role ?? "student") as keyof typeof SidebarConfigs
-  const { periods, selectedPeriodId, setSelectedPeriodId } = useAcademicPeriod()
+  const {
+    academicYears,
+    selectedYearId,
+    setSelectedYearId,
+    periods,
+    selectedPeriodId,
+    setSelectedPeriodId,
+  } = useAcademicPeriod()
   const unreadNotificationCount = useUnreadNotificationCount()
 
   return (
@@ -46,17 +53,56 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
       <SidebarContent>
         <Select
-          value={selectedPeriodId ? String(selectedPeriodId) : undefined}
-          onValueChange={(val) => setSelectedPeriodId(Number(val))}
+          value={selectedYearId ? String(selectedYearId) : undefined}
+          onValueChange={(val) => {
+            const nextId = Number(val)
+            if (!isNaN(nextId)) setSelectedYearId(nextId)
+          }}
         >
-          <Select.Trigger className="w-full rounded-none! border-x-background m-0 shadow-none mb-1">
-            <Select.Value placeholder="Active Period" />
+          <Select.Trigger
+            aria-label="Select academic year"
+            className="w-full rounded-none! border-x-background border-b-0 m-0 shadow-none"
+          >
+            <Select.Value placeholder="Academic Year" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Group>
+              {academicYears.map((year) => (
+                <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
+                  <span className="font-bold">{year.year_label}</span>
+                  {year.is_active && (
+                    <span className="ml-1 text-xs text-muted-foreground font-normal">(Active)</span>
+                  )}
+                </Select.Item>
+              ))}
+            </Select.Group>
+          </Select.Content>
+        </Select>
+
+        <Select
+          value={selectedPeriodId ? String(selectedPeriodId) : undefined}
+          onValueChange={(val) => {
+            const nextId = Number(val)
+            if (!isNaN(nextId)) setSelectedPeriodId(nextId)
+          }}
+          disabled={periods.length === 0}
+        >
+          <Select.Trigger
+            aria-label="Select academic term"
+            className="w-full rounded-none! border-x-background m-0 shadow-none mb-1"
+          >
+            <Select.Value
+              placeholder={periods.length === 0 ? "No terms available" : "Active Period"}
+            />
           </Select.Trigger>
           <Select.Content>
             <Select.Group>
               {periods.map((period) => (
                 <Select.Item key={period.id} value={String(period.id)}>
-                  <span className="font-bold">{period.period}</span> <span>({period.academicyear})</span>
+                  <span className="font-bold">{period.period}</span>
+                  {period.is_active && (
+                    <span className="ml-1 text-xs text-muted-foreground font-normal">(Active)</span>
+                  )}
                 </Select.Item>
               ))}
             </Select.Group>

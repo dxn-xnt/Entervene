@@ -250,12 +250,12 @@ def get_class_form_options_data(db: Session, academic_year_id: int | None = None
     }
 
 
-def list_classes_data(db: Session, status: str) -> dict:
+def list_classes_data(db: Session, status: str, academic_year_id: int | None = None) -> dict:
     requested_status = normalized_text(status)
     from sqlalchemy import case
     # Load all statuses once because the summary describes the complete class
     # inventory while only the returned class list follows the status filter.
-    class_rows = (
+    query = (
         db.query(
             Class,
             AcademicLevel,
@@ -274,6 +274,11 @@ def list_classes_data(db: Session, status: str) -> dict:
         .outerjoin(AcademicPathway, Class.pathway_id == AcademicPathway.id)
         .outerjoin(StudentClass, Class.class_id == StudentClass.class_id)
         .outerjoin(Student, StudentClass.student_id == Student.student_id)
+    )
+    if academic_year_id is not None:
+        query = query.filter(Class.academic_year_id == academic_year_id)
+    class_rows = (
+        query
         .group_by(
             Class.class_id,
             AcademicLevel.academic_level_id,
@@ -473,8 +478,19 @@ def get_teacher_advisory_class_grades_data(
 
     selected_period = None
     if academic_period_id is not None:
-        selected_period = next((p for p in periods if p.academic_period_id == academic_period_id), None)
-    if selected_period is None:
+        period_obj = db.get(AcademicPeriod, academic_period_id)
+        if period_obj is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Academic period not found.",
+            )
+        if period_obj.academic_year_id != class_.academic_year_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Class and academic period belong to different academic years.",
+            )
+        selected_period = period_obj
+    else:
         selected_period = next((p for p in periods if p.is_active), periods[0])
 
     # Query all enrolled students in this class
@@ -490,13 +506,14 @@ def get_teacher_advisory_class_grades_data(
         .all()
     )
 
-    # Query all active subjects in this class
+    # Query all active subjects in this class for the selected period
     subject_load_rows = (
         db.query(SubjectLoad, Subject, AcademicStaff)
         .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
-        .join(AcademicStaff, AcademicStaff.staff_id == SubjectLoad.staff_id)
+        .outerjoin(AcademicStaff, AcademicStaff.staff_id == SubjectLoad.staff_id)
         .filter(
             SubjectLoad.class_id == class_.class_id,
+            SubjectLoad.academic_period_id == selected_period.academic_period_id,
             SubjectLoad.is_active_version.is_(True),
             func.lower(func.coalesce(SubjectLoad.status, "active")).in_(["active", "published"]),
         )
@@ -513,8 +530,8 @@ def get_teacher_advisory_class_grades_data(
             subjects_list.append({
                 "subject_id": subject.subject_id,
                 "subject_name": subject.subject_name,
-                "teacher_staff_id": teacher.staff_id,
-                "teacher_name": _staff_full_name(teacher),
+                "teacher_staff_id": teacher.staff_id if teacher else None,
+                "teacher_name": _staff_full_name(teacher) if teacher else None,
             })
 
     # Query finalized grades for this class and period

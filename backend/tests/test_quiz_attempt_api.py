@@ -15,10 +15,12 @@ from app.api.v1.routes.Quizzes import router as quizzes_router
 from app.db.Base import Base
 from app.db.Session import get_db
 from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
@@ -37,6 +39,7 @@ from app.models.submissions.StudentSubmission import StudentSubmission
 
 TABLES = [
     AcademicYear.__table__,
+    AcademicPeriod.__table__,
     AcademicLevel.__table__,
     UserAccount.__table__,
     AcademicStaff.__table__,
@@ -46,6 +49,7 @@ TABLES = [
     GradingTemplateComponent.__table__,
     Class.__table__,
     StudentClass.__table__,
+    StudentPeriodGrade.__table__,
     Classwork.__table__,
     ClassworkAssignment.__table__,
     StudentSubmission.__table__,
@@ -86,6 +90,16 @@ def quiz_attempt_context():
     )
     level = AcademicLevel(level_name="Grade 7", grade_level=7)
     db.add_all([year, level])
+    db.flush()
+    period = AcademicPeriod(
+        period_name="Second Quarter",
+        academic_year_id=year.academic_year_id,
+        period_sequence=2,
+        start_date=date(2025, 9, 1),
+        end_date=date(2025, 11, 30),
+        is_active=True,
+    )
+    db.add(period)
     db.flush()
 
     accounts = {
@@ -162,6 +176,7 @@ def quiz_attempt_context():
     assignment = ClassworkAssignment(
         classwork_id=classwork.classwork_id,
         class_id=class_.class_id,
+        academic_period_id=period.academic_period_id,
         assigned_by_staff_id=teacher.staff_id,
         is_published=True,
         max_attempts=2,
@@ -223,6 +238,10 @@ def quiz_attempt_context():
             "other_student": other_student,
             "assignment": assignment,
             "classwork": classwork,
+            "class": class_,
+            "year": year,
+            "period": period,
+            "subject": subject,
             "setting": setting,
             "mc_link": mc_link,
             "short_link": short_link,
@@ -426,6 +445,102 @@ def test_quiz_attempt_rejects_unenrolled_locked_closed_and_over_limit(quiz_attem
     ))
     c["db"].commit()
     assert c["client"].post(f"/api/v1/quizzes/assignment/{assignment_id}/start").status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("period_sequence", "expected_detail"),
+    [
+        (1, "Academic period is closed"),
+        (3, "Academic period is not yet active"),
+    ],
+)
+def test_quiz_start_and_submit_reject_non_current_periods_without_mutation(
+    quiz_attempt_context,
+    period_sequence,
+    expected_detail,
+):
+    c = quiz_attempt_context
+    blocked_period = AcademicPeriod(
+        period_name="Blocked Quarter",
+        academic_year_id=c["year"].academic_year_id,
+        period_sequence=period_sequence,
+        start_date=date(2025, 6, 1) if period_sequence == 1 else date(2025, 12, 1),
+        end_date=date(2025, 8, 31) if period_sequence == 1 else date(2026, 2, 28),
+        is_active=False,
+    )
+    c["db"].add(blocked_period)
+    c["db"].flush()
+    c["assignment"].academic_period_id = blocked_period.academic_period_id
+    c["db"].commit()
+
+    assignment_id = c["assignment"].classwork_assignment_id
+    start = c["client"].post(f"/api/v1/quizzes/assignment/{assignment_id}/start")
+    submit = c["client"].post(
+        f"/api/v1/quizzes/assignment/{assignment_id}/submit",
+        json={"answers": []},
+    )
+
+    assert start.status_code == 403
+    assert expected_detail in start.json()["detail"]
+    assert submit.status_code == 403
+    assert expected_detail in submit.json()["detail"]
+    assert c["db"].query(StudentSubmission).count() == 0
+
+
+def test_quiz_start_and_submit_reject_archived_class_without_mutation(quiz_attempt_context):
+    c = quiz_attempt_context
+    c["class"].class_status = "archived"
+    c["db"].commit()
+    assignment_id = c["assignment"].classwork_assignment_id
+
+    start = c["client"].post(f"/api/v1/quizzes/assignment/{assignment_id}/start")
+    submit = c["client"].post(
+        f"/api/v1/quizzes/assignment/{assignment_id}/submit",
+        json={"answers": []},
+    )
+
+    assert start.status_code == 403
+    assert "archived" in start.json()["detail"].lower()
+    assert submit.status_code == 403
+    assert c["db"].query(StudentSubmission).count() == 0
+
+
+def test_quiz_start_and_submit_reject_finalized_period_grade_without_mutation(quiz_attempt_context):
+    c = quiz_attempt_context
+    c["db"].add(StudentPeriodGrade(
+        student_id=c["student"].student_id,
+        class_id=c["class"].class_id,
+        subject_id=c["subject"].subject_id,
+        academic_period_id=c["period"].academic_period_id,
+        is_finalized=True,
+    ))
+    c["db"].commit()
+    assignment_id = c["assignment"].classwork_assignment_id
+
+    start = c["client"].post(f"/api/v1/quizzes/assignment/{assignment_id}/start")
+    submit = c["client"].post(
+        f"/api/v1/quizzes/assignment/{assignment_id}/submit",
+        json={"answers": []},
+    )
+
+    assert start.status_code == 409
+    assert start.json()["detail"] == "The period grade is finalized"
+    assert submit.status_code == 409
+    assert c["db"].query(StudentSubmission).count() == 0
+
+
+def test_quiz_start_rejects_unscoped_legacy_assignment(quiz_attempt_context):
+    c = quiz_attempt_context
+    c["assignment"].academic_period_id = None
+    c["db"].commit()
+
+    response = c["client"].post(
+        f"/api/v1/quizzes/assignment/{c['assignment'].classwork_assignment_id}/start"
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Quiz has an unscoped academic period"
+    assert c["db"].query(StudentSubmission).count() == 0
 
 
 def test_quiz_submit_validates_complete_and_scoped_answers(quiz_attempt_context):

@@ -4,7 +4,11 @@ from decimal import Decimal
 from datetime import date, timedelta
 
 import pytest
+from fastapi import HTTPException
 
+from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.AcademicYear import AcademicYear
+from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.services.prediction import DevelopmentCurrentTermModelSelection as selection
@@ -105,6 +109,155 @@ def test_inactive_period_blocks_before_scoring(current_period_context, monkeypat
     result = _predict(ctx)
     assert result["status"] == service.STATUS_PERIOD_NOT_ACTIVE
     assert result["readiness_reason_codes"] == ["PERIOD_NOT_ACTIVE"]
+
+
+def test_active_period_in_inactive_year_is_rejected(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    year = ctx["db"].get(AcademicYear, ctx["period"].academic_year_id)
+    year.is_active = False
+    ctx["db"].commit()
+    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", lambda _features: pytest.fail("Scorer called"))
+
+    with pytest.raises(HTTPException) as exc_info:
+        _predict(ctx)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "No active academic year is configured."
+
+
+def test_duplicate_active_periods_are_rejected(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    ctx["next_period"].is_active = True
+    ctx["db"].commit()
+    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", lambda _features: pytest.fail("Scorer called"))
+
+    with pytest.raises(HTTPException) as exc_info:
+        _predict(ctx)
+
+    assert exc_info.value.status_code == 409
+    assert "multiple grading periods are active" in exc_info.value.detail
+
+
+def test_duplicate_active_years_are_rejected(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    ctx["db"].add(AcademicYear(
+        year_label="2027-2028",
+        start_date=date(2027, 6, 1),
+        end_date=date(2028, 3, 31),
+        is_active=True,
+    ))
+    ctx["db"].commit()
+    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", lambda _features: pytest.fail("Scorer called"))
+
+    with pytest.raises(HTTPException) as exc_info:
+        _predict(ctx)
+
+    assert exc_info.value.status_code == 409
+    assert "multiple academic years are active" in exc_info.value.detail
+
+
+def test_future_period_cannot_generate_while_another_period_is_canonical(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", lambda _features: pytest.fail("Scorer called"))
+
+    result = service.predict_development_current_term(
+        ctx["db"],
+        ctx["student"].student_id,
+        ctx["class"].class_id,
+        ctx["subject"].subject_id,
+        ctx["next_period"].academic_period_id,
+    )
+
+    assert result["status"] == service.STATUS_PERIOD_NOT_ACTIVE
+    assert result["readiness_reason_codes"] == ["PERIOD_NOT_ACTIVE"]
+
+
+def test_historical_period_cannot_generate_while_current_period_is_canonical(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    historical_year = AcademicYear(
+        year_label="2025-2026",
+        start_date=date(2025, 6, 1),
+        end_date=date(2026, 3, 31),
+        is_active=False,
+    )
+    ctx["db"].add(historical_year)
+    ctx["db"].flush()
+    historical_period = AcademicPeriod(
+        academic_year_id=historical_year.academic_year_id,
+        period_name="Historical Term",
+        period_type="TERM",
+        period_sequence=1,
+        total_periods_in_year=3,
+        period_progress_ratio=Decimal("0.3333"),
+        start_date=date(2025, 6, 1),
+        end_date=date(2025, 8, 31),
+        is_active=False,
+    )
+    ctx["db"].add(historical_period)
+    ctx["db"].commit()
+    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", lambda _features: pytest.fail("Scorer called"))
+
+    result = service.predict_development_current_term(
+        ctx["db"],
+        ctx["student"].student_id,
+        ctx["class"].class_id,
+        ctx["subject"].subject_id,
+        historical_period.academic_period_id,
+    )
+
+    assert result["status"] == service.STATUS_PERIOD_NOT_ACTIVE
+    assert result["readiness_reason_codes"] == ["PERIOD_NOT_ACTIVE"]
+
+
+def test_class_period_year_mismatch_blocks_generation(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    future = AcademicYear(
+        year_label="2027-2028",
+        start_date=date(2027, 6, 1),
+        end_date=date(2028, 3, 31),
+        is_active=False,
+    )
+    ctx["db"].add(future)
+    ctx["db"].flush()
+    ctx["class"].academic_year_id = future.academic_year_id
+    ctx["db"].commit()
+    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", lambda _features: pytest.fail("Scorer called"))
+
+    result = _predict(ctx)
+
+    assert result["status"] == service.STATUS_INVALID_PERIOD_SCOPE
+    assert result["readiness_reason_codes"] == ["CLASS_PERIOD_YEAR_MISMATCH"]
+
+
+def test_missing_active_subject_load_blocks_generation(current_period_context, monkeypatch):
+    ctx = current_period_context
+    _set_weights(ctx)
+    _make_ready(ctx)
+    load = ctx["db"].query(SubjectLoad).filter(
+        SubjectLoad.class_id == ctx["class"].class_id,
+        SubjectLoad.subject_id == ctx["subject"].subject_id,
+        SubjectLoad.academic_period_id == ctx["period"].academic_period_id,
+    ).one()
+    load.is_active_version = False
+    ctx["db"].commit()
+    monkeypatch.setattr(service.v3_scorer, "score_development_current_term", lambda _features: pytest.fail("Scorer called"))
+
+    result = _predict(ctx)
+
+    assert result["status"] == service.STATUS_INVALID_PERIOD_SCOPE
+    assert result["readiness_reason_codes"] == ["ACTIVE_SUBJECT_LOAD_NOT_FOUND"]
 
 
 def test_insufficient_evidence_returns_without_scoring(current_period_context, monkeypatch):

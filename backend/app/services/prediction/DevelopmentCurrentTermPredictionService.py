@@ -8,7 +8,12 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
-from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.Class_ import Class
+from app.models.academic.SubjectLoad import SubjectLoad
+from app.services.academic.AcademicLifecycleService import (
+    resolve_active_academic_period,
+    resolve_active_academic_year,
+)
 from app.services.prediction import DevelopmentCurrentTermScoringService as v3_scorer
 from app.services.prediction.DevelopmentCurrentTermModelSelection import selected_development_model_name, require_development_model_name
 from app.services.prediction.CurrentPeriodFeatureBuilderService import build_current_period_features_from_records
@@ -37,6 +42,44 @@ SUPPORTED_WEIGHT_PATTERNS = {
     "20/50/30",
     "20/60/20",
 }
+
+
+def current_term_lifecycle_reason_codes(
+    db: Session,
+    *,
+    class_id: int,
+    subject_id: int,
+    period_id: int,
+    lock: bool = False,
+) -> list[str]:
+    resolve_active_academic_year(db, required=True, lock=lock)
+    active_period = resolve_active_academic_period(db, required=False, lock=lock)
+    if active_period is None:
+        return ["PERIOD_NOT_ACTIVE"]
+    if active_period.academic_period_id != period_id:
+        return ["PERIOD_NOT_ACTIVE"]
+
+    class_query = db.query(Class).filter(Class.class_id == class_id)
+    if lock:
+        class_query = class_query.with_for_update(read=True)
+    class_ = class_query.one_or_none()
+    if class_ is None:
+        return ["INVALID_ACADEMIC_SCOPE"]
+    if class_.academic_year_id != active_period.academic_year_id:
+        return ["CLASS_PERIOD_YEAR_MISMATCH"]
+
+    load_query = db.query(SubjectLoad).filter(
+        SubjectLoad.class_id == class_id,
+        SubjectLoad.subject_id == subject_id,
+        SubjectLoad.academic_period_id == period_id,
+        SubjectLoad.is_active_version.is_(True),
+        SubjectLoad.status.in_(["published", "active"]),
+    )
+    if lock:
+        load_query = load_query.with_for_update(read=True)
+    if load_query.first() is None:
+        return ["ACTIVE_SUBJECT_LOAD_NOT_FOUND"]
+    return []
 
 
 def _weight_pattern(features: dict[str, Any]) -> str:
@@ -148,13 +191,25 @@ def prepare_development_current_term(
             reason_codes=["FINALIZED_SAME_TERM_GRADE_EXISTS"],
         ), None
 
-    period = db.get(AcademicPeriod, source_period_id)
-    if period is None or not period.is_active:
+    lifecycle_reasons = current_term_lifecycle_reason_codes(
+        db,
+        class_id=class_id,
+        subject_id=subject_id,
+        period_id=source_period_id,
+    )
+    if lifecycle_reasons == ["PERIOD_NOT_ACTIVE"]:
         return result(
             status=STATUS_PERIOD_NOT_ACTIVE,
             source_period_id=source_period_id,
             target_period_id=target_period_id,
-            reason_codes=["PERIOD_NOT_ACTIVE"],
+            reason_codes=lifecycle_reasons,
+        ), None
+    if lifecycle_reasons:
+        return result(
+            status=STATUS_INVALID_PERIOD_SCOPE,
+            source_period_id=source_period_id,
+            target_period_id=target_period_id,
+            reason_codes=lifecycle_reasons,
         ), None
 
     scope = resolve_v3_scope(db, student_id, class_id, subject_id)

@@ -173,6 +173,44 @@ def test_future_academic_year_inherits_prior_scope(db):
     assert resolve_pathway_scope(db, year3.academic_year_id, g12.academic_level_id) is True
 
 
+def test_historical_pathway_scope_update_is_rejected_without_mutation(client, db, admin_headers):
+    historical = AcademicYear(
+        year_label="2025-2026",
+        start_date=date(2025, 6, 1),
+        end_date=date(2026, 3, 31),
+        is_active=False,
+    )
+    current = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=True,
+    )
+    level = AcademicLevel(level_name="Grade 12", grade_level=12)
+    db.add_all([historical, current, level])
+    db.flush()
+    scope = AcademicLevelPathwayScope(
+        academic_year_id=historical.academic_year_id,
+        academic_level_id=level.academic_level_id,
+        requires_pathway=False,
+    )
+    db.add(scope)
+    db.commit()
+
+    response = client.patch(
+        "/api/v1/pathways/scopes",
+        headers=admin_headers,
+        json={
+            "academic_year_id": historical.academic_year_id,
+            "scopes": [{"academic_level_id": level.academic_level_id, "requires_pathway": True}],
+        },
+    )
+
+    assert response.status_code == 403
+    db.refresh(scope)
+    assert scope.requires_pathway is False
+
+
 def test_copy_academic_year_clones_scopes(db):
     year1 = AcademicYear(
         year_label="2026-2027",

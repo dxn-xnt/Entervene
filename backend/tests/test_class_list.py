@@ -233,6 +233,8 @@ def test_list_classes_returns_real_rows_counts_null_adviser_and_sorted_order(cli
         "last_name": "Lovelace",
         "suffix": None,
         "avatar": None,
+        "email": None,
+        "employment_status": None,
     }
     assert sapphire_item["student_count"] == 2
     assert "password_hash" not in response.text
@@ -297,3 +299,57 @@ def test_list_classes_requires_admin_and_authentication(client):
 
     del client.app.dependency_overrides[get_current_user]
     assert client.get("/api/v1/classes").status_code == 401
+
+
+def test_list_classes_filter_by_academic_year_id(client, db):
+    year1 = add_year(db, "2024-2025")
+    year2 = add_year(db, "2025-2026")
+    level = add_level(db, "Grade 7", 7)
+
+    c1 = Class(
+        section_name="Emerald",
+        class_status="active",
+        academic_year_id=year1.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    c2 = Class(
+        section_name="Ruby",
+        class_status="active",
+        academic_year_id=year2.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    db.add_all([c1, c2])
+    db.flush()
+
+    s1 = add_student(db, level, "200000000001")
+    s2 = add_student(db, level, "200000000002")
+    db.add(build_student_class_assignment(s1.student_id, c1))
+    db.add(build_student_class_assignment(s2.student_id, c2))
+    db.commit()
+
+    # Query year 1 only
+    r1 = client.get(f"/api/v1/classes?academic_year_id={year1.academic_year_id}")
+    assert r1.status_code == 200
+    b1 = r1.json()
+    assert b1["summary"]["total_classes"] == 1
+    assert b1["summary"]["students_assigned"] == 1
+    assert len(b1["classes"]) == 1
+    assert b1["classes"][0]["section_name"] == "Emerald"
+
+    # Query year 2 only
+    r2 = client.get(f"/api/v1/classes?academic_year_id={year2.academic_year_id}")
+    assert r2.status_code == 200
+    b2 = r2.json()
+    assert b2["summary"]["total_classes"] == 1
+    assert b2["summary"]["students_assigned"] == 1
+    assert len(b2["classes"]) == 1
+    assert b2["classes"][0]["section_name"] == "Ruby"
+
+    # Query empty future year
+    year3 = add_year(db, "2026-2027")
+    r3 = client.get(f"/api/v1/classes?academic_year_id={year3.academic_year_id}")
+    assert r3.status_code == 200
+    b3 = r3.json()
+    assert b3["summary"]["total_classes"] == 0
+    assert b3["summary"]["students_assigned"] == 0
+    assert b3["classes"] == []

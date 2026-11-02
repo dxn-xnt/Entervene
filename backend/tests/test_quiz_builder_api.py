@@ -15,10 +15,13 @@ from app.api.v1.routes.Quizzes import router as quizzes_router
 from app.db.Base import Base
 from app.db.Session import get_db
 from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.Lesson import Lesson
 from app.models.academic.Subject import Subject
+from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.academic.StudentCLass import StudentClass
 from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
@@ -35,12 +38,15 @@ from app.models.submissions.StudentSubmission import StudentSubmission
 
 TABLES = [
     AcademicYear.__table__,
+    AcademicPeriod.__table__,
     AcademicLevel.__table__,
     UserAccount.__table__,
     AcademicStaff.__table__,
     Student.__table__,
     Subject.__table__,
     Class.__table__,
+    SubjectLoad.__table__,
+    StudentClass.__table__,
     Lesson.__table__,
     Classwork.__table__,
     ClassworkAssignment.__table__,
@@ -118,6 +124,29 @@ def quiz_api_context():
     )
     db.add_all([owner, other_teacher, student, subject, class_])
     db.flush()
+    period = AcademicPeriod(
+        period_name="First Quarter",
+        period_sequence=1,
+        start_date=date(2025, 6, 1),
+        end_date=date(2025, 8, 31),
+        academic_year_id=year.academic_year_id,
+        is_active=True,
+    )
+    db.add(period)
+    db.flush()
+    db.add(SubjectLoad(
+        staff_id=owner.staff_id,
+        subject_id=subject.subject_id,
+        class_id=class_.class_id,
+        academic_period_id=period.academic_period_id,
+        status="active",
+    ))
+    db.add(StudentClass(
+        student_id=student.student_id,
+        class_id=class_.class_id,
+        academic_year_id=year.academic_year_id,
+        enrollment_status="enrolled",
+    ))
 
     lesson = Lesson(
         title="Variables",
@@ -151,6 +180,7 @@ def quiz_api_context():
     assignment = ClassworkAssignment(
         classwork_id=quiz_classwork.classwork_id,
         class_id=class_.class_id,
+        academic_period_id=period.academic_period_id,
         assigned_by_staff_id=owner.staff_id,
         is_published=True,
         max_attempts=1,
@@ -176,6 +206,11 @@ def quiz_api_context():
             "non_quiz_classwork": non_quiz_classwork,
             "foreign_quiz": foreign_quiz,
             "assignment": assignment,
+            "period": period,
+            "class": class_,
+            "subject": subject,
+            "year": year,
+            "other_teacher": other_teacher,
         }
     db.close()
     Base.metadata.drop_all(bind=engine)

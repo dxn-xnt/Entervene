@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Download, UserPlus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useAcademicPeriod, type AcademicYearItem } from "@/context/AcademicPeriodContext";
+import { isChronologicallyEarlierYear, checkYearHasReusableSetup } from "@/lib/academic-year-chronology";
+import { CalendarSync, Download, UserPlus } from "lucide-react";
 import { ApiRequestError, createClassesBatch } from "@/lib/api";
 import type {
   BatchCreateClassesResponse,
@@ -15,6 +17,7 @@ import { buildBatchCreatePayload } from "./classes/build-batch-create-payload";
 import { sortAssignmentStudents } from "@/components/admin/classes/assignment/studentSorting";
 import ImportClassWizard from "@/pages/admin/forms/classes/import-class-wizard";
 import ManualClassWizard from "@/pages/admin/forms/classes/manual-class-wizard";
+import SetupYearWizard, { type SetupYearStep } from "@/pages/admin/forms/classes/setup-year-wizard";
 import ClassCard from "@/components/admin/classes/class-card";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/admin/button";
@@ -28,9 +31,61 @@ type AddClassModalProps = {
   classes?: ClassListItem[];
   onClose?: () => void;
   onClassesCreated?: () => void;
+  sourceYears?: AcademicYearItem[];
 };
 
-export default function AddClassModal({ classes, onClose, onClassesCreated }: AddClassModalProps) {
+export default function AddClassModal({
+  classes,
+  onClose,
+  onClassesCreated,
+  sourceYears: propSourceYears,
+}: AddClassModalProps) {
+  const { selectedYear, academicYears } = useAcademicPeriod();
+  const [discoveredSourceYears, setDiscoveredSourceYears] = useState<AcademicYearItem[]>([]);
+
+  useEffect(() => {
+    if (propSourceYears !== undefined) return;
+    if (!selectedYear) {
+      setDiscoveredSourceYears([]);
+      return;
+    }
+
+    const earlierCandidates = (academicYears ?? []).filter((y) =>
+      isChronologicallyEarlierYear(y, selectedYear)
+    );
+
+    if (earlierCandidates.length === 0) {
+      setDiscoveredSourceYears([]);
+      return;
+    }
+
+    let active = true;
+    void (async () => {
+      try {
+        const results = await Promise.all(
+          earlierCandidates.map(async (candidate) => {
+            const hasSetup = await checkYearHasReusableSetup(candidate.academic_year_id);
+            return { candidate, hasSetup };
+          })
+        );
+        if (active) {
+          setDiscoveredSourceYears(results.filter((r) => r.hasSetup).map((r) => r.candidate));
+        }
+      } catch {
+        if (active) {
+          setDiscoveredSourceYears([]);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [academicYears, selectedYear, propSourceYears]);
+
+  const validSourceYears = propSourceYears ?? discoveredSourceYears;
+  const canSetupFromPreviousYear = validSourceYears.length > 0;
+
   const [mode, setMode] = useState<WizardMode>("choice");
   const [manualSetup, setManualSetup] = useState<ManualClassSetup | null>(null);
   const [manualStep, setManualStep] = useState<"details" | "assignment" | "review">("details");
@@ -38,6 +93,7 @@ export default function AddClassModal({ classes, onClose, onClassesCreated }: Ad
   const [assignmentState, setAssignmentState] = useState<ManualAssignmentWorkspaceState | null>(null);
   const [resetWarning, setResetWarning] = useState("");
   const [saveSuccess, setSaveSuccess] = useState<BatchCreateClassesResponse | null>(null);
+  const [setupYearStep, setSetupYearStep] = useState<SetupYearStep>("configure");
 
   function handleClose() {
     setMode("choice");
@@ -47,11 +103,13 @@ export default function AddClassModal({ classes, onClose, onClassesCreated }: Ad
     setAssignmentState(null);
     setResetWarning("");
     setSaveSuccess(null);
+    setSetupYearStep("configure");
     onClose?.();
   }
 
   function continueFromDetails(setup: ManualClassSetup) {
     setSaveSuccess(null);
+    setSetupYearStep("configure");
     setSkippedStudents(false);
     setManualSetup(setup);
     setManualStep("assignment");
@@ -85,6 +143,7 @@ export default function AddClassModal({ classes, onClose, onClassesCreated }: Ad
 
   function reviewWithoutStudents(setup: ManualClassSetup) {
     setSaveSuccess(null);
+    setSetupYearStep("configure");
     setManualSetup(setup);
     setAssignmentState({
       academicLevelId: setup.academicLevelId,
@@ -106,6 +165,7 @@ export default function AddClassModal({ classes, onClose, onClassesCreated }: Ad
 
   function continueFromImport(setup: ManualClassSetup, hydratedAssignmentState: ManualAssignmentWorkspaceState, skipToReview = false) {
     setSaveSuccess(null);
+    setSetupYearStep("configure");
     setSkippedStudents(skipToReview);
     if (!skipToReview && manualSetup && assignmentState && sameImportedSetup(manualSetup, setup)) {
       setManualStep("assignment");
@@ -133,7 +193,15 @@ export default function AddClassModal({ classes, onClose, onClassesCreated }: Ad
           </div>
         </Dialog.Header>
 
-        <section className="grid gap-4 p-4 md:grid-cols-2">
+        <section className={`grid gap-4 p-4 ${canSetupFromPreviousYear ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+          {canSetupFromPreviousYear && (
+            <DialogueSelect
+              icon={CalendarSync}
+              title="Set Up from Previous Year"
+              description="Reuse section names and optionally carry forward classes or advisers from another academic year."
+              onClick={() => setMode("setup_year")}
+            />
+          )}
           <DialogueSelect
             icon={Download}
             title="Import from File"
@@ -160,21 +228,29 @@ export default function AddClassModal({ classes, onClose, onClassesCreated }: Ad
 
   const stepIndex = manualStep === "details" ? 1 : manualStep === "assignment" ? 2 : 3;
 
-  const dialogTitle = saveSuccess
-    ? "Class Created Successfully"
-    : manualStep === "details"
+  const dialogTitle = saveSuccess || (mode === "setup_year" && setupYearStep === "success")
+    ? (mode === "setup_year" ? "Academic Year Setup Completed" : "Class Created Successfully")
+    : mode === "setup_year"
+      ? (setupYearStep === "confirm" ? "Confirm Academic-Year Setup" : "Set Up from Previous Year")
+      : manualStep === "details"
       ? mode === "manual" ? "Add Class Details" : "Import Class Details"
       : manualStep === "assignment"
         ? "Assign Students"
         : "Review Class Setup";
+
+  const stepCountText = (saveSuccess || (mode === "setup_year" && setupYearStep === "success"))
+    ? null
+    : mode === "setup_year"
+      ? (setupYearStep === "confirm" ? "Step 2 of 2" : "Step 1 of 2")
+      : `Step ${stepIndex} of 3`;
 
   return (
     <Dialog.Content size="lg">
       <Dialog.Header asChild>
         <div className="flex items-center justify-between w-full">
           <Text as="h5" className="font-sans text-xl font-bold">{dialogTitle}</Text>
-          {!saveSuccess && (
-            <Text as="h5" className="font-sans text-md font-bold">Step {stepIndex} of 3</Text>
+          {stepCountText && (
+            <Text as="h5" className="font-sans text-md font-bold">{stepCountText}</Text>
           )}
         </div>
       </Dialog.Header>
@@ -187,6 +263,18 @@ export default function AddClassModal({ classes, onClose, onClassesCreated }: Ad
               handleClose();
               onClassesCreated?.();
             }}
+          />
+        ) : mode === "setup_year" ? (
+          <SetupYearWizard
+            step={setupYearStep}
+            onStepChange={setSetupYearStep}
+            sourceYears={validSourceYears}
+            onBack={() => {
+              setSetupYearStep("configure");
+              setMode("choice");
+            }}
+            onClose={handleClose}
+            onClassesCreated={onClassesCreated}
           />
         ) : mode === "manual" ? (
           <div className={`grid gap-4 ${manualStep === "assignment" ? "h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" : ""}`}>

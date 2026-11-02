@@ -9,8 +9,6 @@ from sqlalchemy.orm import Session
 
 from app.core.Dependencies import get_current_user, get_optional_staff_id, get_staff_id, require_role
 from app.db.Session import get_db
-from app.models.academic.AcademicPeriod import AcademicPeriod
-from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.StudentCLass import StudentClass
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
@@ -60,6 +58,7 @@ from app.services.prediction.TeacherRiskReviewService import review_prediction_r
 from app.services.prediction.DashboardPredictionService import (
     get_dashboard_at_risk_predictions,
     get_dashboard_grade_summaries,
+    resolve_dashboard_academic_period_id,
 )
 from app.services.prediction.DashboardFilterService import get_dashboard_filter_options
 
@@ -259,23 +258,11 @@ def dashboard_grade_summaries(
     db: Session = Depends(get_db),
 ):
     is_admin = current_user.get("role") == "admin"
-    if academic_period_id is None and term is not None:
-        period_id = (
-            db.query(AcademicPeriod.academic_period_id)
-            .join(AcademicYear, AcademicPeriod.academic_year_id == AcademicYear.academic_year_id)
-            .filter(
-                AcademicYear.is_active == True,
-                AcademicPeriod.period_sequence == term,
-            )
-            .scalar()
-        )
-        if period_id is None:
-            period_id = (
-                db.query(AcademicPeriod.academic_period_id)
-                .filter(AcademicPeriod.period_sequence == term)
-                .scalar()
-            )
-        academic_period_id = period_id
+    academic_period_id = resolve_dashboard_academic_period_id(
+        db,
+        academic_period_id=academic_period_id,
+        term=term,
+    )
 
     return get_dashboard_grade_summaries(
         db,

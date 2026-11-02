@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
 from sqlalchemy.orm import Session, joinedload
 from app.models.academic.Subject import Subject
 from app.models.academic.Class_ import Class
@@ -8,9 +7,6 @@ from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.PeriodTemplateSlot import PeriodTemplateSlot
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.academic.SubjectOffering import SubjectOffering
-from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
-from app.services.classes.ClassQueryService import class_pathway_code
-from app.core.pathways import are_pathways_compatible, canonicalize_pathway
 from app.schemas.SubjectLoad import (
     ConflictItem,
     SubjectLoadItem,
@@ -241,73 +237,80 @@ class ConflictDetectorService:
         # 4. Subject Offering Scope Check (Term / Grade Level / Pathway)
         # ---------------------------------------------------------
         if academic_period and hasattr(academic_period, 'academic_period_id'):
-            try:
-                period_offerings = (
-                    db.query(SubjectOffering)
-                    .options(joinedload(SubjectOffering.offering_pathways).joinedload(SubjectOfferingPathway.pathway))
-                    .filter(
-                        SubjectOffering.academic_period_id == academic_period.academic_period_id,
-                        SubjectOffering.status == "active",
-                    )
-                    .all()
+            # Offering eligibility is a publication invariant. Do not swallow
+            # lookup failures: callers must not interpret a failed query as an
+            # academic period with no configured offerings.
+            period_offerings = (
+                db.query(SubjectOffering)
+                .options(joinedload(SubjectOffering.offering_pathways))
+                .filter(
+                    SubjectOffering.academic_period_id == academic_period.academic_period_id,
+                    SubjectOffering.academic_year_id == academic_period.academic_year_id,
+                    SubjectOffering.status == "active",
                 )
-            except Exception:
-                period_offerings = []
+                .all()
+            )
 
-            if period_offerings:
-                def _get_offering_pathway_code(so: SubjectOffering) -> str:
-                    pathway_links = getattr(so, "offering_pathways", None) or []
-                    if not pathway_links:
-                        return canonicalize_pathway(getattr(so, "pathway", None))
-                    if len(pathway_links) == 1:
-                        pw = getattr(pathway_links[0], "pathway", None)
-                        if pw and getattr(pw, "code", None):
-                            return canonicalize_pathway(pw.code)
-                        return "general"
-                    return "both"
+            for load in loads:
+                class_obj = classes_map.get(load.class_id)
+                if class_obj is None:
+                    continue
 
-                offered_tuples = {
-                    (so.subject_id, so.academic_level_id, _get_offering_pathway_code(so))
-                    for so in period_offerings
-                }
-                for load in loads:
-                    class_obj = classes_map.get(load.class_id)
-                    if class_obj:
-                        cls_level_id = class_obj.academic_level_id
-                        cls_pathway = class_pathway_code(class_obj).casefold()
-                        subject_obj = subjects_map.get(load.subject_id)
-                        s_name = subject_obj.subject_name if subject_obj else f"Subject #{load.subject_id}"
-                        c_name = class_obj.section_name if class_obj else f"Class #{load.class_id}"
+                subject_obj = subjects_map.get(load.subject_id)
+                s_name = subject_obj.subject_name if subject_obj else f"Subject #{load.subject_id}"
+                c_name = class_obj.section_name or f"Class #{load.class_id}"
 
-                        matching_offerings = [
-                            so for so in period_offerings
-                            if so.subject_id == load.subject_id
-                            and so.academic_level_id == cls_level_id
-                            and are_pathways_compatible(_get_offering_pathway_code(so), cls_pathway)
-                        ]
+                def is_eligible(offering: SubjectOffering) -> bool:
+                    if (
+                        offering.subject_id != load.subject_id
+                        or offering.academic_year_id != class_obj.academic_year_id
+                        or offering.academic_level_id != class_obj.academic_level_id
+                    ):
+                        return False
 
-                        if not matching_offerings:
-                            conflicts.append(
-                                ConflictItem(
-                                    rule="SUBJECT_NOT_OFFERED_IN_PERIOD",
-                                    severity="warning",
-                                    message=f"Subject '{s_name}' is not in active subject offerings for section {c_name} in this term.",
-                                    class_id=load.class_id,
-                                    subject_id=load.subject_id,
-                                    affected_key=f"{load.class_id}_{load.subject_id}",
-                                )
-                            )
-                        elif any(so.minutes is None for so in matching_offerings):
-                            conflicts.append(
-                                ConflictItem(
-                                    rule="MISSING_OFFERING_DURATION",
-                                    severity="error",
-                                    message=f"Subject offering for '{s_name}' in section '{c_name}' has no period duration set (minutes is null). Please set the period minutes in Subject Offerings before publishing.",
-                                    class_id=load.class_id,
-                                    subject_id=load.subject_id,
-                                    affected_key=f"{load.class_id}_{load.subject_id}",
-                                )
-                            )
+                    pathway_ids = {
+                        link.pathway_id
+                        for link in (offering.offering_pathways or [])
+                    }
+                    # No pathway links means the offering is unrestricted for
+                    # the grade (including core/shared subjects). Restricted
+                    # offerings require exact membership of the class pathway.
+                    return not pathway_ids or (
+                        class_obj.pathway_id is not None
+                        and class_obj.pathway_id in pathway_ids
+                    )
+
+                matching_offerings = [
+                    offering for offering in period_offerings
+                    if is_eligible(offering)
+                ]
+
+                if not matching_offerings:
+                    conflicts.append(
+                        ConflictItem(
+                            rule="SUBJECT_NOT_OFFERED_IN_PERIOD",
+                            severity="error",
+                            message=(
+                                f"Subject '{s_name}' has no active offering for section "
+                                f"'{c_name}' in this academic year, grading period, "
+                                "grade level, and pathway."
+                            ),
+                            class_id=load.class_id,
+                            subject_id=load.subject_id,
+                            affected_key=f"{load.class_id}_{load.subject_id}",
+                        )
+                    )
+                elif any(offering.minutes is None for offering in matching_offerings):
+                    conflicts.append(
+                        ConflictItem(
+                            rule="MISSING_OFFERING_DURATION",
+                            severity="error",
+                            message=f"Subject offering for '{s_name}' in section '{c_name}' has no period duration set (minutes is null). Please set the period minutes in Subject Offerings before publishing.",
+                            class_id=load.class_id,
+                            subject_id=load.subject_id,
+                            affected_key=f"{load.class_id}_{load.subject_id}",
+                        )
+                    )
 
         # ---------------------------------------------------------
         # 5. Math/Science 1-Hour Duration Mismatch Check (JHS)

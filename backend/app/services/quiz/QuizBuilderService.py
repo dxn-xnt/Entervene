@@ -5,6 +5,8 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.academic.Lesson import Lesson
+from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.Class_ import Class
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkLesson import ClassworkLesson
@@ -25,6 +27,7 @@ from app.schemas.Quiz import (
     QuizSettingOut,
 )
 from app.services.classwork.ClassworkShared import is_quiz_type
+from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 
 
 QUESTION_MULTIPLE_CHOICE = "MULTIPLE_CHOICE"
@@ -34,18 +37,113 @@ QUIZ_STATUSES = {"DRAFT", "READY", "PUBLISHED", "ARCHIVED"}
 SUMMARY_RELEASE_MODES = {"IMMEDIATE", "SCHEDULED", "AFTER_DUE_DATE", "NEVER"}
 
 
-def get_teacher_quiz_classwork(db: Session, staff_id: str, classwork_id: int) -> Classwork:
-    """Return a teacher-owned quiz classwork or fail with route-safe errors."""
-    classwork = db.query(Classwork).filter(
-        Classwork.classwork_id == classwork_id,
-        Classwork.created_by_staff_id == staff_id,
-    ).first()
+def _is_admin_staff(db: Session, staff_id: str) -> bool:
+    from sqlalchemy import func
+
+    from app.models.auth.Role import Role
+    from app.models.auth.UserRoles import UserRoles
+    from app.models.people.AcademicStaff import AcademicStaff
+
+    return db.query(Role.role_id).join(
+        UserRoles,
+        UserRoles.role_id == Role.role_id,
+    ).join(
+        AcademicStaff,
+        AcademicStaff.user_id == UserRoles.user_id,
+    ).filter(
+        AcademicStaff.staff_id == staff_id,
+        func.lower(Role.role_name) == "admin",
+    ).first() is not None
+
+
+def authorize_teacher_quiz_assignment(
+    db: Session,
+    staff_id: str,
+    classwork: Classwork,
+    assignment: ClassworkAssignment,
+    *,
+    write_required: bool,
+    block_future_period: bool = False,
+) -> None:
+    if assignment.academic_period_id is None:
+        raise HTTPException(status_code=403, detail="Quiz has an unscoped academic period")
+    class_ = db.get(Class, assignment.class_id)
+    period = db.get(AcademicPeriod, assignment.academic_period_id)
+    if class_ is None or period is None or class_.academic_year_id != period.academic_year_id:
+        raise HTTPException(status_code=403, detail="Quiz academic context is invalid")
+
+    assertion = (
+        SubjectLoadAuthorizationService.assert_can_write
+        if write_required
+        else SubjectLoadAuthorizationService.assert_can_view
+    )
+    assertion(
+        db,
+        staff_id,
+        assignment.class_id,
+        classwork.subject_id,
+        assignment.academic_period_id,
+    )
+    if write_required and block_future_period:
+        SubjectLoadAuthorizationService.assert_context_writable(
+            db,
+            class_id=assignment.class_id,
+            academic_period_id=assignment.academic_period_id,
+            block_future_period_in_current_year=True,
+        )
+
+
+def get_teacher_quiz_classwork(
+    db: Session,
+    staff_id: str,
+    classwork_id: int,
+    *,
+    write_required: bool = False,
+    proposed_status: str | None = None,
+    assignment_scope: ClassworkAssignment | None = None,
+    live_operation: bool = False,
+) -> Classwork:
+    """Return an authorized quiz classwork for builder-wide operations."""
+    classwork = db.query(Classwork).filter(Classwork.classwork_id == classwork_id).first()
     if not classwork:
-        raise HTTPException(status_code=404, detail="Classwork not found or not yours")
-    if classwork.is_archived:
+        raise HTTPException(status_code=404, detail="Classwork not found")
+    if write_required and classwork.is_archived:
         raise HTTPException(status_code=400, detail="Cannot edit archived classwork")
     if not is_quiz_type(classwork.classwork_type):
         raise HTTPException(status_code=400, detail="Classwork is not a quiz")
+
+    if assignment_scope is not None:
+        if assignment_scope.classwork_id != classwork.classwork_id:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+        assignments = [assignment_scope]
+    else:
+        assignments = db.query(ClassworkAssignment).filter(
+            ClassworkAssignment.classwork_id == classwork.classwork_id,
+        ).all()
+    if not assignments:
+        if classwork.created_by_staff_id != staff_id and not _is_admin_staff(db, staff_id):
+            raise HTTPException(status_code=404, detail="Classwork not found")
+        return classwork
+
+    existing_status = db.query(Quiz.status).filter(
+        Quiz.classwork_id == classwork.classwork_id,
+    ).scalar()
+    effective_status = (proposed_status or existing_status or "").strip().upper()
+    future_planning_only = bool(
+        write_required
+        and effective_status != "PUBLISHED"
+        and not classwork.is_published
+        and all(not assignment.is_published for assignment in assignments)
+    )
+    for assignment in assignments:
+        authorize_teacher_quiz_assignment(
+            db,
+            staff_id,
+            classwork,
+            assignment,
+            write_required=write_required,
+            block_future_period=write_required and (live_operation or not future_planning_only),
+        )
     return classwork
 
 

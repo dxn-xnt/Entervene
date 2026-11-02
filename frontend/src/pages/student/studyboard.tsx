@@ -1,33 +1,16 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip as ChartTooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
   ArrowUpRight,
   BookOpen,
   Calendar,
-  Check,
   CheckSquare,
   ClipboardList,
   FileText,
-  Zap,
 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/student/button";
-import { Text } from "@/components/retroui/Text";
 import { Badge } from "@/components/retroui/Badge";
 import { Progress } from "@/components/retroui/Progress";
 import { LoadingPanel } from "@/components/loading-panel";
@@ -93,14 +76,6 @@ function MetricCard({
   );
 }
 
-function computeCompletion(todos: TodoItem[]) {
-  const total = todos.length;
-  const completed = todos.filter((todo) =>
-    todo.is_submitted || todo.status === "completed" || todo.grade !== null
-  ).length;
-  return { total, completed, rate: total > 0 ? Math.round((completed / total) * 100) : 0 };
-}
-
 function computeSubjectPerformance(todos: TodoItem[]) {
   const buckets: Record<string, { subject: string; subjectId: number; earned: number; possible: number }> = {};
   todos.forEach((todo) => {
@@ -120,7 +95,7 @@ function computeSubjectPerformance(todos: TodoItem[]) {
     .sort((a, b) => b.score - a.score);
 }
 
-export function GradeOverviewCards({ todos, isLoading, error }: {
+export function GradeOverviewCards({ isLoading, error }: {
   todos: TodoItem[];
   isLoading: boolean;
   error: string | null;
@@ -262,20 +237,6 @@ const StoryBoard = () => {
   );
   const weakestSubject = subjectPerformance.at(-1);
 
-  const readingTotal =
-    metrics?.daily_reading_seconds.reduce((sum, value) => sum + value, 0) || 0;
-  const readingDays = (
-    metrics?.daily_reading_seconds || [0, 0, 0, 0, 0, 0, 0]
-  ).map((seconds, index) => ({
-    day: days[index],
-    minutes: Math.round(seconds / 60),
-  }));
-  const trend =
-    metrics?.grade_trend.map((item) => ({
-      label: dayLabel(item.week_start),
-      average: item.average,
-    })) || [];
-  const quizCount = (metrics?.quiz_correct || 0) + (metrics?.quiz_wrong || 0);
   const onTimeTotal =
     (metrics?.on_time_count || 0) + (metrics?.late_submission_count || 0);
 

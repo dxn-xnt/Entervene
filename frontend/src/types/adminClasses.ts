@@ -1,5 +1,5 @@
 export type ClassStatus = "Active" | "Archived";
-export type WizardMode = "choice" | "manual" | "import";
+export type WizardMode = "choice" | "manual" | "import" | "setup_year";
 export type DetailTab = "classes" | "students" | "subjects";
 export type GradeFilter = "All" | "Grade 7" | "Grade 8" | "Grade 9" | "Grade 10" | "Grade 11" | "Grade 12";
 export type YearFilter = "All" | "2025-2026" | "2024-2025" | "2023-2024";

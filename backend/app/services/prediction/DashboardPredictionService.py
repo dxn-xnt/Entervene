@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from fastapi import HTTPException
 from sqlalchemy import func, tuple_
 from sqlalchemy.orm import Session
 
@@ -21,8 +22,8 @@ from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicLevel import AcademicLevel
-from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.StudentCLass import StudentClass
+from app.services.academic.AcademicLifecycleService import resolve_active_academic_period
 from app.services.prediction.TeacherAssignmentResolver import (
     TeacherStatusLabel,
     resolve_teachers_for_loads,
@@ -83,6 +84,66 @@ def enrolled_student_class_filter():
     return func.lower(func.coalesce(StudentClass.enrollment_status, "enrolled")) == "enrolled"
 
 
+def resolve_dashboard_academic_period_id(
+    db: Session,
+    *,
+    academic_period_id: int | None,
+    term: int | None,
+) -> int | None:
+    """Resolve the dashboard's legacy term sequence without crossing academic years.
+
+    An explicit period identifier is authoritative. Omitted filters intentionally
+    remain unscoped. Only the legacy sequence needs lifecycle-based resolution.
+    """
+    if academic_period_id is not None:
+        return academic_period_id
+    if term is None:
+        return None
+
+    active_period = resolve_active_academic_period(db)
+    matching_periods = (
+        db.query(AcademicPeriod)
+        .filter(
+            AcademicPeriod.academic_year_id == active_period.academic_year_id,
+            AcademicPeriod.period_sequence == term,
+        )
+        .order_by(AcademicPeriod.academic_period_id)
+        .all()
+    )
+    if not matching_periods:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Term {term} is not configured in the active academic year.",
+        )
+    if len(matching_periods) > 1:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Academic lifecycle is ambiguous: multiple active-year periods use term sequence {term}.",
+        )
+    return matching_periods[0].academic_period_id
+
+
+def _valid_class_period_triplets(
+    db: Session,
+    triplets: list[tuple[int, int, int]],
+) -> list[tuple[int, int, int]]:
+    """Keep only assignment scopes whose class and period share an academic year."""
+    if not triplets:
+        return []
+    class_period_pairs = {(class_id, period_id) for class_id, _, period_id in triplets}
+    valid_pairs = set(
+        db.query(Class.class_id, AcademicPeriod.academic_period_id)
+        .join(AcademicPeriod, Class.academic_year_id == AcademicPeriod.academic_year_id)
+        .filter(tuple_(Class.class_id, AcademicPeriod.academic_period_id).in_(class_period_pairs))
+        .all()
+    )
+    return [
+        triplet
+        for triplet in triplets
+        if (triplet[0], triplet[2]) in valid_pairs
+    ]
+
+
 def _base_joined_query(db: Session, enrolled_only: bool = True):
     """Return the base query with all required joins."""
     q = (
@@ -91,13 +152,18 @@ def _base_joined_query(db: Session, enrolled_only: bool = True):
         .join(Class, AIPrediction.class_id == Class.class_id)
         .outerjoin(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
         .join(Subject, AIPrediction.subject_id == Subject.subject_id)
-        .join(AcademicPeriod, AIPrediction.target_period_id == AcademicPeriod.academic_period_id)
+        .join(
+            AcademicPeriod,
+            (AIPrediction.target_period_id == AcademicPeriod.academic_period_id)
+            & (Class.academic_year_id == AcademicPeriod.academic_year_id),
+        )
     )
     if enrolled_only:
         q = q.join(
             StudentClass,
             (StudentClass.student_id == AIPrediction.student_id)
             & (StudentClass.class_id == AIPrediction.class_id)
+            & (StudentClass.academic_year_id == Class.academic_year_id)
             & enrolled_student_class_filter(),
         )
     return q
@@ -114,13 +180,18 @@ def _risk_summary_query(db: Session, enrolled_only: bool = True):
         .join(Class, AIPrediction.class_id == Class.class_id)
         .outerjoin(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
         .join(Subject, AIPrediction.subject_id == Subject.subject_id)
-        .join(AcademicPeriod, AIPrediction.target_period_id == AcademicPeriod.academic_period_id)
+        .join(
+            AcademicPeriod,
+            (AIPrediction.target_period_id == AcademicPeriod.academic_period_id)
+            & (Class.academic_year_id == AcademicPeriod.academic_year_id),
+        )
     )
     if enrolled_only:
         q = q.join(
             StudentClass,
             (StudentClass.student_id == AIPrediction.student_id)
             & (StudentClass.class_id == AIPrediction.class_id)
+            & (StudentClass.academic_year_id == Class.academic_year_id)
             & enrolled_student_class_filter(),
         )
     return q
@@ -145,24 +216,11 @@ def get_dashboard_at_risk_predictions(
     is_admin: bool = True,
     enrolled_only: bool = True,
 ) -> dict[str, Any]:
-    # Canonical term resolution if academic_period_id was omitted
-    if academic_period_id is None and term is not None:
-        period_id = (
-            db.query(AcademicPeriod.academic_period_id)
-            .join(AcademicYear, AcademicPeriod.academic_year_id == AcademicYear.academic_year_id)
-            .filter(
-                AcademicYear.is_active == True,
-                AcademicPeriod.period_sequence == term,
-            )
-            .scalar()
-        )
-        if period_id is None:
-            period_id = (
-                db.query(AcademicPeriod.academic_period_id)
-                .filter(AcademicPeriod.period_sequence == term)
-                .scalar()
-            )
-        academic_period_id = period_id
+    academic_period_id = resolve_dashboard_academic_period_id(
+        db,
+        academic_period_id=academic_period_id,
+        term=term,
+    )
 
     # Teacher role-based isolation
     assigned_triplets = None
@@ -182,7 +240,10 @@ def get_dashboard_at_risk_predictions(
                 "limit": limit,
                 "offset": offset,
             }
-        assigned_triplets = get_teacher_assigned_triplets(db, staff_id, academic_period_id=academic_period_id)
+        assigned_triplets = _valid_class_period_triplets(
+            db,
+            get_teacher_assigned_triplets(db, staff_id, academic_period_id=academic_period_id),
+        )
         if not assigned_triplets:
             return {
                 "items": [],
@@ -321,10 +382,21 @@ def get_dashboard_grade_summaries(
     academic_period_id defaults to None (all terms), matching the discoverability
     pattern of get_teacher_assigned_triplets.
     """
+    requested_academic_year_id = None
+    if academic_period_id is not None:
+        requested_academic_year_id = (
+            db.query(AcademicPeriod.academic_year_id)
+            .filter(AcademicPeriod.academic_period_id == academic_period_id)
+            .scalar()
+        )
+
     if not is_admin:
         if not staff_id:
             return []
-        assigned_triplets = get_teacher_assigned_triplets(db, staff_id, academic_period_id=academic_period_id)
+        assigned_triplets = _valid_class_period_triplets(
+            db,
+            get_teacher_assigned_triplets(db, staff_id, academic_period_id=academic_period_id),
+        )
         if not assigned_triplets:
             return []
         allowed_class_ids = {t[0] for t in assigned_triplets}
@@ -339,6 +411,8 @@ def get_dashboard_grade_summaries(
     )
     if allowed_class_ids is not None:
         class_query = class_query.filter(Class.class_id.in_(allowed_class_ids))
+    if academic_period_id is not None:
+        class_query = class_query.filter(Class.academic_year_id == requested_academic_year_id)
     classes_with_level = class_query.order_by(AcademicLevel.grade_level, Class.section_name).all()
 
     if not classes_with_level and not is_admin:
@@ -351,6 +425,11 @@ def get_dashboard_grade_summaries(
     if all_class_ids:
         student_counts = dict(
             db.query(StudentClass.class_id, func.count(func.distinct(StudentClass.student_id)))
+            .join(
+                Class,
+                (StudentClass.class_id == Class.class_id)
+                & (StudentClass.academic_year_id == Class.academic_year_id),
+            )
             .filter(
                 StudentClass.class_id.in_(all_class_ids),
                 enrolled_student_class_filter(),
@@ -378,6 +457,16 @@ def get_dashboard_grade_summaries(
                 AIPrediction,
                 (StudentClass.student_id == AIPrediction.student_id)
                 & (StudentClass.class_id == AIPrediction.class_id),
+            )
+            .join(
+                Class,
+                (StudentClass.class_id == Class.class_id)
+                & (StudentClass.academic_year_id == Class.academic_year_id),
+            )
+            .join(
+                AcademicPeriod,
+                (AIPrediction.target_period_id == AcademicPeriod.academic_period_id)
+                & (Class.academic_year_id == AcademicPeriod.academic_year_id),
             )
             .filter(
                 StudentClass.class_id.in_(all_class_ids),

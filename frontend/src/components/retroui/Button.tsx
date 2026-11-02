@@ -6,7 +6,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { Slot } from "@radix-ui/react-slot";
 import {
   Archive, ArrowLeft, ArrowRight, ArrowRightLeft, Calendar, Check,
-  CheckSquare, ClipboardCheck, Copy, Download, ExternalLink, Eye, FileUp, Filter,
+  CheckSquare, ClipboardCheck, Copy, Download, ExternalLink, FileUp, Filter,
   KeyRound, LogIn, Pencil, Plus, RefreshCw, RotateCcw, Save, Send,
   Sparkles, Trash2, Upload, UserPlus, X, type LucideIcon,
 } from "lucide-react";

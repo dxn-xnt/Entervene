@@ -72,6 +72,12 @@ function isQuizType(value?: string | null) {
   return value?.toUpperCase() === "QUIZ";
 }
 
+function withAcademicPeriod(path: string, academicPeriodId: number | null) {
+  if (academicPeriodId == null) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}academic_period_id=${academicPeriodId}`;
+}
+
 
 
 function fmtDate(dateStr?: string | null) {
@@ -105,6 +111,7 @@ export default function SubjectLessonTab({
     let isMounted = true;
 
     async function loadCuratedGoals() {
+      setCuratedGoals(undefined);
       try {
         const data = await getLessonGoals(
           targetClassId,
@@ -169,6 +176,7 @@ export default function SubjectLessonTab({
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [detailError, setDetailError] = useState("");
+  const lessonRequestIdRef = useRef(0);
 
   const isReadingActive = Boolean(
     selectedClasswork && isReadingType(selectedClasswork.classwork_type),
@@ -192,12 +200,13 @@ export default function SubjectLessonTab({
 
   useEffect(() => {
     if (classId && subjectId) {
-      fetchLessons();
-      if (!propSubjectName) fetchSubjectInfo();
+      void fetchLessons();
     } else {
       setIsLoading(false);
     }
-  }, [classId, subjectId]);
+  // fetchLessons intentionally captures the current class, subject, and period.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classId, subjectId, selectedPeriodId]);
 
   useEffect(() => {
     if (!classId || !subjectId) return;
@@ -224,15 +233,20 @@ export default function SubjectLessonTab({
     setSelectedLessonDetail(targetLesson);
     onLessonSelect?.(targetId);
     if (classId && classworksByLesson[targetId] === undefined) {
+      const requestId = lessonRequestIdRef.current;
       setClassworkLoadingIds((prev) => new Set(prev).add(targetId));
       void apiFetch(
-        `/api/v1/lessons/${targetId}/classwork-assignments?class_id=${classId}`,
+        withAcademicPeriod(
+          `/api/v1/lessons/${targetId}/classwork-assignments?class_id=${classId}`,
+          selectedPeriodId,
+        ),
       )
         .then(async (res) => {
           if (!res.ok) throw new Error("Unable to load lesson classwork");
           return (await res.json()) as LessonClasswork[];
         })
         .then((data) => {
+          if (lessonRequestIdRef.current !== requestId) return;
           setClassworkErrorIds((prev) => { const next = new Set(prev); next.delete(targetId); return next; });
           setClassworksByLesson((prev) => ({
             ...prev,
@@ -240,17 +254,22 @@ export default function SubjectLessonTab({
           }));
         })
         .catch(() => {
+          if (lessonRequestIdRef.current !== requestId) return;
           setClassworkErrorIds((prev) => new Set(prev).add(targetId));
         })
-        .finally(() => setClassworkLoadingIds((prev) => { const next = new Set(prev); next.delete(targetId); return next; }));
+        .finally(() => {
+          if (lessonRequestIdRef.current !== requestId) return;
+          setClassworkLoadingIds((prev) => { const next = new Set(prev); next.delete(targetId); return next; });
+        });
     }
-  }, [classId, classworksByLesson, lessons, onLessonSelect, searchParams]);
+  }, [classId, classworksByLesson, lessons, onLessonSelect, searchParams, selectedPeriodId]);
 
-  const fetchSubjectInfo = async () => {
+  const fetchSubjectInfo = async (requestId: number, periodId: number | null) => {
     try {
-      const res = await apiFetch("/api/v1/students/me/subjects");
+      const res = await apiFetch(withAcademicPeriod("/api/v1/students/me/subjects", periodId));
       if (!res.ok) return;
       const data = await res.json();
+      if (lessonRequestIdRef.current !== requestId) return;
       const match = data.find(
         (s: {
           class_id: number;
@@ -271,35 +290,61 @@ export default function SubjectLessonTab({
 
   const fetchLessons = async () => {
     if (!classId || !subjectId) return;
+    const requestId = ++lessonRequestIdRef.current;
+    const periodId = selectedPeriodId;
     setIsLoading(true);
     setError("");
+    setLessons([]);
+    setClassworksByLesson({});
+    setClassworkErrorIds(new Set());
+    setClassworkLoadingIds(new Set());
+    setSubjectAssignments([]);
+    setSelectedLessonDetail(null);
+    setSelectedClasswork(null);
+    if (!propSubjectName) void fetchSubjectInfo(requestId, periodId);
     try {
       const res = await apiFetch(
-        `/api/v1/lessons/class/${classId}/subject/${subjectId}`,
+        withAcademicPeriod(
+          `/api/v1/lessons/class/${classId}/subject/${subjectId}`,
+          periodId,
+        ),
       );
       if (!res.ok) throw new Error("Failed to fetch lessons");
       const data: Lesson[] = await res.json();
+      if (lessonRequestIdRef.current !== requestId) return;
       setLessons(data);
       // Pre-fetch classworks for all lessons in the background
-      fetchAllClassworks(data);
+      fetchAllClassworks(data, requestId, periodId);
 
       void apiFetch(
-        `/api/v1/classwork-assignments/class/${classId}/subject/${subjectId}`,
+        withAcademicPeriod(
+          `/api/v1/classwork-assignments/class/${classId}/subject/${subjectId}`,
+          periodId,
+        ),
       )
         .then(async (r) =>
           r.ok ? ((await r.json()) as ClassworkDetail[]) : [],
         )
-        .then((cwData) => setSubjectAssignments(cwData || []))
-        .catch(() => setSubjectAssignments([]));
+        .then((cwData) => {
+          if (lessonRequestIdRef.current === requestId) setSubjectAssignments(cwData || []);
+        })
+        .catch(() => {
+          if (lessonRequestIdRef.current === requestId) setSubjectAssignments([]);
+        });
     } catch (err) {
+      if (lessonRequestIdRef.current !== requestId) return;
       setError(err instanceof Error ? err.message : "Failed to fetch lessons");
     } finally {
-      setIsLoading(false);
+      if (lessonRequestIdRef.current === requestId) setIsLoading(false);
     }
   };
 
   /** Fetch classworks for every lesson in parallel (background, for Weekly Goals). */
-  const fetchAllClassworks = (lessonList: Lesson[]) => {
+  const fetchAllClassworks = (
+    lessonList: Lesson[],
+    requestId: number,
+    periodId: number | null,
+  ) => {
     if (!classId) return;
     lessonList.forEach(async (lesson) => {
       setClassworkLoadingIds((prev) => new Set(prev).add(lesson.lesson_id));
@@ -311,38 +356,51 @@ export default function SubjectLessonTab({
       });
       try {
         const res = await apiFetch(
-          `/api/v1/lessons/${lesson.lesson_id}/classwork-assignments?class_id=${classId}`,
+          withAcademicPeriod(
+            `/api/v1/lessons/${lesson.lesson_id}/classwork-assignments?class_id=${classId}`,
+            periodId,
+          ),
         );
         if (!res.ok) throw new Error("Unable to load lesson classwork");
         const data = (await res.json()) as LessonClasswork[];
+        if (lessonRequestIdRef.current !== requestId) return;
         setClassworkErrorIds((prev) => { const next = new Set(prev); next.delete(lesson.lesson_id); return next; });
         setClassworksByLesson((prev) => ({
           ...prev,
           [lesson.lesson_id]: prev[lesson.lesson_id] ?? data,
         }));
       } catch {
+        if (lessonRequestIdRef.current !== requestId) return;
         setClassworkErrorIds((prev) => new Set(prev).add(lesson.lesson_id));
       } finally {
-        setClassworkLoadingIds((prev) => { const next = new Set(prev); next.delete(lesson.lesson_id); return next; });
+        if (lessonRequestIdRef.current === requestId) {
+          setClassworkLoadingIds((prev) => { const next = new Set(prev); next.delete(lesson.lesson_id); return next; });
+        }
       }
     });
   };
 
   const fetchLessonClassworks = async (lessonId: number) => {
     if (!classId || classworksByLesson[lessonId] !== undefined) return;
+    const requestId = lessonRequestIdRef.current;
     setClassworkLoadingId(lessonId);
     try {
       const res = await apiFetch(
-        `/api/v1/lessons/${lessonId}/classwork-assignments?class_id=${classId}`,
+        withAcademicPeriod(
+          `/api/v1/lessons/${lessonId}/classwork-assignments?class_id=${classId}`,
+          selectedPeriodId,
+        ),
       );
       if (!res.ok) throw new Error("Unable to load lesson classwork");
       const data = (await res.json()) as LessonClasswork[];
+      if (lessonRequestIdRef.current !== requestId) return;
       setClassworkErrorIds((prev) => { const next = new Set(prev); next.delete(lessonId); return next; });
       setClassworksByLesson((prev) => ({ ...prev, [lessonId]: data }));
     } catch {
+      if (lessonRequestIdRef.current !== requestId) return;
       setClassworkErrorIds((prev) => new Set(prev).add(lessonId));
     } finally {
-      setClassworkLoadingId(null);
+      if (lessonRequestIdRef.current === requestId) setClassworkLoadingId(null);
     }
   };
 
