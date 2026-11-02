@@ -22,7 +22,6 @@ import AddPathwayModal from "./forms/add-pathway";
 import ConfirmGeneralAverageModal, {
   type GeneralAverageAction,
 } from "./forms/confirm-general-average-modal";
-import OfficialSectionsSettings from "./official-sections-settings";
 
 import {
   getAllSettings,
@@ -1281,15 +1280,6 @@ export default function AdminSystemSettings() {
                   </Table>
                 </Card.Content>
               </Card>
-              {scopeConfigYearId && !isLoadingScopes && (
-                <OfficialSectionsSettings
-                  key={scopeConfigYearId}
-                  academicYearId={Number(scopeConfigYearId)}
-                  levels={academicLevels}
-                  pathways={pathways}
-                  pathwayScopes={pathwayScopes}
-                />
-              )}
 
               {/* Teacher Workload Caps */}
               <Card className="@container/card w-full">

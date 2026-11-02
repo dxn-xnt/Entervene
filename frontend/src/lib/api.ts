@@ -1913,6 +1913,12 @@ export async function updateOfficialSection(id: number, payload: { is_active?: b
   return (await response.json()) as OfficialSectionOption;
 }
 
+export async function deleteOfficialSection(id: number): Promise<{ action: string; message: string }> {
+  const response = await apiFetch(`/api/v1/classes/official-sections/${id}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(apiErrorMessage(await response.json().catch(() => null), "Unable to delete official section."));
+  return (await response.json()) as { action: string; message: string };
+}
+
 export type AcademicYearSetupMode =
   | "sections_only"
   | "retain_classes_and_advisers"

@@ -186,7 +186,7 @@ export default function AddClassModal({
 
   if (mode === "choice") {
     return (
-      <Dialog.Content size="2xl">
+      <Dialog.Content size="lg">
         <Dialog.Header asChild>
           <div className="flex items-center justify-between w-full">
             <Text as="h5" className="font-sans text-xl font-bold">Add New Classes</Text>
@@ -233,10 +233,10 @@ export default function AddClassModal({
     : mode === "setup_year"
       ? (setupYearStep === "confirm" ? "Confirm Academic-Year Setup" : "Set Up from Previous Year")
       : manualStep === "details"
-      ? mode === "manual" ? "Add Class Details" : "Import Class Details"
-      : manualStep === "assignment"
-        ? "Assign Students"
-        : "Review Class Setup";
+        ? mode === "manual" ? "Add Class Details" : "Import Class Details"
+        : manualStep === "assignment"
+          ? "Assign Students"
+          : "Review Class Setup";
 
   const stepCountText = (saveSuccess || (mode === "setup_year" && setupYearStep === "success"))
     ? null
@@ -245,7 +245,7 @@ export default function AddClassModal({
       : `Step ${stepIndex} of 3`;
 
   return (
-    <Dialog.Content size="lg">
+    <Dialog.Content size="xl">
       <Dialog.Header asChild>
         <div className="flex items-center justify-between w-full">
           <Text as="h5" className="font-sans text-xl font-bold">{dialogTitle}</Text>
@@ -432,22 +432,22 @@ function ManualReview({ setup, assignmentState, skippedStudents, onSaved, onBack
             pathway_id: null,
             pathway: section.pathway && section.pathway !== "general"
               ? {
-                  id: 0,
-                  code: section.pathway,
-                  name: section.pathway,
-                  is_enabled: true,
-                  sort_order: 1,
-                }
+                id: 0,
+                code: section.pathway,
+                name: section.pathway,
+                is_enabled: true,
+                sort_order: 1,
+              }
               : null,
             adviser: section.adviserName
               ? {
-                  staff_id: section.adviserStaffId,
-                  first_name: section.adviserName,
-                  middle_name: null,
-                  last_name: "",
-                  suffix: null,
-                  avatar: null,
-                }
+                staff_id: section.adviserStaffId,
+                first_name: section.adviserName,
+                middle_name: null,
+                last_name: "",
+                suffix: null,
+                avatar: null,
+              }
               : null,
             student_count: students.length,
             female_count: femaleCount,
