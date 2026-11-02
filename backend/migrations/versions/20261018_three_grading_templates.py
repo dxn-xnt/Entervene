@@ -43,7 +43,7 @@ def upgrade() -> None:
         ]
         and conn.execute(text("SELECT count(*) FROM subject_groups")).scalar_one() == 0
     )
-    if old_ids not in (expected, set()) and not reviewed_demo:
+    if old_ids not in (expected, set()) and not old_ids.issubset(expected) and not reviewed_demo:
         raise RuntimeError(f"Unexpected grading template IDs: {sorted(old_ids)}")
     subject_count = conn.execute(text("SELECT count(*) FROM subject")).scalar_one()
 

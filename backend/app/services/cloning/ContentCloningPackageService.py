@@ -1184,6 +1184,15 @@ class ContentCloningPackageService:
             )
             for item in items
         ]
+        source_academic_period_ids = sorted({
+            period_id
+            for item in items
+            if isinstance(
+                period_id := item.private_snapshot.get("academic_period_id"),
+                int,
+            )
+            and not isinstance(period_id, bool)
+        })
 
         summary_counts = package.summary_counts or {}
         counts = ContentSelectionSummary(
@@ -1210,5 +1219,6 @@ class ContentCloningPackageService:
             sent_at=package.sent_at,
             expires_at=package.expires_at,
             summary=counts,
+            source_academic_period_ids=source_academic_period_ids,
             items=preview_items,
         )

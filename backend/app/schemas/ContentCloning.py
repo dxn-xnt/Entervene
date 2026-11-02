@@ -211,6 +211,7 @@ class RequesterVisiblePackageSummary(BaseModel):
     sent_at: datetime
     expires_at: datetime
     summary: ContentSelectionSummary
+    source_academic_period_ids: list[int] = Field(default_factory=list)
     items: list[PackagePreviewItem] = Field(default_factory=list)
 
 

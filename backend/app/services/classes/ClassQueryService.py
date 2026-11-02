@@ -474,6 +474,11 @@ def get_teacher_advisory_class_grades_data(
     selected_period = None
     if academic_period_id is not None:
         selected_period = next((p for p in periods if p.academic_period_id == academic_period_id), None)
+        if selected_period is None:
+            raise HTTPException(
+                status_code=409,
+                detail="This class does not belong to the selected academic period.",
+            )
     if selected_period is None:
         selected_period = next((p for p in periods if p.is_active), periods[0])
 
@@ -500,6 +505,7 @@ def get_teacher_advisory_class_grades_data(
             SubjectLoad.is_active_version.is_(True),
             func.lower(func.coalesce(SubjectLoad.status, "active")).in_(["active", "published"]),
         )
+        .filter(SubjectLoad.academic_period_id == selected_period.academic_period_id)
         .order_by(func.lower(Subject.subject_name))
         .all()
     )

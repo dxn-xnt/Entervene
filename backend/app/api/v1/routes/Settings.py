@@ -140,9 +140,10 @@ def fetch_academic_levels(
 @router.get("/academic-periods")
 def fetch_academic_periods(
     academic_year_id: int | None = None,
+    include_all: bool = False,
     db: Session = Depends(get_db),
 ):
-    """Fetch academic periods from the database, optionally filtered by academic_year_id."""
+    """Fetch periods for one year, the active year, or all years when explicitly requested."""
     from app.models.academic.AcademicPeriod import AcademicPeriod
     from app.models.academic.AcademicYear import AcademicYear
 
@@ -153,7 +154,7 @@ def fetch_academic_periods(
 
     if academic_year_id is not None:
         query = query.filter(AcademicPeriod.academic_year_id == academic_year_id)
-    else:
+    elif not include_all:
         # Default to active academic year if not specified
         active_year = db.query(AcademicYear).filter(AcademicYear.is_active == True).first()
         if active_year:

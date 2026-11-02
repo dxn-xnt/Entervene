@@ -1347,6 +1347,7 @@ def test_package_preview_privacy_and_authorization(db, scenario):
     assert "sent_at" in preview and preview["sent_at"] is not None
     assert "expires_at" in preview and preview["expires_at"] is not None
     assert "summary" in preview
+    assert preview["source_academic_period_ids"] == [11]
     assert preview["summary"]["competency_count"] >= 1
     assert preview["summary"]["lesson_count"] >= 1
     assert preview["summary"]["classwork_count"] >= 1
@@ -2307,6 +2308,11 @@ def test_multiple_source_terms_require_explicit_mapping(db, scenario):
     )
     assert sent.status_code == 201, sent.text
     requester = _client(db, staff_id="REQ")
+    preview = requester.get(
+        f"/api/v1/content-cloning/requests/{request.request_id}/package"
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["source_academic_period_ids"] == [11, 12]
     endpoint = f"/api/v1/content-cloning/requests/{request.request_id}/package-decision"
     missing_map = requester.post(
         endpoint, json={"decision": "ACCEPT", "expected_version": 2},

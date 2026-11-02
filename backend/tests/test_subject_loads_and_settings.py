@@ -103,6 +103,60 @@ def test_settings_public_endpoint(db):
     assert data["settings"]["school_name"] == "Entervene High"
 
 
+def test_academic_periods_can_explicitly_include_historical_years(db):
+    historical_year = AcademicYear(
+        academic_year_id=1,
+        year_label="2025-2026",
+        start_date=date(2025, 6, 1),
+        end_date=date(2026, 3, 31),
+        is_active=False,
+    )
+    active_year = AcademicYear(
+        academic_year_id=2,
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=True,
+    )
+    db.add_all([historical_year, active_year])
+    db.flush()
+    db.add_all([
+        AcademicPeriod(
+            academic_period_id=1,
+            academic_year_id=historical_year.academic_year_id,
+            period_name="Term 1",
+            period_type="TERM",
+            period_sequence=1,
+            total_periods_in_year=3,
+            start_date=date(2025, 6, 1),
+            end_date=date(2025, 8, 31),
+            is_active=False,
+        ),
+        AcademicPeriod(
+            academic_period_id=2,
+            academic_year_id=active_year.academic_year_id,
+            period_name="Term 1",
+            period_type="TERM",
+            period_sequence=1,
+            total_periods_in_year=3,
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 8, 31),
+            is_active=True,
+        ),
+    ])
+    db.commit()
+
+    client = TestClient(app)
+
+    active_response = client.get("/api/v1/settings/academic-periods")
+    assert active_response.status_code == 200
+    assert [item["academic_year_id"] for item in active_response.json()["periods"]] == [2]
+
+    all_response = client.get("/api/v1/settings/academic-periods?include_all=true")
+    assert all_response.status_code == 200
+    assert {item["academic_year_id"] for item in all_response.json()["periods"]} == {1, 2}
+
+
 def test_subject_load_studio_data_endpoint(db):
     user_id_obj = uuid.uuid4()
     user_id_str = str(user_id_obj)
@@ -398,5 +452,4 @@ def test_publish_section_isolated_conflicts(db):
     assert draft_load.status == "draft"
     assert draft_load.is_locked is False
     assert draft_load.section_revision == 2
-
 

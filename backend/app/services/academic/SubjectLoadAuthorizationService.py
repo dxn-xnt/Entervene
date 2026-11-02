@@ -62,11 +62,11 @@ class SubjectLoadAuthorizationService:
             )
             if admin_staff and admin_staff.user_id:
                 from app.models.auth.Role import Role
-                from app.models.auth.UserRoles import UserRole
+                from app.models.auth.UserRoles import UserRoles
                 is_admin = (
                     db.query(Role.role_id)
-                    .join(UserRole, UserRole.role_id == Role.role_id)
-                    .filter(UserRole.user_id == admin_staff.user_id, Role.role_name == "admin")
+                    .join(UserRoles, UserRoles.role_id == Role.role_id)
+                    .filter(UserRoles.user_id == admin_staff.user_id, Role.role_name == "admin")
                     .first()
                 )
                 if is_admin:

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { RepostWorkspace } from "@/components/teacher/repost-workspace";
 import { SidebarConfigs } from "@/context/sidebar-config";
@@ -25,6 +25,12 @@ vi.mock("@/lib/settings-api", () => ({
   getAcademicYearsSettings: vi.fn(),
   getAcademicPeriodsSettings: vi.fn(),
 }));
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
 
 describe("Unified Repost Workspace & Navigation Gate", () => {
   afterEach(() => {
@@ -178,6 +184,10 @@ describe("Unified Repost Workspace & Navigation Gate", () => {
 
     // Year selector should appear
     expect(await screen.findByText("Select Prior Academic Year")).toBeDefined();
+
+    await waitFor(() => {
+      expect(SettingsApi.getAcademicPeriodsSettings).toHaveBeenCalledWith(undefined, true);
+    });
 
     // Only 2025-2026 PRIOR should be an eligible historical year (since 2026-2027 has no completed terms before Term 1)
     expect(screen.getByText(/2025-2026 PRIOR/)).toBeDefined();
@@ -341,6 +351,7 @@ describe("Unified Repost Workspace & Navigation Gate", () => {
         classwork_count: 0,
         attachment_count: 0,
       },
+      source_academic_period_ids: [1, 2],
       items: [
         {
           item_type: "LESSON",
@@ -348,6 +359,16 @@ describe("Unified Repost Workspace & Navigation Gate", () => {
           display_order: 1,
         },
       ],
+    });
+    vi.mocked(CloningApi.decidePackage).mockResolvedValue({
+      operation_id: "op-shared-123",
+      mode: "SHARED_PACKAGE",
+      status: "SUCCEEDED",
+      destination_class_id: 10,
+      destination_subject_id: 20,
+      destination_academic_period_id: 3,
+      summary: { lesson_count: 1 },
+      created_at: "2026-10-27T00:00:00Z",
     });
 
     render(
@@ -366,6 +387,19 @@ describe("Unified Repost Workspace & Navigation Gate", () => {
     // Auto-opened preview modal from deep-link
     expect(await screen.findByText("Review Packaged Materials")).toBeDefined();
     expect(await screen.findByText("Accept & Clone")).toBeDefined();
+    expect(await screen.findByText(/Materials from 2 historical terms/)).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Accept & Clone" }));
+    await waitFor(() => {
+      expect(CloningApi.decidePackage).toHaveBeenCalledWith("req-sent-ready", {
+        decision: "ACCEPT",
+        expected_version: 2,
+        period_mappings: [
+          { source_academic_period_id: 1, destination_academic_period_id: 3 },
+          { source_academic_period_id: 2, destination_academic_period_id: 3 },
+        ],
+      });
+    });
   });
 
   it("executes self-cloning workflow without requiring peer request", async () => {
@@ -431,6 +465,126 @@ describe("Unified Repost Workspace & Navigation Gate", () => {
 
     // Verify success confirmation view
     expect(await screen.findByText("Materials Successfully Reused!")).toBeDefined();
+  });
+
+  it("does not let an older destination response replace newer self-clone materials", async () => {
+    const first = deferred<CloningApi.SelfEligibleMaterialsResponse>();
+    const second = deferred<CloningApi.SelfEligibleMaterialsResponse>();
+    vi.mocked(CloningApi.getSelfCloneMaterials).mockImplementation((params) => (
+      params.destination_academic_period_id === 3 ? first.promise : second.promise
+    ));
+
+    const view = render(
+      <MemoryRouter initialEntries={["/teacher/requests?tab=reuse"]}>
+        <RepostWorkspace
+          initialTab="reuse"
+          destinationClassId={10}
+          destinationSubjectId={20}
+          destinationAcademicPeriodId={3}
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(CloningApi.getSelfCloneMaterials).toHaveBeenCalledWith(
+      expect.objectContaining({ destination_academic_period_id: 3 }),
+    ));
+
+    view.rerender(
+      <MemoryRouter initialEntries={["/teacher/requests?tab=reuse"]}>
+        <RepostWorkspace
+          initialTab="reuse"
+          destinationClassId={10}
+          destinationSubjectId={20}
+          destinationAcademicPeriodId={4}
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(CloningApi.getSelfCloneMaterials).toHaveBeenCalledWith(
+      expect.objectContaining({ destination_academic_period_id: 4 }),
+    ));
+
+    await act(async () => second.resolve({
+      items: [{
+        item_type: "LESSON", source_entity_id: 2, safe_title: "New destination material",
+        academic_period_id: 2, academic_period_name: "Prior term", source_revision_token: "new-token",
+      }],
+      total: 1,
+    }));
+    expect(await screen.findByText("New destination material")).toBeDefined();
+
+    await act(async () => first.resolve({
+      items: [{
+        item_type: "LESSON", source_entity_id: 1, safe_title: "Stale destination material",
+        academic_period_id: 1, academic_period_name: "Older term", source_revision_token: "old-token",
+      }],
+      total: 1,
+    }));
+    expect(screen.queryByText("Stale destination material")).toBeNull();
+    expect(screen.getByText("New destination material")).toBeDefined();
+  });
+
+  it("maps self-cloned materials from multiple historical terms to the authorized destination", async () => {
+    vi.mocked(CloningApi.getSelfCloneMaterials).mockResolvedValue({
+      items: [
+        {
+          item_type: "LESSON",
+          source_entity_id: 101,
+          safe_title: "Term 1 Foundations",
+          academic_period_id: 1,
+          academic_period_name: "Term 1 Prior",
+          source_revision_token: "token-term-1",
+        },
+        {
+          item_type: "COMPETENCY",
+          source_entity_id: 202,
+          safe_title: "Term 2 Competency",
+          academic_period_id: 2,
+          academic_period_name: "Term 2 Prior",
+          source_revision_token: "token-term-2",
+        },
+      ],
+      total: 2,
+    });
+    vi.mocked(CloningApi.cloneSelfMaterials).mockResolvedValue({
+      operation_id: "op-self-multi",
+      mode: "SELF",
+      status: "SUCCEEDED",
+      destination_class_id: 10,
+      destination_subject_id: 20,
+      destination_academic_period_id: 3,
+      summary: { lesson_count: 1, competency_count: 1 },
+      created_at: "2026-10-27T00:00:00Z",
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/teacher/requests?tab=reuse"]}>
+        <RepostWorkspace
+          initialTab="reuse"
+          destinationClassId={10}
+          destinationSubjectId={20}
+          destinationAcademicPeriodId={3}
+        />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("Term 1 Foundations"));
+    fireEvent.click(await screen.findByText("Term 2 Competency"));
+    fireEvent.click(screen.getByRole("button", { name: /Reuse Selected Materials \(2\)/i }));
+
+    await waitFor(() => {
+      expect(CloningApi.cloneSelfMaterials).toHaveBeenCalledWith({
+        destination_class_id: 10,
+        destination_subject_id: 20,
+        destination_academic_period_id: 3,
+        items: [
+          { item_type: "LESSON", source_entity_id: 101, source_revision_token: "token-term-1" },
+          { item_type: "COMPETENCY", source_entity_id: 202, source_revision_token: "token-term-2" },
+        ],
+        period_mappings: [
+          { source_academic_period_id: 1, destination_academic_period_id: 3 },
+          { source_academic_period_id: 2, destination_academic_period_id: 3 },
+        ],
+      });
+    });
   });
 
   it("displays requests across different subjects in Received Requests inbox", async () => {
