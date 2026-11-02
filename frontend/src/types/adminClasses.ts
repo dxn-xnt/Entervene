@@ -84,6 +84,8 @@ export type OfficialSectionOption = {
   has_class: boolean;
   class_id?: number | null;
   class_status?: string | null;
+  adviser_staff_id?: string | null;
+  adviser_name?: string | null;
 };
 
 export type ClassListAdviser = AdviserOption;
