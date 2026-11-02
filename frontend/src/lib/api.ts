@@ -2746,6 +2746,7 @@ export type OverviewResponse = {
     period_id: number | null;
     period_name: string;
     academic_year: string;
+    academic_year_id?: number | null;
     is_active: boolean;
   };
   cards: OverviewCardData[];
@@ -3107,6 +3108,7 @@ export interface TeacherDashboardHealthResponse {
     period_id: number | null;
     period_name: string;
     academic_year: string;
+    academic_year_id?: number | null;
     is_active: boolean;
   };
   cards?: OverviewCardData[];
@@ -3146,6 +3148,7 @@ export interface TeacherDashboardHealthResponse {
 }
 
 export async function getTeacherDashboardHealth(params: {
+  academic_year_id?: number;
   academic_period_id?: number;
   class_id?: number;
   subject_id?: number;
@@ -3153,6 +3156,7 @@ export async function getTeacherDashboardHealth(params: {
   dashboard_subject_id?: number;
 } = {}): Promise<TeacherDashboardHealthResponse> {
   const query = new URLSearchParams();
+  if (params.academic_year_id) query.set("academic_year_id", String(params.academic_year_id));
   if (params.academic_period_id) query.set("academic_period_id", String(params.academic_period_id));
   if (params.class_id) query.set("class_id", String(params.class_id));
   if (params.subject_id) query.set("subject_id", String(params.subject_id));

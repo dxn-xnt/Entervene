@@ -7,11 +7,11 @@ Endpoints:
   PUT  /settings/{key}     — Admin only. Updates a setting with strict type validation.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from uuid import UUID
 from sqlalchemy.orm import Session
 
-from app.core.Dependencies import require_role
+from app.core.Dependencies import require_role, get_optional_current_user
 from app.db.Session import get_db
 from app.schemas.Settings import (
     AcademicPeriodCreateRequest,
@@ -50,11 +50,17 @@ def fetch_all_settings(
 
 @router.get("/academic-years")
 def fetch_academic_years(
+    current_user: dict | None = Depends(get_optional_current_user),
     db: Session = Depends(get_db),
 ):
-    """Public read only; preparing future years is an explicit admin operation."""
-    from app.models.academic.AcademicYear import AcademicYear
-    years = db.query(AcademicYear).order_by(AcademicYear.start_date.desc()).all()
+    """Returns academic years authorized for the caller.
+    - Admin: historical, active, future.
+    - Teacher/Student: active + authorized historical only (never future).
+    - Unauthenticated: active year metadata only.
+    """
+    from app.services.academic.AcademicYearService import get_authorized_academic_years
+
+    years = get_authorized_academic_years(db, user=current_user)
     return {
         "years": [
             {
@@ -76,7 +82,7 @@ def prepare_academic_years(
 ):
     from app.services.academic.AcademicYearService import ensure_future_academic_years
     ensure_future_academic_years(db, years_ahead=2)
-    return fetch_academic_years(db)
+    return fetch_academic_years(current_user=current_user, db=db)
 
 
 @router.post("/academic-periods")
@@ -141,11 +147,25 @@ def fetch_academic_levels(
 def fetch_academic_periods(
     academic_year_id: int | None = None,
     include_all: bool = False,
+    current_user: dict | None = Depends(get_optional_current_user),
     db: Session = Depends(get_db),
 ):
-    """Fetch periods for one year, the active year, or all years when explicitly requested."""
+    """Fetch periods for one year, the active year, or all years when explicitly requested.
+    Rejects explicit unauthorized academic_year_ids with HTTP 403 Forbidden.
+    """
     from app.models.academic.AcademicPeriod import AcademicPeriod
     from app.models.academic.AcademicYear import AcademicYear
+    from app.services.academic.AcademicYearService import (
+        get_authorized_academic_years,
+        is_academic_year_authorized,
+    )
+
+    if academic_year_id is not None:
+        if not is_academic_year_authorized(db, academic_year_id, user=current_user):
+            raise HTTPException(
+                status_code=403,
+                detail="You are not authorized to access academic periods for this academic year.",
+            )
 
     query = (
         db.query(AcademicPeriod, AcademicYear)
@@ -160,6 +180,14 @@ def fetch_academic_periods(
         active_year = resolve_active_academic_year(db, required=False)
         if active_year:
             query = query.filter(AcademicPeriod.academic_year_id == active_year.academic_year_id)
+        else:
+            query = query.filter(False)
+    else:
+        # include_all is explicitly requested: scope to authorized years for the user
+        if current_user and (current_user.get("role") or "").strip().lower() != "admin":
+            authorized_years = get_authorized_academic_years(db, user=current_user)
+            auth_ids = [ay.academic_year_id for ay in authorized_years]
+            query = query.filter(AcademicPeriod.academic_year_id.in_(auth_ids))
 
     periods = query.order_by(AcademicPeriod.period_sequence.asc()).all()
 
