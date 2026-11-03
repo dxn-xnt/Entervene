@@ -112,6 +112,11 @@ function LegacyPredictionsDashboard() {
   const [selectedPrediction, setSelectedPrediction] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  useEffect(() => {
+    setSelectedPrediction(null);
+    setSheetOpen(false);
+  }, [selectedPeriodId]);
+
   // ── Fetch filters once ──
   useEffect(() => {
     fetchDashboardFilters().then(setFilters).catch(console.error);
@@ -410,6 +415,10 @@ function TeacherCurrentTermDashboard() {
   const [selected, setSelected] = useState<AuthorizedCurrentTermRow | null>(null);
   const candidateId = useTeacherCandidateShortcut(selected);
   const activeInterventionId = useTeacherActiveInterventionShortcut(selected);
+
+  useEffect(() => {
+    setSelected(null);
+  }, [selectedPeriodId]);
 
   useEffect(() => {
     if (!selectedPeriodId) {

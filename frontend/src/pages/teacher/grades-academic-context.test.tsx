@@ -480,6 +480,28 @@ describe("H3C.5D: Teacher Gradebook Academic Context", () => {
       expect(screen.getByRole("button", { name: "Send All to Adviser" })).toBeTruthy();
     });
 
+    it("shows a corrected finalized grade instead of its stale transmuted snapshot", async () => {
+      vi.mocked(apiModule.getTeacherGradebook).mockResolvedValue({
+        ...mockGradebookActive,
+        studentGrades: [{
+          ...mockGradebookActive.studentGrades[0],
+          transmuted_grade: 92,
+          total: "95",
+          is_finalized: true,
+          performance_descriptor: "Outstanding",
+        }],
+      });
+
+      render(
+        <MemoryRouter>
+          <TeacherGradeView />
+        </MemoryRouter>
+      );
+
+      expect(await screen.findByText("95.0")).toBeTruthy();
+      expect(screen.queryByText("92.0")).toBeNull();
+    });
+
     it("fetches term summary scoped to selectedYearId when summary tab is selected", async () => {
       render(
         <MemoryRouter>
@@ -501,7 +523,7 @@ describe("H3C.5D: Teacher Gradebook Academic Context", () => {
 
       const matchedStudents = await screen.findAllByText(/Alice Smith/);
       expect(matchedStudents.length).toBeGreaterThan(0);
-      expect(screen.getByText("PASSED")).toBeTruthy();
+      expect(screen.getByText("Passed")).toBeTruthy();
     });
 
     it("renders read-only mode banner and disables mutations when is_view_only is true", async () => {
@@ -531,6 +553,49 @@ describe("H3C.5D: Teacher Gradebook Academic Context", () => {
       expect(activityButton.className).toContain("cursor-default");
       fireEvent.click(activityButton);
       expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("keeps a future term viewable while hiding every live grading action", async () => {
+      mockAcademicContext = {
+        ...mockAcademicContext,
+        selectedPeriodId: 2,
+        selectedPeriod: {
+          ...mockAcademicContext.selectedPeriod,
+          id: 2,
+          period: "Quarter 2",
+          period_sequence: 2,
+          is_active: false,
+        },
+        periods: [
+          mockAcademicContext.periods[0],
+          {
+            ...mockAcademicContext.periods[0],
+            id: 2,
+            period: "Quarter 2",
+            period_sequence: 2,
+            is_active: false,
+          },
+        ],
+      };
+
+      render(
+        <MemoryRouter>
+          <TeacherGradeView />
+        </MemoryRouter>
+      );
+
+      expect(await screen.findByText("Read-Only Mode (Future Term)")).toBeTruthy();
+      expect((await screen.findAllByText("Alice Smith")).length).toBeGreaterThan(0);
+      expect(screen.getByText(/before this term becomes active/i)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Send All to Adviser" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Add Written Works score" })).toBeNull();
+
+      const activityButton = screen.getByRole("button", { name: "Quiz 1" });
+      expect(activityButton.className).toContain("cursor-default");
+      fireEvent.click(activityButton);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(apiModule.sendStudentGradeToAdviser).not.toHaveBeenCalled();
+      expect(apiModule.bulkSendGradesToAdviser).not.toHaveBeenCalled();
     });
 
     it("passes selectedYearId when exporting full year workbook", async () => {

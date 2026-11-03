@@ -36,6 +36,13 @@ def _authorize_assignment(
 ) -> None:
     if assignment.academic_period_id is None:
         raise HTTPException(status_code=403, detail="Activity has an unscoped academic period")
+    if write:
+        SubjectLoadAuthorizationService.assert_context_writable(
+            db,
+            class_id=assignment.class_id,
+            academic_period_id=assignment.academic_period_id,
+            block_future_period_in_current_year=True,
+        )
     assertion = (
         SubjectLoadAuthorizationService.assert_can_write
         if write
@@ -80,6 +87,12 @@ def create_activity(db: Session, staff_id: str, payload: ActivityCreateRequest):
         raise HTTPException(status_code=400, detail="Academic period was not found")
     if class_ is None or class_.academic_year_id != period.academic_year_id:
         raise HTTPException(status_code=400, detail="Academic period does not belong to the target class year")
+    SubjectLoadAuthorizationService.assert_context_writable(
+        db,
+        class_id=payload.class_id,
+        academic_period_id=payload.academic_period_id,
+        block_future_period_in_current_year=True,
+    )
     SubjectLoadAuthorizationService.assert_can_write(
         db,
         staff_id,

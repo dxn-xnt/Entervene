@@ -9,17 +9,24 @@ import { BookOpen } from "lucide-react";
 import { useStudentOverviewData } from "@/hooks/use-student-overview-data";
 import SubjectGrade from "./subject-grade";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 const Grades = () => {
-  const [selectedSubject, setSelectedSubject] = useState<{ id: number; classId?: number; name: string } | null>(null);
+  const { selectedPeriodId } = useAcademicPeriod();
+  const [selectedSubject, setSelectedSubject] = useState<{
+    id: number;
+    classId: number;
+    name: string;
+    contextPeriodId: number | null;
+  } | null>(null);
   const { subjects, todos, isLoading, error } = useStudentOverviewData();
 
-  if (selectedSubject) {
+  if (selectedSubject?.contextPeriodId === selectedPeriodId) {
     return <SubjectGrade subjectId={selectedSubject.id} classId={selectedSubject.classId} subject={selectedSubject.name} onBack={() => setSelectedSubject(null)} />;
   }
 
-  const getGradedCount = (subjectId: number) => todos.filter((todo) =>
-    todo.subject_id === subjectId && todo.is_graded !== false &&
+  const getGradedCount = (classId: number, subjectId: number) => todos.filter((todo) =>
+    todo.class_id === classId && todo.subject_id === subjectId && todo.is_graded !== false &&
     todo.type?.toUpperCase() !== "READING" &&
     (todo.status === "completed" || todo.is_submitted || todo.grade !== null)
   ).length;
@@ -47,15 +54,15 @@ const Grades = () => {
                 <Tooltip key={subject.subject_load_id}>
                   <TooltipTrigger render={<Card className="block w-full cursor-pointer transition-colors hover:border-border"
                     role="button" tabIndex={0} aria-label={`View grades for ${subject.subject_name}`}
-                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedSubject({ id: subject.subject_id, classId: subject.class_id, name: subject.subject_name }); } }}
-                    onClick={() => setSelectedSubject({ id: subject.subject_id, classId: subject.class_id, name: subject.subject_name })}>
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedSubject({ id: subject.subject_id, classId: subject.class_id, name: subject.subject_name, contextPeriodId: selectedPeriodId }); } }}
+                    onClick={() => setSelectedSubject({ id: subject.subject_id, classId: subject.class_id, name: subject.subject_name, contextPeriodId: selectedPeriodId })}>
                     <Card.Content className="flex items-center justify-between gap-4">
                       <div className="min-w-0">
                         <Card.Title className="mb-1 truncate text-lg">{subject.subject_name}</Card.Title>
                         <p className="truncate text-sm text-muted-foreground">{subject.teacher_name}</p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <Card.Description>{getGradedCount(subject.subject_id)}</Card.Description>
+                        <Card.Description>{getGradedCount(subject.class_id, subject.subject_id)}</Card.Description>
                         <p className="text-sm text-muted-foreground">Graded Classwork</p>
                       </div>
                     </Card.Content>

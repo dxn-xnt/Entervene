@@ -358,6 +358,33 @@ def test_export_class_record_single_term_stream(export_context):
     assert ws.cell(3, 1).value == "ELECTRONIC CLASS RECORD"
 
 
+def test_single_term_export_uses_finalized_grade_instead_of_stale_transmuted_grade(export_context):
+    db = export_context["db"]
+    student = db.query(Student).filter(Student.first_name == "Juan").one()
+    db.add(StudentPeriodGrade(
+        student_id=student.student_id,
+        class_id=export_context["class_id"],
+        subject_id=export_context["subject_id"],
+        academic_period_id=export_context["academic_period_id"],
+        initial_grade=Decimal("88.00"),
+        transmuted_grade=Decimal("90.00"),
+        final_period_grade=Decimal("94.00"),
+        is_finalized=True,
+    ))
+    db.commit()
+
+    stream, _ = export_class_record_single_term(
+        db=db,
+        class_id=export_context["class_id"],
+        subject_id=export_context["subject_id"],
+        academic_period_id=export_context["academic_period_id"],
+        staff_id=export_context["teacher_staff_id"],
+    )
+
+    ws = openpyxl.load_workbook(stream)["Term 1"]
+    assert ws.cell(14, 17).value == 94.0
+
+
 def test_export_class_record_api_endpoint(export_context):
     db = export_context["db"]
     class_id = export_context["class_id"]

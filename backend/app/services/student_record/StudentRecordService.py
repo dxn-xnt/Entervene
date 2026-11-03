@@ -220,12 +220,13 @@ def teacher_period_options(
         .join(Class, Class.class_id == SubjectLoad.class_id)
         .join(AcademicYear, AcademicYear.academic_year_id == AcademicPeriod.academic_year_id)
         .filter(
-            load_filter,
             SubjectLoad.is_active_version.is_(True),
             SubjectLoad.status.in_(["active", "published"]),
             Class.academic_year_id == AcademicPeriod.academic_year_id,
         )
     )
+    if role != "admin":
+        query = query.filter(load_filter)
     if class_id is not None:
         query = query.filter(SubjectLoad.class_id == class_id)
     if subject_id is not None:
@@ -957,6 +958,7 @@ def finalize_student_period_grade(
         db,
         class_id=period_grade.class_id,
         academic_period_id=period_grade.academic_period_id,
+        block_future_period_in_current_year=True,
     )
     if finalized_by_staff_id:
         SubjectLoadAuthorizationService.assert_can_write(
@@ -1249,6 +1251,12 @@ def send_student_grade_to_adviser(
     student_id: UUID,
     payload: SendStudentGradeRequest,
 ) -> SendGradeToAdviserItemResponse:
+    SubjectLoadAuthorizationService.assert_context_writable(
+        db,
+        class_id=class_id,
+        academic_period_id=payload.academic_period_id,
+        block_future_period_in_current_year=True,
+    )
     SubjectLoadAuthorizationService.assert_can_write(
         db, staff_id, class_id, subject_id, payload.academic_period_id
     )
@@ -1492,6 +1500,12 @@ def bulk_send_grades_to_adviser(
     academic_period_id: int,
     payload: BulkSendGradesRequest,
 ) -> BulkSendGradesToAdviserResponse:
+    SubjectLoadAuthorizationService.assert_context_writable(
+        db,
+        class_id=class_id,
+        academic_period_id=academic_period_id,
+        block_future_period_in_current_year=True,
+    )
     SubjectLoadAuthorizationService.assert_can_write(
         db, staff_id, class_id, subject_id, academic_period_id
     )
@@ -2243,8 +2257,16 @@ def teacher_term_grade_summary(
     subject_id: int,
     *,
     academic_year_id: int | None = None,
+    role: str = "teacher",
 ) -> TermGradeSummaryResponse:
-    options = teacher_period_options(db, staff_id, class_id, subject_id)
+    options = teacher_period_options(
+        db,
+        staff_id,
+        class_id,
+        subject_id,
+        academic_year_id=academic_year_id,
+        role=role,
+    )
     if not options.periods:
         raise HTTPException(status_code=403, detail="Student records are outside your teaching scope")
         
@@ -2260,7 +2282,15 @@ def teacher_term_grade_summary(
     default_id = next((p.academic_period_id for p in options.periods
                        if p.academic_period_id == options.default_academic_period_id),
                       options.periods[0].academic_period_id)
-    base_scope = _teacher_scope(db, staff_id, class_id, subject_id, default_id)
+    base_scope = _teacher_scope(
+        db,
+        staff_id,
+        class_id,
+        subject_id,
+        default_id,
+        academic_year_id=year_id,
+        role=role,
+    )
     
     # Sort periods by start_date to assign sequence
     sorted_periods = sorted(options.periods, key=lambda p: p.start_date)
@@ -2292,7 +2322,15 @@ def teacher_term_grade_summary(
         )
         
     for p in sorted_periods:
-        gradebook = teacher_student_gradebook(db, staff_id, class_id, subject_id, p.academic_period_id)
+        gradebook = teacher_student_gradebook(
+            db,
+            staff_id,
+            class_id,
+            subject_id,
+            p.academic_period_id,
+            academic_year_id=year_id,
+            role=role,
+        )
         for gb_row in gradebook.studentGrades:
             sid = UUID(gb_row.student_id)
             if sid in student_rows:

@@ -50,6 +50,14 @@ function displayActivityScore(score: number | null | undefined, header: Gradeboo
   return score ?? "—";
 }
 
+function displayedTermGrade(student: StudentGradebookRow): number | null {
+  if (student.is_finalized && student.total != null) {
+    const officialGrade = Number(student.total);
+    if (Number.isFinite(officialGrade)) return officialGrade;
+  }
+  return student.transmuted_grade ?? null;
+}
+
 function MissingGradeItems({ items, total }: { items: GradeSendMissingItem[]; total: number }) {
   if (!total) return null;
   return <div className="mt-1 text-xs">
@@ -173,7 +181,7 @@ const TeacherGradeView = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("name");
   const [refresh, setRefresh] = useState(0);
-  const { selectedPeriodId, selectedYearId, isLoading: isContextLoading } = useAcademicPeriod();
+  const { selectedPeriodId, selectedYearId, selectedYear, isLoading: isContextLoading } = useAcademicPeriod();
   const fetchRequestIdRef = useRef(0);
 
   const [selectedCategory, setSelectedCategory] = useState<{
@@ -211,9 +219,27 @@ const TeacherGradeView = () => {
   const currentPeriod = periods.find((p) => p.academic_period_id === activePeriodId);
   const timingGate = getTimingGateInfo(currentPeriod);
   const summaryGradeLabel = periods.some((period) => period.is_active) ? "Current Grade" : "Final Grade";
+  const isViewOnly = Boolean(gradebook?.scope?.is_view_only);
+  const activePeriod = periods.find((period) => period.is_active);
+  const isFutureTerm = Boolean(
+    selectedYear?.is_active &&
+    currentPeriod &&
+    !currentPeriod.is_active &&
+    activePeriod &&
+    currentPeriod.period_sequence > activePeriod.period_sequence
+  );
+  const mutationsDisabled = isViewOnly || isFutureTerm;
+  const mutationLockMessage = isFutureTerm
+    ? "Grades cannot be changed, scored, or sent to an adviser before this term becomes active."
+    : "This academic period is view-only.";
 
   const handleSendStudentGrade = async (student: StudentGradebookRow, force = false) => {
     if (!section || !subject || !activePeriodId) return;
+
+    if (mutationsDisabled) {
+      setToastMessage({ type: "error", text: mutationLockMessage });
+      return;
+    }
 
     if (timingGate.isLocked) {
       setToastMessage({
@@ -261,6 +287,12 @@ const TeacherGradeView = () => {
 
   const handleBulkSend = async (force = false) => {
     if (!section || !subject || !activePeriodId) return;
+
+    if (mutationsDisabled) {
+      setShowBulkConfirm(false);
+      setToastMessage({ type: "error", text: mutationLockMessage });
+      return;
+    }
 
     if (timingGate.isLocked) {
       setShowBulkConfirm(false);
@@ -383,6 +415,15 @@ const TeacherGradeView = () => {
         });
     }
   }, [section, subject, activeTab, refresh, selectedYearId, isContextLoading]);
+
+  useEffect(() => {
+    setSelectedCategory(null);
+    setAddingCategoryName(null);
+    setScoringActivity(null);
+    setShowBulkConfirm(false);
+    setConflictData(null);
+    setForceResendAll(false);
+  }, [activePeriodId, selectedYearId]);
 
   const cg = gradebook?.classwork?.[0] ?? { writtenWork: [], performanceTask: [], quarterlyAssessment: [], exams: [] };
   const examItems = cg.exams && cg.exams.length > 0 ? cg.exams : (cg.quarterlyAssessment ?? []);
@@ -664,15 +705,15 @@ const TeacherGradeView = () => {
               </Table.Cell>
 
               <Table.Cell className="font-medium text-center tabular-nums whitespace-nowrap">
-                {item.transmuted_grade != null ? (
-                  <span className="font-bold">{item.transmuted_grade.toFixed(1)}</span>
+                {displayedTermGrade(item) != null ? (
+                  <span className="font-bold">{displayedTermGrade(item)!.toFixed(1)}</span>
                 ) : (
                   <span className="text-xs text-muted-foreground">—</span>
                 )}
               </Table.Cell>
 
               <Table.Cell className="font-medium text-center tabular-nums whitespace-nowrap">
-                {item.transmuted_grade != null && item.performance_descriptor ? (
+                {displayedTermGrade(item) != null && item.performance_descriptor ? (
                   <span className="font-semibold text-xs text-foreground">
                     {item.performance_descriptor}
                   </span>
@@ -691,7 +732,7 @@ const TeacherGradeView = () => {
                       <CheckCircle2 className="size-3 text-emerald-950" />
                       Sent
                     </span>
-                    {!isViewOnly && (
+                    {!mutationsDisabled && (
                       <button
                         type="button"
                         title="Resend updated grade to Adviser"
@@ -708,7 +749,7 @@ const TeacherGradeView = () => {
                     size="sm"
                     variant="outline"
                     className="h-7 text-xs px-2.5 font-bold border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100"
-                    disabled={isViewOnly || sendingStudentId === item.student_id}
+                    disabled={mutationsDisabled || sendingStudentId === item.student_id}
                     onClick={() => handleSendStudentGrade(item)}
                     title={
                       timingGate.isLocked
@@ -831,20 +872,20 @@ const TeacherGradeView = () => {
                     <Tooltip key={item.id}>
                       <TooltipTrigger render={<button
                         type="button"
-                        className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                        className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${mutationsDisabled ? "cursor-default" : "hover:text-primary cursor-pointer"
                           }`}
-                        aria-label={isViewOnly ? item.title : `Enter scores for ${item.title}`}
-                        onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
+                        aria-label={mutationsDisabled ? item.title : `Enter scores for ${item.title}`}
+                        onClick={() => !mutationsDisabled && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                       >
                         <span className="truncate max-w-[90px] font-semibold">WW{originalIndex + 1}</span>
                         {item.sourceInterventionId && <span className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
                         <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                       </button>} />
-                      <TooltipContent>{isViewOnly ? item.title : `Enter scores: ${item.title}`}{item.sourceInterventionId ? " · Intervention" : ""}</TooltipContent>
+                      <TooltipContent>{mutationsDisabled ? item.title : `Enter scores: ${item.title}`}{item.sourceInterventionId ? " · Intervention" : ""}</TooltipContent>
                     </Tooltip>
                   ))}
                 </div>
-                {!isViewOnly && (
+                {!mutationsDisabled && (
                   <Tooltip>
                     <TooltipTrigger render={<button
                       type="button"
@@ -881,20 +922,20 @@ const TeacherGradeView = () => {
                     <Tooltip key={item.id}>
                       <TooltipTrigger render={<button
                         type="button"
-                        className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                        className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${mutationsDisabled ? "cursor-default" : "hover:text-primary cursor-pointer"
                           }`}
-                        aria-label={isViewOnly ? item.title : `Enter scores for ${item.title}`}
-                        onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
+                        aria-label={mutationsDisabled ? item.title : `Enter scores for ${item.title}`}
+                        onClick={() => !mutationsDisabled && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                       >
                         <span className="truncate max-w-[90px] font-semibold">PT{originalIndex + 1}</span>
                         {item.sourceInterventionId && <span className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
                         <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                       </button>} />
-                      <TooltipContent>{isViewOnly ? item.title : `Enter scores: ${item.title}`}{item.sourceInterventionId ? " · Intervention" : ""}</TooltipContent>
+                      <TooltipContent>{mutationsDisabled ? item.title : `Enter scores: ${item.title}`}{item.sourceInterventionId ? " · Intervention" : ""}</TooltipContent>
                     </Tooltip>
                   ))}
                 </div>
-                {!isViewOnly && (
+                {!mutationsDisabled && (
                   <Tooltip>
                     <TooltipTrigger render={<button
                       type="button"
@@ -936,20 +977,20 @@ const TeacherGradeView = () => {
                     <Tooltip key={item.id}>
                       <TooltipTrigger render={<button
                         type="button"
-                        className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                        className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${mutationsDisabled ? "cursor-default" : "hover:text-primary cursor-pointer"
                           }`}
-                        aria-label={isViewOnly ? item.title : `Enter scores for ${item.title}`}
-                        onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
+                        aria-label={mutationsDisabled ? item.title : `Enter scores for ${item.title}`}
+                        onClick={() => !mutationsDisabled && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                       >
                         <span className="truncate max-w-[90px] font-semibold">E{originalIndex + 1}</span>
                         {item.sourceInterventionId && <span className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
                         <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                       </button>} />
-                      <TooltipContent>{isViewOnly ? item.title : `Enter scores: ${item.title}`}{item.sourceInterventionId ? " · Intervention" : ""}</TooltipContent>
+                      <TooltipContent>{mutationsDisabled ? item.title : `Enter scores: ${item.title}`}{item.sourceInterventionId ? " · Intervention" : ""}</TooltipContent>
                     </Tooltip>
                   ))}
                 </div>
-                {!isViewOnly && (
+                {!mutationsDisabled && (
                   <Tooltip>
                     <TooltipTrigger render={<button
                       type="button"
@@ -993,7 +1034,6 @@ const TeacherGradeView = () => {
     );
   };
 
-  const isViewOnly = Boolean(gradebook?.scope?.is_view_only);
   const isSubstitution = Boolean(gradebook?.scope?.is_substitution);
 
   return (
@@ -1026,7 +1066,7 @@ const TeacherGradeView = () => {
               )} */}
 
                 <div className="grid w-full grid-cols-2 items-center gap-2 md:ml-auto md:flex md:w-auto md:flex-row">
-                  {!isViewOnly && activeTab.startsWith("term-") && (
+                  {!mutationsDisabled && activeTab.startsWith("term-") && (
                     <Tooltip>
                       <TooltipTrigger render={<span className="inline-flex min-w-0"><Button
                         size="header"
@@ -1142,17 +1182,23 @@ const TeacherGradeView = () => {
 
 
 
-              {isViewOnly && (
+              {mutationsDisabled && (
                 <div className="rounded border-2 border-black bg-amber-100 p-4 text-black flex items-center gap-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-medium">
                   <span className="text-2xl">🔒</span>
                   <div>
                     <h4 className="font-black text-sm">
-                      {gradebook?.scope?.substitute_name ? "Read-Only Mode (On Leave)" : "Read-Only Mode (Historical Record)"}
+                      {gradebook?.scope?.substitute_name
+                        ? "Read-Only Mode (On Leave)"
+                        : isFutureTerm
+                          ? "Read-Only Mode (Future Term)"
+                          : "Read-Only Mode (Historical Record)"}
                     </h4>
                     <p className="text-xs text-gray-800">
                       {gradebook?.scope?.substitute_name
                         ? `You are currently on leave for this class and subject. Records are view-only. Currently covered by substitute teacher: ${gradebook.scope.substitute_name}.`
-                        : "This academic period is closed or historical. Records are view-only."}
+                        : isFutureTerm
+                          ? mutationLockMessage
+                          : "This academic period is closed or historical. Records are view-only."}
                     </p>
                   </div>
                 </div>
@@ -1213,7 +1259,7 @@ const TeacherGradeView = () => {
             categoryName={selectedCategory.name}
             items={selectedCategory.items}
             studentGrades={selectedCategory.studentGrades}
-            onEnterScores={!isViewOnly ? (item) => {
+            onEnterScores={!mutationsDisabled ? (item) => {
               setSelectedCategory(null);
               setScoringActivity({
                 activityId: item.id,
@@ -1226,7 +1272,7 @@ const TeacherGradeView = () => {
       </Dialog>
 
       <Dialog
-        open={!isViewOnly && addingCategoryName !== null}
+        open={!mutationsDisabled && addingCategoryName !== null}
         onOpenChange={(open) => {
           if (!open) setAddingCategoryName(null);
         }}
@@ -1243,7 +1289,7 @@ const TeacherGradeView = () => {
       </Dialog>
 
       <Dialog
-        open={!isViewOnly && scoringActivity !== null}
+        open={!mutationsDisabled && scoringActivity !== null}
         onOpenChange={(open) => {
           if (!open) setScoringActivity(null);
         }}
@@ -1262,7 +1308,7 @@ const TeacherGradeView = () => {
 
       {/* Bulk Send to Adviser Confirmation Dialog */}
       <Dialog
-        open={showBulkConfirm}
+        open={!mutationsDisabled && showBulkConfirm}
         onOpenChange={(open) => {
           if (!open) setShowBulkConfirm(false);
         }}
