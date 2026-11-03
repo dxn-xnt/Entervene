@@ -81,6 +81,8 @@ export function toDashboardPrediction(row: AuthorizedCurrentTermRow): DashboardP
     generated_at: row.generated_at,
     official_final_grade: row.official_final_grade,
     historical_projection: row.official_final_grade_available || !row.term_context.is_active,
+    is_provisional: row.is_provisional,
+    validation_status: row.validation_status,
   };
 }
 

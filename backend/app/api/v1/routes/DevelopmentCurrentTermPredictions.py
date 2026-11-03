@@ -89,6 +89,8 @@ def generate_development_current_term_prediction(
             "model_version_id": version.model_version_id,
             "lifecycle_status": version.lifecycle_status,
             "development_status": blocked["model_development_status"],
+            "is_provisional": blocked.get("is_provisional", False),
+            "validation_status": blocked.get("validation_status"),
         }
     try:
         result = persistence.generate_and_persist_development_current_term(

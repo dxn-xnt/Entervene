@@ -184,6 +184,8 @@ def _reuse_latest_prediction(
         "lifecycle_status": model_version.lifecycle_status,
         "development_status": prediction["model_development_status"],
         "generated_at": latest.generated_at,
+        "is_provisional": snapshot.get("is_provisional", False),
+        "validation_status": snapshot.get("validation_status", "VALIDATED_JHS"),
     }
 
 
@@ -299,6 +301,8 @@ def _persist_successful_result(
             "role": intervention_service.SUPPORTING_CONTEXT_ROLE,
             "signals": supporting_signals,
         },
+        "is_provisional": prediction.get("is_provisional", False),
+        "validation_status": prediction.get("validation_status", "VALIDATED_JHS"),
         **material_evidence,
     }
     scope = _prediction_scope(
@@ -351,6 +355,8 @@ def _persist_successful_result(
         "lifecycle_status": model_version.lifecycle_status,
         "development_status": prediction["model_development_status"],
         "generated_at": now,
+        "is_provisional": snapshot.get("is_provisional", False),
+        "validation_status": snapshot.get("validation_status", "VALIDATED_JHS"),
     }
 
 
@@ -444,6 +450,8 @@ def generate_and_persist_development_current_term(
                 "model_version_id": version.model_version_id,
                 "lifecycle_status": version.lifecycle_status,
                 "development_status": prediction["model_development_status"],
+                "is_provisional": prediction.get("is_provisional", False),
+                "validation_status": prediction.get("validation_status"),
             }
         if prepared is None:
             raise AssertionError("Assessed development prediction is missing prepared evidence.")

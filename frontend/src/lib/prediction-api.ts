@@ -36,6 +36,8 @@ export interface DevelopmentCurrentTermResponse {
   model_version_id: number;
   lifecycle_status: "DEVELOPMENT";
   development_status: "DEVELOPMENT_ONLY";
+  is_provisional?: boolean;
+  validation_status?: string;
   generated_at?: string;
 }
 
@@ -60,6 +62,8 @@ export interface DevelopmentCurrentTermListItem {
   projected_final_term_grade: number | null;
   intervention_level: DevelopmentInterventionLevel;
   intervention_basis: string | null;
+  is_provisional?: boolean;
+  validation_status?: string;
   readiness_status: string | null;
   readiness_level: string | null;
   readiness_label: string;
@@ -248,6 +252,8 @@ export interface DashboardPredictionItem {
   generated_at: string | null;
   official_final_grade?: number | null;
   historical_projection?: boolean;
+  is_provisional?: boolean;
+  validation_status?: string;
 }
 
 export interface RiskSummary {

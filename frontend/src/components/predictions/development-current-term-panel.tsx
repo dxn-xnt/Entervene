@@ -95,7 +95,7 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
   const selectedGrade = role === "admin"
     ? classes.find((item) => item.class_id === classId)?.academic_level.grade_level
     : teacherClasses.find((item) => item.class_id === classId)?.grade_level;
-  const unsupportedGrade = selectedGrade != null && (selectedGrade < 7 || selectedGrade > 10);
+  const unsupportedGrade = selectedGrade != null && (selectedGrade < 7 || selectedGrade > 12);
 
   useEffect(() => {
     if (role !== "teacher" || classId === null || activePeriodId === null) {
@@ -295,7 +295,7 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
             <Table.Cell className="font-semibold">{row.student_name || row.student_id}</Table.Cell>
             <Table.Cell className="font-bold">{row.official_final_grade_available || row.term_context?.is_active === false
               ? <>{row.official_final_grade_available && <p>Final Grade: {row.official_final_grade?.toFixed(2) ?? "Not available"}</p>}<p className="text-xs font-normal">Earlier projection: {row.projected_final_term_grade?.toFixed(2)}</p></>
-              : row.projected_final_term_grade?.toFixed(2)}</Table.Cell>
+              : <>{row.projected_final_term_grade?.toFixed(2)}{row.is_provisional && <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-800">Provisional</span>}</>}</Table.Cell>
             <Table.Cell>{row.official_final_grade_available || row.term_context?.is_active === false ? "Historical projection" : <InterventionBadge level={row.intervention_level} />}</Table.Cell>
             <Table.Cell><Button size="sm" variant="outline" onClick={() => setSelected(row)}><Eye className="size-4" />View Details</Button></Table.Cell>
           </Table.Row>)}</Table.Body>
@@ -308,7 +308,21 @@ export default function DevelopmentCurrentTermPanel({ periodId, termName, role }
           {selected && <div className="space-y-4 p-5 text-sm">
             {selected.official_final_grade_available && <div role="status" className="border border-blue-700 bg-blue-50 p-3"><strong>Final Grade: {selected.official_final_grade?.toFixed(2) ?? "Not available"}</strong><p>Earlier Projected Final Term Grade: {selected.projected_final_term_grade?.toFixed(2)}</p><p>This projection is historical and is no longer the current outcome.</p></div>}
             {selected.term_context?.is_active === false && !selected.official_final_grade_available && <p role="status" className="border border-blue-700 bg-blue-50 p-3">This term is no longer active. The projection is historical.</p>}
-            <Badge size="sm" variant="surface">Development</Badge>
+            <div className="flex items-center gap-2">
+              <Badge size="sm" variant="surface">Development</Badge>
+              {selected.is_provisional && (
+                <Badge size="sm" variant="surface" className="border-amber-500 bg-amber-50 text-amber-900">
+                  {selected.validation_status === "PROVISIONAL_UNVALIDATED_SHS" ? "Provisional (SHS)" : "Provisional"}
+                </Badge>
+              )}
+            </div>
+            {selected.is_provisional && (
+              <p role="status" className="border border-amber-500 bg-amber-50 p-2 text-xs font-medium text-amber-900">
+                {selected.validation_status === "PROVISIONAL_UNVALIDATED_SHS"
+                  ? "Provisional projection for Senior High School (Grades 11–12): reuses the 31-feature model pipeline with out-of-cohort evaluation."
+                  : "Provisional projection: reuses the 31-feature model pipeline for non-canonical or enhanced subject curriculum."}
+              </p>
+            )}
             <dl className="grid grid-cols-2 gap-3">
               <dt className="text-muted-foreground">Student</dt><dd className="font-semibold">{selected.student_name || selected.student_id}</dd>
               <dt className="text-muted-foreground">Subject</dt><dd>{selected.subject_name}</dd>
