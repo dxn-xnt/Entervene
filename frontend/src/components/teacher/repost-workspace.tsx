@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
-  Award,
-  BookOpen,
   Check,
+  CheckCheck,
   CheckCircle2,
-  ClipboardList,
   Clock,
   ExternalLink,
-  FileText,
   FolderSync,
   Inbox,
   Loader2,
@@ -22,6 +19,7 @@ import { Button } from "@/components/teacher/button";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
+import { Select } from "@/components/retroui/Select";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import {
   cloneSelfMaterials,
@@ -234,10 +232,6 @@ export function RepostWorkspace({
       filteredSelfMaterials.forEach((item) => next.add(item.source_revision_token));
       return next;
     });
-  };
-
-  const deselectAll = () => {
-    setSelectedTokens(new Set());
   };
 
   const handleSelfCloneExecute = async () => {
@@ -569,10 +563,6 @@ export function RepostWorkspace({
     setPackagingTokens(new Set(eligibleMaterials.map((m) => m.source_revision_token)));
   };
 
-  const handleDeselectAllPackaging = () => {
-    setPackagingTokens(new Set());
-  };
-
   const handleSendPackage = async () => {
     if (!packagingRequest || packagingTokens.size === 0) return;
     setSubmittingPackage(true);
@@ -679,19 +669,6 @@ export function RepostWorkspace({
     }
   };
 
-  // Helper icons
-  const getItemTypeIcon = (type: string) => {
-    switch (type) {
-      case "COMPETENCY":
-        return <Award className="size-4 shrink-0 text-amber-700" />;
-      case "LESSON":
-        return <BookOpen className="size-4 shrink-0 text-blue-700" />;
-      case "CLASSWORK":
-        return <ClipboardList className="size-4 shrink-0 text-purple-700" />;
-      default:
-        return <FileText className="size-4 shrink-0 text-gray-700" />;
-    }
-  };
 
   // Navigation tab switcher (updates URL query params if route-backed)
   const handleTabSwitch = (tab: RepostWorkspaceTab) => {
@@ -715,37 +692,37 @@ export function RepostWorkspace({
     switch (status) {
       case "PENDING_OWNER":
         return (
-          <Badge variant="outline" className="border-amber-500 bg-amber-50 text-amber-800 font-bold">
-            <Clock className="size-3 mr-1 inline" /> Pending Colleague
+          <Badge size="sm" variant="outline" className="shrink-0 gap-1.5">
+            <Clock className="size-3" /> Pending Colleague
           </Badge>
         );
       case "PACKAGE_SENT":
         return (
-          <Badge variant="solid" className="border border-black bg-blue-500 text-white font-bold">
-            <Package className="size-3 mr-1 inline" /> Package Ready
+          <Badge size="sm" variant="secondary" className="shrink-0 gap-1.5">
+            <Package className="size-3" /> Package Ready
           </Badge>
         );
       case "ACCEPTED":
         return (
-          <Badge variant="solid" className="border border-black bg-emerald-500 text-white font-bold">
-            <Check className="size-3 mr-1 inline" /> Cloned & Accepted
+          <Badge size="sm" variant="success" className="shrink-0 gap-1.5">
+            <Check className="size-3" /> Cloned & Accepted
           </Badge>
         );
       case "DECLINED_BY_OWNER":
       case "DECLINED_BY_REQUESTER":
         return (
-          <Badge variant="outline" className="border-red-500 bg-red-50 text-red-700 font-bold">
-            <X className="size-3 mr-1 inline" /> Declined
+          <Badge size="sm" variant="destructive" className="shrink-0 gap-1.5">
+            <X className="size-3" /> Declined
           </Badge>
         );
       case "EXPIRED":
         return (
-          <Badge variant="outline" className="border-gray-400 bg-gray-100 text-gray-600 font-bold">
+          <Badge size="sm" variant="default" className="shrink-0">
             Expired
           </Badge>
         );
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return <Badge size="sm" variant="outline">{status}</Badge>;
     }
   };
 
@@ -958,23 +935,15 @@ export function RepostWorkspace({
                   </div>
 
                   {selfMaterials.length > 0 && (
-                    <div className="flex items-center gap-2 text-xs font-bold">
-                      <button
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <Button size="sm" autoIcon={false}
                         type="button"
+                        className="gap-2 shadow-none hover:shadow-none active:shadow-none"
                         onClick={selectAllFiltered}
-                        className="text-blue-700 hover:underline cursor-pointer"
                       >
+                        <CheckCheck className="size-4" />
                         Select All
-                      </button>
-                      <span>&middot;</span>
-                      <button
-                        type="button"
-                        onClick={deselectAll}
-                        className="text-gray-600 hover:underline cursor-pointer"
-                      >
-                        Deselect All
-                      </button>
-                      <span>&middot;</span>
+                      </Button>
                       <span className="text-muted-foreground font-semibold">
                         {selectedTokens.size} of {filteredSelfMaterials.length} selected
                       </span>
@@ -998,7 +967,7 @@ export function RepostWorkspace({
                     compact
                   />
                 ) : (
-                  <div className="border-2 border-black rounded divide-y divide-black max-h-96 overflow-y-auto bg-white shadow-[2px_2px_0px_#000]">
+                  <div className="border-2 border-border rounded! divide-y divide-border max-h-96 overflow-y-auto bg-card shadow-none">
                     {filteredSelfMaterials.map((item) => {
                       const isSelected = selectedTokens.has(item.source_revision_token);
                       return (
@@ -1006,7 +975,7 @@ export function RepostWorkspace({
                           key={item.source_revision_token}
                           onClick={() => toggleItemSelection(item.source_revision_token)}
                           className={`flex items-center justify-between p-3 cursor-pointer transition-colors ${
-                            isSelected ? "bg-amber-100/60" : "hover:bg-gray-50"
+                            isSelected ? "bg-primary text-primary-foreground" : "hover:bg-accent"
                           }`}
                         >
                           <div className="flex items-center gap-3 min-w-0 pr-2">
@@ -1030,7 +999,6 @@ export function RepostWorkspace({
                             <Badge variant="outline" size="sm" className="border-black text-[10px] font-bold">
                               {item.item_type}
                             </Badge>
-                            {getItemTypeIcon(item.item_type)}
                           </div>
                         </div>
                       );
@@ -1128,17 +1096,19 @@ export function RepostWorkspace({
                         No prior completed academic years exist relative to this destination term.
                       </div>
                     ) : (
-                      <select
+                      <Select
                         value={selectedSourceYearId}
-                        onChange={(e) => setSelectedSourceYearId(e.target.value)}
-                        className="w-full border-2 border-black p-2 rounded bg-white text-xs sm:text-sm font-bold shadow-[2px_2px_0px_#000]"
+                        onValueChange={setSelectedSourceYearId}
                       >
+                        <Select.Trigger className="w-full rounded!" aria-label="Select prior academic year"><Select.Value placeholder="Select academic year" /></Select.Trigger>
+                        <Select.Content className="rounded!"><Select.Group>
                         {eligibleHistoricalYears.map((y) => (
-                          <option key={y.academic_year_id} value={String(y.academic_year_id)}>
+                          <Select.Item key={y.academic_year_id} value={String(y.academic_year_id)}>
                             {y.year_label} {y.is_active ? "(Active)" : "(Archived)"}
-                          </option>
+                          </Select.Item>
                         ))}
-                      </select>
+                        </Select.Group></Select.Content>
+                      </Select>
                     )}
                   </div>
                 )}
@@ -1154,17 +1124,19 @@ export function RepostWorkspace({
                           No prior completed academic years exist.
                         </div>
                       ) : (
-                        <select
+                        <Select
                           value={selectedSourceYearId}
-                          onChange={(e) => setSelectedSourceYearId(e.target.value)}
-                          className="w-full border-2 border-black p-2 rounded bg-white text-xs sm:text-sm font-bold shadow-[2px_2px_0px_#000]"
+                          onValueChange={setSelectedSourceYearId}
                         >
+                          <Select.Trigger className="w-full rounded!" aria-label="Select prior academic year"><Select.Value placeholder="Select academic year" /></Select.Trigger>
+                          <Select.Content className="rounded!"><Select.Group>
                           {eligibleHistoricalYears.map((y) => (
-                            <option key={y.academic_year_id} value={String(y.academic_year_id)}>
+                            <Select.Item key={y.academic_year_id} value={String(y.academic_year_id)}>
                               {y.year_label} {y.is_active ? "(Active)" : "(Archived)"}
-                            </option>
+                            </Select.Item>
                           ))}
-                        </select>
+                          </Select.Group></Select.Content>
+                        </Select>
                       )}
                     </div>
 
@@ -1177,17 +1149,19 @@ export function RepostWorkspace({
                           No prior completed terms exist in the selected year.
                         </div>
                       ) : (
-                        <select
+                        <Select
                           value={selectedSourcePeriodId}
-                          onChange={(e) => setSelectedSourcePeriodId(e.target.value)}
-                          className="w-full border-2 border-black p-2 rounded bg-white text-xs sm:text-sm font-bold shadow-[2px_2px_0px_#000]"
+                          onValueChange={setSelectedSourcePeriodId}
                         >
+                          <Select.Trigger className="w-full rounded!" aria-label="Select specific historical term"><Select.Value placeholder="Select term" /></Select.Trigger>
+                          <Select.Content className="rounded!"><Select.Group>
                           {periodsForSelectedYear.map((p) => (
-                            <option key={p.id} value={String(p.id)}>
+                            <Select.Item key={p.id} value={String(p.id)}>
                               {p.period} (Sequence {p.period_sequence})
-                            </option>
+                            </Select.Item>
                           ))}
-                        </select>
+                          </Select.Group></Select.Content>
+                        </Select>
                       )}
                     </div>
                   </div>
@@ -1391,36 +1365,38 @@ export function RepostWorkspace({
                 {outgoingData.items.map((req) => (
                   <Card
                     key={req.request_id}
-                    className="border-2 border-black p-4 bg-white shadow-[2px_2px_0px_#000] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    className="flex min-w-0 flex-col gap-3 p-4 shadow-none hover:shadow-none"
                   >
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-black text-foreground">{req.source_owner_name}</span>
-                        <span className="text-xs text-muted-foreground">&middot;</span>
-                        <span className="text-xs font-bold underline text-foreground">{req.subject_name}</span>
+                    <div className="space-y-2 min-w-0">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+                          <span className="font-bold text-foreground">{req.source_owner_name}</span>
+                          <span className="text-muted-foreground">&middot;</span>
+                          <span className="font-medium text-foreground">{req.subject_name}</span>
+                        </div>
                         {renderStatusBadge(req.status)}
                       </div>
-                      <p className="text-xs text-gray-600 font-medium">
+                      <p className="text-sm text-muted-foreground">
                         Target Section: <strong>{req.destination_section_name}</strong> &middot; Term:{" "}
                         {req.destination_period_name}
                       </p>
                       {req.message && (
-                        <p className="text-xs italic bg-gray-50 border border-gray-200 p-2 rounded text-gray-700 mt-1">
+                        <p className="break-words text-sm italic text-muted-foreground">
                           &ldquo;{req.message}&rdquo;
                         </p>
                       )}
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         Sent on {new Date(req.created_at).toLocaleDateString()} &middot; ID: {req.request_id.slice(0, 8)}...
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                       {req.status === "PACKAGE_SENT" && (
                         <Button
                           variant="default"
                           size="sm"
                           onClick={() => void openPreviewModal(req)}
-                          className="flex items-center gap-1.5 bg-yellow-400 text-black border-2 border-black font-bold"
+                          className="gap-2"
                         >
                           <PackageCheck className="size-3.5" /> Review &amp; Clone
                         </Button>
@@ -1433,7 +1409,7 @@ export function RepostWorkspace({
                             onCloseDialog?.();
                             navigate(`/teacher/classes/${req.destination_class_id}/${req.destination_subject_id}`);
                           }}
-                          className="flex items-center gap-1.5 text-xs font-bold"
+                          className="gap-2"
                         >
                           <ExternalLink className="size-3.5" /> View Cloned Materials
                         </Button>
@@ -1533,21 +1509,14 @@ export function RepostWorkspace({
             {eligibleMaterials.length > 0 && (
               <div className="flex items-center justify-between text-xs font-bold px-1">
                 <div className="flex items-center gap-2">
-                  <button
+                  <Button size="sm" autoIcon={false}
                     type="button"
+                    className="gap-2 shadow-none hover:shadow-none active:shadow-none"
                     onClick={handleSelectAllPackaging}
-                    className="text-blue-700 hover:underline cursor-pointer"
                   >
+                    <CheckCheck className="size-4" />
                     Select All
-                  </button>
-                  <span>&middot;</span>
-                  <button
-                    type="button"
-                    onClick={handleDeselectAllPackaging}
-                    className="text-gray-600 hover:underline cursor-pointer"
-                  >
-                    Deselect All
-                  </button>
+                  </Button>
                 </div>
                 <span className="text-muted-foreground">
                   {packagingTokens.size} of {eligibleMaterials.length} selected

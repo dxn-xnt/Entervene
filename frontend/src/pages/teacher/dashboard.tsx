@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Calendar, AlertCircle, ArrowUpRight, BookOpen, CheckCircle } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/To
 import { Select } from "@/components/retroui/Select";
 import { Progress } from "@/components/retroui/Progress";
 import { OverviewCard } from "@/components/overview-cards";
-import { Empty } from "@/components/retroui/Empty";
+import { Skeleton } from "@/components/retroui/Skeleton";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
@@ -31,7 +31,6 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
 } from "recharts";
-import IconContainer from "@/components/icon-container";
 
 // Dashboard metrics stay unavailable until loaded; later-phase detail widgets retain their mockups.
 const defaultTeacherCards: OverviewCardData[] = [
@@ -492,6 +491,11 @@ export default function Dashboard() {
         gradeDetails.available_grade_count === 0 ? "No Current grades available." :
           "Current-grade details are unavailable.",
   );
+  const dashboardEmptyState = (title: string, description: string, icon: ReactNode) => {
+    if (isLoading || isPeriodLoading) return <Skeleton className="h-36 w-full" />;
+    if (error) return <p className="py-6 text-sm text-muted-foreground">Dashboard data is unavailable.</p>;
+    return <TeacherEmptyState compact className="rounded! bg-card shadow-none hover:shadow-none" icon={icon} title={title} description={description} />;
+  };
   const gradeCoverage = () => gradeDetails && (
     <Card.Description className="mt-3 text-[11px] text-muted-foreground">
       {gradeDetails.available_grade_count} of {gradeDetails.total_grade_count} student-subject grades available.
@@ -620,11 +624,9 @@ export default function Dashboard() {
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
                         {!support?.items.length && (
-                          <Card.Description className="text-[11px] text-muted-foreground">
-                            {emptyMessage(support?.warnings.length
+                          dashboardEmptyState("No students to check in with", support?.warnings.length
                               ? "No confirmed check-in indicators in the available data."
-                              : "No students meet the check-in criteria.")}
-                          </Card.Description>
+                              : "No students meet the check-in criteria.", <CheckCircle />)
                         )}
                         {support?.items.map((s) => {
                           const depthReason = getMostDepthReason(s.reasons);
@@ -693,26 +695,13 @@ export default function Dashboard() {
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
                         {reviewSubmissions.length === 0 && (
-                          <Empty className="border-none bg-transparent shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground">
-                            <Empty.Content>
-                              <Empty.Icon>
-                                {reviewWarnings.length ? (
-                                  <AlertCircle className="size-6 text-muted-foreground" />
-                                ) : (
-                                  <CheckCircle className="size-6 text-muted-foreground" />
-                                )}
-                              </Empty.Icon>
-                              <Empty.Title>
-                                {emptyMessage(
-                                  reviewWarnings.length
-                                    ? "Review queue incomplete."
-                                    : isHistorical
-                                      ? "No historical submissions to review."
-                                      : "No submissions need grading."
-                                )}
-                              </Empty.Title>
-                            </Empty.Content>
-                          </Empty>
+                          reviewWarnings.length ? (
+                            <p className="py-6 text-sm text-muted-foreground" role="status">Review queue incomplete.</p>
+                          ) : dashboardEmptyState(
+                            isHistorical ? "No historical submissions to review" : "No submissions need grading",
+                            isHistorical ? "There are no submissions awaiting review for this period." : "You're all caught up with grading.",
+                            <CheckCircle />,
+                          )
                         )}
                         {reviewSubmissions.map((item) => (
                           <Card
@@ -809,7 +798,8 @@ export default function Dashboard() {
                     </Card.Header>
 
                     {/* Line Chart Body */}
-                    <Card.Content className="h-52 w-full p-0 pb-4">
+                    <Card.Content className={trendPoints.length ? "h-52 w-full p-0 pb-4" : "w-full p-0"}>
+                      {trendPoints.length ? <>
                       <ResponsiveContainer width="100%" height="100%" className="-mx-2 text-foreground!">
                         <LineChart
                           data={trendPoints}
@@ -900,6 +890,7 @@ export default function Dashboard() {
                           <span key={`${warning.code}-${warning.assignment_id}-${index}`}> {warning.message}</span>
                         ))}
                       </Card.Description>
+                      </> : dashboardEmptyState("No classwork performance yet", "Published classwork results will appear here for the selected class and subject.", <BookOpen />)}
                     </Card.Content>
                   </Card>
 
@@ -959,20 +950,11 @@ export default function Dashboard() {
                       <Card.Content className="flex flex-col justify-between gap-2.5 p-0 justify-between h-full">
                         <div className="flex flex-col gap-2.5 ">
                           {!lessonSubject?.items.length && (
-                            <Empty className="rounded! bg-retro shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground">
-                              <Empty.Content>
-                                <Empty.Icon>
-                                  <IconContainer className="bg-primary rounded-none">
-                                    <BookOpen className="size-6 text-foreground" />
-                                  </IconContainer>
-                                </Empty.Icon>
-                                <Empty.Title className="text-base! font-medium">{emptyMessage(!lessonSubject
+                            dashboardEmptyState("No lesson performance yet", !lessonSubject
                                   ? "No subjects assigned for this academic period."
                                   : lessonSubject.coverage.scored_mapped_response_count === 0
                                     ? "No scored quiz answers linked to lessons for this subject."
-                                    : `Not enough evidence yet. Each lesson needs scores from at least ${lessonPerformance?.policy.min_learners ?? 3} learners across ${lessonPerformance?.policy.min_questions ?? 3} questions.`)}</Empty.Title>
-                              </Empty.Content>
-                            </Empty>
+                                    : `Not enough evidence yet. Each lesson needs scores from at least ${lessonPerformance?.policy.min_learners ?? 3} learners across ${lessonPerformance?.policy.min_questions ?? 3} questions.`, <BookOpen />)
                           )}
                           {lessonSubject?.items.slice(0, 5).map((item) => (
                             <div
@@ -1062,9 +1044,7 @@ export default function Dashboard() {
                         return (
                           <>
                             {sections.length === 0 && (
-                              <Card.Description className="text-xs text-muted-foreground">
-                                {emptyMessage("No classes for this academic period.")}
-                              </Card.Description>
+                              dashboardEmptyState("No classes for this period", "Assigned classes will appear here for the selected academic period.", <BookOpen />)
                             )}
                             {displayed.map((sec, idx: number) => (
                               <Card
@@ -1249,9 +1229,7 @@ export default function Dashboard() {
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
                         {topPerformers.length === 0 && (
-                          <Card.Description className="text-xs text-muted-foreground">
-                            {gradeEmptyMessage(Array.isArray(visibleGradeData?.top_performers))}
-                          </Card.Description>
+                          dashboardEmptyState("No top performers yet", gradeEmptyMessage(Array.isArray(visibleGradeData?.top_performers)), <CheckCircle />)
                         )}
                         {topPerformers.map((p) => (
                           <Card
@@ -1293,9 +1271,7 @@ export default function Dashboard() {
 
                       <Card.Content className="mt-4 flex flex-col justify-between gap-2.5 p-0">
                         {(!gradeDetails || gradeDetails.available_grade_count === 0 || gradeDistribution.length === 0) && (
-                          <Card.Description className="text-xs text-muted-foreground">
-                            {gradeEmptyMessage(Array.isArray(visibleGradeData?.grade_distribution))}
-                          </Card.Description>
+                          dashboardEmptyState("No grade distribution yet", gradeEmptyMessage(Array.isArray(visibleGradeData?.grade_distribution)), <BookOpen />)
                         )}
                         {gradeDetails && gradeDetails.available_grade_count > 0 && gradeDistribution.map((item) => (
                           <div

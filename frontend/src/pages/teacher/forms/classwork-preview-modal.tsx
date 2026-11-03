@@ -5,6 +5,8 @@ import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Progress } from "@/components/retroui/Progress";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
+import { Skeleton } from "@/components/retroui/Skeleton";
 import {
   BookOpen,
   CheckSquare,
@@ -177,16 +179,14 @@ export default function ClassworkDetailModal({
             <div className="space-y-4 p-5">
               <Card className="block w-full">
                 <Card.Content className="space-y-4">
-                  <div className="flex flex-row justify-between items-start gap-3 min-w-0 w-full">
-                    <div className="flex flex-row gap-2.5 items-center min-w-0 flex-1">
-                      <IconContainer variant="primary" size="xl" className="rounded! shrink-0">
+                  <div className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3">
+                      <IconContainer variant="primary" size="xl" className="row-span-2 rounded! shrink-0">
                         <ClassworkTypeIcon type={selectedClasswork.classwork_type} size={20} />
                       </IconContainer>
 
-                      <div className="flex flex-col min-w-0 flex-1">
-                        <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <Card.Title
-                            className="text-2xl sm:text-3xl font-bold truncate min-w-0"
+                            className="mb-0 min-w-0 flex-1 truncate text-2xl font-bold sm:text-3xl"
                             title={selectedClasswork.title}
                           >
                             {formatToTitleCase(selectedClasswork.title)}
@@ -195,33 +195,27 @@ export default function ClassworkDetailModal({
                           <Badge variant="secondary" size="sm" className="h-fit shrink-0">
                             {formatToTitleCase(selectedClasswork.classwork_type, "Classwork")}
                           </Badge>
-                        </div>
-
-                        <p className="text-sm font-normal text-muted-foreground truncate">
-                          {selectedClasswork.due_date
-                            ? `Due ${formatDate(selectedClasswork.due_date)}`
-                            : selectedClasswork.created_at
-                              ? `Created ${formatDate(selectedClasswork.created_at)}`
-                              : "No due date"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                       {!isReadingType(selectedClasswork.classwork_type) && selectedClasswork.classwork_category && (
-                        <Badge variant="outline">
+                        <Badge variant="outline" size="sm">
                           {formatToTitleCase(selectedClasswork.classwork_category)}
                         </Badge>
                       )}
-                      <Badge variant={selectedClasswork.is_published ? "solid" : "default"}>
+                      <Badge size="sm" variant={selectedClasswork.is_published ? "solid" : "default"}>
                         {selectedClasswork.is_published ? "Published" : "Draft"}
                       </Badge>
                       {selectedClasswork.is_locked && (
-                        <Badge variant="destructive">
+                        <Badge variant="destructive" size="sm">
                           Locked
                         </Badge>
                       )}
                     </div>
+                    <p className="col-start-2 truncate text-sm font-normal text-muted-foreground">
+                      {selectedClasswork.due_date
+                        ? `Due ${formatDate(selectedClasswork.due_date)}`
+                        : selectedClasswork.created_at
+                          ? `Created ${formatDate(selectedClasswork.created_at)}`
+                          : "No due date"}
+                    </p>
                   </div>
                 </Card.Content>
               </Card>
@@ -295,9 +289,7 @@ export default function ClassworkDetailModal({
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-600">
-                      No classwork files attached.
-                    </p>
+                    <TeacherEmptyState compact className="rounded! bg-card shadow-none hover:shadow-none" icon={<Paperclip />} title="No reference files attached" description="This classwork has no attached reference files." />
                   )}
                 </Card.Content>
               </Card>
@@ -380,19 +372,19 @@ export default function ClassworkDetailModal({
                   </Card.Title>
                   <div className="space-y-2">
                     {(activeTracking?.missing ?? []).slice(0, 6).map((student) => (
-                      <div
+                      <Card
                         key={student.student_id}
-                        className="border-2 border-black px-3 py-2 text-sm"
+                        className="block w-full px-3 py-2 text-sm shadow-none hover:shadow-none"
                       >
                         <p className="font-semibold">{student.student_name}</p>
                         <p className="text-xs text-gray-600">
                           {student.status.replace(/_/g, " ")}
                         </p>
-                      </div>
+                      </Card>
                     ))}
-                    {(activeTracking?.missing ?? []).length === 0 && (
-                      <p className="text-sm text-gray-600">Everyone is accounted for.</p>
-                    )}
+                    {trackingLoading && !activeTracking ? <Skeleton className="h-32 w-full" /> : activeTracking && (activeTracking.missing ?? []).length === 0 ? (
+                      <TeacherEmptyState compact className="rounded! bg-card shadow-none hover:shadow-none" icon={<Users />} title="Everyone is accounted for" description="No students need follow-up for this classwork." />
+                    ) : !activeTracking ? <p className="text-sm text-muted-foreground">Follow-up information is unavailable.</p> : null}
                   </div>
                 </Card.Content>
               </Card>

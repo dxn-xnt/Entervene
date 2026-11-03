@@ -540,7 +540,7 @@ const TeacherGradeView = () => {
               <Table.Cell className="text-center">
                 {item.remark ? (
                   <Badge size="sm" variant={item.remark === "PASSED" ? "success" : item.remark === "FAILED" ? "destructive" : "outline"}>
-                    {item.remark}
+                    {formatToTitleCase(item.remark)}
                   </Badge>
                 ) : "—"}
               </Table.Cell>
@@ -1533,3 +1533,4 @@ const TeacherGradeView = () => {
 
 export default TeacherGradeView;
 
+import { formatToTitleCase } from "@/lib/formatters";

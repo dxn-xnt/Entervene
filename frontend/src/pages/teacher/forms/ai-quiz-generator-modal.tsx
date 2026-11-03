@@ -6,7 +6,6 @@ import {
   Loader2,
   BookOpen,
   HelpCircle,
-  X,
   Settings2,
   ChevronDown,
   ChevronUp,
@@ -513,37 +512,13 @@ export default function AIQuizGeneratorModal({
       <Dialog.Content
         size="2xl"
         className="p-0"
+        overlay={{ forceRender: true }}
       >
         {/* ── Fixed Header ── */}
         <Dialog.Header
           position="fixed"
-          asChild
-          className="border-black bg-primary"
         >
-          <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                <Sparkles className="w-5 h-5 text-amber-600" />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-black">
-                  AI Quiz Generator
-                </h2>
-              </div>
-            </div>
-            <Tooltip>
-              <TooltipTrigger render={<span className="inline-flex"><button
-                type="button"
-                onClick={onClose}
-                disabled={isGenerating}
-                className="cursor-pointer p-1 border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-neutral-100 disabled:opacity-50 text-black"
-                aria-label="Close generator"
-              >
-                <X size={16} />
-              </button></span>} />
-              <TooltipContent>{isGenerating ? "Generating quiz" : "Close generator"}</TooltipContent>
-            </Tooltip>
-          </div>
+          <h2 className="font-sans text-xl font-bold">AI Quiz Generator</h2>
         </Dialog.Header>
 
         {/* ── Scrollable Body ── */}
@@ -554,10 +529,10 @@ export default function AIQuizGeneratorModal({
           {/* Subject Selection */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold uppercase tracking-wider text-black">
+              <label className="text-sm font-bold text-black">
                 Subject / Learning Area
               </label>
-              <span className="text-[10px] font-semibold text-muted-foreground">
+              <span className="text-sm font-semibold text-muted-foreground">
                 Change subject to source different lessons
               </span>
             </div>
@@ -584,10 +559,10 @@ export default function AIQuizGeneratorModal({
                 </Select>
               </div>
             ) : (
-              <div className="flex items-center gap-2 border-2 border-black bg-neutral-100 px-3 py-2 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <div className="flex items-center gap-2 rounded! border-2 border-border bg-background px-3 py-2 text-sm font-bold shadow-none">
                 <BookOpen className="w-4 h-4 text-black/70" />
                 <span>{currentSubjectName}</span>
-                <Badge variant="surface" className="ml-auto text-[10px] uppercase font-bold">
+                <Badge size="sm" variant="outline" className="ml-auto">
                   Pre-selected
                 </Badge>
               </div>
@@ -596,7 +571,7 @@ export default function AIQuizGeneratorModal({
 
           {/* Source Mode Toggle */}
           <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-black">
+            <label className="text-sm font-bold text-black">
               Question Source
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -606,18 +581,17 @@ export default function AIQuizGeneratorModal({
                   { mode: "specific", icon: <BookMarked className="w-3.5 h-3.5" />, label: "By Specific Readings" },
                 ] as const
               ).map(({ mode, icon, label }) => (
-                <button
+                <Button
                   key={mode}
                   type="button"
+                  size="sm"
+                  variant={sourceMode === mode ? "default" : "outline"}
                   onClick={() => handleSourceModeChange(mode)}
-                  className={`flex items-center justify-center gap-2 py-2 px-3 border-2 border-black text-xs font-extrabold transition-all cursor-pointer ${sourceMode === mode
-                      ? "bg-black text-white shadow-none"
-                      : "bg-white text-black hover:bg-neutral-100 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                    }`}
+                  className="gap-2 shadow-none hover:shadow-none"
                 >
                   {icon}
                   {label}
-                </button>
+                </Button>
               ))}
             </div>
 
@@ -625,7 +599,7 @@ export default function AIQuizGeneratorModal({
             {sourceMode === "lesson" && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-sm text-muted-foreground">
                     Select lessons — all attached readings will be used as source material.
                   </span>
                   {lessons.length > 0 && (
@@ -638,7 +612,7 @@ export default function AIQuizGeneratorModal({
                             : lessons.map((l) => l.lesson_id)
                         )
                       }
-                      className="text-xs font-bold text-blue-600 hover:underline cursor-pointer shrink-0 ml-2"
+                      className="text-sm font-bold text-foreground hover:underline cursor-pointer shrink-0 ml-2"
                     >
                       {selectedLessonIds.length === lessons.length ? "Deselect All" : "Select All"}
                     </button>
@@ -646,23 +620,23 @@ export default function AIQuizGeneratorModal({
                 </div>
 
                 {isLoadingSource ? (
-                  <div className="flex items-center gap-2 p-4 border-2 border-dashed border-black/30 bg-neutral-50 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2 p-4 border-2 border-dashed border-black/30 bg-neutral-50 text-sm text-muted-foreground">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Loading lessons…
                   </div>
                 ) : lessons.length === 0 ? (
-                  <div className="p-3 border-2 border-dashed border-black/30 bg-neutral-50 text-xs text-muted-foreground">
+                  <div className="p-3 border-2 border-dashed border-black/30 bg-neutral-50 text-sm text-muted-foreground">
                     No lessons found. AI will generate based on general curriculum for{" "}
                     <strong>{currentSubjectName}</strong>.
                   </div>
                 ) : (
-                  <div className="max-h-32 overflow-y-auto border-2 border-black p-2 space-y-1.5 bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="max-h-32 overflow-y-auto rounded! border-2 border-border p-2 space-y-1.5 bg-background shadow-none">
                     {lessons.map((lesson) => {
                       const sel = selectedLessonIds.includes(lesson.lesson_id);
                       return (
                         <label
                           key={lesson.lesson_id}
-                          className={`flex items-center gap-2 p-2 border border-black/20 text-xs font-medium cursor-pointer transition-colors ${sel ? "bg-amber-50 border-black font-bold" : "hover:bg-neutral-50"
+                          className={`flex items-center gap-2 p-2 rounded! border border-border text-sm font-medium cursor-pointer transition-colors ${sel ? "bg-primary border-border font-bold" : "hover:bg-neutral-50"
                             }`}
                         >
                           <input
@@ -675,7 +649,7 @@ export default function AIQuizGeneratorModal({
                                   : [...prev, lesson.lesson_id]
                               )
                             }
-                            className="rounded border-2 border-black accent-black w-4 h-4 cursor-pointer"
+                            className="rounded rounded! border-2 border-border accent-black w-4 h-4 cursor-pointer"
                           />
                           <span className="flex-1 truncate">{lesson.title}</span>
                         </label>
@@ -683,7 +657,7 @@ export default function AIQuizGeneratorModal({
                     })}
                   </div>
                 )}
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   {selectedLessonIds.length} lesson(s) selected.
                 </p>
               </div>
@@ -693,7 +667,7 @@ export default function AIQuizGeneratorModal({
             {sourceMode === "specific" && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-sm text-muted-foreground">
                     Hand-pick individual reading classworks across lessons.
                   </span>
                   {readingClassworks.length > 0 && (
@@ -706,7 +680,7 @@ export default function AIQuizGeneratorModal({
                             : readingClassworks.map((r) => r.classwork_id)
                         )
                       }
-                      className="text-xs font-bold text-blue-600 hover:underline cursor-pointer shrink-0 ml-2"
+                      className="text-sm font-bold text-foreground hover:underline cursor-pointer shrink-0 ml-2"
                     >
                       {selectedReadingIds.length === readingClassworks.length
                         ? "Deselect All"
@@ -716,20 +690,20 @@ export default function AIQuizGeneratorModal({
                 </div>
 
                 {isLoadingSource ? (
-                  <div className="flex items-center gap-2 p-4 border-2 border-dashed border-black/30 bg-neutral-50 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2 p-4 border-2 border-dashed border-black/30 bg-neutral-50 text-sm text-muted-foreground">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Loading reading classworks…
                   </div>
                 ) : readingClassworks.length === 0 ? (
-                  <div className="p-3 border-2 border-dashed border-black/30 bg-neutral-50 text-xs text-muted-foreground">
+                  <div className="p-3 border-2 border-dashed border-black/30 bg-neutral-50 text-sm text-muted-foreground">
                     No reading classworks found for this subject. Try "By Lesson" mode or add
                     reading classworks first.
                   </div>
                 ) : (
-                  <div className="max-h-40 overflow-y-auto border-2 border-black p-2 space-y-3 bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="max-h-40 overflow-y-auto rounded! border-2 border-border p-2 space-y-3 bg-background shadow-none">
                     {readingsByLesson.map(([lessonTitle, items]) => (
                       <div key={lessonTitle}>
-                        <p className="text-[10px] font-black uppercase tracking-wider text-black/50 mb-1">
+                        <p className="text-sm font-bold text-black/50 mb-1">
                           {lessonTitle}
                         </p>
                         <div className="space-y-1">
@@ -738,8 +712,8 @@ export default function AIQuizGeneratorModal({
                             return (
                               <label
                                 key={cw.classwork_id}
-                                className={`flex items-center gap-2 p-1.5 border border-black/20 text-xs font-medium cursor-pointer transition-colors ${sel
-                                    ? "bg-amber-50 border-black font-bold"
+                                className={`flex items-center gap-2 p-1.5 rounded! border border-border text-sm font-medium cursor-pointer transition-colors ${sel
+                                    ? "bg-primary border-border font-bold"
                                     : "hover:bg-neutral-50"
                                   }`}
                               >
@@ -753,7 +727,7 @@ export default function AIQuizGeneratorModal({
                                         : [...prev, cw.classwork_id]
                                     )
                                   }
-                                  className="rounded border-2 border-black accent-black w-4 h-4 cursor-pointer"
+                                  className="rounded rounded! border-2 border-border accent-black w-4 h-4 cursor-pointer"
                                 />
                                 <span className="flex-1 truncate">{cw.title}</span>
                               </label>
@@ -764,7 +738,7 @@ export default function AIQuizGeneratorModal({
                     ))}
                   </div>
                 )}
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   {selectedReadingIds.length} reading classwork(s) selected across lessons.
                 </p>
               </div>
@@ -773,7 +747,7 @@ export default function AIQuizGeneratorModal({
 
           {/* Additional Coverage */}
           <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-black">
+            <label className="text-sm font-bold text-black">
               Specific Coverage / Instructions (Optional)
             </label>
             <textarea
@@ -782,17 +756,17 @@ export default function AIQuizGeneratorModal({
               placeholder="e.g., Focus on Chapter 3 photosynthesis; include questions on ATP cycle; emphasize terminology..."
               rows={2}
               disabled={isGenerating}
-              className="w-full border-2 border-black p-2.5 text-xs font-medium bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] resize-none focus:outline-none placeholder:text-muted-foreground"
+              className="w-full rounded! border-2 border-border p-2.5 text-sm font-medium bg-background shadow-none resize-none focus:outline-none placeholder:text-muted-foreground"
             />
           </div>
 
           {/* Test Parts Configuration */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold uppercase tracking-wider text-black">
+              <label className="text-sm font-bold text-black">
                 Test Parts & Difficulties
               </label>
-              <span className="text-[11px] font-extrabold text-black">
+              <span className="text-sm font-semibold text-black">
                 Total: {totalItemCount} items ({totalPointsCount} pts)
               </span>
             </div>
@@ -806,11 +780,11 @@ export default function AIQuizGeneratorModal({
                 return (
                   <div
                     key={part.id}
-                    className="p-2.5 border-2 border-black bg-white shadow-xs"
+                    className="p-4 rounded! border-2 border-border bg-background shadow-none"
                   >
                     {/* ── Row top ── */}
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-black w-5 text-center text-muted-foreground shrink-0">
+                      <span className="text-sm font-bold w-5 text-center text-muted-foreground shrink-0">
                         #{index + 1}
                       </span>
 
@@ -840,16 +814,16 @@ export default function AIQuizGeneratorModal({
                               e.target.value = String(clamped);
                               updateTestPart(part.id, { count: clamped });
                             }}
-                            className="w-14 h-8 text-center border-2 border-black rounded shadow-none"
+                            className="w-14 h-8 text-center rounded! border-2 border-border rounded shadow-none"
                             aria-label="Number of questions"
                           />} />
                           <TooltipContent>Questions</TooltipContent>
                         </Tooltip>
-                        <span className="text-[11px] font-semibold text-muted-foreground">items</span>
+                        <span className="text-sm font-semibold text-muted-foreground">items</span>
                       </div>
 
                       <div className="flex items-center gap-1 shrink-0">
-                        <span className="text-xs font-black text-black">@</span>
+                        <span className="text-sm font-bold text-black">@</span>
                         <Tooltip>
                           <TooltipTrigger render={<Input
                             type="number"
@@ -865,15 +839,15 @@ export default function AIQuizGeneratorModal({
                               e.target.value = String(clamped);
                               updateTestPart(part.id, { points_per_item: clamped });
                             }}
-                            className="w-14 h-8 text-center border-2 border-black rounded shadow-none bg-amber-50"
+                            className="w-14 h-8 text-center rounded! border-2 border-border rounded shadow-none bg-background"
                             aria-label="Points per question"
                           />} />
                           <TooltipContent>Points per question</TooltipContent>
                         </Tooltip>
-                        <span className="text-[11px] font-semibold text-muted-foreground">pt(s)</span>
+                        <span className="text-sm font-semibold text-muted-foreground">pt(s)</span>
                       </div>
 
-                      <Badge variant="surface" className="border-black font-bold text-[10px] bg-neutral-100 shrink-0">
+                      <Badge size="sm" variant="outline" className="shrink-0">
                         = {rowPts} pts
                       </Badge>
 
@@ -884,7 +858,7 @@ export default function AIQuizGeneratorModal({
                           size="sm"
                           disabled={testParts.length <= 1}
                           onClick={() => removeTestPart(part.id)}
-                          className="h-8 w-8 p-0 border-2 border-black text-red-600 hover:bg-red-50 disabled:opacity-30 cursor-pointer ml-auto shrink-0"
+                          className="h-8 w-8 p-0 rounded! border-2 border-border text-red-600 hover:bg-red-50 disabled:opacity-30 cursor-pointer ml-auto shrink-0"
                           aria-label="Remove test part"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -895,21 +869,18 @@ export default function AIQuizGeneratorModal({
 
                     {/* ── Prominent Difficulty Customizer Toggle ── */}
                     <div className="mt-2.5 pt-2 border-t-2 border-black/10 flex items-center justify-between">
-                      <button
+                      <Button
                         type="button"
+                        size="sm"
+                        variant={isExpanded || !isDefaultBreakdown(part) ? "default" : "outline"}
                         onClick={() => togglePartExpanded(part.id)}
-                        className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold border-2 border-black transition-all cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${isExpanded
-                            ? "bg-black text-white"
-                            : isDefaultBreakdown(part)
-                              ? "bg-white text-black hover:bg-neutral-100"
-                              : "bg-[#F6E9B2] text-black hover:bg-[#ebdca0]"
-                          }`}
+                        className="gap-2"
                       >
                         <Settings2 className="w-3.5 h-3.5" />
                         <span>Customize Difficulty</span>
                         <span
-                          className={`px-1.5 py-0.5 text-[10px] font-extrabold uppercase ${isExpanded
-                              ? "bg-white/20 text-white"
+                          className={`px-1.5 py-0.5 text-sm font-semibold ${isExpanded
+                              ? "bg-background/20 text-white"
                               : bError
                                 ? "bg-red-500 text-white"
                                 : isDefaultBreakdown(part)
@@ -926,9 +897,9 @@ export default function AIQuizGeneratorModal({
                         ) : (
                           <ChevronDown className="w-3.5 h-3.5 ml-0.5" />
                         )}
-                      </button>
+                      </Button>
 
-                      <span className="text-[11px] font-semibold text-muted-foreground hidden sm:inline-block">
+                      <span className="text-sm font-semibold text-muted-foreground hidden sm:inline-block">
                         {isDefaultBreakdown(part)
                           ? "Default: 100% Easy"
                           : "Custom Easy/Med/Hard split"}
@@ -940,7 +911,7 @@ export default function AIQuizGeneratorModal({
                         {(["EASY", "MEDIUM", "HARD"] as const).map((diff) => (
                           <div key={diff} className="flex items-center gap-1">
                             <span
-                              className={`text-[10px] font-black ${diff === "EASY"
+                              className={`text-sm font-bold ${diff === "EASY"
                                   ? "text-green-700"
                                   : diff === "MEDIUM"
                                     ? "text-amber-600"
@@ -964,17 +935,17 @@ export default function AIQuizGeneratorModal({
                                 e.target.value = String(clamped);
                                 updateBreakdown(part.id, diff, clamped);
                               }}
-                              className="w-12 h-7 text-center text-xs font-bold border-2 border-black rounded focus:outline-none focus:ring-1 focus:ring-black"
+                              className="w-12 h-7 text-center text-sm font-bold rounded! border-2 border-border rounded focus:outline-none focus:ring-1 focus:ring-black"
                             />
                           </div>
                         ))}
                         {bError && (
-                          <span className="text-[10px] text-red-600 font-bold">
+                          <span className="text-sm text-red-600 font-bold">
                             ← must sum to {part.count}
                           </span>
                         )}
                         {!bError && !isDefaultBreakdown(part) && (
-                          <span className="text-[10px] text-green-600 font-bold">✓</span>
+                          <span className="text-sm text-green-600 font-bold">✓</span>
                         )}
                       </div>
                     )}
@@ -987,7 +958,7 @@ export default function AIQuizGeneratorModal({
                 variant="outline"
                 size="sm"
                 onClick={addTestPart}
-                className="w-full gap-1 border-2 border-dashed border-black font-bold text-xs hover:bg-neutral-100 cursor-pointer bg-white"
+                className="w-full gap-1 border-2 border-dashed border-black font-bold text-sm shadow-none cursor-pointer bg-background"
               >
                 <Plus className="w-3.5 h-3.5" /> Add Another Test Part
               </Button>
@@ -1002,7 +973,7 @@ export default function AIQuizGeneratorModal({
           className="sm:justify-between"
         >
           {/* Left side */}
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <HelpCircle className="w-3.5 h-3.5 text-muted-foreground" />
             <span>AI generates questions, choices, answers, and rubrics.</span>
           </div>
@@ -1015,7 +986,7 @@ export default function AIQuizGeneratorModal({
               size="sm"
               disabled={isGenerating}
               onClick={onClose}
-              className="border-2 border-black font-bold cursor-pointer"
+              className="rounded! border-2 border-border font-bold cursor-pointer"
             >
               Cancel
             </Button>
@@ -1026,7 +997,7 @@ export default function AIQuizGeneratorModal({
               size="sm"
               disabled={isGenerating || totalItemCount <= 0 || hasAnyBreakdownError}
               onClick={handleGenerate}
-              className="gap-2 border-2 border-black bg-amber-400 text-black hover:bg-amber-500 font-extrabold cursor-pointer"
+              className="gap-2"
             >
               {isGenerating ? (
                 <>

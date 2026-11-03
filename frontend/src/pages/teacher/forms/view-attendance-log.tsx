@@ -9,6 +9,7 @@ import { Card } from "@/components/retroui/Card";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { type AttendanceRecordItem, type AttendanceStatus } from "@/lib/attendance-api";
 import { Search, Calendar } from "lucide-react";
 
@@ -73,8 +74,7 @@ export default function ViewAttendanceLogModal({
         return (
           <Badge
             size="sm"
-            variant="surface"
-            className="bg-success/80"
+            variant="success"
           >
             Present
           </Badge>
@@ -83,8 +83,7 @@ export default function ViewAttendanceLogModal({
         return (
           <Badge
             size="sm"
-            variant="surface"
-            className="bg-destructive/80"
+            variant="destructive"
           >
             Absent
           </Badge>
@@ -93,8 +92,7 @@ export default function ViewAttendanceLogModal({
         return (
           <Badge
             size="sm"
-            variant="surface"
-            className="bg-primary/80"
+            variant="destructive"
           >
             Late
           </Badge>
@@ -103,8 +101,7 @@ export default function ViewAttendanceLogModal({
         return (
           <Badge
             size="sm"
-            variant="surface"
-            className="bg-blue-200"
+            variant="outline"
           >
             Excused
           </Badge>
@@ -227,7 +224,7 @@ export default function ViewAttendanceLogModal({
         </div>
 
         {/* Table of Attendance Logs */}
-        <Table wrapperClassName="attendance-records-wrapper h-auto shrink-0" className="attendance-records attendance-history w-full border-collapse">
+        <Table rounded wrapperClassName="attendance-records-wrapper rounded! h-auto shrink-0" className="attendance-records attendance-history w-full border-collapse">
           <Table.Header>
             <Table.Row>
               <Table.Head className="min-w-[140px] font-head text-black">
@@ -249,11 +246,15 @@ export default function ViewAttendanceLogModal({
               <Table.Row>
                 <Table.Cell
                   colSpan={3}
-                  className="py-8 text-center text-sm font-bold italic text-gray-500"
+                  className="p-0"
                 >
-                  {history.length === 0
-                    ? "No attendance records logged for this student yet."
-                    : "No matching attendance logs found."}
+                  <TeacherEmptyState
+                    compact
+                    className="rounded! border-0 bg-card shadow-none hover:shadow-none"
+                    icon={history.length ? <Search /> : <Calendar />}
+                    title={history.length ? "No matching attendance logs" : "No attendance records yet"}
+                    description={history.length ? "Try another search term or status filter." : "Attendance records for this student will appear here once logged."}
+                  />
                 </Table.Cell>
               </Table.Row>
             ) : (
