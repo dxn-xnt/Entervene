@@ -67,6 +67,7 @@ def test_later_improvement_resolves_without_rewriting_trigger(current_period_con
     first = _run(ctx, model_id)
     add_activity(ctx, "PERFORMANCE_TASK", 15, 20)
     second = _run(ctx, model_id)
+    print("DEBUG_SECOND_RUN:", second)
     rows = _interventions(ctx)
     assert second["revision"] == 2
     assert len(rows) == 1
@@ -104,6 +105,7 @@ def test_low_revision_and_unchanged_evidence_do_not_duplicate(current_period_con
     same = _run(ctx, model_id)
     add_activity(ctx, "PERFORMANCE_TASK", 15, 20)
     second = _run(ctx, model_id)
+    print("DEBUG_SECOND_RUN:", second)
     rows = _interventions(ctx)
     assert same["unchanged"] is True and second["revision"] == 2
     assert len(rows) == 1
@@ -133,10 +135,22 @@ def test_separate_subjects_have_separate_candidates(current_period_context, monk
         ), start=1)
     ])
     second_subject.grading_template_id = template.grading_template_id
+    from app.models.academic.SubjectLoad import SubjectLoad
+    ctx["db"].add(
+        SubjectLoad(
+            staff_id=ctx["staff"].staff_id,
+            subject_id=second_subject.subject_id,
+            class_id=ctx["class"].class_id,
+            academic_period_id=ctx["period"].academic_period_id,
+            status="active",
+            is_active_version=True,
+        )
+    )
     ctx["db"].commit()
     ctx["subject"] = second_subject
     _make_ready(ctx)
     second = _run(ctx, model_id)
+    print("DEBUG_SECOND_RUN:", second)
     rows = _interventions(ctx)
     assert {row.source_prediction_id for row in rows} == {first["prediction_id"], second["prediction_id"]}
     assert {row.subject_id for row in rows} == {first_subject_id, second_subject.subject_id}

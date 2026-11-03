@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     debug: bool = False
     app_environment: str = Field(default="production", validation_alias=AliasChoices("app_environment", "app_env"))
     development_prediction_api_enabled: bool = False
-    development_current_term_model_name: str = "entervene_current_term_development_rf_v3"
+    development_current_term_model_name: str = "entervene_current_term_official_target_rf_candidate"
     database_url: str = Field(..., min_length=1)
     frontend_url: str = "http://localhost:5173"
     mobile_app_url: str = "http://localhost:8081"

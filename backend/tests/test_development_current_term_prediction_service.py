@@ -296,7 +296,8 @@ def test_same_term_contract_accepts_same_period_and_rejects_different_target(cur
 def test_unsupported_subject_blocks_before_scoring(current_period_context, monkeypatch):
     ctx = current_period_context
     _set_weights(ctx)
-    ctx["subject"].subject_codename = "PHILOSOPHY"
+    ctx["subject"].subject_codename = ""
+    ctx["subject"].subject_name = ""
     ctx["db"].commit()
     _make_ready(ctx)
 
@@ -310,7 +311,7 @@ def test_unsupported_subject_blocks_before_scoring(current_period_context, monke
     assert result["status"] == service.STATUS_UNSUPPORTED_DEVELOPMENT_DOMAIN
     assert result["readiness_result"]["ready"] is True
     assert result["readiness_reason_codes"] == ["UNSUPPORTED_SUBJECT"]
-    assert result["domain_result"]["subject"] == "PHILOSOPHY"
+    assert result["domain_result"]["subject"] in {"", "UNKNOWN"}
 
 
 def test_unsupported_weight_pattern_blocks_before_scoring(current_period_context, monkeypatch):

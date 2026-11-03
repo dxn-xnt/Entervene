@@ -78,13 +78,13 @@ describe("shared prediction page access", () => {
         <PredictionsDashboard />
       </MemoryRouter>
     );
-    await waitFor(() => expect(screen.getByText("Subject Summaries")).toBeTruthy());
+    await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
     expect(screen.getByRole("heading", { name: "AI Predictions" })).toBeTruthy();
     expect(screen.queryByText("Current-Term Development")).toBeNull();
     expect(screen.getByRole("button", { name: /High Risk\s+1/i })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /High Risk/i }));
-    expect(screen.getByText("Projected Term Grade")).toBeTruthy();
+    expect(screen.getByText("Projected Grade")).toBeTruthy();
     expect(screen.getByText("Risk Level")).toBeTruthy();
     expect(screen.queryByText("Risk Score")).toBeNull();
     fireEvent.click(screen.getByText("Alex Rivera"));

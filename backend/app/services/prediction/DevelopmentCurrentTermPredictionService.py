@@ -17,7 +17,11 @@ from app.services.academic.AcademicLifecycleService import (
 from app.services.prediction import DevelopmentCurrentTermScoringService as v3_scorer
 from app.services.prediction.DevelopmentCurrentTermModelSelection import selected_development_model_name, require_development_model_name
 from app.services.prediction.CurrentPeriodFeatureBuilderService import build_current_period_features_from_records
-from app.services.prediction.CurrentTermV3Domain import resolve_v3_scope, canonicalize_v3_features
+from app.services.prediction.CurrentTermV3Domain import (
+    resolve_v3_scope,
+    canonicalize_v3_features,
+    UNSUPPORTED_EXPLICIT_SUBJECTS,
+)
 
 
 MODEL_DEVELOPMENT_STATUS = "DEVELOPMENT_ONLY"
@@ -99,6 +103,8 @@ def _base_result(
     projected_final_term_grade: float | None = None,
     domain_result: dict[str, Any] | None = None,
     model_name: str = v3_scorer.MODEL_NAME,
+    is_provisional: bool = False,
+    validation_status: str | None = None,
 ) -> dict[str, Any]:
     readiness_result = readiness_result or {}
     return {
@@ -112,6 +118,8 @@ def _base_result(
         "model_name": model_name,
         "model_development_status": MODEL_DEVELOPMENT_STATUS,
         "prediction_purpose": PREDICTION_PURPOSE,
+        "is_provisional": is_provisional,
+        "validation_status": validation_status,
     }
 
 
@@ -133,15 +141,29 @@ def _finalized_same_term_grade_exists(
     ).first() is not None
 
 
-def _unsupported_domain(features: dict[str, Any]) -> dict[str, Any]:
+def _unsupported_domain(
+    features: dict[str, Any],
+    grade_level: int | None = None,
+    is_provisional: bool = False,
+    validation_status: str | None = None,
+) -> dict[str, Any]:
     reasons: list[str] = []
     subject = str(features.get("subject") or "").strip().upper()
     pattern = _weight_pattern(features)
 
-    if subject not in SUPPORTED_SUBJECTS:
+    if not subject or subject in UNSUPPORTED_EXPLICIT_SUBJECTS:
         reasons.append("UNSUPPORTED_SUBJECT")
+
     if pattern not in SUPPORTED_WEIGHT_PATTERNS:
         reasons.append("UNSUPPORTED_WEIGHT_PATTERN")
+
+    provisional = is_provisional or (grade_level in {11, 12})
+    resolved_validation_status = validation_status
+    if resolved_validation_status is None:
+        if provisional:
+            resolved_validation_status = "PROVISIONAL_UNVALIDATED_SHS" if (grade_level in {11, 12}) else "PROVISIONAL"
+        else:
+            resolved_validation_status = "VALIDATED_JHS"
 
     return {
         "supported": not reasons,
@@ -150,6 +172,8 @@ def _unsupported_domain(features: dict[str, Any]) -> dict[str, Any]:
         "weight_pattern": pattern,
         "supported_subjects": sorted(SUPPORTED_SUBJECTS),
         "supported_weight_patterns": sorted(SUPPORTED_WEIGHT_PATTERNS),
+        "is_provisional": provisional,
+        "validation_status": resolved_validation_status,
     }
 
 
@@ -223,6 +247,8 @@ def prepare_development_current_term(
             target_period_id=target_period_id,
             reason_codes=scope["reason_codes"],
             domain_result=scope,
+            is_provisional=scope.get("is_provisional", False),
+            validation_status=scope.get("validation_status"),
         ), None
 
     built = build_current_period_features_from_records(
@@ -248,6 +274,8 @@ def prepare_development_current_term(
             source_period_id=source_period_id,
             target_period_id=target_period_id,
             readiness_result=readiness_result,
+            is_provisional=scope.get("is_provisional", False),
+            validation_status=scope.get("validation_status"),
         ), None
 
     if not scope["supported"]:
@@ -262,9 +290,16 @@ def prepare_development_current_term(
                 "subject": built["features"]["subject"],
                 "weight_pattern": _weight_pattern(built["features"]),
             },
+            is_provisional=scope.get("is_provisional", False),
+            validation_status=scope.get("validation_status"),
         ), None
 
-    domain_result = _unsupported_domain(built["features"])
+    domain_result = _unsupported_domain(
+        built["features"],
+        grade_level=scope.get("grade_level"),
+        is_provisional=scope.get("is_provisional", False),
+        validation_status=scope.get("validation_status"),
+    )
     if not domain_result["supported"]:
         return result(
             status=STATUS_UNSUPPORTED_DEVELOPMENT_DOMAIN,
@@ -273,6 +308,8 @@ def prepare_development_current_term(
             readiness_result=readiness_result,
             reason_codes=list(domain_result["reason_codes"]),
             domain_result=domain_result,
+            is_provisional=domain_result.get("is_provisional", False),
+            validation_status=domain_result.get("validation_status"),
         ), None
 
     contract = v3_scorer.compare_feature_contract(built["features"], v3_scorer.load_development_current_term_schema(model_name))
@@ -284,6 +321,8 @@ def prepare_development_current_term(
             readiness_result=readiness_result,
             reason_codes=["V3_FEATURE_CONTRACT_MISMATCH"],
             domain_result={"supported": True, "feature_contract": contract},
+            is_provisional=domain_result.get("is_provisional", False),
+            validation_status=domain_result.get("validation_status"),
         ), None
 
     prediction = result(
@@ -292,6 +331,8 @@ def prepare_development_current_term(
         target_period_id=target_period_id,
         readiness_result=readiness_result,
         domain_result=domain_result,
+        is_provisional=domain_result.get("is_provisional", False),
+        validation_status=domain_result.get("validation_status", "VALIDATED_JHS"),
     )
     return prediction, {
         "features": dict(built["features"]),
@@ -315,7 +356,12 @@ def score_prepared_development_current_term(
         projected = v3_scorer.score_development_current_term(features, model_name=model_name)
     if scored_features_out is not None:
         scored_features_out.update(features)
-    return {**prediction, "projected_final_term_grade": projected}
+    return {
+        **prediction,
+        "projected_final_term_grade": projected,
+        "is_provisional": prediction.get("is_provisional", False),
+        "validation_status": prediction.get("validation_status", "VALIDATED_JHS"),
+    }
 
 
 def predict_development_current_term(

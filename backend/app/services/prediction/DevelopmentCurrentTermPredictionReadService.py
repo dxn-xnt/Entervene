@@ -302,6 +302,13 @@ def list_latest_development_current_term_predictions(
             StudentPeriodGrade.is_finalized.is_(True),
             StudentPeriodGrade.final_period_grade.isnot(None),
         ).first()
+        snapshot = prediction.evidence_snapshot if isinstance(prediction.evidence_snapshot, dict) else {}
+        is_provisional = bool(snapshot.get("is_provisional", False))
+        if not is_provisional and getattr(class_, "academic_level", None) and getattr(class_.academic_level, "grade_level", None) in (11, 12):
+            is_provisional = True
+            validation_status = "PROVISIONAL_UNVALIDATED_SHS"
+        else:
+            validation_status = snapshot.get("validation_status", "PROVISIONAL_UNVALIDATED_SHS" if is_provisional else "VALIDATED_JHS")
         items.append({
             "prediction_id": prediction.prediction_id,
             "revision": prediction.revision,
@@ -317,6 +324,8 @@ def list_latest_development_current_term_predictions(
             "projected_final_term_grade": _to_float(prediction.predicted_period_grade),
             "intervention_level": prediction.intervention_level,
             "intervention_basis": prediction.intervention_basis,
+            "is_provisional": is_provisional,
+            "validation_status": validation_status,
             "readiness_status": readiness["readiness_status"],
             "readiness_level": readiness["readiness_level"],
             "readiness_label": "Enough evidence available for projection"

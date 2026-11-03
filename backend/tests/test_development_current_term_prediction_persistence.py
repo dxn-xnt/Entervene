@@ -352,7 +352,8 @@ def test_blocked_results_are_not_persisted(current_period_context, monkeypatch, 
     else:
         _make_ready(ctx)
     if blocker == "subject":
-        ctx["subject"].subject_codename = "PHILOSOPHY"
+        ctx["subject"].subject_codename = ""
+        ctx["subject"].subject_name = ""
         ctx["db"].commit()
     elif blocker == "weight":
         _set_weights(ctx, "20", "40", "40")
@@ -506,3 +507,52 @@ def test_concurrent_lifecycle_scope_change_before_persistence_raises_value_error
         _run(ctx, model_version_id)
 
     assert ctx["db"].query(DevelopmentCurrentTermPrediction).count() == 0
+
+
+def test_shs_grade_11_persistence_with_provisional_metadata(current_period_context, monkeypatch):
+    ctx = current_period_context
+    ctx["level"].grade_level = 11
+    ctx["subject"].subject_codename = "PRECAL11"
+    ctx["subject"].subject_name = "Precalculus"
+    ctx["db"].commit()
+    _set_weights(ctx)
+    _make_ready(ctx)
+    model_version_id = _register_test_model(ctx)
+    monkeypatch.setattr(scorer, "score_development_current_term", lambda _features: 82.5)
+
+    result = _run(ctx, model_version_id)
+
+    assert result["persisted"] is True
+    assert result["prediction_status"] == "DEVELOPMENT_PREDICTION_AVAILABLE"
+    assert result["projected_final_term_grade"] == 82.5
+    assert result["intervention_level"] == "MODERATE_RISK"
+    assert result["is_provisional"] is True
+    assert result["validation_status"] == "PROVISIONAL_UNVALIDATED_SHS"
+
+    row = ctx["db"].query(DevelopmentCurrentTermPrediction).filter_by(prediction_id=result["prediction_id"]).one()
+    assert row.evidence_snapshot["is_provisional"] is True
+    assert row.evidence_snapshot["validation_status"] == "PROVISIONAL_UNVALIDATED_SHS"
+    assert row.evidence_snapshot["normalized_subject"] == "MATHEMATICS"
+
+
+def test_shs_grade_12_persistence_with_actual_subject(current_period_context, monkeypatch):
+    ctx = current_period_context
+    ctx["level"].grade_level = 12
+    ctx["subject"].subject_codename = "PHYS12"
+    ctx["subject"].subject_name = "General Physics 1"
+    ctx["db"].commit()
+    _set_weights(ctx)
+    _make_ready(ctx)
+    model_version_id = _register_test_model(ctx)
+    monkeypatch.setattr(scorer, "score_development_current_term", lambda _features: 92.0)
+
+    result = _run(ctx, model_version_id)
+
+    assert result["persisted"] is True
+    assert result["intervention_level"] == "LOW_RISK"
+    assert result["is_provisional"] is True
+    assert result["validation_status"] == "PROVISIONAL_UNVALIDATED_SHS"
+
+    row = ctx["db"].query(DevelopmentCurrentTermPrediction).filter_by(prediction_id=result["prediction_id"]).one()
+    assert row.evidence_snapshot["normalized_subject"] == "SCIENCE"
+

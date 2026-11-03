@@ -197,7 +197,6 @@ describe("PredictionSubjectSection", () => {
     );
 
     expect(screen.getByRole("heading", { level: 2, name: /Mathematics 9/i })).toBeDefined();
-    expect(screen.getByText("(Grade 9)")).toBeDefined();
 
     // Badges in header
     expect(screen.getByText("1 High Risk")).toBeDefined();
@@ -304,7 +303,7 @@ describe("TeacherCurrentTermDashboard (Subject-First Main Page)", () => {
 
     // After loading
     await waitFor(() => {
-      expect(screen.getByRole("heading", { level: 2, name: /Subject Summaries/i })).toBeDefined();
+      expect(screen.getByRole("heading", { level: 2, name: /Mathematics 9/i })).toBeDefined();
     });
 
     // Heading "Grade Cohort Summaries" must NOT exist

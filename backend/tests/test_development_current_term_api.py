@@ -612,7 +612,8 @@ def test_blocked_api_does_not_persist(current_period_context, monkeypatch, block
     else:
         _make_ready(ctx)
     if blocker == "subject":
-        ctx["subject"].subject_codename = "PHILOSOPHY"
+        ctx["subject"].subject_codename = ""
+        ctx["subject"].subject_name = ""
     elif blocker == "weight":
         _set_weights(ctx, "20", "40", "40")
         add_activity(ctx, "QUARTERLY_ASSESSMENT", 32, 40)
