@@ -482,7 +482,7 @@ export default function StudentClassworkView() {
               <div className="flex w-full min-w-0 flex-col gap-3">
                 <Card className="mx-auto flex w-full flex-col gap-4 px-5 pt-6">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
                       <IconContainer
                         variant="primary"
                         size="xl"
@@ -495,12 +495,6 @@ export default function StudentClassworkView() {
                           <h1 className="break-words text-2xl font-bold sm:text-3xl">
                             {detail.title}
                           </h1>
-                          <Badge
-                            variant="secondary"
-                            size="sm"
-                          >
-                            {formatToTitleCase(detail.classwork_type) || "Classwork"}
-                          </Badge>
                         </div>
                         {detail.linked_lessons &&
                           detail.linked_lessons.length > 0 ? (
@@ -549,11 +543,14 @@ export default function StudentClassworkView() {
                         ) : null}
                       </div>
                     </div>
-                    <div className="flex flex-row whitespace-nowrap items-center gap-2">
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <Badge variant="secondary" size="sm">
+                        {formatToTitleCase(detail.classwork_type) || "Classwork"}
+                      </Badge>
                       {detail.classwork_category && (
                         <Badge
                           variant="outline"
-                          size="md"
+                          size="sm"
                         >
                           {formatToTitleCase(detail.classwork_category)}
                         </Badge>
@@ -568,7 +565,7 @@ export default function StudentClassworkView() {
                               ? "destructive"
                               : "outline"
                         }
-                        size="md"
+                        size="sm"
                       >
                         {closed && !submission
                           ? "Closed"

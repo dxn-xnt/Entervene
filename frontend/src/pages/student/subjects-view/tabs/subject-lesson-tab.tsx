@@ -909,16 +909,16 @@ export default function SubjectLessonTab({
           {/* ════════════════ DEDICATED SECTION: Quarterly Assessments ════════════════ */}
           {quarterlyAssessments.length > 0 && (
             <Card className="block">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
                 <div className="flex items-center gap-2.5">
-                  <IconContainer variant="primary" className="size-9 rounded-none border p-0 shadow-sm [&_svg]:size-5">
+                  <IconContainer variant="primary" size="md" shadow="none" rounded="md">
                     <GraduationCap />
                   </IconContainer>
                   <div>
                     <h3 className="text-xl font-bold tracking-tight text-black">
                       Exams
                     </h3>
-                    <p className="text-sm font-medium text-gray-600">
+                    <p className="text-sm text-muted-foreground">
                       Periodical exams and summative assessments for this
                       subject.
                     </p>
@@ -926,7 +926,7 @@ export default function SubjectLessonTab({
                 </div>
                 <Badge
                   variant="secondary"
-                  className="px-3 py-1 text-sm font-bold shadow-sm"
+                  size="sm"
                 >
                   {quarterlyAssessments.length}{" "}
                   {quarterlyAssessments.length === 1 ? "Exam" : "Exams"}
@@ -942,15 +942,18 @@ export default function SubjectLessonTab({
                   const isLoading =
                     detailLoadingId === cw.classwork_assignment_id;
                   return (
-                    <button
+                    <Card
                       key={`qa-${cw.classwork_assignment_id}`}
+                      className="block w-full min-w-0 rounded! p-0 shadow-none hover:shadow-none"
+                    >
+                    <button
                       type="button"
                       onClick={() => openClassworkDetail(cw)}
                       disabled={isLoading}
-                      className="w-full rounded border border-black bg-white px-5 py-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between gap-4 hover:bg-gray-50 transition-all text-left"
+                      className="flex w-full flex-wrap items-center justify-between gap-3 rounded! p-4 text-left transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <IconContainer variant="primary" className="size-10 border bg-[#F6E9B2] p-0 [&_svg]:size-5">
+                        <IconContainer variant="primary" size="md" shadow="none" rounded="md">
                           <ClipboardList />
                         </IconContainer>
                         <div className="min-w-0 flex-1">
@@ -958,11 +961,11 @@ export default function SubjectLessonTab({
                             <h4 className="font-bold text-sm md:text-base leading-tight line-clamp-2 break-words [overflow-wrap:anywhere]">
                               {cw.title}
                             </h4>
-                            <span className="rounded-full border border-black bg-[#7ABA78] px-2.5 py-0.5 text-sm font-bold text-white shrink-0">
+                            <Badge size="sm" variant="secondary" className="shrink-0">
                               Exam
-                            </span>
+                            </Badge>
                           </div>
-                          <p className="text-sm font-medium text-gray-600 mt-1">
+                          <p className="text-sm text-muted-foreground mt-1">
                             {cw.due_date
                               ? `Due ${new Date(cw.due_date).toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}`
                               : "No due date"}
@@ -973,14 +976,16 @@ export default function SubjectLessonTab({
 
                       <div className="flex items-center gap-3 shrink-0">
                         {badge && (
-                          <span
-                            className={`rounded-full border px-3 py-1 text-sm font-bold ${badge.cls}`}
+                          <Badge
+                            size="sm"
+                            variant={badge.label === "Submitted" ? "success" : badge.label === "Late" || badge.label === "Past due" ? "destructive" : "outline"}
                           >
                             {badge.label}
-                          </span>
+                          </Badge>
                         )}
                       </div>
                     </button>
+                    </Card>
                   );
                 })}
               </div>
