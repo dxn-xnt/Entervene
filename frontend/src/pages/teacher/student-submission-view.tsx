@@ -38,6 +38,7 @@ export type StudentSubmissionViewProps = {
   onFeedbackChange: (value: string) => void;
   onPostGrade: () => void;
   onOpenQuizGrading: (submissionId: number) => void;
+  isReadOnly?: boolean;
 };
 
 export default function StudentSubmissionView({
@@ -55,6 +56,7 @@ export default function StudentSubmissionView({
   onFeedbackChange,
   onPostGrade,
   onOpenQuizGrading,
+  isReadOnly = false,
 }: StudentSubmissionViewProps) {
   const navigate = useNavigate();
 
@@ -104,16 +106,23 @@ export default function StudentSubmissionView({
               </Breadcrumb>
             </div>
             <div className="flex ">
-              <Button
-                type="button"
-                onClick={onPostGrade}
-                disabled={!selectedSubmissionDetail || isPostingGrade}
-                className="whitespace-nowrap"
-              >
-                {selectedSubmissionDetail?.status === "graded"
-                  ? "Update Grade"
-                  : "Post Grade"}
-              </Button>
+              <Tooltip>
+                <TooltipTrigger render={
+                  <span className="inline-flex">
+                    <Button
+                      type="button"
+                      onClick={onPostGrade}
+                      disabled={!selectedSubmissionDetail || isPostingGrade || isReadOnly}
+                      className="whitespace-nowrap"
+                    >
+                      {selectedSubmissionDetail?.status === "graded"
+                        ? "Update Grade"
+                        : "Post Grade"}
+                    </Button>
+                  </span>
+                } />
+                {isReadOnly && <TooltipContent>Historical records are read-only</TooltipContent>}
+              </Tooltip>
             </div>
           </header>
 
@@ -242,7 +251,7 @@ export default function StudentSubmissionView({
                 }
                 selectedScore={gradeDraft !== "" ? Number(gradeDraft) : null}
                 onSelectScore={(points) => {
-                  if (selectedSubmissionDetail && !isPostingGrade) {
+                  if (selectedSubmissionDetail && !isPostingGrade && !isReadOnly) {
                     onGradeChange(String(points));
                   }
                 }}
@@ -254,7 +263,7 @@ export default function StudentSubmissionView({
                       max={selected.total_points ?? undefined}
                       value={gradeDraft}
                       onChange={(event) => onGradeChange(event.target.value)}
-                      disabled={!selectedSubmissionDetail || isPostingGrade}
+                      disabled={!selectedSubmissionDetail || isPostingGrade || isReadOnly}
                       className="w-12 bg-transparent text-right text-lg font-extrabold outline-none"
                       placeholder="0"
                     />
@@ -275,7 +284,7 @@ export default function StudentSubmissionView({
                   <textarea
                     value={feedbackDraft}
                     onChange={(event) => onFeedbackChange(event.target.value)}
-                    disabled={!selectedSubmissionDetail || isPostingGrade}
+                    disabled={!selectedSubmissionDetail || isPostingGrade || isReadOnly}
                     className="min-h-24 w-full border-2 border-black p-3 text-sm outline-none rounded! placeholder:text-muted-foreground disabled:opacity-50"
                     placeholder="Write constructive feedback for the student..."
                   />

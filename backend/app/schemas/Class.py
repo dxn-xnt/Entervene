@@ -166,6 +166,7 @@ class TeacherAdvisoryClassListItem(BaseModel):
     section_name: str
     academic_level: str
     academic_year: str
+    academic_year_id: int | None = None
     class_status: str
     is_archived: bool
     student_count: int
@@ -198,6 +199,7 @@ class TeacherAdvisoryClassDetailResponse(BaseModel):
     section_name: str
     academic_level: str
     academic_year: str
+    academic_year_id: int | None = None
     class_status: str
     is_archived: bool
     created_at: datetime | None

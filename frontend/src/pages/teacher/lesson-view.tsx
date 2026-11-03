@@ -506,6 +506,7 @@ export interface TeacherLessonViewProps {
     isDeliveryLoading?: boolean;
     onConfirmDelivery?: (lesson: Lesson) => Promise<void> | void;
     onOpenCorrectionDialog?: (lesson: Lesson) => void;
+    isReadOnly?: boolean;
 }
 
 export function TeacherLessonView({
@@ -525,6 +526,7 @@ export function TeacherLessonView({
     isDeliveryLoading = false,
     onConfirmDelivery,
     onOpenCorrectionDialog,
+    isReadOnly = false,
 }: TeacherLessonViewProps) {
     const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
     const [isArchivingLesson, setIsArchivingLesson] = useState(false);
@@ -586,7 +588,7 @@ export function TeacherLessonView({
                     </div>
 
                     <div className="flex flex-wrap w-full gap-2 md:flex md:w-auto md:flex-nowrap md:items-center">
-                        {!isTaught && onConfirmDelivery && (
+                        {!isReadOnly && !isTaught && onConfirmDelivery && (
                             <Button
                                 type="button"
                                 size="header"
@@ -604,7 +606,7 @@ export function TeacherLessonView({
                                 Mark as Taught
                             </Button>
                         )}
-                        {isTaught && onOpenCorrectionDialog && (
+                        {!isReadOnly && isTaught && onOpenCorrectionDialog && (
                             <Button
                                 type="button"
                                 size="header"
@@ -618,17 +620,19 @@ export function TeacherLessonView({
                                 Correct Delivery
                             </Button>
                         )}
-                        <Button
-                            type="button"
-                            size="header"
-                            variant="outline"
-                            onClick={() => openLessonManager(lesson)}
-                            className="w-full whitespace-nowrap md:w-auto"
-                        >
-                            <Pencil size={16} />
-                            Edit Lesson
-                        </Button>
-                        {onArchiveLesson && (
+                        {!isReadOnly && (
+                            <Button
+                                type="button"
+                                size="header"
+                                variant="outline"
+                                onClick={() => openLessonManager(lesson)}
+                                className="w-full whitespace-nowrap md:w-auto"
+                            >
+                                <Pencil size={16} />
+                                Edit Lesson
+                            </Button>
+                        )}
+                        {!isReadOnly && onArchiveLesson && (
                             <Button
                                 type="button"
                                 size="header"
@@ -789,17 +793,19 @@ export function TeacherLessonView({
                                         Assign readings, quizzes, activities, or homework to this lesson.
                                     </EmptyDescription>
                                 </EmptyHeader>
-                                <EmptyContent className="mt-2">
-                                    <Button
-                                        variant="default"
-                                        size="sm"
-                                        onClick={() => openClassworkForm(lesson)}
-                                        className="gap-2"
-                                    >
-                                        <Plus size={16} />
-                                        Add Classwork
-                                    </Button>
-                                </EmptyContent>
+                                {!isReadOnly && (
+                                    <EmptyContent className="mt-2">
+                                        <Button
+                                            variant="default"
+                                            size="sm"
+                                            onClick={() => openClassworkForm(lesson)}
+                                            className="gap-2"
+                                        >
+                                            <Plus size={16} />
+                                            Add Classwork
+                                        </Button>
+                                    </EmptyContent>
+                                )}
                             </Empty>
                         )}
                     </section>

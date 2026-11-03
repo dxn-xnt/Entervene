@@ -8,8 +8,10 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { academicContextState } from "@/lib/academic-context-state";
 import ClassworkCard from "@/pages/teacher/classworks/classwork-card";
 import { Badge } from "@/components/retroui/Badge";
 import { isQuizType } from "@/lib/classwork-utils";
@@ -112,30 +114,58 @@ export default function SubjectClassworkTab({
   const [detailError, setDetailError] = useState("");
   const [, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const {
+    selectedPeriodId,
+    selectedYearId,
+    selectedPeriod,
+    selectedYear,
+    periods,
+    isLoading: isContextLoading,
+  } = useAcademicPeriod();
+  const contextState = useMemo(
+    () => academicContextState(selectedYear, selectedPeriod, periods),
+    [periods, selectedPeriod, selectedYear],
+  );
+  const isHistorical = contextState === "historical";
+  const isFuturePlanning = contextState === "future";
+  const requestIdRef = useRef(0);
 
   const loadClassworks = useCallback(async () => {
+    if (isContextLoading) return;
+    const currentRequestId = ++requestIdRef.current;
     setIsLoading(true);
     setError("");
     try {
+      const params = new URLSearchParams();
+      if (selectedPeriodId) params.append("academic_period_id", String(selectedPeriodId));
+      if (selectedYearId) params.append("academic_year_id", String(selectedYearId));
+      const qs = params.toString() ? `?${params.toString()}` : "";
+
       const [classworksResponse, loadsResponse] = await Promise.all([
-        apiFetch("/api/v1/classwork-assignments/my-classworks"),
-        apiFetch("/api/v1/classwork-assignments/teacher/classes"),
+        apiFetch(`/api/v1/classwork-assignments/my-classworks${qs}`),
+        apiFetch(`/api/v1/classwork-assignments/teacher/classes${qs}`),
       ]);
       if (!classworksResponse.ok || !loadsResponse.ok) {
         throw new Error("Unable to load your classworks.");
       }
       const allLoads = (await loadsResponse.json()) as TeacherClassLoad[];
       const allItems = (await classworksResponse.json()) as TeacherClasswork[];
-      setLoads(allLoads);
-      setItems(allItems);
+      if (currentRequestId === requestIdRef.current) {
+        setLoads(allLoads);
+        setItems(allItems);
+      }
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Unable to load your classworks.",
-      );
+      if (currentRequestId === requestIdRef.current) {
+        setError(
+          err instanceof Error ? err.message : "Unable to load your classworks.",
+        );
+      }
     } finally {
-      setIsLoading(false);
+      if (currentRequestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
-  }, []);
+  }, [selectedPeriodId, selectedYearId, isContextLoading]);
 
   useEffect(() => {
     void loadClassworks();
@@ -315,6 +345,7 @@ export default function SubjectClassworkTab({
   }, [filteredItems, effectiveClassId, trackingByClasswork]);
 
   const openCreateWizard = () => {
+    if (isHistorical) return;
     const preferredType =
       typeFilter !== "all" ? (typeFilter as ClassworkKind) : undefined;
     setSelectedType(preferredType ?? null);
@@ -328,10 +359,12 @@ export default function SubjectClassworkTab({
   };
 
   useEffect(() => {
-    if (isCreateOpen) {
+    if (isCreateOpen && !isHistorical) {
       openCreateWizard();
+    } else if (isHistorical) {
+      closeCreateWizard();
     }
-  }, [isCreateOpen]);
+  }, [isCreateOpen, isHistorical]);
 
   const cycleSort = () => {
     setSortMode((current) =>
@@ -575,12 +608,12 @@ export default function SubjectClassworkTab({
 
       {/* Creation Modal Wizard Dialog */}
       <Dialog
-        open={showCreateWizard}
+        open={showCreateWizard && !isHistorical}
         onOpenChange={(open) => {
           if (!open) closeCreateWizard();
         }}
       >
-        {showCreateWizard &&
+        {showCreateWizard && !isHistorical &&
           (selectedType === null ? (
             <Dialog.Content size="lg">
               <Dialog.Header position="fixed" asChild>
@@ -624,6 +657,7 @@ export default function SubjectClassworkTab({
             </Dialog.Content>
           ) : isQuizType(selectedType) ? (
             <CreateClassworkQuizModal
+              draftOnly={isFuturePlanning}
               selectedType={selectedType}
               subjects={subjects}
               loads={loads}
@@ -637,6 +671,7 @@ export default function SubjectClassworkTab({
             />
           ) : (
             <CreateClassworkModal
+              draftOnly={isFuturePlanning}
               selectedType={selectedType}
               subjects={subjects}
               loads={loads}

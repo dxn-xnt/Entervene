@@ -46,6 +46,7 @@ export interface LessonClasswork {
 export interface ClassworkDetail {
   classwork_assignment_id: number;
   classwork_id: number;
+  academic_period_id?: number;
   title: string;
   description?: string | null;
   instructions?: string | null;

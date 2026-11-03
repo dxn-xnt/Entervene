@@ -4,20 +4,13 @@ import { Button } from "@/components/teacher/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { Card } from "@/components/retroui/Card";
 import { ArrowUpRight, BookOpen } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { apiFetch, getTeacherAdvisoryClasses } from "@/lib/api";
+import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 import type { TeacherAdvisoryClassListItem } from "@/types/adminClasses";
-import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { cn } from "@/lib/utils";
 import { SubjectCard, type ActiveClassworkInfo } from "@/components/subject-card";
 
@@ -90,44 +83,15 @@ function AdvisoryCatalogCard({
 
 const TeacherClasses = () => {
   const navigate = useNavigate();
-  const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
-  const [advisoryClasses, setAdvisoryClasses] = useState<
-    TeacherAdvisoryClassListItem[]
-  >([]);
-  const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const { selectedPeriodId } = useAcademicPeriod();
+  const {
+    classes: loads,
+    advisoryClasses,
+    isLoading,
+    error: hookError,
+  } = useTeacherClasses();
+  const [dismissedError, setDismissedError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const loadTeacherClasses = async () => {
-      setIsLoading(true);
-      setError("");
-
-      try {
-        const query = selectedPeriodId ? `?academic_period_id=${selectedPeriodId}` : "";
-        const [response, advisoryData] = await Promise.all([
-          apiFetch(`/api/v1/classwork-assignments/teacher/classes${query}`),
-          getTeacherAdvisoryClasses(selectedPeriodId ?? undefined),
-        ]);
-        if (!response.ok) {
-          throw new Error("Unable to load teacher classes.");
-        }
-
-        setLoads((await response.json()) as TeacherClassLoad[]);
-        setAdvisoryClasses(advisoryData);
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load teacher classes.",
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadTeacherClasses();
-  }, [selectedPeriodId]);
+  const error = hookError && hookError.message !== dismissedError ? hookError.message : "";
 
   const advisoryByClass = useMemo(() => {
     return new Map(advisoryClasses.map((item) => [item.class_id, item]));
@@ -199,7 +163,7 @@ const TeacherClasses = () => {
                   position="top-right"
 
                   duration={5000}
-                  onClose={() => setError("")}
+                  onClose={() => setDismissedError(error)}
                 >
                   <Alert.Title>Error</Alert.Title>
                   <Alert.Description>{error}</Alert.Description>
@@ -223,19 +187,11 @@ const TeacherClasses = () => {
                   >
                     {groupedSubjectLoads.length === 0 ? (
                       <div className="col-span-full">
-                        <Empty className="hover:shadow-none transition-shadow">
-                          <EmptyHeader>
-                            <EmptyMedia>
-                              <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
-                                <BookOpen className="size-5 text-black" />
-                              </div>
-                            </EmptyMedia>
-                            <EmptyTitle>No subject teaching sections assigned.</EmptyTitle>
-                            <EmptyDescription className="text-center">
-                              No active teaching sections are currently assigned to your account.
-                            </EmptyDescription>
-                          </EmptyHeader>
-                        </Empty>
+                        <TeacherEmptyState
+                          icon={<BookOpen className="size-5 text-black" />}
+                          title="No subject teaching sections assigned"
+                          description="No subject teaching sections are assigned to your account for this academic period."
+                        />
                       </div>
                     ) : (
                       groupedSubjectLoads.map((group) => (

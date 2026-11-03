@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
   ArrowDownAZ,
@@ -11,6 +11,7 @@ import {
   FileText,
   Lightbulb,
   Pencil,
+  Plus,
   Repeat,
   Search,
   Users,
@@ -119,7 +120,7 @@ export default function TeacherClassDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [tab, setTab] = useState<DetailTab>("lessons");
-  const { selectedPeriodId } = useAcademicPeriod();
+  const { selectedPeriodId, selectedYear, selectedPeriod } = useAcademicPeriod();
   const [isSetGoalModalOpen, setIsSetGoalModalOpen] = useState(false);
   const [isRepostModalOpen, setIsRepostModalOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -128,6 +129,13 @@ export default function TeacherClassDetail() {
   const [classworkInterfaceClasswork, setClassworkInterfaceClasswork] = useState<TeacherClasswork | null>(null);
   const [detail, setDetail] =
     useState<TeacherAdvisoryClassDetailResponse | null>(null);
+
+  const isReadOnly = useMemo(() => {
+    if (detail?.is_archived) return true;
+    if (selectedYear && !selectedYear.is_active) return true;
+    if (selectedPeriod && !selectedPeriod.is_active) return true;
+    return false;
+  }, [detail?.is_archived, selectedYear, selectedPeriod]);
   const [error, setError] = useState("");
 
   const initialSubjectId =
@@ -234,13 +242,21 @@ export default function TeacherClassDetail() {
                     </Button>
                     {tab === "lessons" ? (
                       <div className="flex flex-row gap-2">
-                        <Button
-                          size="header"
-                          className="w-full md:w-auto whitespace-nowrap"
-                          onClick={() => setIsSetGoalModalOpen(true)}
-                        >
-                          <Pencil className="size-4" /> Set Lesson Goal
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger render={
+                            <span className="inline-flex w-full md:w-auto">
+                              <Button
+                                size="header"
+                                className="w-full md:w-auto whitespace-nowrap"
+                                disabled={isReadOnly}
+                                onClick={() => setIsSetGoalModalOpen(true)}
+                              >
+                                <Pencil className="size-4" /> Set Lesson Goal
+                              </Button>
+                            </span>
+                          } />
+                          {isReadOnly && <TooltipContent>Historical records are read-only</TooltipContent>}
+                        </Tooltip>
                         {(currentSubject?.subject_id || initialSubjectId || detail.subject_loads[0]?.subject_id) && (
                           <Button
                             size="header"
@@ -336,6 +352,7 @@ export default function TeacherClassDetail() {
                   subjectId={currentSubject?.subject_id || initialSubjectId}
                   onClassworkViewChange={setClassworkInterfaceClasswork}
                   refreshTrigger={refreshKey}
+                  isReadOnly={isReadOnly}
                 />
               )}
               {detail && (currentSubject?.subject_id || initialSubjectId || detail.subject_loads[0]?.subject_id) && (
@@ -1634,12 +1651,14 @@ function ClassworkTab({
   subjectId,
   onClassworkViewChange,
   refreshTrigger,
+  isReadOnly = false,
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
   currentSubject?: TeacherAdvisoryClassDetailResponse["subject_loads"][number] | null;
   subjectId?: number | null;
   onClassworkViewChange?: (cw: TeacherClasswork | null) => void;
   refreshTrigger?: number;
+  isReadOnly?: boolean;
 }) {
   const navigate = useNavigate();
   const activeSubjectId =
@@ -1650,10 +1669,12 @@ function ClassworkTab({
     isLoading: loadingClasses,
     error: classesError,
     selectedPeriodId,
+    selectedYearId,
     refetch: refetchClasses,
   } = useTeacherClasses({ includeAdvisory: false });
 
   const [items, setItems] = useState<TeacherClasswork[]>([]);
+  const classworkRequestIdRef = useRef(0);
   const [lessons, setLessons] = useState<Array<{ lesson_id: number; title: string }>>([]);
   const [lessonFilter, setLessonFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -1674,26 +1695,37 @@ function ClassworkTab({
   };
 
   const loadClassworks = useCallback(async () => {
+    const currentRequestId = ++classworkRequestIdRef.current;
     setLoadingItems(true);
     setItemsError("");
     try {
-      const periodQuery = selectedPeriodId ? `?academic_period_id=${selectedPeriodId}` : "";
+      const effectiveYearId = detail.academic_year_id ?? selectedYearId;
+      const params = new URLSearchParams();
+      if (selectedPeriodId) params.append("academic_period_id", String(selectedPeriodId));
+      if (effectiveYearId) params.append("academic_year_id", String(effectiveYearId));
+      const qs = params.toString() ? `?${params.toString()}` : "";
       const classworksResponse = await apiFetch(
-        `/api/v1/classwork-assignments/my-classworks${periodQuery}`,
+        `/api/v1/classwork-assignments/my-classworks${qs}`,
       );
       if (!classworksResponse.ok) {
         throw new Error("Unable to load your classworks.");
       }
       const allItems = (await classworksResponse.json()) as TeacherClasswork[];
-      setItems(allItems);
+      if (currentRequestId === classworkRequestIdRef.current) {
+        setItems(allItems);
+      }
     } catch (err) {
-      setItemsError(
-        err instanceof Error ? err.message : "Unable to load your classworks.",
-      );
+      if (currentRequestId === classworkRequestIdRef.current) {
+        setItemsError(
+          err instanceof Error ? err.message : "Unable to load your classworks.",
+        );
+      }
     } finally {
-      setLoadingItems(false);
+      if (currentRequestId === classworkRequestIdRef.current) {
+        setLoadingItems(false);
+      }
     }
-  }, [selectedPeriodId]);
+  }, [selectedPeriodId, selectedYearId, detail.academic_year_id]);
 
   useEffect(() => {
     void loadClassworks();
@@ -1836,6 +1868,12 @@ function ClassworkTab({
       cancelled = true;
     };
   }, [filteredItems, detail.class_id, trackingByClasswork]);
+
+  const openCreateWizard = () => {
+    if (isReadOnly) return;
+    setSelectedType(null);
+    setShowCreateWizard(true);
+  };
 
   const closeCreateWizard = () => {
     setShowCreateWizard(false);
@@ -2016,30 +2054,20 @@ function ClassworkTab({
             ))}
           </section>
         ) : (
-          <Empty className="shadow-md hover:shadow-none transition-shadow">
-            <EmptyHeader>
-              <EmptyMedia>
-                <div className="flex items-center gap-2">
-                  <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
-                    <BookOpen className="size-5 text-black" />
-                  </div>
-                  <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
-                    <CheckSquare className="size-5 text-black" />
-                  </div>
-                  <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
-                    <FileText className="size-5 text-black" />
-                  </div>
-                  <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
-                    <ClipboardList className="size-5 text-black" />
-                  </div>
-                </div>
-              </EmptyMedia>
-              <EmptyTitle>No Classworks Found</EmptyTitle>
-              <EmptyDescription className="text-center whitespace-nowrap">
-                No classwork items match the selected filter criteria for this subject.
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+          <TeacherEmptyState
+            icon={<ClipboardList className="size-5 text-black" />}
+            title="No Classworks Found"
+            description="No classwork items match the selected filter criteria for this subject."
+            action={
+              !isReadOnly
+                ? {
+                    label: "Create Classwork",
+                    icon: <Plus className="size-4" />,
+                    onClick: openCreateWizard,
+                  }
+                : undefined
+            }
+          />
         )}
       </main>
 

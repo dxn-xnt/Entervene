@@ -11,23 +11,18 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getTeacherClassworks } from "@/lib/api";
 import { useTeacherClasses } from "@/hooks/use-teacher-classes";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { academicContextState } from "@/lib/academic-context-state";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import ClassworkCard from "./classworks/classwork-card";
 import ClassworkListItem from "./classworks/classwork-list-item";
 import { isQuizType } from "@/lib/classwork-utils";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import type {
   ClassworkKind,
   SortMode,
@@ -281,8 +276,25 @@ export default function Classworks() {
     isLoading: loadingClasses,
     error: classesError,
     selectedPeriodId,
+    selectedYearId,
     refetch: refetchClasses,
   } = useTeacherClasses({ includeAdvisory: false });
+
+  const {
+    selectedPeriod,
+    selectedYear,
+    periods,
+    isLoading: isContextLoading,
+  } = useAcademicPeriod();
+
+  const contextState = useMemo(
+    () => academicContextState(selectedYear, selectedPeriod, periods),
+    [periods, selectedPeriod, selectedYear],
+  );
+  const isReadOnly = contextState === "historical";
+  const isFuturePlanning = contextState === "future";
+
+  const requestIdRef = useRef(0);
 
   const [items, setItems] = useState<TeacherClasswork[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("all");
@@ -307,28 +319,27 @@ export default function Classworks() {
   }, [remediationType]);
 
   const loadClassworks = useCallback(async () => {
-    // Load real teacher-owned classworks scoped to the selected academic period
+    if (isContextLoading) return;
+    const currentRequestId = ++requestIdRef.current;
     setLoadingItems(true);
     setItemsError("");
     try {
-      const periodQuery = selectedPeriodId
-        ? `?academic_period_id=${selectedPeriodId}`
-        : "";
-      const classworksResponse = await apiFetch(
-        `/api/v1/classwork-assignments/my-classworks${periodQuery}`,
-      );
-      if (!classworksResponse.ok) {
-        throw new Error("Unable to load your classworks.");
+      const data = await getTeacherClassworks(selectedPeriodId, selectedYearId);
+      if (currentRequestId === requestIdRef.current) {
+        setItems(data);
       }
-      setItems((await classworksResponse.json()) as TeacherClasswork[]);
     } catch (err) {
-      setItemsError(
-        err instanceof Error ? err.message : "Unable to load your classworks.",
-      );
+      if (currentRequestId === requestIdRef.current) {
+        setItemsError(
+          err instanceof Error ? err.message : "Unable to load your classworks.",
+        );
+      }
     } finally {
-      setLoadingItems(false);
+      if (currentRequestId === requestIdRef.current) {
+        setLoadingItems(false);
+      }
     }
-  }, [selectedPeriodId]);
+  }, [selectedPeriodId, selectedYearId, isContextLoading]);
 
   useEffect(() => {
     void loadClassworks();
@@ -476,6 +487,7 @@ export default function Classworks() {
   }, [filteredItems, classFilter, trackingByClasswork]);
 
   const openCreateWizard = () => {
+    if (isReadOnly) return;
     const preferredType = tabType[activeTab] as ClassworkKind | undefined;
     setSelectedType(preferredType ?? null);
     setShowCreateWizard(true);
@@ -492,6 +504,13 @@ export default function Classworks() {
       setRouteParams(next, { replace: true });
     }
   };
+
+  useEffect(() => {
+    if (isReadOnly) {
+      setShowCreateWizard(false);
+      setSelectedType(null);
+    }
+  }, [isReadOnly]);
 
   const handleClassworkCreated = async () => {
     await Promise.all([loadClassworks(), refetchClasses()]);
@@ -524,16 +543,24 @@ export default function Classworks() {
                   </h1>
                 </div>
 
-                <Button
-                  type="button"
-                  size="header"
-                  onClick={openCreateWizard}
-                  className="shrink-0 whitespace-nowrap"
-                >
-                  <Plus className="size-4" />
-                  <span className="hidden sm:inline">New Classwork</span>
-                  <span className="sm:hidden">New</span>
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger render={
+                    <span className="inline-flex">
+                      <Button
+                        type="button"
+                        size="header"
+                        disabled={isReadOnly}
+                        onClick={openCreateWizard}
+                        className="shrink-0 whitespace-nowrap"
+                      >
+                        <Plus className="size-4" />
+                        <span className="hidden sm:inline">New Classwork</span>
+                        <span className="sm:hidden">New</span>
+                      </Button>
+                    </span>
+                  } />
+                  {isReadOnly && <TooltipContent>Historical records are read-only</TooltipContent>}
+                </Tooltip>
               </header>
               <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
                 <Tabs
@@ -714,45 +741,30 @@ export default function Classworks() {
                     </section>
                   )
                 ) : (
-                  <Empty className="shadow-md hover:shadow-none transition-shadow">
-                    <EmptyHeader>
-                      <EmptyMedia>
-                        <div className="flex items-center gap-2">
-                          <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
-                            <BookOpen className="size-5 text-black" />
-                          </div>
-                          <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
-                            <CheckSquare className="size-5 text-black" />
-                          </div>
-                          <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
-                            <FileText className="size-5 text-black" />
-                          </div>
-                          <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
-                            <ClipboardList className="size-5 text-black" />
-                          </div>
-                        </div>
-                      </EmptyMedia>
-                      <EmptyTitle>No Classworks Found</EmptyTitle>
-                      <EmptyDescription className="text-center whitespace-nowrap">
-                        Try another tab, search term, or filter.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                    <EmptyContent>
-                      <Button size="sm" variant="default" onClick={openCreateWizard} className="gap-1.5">
-                        Create Classwork
-                      </Button>
-                    </EmptyContent>
-                  </Empty>
+                  <TeacherEmptyState
+                    icon={<ClipboardList className="size-5 text-black" />}
+                    title="No Classworks Found"
+                    description="No classwork items match the selected filter criteria for this academic period."
+                    action={
+                      !isReadOnly
+                        ? {
+                            label: "Create Classwork",
+                            icon: <Plus className="size-4" />,
+                            onClick: openCreateWizard,
+                          }
+                        : undefined
+                    }
+                  />
                 )}
               </main>
 
               <Dialog
-                open={showCreateWizard}
+                open={showCreateWizard && !isReadOnly}
                 onOpenChange={(open) => {
                   if (!open) closeCreateWizard();
                 }}
               >
-                {showCreateWizard &&
+                {showCreateWizard && !isReadOnly &&
                   (selectedType === null ? (
                     <Dialog.Content size="lg">
                       <Dialog.Header position="fixed" asChild>
@@ -812,6 +824,7 @@ export default function Classworks() {
                     </Dialog.Content>
                   ) : isQuizType(selectedType) ? (
                     <CreateClassworkQuizModal
+                      draftOnly={isFuturePlanning}
                       selectedType={selectedType}
                       subjects={subjects}
                       loads={loads as unknown as TeacherClassLoad[]}
@@ -839,6 +852,7 @@ export default function Classworks() {
                     />
                   ) : (
                     <CreateClassworkModal
+                      draftOnly={isFuturePlanning}
                       selectedType={selectedType}
                       subjects={subjects}
                       loads={loads as unknown as TeacherClassLoad[]}

@@ -86,6 +86,7 @@ type SubjectLessonListProps = {
   deliveryLoadingLessonId?: number | null;
   onConfirmDelivery?: (lesson: Lesson) => Promise<void> | void;
   onOpenCorrectionDialog?: (lesson: Lesson) => void;
+  isReadOnly?: boolean;
 };
 
 export default function SubjectLessonList({
@@ -119,6 +120,7 @@ export default function SubjectLessonList({
   deliveryLoadingLessonId = null,
   onConfirmDelivery,
   onOpenCorrectionDialog,
+  isReadOnly = false,
 }: SubjectLessonListProps) {
   const navigate = useNavigate();
   const [internalCompetencyFilter, setInternalCompetencyFilter] = useState("all");
@@ -171,6 +173,11 @@ export default function SubjectLessonList({
 
   const [lessonToArchive, setLessonToArchive] = useState<Lesson | null>(null);
   const [isArchivingLesson, setIsArchivingLesson] = useState(false);
+
+  useEffect(() => {
+    if (isReadOnly) setLessonToArchive(null);
+  }, [isReadOnly]);
+
   const quarterlyAssessments = (subjectAssignments ?? []).filter(
     (cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT",
   );
@@ -244,15 +251,15 @@ export default function SubjectLessonList({
         isLoadingClassworks={isLoadingCw}
         onOpenLessonDetail={openLessonDetail}
         onOpenClassworkDetail={openClassworkDetail}
-        onOpenClassworkForm={openClassworkForm}
-        onOpenLessonManager={openLessonManager}
-        onArchiveLesson={() => setLessonToArchive(lesson)}
+        onOpenClassworkForm={isReadOnly ? undefined : openClassworkForm}
+        onOpenLessonManager={isReadOnly ? undefined : openLessonManager}
+        onArchiveLesson={isReadOnly ? undefined : () => setLessonToArchive(lesson)}
         withShadow={false}
         delivery={delivery}
         isDelivered={isDelivered}
         isDeliveryLoading={isDeliveryLoading}
-        onConfirmDelivery={onConfirmDelivery}
-        onOpenCorrectionDialog={onOpenCorrectionDialog}
+        onConfirmDelivery={isReadOnly ? undefined : onConfirmDelivery}
+        onOpenCorrectionDialog={isReadOnly ? undefined : onOpenCorrectionDialog}
       />
     );
   };
@@ -489,7 +496,7 @@ export default function SubjectLessonList({
                                       onClick={(e) => e.stopPropagation()}
                                       className="border-2 border-black bg-white min-w-[180px] p-1 rounded font-semibold text-xs z-50"
                                     >
-                                      {onAddLessonToCompetency && (
+                                      {!isReadOnly && onAddLessonToCompetency && (
                                         <DropdownMenuItem
                                           onClick={() => onAddLessonToCompetency(comp.competency_id)}
                                           className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-yellow-100"
@@ -557,7 +564,7 @@ export default function SubjectLessonList({
                                   No lessons assigned to this competency yet.
                                 </EmptyDescription>
                               </EmptyHeader>
-                              {onAddLessonToCompetency && (
+                              {!isReadOnly && onAddLessonToCompetency && (
                                 <EmptyContent className="mt-2">
                                   <Button
                                     type="button"
@@ -577,7 +584,7 @@ export default function SubjectLessonList({
                     </ContextMenu.Trigger>
 
                     <ContextMenu.Content className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] min-w-[160px] p-1 rounded font-semibold text-xs z-50">
-                      {onAddLessonToCompetency && (
+                      {!isReadOnly && onAddLessonToCompetency && (
                         <ContextMenu.Item
                           onClick={() => onAddLessonToCompetency(comp.competency_id)}
                           className="flex items-center gap-2 cursor-pointer px-2.5 py-2 hover:bg-yellow-100 rounded focus:bg-yellow-100 text-xs font-bold"

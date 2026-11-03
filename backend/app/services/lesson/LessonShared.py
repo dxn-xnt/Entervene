@@ -7,6 +7,7 @@ from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.StudentCLass import StudentClass
 from app.models.people.Student import Student
 from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.services.academic.ContentAuthorizationService import (
     authorize_teacher_content,
@@ -18,28 +19,111 @@ from app.services.academic.ContentAuthorizationService import (
 
 
 def ensure_teacher_subject(db: Session, staff_id: str, subject_id: int) -> None:
-    load = db.query(SubjectLoad).filter(
+    from app.services.academic.SubjectLoadAuthorizationService import (
+        SubjectLoadAuthorizationService,
+        AcademicContextState,
+    )
+    loads = db.query(SubjectLoad).filter(
         SubjectLoad.staff_id == staff_id,
         SubjectLoad.subject_id == subject_id,
         SubjectLoad.is_active_version.is_(True),
         SubjectLoad.status.in_(["active", "published"]),
-    ).first()
-    if not load:
+    ).all()
+    if not loads:
         raise HTTPException(status_code=403, detail="You are not assigned to this subject")
+
+    has_active_load = False
+    for load in loads:
+        period = db.get(AcademicPeriod, load.academic_period_id) if load.academic_period_id else None
+        class_obj = db.get(Class, load.class_id) if load.class_id else None
+        year_id = (
+            period.academic_year_id
+            if period is not None and period.academic_year_id is not None
+            else (class_obj.academic_year_id if class_obj is not None else None)
+        )
+        year_obj = db.get(AcademicYear, year_id) if year_id is not None else None
+        if year_obj is not None:
+            state = SubjectLoadAuthorizationService.classify_academic_year(db, year_obj)
+            if state == AcademicContextState.CURRENT:
+                has_active_load = True
+                break
+        else:
+            has_active_load = True
+            break
+
+    if not has_active_load:
+        all_historical = all(
+            SubjectLoadAuthorizationService.classify_academic_year(
+                db,
+                db.get(
+                    AcademicYear,
+                    (db.get(AcademicPeriod, l.academic_period_id).academic_year_id
+                     if l.academic_period_id and db.get(AcademicPeriod, l.academic_period_id)
+                     else (db.get(Class, l.class_id).academic_year_id if l.class_id and db.get(Class, l.class_id) else None)),
+                ),
+            ) == AcademicContextState.HISTORICAL
+            for l in loads
+        )
+        if all_historical:
+            raise HTTPException(
+                status_code=403,
+                detail="Academic year is closed. Historical records are read-only.",
+            )
+        raise HTTPException(
+            status_code=403,
+            detail="Academic year is not currently active. Records are read-only.",
+        )
 
 
 def ensure_teacher_class_subject(
-    db: Session, staff_id: str, class_id: int, subject_id: int, *, read_only: bool = False
+    db: Session,
+    staff_id: str,
+    class_id: int,
+    subject_id: int,
+    *,
+    read_only: bool = False,
+    academic_period_id: int | None = None,
 ) -> None:
     """Require active class/subject authority, retaining substitute/view-only reads."""
     from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+    from app.services.academic.AcademicYearService import is_academic_year_authorized
+
+    class_obj = db.get(Class, class_id)
+    if not class_obj:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    if class_obj.academic_year_id is not None:
+        if not is_academic_year_authorized(db, class_obj.academic_year_id, role="teacher", staff_id=staff_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Not authorized to access this academic year",
+            )
+
+    if not read_only:
+        SubjectLoadAuthorizationService.assert_context_writable(
+            db,
+            class_id=class_id,
+            academic_period_id=academic_period_id,
+        )
+
     if read_only:
-        periods = db.query(AcademicPeriod.academic_period_id).join(
-            Class, Class.academic_year_id == AcademicPeriod.academic_year_id
-        ).filter(Class.class_id == class_id).all()
+        if academic_period_id is not None:
+            read_scopes = ((class_id, subject_id, academic_period_id),)
+        else:
+            periods = (
+                db.query(AcademicPeriod.academic_period_id)
+                .join(Class, Class.academic_year_id == AcademicPeriod.academic_year_id)
+                .filter(Class.class_id == class_id)
+                .all()
+            )
+            read_scopes = ((class_id, subject_id, period_id) for (period_id,) in periods)
+
         authorize_teacher_content(
-            db, staff_id=staff_id, owner_staff_id=None, detail="Lesson not found",
-            read_scopes=((class_id, subject_id, period_id) for (period_id,) in periods),
+            db,
+            staff_id=staff_id,
+            owner_staff_id=None,
+            detail="Lesson not found",
+            read_scopes=read_scopes,
         )
         return
     load = db.query(SubjectLoad).filter(
@@ -182,6 +266,17 @@ def authorize_lesson_access(
 
     if role == "admin":
         return
+
+    if class_id is not None:
+        class_obj = db.get(Class, class_id)
+        if class_obj and class_obj.academic_year_id is not None:
+            from app.services.academic.AcademicYearService import is_academic_year_authorized
+            if not is_academic_year_authorized(db, class_obj.academic_year_id, role=role, staff_id=staff_id):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Not authorized to access this academic year",
+                )
+
     if role == "teacher":
         if staff_id is None:
             staff_id = resolve_content_staff_id(db, current_user)

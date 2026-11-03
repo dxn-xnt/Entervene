@@ -397,6 +397,20 @@ class SubjectLoadAuthorizationService:
         if staff_id == load.staff_id:
             return SubjectAccessLevel.VIEW_ONLY if restriction_reason else SubjectAccessLevel.WRITE
 
+        # Check if staff was an authorized substitute teacher on this load (active or completed)
+        from app.models.academic.TeacherSubstitution import TeacherSubstitution
+        past_sub = (
+            db.query(TeacherSubstitution.substitution_id)
+            .filter(
+                TeacherSubstitution.subject_load_id == load.subject_load_id,
+                TeacherSubstitution.substitute_staff_id == staff_id,
+                TeacherSubstitution.status.in_(["active", "completed"]),
+            )
+            .first()
+        )
+        if past_sub is not None:
+            return SubjectAccessLevel.VIEW_ONLY
+
         return SubjectAccessLevel.DENIED
 
     @classmethod

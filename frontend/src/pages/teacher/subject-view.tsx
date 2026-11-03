@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Award, BookOpen, CheckSquare, ClipboardList, FileText, Plus, Repeat, X, type LucideIcon } from "lucide-react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -32,6 +32,7 @@ import SubjectClassworkTab from "./subject-details/subject-classwork-tab";
 import TeacherLessonDetailScreen from "./lesson-view";
 import { RepostModal } from "@/components/teacher/repost-modal";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { academicContextState } from "@/lib/academic-context-state";
 import TOSGeneratorScreen from "./subject-details/tos-generator-screen";
 import {
   fetchClassSubjectDeliveries,
@@ -95,7 +96,28 @@ export default function SubjectDetails() {
     classId: string;
     subjectId: string;
   }>();
-  const { selectedPeriodId, periods } = useAcademicPeriod();
+  const {
+    selectedPeriodId,
+    selectedYearId,
+    selectedPeriod,
+    selectedYear,
+    periods,
+  } = useAcademicPeriod();
+  const isReadOnly = useMemo(
+    () =>
+      Boolean(
+        (selectedYear && !selectedYear.is_active) ||
+          (selectedPeriod && !selectedPeriod.is_active),
+      ),
+    [selectedPeriod, selectedYear],
+  );
+  const classworkContextState = useMemo(
+    () => academicContextState(selectedYear, selectedPeriod, periods),
+    [periods, selectedPeriod, selectedYear],
+  );
+  const isHistoricalClassworkContext = classworkContextState === "historical";
+  const isFutureClassworkPlanning = classworkContextState === "future";
+  const loadRequestIdRef = useRef(0);
   const [isRepostModalOpen, setIsRepostModalOpen] = useState(false);
   const [competencies, setCompetencies] = useState<CompetencyItem[]>([]);
   const [isCompetencyModalOpen, setIsCompetencyModalOpen] = useState(false);
@@ -147,9 +169,18 @@ export default function SubjectDetails() {
     if (!classId || !subjectId) return;
     try {
       void loadDeliveries();
+      const lessonParams = new URLSearchParams();
+      if (effectivePeriodId) lessonParams.set("academic_period_id", String(effectivePeriodId));
+      if (selectedYearId) lessonParams.set("academic_year_id", String(selectedYearId));
+      const lessonQuery = lessonParams.toString() ? `?${lessonParams.toString()}` : "";
+
+      const compParams = new URLSearchParams();
+      if (effectivePeriodId) compParams.set("period_id", String(effectivePeriodId));
+      const compQuery = compParams.toString() ? `?${compParams.toString()}` : "";
+
       const [lessonsRes, compsRes] = await Promise.all([
-        apiFetch(`/api/v1/lessons/my-class/${classId}/subject/${subjectId}`),
-        apiFetch(`/api/v1/competencies/subject/${subjectId}`),
+        apiFetch(`/api/v1/lessons/my-class/${classId}/subject/${subjectId}${lessonQuery}`),
+        apiFetch(`/api/v1/competencies/subject/${subjectId}${compQuery}`),
       ]);
       if (lessonsRes.ok) {
         const lessonData = (await lessonsRes.json()) as Lesson[];
@@ -268,18 +299,44 @@ export default function SubjectDetails() {
     setSearchParams(nextParams, { replace: true });
   };
 
+  const subjectLoad = useMemo(() => {
+    return loads.find(
+      (load) =>
+        load.class_id === Number(classId) &&
+        load.subject_id === Number(subjectId),
+    );
+  }, [classId, loads, subjectId]);
+
+  const effectivePeriodId = useMemo(() => {
+    if (selectedPeriodId) return Number(selectedPeriodId);
+    const active = periods.find((p) => p.is_active);
+    if (active) return active.id;
+    if (periods.length > 0) return periods[0].id;
+    return subjectLoad?.academic_period_id || null;
+  }, [selectedPeriodId, periods, subjectLoad?.academic_period_id]);
+
   useEffect(() => {
+    const requestId = ++loadRequestIdRef.current;
     const loadContext = async () => {
       setIsLoading(true);
       setError("");
 
       try {
+        const lessonParams = new URLSearchParams();
+        if (effectivePeriodId) lessonParams.set("academic_period_id", String(effectivePeriodId));
+        if (selectedYearId) lessonParams.set("academic_year_id", String(selectedYearId));
+        const lessonQuery = lessonParams.toString() ? `?${lessonParams.toString()}` : "";
+
+        const compParams = new URLSearchParams();
+        if (effectivePeriodId) compParams.set("period_id", String(effectivePeriodId));
+        const compQuery = compParams.toString() ? `?${compParams.toString()}` : "";
+
         const [classesResponse, lessonsResponse, assignmentsResponse, competenciesResponse] =
           await Promise.all([
             apiFetch("/api/v1/classwork-assignments/teacher/classes"),
             classId && subjectId
               ? apiFetch(
-                `/api/v1/lessons/my-class/${classId}/subject/${subjectId}`,
+                `/api/v1/lessons/my-class/${classId}/subject/${subjectId}${lessonQuery}`,
               )
               : Promise.resolve(null),
             classId && subjectId
@@ -288,9 +345,11 @@ export default function SubjectDetails() {
               )
               : Promise.resolve(null),
             subjectId
-              ? apiFetch(`/api/v1/competencies/subject/${subjectId}`)
+              ? apiFetch(`/api/v1/competencies/subject/${subjectId}${compQuery}`)
               : Promise.resolve(null),
           ]);
+
+        if (requestId !== loadRequestIdRef.current) return;
 
         if (!classesResponse.ok) {
           throw new Error("Unable to load subject context.");
@@ -383,18 +442,21 @@ export default function SubjectDetails() {
           }
         }
       } catch (err) {
+        if (requestId !== loadRequestIdRef.current) return;
         setError(
           err instanceof Error
             ? err.message
             : "Unable to load subject details.",
         );
       } finally {
-        setIsLoading(false);
+        if (requestId === loadRequestIdRef.current) {
+          setIsLoading(false);
+        }
       }
     };
 
     loadContext();
-  }, [classId, subjectId]);
+  }, [classId, subjectId, effectivePeriodId, selectedYearId]);
 
   useEffect(() => {
     const isOpen = Boolean(selectedClasswork || detailLoadingId || detailError);
@@ -418,22 +480,6 @@ export default function SubjectDetails() {
       void loadLessonClassworks(targetId);
     }
   }, [classId, lessons, searchParams]);
-
-  const subjectLoad = useMemo(() => {
-    return loads.find(
-      (load) =>
-        load.class_id === Number(classId) &&
-        load.subject_id === Number(subjectId),
-    );
-  }, [classId, loads, subjectId]);
-
-  const effectivePeriodId = useMemo(() => {
-    if (selectedPeriodId) return Number(selectedPeriodId);
-    const active = periods.find((p) => p.is_active);
-    if (active) return active.id;
-    if (periods.length > 0) return periods[0].id;
-    return subjectLoad?.academic_period_id || null;
-  }, [selectedPeriodId, periods, subjectLoad?.academic_period_id]);
 
   const loadDeliveries = useCallback(async () => {
     if (!classId || !subjectId || !effectivePeriodId) return;
@@ -460,6 +506,7 @@ export default function SubjectDetails() {
   }, [loadDeliveries]);
 
   const handleConfirmDelivery = async (lesson: Lesson) => {
+    if (isReadOnly) return;
     if (!classId || !subjectId || !effectivePeriodId) {
       setError("Academic period context is missing. Please select an academic term.");
       return;
@@ -500,11 +547,13 @@ export default function SubjectDetails() {
   };
 
   const openCorrectionDialog = (lesson: Lesson) => {
+    if (isReadOnly) return;
     setCorrectionTargetLesson(lesson);
     setIsCorrectionModalOpen(true);
   };
 
   const handleConfirmCorrection = async (deliveryId: number, reason: string) => {
+    if (isReadOnly) return;
     if (!correctionTargetLesson) return;
     const lessonId = correctionTargetLesson.lesson_id;
     setDeliveryLoadingLessonId(lessonId);
@@ -650,6 +699,7 @@ export default function SubjectDetails() {
   };
 
   const openClassworkForm = (lesson: Lesson) => {
+    if (isHistoricalClassworkContext) return;
     setError("");
     setClassworkLesson(lesson);
     setSelectedType(null);
@@ -664,6 +714,7 @@ export default function SubjectDetails() {
   };
 
   const openLessonManager = (lesson: Lesson) => {
+    if (isReadOnly) return;
     setError("");
     setSelectedLesson(lesson);
     setLessonDraft({
@@ -700,6 +751,7 @@ export default function SubjectDetails() {
   };
 
   const saveLesson = async () => {
+    if (isReadOnly) return;
     if (!selectedLesson || !lessonDraft) return;
 
     setError("");
@@ -800,6 +852,7 @@ export default function SubjectDetails() {
   };
 
   const removeLessonAttachment = async (attachmentId: number) => {
+    if (isReadOnly) return;
     if (!selectedLesson) return;
 
     setRemovingLessonAttachmentId(attachmentId);
@@ -839,6 +892,7 @@ export default function SubjectDetails() {
   };
 
   const handleArchiveLessonDirect = async (lesson: Lesson) => {
+    if (isReadOnly) return;
     const response = await apiFetch(
       `/api/v1/lessons/${lesson.lesson_id}/archive`,
       {
@@ -940,6 +994,7 @@ export default function SubjectDetails() {
                 )}
                 <TeacherLessonDetailScreen
                   lesson={activeLessonDetail}
+                  isReadOnly={isReadOnly}
                   subjectName={subjectName}
                   sectionName={sectionName}
                   closeLessonDetail={closeLessonDetail}
@@ -1002,16 +1057,24 @@ export default function SubjectDetails() {
                     </div>
 
                     <div className="flex flex-wrap w-full gap-2 md:flex md:w-auto md:flex-nowrap md:items-center">
-                      <Button
-                        type="button"
-                        size="header"
-                        variant="outline"
-                        onClick={() => setIsRepostModalOpen(true)}
-                        className="w-full whitespace-nowrap md:w-auto"
-                      >
-                        <Repeat size={16} />
-                        Repost
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger render={
+                          <span className="inline-flex w-full md:w-auto">
+                            <Button
+                              type="button"
+                              size="header"
+                              variant="outline"
+                              disabled={isReadOnly}
+                              onClick={() => setIsRepostModalOpen(true)}
+                              className="w-full whitespace-nowrap md:w-auto"
+                            >
+                              <Repeat size={16} />
+                              Repost
+                            </Button>
+                          </span>
+                        } />
+                        {isReadOnly && <TooltipContent>Historical records are read-only</TooltipContent>}
+                      </Tooltip>
                       {/* <Button
                         type="button"
                         size="header"
@@ -1042,6 +1105,7 @@ export default function SubjectDetails() {
                             type="button"
                             size="header"
                             variant="default"
+                            disabled={isReadOnly}
                             onClick={() => {
                               setSelectedCompetencyIdForNewLesson(undefined);
                               setIsCreatingLesson(true);
@@ -1058,6 +1122,7 @@ export default function SubjectDetails() {
                           type="button"
                           size="header"
                           variant="default"
+                          disabled={isHistoricalClassworkContext}
                           onClick={() => setIsCreatingSubjectClasswork(true)}
                           className="w-full whitespace-nowrap md:w-auto"
                         >
@@ -1137,13 +1202,14 @@ export default function SubjectDetails() {
                       deliveryLoadingLessonId={deliveryLoadingLessonId}
                       onConfirmDelivery={handleConfirmDelivery}
                       onOpenCorrectionDialog={openCorrectionDialog}
+                      isReadOnly={isReadOnly}
                     />
                   )}
                 </div>
               </>
             )}
 
-            {selectedLesson && lessonDraft && (
+            {!isReadOnly && selectedLesson && lessonDraft && (
               <ManageLessonModal
                 selectedLesson={selectedLesson}
                 lessonDraft={lessonDraft}
@@ -1167,7 +1233,7 @@ export default function SubjectDetails() {
             )}
 
             <Dialog
-              open={showCreateWizard}
+              open={showCreateWizard && !isHistoricalClassworkContext}
               onOpenChange={(open) => {
                 if (!open) closeCreateWizard();
               }}
@@ -1221,6 +1287,7 @@ export default function SubjectDetails() {
                   </Dialog.Content>
                 ) : isQuizType(selectedType) ? (
                   <CreateClassworkQuizModal
+                    draftOnly={isFutureClassworkPlanning}
                     selectedType={selectedType}
                     subjects={subjects}
                     loads={loads}
@@ -1250,6 +1317,7 @@ export default function SubjectDetails() {
                   />
                 ) : (
                   <CreateClassworkModal
+                    draftOnly={isFutureClassworkPlanning}
                     selectedType={selectedType}
                     subjects={subjects}
                     loads={loads}
@@ -1280,7 +1348,7 @@ export default function SubjectDetails() {
                 ))}
             </Dialog>
 
-            {isCreatingLesson && (
+            {!isReadOnly && isCreatingLesson && (
               <CreateLessonModal
                 classId={classId}
                 subjectId={subjectId}
@@ -1333,7 +1401,7 @@ export default function SubjectDetails() {
             />
 
             {/* ── Lesson Create Modal ── */}
-            {isCreatingLesson && (
+            {!isReadOnly && isCreatingLesson && (
               <CreateLessonModal
                 classId={classId}
                 subjectId={subjectId}
@@ -1353,7 +1421,7 @@ export default function SubjectDetails() {
             {/* ── Repost Materials Modal ── */}
             {classId && subjectId && (
               <RepostModal
-                open={isRepostModalOpen}
+                open={isRepostModalOpen && !isReadOnly}
                 onOpenChange={setIsRepostModalOpen}
                 destinationClassId={Number(classId)}
                 destinationSubjectId={Number(subjectId)}
@@ -1367,7 +1435,7 @@ export default function SubjectDetails() {
             )}
 
             {/* ── Lesson Delivery Correction Modal ── */}
-            {isCorrectionModalOpen && (
+            {!isReadOnly && isCorrectionModalOpen && (
               <LessonDeliveryCorrectionModal
                 open={isCorrectionModalOpen}
                 onOpenChange={(open) => {

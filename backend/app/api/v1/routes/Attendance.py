@@ -47,7 +47,8 @@ def scan_qr_attendance(
     Record attendance via QR code scan for the current teacher's selected class session.
     """
     staff_id = _attendance_staff_id(db, current_user)
-    return record_qr_scan_attendance(db=db, payload=payload, recorded_by_staff_id=staff_id)
+    role = str(current_user.get("role", "")).lower()
+    return record_qr_scan_attendance(db=db, payload=payload, recorded_by_staff_id=staff_id, role=role)
 
 
 @router.post("", response_model=list[AttendanceRecordResponse])
@@ -60,7 +61,8 @@ def record_batch_attendance(
     Batch mark or update daily attendance for a class (including marking status as 'excused' with remarks).
     """
     staff_id = _attendance_staff_id(db, current_user)
-    return batch_mark_attendance(db=db, payload=payload, recorded_by_staff_id=staff_id)
+    role = str(current_user.get("role", "")).lower()
+    return batch_mark_attendance(db=db, payload=payload, recorded_by_staff_id=staff_id, role=role)
 
 
 @router.get("/class/{class_id}", response_model=list[AttendanceRecordResponse])
@@ -69,6 +71,7 @@ def list_class_attendance_logs(
     date_val: Optional[date] = Query(None, alias="date", description="Filter by specific date (YYYY-MM-DD)"),
     subject_id: Optional[int] = Query(None, description="Filter by specific subject ID"),
     academic_period_id: Optional[int] = Query(None, description="Filter by academic period ID"),
+    academic_year_id: Optional[int] = Query(None, description="Filter by academic year ID"),
     current_user: dict = Depends(require_role("teacher", "admin")),
     db: Session = Depends(get_db),
 ):
@@ -76,11 +79,18 @@ def list_class_attendance_logs(
     Retrieve attendance logs for a class, optionally filtered by date or subject.
     """
     staff_id = None
-    if str(current_user.get("role", "")).lower() == "teacher":
+    role = str(current_user.get("role", "")).lower()
+    if role == "teacher":
         staff_id = _attendance_staff_id(db, current_user)
     return get_class_attendance_logs(
-        db=db, class_id=class_id, date_val=date_val, subject_id=subject_id,
-        academic_period_id=academic_period_id, staff_id=staff_id
+        db=db,
+        class_id=class_id,
+        date_val=date_val,
+        subject_id=subject_id,
+        academic_period_id=academic_period_id,
+        academic_year_id=academic_year_id,
+        staff_id=staff_id,
+        role=role,
     )
 
 
@@ -90,6 +100,7 @@ def get_student_summary(
     class_id: Optional[int] = Query(None, description="Filter summary by class ID"),
     subject_id: Optional[int] = Query(None, description="Filter summary by subject ID"),
     academic_period_id: Optional[int] = Query(None, description="Filter summary by academic period ID"),
+    academic_year_id: Optional[int] = Query(None, description="Filter summary by academic year ID"),
     current_user: dict = Depends(require_role("teacher", "admin")),
     db: Session = Depends(get_db),
 ):
@@ -97,11 +108,18 @@ def get_student_summary(
     Get overall attendance statistics and rate (%) for a student by UUID (teacher/admin only).
     """
     staff_id = None
-    if str(current_user.get("role", "")).lower() == "teacher":
+    role = str(current_user.get("role", "")).lower()
+    if role == "teacher":
         staff_id = _attendance_staff_id(db, current_user)
     return get_student_attendance_summary(
-        db=db, student_id=student_id, class_id=class_id, subject_id=subject_id,
-        academic_period_id=academic_period_id, staff_id=staff_id
+        db=db,
+        student_id=student_id,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=academic_period_id,
+        academic_year_id=academic_year_id,
+        staff_id=staff_id,
+        role=role,
     )
 
 

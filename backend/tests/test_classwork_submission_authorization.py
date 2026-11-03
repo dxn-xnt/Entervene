@@ -416,6 +416,44 @@ def test_explicit_future_period_planning_is_preserved(authz_context):
     assert assignment.academic_period_id == future_period.academic_period_id
 
 
+def test_future_period_classwork_drafts_cannot_be_published(authz_context):
+    c = authz_context
+    future_period = _add_period_load(c, sequence=2)
+    before_count = c["db"].query(Classwork).count()
+
+    create_payload = _wizard_payload(c, "Published Q2 work", future_period.academic_period_id)
+    create_payload["is_published"] = "true"
+    create_response = c["client"].post(
+        "/api/v1/classwork-assignments/with-assignments",
+        data=create_payload,
+    )
+
+    c["assignment"].academic_period_id = future_period.academic_period_id
+    c["assignment"].is_published = False
+    c["classwork"].is_published = False
+    c["db"].commit()
+
+    update_response = c["client"].put(
+        f"/api/v1/classwork-assignments/classwork/{c['classwork'].classwork_id}",
+        json={"is_published": True},
+    )
+    assign_response = c["client"].post(
+        f"/api/v1/classwork-assignments/classwork/{c['classwork'].classwork_id}/assign",
+        json={
+            "class_ids": [c["allowed_class"].class_id],
+            "academic_period_id": future_period.academic_period_id,
+            "is_published": True,
+        },
+    )
+
+    assert [create_response.status_code, update_response.status_code, assign_response.status_code] == [403, 403, 403]
+    assert c["db"].query(Classwork).count() == before_count
+    c["db"].refresh(c["classwork"])
+    c["db"].refresh(c["assignment"])
+    assert c["classwork"].is_published is False
+    assert c["assignment"].is_published is False
+
+
 def test_default_classwork_creation_rejects_missing_and_inconsistent_lifecycle(authz_context):
     c = authz_context
     c["period"].is_active = False

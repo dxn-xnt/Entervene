@@ -1,7 +1,7 @@
 # app/api/v1/routes/Lessons.py
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.Dependencies import get_staff_id, get_student_record, require_role
@@ -57,10 +57,19 @@ def get_draft_lessons(
 def get_teacher_lessons_for_class_subject(
     class_id: int,
     subject_id: int,
+    academic_period_id: Optional[int] = Query(None, description="Filter lessons by academic period"),
+    academic_year_id: Optional[int] = Query(None, description="Filter lessons by academic year"),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    return teacher_lessons_for_class_subject(class_id, subject_id, staff_id, db)
+    return teacher_lessons_for_class_subject(
+        class_id=class_id,
+        subject_id=subject_id,
+        staff_id=staff_id,
+        db=db,
+        academic_period_id=academic_period_id,
+        academic_year_id=academic_year_id,
+    )
 
 
 @router.get("/my-class/{class_id}/lesson/{lesson_id}/linked-classwork")

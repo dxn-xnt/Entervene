@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import GradeItemLine from "@/components/item-line/grade";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
@@ -8,28 +8,42 @@ import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { BookOpen } from "lucide-react";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { LoadingPanel } from "@/components/loading-panel";
+import { Alert } from "@/components/retroui/Alert";
 
 const Grades = () => {
   const navigate = useNavigate();
   const [classes, setClasses] = useState<TeacherClassItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const { selectedPeriodId } = useAcademicPeriod();
+  const [error, setError] = useState<string | null>(null);
+  const { selectedPeriodId, selectedYearId, isLoading: isContextLoading } = useAcademicPeriod();
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
-    let isMounted = true;
-    getTeacherClasses(selectedPeriodId ?? undefined)
+    if (isContextLoading) return;
+
+    const currentRequestId = ++requestIdRef.current;
+    setLoading(true);
+    setError(null);
+
+    getTeacherClasses(selectedPeriodId ?? null, selectedYearId ?? null)
       .then((data) => {
-        if (!isMounted) return;
+        if (requestIdRef.current !== currentRequestId) return;
         setClasses(data);
       })
-      .catch((err) => console.error("Error loading teacher classes:", err))
+      .catch((err: unknown) => {
+        if (requestIdRef.current !== currentRequestId) return;
+        console.error("Error loading teacher classes:", err);
+        setClasses([]);
+        setError(err instanceof Error ? err.message : "Unable to load teacher classes. Please try again.");
+      })
       .finally(() => {
-        if (isMounted) setLoading(false);
+        if (requestIdRef.current === currentRequestId) {
+          setLoading(false);
+        }
       });
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedPeriodId]);
+  }, [selectedPeriodId, selectedYearId, isContextLoading]);
+
+  const showLoading = loading || isContextLoading;
 
   return (
     <AppLayout>
@@ -44,28 +58,39 @@ const Grades = () => {
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-              {loading ? (
-              <LoadingPanel label="Loading grades..." />
-            ) : classes.length === 0 ? (
-              <TeacherEmptyState icon={<BookOpen />} title="No classes assigned" description="Your class grades will appear here once classes are assigned to you." />
-            ) : (
-              <div className="flex flex-col gap-3">
-                {classes.map((item) => (
-                  <GradeItemLine
-                    key={`${item.class_id}-${item.subject_id}`}
-                    section={item.section_name}
-                    subject={item.subject_name}
-                    onClick={() =>
-                      navigate(
-                        `/teacher/grades/${encodeURIComponent(String(item.class_id))}/${encodeURIComponent(
-                          String(item.subject_id)
-                        )}`
-                      )
-                    }
-                  />
-                ))}
-              </div>
-            )}
+              {error && (
+                <Alert status="error" onClose={() => setError(null)}>
+                  <Alert.Title>Error</Alert.Title>
+                  <Alert.Description>{error}</Alert.Description>
+                </Alert>
+              )}
+
+              {showLoading ? (
+                <LoadingPanel label="Loading grades..." />
+              ) : classes.length === 0 ? (
+                <TeacherEmptyState
+                  icon={<BookOpen className="size-5" />}
+                  title="No classes assigned"
+                  description="Your class grades will appear here once classes are assigned to you for this academic period."
+                />
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {classes.map((item) => (
+                    <GradeItemLine
+                      key={`${item.class_id}-${item.subject_id}`}
+                      section={item.section_name}
+                      subject={item.subject_name}
+                      onClick={() =>
+                        navigate(
+                          `/teacher/grades/${encodeURIComponent(String(item.class_id))}/${encodeURIComponent(
+                            String(item.subject_id)
+                          )}`
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
