@@ -1209,12 +1209,12 @@ function LessonsTab({
           </section>
 
           {/* Weekly Goals Sidebar Progress */}
-          <aside className="flex flex-col gap-3 min-w-0 xl:row-span-2">
+          <aside className="flex flex-col gap-3 min-w-0 self-start xl:row-span-2">
             <LessonGoalProgress
               goalItems={curatedGoals}
               isTeacher
               onSetGoal={() => setGoalModalOpen(true)}
-              className="w-full flex-1 min-w-0"
+              className="w-full min-w-0"
             />
             <OverviewCard
               title="Total Lessons"
@@ -1267,7 +1267,7 @@ function LessonsTab({
                   {classworkCreateOptions.map((option) => {
                     return (
                       <DialogueSelect
-                        className="shadow-none hover:shadow-none"
+                        className="shadow-none hover:shadow-none active:shadow-none"
                         key={option.type}
                         title={option.title}
                         description={option.description}
@@ -2104,6 +2104,7 @@ function ClassworkTab({
                   {classworkCreateOptions.map((option) => {
                     return (
                       <DialogueSelect
+                        className="shadow-none hover:shadow-none active:shadow-none"
                         key={option.type}
                         title={option.title}
                         description={option.description}
@@ -2328,7 +2329,7 @@ function StudentRow({
         <Table.Row className="bg-gray-50/70 border-b-2 border-black">
           <Table.Cell colSpan={3} className="p-3">
             <Card className="block w-full border-2 border-black bg-white p-3 shadow-none">
-              <h5 className="font-bold text-xs uppercase mb-2 text-gray-700">
+              <h5 className="mb-2 text-sm font-bold text-black">
                 Suggestion History for {student.full_name}
               </h5>
               {historyError ? (
@@ -2441,9 +2442,13 @@ function StudentRow({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs font-semibold text-black/60">
-                  No suggestions yet.
-                </p>
+                <TeacherEmptyState
+                  compact
+                  className="rounded! bg-card px-3! py-3! shadow-none hover:shadow-none"
+                  icon={<Lightbulb />}
+                  title="No suggestions yet"
+                  description="Suggestions shared with this student will appear here."
+                />
               )}
             </Card>
           </Table.Cell>

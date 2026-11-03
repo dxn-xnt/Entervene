@@ -635,6 +635,7 @@ export default function SubjectClassworkTab({
                   {classworkCreateOptions.map((option) => {
                     return (
                       <DialogueSelect
+                        className="shadow-none hover:shadow-none active:shadow-none"
                         key={option.type}
                         title={option.title}
                         description={option.description}

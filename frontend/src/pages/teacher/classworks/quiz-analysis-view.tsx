@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/To
 import { Badge } from "@/components/retroui/Badge";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Button } from "@/components/teacher/button";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 
 const QUIZ_TABS: Array<TabItem<"overview" | "questions" | "students">> = [
   { id: "overview", label: "Overview", icon: BarChart3 },
@@ -66,6 +67,9 @@ export default function QuizAnalysisView({
   }
 
   if (quizAnalysisError) {
+    if (quizAnalysisError === "Quiz has not been created") {
+      return <TeacherEmptyState compact className="rounded! bg-card shadow-none hover:shadow-none" icon={<HelpCircle />} title="No quiz created yet" description="Quiz analysis will appear after a quiz is created and students answer it." />;
+    }
     return (
       <p className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
         {quizAnalysisError}
@@ -75,9 +79,7 @@ export default function QuizAnalysisView({
 
   if (!quizAnalysis) {
     return (
-      <p className="rounded border border-dashed border-gray-300 px-4 py-6 text-center text-sm font-semibold text-gray-500">
-        Quiz analysis is not available yet.
-      </p>
+      <TeacherEmptyState compact className="rounded! bg-card shadow-none hover:shadow-none" icon={<BarChart3 />} title="No quiz analysis yet" description="Analysis will appear when quiz results are available." />
     );
   }
 

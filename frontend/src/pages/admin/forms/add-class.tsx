@@ -186,7 +186,7 @@ export default function AddClassModal({
 
   if (mode === "choice") {
     return (
-      <Dialog.Content size="lg">
+      <Dialog.Content size="2xl">
         <Dialog.Header asChild>
           <div className="flex items-center justify-between w-full">
             <Text as="h5" className="font-sans text-xl font-bold">Add New Classes</Text>
@@ -196,6 +196,7 @@ export default function AddClassModal({
         <section className={`grid gap-4 p-4 ${canSetupFromPreviousYear ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
           {canSetupFromPreviousYear && (
             <DialogueSelect
+              className="shadow-none hover:shadow-none active:shadow-none"
               icon={CalendarSync}
               title="Set Up from Previous Year"
               description="Reuse section names and optionally carry forward classes or advisers from another academic year."
@@ -203,6 +204,7 @@ export default function AddClassModal({
             />
           )}
           <DialogueSelect
+            className="shadow-none hover:shadow-none active:shadow-none"
             icon={Download}
             title="Import from File"
             description="Import multiple class sections and optional student assignments for one selected grade level using a CSV file."
@@ -210,6 +212,7 @@ export default function AddClassModal({
           />
 
           <DialogueSelect
+            className="shadow-none hover:shadow-none active:shadow-none"
             icon={UserPlus}
             title="Create Manually"
             description="Add individual class sections, assign advisers, and manage students step by step."

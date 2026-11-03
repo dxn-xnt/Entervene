@@ -6,6 +6,7 @@ import {
   ArrowUp,
   ChevronDown,
   ChevronRight,
+  Target,
   Trash2,
 } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -14,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/To
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { Checkbox } from "@/components/retroui/Checkbox";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { toast } from "sonner";
 import {
   apiFetch,
@@ -487,12 +489,13 @@ export function SetLessonGoalModal({
             <Card.Content className="min-w-0">
 
               {selectedItems.length === 0 ? (
-                <div className="rounded! border-2 border-dashed border-border bg-background px-4 py-8 text-center">
-                  <p className="text-sm font-bold text-foreground">No goals selected yet</p>
-                  <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-                    Check items above to add them. You can reorder them to dictate the exact order shown to students.
-                  </p>
-                </div>
+                <TeacherEmptyState
+                  icon={<Target />}
+                  title="No goals selected yet"
+                  description="Select items above to add goals, then arrange the order students will see."
+                  compact
+                  className="rounded! border-2 border-border bg-card shadow-none hover:shadow-none"
+                />
               ) : (
                 <div className="flex flex-col gap-2">
                   {selectedItems.map((item, index) => (
