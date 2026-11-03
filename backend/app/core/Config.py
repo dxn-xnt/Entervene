@@ -1,9 +1,13 @@
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-ENV_FILE = os.getenv("ENV_FILE", ".env")
-load_dotenv(ENV_FILE)
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+_DEFAULT_ENV_FILE = _BACKEND_DIR / ".env"
+_RESOLVED_ENV = _DEFAULT_ENV_FILE if _DEFAULT_ENV_FILE.exists() else Path(".env").resolve()
+ENV_FILE = os.getenv("ENV_FILE", str(_RESOLVED_ENV))
+load_dotenv(ENV_FILE, override=True)
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict

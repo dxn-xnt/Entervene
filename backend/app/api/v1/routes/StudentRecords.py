@@ -235,12 +235,14 @@ def get_teacher_term_grade_summary(
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
+    role = _teacher.get("role", "teacher") if isinstance(_teacher, dict) else "teacher"
     return teacher_term_grade_summary(
         db,
         staff_id=staff_id,
         class_id=class_id,
         subject_id=subject_id,
         academic_year_id=academic_year_id,
+        role=role,
     )
 
 

@@ -19,12 +19,17 @@ from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.attendance.Attendance import AttendanceRecord
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.settings.Setting import Setting
-from app.services.export.SF9ExportService import export_advisory_class_sf9, export_student_sf9
+from app.services.export.SF9ExportService import (
+    export_advisory_class_sf9,
+    export_student_sf9,
+    gather_student_sf9_data,
+)
 from fastapi import FastAPI
 
 TABLES = [
@@ -34,6 +39,7 @@ TABLES = [
     Class.__table__,
     Subject.__table__,
     SubjectLoad.__table__,
+    TeacherSubstitution.__table__,
     UserAccount.__table__,
     AcademicStaff.__table__,
     Student.__table__,
@@ -166,6 +172,97 @@ def test_export_student_sf9_unauthorized_staff():
             staff_id=ctx["other_staff_id"],
         )
     assert "not authorized" in str(excinfo.value) or "403" in str(excinfo.value)
+
+
+def test_individual_sf9_requires_exact_enrollment_and_year_scopes_attendance():
+    db, ctx = setup_test_db()
+    enrollment = db.query(StudentClass).filter(
+        StudentClass.student_id == ctx["student2_id"],
+        StudentClass.class_id == ctx["class_id"],
+    ).one()
+    enrollment.enrollment_status = "transferred"
+    db.add(AttendanceRecord(
+        student_id=ctx["student1_id"],
+        class_id=ctx["class_id"],
+        date=date(2025, 8, 10),
+        status="absent",
+    ))
+    db.commit()
+
+    with pytest.raises(Exception) as excinfo:
+        gather_student_sf9_data(
+            db, ctx["class_id"], str(ctx["student2_id"]), ctx["adviser_staff_id"]
+        )
+    assert "not found in this advisory class" in str(excinfo.value)
+    with pytest.raises(Exception):
+        export_student_sf9(
+            db, ctx["class_id"], ctx["student2_id"], ctx["adviser_staff_id"]
+        )
+
+    data = gather_student_sf9_data(
+        db, ctx["class_id"], str(ctx["student1_id"]), ctx["adviser_staff_id"]
+    )
+    assert data["attendance"]["total"] == {
+        "class_days": 3,
+        "present": 2,
+        "absent": 1,
+    }
+
+
+def test_sf9_year_policy_allows_historical_adviser_and_denies_future_year():
+    db, ctx = setup_test_db()
+    historical = AcademicYear(
+        academic_year_id=2,
+        year_label="2025-2026",
+        start_date=date(2025, 8, 1),
+        end_date=date(2026, 5, 31),
+        is_active=False,
+    )
+    future = AcademicYear(
+        academic_year_id=3,
+        year_label="2027-2028",
+        start_date=date(2027, 8, 1),
+        end_date=date(2028, 5, 31),
+        is_active=False,
+    )
+    historical_class = Class(
+        class_id=2,
+        section_name="Historical",
+        academic_year_id=2,
+        academic_level_id=1,
+        adviser_staff_id=ctx["adviser_staff_id"],
+    )
+    future_class = Class(
+        class_id=3,
+        section_name="Future",
+        academic_year_id=3,
+        academic_level_id=1,
+        adviser_staff_id=ctx["adviser_staff_id"],
+    )
+    db.add_all([historical, future, historical_class, future_class])
+    db.flush()
+    db.add_all([
+        StudentClass(
+            student_id=ctx["student1_id"], class_id=2,
+            academic_year_id=2, enrollment_status="enrolled",
+        ),
+        StudentClass(
+            student_id=ctx["student1_id"], class_id=3,
+            academic_year_id=3, enrollment_status="enrolled",
+        ),
+    ])
+    db.commit()
+
+    historical_data = gather_student_sf9_data(
+        db, 2, str(ctx["student1_id"]), ctx["adviser_staff_id"]
+    )
+    assert historical_data["class_info"]["academic_year"] == "2025-2026"
+
+    with pytest.raises(Exception) as excinfo:
+        gather_student_sf9_data(
+            db, 3, str(ctx["student1_id"]), ctx["adviser_staff_id"]
+        )
+    assert "Not authorized to access this academic year" in str(excinfo.value)
 
 
 def test_export_advisory_class_sf9_batch():

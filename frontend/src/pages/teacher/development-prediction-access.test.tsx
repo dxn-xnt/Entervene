@@ -9,8 +9,9 @@ import { buildCurrentTermDashboard, currentTermRiskSummary, toDashboardPredictio
 
 const auth = vi.hoisted(() => ({ role: "teacher" as "teacher" | "admin" }));
 const currentTerm = vi.hoisted(() => ({ load: vi.fn() }));
+const academicContext = vi.hoisted(() => ({ selectedPeriodId: 3 }));
 vi.mock("@/context/AuthContext", () => ({ useAuth: () => ({ role: auth.role, user: { role: auth.role } }) }));
-vi.mock("@/context/AcademicPeriodContext", () => ({ useAcademicPeriod: () => ({ selectedPeriodId: 3 }) }));
+vi.mock("@/context/AcademicPeriodContext", () => ({ useAcademicPeriod: () => academicContext }));
 vi.mock("@/layouts/app-layout", () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 vi.mock("@/components/ui/sidebar", () => ({ SidebarTrigger: () => null }));
 vi.mock("@/components/predictions/prediction-grade-section", () => ({
@@ -67,7 +68,7 @@ const filters = {
   terms: [{ term_number: 1, term_label: "Term 1", academic_period_id: 3 }],
 };
 
-afterEach(() => { cleanup(); vi.unstubAllEnvs(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.unstubAllEnvs(); vi.clearAllMocks(); academicContext.selectedPeriodId = 3; });
 
 describe("shared prediction page access", () => {
   it("uses one AI Predictions experience and renders V3 semantics for teachers", async () => {
@@ -151,6 +152,22 @@ describe("shared prediction page access", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
     expect(screen.getByText(/could not be loaded/i)).toBeTruthy();
     expect(screen.queryByText("No current-term projections are available for this scope.")).toBeNull();
+  });
+
+  it("closes stale prediction detail when the academic term changes", async () => {
+    auth.role = "teacher";
+    currentTerm.load.mockResolvedValue({ rows: [row], filters, assignedScopes: [] });
+    const view = render(<MemoryRouter><PredictionsDashboard /></MemoryRouter>);
+    await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: /High Risk/i }));
+    fireEvent.click(screen.getByText("Alex Rivera"));
+    expect(screen.getByText("Prediction detail for Alex Rivera")).toBeTruthy();
+
+    academicContext.selectedPeriodId = 4;
+    view.rerender(<MemoryRouter><PredictionsDashboard /></MemoryRouter>);
+
+    await waitFor(() => expect(screen.queryByText("Prediction detail for Alex Rivera")).toBeNull());
+    expect(currentTerm.load).toHaveBeenLastCalledWith(4);
   });
 
   it("keeps finalized projections visible as history and out of actionable risk counts", () => {

@@ -650,3 +650,18 @@ def test_admin_can_access_gradebook_for_any_year(client, gradebook_world):
     )
     # Admin access returns 200 OK
     assert res.status_code == 200, res.text
+
+
+def test_admin_can_access_future_year_term_summary(client, gradebook_world):
+    headers = {"Authorization": f"Bearer {gradebook_world['token_admin']}"}
+    class_id = gradebook_world["class_future"].class_id
+    subject_id = gradebook_world["subj_math"].subject_id
+    year_id = gradebook_world["future_yr"].academic_year_id
+
+    res = client.get(
+        f"/api/v1/student-records/teacher/classes/{class_id}/subjects/{subject_id}/term-summary?academic_year_id={year_id}",
+        headers=headers,
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json()["scope"]["academic_year_id"] == year_id

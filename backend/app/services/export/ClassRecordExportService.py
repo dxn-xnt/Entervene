@@ -776,8 +776,16 @@ def _generate_class_record_sheet(
             if ig_val is not None:
                 ws.cell(row_num, initial_grade_col).number_format = "0.00"
 
-            # Term Grade
-            tg_val = student.transmuted_grade if student.transmuted_grade is not None else (_deped_transmuted(ig_val) if ig_val is not None else None)
+            # Term Grade: finalized rows expose the official final-period value
+            # through ``total``; do not export an older computed snapshot.
+            if student.is_finalized and student.total is not None:
+                tg_val = float(student.total)
+            else:
+                tg_val = (
+                    student.transmuted_grade
+                    if student.transmuted_grade is not None
+                    else (_deped_transmuted(ig_val) if ig_val is not None else None)
+                )
             ws.cell(row_num, term_grade_col).value = tg_val if tg_val is not None else ""
             ws.cell(row_num, term_grade_col).alignment = ALIGN_CENTER
             ws.cell(row_num, term_grade_col).font = FONT_ROW_NUM
