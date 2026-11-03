@@ -774,17 +774,24 @@ export default function ClassworkView({
               <Card className="w-full border-0! p-0 shadow-none">
                 <Card.Content className="flex flex-col gap-1">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <Card.Title className="flex flex-row items-center gap-3 mb-0 text-3xl font-bold">
-                      <IconContainer variant="primary" size="xl">
+                    <Card.Title className="flex min-w-0 w-full flex-row items-center gap-3 mb-0 text-3xl font-bold">
+                      <IconContainer variant="primary" size="xl" className="shrink-0">
                         <ClassworkTypeIcon type={selected.classwork_type} size={48} />
                       </IconContainer>
 
-                      <div className="flex flex-col gap-1">
-                        <div className="flex flex-row items-center gap-2">
-                          <span>{selected.title}</span>
-                          <Badge variant="secondary" size="sm" className="h-fit ml-1">
+                      <div className="flex min-w-0 flex-1 flex-col gap-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="min-w-0 flex-1 break-words">{selected.title}</span>
+                          <Badge variant="secondary" size="sm" className="shrink-0">
                             {formatToTitleCase(selected.classwork_type)}
                           </Badge>
+                          {!isReadingType(selected.classwork_type) && selected.classwork_category && (
+                            <Badge variant="outline" size="sm" className="shrink-0 whitespace-nowrap">{formatToTitleCase(selected.classwork_category)}</Badge>
+                          )}
+                          <Badge variant={selected.is_published ? "solid" : "default"} size="sm" className="shrink-0 whitespace-nowrap">
+                            {selected.is_published ? "Published" : "Draft"}
+                          </Badge>
+                          {selected.is_locked && <Badge variant="destructive" size="sm" className="shrink-0 whitespace-nowrap">Locked</Badge>}
                         </div>
 
                         <div className="gap-3">
@@ -836,26 +843,6 @@ export default function ClassworkView({
                       </div>
 
                     </Card.Title>
-                    <div className="flex flex-row items-center gap-2 px-2 whitespace-nowrap">
-                      {!isReadingType(selected.classwork_type) && selected.classwork_category && (
-                        <Badge
-                          variant="outline"
-                          size="md"
-                          className="w-fit whitespace-nowrap"
-                        >
-                          {formatToTitleCase(selected.classwork_category)}
-                        </Badge>
-                      )}
-
-                      <Badge variant="solid" size="md" className="whitespace-nowrap">
-                        {selected.is_published ? "Published" : "Draft"}
-                      </Badge>
-                      {selected.is_locked && (
-                        <Badge variant="outline" size="sm" className="bg-white whitespace-nowrap">
-                          Locked
-                        </Badge>
-                      )}
-                    </div>
                   </div>
                 </Card.Content>
               </Card>
@@ -891,11 +878,7 @@ export default function ClassworkView({
                         }
                       />
                     ) : (
-                      <Card className="py-4 w-full text-center shadow-none!">
-                        <p className="text-sm text-muted-foreground">
-                          No files attached.
-                        </p>
-                      </Card>
+                      <TeacherEmptyState compact className="rounded! bg-card shadow-none hover:shadow-none" icon={<FileText />} title="No files attached" description="This classwork has no attached files." />
                     )}
                   </Card.Content>
                 </Card>

@@ -305,12 +305,14 @@ export default function SubjectLessonList({
                 <Card
                   key={classwork.classwork_assignment_id}
                   onClick={() => openClassworkDetail(classwork)}
-                  className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 border-2 border-black bg-[#FFFDF0] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFF9D2]"
+                  className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ")
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
                       openClassworkDetail(classwork);
+                    }
                   }}
                 >
                   <div className="flex min-w-0 items-center gap-3">
@@ -319,7 +321,7 @@ export default function SubjectLessonList({
                       <p className="text-sm md:text-base font-bold text-black line-clamp-2 break-words">
                         {classwork.title}
                       </p>
-                      <p className="text-xs font-medium text-gray-700">
+                      <p className="text-sm text-muted-foreground">
                         {formatToTitleCase(classwork.classwork_type, "Exam")}
                         {classwork.due_date
                           ? ` | Due ${formatDate(classwork.due_date)}`
@@ -327,12 +329,12 @@ export default function SubjectLessonList({
                       </p>
                     </div>
                   </div>
-                  <div className="flex min-w-28 justify-center">
+                  <div className="flex justify-center">
                     {classwork.attachment_count ? (
                       <Badge
                         variant="secondary"
                         size="sm"
-                        className="bg-[#F6E9B2] border border-black"
+                        className="border border-border"
                       >
                         File {classwork.attachment_count}
                       </Badge>
@@ -340,22 +342,13 @@ export default function SubjectLessonList({
                       <span aria-hidden="true" className="h-7 w-20" />
                     )}
                   </div>
-                  <span className="inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs font-semibold">
+                  <span className="inline-flex items-center gap-2 rounded border border-border px-2 py-1 text-sm font-medium">
                     <Eye size={14} />
                     Details
                   </span>
                 </Card>
               ))}
             </div>
-          </div>
-
-          {/* ── Separator ── */}
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-black" />
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-600">
-              Learning Competencies &amp; Lessons
-            </span>
-            <div className="h-px flex-1 bg-black" />
           </div>
         </>
       )}

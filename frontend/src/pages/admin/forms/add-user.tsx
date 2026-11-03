@@ -535,12 +535,14 @@ export default function AddUserModal({
           <>
             <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 sm:gap-4 sm:p-5">
               <DialogueSelect
+                className="shadow-none hover:shadow-none active:shadow-none"
                 icon={FileSpreadsheet}
                 title="Import file"
                 description="Upload a CSV file to add multiple users at once."
                 onClick={() => setStep("import")}
               />
               <DialogueSelect
+                className="shadow-none hover:shadow-none active:shadow-none"
                 icon={UserPlus}
                 title="Create manual"
                 description="Add individual user accounts one at a time."

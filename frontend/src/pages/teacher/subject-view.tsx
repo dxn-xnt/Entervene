@@ -1264,7 +1264,7 @@ export default function SubjectDetails() {
                         {createOptions.map((option) => {
                           return (
                             <DialogueSelect
-                              className="shadow-none hover:shadow-none"
+                              className="shadow-none hover:shadow-none active:shadow-none"
                               key={option.type}
                               title={option.title}
                               description={option.description}

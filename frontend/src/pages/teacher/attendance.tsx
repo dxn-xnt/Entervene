@@ -1545,7 +1545,7 @@ export default function TeacherAttendancePage() {
                     {/* Attendance Summary & Report Matrix */}
                     <div className="flex flex-col gap-4 mt-3">
                       {/* Global Controls & Layout Switcher */}
-                      <div className="flex flex-col gap-3 border-2 border-black bg-gray-50 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                      <div className="flex flex-col gap-3 rounded! border-2 border-black bg-gray-50 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                         <div>
                           <h2 className="text-lg font-extrabold">
                             Attendance Summary & Log Explorer
