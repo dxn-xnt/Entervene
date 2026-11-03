@@ -39,6 +39,7 @@ import { ActivityRubricEditor } from "@/components/activity-rubric-editor";
 import { activityRubricMaximum, defaultActivityRubric, validateActivityRubric } from "@/lib/classwork-utils";
 
 export interface EditClassworkModalProps {
+  draftOnly?: boolean;
   classwork: TeacherClasswork;
   isOpen: boolean;
   onClose: () => void;
@@ -46,6 +47,7 @@ export interface EditClassworkModalProps {
 }
 
 export default function EditClassworkModal({
+  draftOnly = false,
   classwork,
   isOpen,
   onClose,
@@ -118,6 +120,11 @@ export default function EditClassworkModal({
         : defaultActivityRubric.map((level) => ({ ...level })),
     );
   }, [classwork, isOpen]);
+  useEffect(() => {
+    if (draftOnly) {
+      setEditDraft((current) => ({ ...current, is_published: false }));
+    }
+  }, [draftOnly]);
 
   useEffect(() => {
     if (!isOpen || !currentClasswork.subject_id) {
@@ -396,6 +403,7 @@ export default function EditClassworkModal({
       }
     }
 
+    const publishValue = draftOnly ? false : editDraft.is_published;
     setIsSavingEdit(true);
     try {
       const response = await apiFetch(
@@ -414,7 +422,7 @@ export default function EditClassworkModal({
             rubric_levels: hasRubric && rubricChanged ? rubricLevels : undefined,
             confirm_rubric_change:
               rubricChanged && Boolean(currentClasswork.has_submissions),
-            is_published: editDraft.is_published,
+            is_published: publishValue,
             show_scores: editDraft.show_scores,
             lesson_ids: selectedLessonIds,
           }),
@@ -456,7 +464,7 @@ export default function EditClassworkModal({
               max_attempts: isQuizType(editDraft.classwork_type)
                 ? attempts
                 : null,
-              is_published: editDraft.is_published,
+              is_published: publishValue,
             }),
           },
         );
@@ -933,7 +941,7 @@ export default function EditClassworkModal({
                           is_published: val === "published",
                         }))
                       }
-                      disabled={isSavingEdit}
+                      disabled={isSavingEdit || draftOnly}
                     >
                       <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                         <Select.Value />
@@ -945,6 +953,11 @@ export default function EditClassworkModal({
                         </Select.Group>
                       </Select.Content>
                     </Select>
+                    {draftOnly && (
+                      <p className="mt-2 text-xs font-semibold text-muted-foreground">
+                        Future-term planning remains unpublished until the term is active.
+                      </p>
+                    )}
                   </Field>
 
                   <Field label="Locked Until">

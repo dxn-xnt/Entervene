@@ -11,6 +11,34 @@ const mockToast = {
   error: vi.fn(),
 };
 
+const mockAcademicContext = vi.hoisted(() => ({
+  selectedPeriodId: 1 as number | null,
+  selectedPeriod: {
+    id: 1,
+    period: "Quarter 1",
+    period_sequence: 1,
+    total_periods: 4,
+    academicyear: "2025-2026",
+    academic_year_id: 1,
+    startDate: null,
+    endDate: null,
+    is_active: true,
+    status: "active",
+  },
+  selectedYear: {
+    academic_year_id: 1,
+    year_label: "2025-2026",
+    start_date: null,
+    end_date: null,
+    is_active: true,
+  },
+  periods: [] as Array<Record<string, unknown>>,
+}));
+
+vi.mock("@/context/AcademicPeriodContext", () => ({
+  useAcademicPeriod: () => mockAcademicContext,
+}));
+
 vi.mock("@/components/retroui/Toast", () => ({
   useToast: () => mockToast,
 }));
@@ -67,6 +95,11 @@ beforeEach(() => {
   vi.restoreAllMocks();
   mockToast.success.mockClear();
   mockToast.error.mockClear();
+  mockAcademicContext.selectedPeriodId = 1;
+  mockAcademicContext.selectedPeriod.is_active = true;
+  mockAcademicContext.selectedPeriod.period_sequence = 1;
+  mockAcademicContext.selectedYear.is_active = true;
+  mockAcademicContext.periods = [mockAcademicContext.selectedPeriod];
 
   vi.spyOn(apiModule, "apiFetch").mockImplementation(async (path: string, _options?: RequestInit) => {
     if (path.includes("/api/v1/classwork-assignments/assignment/16")) {
@@ -101,6 +134,22 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+it("keeps historical classwork viewable while hiding progress mutations", async () => {
+  mockAcademicContext.selectedYear.is_active = false;
+
+  mount("/student/classworks/16");
+
+  expect(await screen.findByRole("heading", { name: "Kinematics Reference Guide" })).toBeTruthy();
+  expect(screen.getByText("This reading is unavailable.")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Mark as Completed" })).toBeNull();
+  expect(
+    vi.mocked(apiModule.apiFetch).mock.calls.some(
+      ([path, options]) =>
+        path.includes("/complete-reading") && options?.method === "POST",
+    ),
+  ).toBe(false);
 });
 
 describe("StudentClassworkView reading review and intervention integration", () => {

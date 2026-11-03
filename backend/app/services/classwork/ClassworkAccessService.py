@@ -40,6 +40,21 @@ def authorize_classwork_access(
     if role == "admin":
         return
     if role == "teacher":
+        from app.services.academic.AcademicYearService import is_academic_year_authorized
+        if class_id is not None:
+            target_class = db.get(Class, class_id)
+            if target_class is not None and target_class.academic_year_id is not None:
+                if not is_academic_year_authorized(db, target_class.academic_year_id, current_user):
+                    raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+        else:
+            assigned_year_ids = {
+                assignment.class_.academic_year_id
+                for assignment in cw.assignments
+                if assignment.class_ and assignment.class_.academic_year_id is not None
+            }
+            if assigned_year_ids and not any(is_academic_year_authorized(db, y_id, current_user) for y_id in assigned_year_ids):
+                raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
         def read_scopes():
             query = db.query(ClassworkAssignment).filter(
                 ClassworkAssignment.classwork_id == cw.classwork_id,
@@ -100,6 +115,11 @@ def authorize_assignment_access(
     role = current_user.get("role")
     user_id = user_id_from_claims(current_user)
     if role == "teacher":
+        from app.services.academic.AcademicYearService import is_academic_year_authorized
+        class_obj = db.get(Class, assignment.class_id)
+        if class_obj is not None and class_obj.academic_year_id is not None:
+            if not is_academic_year_authorized(db, class_obj.academic_year_id, current_user):
+                raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
         scopes = (
             [(assignment.class_id, cw.subject_id, assignment.academic_period_id)]
             if assignment.academic_period_id is not None and assignment.classwork_id == cw.classwork_id

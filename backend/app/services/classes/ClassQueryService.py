@@ -174,7 +174,15 @@ def _advisory_class_access_row(db: Session, class_id: int):
     return row
 
 
-def _ensure_adviser_access(db: Session, class_: Class, staff_id: str) -> None:
+def _ensure_adviser_access(db: Session, class_: Class, staff_id: str, current_user: dict | None = None) -> None:
+    from app.services.academic.AcademicYearService import is_academic_year_authorized
+    if current_user and current_user.get("role") != "admin":
+        if not is_academic_year_authorized(db, class_.academic_year_id, current_user, role="teacher", staff_id=staff_id):
+            raise HTTPException(status_code=403, detail="You do not have permission to view this class.")
+    elif not current_user:
+        if not is_academic_year_authorized(db, class_.academic_year_id, role="teacher", staff_id=staff_id):
+            raise HTTPException(status_code=403, detail="You do not have permission to view this class.")
+
     if class_.adviser_staff_id == staff_id:
         return
     has_load = (
@@ -183,7 +191,6 @@ def _ensure_adviser_access(db: Session, class_: Class, staff_id: str) -> None:
             SubjectLoad.class_id == class_.class_id,
             SubjectLoad.staff_id == staff_id,
             func.coalesce(SubjectLoad.is_active_version, True).is_(True),
-            func.coalesce(SubjectLoad.status, "active") != "archived",
         )
         .first()
     )
@@ -191,19 +198,14 @@ def _ensure_adviser_access(db: Session, class_: Class, staff_id: str) -> None:
         return
 
     from app.models.academic.TeacherSubstitution import TeacherSubstitution
-    from app.services.academic.SubstitutionService import SubstitutionService
-    from sqlalchemy import or_
-    today_date = SubstitutionService.get_academic_date()
     is_sub = (
         db.query(TeacherSubstitution.substitution_id)
         .join(SubjectLoad, SubjectLoad.subject_load_id == TeacherSubstitution.subject_load_id)
         .filter(
             SubjectLoad.class_id == class_.class_id,
             func.coalesce(SubjectLoad.is_active_version, True).is_(True),
-            func.coalesce(SubjectLoad.status, "active") != "archived",
             TeacherSubstitution.substitute_staff_id == staff_id,
-            TeacherSubstitution.status == "active",
-            or_(TeacherSubstitution.end_date.is_(None), TeacherSubstitution.end_date >= today_date),
+            TeacherSubstitution.status.in_(["active", "completed"]),
         )
         .first()
     )
@@ -335,7 +337,13 @@ def list_classes_data(db: Session, status: str, academic_year_id: int | None = N
     }
 
 
-def list_teacher_advisory_classes_data(db: Session, staff_id: str, academic_period_id: int | None = None) -> list[dict]:
+def list_teacher_advisory_classes_data(
+    db: Session,
+    staff_id: str,
+    academic_period_id: int | None = None,
+    academic_year_id: int | None = None,
+) -> list[dict]:
+    from app.services.academic.AcademicLifecycleService import resolve_active_academic_year
     query = (
         db.query(
             Class,
@@ -355,11 +363,17 @@ def list_teacher_advisory_classes_data(db: Session, staff_id: str, academic_peri
         .filter(Class.adviser_staff_id == staff_id)
     )
 
-    if academic_period_id is not None:
+    if academic_year_id is not None:
+        query = query.filter(Class.academic_year_id == academic_year_id)
+    elif academic_period_id is not None:
         from app.models.academic.AcademicPeriod import AcademicPeriod
         period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == academic_period_id).first()
         if period:
             query = query.filter(Class.academic_year_id == period.academic_year_id)
+    else:
+        active_year = resolve_active_academic_year(db, required=False)
+        if active_year:
+            query = query.filter(Class.academic_year_id == active_year.academic_year_id)
 
     rows = (
         query
@@ -374,6 +388,7 @@ def list_teacher_advisory_classes_data(db: Session, staff_id: str, academic_peri
             "section_name": class_.section_name,
             "academic_level": academic_level.level_name,
             "academic_year": academic_year.year_label,
+            "academic_year_id": class_.academic_year_id,
             "class_status": readable_text(class_.class_status) or "active",
             "is_archived": _is_archived_status(class_.class_status),
             "student_count": int(student_count or 0),
@@ -383,9 +398,14 @@ def list_teacher_advisory_classes_data(db: Session, staff_id: str, academic_peri
     ]
 
 
-def get_teacher_advisory_class_detail_data(db: Session, class_id: int, staff_id: str) -> dict:
+def get_teacher_advisory_class_detail_data(
+    db: Session,
+    class_id: int,
+    staff_id: str,
+    current_user: dict | None = None,
+) -> dict:
     class_, academic_level, academic_year = _advisory_class_access_row(db, class_id)
-    _ensure_adviser_access(db, class_, staff_id)
+    _ensure_adviser_access(db, class_, staff_id, current_user=current_user)
 
     student_rows = (
         db.query(Student, UserAccount)
@@ -435,6 +455,7 @@ def get_teacher_advisory_class_detail_data(db: Session, class_id: int, staff_id:
         "section_name": class_.section_name,
         "academic_level": academic_level.level_name,
         "academic_year": academic_year.year_label,
+        "academic_year_id": class_.academic_year_id,
         "class_status": readable_text(class_.class_status) or "active",
         "is_archived": _is_archived_status(class_.class_status),
         "created_at": class_.created_at,

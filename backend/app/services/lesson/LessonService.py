@@ -10,6 +10,8 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from app.core.FileUpload import delete_file, save_file
 from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAssignment import LessonAssignment
+from app.models.academic.LessonDelivery import LessonDelivery
+from app.models.academic.Competency import Competency
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.Class_ import Class
 from app.models.classwork.Classwork import Classwork
@@ -32,6 +34,19 @@ from app.services.lesson.LessonShared import (
 
 def create_lesson_record(body: LessonCreate, staff_id: str, db: Session) -> LessonResponse:
     ensure_teacher_subject(db, staff_id, body.subject_id)
+    if body.competency_id is not None:
+        from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+        comp = db.get(Competency, body.competency_id)
+        if not comp or comp.is_archived:
+            raise HTTPException(status_code=404, detail="Competency not found")
+        if comp.subject_id != body.subject_id:
+            raise HTTPException(status_code=400, detail="Competency does not belong to this subject")
+        if comp.academic_period_id is not None:
+            SubjectLoadAuthorizationService.assert_context_writable(
+                db,
+                class_id=None,
+                academic_period_id=comp.academic_period_id,
+            )
     lesson = Lesson(
         title=body.title,
         description=body.description,
@@ -78,14 +93,35 @@ def teacher_lessons_for_class_subject(
     subject_id: int,
     staff_id: str,
     db: Session,
+    academic_period_id: int | None = None,
+    academic_year_id: int | None = None,
 ) -> list[LessonResponse]:
-    ensure_teacher_class_subject(db, staff_id, class_id, subject_id, read_only=True)
+    class_obj = db.query(Class).filter(Class.class_id == class_id).first()
+    if not class_obj:
+        raise HTTPException(status_code=404, detail="Class not found")
+    if academic_year_id is not None and class_obj.academic_year_id != academic_year_id:
+        raise HTTPException(status_code=400, detail="Class does not belong to the selected academic year")
+    if academic_period_id is not None:
+        period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == academic_period_id).first()
+        if not period:
+            raise HTTPException(status_code=404, detail="Academic period not found")
+        if period.academic_year_id != class_obj.academic_year_id:
+            raise HTTPException(status_code=400, detail="Academic period does not match class academic year")
+
+    ensure_teacher_class_subject(
+        db,
+        staff_id,
+        class_id,
+        subject_id,
+        read_only=True,
+        academic_period_id=academic_period_id,
+    )
     assigned_subquery = (
         db.query(LessonAssignment.lesson_id)
         .filter(LessonAssignment.class_id == class_id)
         .subquery()
     )
-    lessons = (
+    query = (
         db.query(Lesson)
         .filter(
             Lesson.subject_id == subject_id,
@@ -95,7 +131,27 @@ def teacher_lessons_for_class_subject(
                 and_(~Lesson.assignments.any(), Lesson.created_by_staff_id == staff_id),
             ),
         )
-        .order_by(Lesson.order_index.asc(), Lesson.created_at.desc())
+    )
+    if academic_period_id is not None:
+        delivered_subquery = (
+            db.query(LessonDelivery.lesson_id)
+            .filter(
+                LessonDelivery.class_id == class_id,
+                LessonDelivery.academic_period_id == academic_period_id,
+                LessonDelivery.revoked_at.is_(None),
+            )
+            .subquery()
+        )
+        query = query.outerjoin(Competency, Lesson.competency_id == Competency.competency_id).filter(
+            or_(
+                Competency.academic_period_id == academic_period_id,
+                Competency.academic_period_id.is_(None),
+                Lesson.competency_id.is_(None),
+                Lesson.lesson_id.in_(select(delivered_subquery.c.lesson_id)),
+            )
+        )
+    lessons = (
+        query.order_by(Lesson.order_index.asc(), Lesson.created_at.desc())
         .all()
     )
     responses = []
@@ -191,7 +247,7 @@ def student_lessons_for_class_subject(
         )
         .subquery()
     )
-    lessons = (
+    query = (
         db.query(Lesson)
         .filter(
             Lesson.subject_id == subject_id,
@@ -203,7 +259,27 @@ def student_lessons_for_class_subject(
                 ~Lesson.assignments.any(),
             ),
         )
-        .order_by(Lesson.order_index.asc(), Lesson.created_at.desc())
+    )
+    if academic_period_id is not None:
+        delivered_subquery = (
+            db.query(LessonDelivery.lesson_id)
+            .filter(
+                LessonDelivery.class_id == class_id,
+                LessonDelivery.academic_period_id == academic_period_id,
+                LessonDelivery.revoked_at.is_(None),
+            )
+            .subquery()
+        )
+        query = query.outerjoin(Competency, Lesson.competency_id == Competency.competency_id).filter(
+            or_(
+                Competency.academic_period_id == academic_period_id,
+                Competency.academic_period_id.is_(None),
+                Lesson.competency_id.is_(None),
+                Lesson.lesson_id.in_(select(delivered_subquery.c.lesson_id)),
+            )
+        )
+    lessons = (
+        query.order_by(Lesson.order_index.asc(), Lesson.created_at.desc())
         .all()
     )
     return [build_lesson_response(lesson, db) for lesson in lessons]
@@ -239,6 +315,20 @@ def _assert_lesson_writable(db: Session, lesson: Lesson) -> None:
                 class_id=None,
                 academic_period_id=comp.academic_period_id,
             )
+    deliveries = (
+        db.query(LessonDelivery)
+        .filter(
+            LessonDelivery.lesson_id == lesson.lesson_id,
+            LessonDelivery.revoked_at.is_(None),
+        )
+        .all()
+    )
+    for delivery in deliveries:
+        SubjectLoadAuthorizationService.assert_context_writable(
+            db,
+            class_id=delivery.class_id,
+            academic_period_id=delivery.academic_period_id,
+        )
 
 
 def update_lesson_record(
@@ -249,6 +339,19 @@ def update_lesson_record(
 ) -> LessonResponse:
     lesson = get_owned_lesson(db, staff_id, lesson_id)
     _assert_lesson_writable(db, lesson)
+    if body.competency_id is not None:
+        from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+        comp = db.get(Competency, body.competency_id)
+        if not comp or comp.is_archived:
+            raise HTTPException(status_code=404, detail="Competency not found")
+        if comp.subject_id != lesson.subject_id:
+            raise HTTPException(status_code=400, detail="Competency does not belong to this subject")
+        if comp.academic_period_id is not None:
+            SubjectLoadAuthorizationService.assert_context_writable(
+                db,
+                class_id=None,
+                academic_period_id=comp.academic_period_id,
+            )
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(lesson, field, value)
     db.commit()
@@ -290,6 +393,7 @@ def assign_lesson_to_classes(
     db: Session,
 ) -> dict:
     lesson = get_owned_lesson(db, staff_id, lesson_id)
+    _assert_lesson_writable(db, lesson)
     class_ids = list(dict.fromkeys(body.class_ids))
     for class_id in class_ids:
         ensure_teacher_class_subject(db, staff_id, class_id, lesson.subject_id)
@@ -318,7 +422,6 @@ def assign_lesson_to_classes(
         db.rollback()
         raise
     return {"message": f"Lesson assigned to {len(created)} class(es)", "class_ids": created}
-
 
 
 def lesson_classwork_assignments(
@@ -400,7 +503,6 @@ def lesson_classwork_assignments(
             "submission_status": display_status,
         })
     return results
-
 
 
 def unarchive_lesson_record(lesson_id: int, staff_id: str, db: Session) -> dict:

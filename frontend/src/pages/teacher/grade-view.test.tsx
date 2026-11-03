@@ -16,6 +16,21 @@ vi.mock("@/lib/api", () => ({
   exportTeacherClassRecordWorkbook: vi.fn(),
 }));
 vi.mock("react-router-dom", () => ({ useParams: () => ({ section: "1", subject: "2" }) }));
+vi.mock("@/context/AcademicPeriodContext", () => ({
+  useAcademicPeriod: () => ({
+    selectedPeriodId: 3,
+    selectedYearId: 10,
+    selectedPeriod: null,
+    selectedYear: null,
+    periods: [],
+    academicYears: [],
+    isLoading: false,
+    setSelectedPeriodId: vi.fn(),
+    setSelectedYearId: vi.fn(),
+    refetch: vi.fn(),
+    registerDirtyGuard: () => () => {},
+  }),
+}));
 vi.mock("@/layouts/app-layout", () => ({ default: ({ children }: { children: ReactNode }) => <main>{children}</main> }));
 vi.mock("@/components/ui/sidebar", () => ({ SidebarTrigger: () => null }));
 vi.mock("./forms/view-grade-scores", () => ({ default: () => null }));

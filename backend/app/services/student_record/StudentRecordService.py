@@ -172,20 +172,41 @@ def teacher_period_options(
     staff_id: str,
     class_id: int | None = None,
     subject_id: int | None = None,
+    academic_year_id: int | None = None,
+    role: str = "teacher",
 ) -> StudentRecordPeriodOptionsResponse:
     today_date = date.today()
-    active_subs = (
-        db.query(TeacherSubstitution.subject_load_id, TeacherSubstitution.end_date)
+    from app.services.academic.SubstitutionService import SubstitutionService
+    academic_today = SubstitutionService.get_academic_date()
+
+    from app.services.academic.AcademicYearService import is_academic_year_authorized
+    if academic_year_id is not None:
+        if not is_academic_year_authorized(
+            db, academic_year_id, role=role, staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
+    if class_id is not None:
+        class_obj = db.get(Class, class_id)
+        if class_obj and class_obj.academic_year_id is not None:
+            if academic_year_id is not None and class_obj.academic_year_id != academic_year_id:
+                raise HTTPException(status_code=400, detail="Academic year does not match class academic year")
+            if not is_academic_year_authorized(
+                db, class_obj.academic_year_id, role=role, staff_id=staff_id
+            ):
+                raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
+    subs = (
+        db.query(TeacherSubstitution.subject_load_id, TeacherSubstitution.end_date, TeacherSubstitution.status)
         .filter(
             TeacherSubstitution.substitute_staff_id == staff_id,
-            TeacherSubstitution.status == "active",
-            TeacherSubstitution.start_date <= today_date,
+            TeacherSubstitution.status.in_(["active", "completed"]),
         )
         .all()
     )
     covered_load_ids = [
-        sub_id for sub_id, end_d in active_subs
-        if end_d is None or today_date <= end_d
+        sub_id for sub_id, end_d, status in subs
+        if status == "completed" or (status == "active" and (end_d is None or academic_today <= end_d or today_date <= end_d))
     ]
 
     from sqlalchemy import or_
@@ -209,8 +230,14 @@ def teacher_period_options(
         query = query.filter(SubjectLoad.class_id == class_id)
     if subject_id is not None:
         query = query.filter(SubjectLoad.subject_id == subject_id)
+    if academic_year_id is not None:
+        query = query.filter(AcademicPeriod.academic_year_id == academic_year_id)
 
-    rows = query.distinct().order_by(AcademicPeriod.is_active.desc(), AcademicPeriod.end_date.desc()).all()
+    raw_rows = query.distinct().order_by(AcademicPeriod.is_active.desc(), AcademicPeriod.end_date.desc()).all()
+    rows = [
+        (period, year) for period, year in raw_rows
+        if is_academic_year_authorized(db, year.academic_year_id, role=role, staff_id=staff_id)
+    ]
 
     options = [
         StudentRecordPeriodOption(
@@ -227,7 +254,7 @@ def teacher_period_options(
     active_period = resolve_active_academic_period(db, required=False)
     active_period_id = active_period.academic_period_id if active_period else None
     default_period = next(
-        (item.academic_period_id for item in options if item.academic_period_id == active_period_id),
+        (item.academic_period_id for item in options if item.academic_period_id == active_period_id and (academic_year_id is None or item.academic_year_id == academic_year_id)),
         None,
     )
     if default_period is None and options:
@@ -243,9 +270,11 @@ def teacher_student_roster(
     staff_id: str,
     class_id: int,
     subject_id: int,
-    academic_period_id: int | None,
+    academic_period_id: int | None = None,
+    academic_year_id: int | None = None,
+    role: str = "teacher",
 ) -> StudentRecordRosterResponse:
-    scope = _teacher_scope(db, staff_id, class_id, subject_id, academic_period_id)
+    scope = _teacher_scope(db, staff_id, class_id, subject_id, academic_period_id, academic_year_id=academic_year_id, role=role)
     students = _roster(db, scope)
     assignments = _classwork_assignments(db, scope)
     submissions_by_student = _submissions_by_student(db, assignments)
@@ -294,9 +323,11 @@ def teacher_student_record_detail(
     class_id: int,
     subject_id: int,
     student_id: UUID,
-    academic_period_id: int | None,
+    academic_period_id: int | None = None,
+    academic_year_id: int | None = None,
+    role: str = "teacher",
 ) -> StudentRecordDetailResponse:
-    scope = _teacher_scope(db, staff_id, class_id, subject_id, academic_period_id)
+    scope = _teacher_scope(db, staff_id, class_id, subject_id, academic_period_id, academic_year_id=academic_year_id, role=role)
     student = _scoped_student(db, scope, student_id)
     assignments = _classwork_assignments(db, scope)
     submissions = _submissions_by_student(db, assignments).get(student.student_id, {})
@@ -418,8 +449,10 @@ def teacher_student_gradebook(
     class_id: int,
     subject_id: int,
     academic_period_id: int | None = None,
+    academic_year_id: int | None = None,
+    role: str = "teacher",
 ) -> StudentGradebookResponse:
-    scope = _teacher_scope(db, staff_id, class_id, subject_id, academic_period_id)
+    scope = _teacher_scope(db, staff_id, class_id, subject_id, academic_period_id, academic_year_id=academic_year_id, role=role)
     students = _roster(db, scope)
     assignments = _classwork_assignments(db, scope)
     submissions_by_student = _submissions_by_student(db, assignments)
@@ -937,6 +970,10 @@ def finalize_student_period_grade(
     # Validate policy before touching the stored grade, including implicit autoflush.
     period = db.get(AcademicPeriod, period_grade.academic_period_id)
     year_id = period.academic_year_id if period else None
+    if finalized_by_staff_id and year_id is not None:
+        from app.services.academic.AcademicYearService import is_academic_year_authorized
+        if not is_academic_year_authorized(db, year_id, role="teacher", staff_id=finalized_by_staff_id):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
     policy_context = read_passing_threshold_context_or_422(
         db, academic_year_id=year_id, subject_ids=[period_grade.subject_id])
     require_subject_passing_threshold(
@@ -1462,16 +1499,7 @@ def bulk_send_grades_to_adviser(
 
     _validate_grade_submission_timing(db, academic_period_id)
 
-    students = (
-        db.query(Student)
-        .join(StudentClass, StudentClass.student_id == Student.student_id)
-        .filter(
-            StudentClass.class_id == class_id,
-            StudentClass.enrollment_status == "enrolled",
-        )
-        .order_by(Student.last_name.asc(), Student.first_name.asc())
-        .all()
-    )
+    students = _roster(db, scope)
 
     assignments = _classwork_assignments(db, scope)
     written_assignments: list[ClassworkAssignment] = []
@@ -1747,18 +1775,52 @@ def _teacher_scope(
     class_id: int,
     subject_id: int,
     academic_period_id: int | None,
+    academic_year_id: int | None = None,
+    role: str = "teacher",
 ) -> TeacherRecordScope:
+    class_obj = db.get(Class, class_id)
+    if not class_obj:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    from app.services.academic.AcademicYearService import is_academic_year_authorized
+    if academic_year_id is not None:
+        if class_obj.academic_year_id is not None and class_obj.academic_year_id != academic_year_id:
+            raise HTTPException(status_code=400, detail="Academic year does not match class academic year")
+        if not is_academic_year_authorized(
+            db, academic_year_id, role=role, staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
+    if class_obj.academic_year_id is not None and not is_academic_year_authorized(
+        db, class_obj.academic_year_id, role=role, staff_id=staff_id
+    ):
+        raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
+    if academic_period_id is not None:
+        period_obj = db.get(AcademicPeriod, academic_period_id)
+        if not period_obj:
+            raise HTTPException(status_code=404, detail="Academic period not found")
+        if class_obj.academic_year_id is not None and period_obj.academic_year_id != class_obj.academic_year_id:
+            raise HTTPException(status_code=400, detail="Academic period does not belong to specified class academic year")
+        if academic_year_id is not None and period_obj.academic_year_id != academic_year_id:
+            raise HTTPException(status_code=400, detail="Academic period does not belong to specified class academic year")
+        if not is_academic_year_authorized(
+            db, period_obj.academic_year_id, role=role, staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
     period_id = (
         academic_period_id
         if academic_period_id is not None
-        else _default_period_id(db, staff_id, class_id, subject_id)
+        else _default_period_id(db, staff_id, class_id, subject_id, academic_year_id=academic_year_id, role=role)
     )
     if period_id is None:
         raise HTTPException(status_code=404, detail="No active or recent academic period found")
 
-    SubjectLoadAuthorizationService.assert_can_view(
-        db, staff_id, class_id, subject_id, period_id
-    )
+    if role != "admin":
+        SubjectLoadAuthorizationService.assert_can_view(
+            db, staff_id, class_id, subject_id, period_id
+        )
     access_level = SubjectLoadAuthorizationService.get_teacher_access_level(
         db, staff_id, class_id, subject_id, period_id
     )
@@ -1787,7 +1849,10 @@ def _teacher_scope(
     active_sub = SubstitutionService.get_active_substitution(db, subject_load.subject_load_id)
 
     is_view_only = (access_level == SubjectAccessLevel.VIEW_ONLY)
-    is_substitution = (active_sub is not None and active_sub.substitute_staff_id == staff_id)
+    is_substitution = (
+        (active_sub is not None and active_sub.substitute_staff_id == staff_id)
+        or (subject_load.staff_id != staff_id and access_level != SubjectAccessLevel.DENIED)
+    )
 
     sub_name = None
     orig_name = None
@@ -1821,8 +1886,10 @@ def _default_period_id(
     staff_id: str,
     class_id: int,
     subject_id: int,
+    academic_year_id: int | None = None,
+    role: str = "teacher",
 ) -> int | None:
-    options = teacher_period_options(db, staff_id, class_id, subject_id)
+    options = teacher_period_options(db, staff_id, class_id, subject_id, academic_year_id=academic_year_id, role=role)
     return options.default_academic_period_id
 
 

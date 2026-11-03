@@ -195,6 +195,7 @@ export type TeacherAdvisoryClassListItem = {
   section_name: string;
   academic_level: string;
   academic_year: string;
+  academic_year_id?: number | null;
   class_status: string;
   is_archived: boolean;
   student_count: number;
@@ -227,6 +228,7 @@ export type TeacherAdvisoryClassDetailResponse = {
   section_name: string;
   academic_level: string;
   academic_year: string;
+  academic_year_id?: number | null;
   class_status: string;
   is_archived: boolean;
   created_at: string | null;

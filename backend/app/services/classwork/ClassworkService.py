@@ -14,6 +14,7 @@ from app.core.FileUpload import delete_file, save_file
 from app.core.Security import decode_access_token
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
@@ -278,6 +279,15 @@ async def create_classwork_wizard_record(
         academic_period_id = resolve_active_academic_period(db).academic_period_id
 
     ensure_class_targets(db, staff_id, subject_id, selected_class_ids, academic_period_id)
+    if is_published:
+        from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+        for class_id in selected_class_ids:
+            SubjectLoadAuthorizationService.assert_context_writable(
+                db,
+                class_id=class_id,
+                academic_period_id=academic_period_id,
+                block_future_period_in_current_year=True,
+            )
     quiz_builder = _parse_quiz_payload(quiz_payload, normalized_type)
 
     intervention = None
@@ -635,7 +645,12 @@ def check_and_notify_post_deadline_summaries(db: Session, staff_id: str):
         print(f"[Notification Error] Failed to generate post-deadline summary: {err}")
 
 
-def teacher_classworks(staff_id: str, db: Session, academic_period_id: int | None = None) -> list[ClassworkResponse]:
+def teacher_classworks(
+    staff_id: str,
+    db: Session,
+    academic_period_id: int | None = None,
+    academic_year_id: int | None = None,
+) -> list[ClassworkResponse]:
     check_and_notify_post_deadline_summaries(db, staff_id)
     query = (
         db.query(Classwork)
@@ -648,14 +663,45 @@ def teacher_classworks(staff_id: str, db: Session, academic_period_id: int | Non
         )
         .filter(Classwork.created_by_staff_id == staff_id, Classwork.is_archived == False)
     )
+
+    from sqlalchemy import or_
+    from app.models.academic.AcademicPeriod import AcademicPeriod
+    from app.models.academic.AcademicYear import AcademicYear
+    from app.models.academic.Class_ import Class
+
     if academic_period_id is not None:
-        from sqlalchemy import or_
-        query = query.filter(
-            or_(
-                Classwork.assignments.any(ClassworkAssignment.academic_period_id == academic_period_id),
-                ~Classwork.assignments.any(),
+        period = db.get(AcademicPeriod, academic_period_id)
+        is_active_period = bool(period and period.is_active)
+        if is_active_period:
+            query = query.filter(
+                or_(
+                    Classwork.assignments.any(ClassworkAssignment.academic_period_id == academic_period_id),
+                    ~Classwork.assignments.any(),
+                )
             )
-        )
+        else:
+            query = query.filter(
+                Classwork.assignments.any(ClassworkAssignment.academic_period_id == academic_period_id)
+            )
+    elif academic_year_id is not None:
+        year = db.get(AcademicYear, academic_year_id)
+        is_active_year = bool(year and year.is_active)
+        if is_active_year:
+            query = query.filter(
+                or_(
+                    Classwork.assignments.any(
+                        ClassworkAssignment.class_.has(Class.academic_year_id == academic_year_id)
+                    ),
+                    ~Classwork.assignments.any(),
+                )
+            )
+        else:
+            query = query.filter(
+                Classwork.assignments.any(
+                    ClassworkAssignment.class_.has(Class.academic_year_id == academic_year_id)
+                )
+            )
+
     classworks = query.order_by(Classwork.created_at.desc()).all()
     return [build_classwork_response(classwork) for classwork in classworks]
 
@@ -695,12 +741,26 @@ def classwork_detail(
     if current_user.get("role") == "teacher":
         from app.services.classwork.ClassworkResponseService import authorized_teacher_linked_lessons
         response.linked_lessons = authorized_teacher_linked_lessons(classwork, current_user, db, class_id)
+        from app.models.academic.Class_ import Class
+        from app.services.academic.AcademicYearService import is_academic_year_authorized
+        def _is_asgn_auth(asgn):
+            c_obj = db.get(Class, asgn.class_id)
+            if c_obj and c_obj.academic_year_id is not None:
+                return is_academic_year_authorized(db, c_obj.academic_year_id, current_user)
+            return True
+        if response.assignments:
+            response.assignments = [a for a in response.assignments if _is_asgn_auth(a)]
     result = response.model_dump()
     result["due_date"] = due_date
     return result
 
 
-def _assert_classwork_writable(db: Session, classwork: Classwork) -> None:
+def _assert_classwork_writable(
+    db: Session,
+    classwork: Classwork,
+    *,
+    block_future_period: bool = False,
+) -> None:
     from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
     assignments = (
         db.query(ClassworkAssignment)
@@ -712,6 +772,7 @@ def _assert_classwork_writable(db: Session, classwork: Classwork) -> None:
             db,
             class_id=assignment.class_id,
             academic_period_id=assignment.academic_period_id,
+            block_future_period_in_current_year=block_future_period,
         )
 
 
@@ -735,8 +796,17 @@ def update_classwork_record(
     )
     if not classwork:
         raise HTTPException(status_code=404, detail="Classwork not found or not yours")
-    _assert_classwork_writable(db, classwork)
     values = body.model_dump(exclude_unset=True)
+    is_live_update = bool(
+        values.get("is_published")
+        or classwork.is_published
+        or any(assignment.is_published for assignment in classwork.assignments)
+    )
+    _assert_classwork_writable(
+        db,
+        classwork,
+        block_future_period=is_live_update,
+    )
     linked_exam = any(a.original_exam_assignment_id is not None for a in classwork.assignments) or db.query(
         ClassworkAssignment.classwork_assignment_id,
     ).filter(ClassworkAssignment.original_exam_assignment_id.in_(
@@ -1021,6 +1091,15 @@ def assign_classwork_to_classes(
             academic_period_id = resolve_active_academic_period(db).academic_period_id
 
     ensure_class_targets(db, staff_id, classwork.subject_id, class_ids, academic_period_id)
+    if body.is_published:
+        from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+        for class_id in class_ids:
+            SubjectLoadAuthorizationService.assert_context_writable(
+                db,
+                class_id=class_id,
+                academic_period_id=academic_period_id,
+                block_future_period_in_current_year=True,
+            )
     created = []
     updated = []
     new_assignments = []
@@ -1185,9 +1264,19 @@ def classwork_assignment_detail(assignment_id: int, current_user: dict, db: Sess
     return response
 
 
-def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None = None) -> list[dict]:
+def teacher_classes(
+    staff_id: str,
+    db: Session,
+    academic_period_id: int | None = None,
+    academic_year_id: int | None = None,
+) -> list[dict]:
     from app.models.academic.TeacherSubstitution import TeacherSubstitution
     from app.services.academic.SubstitutionService import SubstitutionService
+    from app.services.academic.SubjectLoadAuthorizationService import (
+        SubjectLoadAuthorizationService,
+        AcademicContextState,
+    )
+    from app.models.academic.AcademicYear import AcademicYear
     from app.models.classwork.ClassworkAssignment import ClassworkAssignment
     from app.models.classwork.Classwork import Classwork
     from app.models.submissions.StudentSubmission import StudentSubmission
@@ -1196,16 +1285,34 @@ def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None =
     from sqlalchemy import or_, func
 
     today_date = SubstitutionService.get_academic_date()
-    active_subs = (
-        db.query(TeacherSubstitution.subject_load_id)
-        .filter(
-            TeacherSubstitution.substitute_staff_id == staff_id,
+
+    is_historical = False
+    if academic_period_id is not None:
+        period_obj = db.get(AcademicPeriod, academic_period_id)
+        if period_obj:
+            is_historical = (
+                SubjectLoadAuthorizationService.classify_academic_period(db, period_obj)
+                == AcademicContextState.HISTORICAL
+            )
+    elif academic_year_id is not None:
+        year_obj = db.get(AcademicYear, academic_year_id)
+        if year_obj:
+            is_historical = (
+                SubjectLoadAuthorizationService.classify_academic_year(db, year_obj)
+                == AcademicContextState.HISTORICAL
+            )
+
+    sub_query = db.query(TeacherSubstitution.subject_load_id).filter(
+        TeacherSubstitution.substitute_staff_id == staff_id,
+    )
+    if is_historical:
+        sub_query = sub_query.filter(TeacherSubstitution.status.in_(["active", "completed"]))
+    else:
+        sub_query = sub_query.filter(
             TeacherSubstitution.status == "active",
             or_(TeacherSubstitution.end_date.is_(None), TeacherSubstitution.end_date >= today_date),
         )
-        .all()
-    )
-    sub_load_ids = [s[0] for s in active_subs]
+    sub_load_ids = [s[0] for s in sub_query.all()]
 
     load_filter = SubjectLoad.staff_id == staff_id
     if sub_load_ids:
@@ -1224,6 +1331,8 @@ def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None =
             Class.academic_year_id == AcademicPeriod.academic_year_id,
         )
     )
+    if academic_year_id is not None:
+        query = query.filter(Class.academic_year_id == academic_year_id)
     if academic_period_id is not None:
         query = query.filter(SubjectLoad.academic_period_id == academic_period_id)
     
@@ -1370,6 +1479,7 @@ def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None =
             "section_name": _class_section_name(class_),
             "grade_level": level.level_name if (level and level.level_name) else (f"Grade {level.grade_level}" if (level and level.grade_level) else "Grade 7"),
             "academic_period_id": subject_load.academic_period_id,
+            "academic_year_id": class_.academic_year_id,
             "student_count": total_students,
             "total_classworks": total_cw,
             "progress": progress_pct,
@@ -1385,6 +1495,7 @@ def teacher_assignments_for_class_subject(
     subject_id: int,
     staff_id: str,
     db: Session,
+    academic_period_id: int | None = None,
 ) -> list[ClassworkAssignmentResponse]:
     from app.models.academic.AcademicPeriod import AcademicPeriod
     from app.services.academic.ContentAuthorizationService import authorize_teacher_content
@@ -1400,7 +1511,7 @@ def teacher_assignments_for_class_subject(
     actor = db.get(AcademicStaff, staff_id)
     claims = {"role": "teacher", "sub": actor.user_id if actor else None}
 
-    rows = (
+    query = (
         db.query(ClassworkAssignment, Classwork, Class)
         .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
         .join(Class, Class.class_id == ClassworkAssignment.class_id)
@@ -1409,9 +1520,10 @@ def teacher_assignments_for_class_subject(
             Classwork.subject_id == subject_id,
             Classwork.is_archived == False,
         )
-        .order_by(ClassworkAssignment.created_at.desc())
-        .all()
     )
+    if academic_period_id is not None:
+        query = query.filter(ClassworkAssignment.academic_period_id == academic_period_id)
+    rows = query.order_by(ClassworkAssignment.created_at.desc()).all()
     results = []
     for assignment, classwork, class_ in rows:
         try:

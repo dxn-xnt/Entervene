@@ -90,11 +90,13 @@ export async function getClassAttendanceLogs(
   dateStr?: string,
   subjectId?: number,
   academicPeriodId?: number,
+  academicYearId?: number,
 ): Promise<AttendanceRecordItem[]> {
   const params = new URLSearchParams();
   if (dateStr) params.append("date", dateStr);
   if (subjectId) params.append("subject_id", String(subjectId));
   if (academicPeriodId) params.append("academic_period_id", String(academicPeriodId));
+  if (academicYearId) params.append("academic_year_id", String(academicYearId));
 
   const queryString = params.toString() ? `?${params.toString()}` : "";
   const res = await apiFetch(`/api/v1/attendance/class/${classId}${queryString}`);
@@ -104,10 +106,14 @@ export async function getClassAttendanceLogs(
 
 export async function getStudentAttendanceSummary(
   studentId: string,
-  classId?: number
+  classId?: number,
+  academicPeriodId?: number,
+  academicYearId?: number,
 ): Promise<AttendanceSummaryResponse> {
   const params = new URLSearchParams();
   if (classId) params.append("class_id", String(classId));
+  if (academicPeriodId) params.append("academic_period_id", String(academicPeriodId));
+  if (academicYearId) params.append("academic_year_id", String(academicYearId));
 
   const queryString = params.toString() ? `?${params.toString()}` : "";
   const res = await apiFetch(`/api/v1/attendance/student/${studentId}/summary${queryString}`);

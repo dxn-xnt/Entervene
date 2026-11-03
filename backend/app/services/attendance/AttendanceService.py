@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from app.models.academic.StudentCLass import StudentClass
 from app.models.attendance.Attendance import AttendanceRecord
@@ -79,11 +79,17 @@ def _resolve_attendance_period_id(
                 status_code=400,
                 detail="Academic class and period must belong to the same academic year.",
             )
-        if target_date is not None and not (requested_period.start_date <= target_date <= requested_period.end_date):
-            raise HTTPException(
-                status_code=400,
-                detail="Attendance date must fall within the selected academic period.",
-            )
+        if target_date is not None:
+            if requested_period.start_date and target_date < requested_period.start_date:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Attendance date must fall within the selected academic period.",
+                )
+            if requested_period.end_date and target_date > requested_period.end_date:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Attendance date must fall within the selected academic period.",
+                )
 
     if subject_id is not None:
         load_query = (
@@ -107,7 +113,10 @@ def _resolve_attendance_period_id(
         matching_loads = []
         for load in loads:
             period = db.get(AcademicPeriod, load.academic_period_id)
-            if target_date is not None and period and period.start_date <= target_date <= period.end_date:
+            if target_date is not None and period and (
+                (period.start_date is None or period.start_date <= target_date)
+                and (period.end_date is None or target_date <= period.end_date)
+            ):
                 matching_loads.append(load)
         if len(matching_loads) == 1:
             return matching_loads[0].academic_period_id
@@ -126,8 +135,8 @@ def _resolve_attendance_period_id(
             db.query(AcademicPeriod)
             .filter(
                 AcademicPeriod.academic_year_id == class_obj.academic_year_id,
-                AcademicPeriod.start_date <= target_date,
-                AcademicPeriod.end_date >= target_date,
+                or_(AcademicPeriod.start_date.is_(None), AcademicPeriod.start_date <= target_date),
+                or_(AcademicPeriod.end_date.is_(None), AcademicPeriod.end_date >= target_date),
             )
             .all()
         )
@@ -148,10 +157,23 @@ def _assert_attendance_write_access(
     target_date: date,
     recorded_by_staff_id: str | None,
     academic_period_id: int | None = None,
+    role: str = "teacher",
 ) -> int:
     from app.models.academic.Class_ import Class
     from app.models.academic.SubjectLoad import SubjectLoad
     from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+    from app.services.academic.AcademicYearService import is_academic_year_authorized
+
+    class_obj = db.get(Class, class_id)
+    if class_obj is None:
+        raise HTTPException(status_code=404, detail="Class not found.")
+
+    if class_obj.academic_year_id is not None and role != "admin":
+        if not is_academic_year_authorized(db, class_obj.academic_year_id, role=role, staff_id=recorded_by_staff_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Not authorized to access this academic year",
+            )
 
     period_id = _resolve_attendance_period_id(
         db, class_id, subject_id, target_date, academic_period_id=academic_period_id
@@ -163,10 +185,9 @@ def _assert_attendance_write_access(
         as_of=target_date,
         block_future_period_in_current_year=True,
     )
-    if not recorded_by_staff_id:
+    if not recorded_by_staff_id or role == "admin":
         return period_id
 
-    class_obj = db.get(Class, class_id)
     if subject_id is not None:
         if period_id is not None:
             SubjectLoadAuthorizationService.assert_can_write(
@@ -203,16 +224,14 @@ def _assert_attendance_write_access(
         )
         .all()
     )
-    if (class_obj and class_obj.adviser_staff_id) or class_loads:
-        if class_obj and class_obj.adviser_staff_id == recorded_by_staff_id:
-            return period_id
-        if any(
-            SubjectLoadAuthorizationService.can_write(
-                db, recorded_by_staff_id, l.class_id, l.subject_id, l.academic_period_id, as_of=target_date
-            )
-            for l in class_loads
-        ):
-            return period_id
+    is_adviser = bool(class_obj and class_obj.adviser_staff_id == recorded_by_staff_id)
+    has_load_write = any(
+        SubjectLoadAuthorizationService.can_write(
+            db, recorded_by_staff_id, l.class_id, l.subject_id, l.academic_period_id, as_of=target_date
+        )
+        for l in class_loads
+    )
+    if not is_adviser and not has_load_write:
         raise HTTPException(
             status_code=403,
             detail="You are not authorized to modify attendance records for this class.",
@@ -227,15 +246,23 @@ def _assert_attendance_read_access(
     staff_id: str | None,
     student_id: UUID | None = None,
     academic_period_id: int | None = None,
+    role: str = "teacher",
 ) -> None:
-    if not staff_id:
+    if not staff_id or role == "admin":
         return
     from app.models.academic.Class_ import Class
     from app.models.academic.SubjectLoad import SubjectLoad
     from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+    from app.services.academic.AcademicYearService import is_academic_year_authorized
 
     if class_id is not None:
         class_obj = db.get(Class, class_id)
+        if class_obj and class_obj.academic_year_id is not None:
+            if not is_academic_year_authorized(db, class_obj.academic_year_id, role=role, staff_id=staff_id):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Not authorized to access this academic year",
+                )
         if subject_id is not None:
             load_query = (
                 db.query(SubjectLoad)
@@ -325,6 +352,7 @@ def batch_mark_attendance(
     db: Session,
     payload: BatchAttendanceCreate,
     recorded_by_staff_id: str | None = None,
+    role: str = "teacher",
 ) -> list[AttendanceRecordResponse]:
     """Upsert daily attendance records for a batch of students in a class."""
     _assert_attendance_write_access(
@@ -334,6 +362,7 @@ def batch_mark_attendance(
         target_date=payload.date,
         recorded_by_staff_id=recorded_by_staff_id,
         academic_period_id=payload.academic_period_id,
+        role=role,
     )
     requested_student_ids = {item.student_id for item in payload.records}
     if requested_student_ids:
@@ -403,6 +432,7 @@ def record_qr_scan_attendance(
     db: Session,
     payload: QRScanAttendanceRequest,
     recorded_by_staff_id: str | None = None,
+    role: str = "teacher",
 ) -> QRScanAttendanceResponse:
     """Record student attendance via QR code scan.
     
@@ -450,6 +480,7 @@ def record_qr_scan_attendance(
         target_date=today,
         recorded_by_staff_id=recorded_by_staff_id,
         academic_period_id=payload.academic_period_id,
+        role=role,
     )
     # 4. Check existing attendance record for (student_id, class_id, subject_id, today)
     existing_q = db.query(AttendanceRecord).filter(
@@ -521,19 +552,59 @@ def get_class_attendance_logs(
     date_val: Optional[date] = None,
     subject_id: Optional[int] = None,
     academic_period_id: Optional[int] = None,
+    academic_year_id: Optional[int] = None,
     staff_id: Optional[str] = None,
+    role: str = "teacher",
 ) -> list[AttendanceRecordResponse]:
-    """Retrieve attendance logs for a specific class, optionally filtered by date or subject."""
+    """Retrieve attendance logs for a specific class, optionally filtered by date, subject, period, or year."""
+    from app.models.academic.Class_ import Class
+    from app.models.academic.AcademicPeriod import AcademicPeriod
+    from app.services.academic.AcademicYearService import is_academic_year_authorized
+
+    class_obj = db.get(Class, class_id)
+    if class_obj is None:
+        raise HTTPException(status_code=404, detail="Class not found.")
+
+    if role != "admin":
+        if academic_year_id is not None and not is_academic_year_authorized(
+            db, academic_year_id, role=role, staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+        if class_obj.academic_year_id is not None and not is_academic_year_authorized(
+            db, class_obj.academic_year_id, role=role, staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
+    if academic_year_id is not None and class_obj.academic_year_id is not None:
+        if class_obj.academic_year_id != academic_year_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Class does not belong to specified academic year.",
+            )
+
     period = None
     if academic_period_id is not None:
-        _resolve_attendance_period_id(
-            db, class_id, subject_id, date_val, academic_period_id=academic_period_id
-        )
-        from app.models.academic.AcademicPeriod import AcademicPeriod
         period = db.get(AcademicPeriod, academic_period_id)
+        if period is None:
+            raise HTTPException(status_code=404, detail="Academic period not found.")
+        if class_obj.academic_year_id is not None and period.academic_year_id != class_obj.academic_year_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Academic class and period must belong to the same academic year.",
+            )
+        if academic_year_id is not None and period.academic_year_id != academic_year_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Academic period does not belong to specified academic year.",
+            )
+        if role != "admin" and not is_academic_year_authorized(
+            db, period.academic_year_id, role=role, staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
     _assert_attendance_read_access(
         db, class_id=class_id, subject_id=subject_id, staff_id=staff_id,
-        academic_period_id=academic_period_id,
+        academic_period_id=academic_period_id, role=role,
     )
     query = (
         db.query(AttendanceRecord, Student)
@@ -546,7 +617,10 @@ def get_class_attendance_logs(
     if subject_id:
         query = query.filter(AttendanceRecord.subject_id == subject_id)
     if period is not None:
-        query = query.filter(AttendanceRecord.date >= period.start_date, AttendanceRecord.date <= period.end_date)
+        if period.start_date is not None:
+            query = query.filter(AttendanceRecord.date >= period.start_date)
+        if period.end_date is not None:
+            query = query.filter(AttendanceRecord.date <= period.end_date)
 
     query = query.order_by(AttendanceRecord.date.desc(), Student.last_name.asc())
     rows = query.all()
@@ -563,19 +637,57 @@ def get_student_attendance_summary(
     class_id: Optional[int] = None,
     subject_id: Optional[int] = None,
     academic_period_id: Optional[int] = None,
+    academic_year_id: Optional[int] = None,
     staff_id: Optional[str] = None,
+    role: str = "teacher",
 ) -> AttendanceSummaryResponse:
     """Calculate attendance statistics and overall rate for a student."""
+    from app.models.academic.Class_ import Class
+    from app.models.academic.AcademicPeriod import AcademicPeriod
+    from app.services.academic.AcademicYearService import is_academic_year_authorized
+
+    if class_id is not None:
+        class_obj = db.get(Class, class_id)
+        if class_obj is None:
+            raise HTTPException(status_code=404, detail="Class not found.")
+        if role != "admin":
+            if academic_year_id is not None and not is_academic_year_authorized(
+                db, academic_year_id, role=role, staff_id=staff_id
+            ):
+                raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+            if class_obj.academic_year_id is not None and not is_academic_year_authorized(
+                db, class_obj.academic_year_id, role=role, staff_id=staff_id
+            ):
+                raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+        if academic_year_id is not None and class_obj.academic_year_id is not None:
+            if class_obj.academic_year_id != academic_year_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Class does not belong to specified academic year.",
+                )
+
     period = None
     if academic_period_id is not None:
-        from app.models.academic.AcademicPeriod import AcademicPeriod
         period = db.get(AcademicPeriod, academic_period_id)
         if period is None:
             raise HTTPException(status_code=404, detail="Academic period not found.")
         if class_id is not None:
-            _resolve_attendance_period_id(
-                db, class_id, subject_id, None, academic_period_id=academic_period_id
+            class_obj = db.get(Class, class_id)
+            if class_obj and class_obj.academic_year_id is not None and period.academic_year_id != class_obj.academic_year_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Academic class and period must belong to the same academic year.",
+                )
+        if academic_year_id is not None and period.academic_year_id != academic_year_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Academic period does not belong to specified academic year.",
             )
+        if role != "admin" and not is_academic_year_authorized(
+            db, period.academic_year_id, role=role, staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
     _assert_attendance_read_access(
         db,
         class_id=class_id,
@@ -583,6 +695,7 @@ def get_student_attendance_summary(
         staff_id=staff_id,
         student_id=student_id,
         academic_period_id=academic_period_id,
+        role=role,
     )
     query = db.query(AttendanceRecord).filter(AttendanceRecord.student_id == student_id)
     if class_id:
@@ -590,7 +703,10 @@ def get_student_attendance_summary(
     if subject_id:
         query = query.filter(AttendanceRecord.subject_id == subject_id)
     if period is not None:
-        query = query.filter(AttendanceRecord.date >= period.start_date, AttendanceRecord.date <= period.end_date)
+        if period.start_date is not None:
+            query = query.filter(AttendanceRecord.date >= period.start_date)
+        if period.end_date is not None:
+            query = query.filter(AttendanceRecord.date <= period.end_date)
 
     records = query.all()
     total_days = len(records)

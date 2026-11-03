@@ -61,11 +61,20 @@ def finalize_period_grade(
 def get_teacher_record_periods(
     class_id: int | None = Query(None),
     subject_id: int | None = Query(None),
-    _teacher: dict = Depends(require_role("teacher")),
+    academic_year_id: int | None = Query(None),
+    _teacher: dict = Depends(require_role("teacher", "admin")),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    return teacher_period_options(db, staff_id, class_id, subject_id)
+    role = _teacher.get("role", "teacher") if isinstance(_teacher, dict) else "teacher"
+    return teacher_period_options(
+        db,
+        staff_id,
+        class_id,
+        subject_id,
+        academic_year_id=academic_year_id,
+        role=role,
+    )
 
 
 @router.get(
@@ -76,11 +85,21 @@ def get_teacher_student_roster(
     class_id: int,
     subject_id: int,
     academic_period_id: int | None = Query(None),
-    _teacher: dict = Depends(require_role("teacher")),
+    academic_year_id: int | None = Query(None),
+    _teacher: dict = Depends(require_role("teacher", "admin")),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    return teacher_student_roster(db, staff_id, class_id, subject_id, academic_period_id)
+    role = _teacher.get("role", "teacher") if isinstance(_teacher, dict) else "teacher"
+    return teacher_student_roster(
+        db,
+        staff_id,
+        class_id,
+        subject_id,
+        academic_period_id,
+        academic_year_id=academic_year_id,
+        role=role,
+    )
 
 
 @router.get(
@@ -92,7 +111,8 @@ def get_teacher_student_record_detail(
     subject_id: int,
     student_id: UUID,
     academic_period_id: int | None = Query(None),
-    _teacher: dict = Depends(require_role("teacher")),
+    academic_year_id: int | None = Query(None),
+    _teacher: dict = Depends(require_role("teacher", "admin")),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
@@ -103,6 +123,7 @@ def get_teacher_student_record_detail(
         subject_id,
         student_id,
         academic_period_id,
+        academic_year_id=academic_year_id,
     )
 
 
@@ -114,16 +135,20 @@ def get_teacher_student_gradebook(
     class_id: int,
     subject_id: int,
     academic_period_id: int | None = Query(None),
-    _teacher: dict = Depends(require_role("teacher")),
+    academic_year_id: int | None = Query(None),
+    _teacher: dict = Depends(require_role("teacher", "admin")),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
+    role = _teacher.get("role", "teacher") if isinstance(_teacher, dict) else "teacher"
     return teacher_student_gradebook(
         db,
         staff_id=staff_id,
         class_id=class_id,
         subject_id=subject_id,
         academic_period_id=academic_period_id,
+        academic_year_id=academic_year_id,
+        role=role,
     )
 
 
@@ -134,10 +159,18 @@ def export_teacher_class_record(
     class_id: int,
     subject_id: int,
     academic_period_id: int = Query(...),
+    academic_year_id: int | None = Query(None),
     _teacher: dict = Depends(require_role("teacher", "admin")),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
+    from app.models.academic.Class_ import Class
+    from fastapi import HTTPException
+    class_obj = db.get(Class, class_id)
+    if not class_obj:
+        raise HTTPException(status_code=404, detail="Class not found")
+    if academic_year_id is not None and class_obj.academic_year_id != academic_year_id:
+        raise HTTPException(status_code=400, detail="Academic year does not match class academic year")
     stream, filename = export_class_record_single_term(
         db=db,
         class_id=class_id,
@@ -166,6 +199,13 @@ def export_teacher_class_record_workbook(
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
+    from app.models.academic.Class_ import Class
+    from fastapi import HTTPException
+    class_obj = db.get(Class, class_id)
+    if not class_obj:
+        raise HTTPException(status_code=404, detail="Class not found")
+    if academic_year_id is not None and class_obj.academic_year_id != academic_year_id:
+        raise HTTPException(status_code=400, detail="Academic year does not match class academic year")
     stream, filename = export_class_record_full_workbook(
         db=db,
         class_id=class_id,
@@ -190,7 +230,8 @@ def export_teacher_class_record_workbook(
 def get_teacher_term_grade_summary(
     class_id: int,
     subject_id: int,
-    _teacher: dict = Depends(require_role("teacher")),
+    academic_year_id: int | None = Query(None),
+    _teacher: dict = Depends(require_role("teacher", "admin")),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
@@ -199,6 +240,7 @@ def get_teacher_term_grade_summary(
         staff_id=staff_id,
         class_id=class_id,
         subject_id=subject_id,
+        academic_year_id=academic_year_id,
     )
 
 

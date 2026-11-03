@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Table } from "@/components/retroui/Table";
 import { Tabs } from "@/components/retroui/Tabs";
@@ -172,6 +173,8 @@ const TeacherGradeView = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("name");
   const [refresh, setRefresh] = useState(0);
+  const { selectedPeriodId, selectedYearId, isLoading: isContextLoading } = useAcademicPeriod();
+  const fetchRequestIdRef = useRef(0);
 
   const [selectedCategory, setSelectedCategory] = useState<{
     name: string;
@@ -315,39 +318,71 @@ const TeacherGradeView = () => {
   };
 
   useEffect(() => {
-    if (section && subject) {
-      getTeacherAvailablePeriods(Number(section), Number(subject))
+    if (section && subject && !isContextLoading) {
+      getTeacherAvailablePeriods(Number(section), Number(subject), selectedYearId ?? undefined)
         .then((res) => {
-          setPeriods(res.periods as unknown as TermPeriodInfo[]);
-          if (res.default_academic_period_id) {
+          const loadedPeriods = res.periods as unknown as TermPeriodInfo[];
+          setPeriods(loadedPeriods);
+          const matchingSelectedPeriod = loadedPeriods.find((p) => p.academic_period_id === selectedPeriodId);
+          if (matchingSelectedPeriod) {
+            setActiveTab(`term-${matchingSelectedPeriod.academic_period_id}`);
+          } else if (res.default_academic_period_id) {
             setActiveTab(`term-${res.default_academic_period_id}`);
+          } else if (loadedPeriods.length > 0) {
+            setActiveTab(`term-${loadedPeriods[0].academic_period_id}`);
           } else {
             setActiveTab("summary");
           }
         })
-        .catch((err) => console.error("Error loading periods:", err));
+        .catch((err) => {
+          console.error("Error loading periods:", err);
+          setPeriods([]);
+        });
     }
-  }, [section, subject]);
+  }, [section, subject, selectedYearId, selectedPeriodId, isContextLoading]);
 
   useEffect(() => {
-    if (!section || !subject || !activeTab) return;
+    if (!section || !subject || !activeTab || isContextLoading) return;
+    const currentRequestId = ++fetchRequestIdRef.current;
     setLoading(true);
 
     if (activeTab === "summary") {
       setGradebook(null);
-      getTeacherTermSummary(Number(section), Number(subject))
-        .then((data) => setTermSummary(data))
-        .catch((err) => console.error("Error loading summary:", err))
-        .finally(() => setLoading(false));
+      getTeacherTermSummary(Number(section), Number(subject), selectedYearId ?? undefined)
+        .then((data) => {
+          if (fetchRequestIdRef.current !== currentRequestId) return;
+          setTermSummary(data);
+        })
+        .catch((err) => {
+          if (fetchRequestIdRef.current !== currentRequestId) return;
+          console.error("Error loading summary:", err);
+          setTermSummary(null);
+        })
+        .finally(() => {
+          if (fetchRequestIdRef.current === currentRequestId) {
+            setLoading(false);
+          }
+        });
     } else if (activeTab.startsWith("term-")) {
       setTermSummary(null);
       const periodId = Number(activeTab.split("-")[1]);
-      getTeacherGradebook(section, subject, periodId)
-        .then((data) => setGradebook(data))
-        .catch((err) => console.error("Error loading gradebook:", err))
-        .finally(() => setLoading(false));
+      getTeacherGradebook(section, subject, periodId, selectedYearId ?? undefined)
+        .then((data) => {
+          if (fetchRequestIdRef.current !== currentRequestId) return;
+          setGradebook(data);
+        })
+        .catch((err) => {
+          if (fetchRequestIdRef.current !== currentRequestId) return;
+          console.error("Error loading gradebook:", err);
+          setGradebook(null);
+        })
+        .finally(() => {
+          if (fetchRequestIdRef.current === currentRequestId) {
+            setLoading(false);
+          }
+        });
     }
-  }, [section, subject, activeTab, refresh]);
+  }, [section, subject, activeTab, refresh, selectedYearId, isContextLoading]);
 
   const cg = gradebook?.classwork?.[0] ?? { writtenWork: [], performanceTask: [], quarterlyAssessment: [], exams: [] };
   const examItems = cg.exams && cg.exams.length > 0 ? cg.exams : (cg.quarterlyAssessment ?? []);
@@ -380,7 +415,7 @@ const TeacherGradeView = () => {
 
     try {
       setIsExporting(true);
-      const { blob, filename } = await exportTeacherClassRecordWorkbook(section, subject);
+      const { blob, filename } = await exportTeacherClassRecordWorkbook(section, subject, selectedYearId ?? undefined);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -440,7 +475,7 @@ const TeacherGradeView = () => {
 
       try {
         setIsExporting(true);
-        const { blob, filename } = await exportTeacherClassRecord(section, subject, activePeriodId);
+        const { blob, filename } = await exportTeacherClassRecord(section, subject, activePeriodId, selectedYearId ?? undefined);
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -1111,10 +1146,13 @@ const TeacherGradeView = () => {
                 <div className="rounded border-2 border-black bg-amber-100 p-4 text-black flex items-center gap-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-medium">
                   <span className="text-2xl">🔒</span>
                   <div>
-                    <h4 className="font-black text-sm">Read-Only Mode (On Leave)</h4>
+                    <h4 className="font-black text-sm">
+                      {gradebook?.scope?.substitute_name ? "Read-Only Mode (On Leave)" : "Read-Only Mode (Historical Record)"}
+                    </h4>
                     <p className="text-xs text-gray-800">
-                      You are currently on leave for this class and subject. Records are view-only.
-                      {gradebook?.scope?.substitute_name && ` Currently covered by substitute teacher: ${gradebook.scope.substitute_name}.`}
+                      {gradebook?.scope?.substitute_name
+                        ? `You are currently on leave for this class and subject. Records are view-only. Currently covered by substitute teacher: ${gradebook.scope.substitute_name}.`
+                        : "This academic period is closed or historical. Records are view-only."}
                     </p>
                   </div>
                 </div>
@@ -1175,20 +1213,20 @@ const TeacherGradeView = () => {
             categoryName={selectedCategory.name}
             items={selectedCategory.items}
             studentGrades={selectedCategory.studentGrades}
-            onEnterScores={(item) => {
+            onEnterScores={!isViewOnly ? (item) => {
               setSelectedCategory(null);
               setScoringActivity({
                 activityId: item.id,
                 title: item.title,
                 maxScore: item.maxScore,
               });
-            }}
+            } : undefined}
           />
         )}
       </Dialog>
 
       <Dialog
-        open={addingCategoryName !== null}
+        open={!isViewOnly && addingCategoryName !== null}
         onOpenChange={(open) => {
           if (!open) setAddingCategoryName(null);
         }}
@@ -1205,7 +1243,7 @@ const TeacherGradeView = () => {
       </Dialog>
 
       <Dialog
-        open={scoringActivity !== null}
+        open={!isViewOnly && scoringActivity !== null}
         onOpenChange={(open) => {
           if (!open) setScoringActivity(null);
         }}

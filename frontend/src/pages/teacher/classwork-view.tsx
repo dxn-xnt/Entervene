@@ -41,6 +41,8 @@ import EditClassworkModal from "./forms/edit-classwork";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import AppLayout from "@/layouts/app-layout";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { academicContextState } from "@/lib/academic-context-state";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
 import IconContainer from "@/components/icon-container";
@@ -98,6 +100,15 @@ export default function ClassworkView({
 
   const [selected, setSelected] = useState<TeacherClasswork | null>(classwork ?? null);
   const [isClassworkLoading, setIsClassworkLoading] = useState(!classwork);
+  const { selectedPeriod, selectedYear, periods } = useAcademicPeriod();
+
+  const contextState = useMemo(
+    () => academicContextState(selectedYear, selectedPeriod, periods),
+    [periods, selectedPeriod, selectedYear],
+  );
+  const isFuturePlanning = contextState === "future";
+  const isReadOnly = Boolean(selected?.is_archived || contextState === "historical");
+  const blocksLiveActions = isReadOnly || isFuturePlanning;
   const [classworkFetchError, setClassworkFetchError] = useState("");
   const [tracking, setTracking] = useState<AssignmentTracking | null>(null);
   const [isTrackingLoading, setIsTrackingLoading] = useState(false);
@@ -133,6 +144,18 @@ export default function ClassworkView({
   const [gradeDraft, setGradeDraft] = useState("");
   const [feedbackDraft, setFeedbackDraft] = useState("");
   const [isPostingGrade, setIsPostingGrade] = useState(false);
+
+  useEffect(() => {
+    if (contextState === "historical") {
+      setShowEditModal(false);
+      setShowArchiveConfirm(false);
+    }
+    if (blocksLiveActions) {
+      setSelectedGradingSubmissionId(null);
+      setSelectedSubmissionDetail(null);
+      setSelectedStudent(null);
+    }
+  }, [blocksLiveActions, contextState]);
 
   // Sync internal selected state when prop changes or fetch if standalone
   useEffect(() => {
@@ -245,7 +268,7 @@ export default function ClassworkView({
   }, [loadTrackingAndAnalysis]);
 
   const archiveSelectedClasswork = async () => {
-    if (!selected) return;
+    if (!selected || isReadOnly) return;
 
     setIsArchiving(true);
     setDetailError("");
@@ -278,7 +301,7 @@ export default function ClassworkView({
   const openStudentSubmission = async (student: TrackingStudent) => {
     // For quizzes, open the specialized Quiz Question Grading Modal directly
     if (selected && isQuizType(selected.classwork_type)) {
-      if (student.submission_id) {
+      if (student.submission_id && !blocksLiveActions) {
         setSelectedGradingSubmissionId(student.submission_id);
       }
       return;
@@ -337,7 +360,7 @@ export default function ClassworkView({
   };
 
   const postGrade = async () => {
-    if (!selectedSubmissionDetail || !selected) return;
+    if (blocksLiveActions || !selectedSubmissionDetail || !selected) return;
     const grade = Number(gradeDraft);
     if (!Number.isFinite(grade) || grade < 0) {
       setGradeError("Enter a valid score.");
@@ -586,6 +609,7 @@ export default function ClassworkView({
         feedbackDraft={feedbackDraft}
         gradeError={gradeError}
         isPostingGrade={isPostingGrade}
+        isReadOnly={blocksLiveActions}
         onClose={closeStudentSubmission}
         onGradeChange={(value) => {
           setGradeDraft(value);
@@ -596,9 +620,9 @@ export default function ClassworkView({
           setGradeError("");
         }}
         onPostGrade={postGrade}
-        onOpenQuizGrading={(submissionId) =>
-          setSelectedGradingSubmissionId(submissionId)
-        }
+        onOpenQuizGrading={(submissionId) => {
+          if (!blocksLiveActions) setSelectedGradingSubmissionId(submissionId);
+        }}
       />
     );
 
@@ -705,29 +729,43 @@ export default function ClassworkView({
             </div>
 
             <div className="flex items-center gap-2 flex-col lg:flex-row lg:flex-nowrap">
-              <Button
-                type="button"
-                size="header"
-                variant="outline"
-                onClick={() => setShowEditModal(true)}
-                disabled={isArchiving}
-                className="whitespace-nowrap gap-2"
-              >
-                <Pencil size={16} />
-                Edit Classwork
-              </Button>
+              <Tooltip>
+                <TooltipTrigger render={
+                  <span className="inline-flex">
+                    <Button
+                      type="button"
+                      size="header"
+                      variant="outline"
+                      onClick={() => setShowEditModal(true)}
+                      disabled={isArchiving || isReadOnly}
+                      className="whitespace-nowrap gap-2"
+                    >
+                      <Pencil size={16} />
+                      Edit Classwork
+                    </Button>
+                  </span>
+                } />
+                {isReadOnly && <TooltipContent>Historical records are read-only</TooltipContent>}
+              </Tooltip>
 
-              <Button
-                type="button"
-                size="header"
-                variant="outline"
-                onClick={() => setShowArchiveConfirm(true)}
-                disabled={isArchiving}
-                className="whitespace-nowrap gap-2 bg-primary"
-              >
-                <Archive size={16} />
-                Archive Classwork
-              </Button>
+              <Tooltip>
+                <TooltipTrigger render={
+                  <span className="inline-flex">
+                    <Button
+                      type="button"
+                      size="header"
+                      variant="outline"
+                      onClick={() => setShowArchiveConfirm(true)}
+                      disabled={isArchiving || isReadOnly}
+                      className="whitespace-nowrap gap-2 bg-primary"
+                    >
+                      <Archive size={16} />
+                      Archive Classwork
+                    </Button>
+                  </span>
+                } />
+                {isReadOnly && <TooltipContent>Historical records are read-only</TooltipContent>}
+              </Tooltip>
             </div>
           </header>
 
@@ -892,7 +930,7 @@ export default function ClassworkView({
                 </Card>
               )}
               <ConfirmDialog
-                open={showArchiveConfirm}
+                open={showArchiveConfirm && !isReadOnly}
                 onOpenChange={setShowArchiveConfirm}
                 title="Archive Classwork"
                 confirmationTitle={`Are you sure you want to archive "${selected.title}"?`}
@@ -1118,7 +1156,9 @@ export default function ClassworkView({
                   isQuizAnalysisLoading={isQuizAnalysisLoading}
                   quizAnalysisError={quizAnalysisError}
                   selected={selected}
-                  setSelectedGradingSubmissionId={setSelectedGradingSubmissionId}
+                  setSelectedGradingSubmissionId={(submissionId) => {
+                    if (!blocksLiveActions) setSelectedGradingSubmissionId(submissionId);
+                  }}
                 />
               ) : (
                 <>
@@ -1319,8 +1359,9 @@ export default function ClassworkView({
 
       {/* Edit Classwork Modal */}
       <EditClassworkModal
+        draftOnly={isFuturePlanning}
         classwork={selected}
-        isOpen={showEditModal}
+        isOpen={showEditModal && !isReadOnly}
         onClose={() => setShowEditModal(false)}
         onSuccess={(updated) => {
           setSelected(updated);
@@ -1328,7 +1369,7 @@ export default function ClassworkView({
         }}
       />
 
-      {selectedGradingSubmissionId && (
+      {selectedGradingSubmissionId && !blocksLiveActions && (
         <QuizGradingModal
           submissionId={selectedGradingSubmissionId}
           isOpen={Boolean(selectedGradingSubmissionId)}

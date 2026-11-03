@@ -17,7 +17,7 @@ import ViewAttendanceLogModal from "./forms/view-attendance-log";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
 import { useTeacherClasses } from "@/hooks/use-teacher-classes";
-import { useRegisterDirtyGuard } from "@/context/AcademicPeriodContext";
+import { useAcademicPeriod, useRegisterDirtyGuard } from "@/context/AcademicPeriodContext";
 import {
   getClassAttendanceLogs,
   recordBatchAttendance,
@@ -135,7 +135,16 @@ export default function TeacherAttendancePage() {
     error: classesError,
     refetch: refetchClasses,
     selectedPeriodId,
+    selectedYearId,
   } = useTeacherClasses();
+  const { selectedPeriod, selectedYear } = useAcademicPeriod();
+
+  const isReadOnly = useMemo(() => {
+    if (selectedYear && !selectedYear.is_active) return true;
+    if (selectedPeriod && !selectedPeriod.is_active) return true;
+    return false;
+  }, [selectedYear, selectedPeriod]);
+
   const [selectedTargetKey, setSelectedTargetKey] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0],
@@ -143,6 +152,13 @@ export default function TeacherAttendancePage() {
   const [activeTab, setActiveTab] = useState<"marking" | "summary" | "scan">(
     "marking",
   );
+
+  // Automatically switch away from live scanner tab if in historical read-only mode
+  useEffect(() => {
+    if (isReadOnly && activeTab === "scan") {
+      setActiveTab("marking");
+    }
+  }, [isReadOnly, activeTab]);
 
   // Unsaved marks tracking & guard
   const initialMarksRef = useRef<Map<string, { status: AttendanceStatus; remarks: string }>>(new Map());
@@ -174,6 +190,7 @@ export default function TeacherAttendancePage() {
     useState<StudentSummaryStats | null>(null);
 
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const logsRequestIdRef = useRef(0);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -197,12 +214,13 @@ export default function TeacherAttendancePage() {
 
     // 2. Subject Teaching Loads
     teachingClasses.forEach((l) => {
-      if (!l.academic_period_id) return;
+      const periodId = l.academic_period_id || selectedPeriodId;
+      if (!periodId) return;
       list.push({
         key: `subj-${l.class_id}-${l.subject_id}`,
         class_id: l.class_id,
         subject_id: l.subject_id,
-        academic_period_id: l.academic_period_id,
+        academic_period_id: periodId,
         section_name: l.section_name,
         subject_name: l.subject_name,
         academic_level: l.grade_level,
@@ -216,13 +234,14 @@ export default function TeacherAttendancePage() {
 
   // Compute if current student marks differ from saved baseline
   const isDirty = useMemo(() => {
+    if (isReadOnly) return false;
     if (studentList.length === 0 || initialMarksRef.current.size === 0) return false;
     return studentList.some((s) => {
       const initial = initialMarksRef.current.get(s.student_id);
       if (!initial) return false;
       return s.status !== initial.status || (s.remarks || "") !== (initial.remarks || "");
     });
-  }, [studentList]);
+  }, [isReadOnly, studentList]);
 
   // Warn on tab close / browser refresh if unsaved marks exist
   useEffect(() => {
@@ -301,37 +320,44 @@ export default function TeacherAttendancePage() {
 
   // Load Attendance Logs & Students for Selected Class & Subject & Date
   useEffect(() => {
-    if (!selectedClassId) return;
+    if (!selectedClassId) {
+      setStudentList([]);
+      setAllClassLogs([]);
+      setLoadingLogs(false);
+      return;
+    }
+
+    const currentRequestId = ++logsRequestIdRef.current;
+    setLoadingLogs(true);
 
     async function loadAttendanceData() {
       try {
-        setLoadingLogs(true);
-        // 1. Fetch class students
-        const resStudents = await apiFetch(
-          `/api/v1/classes/${selectedClassId}/students`,
-        );
+        const [resStudents, fullLogs] = await Promise.all([
+          apiFetch(`/api/v1/classes/${selectedClassId}/students`),
+          getClassAttendanceLogs(
+            selectedClassId!,
+            undefined,
+            selectedSubjectId,
+            selectedAcademicPeriodId,
+            selectedYearId ?? undefined,
+          ),
+        ]);
+
+        if (logsRequestIdRef.current !== currentRequestId) return;
+
         const rawData = resStudents.ok ? await resStudents.json() : null;
         const students: StudentInfo[] = Array.isArray(rawData)
           ? rawData
           : rawData?.students || [];
 
-        // 2. Fetch all logs for class & subject
-        const fullLogs = await getClassAttendanceLogs(
-          selectedClassId!,
-          undefined,
-          selectedSubjectId,
-          selectedAcademicPeriodId,
-        );
         setAllClassLogs(fullLogs);
 
-        // 3. Filter logs for selected date for marking view
         const logMap = new Map(
           fullLogs
             .filter((l) => l.date === selectedDate)
             .map((l) => [l.student_id, l]),
         );
 
-        // 4. Build marking state array
         const initialStates: StudentAttendanceState[] = students.map((s) => {
           const log = logMap.get(s.student_id);
           const name =
@@ -355,14 +381,19 @@ export default function TeacherAttendancePage() {
           initialStates.map((s) => [s.student_id, { status: s.status, remarks: s.remarks }]),
         );
       } catch (err) {
+        if (logsRequestIdRef.current !== currentRequestId) return;
         console.error("Failed to load attendance logs:", err);
+        setStudentList([]);
+        setAllClassLogs([]);
       } finally {
-        setLoadingLogs(false);
+        if (logsRequestIdRef.current === currentRequestId) {
+          setLoadingLogs(false);
+        }
       }
     }
 
     loadAttendanceData();
-  }, [selectedClassId, selectedSubjectId, selectedAcademicPeriodId, selectedDate]);
+  }, [selectedClassId, selectedSubjectId, selectedAcademicPeriodId, selectedYearId, selectedDate]);
 
   // Unique recorded dates sorted chronologically
   const uniqueDates = useMemo(() => {
@@ -373,6 +404,7 @@ export default function TeacherAttendancePage() {
 
   // Handle Individual Status Change
   const setStatus = (studentId: string, status: AttendanceStatus) => {
+    if (isReadOnly) return;
     setStudentList((prev) =>
       prev.map((item) =>
         item.student_id === studentId ? { ...item, status } : item,
@@ -382,6 +414,7 @@ export default function TeacherAttendancePage() {
 
   // Handle Remarks Change
   const setRemarks = (studentId: string, remarks: string) => {
+    if (isReadOnly) return;
     setStudentList((prev) =>
       prev.map((item) =>
         item.student_id === studentId ? { ...item, remarks } : item,
@@ -391,12 +424,13 @@ export default function TeacherAttendancePage() {
 
   // Bulk Actions
   const markAll = (status: AttendanceStatus) => {
+    if (isReadOnly) return;
     setStudentList((prev) => prev.map((item) => ({ ...item, status })));
   };
 
   // Save Batch Attendance
   const handleSaveAttendance = async () => {
-    if (!selectedClassId) return;
+    if (isReadOnly || !selectedClassId) return;
     try {
       setSaving(true);
       await recordBatchAttendance({
@@ -417,6 +451,7 @@ export default function TeacherAttendancePage() {
         undefined,
         selectedSubjectId,
         selectedAcademicPeriodId,
+        selectedYearId ?? undefined,
       );
       setAllClassLogs(fullLogs);
 
@@ -556,7 +591,7 @@ export default function TeacherAttendancePage() {
   };
 
   const startScanner = async () => {
-    if (isStartingRef.current || isStoppingRef.current) return;
+    if (isReadOnly || isStartingRef.current || isStoppingRef.current) return;
     const el = document.getElementById("attendance-qr-reader");
     if (!el) return;
 
@@ -735,9 +770,62 @@ export default function TeacherAttendancePage() {
   }, [studentList]);
 
   const changeAttendanceTab = (tab: "marking" | "scan" | "summary") => {
+    if (tab === activeTab) return;
+    if (isReadOnly && tab === "scan") return;
     if (activeTab === "scan" && tab !== "scan") void stopScanner();
     setActiveTab(tab);
   };
+
+  const attendanceTabs = useMemo(() => {
+    return [
+      {
+        id: "marking" as const,
+        label: isReadOnly ? "View Attendance" : "Mark Attendance",
+        icon: Users,
+      },
+      ...(!isReadOnly
+        ? [
+            {
+              id: "scan" as const,
+              label: "QR Scanner",
+              icon: QrCode,
+            },
+          ]
+        : []),
+      {
+        id: "summary" as const,
+        label: "Attendance Summary & Logs",
+        icon: BarChart3,
+      },
+    ];
+  }, [isReadOnly]);
+
+  const mobileTabs = useMemo(() => {
+    return [
+      {
+        id: "marking" as const,
+        label: isReadOnly ? "View" : "Mark",
+        name: isReadOnly ? "View attendance" : "Mark attendance",
+        icon: Users,
+      },
+      ...(!isReadOnly
+        ? [
+            {
+              id: "scan" as const,
+              label: "Scan QR",
+              name: "QR Scanner",
+              icon: QrCode,
+            },
+          ]
+        : []),
+      {
+        id: "summary" as const,
+        label: "Logs",
+        name: "Attendance summary and logs",
+        icon: BarChart3,
+      },
+    ];
+  }, [isReadOnly]);
 
   return (
     <AppLayout>
@@ -749,40 +837,25 @@ export default function TeacherAttendancePage() {
               <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 md:px-6">
                 <div className="flex items-center gap-3">
                   <SidebarTrigger className="shrink-0 md:hidden" />
-                  <div>
+                  <div className="flex items-center gap-2.5">
                     <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">Attendance</h1>
+                    {isReadOnly && (
+                      <Badge variant="surface" size="sm" className="font-semibold">
+                        Historical · Read-Only
+                      </Badge>
+                    )}
                   </div>
                 </div>
               </header>
               <div className="hidden -mt-[1px] bg-background px-3 sm:px-4 md:block md:px-6">
                 <Tabs
-                  tabs={[
-                    {
-                      id: "marking",
-                      label: "Mark Attendance",
-                      icon: Users,
-                    },
-                    {
-                      id: "scan",
-                      label: "QR Scanner",
-                      icon: QrCode,
-                    },
-                    {
-                      id: "summary",
-                      label: "Attendance Summary & Logs",
-                      icon: BarChart3,
-                    },
-                  ]}
+                  tabs={attendanceTabs}
                   activeTab={activeTab}
                   onTabChange={changeAttendanceTab}
                 />
               </div>
               <nav aria-label="Attendance views" className="attendance-mobile-tabs sticky top-0 z-30 bg-background md:hidden">
-                {([
-                  { id: "marking", label: "Mark", name: "Mark attendance", icon: Users },
-                  { id: "scan", label: "Scan QR", name: "QR Scanner", icon: QrCode },
-                  { id: "summary", label: "Logs", name: "Attendance summary and logs", icon: BarChart3 },
-                ] as const).map(({ id, label, name, icon: Icon }) => (
+                {mobileTabs.map(({ id, label, name, icon: Icon }) => (
                   <button key={id} type="button" aria-label={name} aria-pressed={activeTab === id}
                     onClick={() => changeAttendanceTab(id)}>
                     <Icon size={16} aria-hidden="true" />{label}
@@ -936,6 +1009,13 @@ export default function TeacherAttendancePage() {
                     </div>
                   </div>
 
+                  {isReadOnly && (
+                    <div className="rounded border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs font-semibold text-amber-900 flex items-center gap-2">
+                      <AlertTriangle className="size-4 shrink-0 text-amber-700" />
+                      <span>Historical academic period: Attendance records are viewable in read-only mode.</span>
+                    </div>
+                  )}
+
                   <Card className="block min-w-0 w-full overflow-hidden border-black bg-white transition-none shadow-md hover:shadow-none">
                     <div className="flex w-full flex-col gap-3 border-black bg-white py-3 transition-none sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
@@ -945,6 +1025,7 @@ export default function TeacherAttendancePage() {
                         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row">
                           <Button
                             size="sm"
+                            disabled={isReadOnly}
                             onClick={() => markAll("present")}
                             className="bg-success/80 shadow-none hover:bg-success"
                           >
@@ -953,6 +1034,7 @@ export default function TeacherAttendancePage() {
                           </Button>
                           <Button
                             size="sm"
+                            disabled={isReadOnly}
                             onClick={() => markAll("absent")}
                             className="bg-destructive/80 shadow-none hover:bg-destructive"
                           >
@@ -965,13 +1047,17 @@ export default function TeacherAttendancePage() {
                       <Button
                         size="sm"
                         onClick={handleSaveAttendance}
-                        disabled={saving || studentList.length === 0}
+                        disabled={isReadOnly || saving || studentList.length === 0}
                         className="flex w-full items-center justify-center gap-2 shadow-none sm:w-auto"
                       >
                         {saveSuccess ? (
                           <>
                             <Check className="w-4 h-4 text-emerald-400" /> Saved
                             Successfully!
+                          </>
+                        ) : isReadOnly ? (
+                          <>
+                            <Save className="w-4 h-4" /> Historical Read-Only
                           </>
                         ) : (
                           <>
@@ -1079,6 +1165,7 @@ export default function TeacherAttendancePage() {
                                 <Table.Cell className="text-center" data-label="Status">
                                   <Select
                                     value={student.status}
+                                    disabled={isReadOnly}
                                     onValueChange={(value) =>
                                       setStatus(student.student_id, value as AttendanceStatus)
                                     }
@@ -1087,7 +1174,7 @@ export default function TeacherAttendancePage() {
                                       aria-label={`Attendance status for ${student.student_name}`}
                                       className={cn(
                                         "w-36 mx-auto font-semibold border-2 border-black shadow-none",
-
+                                        isReadOnly && "cursor-not-allowed opacity-75"
                                       )}
                                     >
                                       <Select.Value />
@@ -1107,11 +1194,18 @@ export default function TeacherAttendancePage() {
                                   <Input
                                     type="text"
                                     aria-label={`Remarks for ${student.student_name}`}
-                                    className="w-full border-transparent hover:border-gray-300 focus:border-black outline-none bg-transparent transition-colors placeholder:text-gray-400 rounded shadow-none focus:shadow-none"
+                                    disabled={isReadOnly}
+                                    readOnly={isReadOnly}
+                                    className={cn(
+                                      "w-full border-transparent hover:border-gray-300 focus:border-black outline-none bg-transparent transition-colors placeholder:text-gray-400 rounded shadow-none focus:shadow-none",
+                                      isReadOnly && "cursor-not-allowed text-muted-foreground hover:border-transparent focus:border-transparent"
+                                    )}
                                     placeholder={
-                                      student.status !== "present"
-                                        ? "Add remarks..."
-                                        : "-"
+                                      isReadOnly
+                                        ? "-"
+                                        : student.status !== "present"
+                                          ? "Add remarks..."
+                                          : "-"
                                     }
                                     value={student.remarks}
                                     onChange={(e) =>
@@ -1157,17 +1251,19 @@ export default function TeacherAttendancePage() {
                       </Table>
                     )}
                   </Card>
-                  <div className="attendance-save-bar md:hidden">
-                    <div className="attendance-save-context">
-                      <strong>{selectedTarget?.label || "Select a class"}</strong>
-                      <span>{selectedDate} · {studentList.length} students</span>
+                  {!isReadOnly && (
+                    <div className="attendance-save-bar md:hidden">
+                      <div className="attendance-save-context">
+                        <strong>{selectedTarget?.label || "Select a class"}</strong>
+                        <span>{selectedDate} · {studentList.length} students</span>
+                      </div>
+                      <Button onClick={handleSaveAttendance} disabled={saving || studentList.length === 0}
+                        className="w-full gap-2 shadow-none" aria-live="polite">
+                        {saveSuccess ? <Check size={18} /> : <Save size={18} />}
+                        {saving ? "Saving attendance…" : saveSuccess ? "Attendance saved" : "Save Attendance"}
+                      </Button>
                     </div>
-                    <Button onClick={handleSaveAttendance} disabled={saving || studentList.length === 0}
-                      className="w-full gap-2 shadow-none" aria-live="polite">
-                      {saveSuccess ? <Check size={18} /> : <Save size={18} />}
-                      {saving ? "Saving attendance…" : saveSuccess ? "Attendance saved" : "Save Attendance"}
-                    </Button>
-                  </div>
+                  )}
 
                 </>
               )}

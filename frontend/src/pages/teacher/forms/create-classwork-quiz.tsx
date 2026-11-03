@@ -55,6 +55,7 @@ import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
 import { RemediationTeacherGuidanceBanner } from "./remediation-teacher-guidance-banner";
 
 interface CreateClassworkQuizModalProps {
+    draftOnly?: boolean;
     selectedType: ClassworkKind;
     subjects: Array<{ id: number; name: string }>;
     loads: TeacherClassLoad[];
@@ -77,6 +78,7 @@ interface CreateClassworkQuizModalProps {
 }
 
 export default function CreateClassworkQuizModal({
+    draftOnly = false,
     selectedType,
     subjects,
     loads,
@@ -143,7 +145,7 @@ export default function CreateClassworkQuizModal({
             ...emptyClassworkDraft,
             title: initialTitle || "",
             instructions: initialInstructions || "",
-            is_published: remediationDraft ? false : emptyClassworkDraft.is_published,
+            is_published: remediationDraft || draftOnly ? false : emptyClassworkDraft.is_published,
             classwork_category: remediationDraft ? (remediationGradeTreatment === "PRACTICE_ONLY" ? "" : remediationGradeTreatment === "EXAMINATION" ? "QUARTERLY_ASSESSMENT" : remediationGradeTreatment || "") : categoryFromFocus(null),
             exam_subtype: remediationOriginalExam?.subtype ?? "",
             total_points: defaultTotalPoints,
@@ -156,6 +158,11 @@ export default function CreateClassworkQuizModal({
             setDraft((current) => current.subject_id ? current : { ...current, subject_id: String(initialSubjectId) });
         }
     }, [initialSubjectId, subjects]);
+    useEffect(() => {
+        if (draftOnly) {
+            setDraft((current) => ({ ...current, is_published: false }));
+        }
+    }, [draftOnly]);
 
     const [quizQuestions, setQuizQuestions] = useState<QuizQuestionDraft[]>([
         createEmptyQuizQuestion(1),
@@ -762,7 +769,7 @@ export default function CreateClassworkQuizModal({
                 formData.append("exam_subtype", draft.exam_subtype);
             }
             formData.append("total_points", String(Number(draft.total_points)));
-            formData.append("is_published", String(draft.is_published));
+            formData.append("is_published", String(draftOnly ? false : draft.is_published));
             formData.append("subject_id", String(draft.subject_id));
             formData.append("show_scores", String(draft.show_scores));
             formData.append("class_ids", JSON.stringify(selectedClassIds));
@@ -1838,7 +1845,7 @@ export default function CreateClassworkQuizModal({
                                                     is_published: val === "published",
                                                 }))
                                             }
-                                            disabled={isCreating}
+                                            disabled={isCreating || draftOnly}
                                         >
                                             <Select.Trigger className="w-full">
                                                 <Select.Value />
@@ -1852,6 +1859,11 @@ export default function CreateClassworkQuizModal({
                                                 </Select.Group>
                                             </Select.Content>
                                         </Select>
+                                        {draftOnly && (
+                                            <p className="mt-2 text-xs font-semibold text-muted-foreground">
+                                                Future-term planning is saved as an unpublished draft.
+                                            </p>
+                                        )}
                                         {draft.is_published && unkeyedIdCount > 0 && (
                                             <div className="mt-2 rounded border-2 border-amber-500 bg-amber-50 p-2.5 text-xs text-amber-900 font-semibold shadow-xs">
                                                 ⚠️ <strong>Cannot publish:</strong> {unkeyedIdCount} Identification question(s) have no answer key. Add at least one answer key or select &quot;Keep hidden from students&quot; to save as draft.
