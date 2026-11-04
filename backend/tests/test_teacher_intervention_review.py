@@ -97,6 +97,11 @@ def test_assigned_teacher_lists_and_views_frozen_candidate(candidate_context):
     assert item.source_prediction_revision == 1
     assert item.triggering_predicted_grade == 84
     assert item.triggering_intervention_level == "MODERATE_RISK"
+    assert item.current_prediction_revision == 1
+    assert item.current_predicted_grade == 84
+    assert item.current_intervention_level == "MODERATE_RISK"
+    assert item.candidate_activation_eligible is True
+    assert item.candidate_activation_reason is None
     detail = get_teacher_candidate(ctx["db"], _staff(ctx), _id(ctx))
     assert detail.diagnosis_snapshot == ctx["candidate"].diagnosis_snapshot
     assert "manual_assessment_coverage" in detail.diagnosis_snapshot
@@ -116,6 +121,7 @@ def test_teacher_http_contract_returns_scoped_candidate(candidate_context):
     detail = client.get(f"/candidates/{_id(ctx)}")
     assert detail.status_code == 200
     assert detail.json()["diagnosis_snapshot"] == ctx["candidate"].diagnosis_snapshot
+    assert detail.json()["candidate_activation_eligible"] is True
 
 
 def test_active_read_preserves_trigger_and_frozen_evidence(candidate_context):
@@ -301,17 +307,28 @@ def test_latest_improved_prediction_resolves_instead_of_activating(candidate_con
     assert row.activated_at is None
 
 
-def test_later_low_revision_can_activate_with_original_trigger_preserved(candidate_context, monkeypatch):
+def test_later_high_risk_revision_blocks_activation_and_preserves_candidate(candidate_context, monkeypatch):
     ctx = candidate_context
     original_prediction_id = ctx["candidate"].source_prediction_id
     submission = ctx["db"].query(StudentSubmission).first()
     submission.grade = Decimal("1")
     ctx["db"].commit()
     monkeypatch.setattr(scorer, "score_development_current_term", lambda _features, model_name=None: 74)
-    activated = activate_teacher_candidate(ctx["db"], _staff(ctx), _id(ctx))
-    assert activated.status == "ACTIVE"
-    assert activated.source_prediction_id == original_prediction_id
-    assert activated.triggering_predicted_grade == 84
+    with pytest.raises(HTTPException) as exc:
+        activate_teacher_candidate(ctx["db"], _staff(ctx), _id(ctx))
+    assert exc.value.status_code == 409
+    assert "not Moderate Risk" in str(exc.value.detail)
+    ctx["db"].expire_all()
+    candidate = ctx["db"].get(Intervention, _id(ctx))
+    assert candidate.status == "CANDIDATE"
+    assert candidate.source_prediction_id == original_prediction_id
+    assert candidate.resolution_reason is None
+    current = get_teacher_candidate(ctx["db"], _staff(ctx), _id(ctx))
+    assert current.current_prediction_revision == 2
+    assert current.current_intervention_level == "HIGH_RISK"
+    assert current.current_predicted_grade == 74
+    assert current.candidate_activation_eligible is False
+    assert current.candidate_activation_reason == "CURRENT_RISK_NOT_MODERATE"
 
 
 def test_ungrading_blocks_activation_without_improvement(candidate_context):

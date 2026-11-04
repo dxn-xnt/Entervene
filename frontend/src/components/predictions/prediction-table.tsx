@@ -6,6 +6,7 @@ import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { ArrowUpDown, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getRiskBadgeMeta } from "@/lib/formatters";
+import { getTeacherRiskDisplay } from "./teacher-risk-display";
 
 interface PredictionTableProps {
   items: DashboardPredictionItem[];
@@ -14,6 +15,7 @@ interface PredictionTableProps {
   offset: number;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
+  showGradeLevel?: boolean;
   hideClass?: boolean;
   hideSubject?: boolean;
   hidePagination?: boolean;
@@ -21,6 +23,7 @@ interface PredictionTableProps {
   onPageChange: (newOffset: number) => void;
   onRowClick: (predictionId: number) => void;
   currentTerm?: boolean;
+  simplifiedTeacherRisk?: boolean;
   onClearFilters?: () => void;
 }
 
@@ -65,6 +68,7 @@ export default function PredictionTable({
   offset,
   sortBy,
   sortOrder,
+  showGradeLevel = false,
   hideClass = false,
   hideSubject = false,
   hidePagination = false,
@@ -72,11 +76,15 @@ export default function PredictionTable({
   onPageChange,
   onRowClick,
   currentTerm = false,
+  simplifiedTeacherRisk = false,
   onClearFilters,
 }: PredictionTableProps) {
   const currentPage = Math.floor(offset / limit) + 1;
   const totalPages = Math.ceil(total / limit) || 1;
-  const colSpanCount = (currentTerm ? 3 : 4) + (!hideClass ? 1 : 0) + (!hideSubject ? 1 : 0);
+  const colSpanCount = (currentTerm ? 3 : 4)
+    + (showGradeLevel ? 1 : 0)
+    + (!hideClass ? 1 : 0)
+    + (!hideSubject ? 1 : 0);
 
   return (
     <div className="flex flex-col">
@@ -93,6 +101,11 @@ export default function PredictionTable({
               />
             </Table.Head>
             {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">LRN</Table.Head> */}
+            {showGradeLevel && (
+              <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">
+                Grade Level
+              </Table.Head>
+            )}
             {!hideClass && <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">Class</Table.Head>}
             {!hideSubject && <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap">Subject</Table.Head>}
             <Table.Head className="font-extrabold text-primary-foreground whitespace-nowrap text-center">Risk Level</Table.Head>
@@ -140,7 +153,10 @@ export default function PredictionTable({
             </Table.Row>
           ) : (
             items.map((item) => {
-              const riskMeta = getRiskBadgeMeta(item.risk_level);
+              const teacherRisk = getTeacherRiskDisplay(item.risk_level);
+              const riskMeta = getRiskBadgeMeta(
+                simplifiedTeacherRisk ? teacherRisk.level : item.risk_level
+              );
 
               return (
                 <Table.Row
@@ -154,6 +170,11 @@ export default function PredictionTable({
                   {/* <Table.Cell className="text-gray-700 text-xs font-bold whitespace-nowrap">
                     {item.student_lrn}
                   </Table.Cell> */}
+                  {showGradeLevel && (
+                    <Table.Cell className="font-normal whitespace-nowrap">
+                      {item.grade_level != null ? `Grade ${item.grade_level}` : "—"}
+                    </Table.Cell>
+                  )}
                   {!hideClass && <Table.Cell className="font-normal whitespace-nowrap">{item.class_name}</Table.Cell>}
                   {!hideSubject && <Table.Cell className="font-normal whitespace-nowrap">{item.subject_name}</Table.Cell>}
                   <Table.Cell className="whitespace-nowrap text-center">
@@ -166,7 +187,11 @@ export default function PredictionTable({
                           : riskMeta.bg
                       )}
                     >
-                      {currentTerm && item.historical_projection ? "Historical projection" : riskMeta.text}
+                      {currentTerm && item.historical_projection
+                        ? "Historical projection"
+                        : simplifiedTeacherRisk
+                          ? teacherRisk.label
+                          : riskMeta.text}
                     </Badge>
                   </Table.Cell>
                   {/* <Table.Cell className="font-normal whitespace-nowrap">{item.term_label}</Table.Cell> */}

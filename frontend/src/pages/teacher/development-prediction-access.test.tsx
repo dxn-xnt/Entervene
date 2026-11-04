@@ -82,9 +82,19 @@ describe("shared prediction page access", () => {
     await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
     expect(screen.getByRole("heading", { name: "AI Predictions" })).toBeTruthy();
     expect(screen.queryByText("Current-Term Development")).toBeNull();
+    const summaryButtons = screen.getAllByRole("button").filter((button) =>
+      /Moderate Risk|High Risk|On Track/.test(button.textContent || "")
+    );
+    expect(summaryButtons).toEqual([
+      screen.getByRole("button", { name: /Moderate Risk\s+0/i }),
+      screen.getByRole("button", { name: /High Risk\s+1/i }),
+      screen.getByRole("button", { name: /On Track\s+0/i }),
+    ]);
     expect(screen.getByRole("button", { name: /High Risk\s+1/i })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /High Risk/i }));
+    expect(screen.getByText("Grade Level")).toBeTruthy();
+    expect(screen.getByText("Grade 9")).toBeTruthy();
     expect(screen.getByText("Projected Grade")).toBeTruthy();
     expect(screen.getByText("Risk Level")).toBeTruthy();
     expect(screen.queryByText("Risk Score")).toBeNull();
@@ -136,6 +146,31 @@ describe("shared prediction page access", () => {
     expect(screen.getByText("Predicted Grade")).toBeTruthy();
     expect(screen.getByText("Risk Level")).toBeTruthy();
     expect(screen.getByText("Risk Score")).toBeTruthy();
+    expect(screen.queryByText("Grade Level")).toBeNull();
+  });
+
+  it("shows both current-term low categories as On Track without changing stored values", () => {
+    const lowRisk = toDashboardPrediction({ ...row, prediction_id: 51, intervention_level: "LOW_RISK" });
+    const monitoring = toDashboardPrediction({ ...row, prediction_id: 52, intervention_level: "NEEDS_MONITORING" });
+
+    render(<PredictionTable
+      items={[lowRisk, monitoring]}
+      total={2}
+      limit={10}
+      offset={0}
+      currentTerm
+      simplifiedTeacherRisk
+      hidePagination
+      onSort={() => undefined}
+      onPageChange={() => undefined}
+      onRowClick={() => undefined}
+    />);
+
+    expect(screen.getAllByText("On Track")).toHaveLength(2);
+    expect(screen.queryByText("Low Risk")).toBeNull();
+    expect(screen.queryByText("Needs Monitoring")).toBeNull();
+    expect(lowRisk.risk_level).toBe("LOW_RISK");
+    expect(monitoring.risk_level).toBe("NEEDS_MONITORING");
   });
 
   it("uses a neutral empty state for current-term results", () => {

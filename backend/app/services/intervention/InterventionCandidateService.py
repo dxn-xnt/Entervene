@@ -20,6 +20,7 @@ from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECT
 
 OPEN_STATUSES = ("CANDIDATE", "ACTIVE")
 IMPROVED_PREDICTION = "IMPROVED_PREDICTION"
+AUTOMATIC_CANDIDATE_LEVEL = "MODERATE_RISK"
 
 
 def sync_intervention_for_persisted_prediction(
@@ -105,8 +106,12 @@ def sync_intervention_for_persisted_prediction(
             stage_intervention_notification(db, open_intervention, event=IMPROVED_PREDICTION, predicted_grade=grade)
         return open_intervention
 
+    # A policy-ineligible revision must not erase an existing candidate or
+    # ACTIVE intervention. It only prevents creation for a previously empty scope.
     if open_intervention is not None:
         return open_intervention
+    if prediction.intervention_level != AUTOMATIC_CANDIDATE_LEVEL:
+        return None
     candidate = Intervention(
         student_id=student_id,
         class_id=class_id,

@@ -36,6 +36,7 @@ import type {
   TeacherReview,
 } from "@/lib/prediction-api";
 import { EVIDENCE_GROUPS, evidenceRowsForGroup } from "./teacher-evidence";
+import { getTeacherRiskDisplay } from "./teacher-risk-display";
 import { useAuth } from "@/context/AuthContext";
 import {
   assignPredictionIntervention,
@@ -784,8 +785,7 @@ function CurrentTermTeacherDetail({
   const attendance = prediction.participation_context.attendance;
   const submissions = prediction.participation_context.submissions;
   const term = prediction.term_context;
-  const risk =
-    RISK_LABELS[prediction.intervention_level] || prediction.intervention_level;
+  const risk = getTeacherRiskDisplay(prediction.intervention_level).label;
 
   return (
     <div className="flex flex-col gap-4 px-5 text-sm">
@@ -871,7 +871,7 @@ function CurrentTermTeacherDetail({
             </p>
           </Card>
           <Card className="border-2 border-black p-3 shadow-none bg-white">
-            <p className="text-xs text-gray-600">Intervention Level</p>
+            <p className="text-xs text-gray-600">Risk Level</p>
             <Badge
               size="sm"
               variant="surface"
@@ -883,8 +883,8 @@ function CurrentTermTeacherDetail({
         </div>
         <p className="mt-2 text-xs text-gray-600"></p>
         <p className="mt-1 text-xs text-gray-600">
-          The intervention level is assigned from the projected grade using the
-          school's configured thresholds.
+          This display status is derived from the projected grade using the
+          school's configured thresholds. Intervention eligibility remains separate.
         </p>
       </section>
 

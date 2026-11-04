@@ -9,6 +9,7 @@ import {
   type RiskSummary,
   CurrentTermPredictionLoadError,
 } from "@/lib/prediction-api";
+import { matchesTeacherRiskFilter } from "./teacher-risk-display";
 
 export type AuthorizedCurrentTermRow = DevelopmentCurrentTermListItem & { grade_level: number | null };
 
@@ -92,7 +93,8 @@ export function buildCurrentTermDashboard(
 ): DashboardAtRiskResponse {
   const search = options.search?.trim().toLowerCase() || "";
   const filtered = rows.filter((row) =>
-    (!options.interventionLevel || (!row.official_final_grade_available && row.term_context.is_active && row.intervention_level === options.interventionLevel))
+    (!options.interventionLevel || (!row.official_final_grade_available && row.term_context.is_active
+      && matchesTeacherRiskFilter(row.intervention_level, options.interventionLevel)))
     && (!search || (row.student_name || row.student_id).toLowerCase().includes(search)));
   const offset = options.offset ?? 0;
   const limit = options.limit ?? 10;

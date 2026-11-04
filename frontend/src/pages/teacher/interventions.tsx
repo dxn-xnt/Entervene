@@ -271,7 +271,7 @@ export default function TeacherInterventions() {
   };
 
   const activate = async () => {
-    if (!detail || activating || reviewStale) return;
+    if (!detail || activating || reviewStale || detail.candidate_activation_eligible === false) return;
     setActivating(true);
     setActionError(null);
     try {
@@ -690,10 +690,19 @@ export default function TeacherInterventions() {
                         <Table.Cell className="font-semibold text-center">
                           {candidate.triggering_predicted_grade.toFixed(2)}
                         </Table.Cell>
-                        <Table.Cell className="flex flex-row items-center justify-center mt-2">
+                        <Table.Cell className="mt-2 flex flex-col items-center justify-center gap-1">
                           <Badge variant="surface" size="sm">
                             {label(candidate.triggering_intervention_level)}
                           </Badge>
+                          {!activeView && !resolvedView && candidate.candidate_activation_eligible === false && (
+                            <Badge variant="outline" size="sm">Review only</Badge>
+                          )}
+                          {!activeView && !resolvedView && candidate.current_intervention_level &&
+                            candidate.current_intervention_level !== candidate.triggering_intervention_level && (
+                              <span className="text-xs text-muted-foreground">
+                                Current: {label(candidate.current_intervention_level)}
+                              </span>
+                            )}
                         </Table.Cell>
                         <Table.Cell>
                           {resolvedView
