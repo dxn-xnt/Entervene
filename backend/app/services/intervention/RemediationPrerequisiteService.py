@@ -21,6 +21,7 @@ from app.models.intervention.Intervention import Intervention
 from app.models.intervention.InterventionReadingReview import InterventionReadingReview
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.schemas.PracticeAssessment import PracticeProgressionEvaluation
 from app.schemas.StudentPersistentIntervention import (
     StudentPreparationProgress,
     StudentRequiredReading,
@@ -50,6 +51,9 @@ PrerequisiteCode = Literal[
     "PREREQUISITE_SNAPSHOT_MISSING",
     "PREPARATION_REQUIRED",
     "PREPARATION_COMPLETE",
+    "PRACTICE_PASS_REQUIRED",
+    "PRACTICE_ATTEMPT_REQUIRED",
+    "PRACTICE_COMPLETE",
 ]
 
 REMEDIATION_ACTIVITY_TYPES = {"QUIZ", "ASSIGNMENT", "ACTIVITY", "CLASSWORK"}
@@ -65,6 +69,7 @@ class RemediationPrerequisiteDecision:
     preparation: StudentPreparationProgress | None = None
     resource_issues: tuple[StudentRequiredReadingIssue, ...] = ()
     readings: tuple[StudentRequiredReading, ...] = ()
+    practice_evaluation: PracticeProgressionEvaluation | None = None
 
 
 def _decision(
@@ -76,6 +81,7 @@ def _decision(
     preparation: StudentPreparationProgress | None = None,
     resource_issues: list[StudentRequiredReadingIssue] | None = None,
     readings: list[StudentRequiredReading] | None = None,
+    practice_evaluation: PracticeProgressionEvaluation | None = None,
     applies: bool = True,
 ) -> RemediationPrerequisiteDecision:
     return RemediationPrerequisiteDecision(
@@ -87,6 +93,7 @@ def _decision(
         preparation=preparation,
         resource_issues=tuple(resource_issues or ()),
         readings=tuple(readings or ()),
+        practice_evaluation=practice_evaluation,
     )
 
 
@@ -374,13 +381,122 @@ def evaluate_remediation_prerequisite(
             resource_issues=issues,
             readings=readings,
         )
+    from app.services.intervention.PracticeAssessmentService import (
+        evaluate_practice_progression,
+    )
+
+    practice_eval = evaluate_practice_progression(
+        db, intervention.intervention_id, student.student_id
+    )
+
+    # 1. Existing Remediation Protection (Grandfathering):
+    # If the student already started or completed this remediation activity before
+    # a practice assessment was published, never retroactively revoke access or invalidate work.
+    existing_remediation = (
+        db.query(StudentSubmission)
+        .filter(
+            StudentSubmission.classwork_assignment_id == assignment.classwork_assignment_id,
+            StudentSubmission.student_id == student.student_id,
+        )
+        .first()
+    )
+    has_existing_remediation = False
+    if existing_remediation is not None:
+        norm_status = (existing_remediation.status or "").lower()
+        if (
+            norm_status in ("pending", "submitted", "graded", "returned")
+            or existing_remediation.submitted_at is not None
+            or (existing_remediation.attempt_count is not None and existing_remediation.attempt_count > 0)
+            or existing_remediation.grade is not None
+        ):
+            has_existing_remediation = True
+
+    if has_existing_remediation:
+        return _decision(
+            allowed=True,
+            code="PREPARATION_COMPLETE",
+            message="Existing remediation work is in progress or completed; access preserved.",
+            intervention_id=intervention.intervention_id,
+            preparation=preparation,
+            readings=readings,
+            practice_evaluation=practice_eval,
+        )
+
+    # 2. Practice Assessment Progression Evaluation:
+    if not practice_eval.practice_exists or practice_eval.assessment_status != "PUBLISHED":
+        return _decision(
+            allowed=True,
+            code="PREPARATION_COMPLETE",
+            message=f"Required Reading preparation is complete ({preparation.summary}).",
+            intervention_id=intervention.intervention_id,
+            preparation=preparation,
+            readings=readings,
+            practice_evaluation=practice_eval,
+        )
+
+    if practice_eval.gatekeeper_policy == "OPTIONAL":
+        return _decision(
+            allowed=True,
+            code="PREPARATION_COMPLETE",
+            message=practice_eval.reason,
+            intervention_id=intervention.intervention_id,
+            preparation=preparation,
+            readings=readings,
+            practice_evaluation=practice_eval,
+        )
+
+    if practice_eval.gatekeeper_policy == "REQUIRE_PASS":
+        if not practice_eval.eligible_for_remediation:
+            return _decision(
+                allowed=False,
+                code="PRACTICE_PASS_REQUIRED",
+                message=practice_eval.reason,
+                intervention_id=intervention.intervention_id,
+                preparation=preparation,
+                resource_issues=issues,
+                readings=readings,
+                practice_evaluation=practice_eval,
+            )
+        return _decision(
+            allowed=True,
+            code="PREPARATION_COMPLETE",
+            message=practice_eval.reason,
+            intervention_id=intervention.intervention_id,
+            preparation=preparation,
+            readings=readings,
+            practice_evaluation=practice_eval,
+        )
+
+    if practice_eval.gatekeeper_policy == "REQUIRE_ATTEMPT":
+        if not practice_eval.eligible_for_remediation:
+            return _decision(
+                allowed=False,
+                code="PRACTICE_ATTEMPT_REQUIRED",
+                message=practice_eval.reason,
+                intervention_id=intervention.intervention_id,
+                preparation=preparation,
+                resource_issues=issues,
+                readings=readings,
+                practice_evaluation=practice_eval,
+            )
+        return _decision(
+            allowed=True,
+            code="PREPARATION_COMPLETE",
+            message=practice_eval.reason,
+            intervention_id=intervention.intervention_id,
+            preparation=preparation,
+            readings=readings,
+            practice_evaluation=practice_eval,
+        )
+
     return _decision(
-        allowed=True,
-        code="PREPARATION_COMPLETE",
-        message=f"Required Reading preparation is complete ({preparation.summary}).",
+        allowed=practice_eval.eligible_for_remediation,
+        code="PREPARATION_COMPLETE" if practice_eval.eligible_for_remediation else "PRACTICE_PASS_REQUIRED",
+        message=practice_eval.reason,
         intervention_id=intervention.intervention_id,
         preparation=preparation,
         readings=readings,
+        practice_evaluation=practice_eval,
     )
 
 
@@ -407,6 +523,11 @@ def require_remediation_prerequisite(
             "resource_issues": [
                 issue.model_dump(mode="json") for issue in decision.resource_issues
             ],
+            "practice": (
+                decision.practice_evaluation.model_dump(mode="json")
+                if decision.practice_evaluation is not None
+                else None
+            ),
         },
     )
 

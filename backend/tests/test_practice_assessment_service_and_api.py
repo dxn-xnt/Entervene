@@ -862,6 +862,9 @@ class TestAdapters:
             assigned_by_staff_id=staff_id,
         )
         db.add(cw_assign)
+        db_env["intervention"].remediation_plan = {
+            "selected_resources": [{"kind": "CLASSWORK", "id": cw.classwork_id}]
+        }
         db.commit()
 
         # Mock the AI generator function
@@ -897,6 +900,67 @@ class TestAdapters:
         assert preview[0].is_ai_generated is True
         assert len(preview[0].options) == 4
         assert any(o.is_correct for o in preview[0].options)
+
+    def test_ai_generation_rejects_unapproved_reading_ids(self, db_env):
+        db = db_env["db"]
+        staff_id = db_env["staff"].staff_id
+        intervention_id = db_env["intervention"].intervention_id
+        subj = db_env["subject"]
+        cls_obj = db_env["class"]
+        period = db_env["period"]
+
+        cw1 = Classwork(
+            subject_id=subj.subject_id,
+            created_by_staff_id=staff_id,
+            classwork_type="READING",
+            title="Approved Reading",
+            description="Content of approved reading",
+            instructions="Read this.",
+            is_archived=False,
+            is_graded=False,
+        )
+        cw2 = Classwork(
+            subject_id=subj.subject_id,
+            created_by_staff_id=staff_id,
+            classwork_type="READING",
+            title="Unapproved Class Reading",
+            description="Content of unapproved reading",
+            instructions="Read this.",
+            is_archived=False,
+            is_graded=False,
+        )
+        db.add_all([cw1, cw2])
+        db.flush()
+
+        db.add(ClassworkAssignment(
+            classwork_id=cw1.classwork_id,
+            class_id=cls_obj.class_id,
+            academic_period_id=period.academic_period_id,
+            assigned_by_staff_id=staff_id,
+        ))
+        db.add(ClassworkAssignment(
+            classwork_id=cw2.classwork_id,
+            class_id=cls_obj.class_id,
+            academic_period_id=period.academic_period_id,
+            assigned_by_staff_id=staff_id,
+        ))
+        db_env["intervention"].remediation_plan = {
+            "selected_resources": [{"kind": "CLASSWORK", "id": cw1.classwork_id}]
+        }
+        db.commit()
+
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(
+                PracticeAssessmentAIService.generate_practice_questions_ai(
+                    db, staff_id, intervention_id,
+                    AIGeneratePracticeQuestionsRequest(
+                        target_count=1,
+                        reading_classwork_ids=[cw2.classwork_id],
+                    ),
+                )
+            )
+        assert exc.value.status_code == 422
+        assert "not approved supporting materials" in exc.value.detail
 
     def test_quiz_import_adapter_allowed_types(self):
         mock_parsed_preview = QuizImportPreviewResponse(

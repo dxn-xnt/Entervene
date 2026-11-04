@@ -513,6 +513,14 @@ def get_student_assessment_metadata(db: Session, student_id: UUID, intervention_
         .all()
     )
     active_attempt = next((a for a in attempts if a.status == "STARTED"), None)
+    submitted_attempts = [a for a in attempts if a.status == "SUBMITTED"]
+    best_score = max((a.score_percentage for a in submitted_attempts), default=None)
+    latest_attempt = submitted_attempts[0] if submitted_attempts else None
+
+    has_passed = any(
+        a.is_passed or (a.score_percentage is not None and a.score_percentage >= assessment.passing_percentage)
+        for a in submitted_attempts
+    )
 
     return {
         "practice_assessment_id": assessment.practice_assessment_id,
@@ -521,10 +529,14 @@ def get_student_assessment_metadata(db: Session, student_id: UUID, intervention_
         "passing_percentage": float(assessment.passing_percentage),
         "total_questions": len(assessment.questions),
         "total_points": float(sum(q.points for q in assessment.questions)),
-        "attempts_count": len([a for a in attempts if a.status == "SUBMITTED"]),
+        "attempts_count": len(submitted_attempts),
         "has_active_attempt": active_attempt is not None,
         "active_attempt_id": active_attempt.attempt_id if active_attempt else None,
-        "has_passed": any(a.is_passed for a in attempts if a.status == "SUBMITTED"),
+        "active_attempt_number": active_attempt.attempt_number if active_attempt else None,
+        "has_passed": has_passed,
+        "best_score_percentage": float(best_score) if best_score is not None else None,
+        "latest_score_percentage": float(latest_attempt.score_percentage) if latest_attempt is not None else None,
+        "latest_attempt_number": latest_attempt.attempt_number if latest_attempt else None,
     }
 
 
@@ -819,12 +831,26 @@ def get_attempt_feedback(
     user_id = current_user.get("sub") or current_user.get("user_id")
 
     if role == "student":
-        student = db.query(Student).filter_by(user_id=UUID(str(user_id))).first()
+        student = None
+        try:
+            parsed_uuid = UUID(str(user_id))
+            student = db.query(Student).filter(
+                (Student.user_id == parsed_uuid) | (Student.student_id == parsed_uuid)
+            ).first()
+        except (ValueError, TypeError):
+            pass
         if student is None or attempt.student_id != student.student_id:
             raise HTTPException(status_code=403, detail="Access denied")
     elif role == "teacher":
         from app.models.people.AcademicStaff import AcademicStaff
-        staff = db.query(AcademicStaff).filter_by(user_id=UUID(str(user_id))).first()
+        staff = None
+        try:
+            parsed_uuid = UUID(str(user_id))
+            staff = db.query(AcademicStaff).filter_by(user_id=parsed_uuid).first()
+        except (ValueError, TypeError):
+            pass
+        if staff is None:
+            staff = db.query(AcademicStaff).filter_by(staff_id=str(user_id)).first()
         if staff is None:
             raise HTTPException(status_code=403, detail="Staff record not found")
         _require_teacher_scope(db, staff.staff_id, attempt.assessment.intervention)
@@ -967,7 +993,10 @@ def evaluate_practice_progression(
     practice_completed = attempts_count > 0
 
     best_score = max((a.score_percentage for a in submitted_attempts), default=None)
-    practice_passed = any(a.is_passed for a in submitted_attempts)
+    practice_passed = any(
+        a.is_passed or (a.score_percentage is not None and a.score_percentage >= assessment.passing_percentage)
+        for a in submitted_attempts
+    )
 
     policy = assessment.gatekeeper_policy
     if policy == "REQUIRE_PASS":

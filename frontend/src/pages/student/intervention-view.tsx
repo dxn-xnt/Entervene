@@ -35,6 +35,11 @@ import { apiFetch } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
+import StudentPracticeAssessmentModal from "./intervention/student-practice-assessment-modal";
+import {
+  type StudentPracticeAssessmentMetadata,
+  getStudentPracticeAssessment,
+} from "@/lib/practice-assessment-api";
 
 export default function StudentInterventionView() {
   const navigate = useNavigate();
@@ -51,6 +56,9 @@ export default function StudentInterventionView() {
   const [activities, setActivities] = useState<StudentSupportActivity[]>([]);
   const [isContentExpanded, setIsContentExpanded] = useState(false);
   const [targetLesson, setTargetLesson] = useState<{ lesson_id: number; title: string } | null>(null);
+  const [practiceMeta, setPracticeMeta] = useState<StudentPracticeAssessmentMetadata | null>(null);
+  const [isPracticeModalOpen, setIsPracticeModalOpen] = useState(false);
+  const [practiceModalMode, setPracticeModalMode] = useState<"taking" | "feedback">("taking");
 
   useEffect(() => {
     let cancelled = false;
@@ -89,6 +97,12 @@ export default function StudentInterventionView() {
         if (!cancelled) {
           setIntervention(matchedIntervention);
           setActivities(matchedIntervention.activities || []);
+        }
+        try {
+          const pMeta = await getStudentPracticeAssessment(matchedIntervention.intervention_id);
+          if (!cancelled) setPracticeMeta(pMeta);
+        } catch {
+          // No published practice assessment or failed to load
         }
         if (!resolvedReviewerId && matchedIntervention.reviewer_id) {
           resolvedReviewerId = matchedIntervention.reviewer_id;
@@ -161,6 +175,12 @@ export default function StudentInterventionView() {
       if (match) {
         setIntervention(match);
         setActivities(match.activities ?? []);
+        try {
+          const pMeta = await getStudentPracticeAssessment(match.intervention_id);
+          if (!cancelled) setPracticeMeta(pMeta);
+        } catch {
+          // No published practice assessment or failed to load
+        }
         if (match.class_id && match.subject_id) {
           try {
             const lessonRes = await apiFetch(
@@ -189,6 +209,27 @@ export default function StudentInterventionView() {
       cancelled = true;
     };
   }, [reviewer?.material_id, activities.length]);
+
+  const reloadInterventionData = async () => {
+    const currentId = intervention?.intervention_id || interventionId;
+    if (!currentId) return;
+    try {
+      let refreshed: StudentPersistentIntervention | null = null;
+      try {
+        refreshed = await getMyActiveIntervention(currentId);
+      } catch {
+        refreshed = await getMyResolvedIntervention(currentId).catch(() => null);
+      }
+      if (refreshed) {
+        setIntervention(refreshed);
+        setActivities(refreshed.activities || []);
+      }
+      const pMeta = await getStudentPracticeAssessment(currentId).catch(() => null);
+      setPracticeMeta(pMeta);
+    } catch (err) {
+      console.warn("Unable to reload intervention data", err);
+    }
+  };
 
   const subjectName = intervention?.subject_name || reviewer?.subject_name || "Study Support";
   const title = reviewer?.title || (intervention ? `${intervention.subject_name} Support` : "Study Support");
@@ -237,7 +278,16 @@ export default function StudentInterventionView() {
   ).length;
   const activityPercentage = totalActivities > 0 ? Math.round((completedActivities / totalActivities) * 100) : 0;
 
-  const totalTasks = totalReadings + totalActivities;
+  const practiceTotal = practiceMeta ? 1 : 0;
+  const practiceCompleted =
+    practiceMeta &&
+    (practiceMeta.has_passed ||
+      (practiceMeta.gatekeeper_policy === "REQUIRE_ATTEMPT" && practiceMeta.attempts_count > 0) ||
+      (practiceMeta.gatekeeper_policy === "OPTIONAL" && practiceMeta.attempts_count > 0))
+      ? 1
+      : 0;
+
+  const totalTasks = totalReadings + totalActivities + practiceTotal;
   const completedTasks = reviewedReadings + completedActivities;
   const overallPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
@@ -459,6 +509,146 @@ export default function StudentInterventionView() {
                       </Card>
                     )}
 
+                    {/* Step 2 — Practice Assessment */}
+                    {practiceMeta && (
+                      <Card
+                        aria-label="Practice Assessment"
+                        className="w-full border-2 border-border bg-card p-4 sm:p-5 flex flex-col gap-3.5"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <h2 className="text-base sm:text-lg font-bold text-foreground">
+                              Practice Assessment
+                            </h2>
+                            <Badge variant="surface" size="sm">
+                              Ungraded
+                            </Badge>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {practiceMeta.gatekeeper_policy === "REQUIRE_PASS" ? (
+                              <Badge variant="solid" size="sm">
+                                Passing Required ({practiceMeta.passing_percentage}%)
+                              </Badge>
+                            ) : practiceMeta.gatekeeper_policy === "REQUIRE_ATTEMPT" ? (
+                              <Badge variant="outline" size="sm">
+                                Attempt Required
+                              </Badge>
+                            ) : (
+                              <Badge variant="surface" size="sm">
+                                Optional Practice
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Assessment Information & Status */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/30 p-3.5 rounded border-2 border-border">
+                          <div className="space-y-1">
+                            <h3 className="font-bold text-sm text-foreground">
+                              {practiceMeta.title}
+                            </h3>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                              <span>{practiceMeta.total_questions} question(s)</span>
+                              <span>•</span>
+                              <span>{practiceMeta.total_points} point(s) possible</span>
+                              <span>•</span>
+                              <span>Passing threshold: {practiceMeta.passing_percentage}%</span>
+                            </div>
+
+                            {/* Status detail */}
+                            <div className="pt-1">
+                              {practiceMeta.has_active_attempt ? (
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="solid" size="sm">
+                                    Attempt In Progress
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    You have an active unfinished attempt.
+                                  </span>
+                                </div>
+                              ) : practiceMeta.attempts_count > 0 ? (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge
+                                    variant={practiceMeta.has_passed ? "success" : "outline"}
+                                    size="sm"
+                                  >
+                                    {practiceMeta.has_passed ? "Passed" : "Below Passing"}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    Best Score: <strong>{Number(practiceMeta.best_score_percentage).toFixed(0)}%</strong> ({practiceMeta.attempts_count} attempt(s) submitted)
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground italic">
+                                  Not yet attempted
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex flex-wrap items-center gap-2 sm:self-center">
+                            {practiceMeta.has_active_attempt ? (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => {
+                                  setPracticeModalMode("taking");
+                                  setIsPracticeModalOpen(true);
+                                }}
+                              >
+                                Resume Practice
+                              </Button>
+                            ) : practiceMeta.attempts_count === 0 ? (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => {
+                                  setPracticeModalMode("taking");
+                                  setIsPracticeModalOpen(true);
+                                }}
+                              >
+                                Take Practice
+                              </Button>
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setPracticeModalMode("feedback");
+                                    setIsPracticeModalOpen(true);
+                                  }}
+                                >
+                                  Review Results
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => {
+                                    setPracticeModalMode("taking");
+                                    setIsPracticeModalOpen(true);
+                                  }}
+                                >
+                                  Try Again
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Helpful context text */}
+                        <p className="text-xs sm:text-sm text-muted-foreground px-1 -mt-1">
+                          {practiceMeta.gatekeeper_policy === "REQUIRE_PASS"
+                            ? `Earn at least ${practiceMeta.passing_percentage}% on this practice assessment to unlock your curated remediation activity.`
+                            : practiceMeta.gatekeeper_policy === "REQUIRE_ATTEMPT"
+                              ? "Complete at least one practice attempt to unlock your curated remediation activity. You may proceed even if below passing."
+                              : "Practice questions are optional and help you prepare before beginning the remediation activity."}
+                        </p>
+                      </Card>
+                    )}
+
                     {/* Curated remediation activities */}
                     {activities.length > 0 && (
                       <Card
@@ -537,7 +727,11 @@ export default function StudentInterventionView() {
                                 ) : locked ? (
                                   <p className="flex items-center gap-1.5 text-xs sm:text-sm text-muted-foreground px-1">
                                     <LockKeyhole className="size-3.5 shrink-0" />
-                                    Complete all Supporting Readings before opening this activity.
+                                    {act.prerequisite_code === "PRACTICE_PASS_REQUIRED"
+                                      ? act.prerequisite_message || "Passing score on Practice Assessment required before starting this remediation activity."
+                                      : act.prerequisite_code === "PRACTICE_ATTEMPT_REQUIRED"
+                                        ? act.prerequisite_message || "Practice Assessment attempt required before starting this remediation activity."
+                                        : act.prerequisite_message || "Complete all Supporting Readings before opening this activity."}
                                   </p>
                                 ) : actHistorical ? (
                                   <p className="text-xs sm:text-sm text-muted-foreground px-1">
@@ -557,7 +751,7 @@ export default function StudentInterventionView() {
                     )}
 
                     {/* Empty state if neither review readings nor curated activities exist */}
-                    {orderedReadings.length === 0 && activities.length === 0 && (
+                    {orderedReadings.length === 0 && activities.length === 0 && !practiceMeta && (
                       <StudentEmptyState
                         icon={<BookOpen className="size-6" />}
                         title="No activities assigned yet"
@@ -636,6 +830,25 @@ export default function StudentInterventionView() {
                         </div>
                       )}
 
+                      {practiceMeta && (
+                        <div className="flex flex-col gap-1.5 pt-1">
+                          <div className="flex justify-between items-center text-sm font-semibold text-foreground">
+                            <span>Practice Assessment</span>
+                            <span>
+                              {practiceMeta.has_passed
+                                ? "Passed"
+                                : practiceMeta.attempts_count > 0
+                                  ? `${practiceMeta.attempts_count} Attempt(s)`
+                                  : "Not Attempted"}
+                            </span>
+                          </div>
+                          <Progress
+                            value={practiceCompleted > 0 ? 100 : practiceMeta.attempts_count > 0 ? 50 : 0}
+                            className="h-2"
+                          />
+                        </div>
+                      )}
+
                       {totalActivities > 0 && (
                         <div className="flex flex-col gap-1.5 pt-1">
                           <div className="flex justify-between items-center text-sm font-semibold text-foreground">
@@ -669,6 +882,17 @@ export default function StudentInterventionView() {
           </div>
         </div>
       </div>
+      {(intervention?.intervention_id || interventionId) && (
+        <StudentPracticeAssessmentModal
+          isOpen={isPracticeModalOpen}
+          onClose={() => setIsPracticeModalOpen(false)}
+          interventionId={intervention?.intervention_id ?? interventionId!}
+          initialMode={practiceModalMode}
+          onAttemptCompleted={() => {
+            void reloadInterventionData();
+          }}
+        />
+      )}
     </AppLayout>
   );
 }

@@ -61,31 +61,52 @@ async def generate_practice_questions_ai(
             "lessons": [],
         }
 
-    # 2. Resolve target reading classwork IDs
-    selected_rids = payload.reading_classwork_ids
-    if selected_rids is None:
-        plan = intervention.remediation_plan or {}
-        plan_rids = [
-            ref.get("id")
-            for ref in plan.get("selected_resources") or []
-            if isinstance(ref, dict) and ref.get("kind") == "CLASSWORK" and ref.get("id")
-        ]
-        if plan_rids:
-            selected_rids = plan_rids
-        else:
-            candidates = (
-                db.query(ClassworkAssignment.classwork_id)
-                .join(Classwork, ClassworkAssignment.classwork_id == Classwork.classwork_id)
-                .filter(
-                    ClassworkAssignment.class_id == intervention.class_id,
-                    ClassworkAssignment.academic_period_id == intervention.academic_period_id,
-                    Classwork.classwork_type == "READING",
-                    Classwork.is_archived.is_(False),
-                )
-                .all()
+    # 2. Resolve approved reading classwork IDs strictly from intervention plan/prerequisites
+    plan = intervention.remediation_plan or {}
+    approved_rids = {
+        ref.get("id")
+        for ref in (plan.get("selected_resources") or [])
+        if isinstance(ref, dict) and ref.get("kind") == "CLASSWORK" and ref.get("id")
+    }
+    from app.models.classwork.RemediationReadingPrerequisite import RemediationReadingPrerequisite
+    prereq_rids = {
+        row[0]
+        for row in (
+            db.query(RemediationReadingPrerequisite.reading_classwork_id)
+            .join(
+                ClassworkAssignment,
+                RemediationReadingPrerequisite.remediation_assignment_id == ClassworkAssignment.classwork_assignment_id,
             )
-            if candidates:
-                selected_rids = [c[0] for c in candidates]
+            .filter(ClassworkAssignment.source_intervention_id == intervention.intervention_id)
+            .distinct()
+            .all()
+        )
+    }
+    approved_rids.update(prereq_rids)
+
+    if not approved_rids:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "No readable reading materials found for this intervention. "
+                "No approved reading materials are assigned to this intervention. "
+                "Please select and save supporting reading materials in the intervention before generating practice questions."
+            ),
+        )
+
+    if payload.reading_classwork_ids is not None:
+        unapproved = [cid for cid in payload.reading_classwork_ids if cid not in approved_rids]
+        if unapproved:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Reading classwork ID(s) {unapproved} are not approved supporting materials for this intervention. "
+                    "Questions can only be generated from reading materials saved in the intervention plan."
+                ),
+            )
+        selected_rids = list(payload.reading_classwork_ids)
+    else:
+        selected_rids = list(approved_rids)
 
     # 3. Extract reading materials context
     context = resolve_remediation_material_context(
