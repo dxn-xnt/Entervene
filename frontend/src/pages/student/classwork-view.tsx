@@ -54,6 +54,8 @@ import { formatDateTime, formatToTitleCase } from "@/lib/formatters";
 import { routes } from "@/../routes";
 import type { ClassworkDetail, Submission } from "./subjects-view/types";
 import type { ActivityRubricLevel } from "@/types/classwork";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { academicContextState } from "@/lib/academic-context-state";
 
 type StudentClassworkDetail = ClassworkDetail & {
   class_id: number;
@@ -86,6 +88,13 @@ export default function StudentClassworkView() {
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
+  const {
+    selectedPeriodId,
+    selectedPeriod,
+    selectedYear,
+    periods,
+  } = useAcademicPeriod();
+  const contextState = academicContextState(selectedYear, selectedPeriod, periods);
   const { assignmentId: rawId } = useParams<{ assignmentId: string }>();
   const [searchParams] = useSearchParams();
   const rawInterventionId = searchParams.get("intervention_id");
@@ -112,7 +121,11 @@ export default function StudentClassworkView() {
 
   const isQuiz = detail?.classwork_type?.toUpperCase() === "QUIZ";
   const isReading = detail?.classwork_type?.toUpperCase() === "READING";
-  useReadingFocusTracker(assignmentId, Boolean(detail && isReading));
+  const isWritableContext = Boolean(
+    contextState === "active" &&
+      (detail?.academic_period_id == null || detail.academic_period_id === selectedPeriodId),
+  );
+  useReadingFocusTracker(assignmentId, Boolean(detail && isReading && isWritableContext));
 
   useEffect(() => {
     if (!Number.isInteger(assignmentId) || assignmentId <= 0) {
@@ -248,12 +261,15 @@ export default function StudentClassworkView() {
   const dueDate = detail?.due_date ? new Date(detail.due_date) : null;
   const overdue = Boolean(dueDate && Date.now() > dueDate.getTime());
   const closed = Boolean(
-    detail?.is_locked || (overdue && !detail?.allow_late_submissions),
+    !isWritableContext ||
+      detail?.is_locked ||
+      (overdue && !detail?.allow_late_submissions),
   );
   const status =
     quiz?.status ?? submission?.status ?? detail?.submission_status;
 
   const submitFiles = async (files: File[]) => {
+    if (!isWritableContext) return;
     setActionLoading(true);
     try {
       const body = new FormData();
@@ -287,6 +303,7 @@ export default function StudentClassworkView() {
   };
 
   const completeReading = async () => {
+    if (!isWritableContext) return;
     setActionLoading(true);
     try {
       const response = await apiFetch(
@@ -341,6 +358,7 @@ export default function StudentClassworkView() {
   };
 
   const deleteSubmission = async () => {
+    if (!isWritableContext) return false;
     setActionLoading(true);
     try {
       const response = await apiFetch(
@@ -464,7 +482,7 @@ export default function StudentClassworkView() {
               <div className="flex w-full min-w-0 flex-col gap-3">
                 <Card className="mx-auto flex w-full flex-col gap-4 px-5 pt-6">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
                       <IconContainer
                         variant="primary"
                         size="xl"
@@ -477,12 +495,6 @@ export default function StudentClassworkView() {
                           <h1 className="break-words text-2xl font-bold sm:text-3xl">
                             {detail.title}
                           </h1>
-                          <Badge
-                            variant="secondary"
-                            size="sm"
-                          >
-                            {formatToTitleCase(detail.classwork_type) || "Classwork"}
-                          </Badge>
                         </div>
                         {detail.linked_lessons &&
                           detail.linked_lessons.length > 0 ? (
@@ -531,11 +543,14 @@ export default function StudentClassworkView() {
                         ) : null}
                       </div>
                     </div>
-                    <div className="flex flex-row whitespace-nowrap items-center gap-2">
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <Badge variant="secondary" size="sm">
+                        {formatToTitleCase(detail.classwork_type) || "Classwork"}
+                      </Badge>
                       {detail.classwork_category && (
                         <Badge
                           variant="outline"
-                          size="md"
+                          size="sm"
                         >
                           {formatToTitleCase(detail.classwork_category)}
                         </Badge>
@@ -550,7 +565,7 @@ export default function StudentClassworkView() {
                               ? "destructive"
                               : "outline"
                         }
-                        size="md"
+                        size="sm"
                       >
                         {closed && !submission
                           ? "Closed"
@@ -843,7 +858,7 @@ export default function StudentClassworkView() {
                                   : "Summary Scheduled"}
                             </Button>
                           )}
-                        {quiz.can_submit && (
+                        {quiz.can_submit && isWritableContext && (
                           <Button
                             size="sm"
                             className="w-full gap-2"
@@ -866,7 +881,7 @@ export default function StudentClassworkView() {
                     <SubmissionViewer
                       submission={submission}
                       dueDate={detail.due_date ?? undefined}
-                      isLocked={detail.is_locked}
+                      isLocked={closed}
                       allowLateSubmissions={detail.allow_late_submissions}
                       maxAttempts={detail.max_attempts}
                       showScores={detail.show_scores}

@@ -1,9 +1,13 @@
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-ENV_FILE = os.getenv("ENV_FILE", ".env")
-load_dotenv(ENV_FILE)
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+_DEFAULT_ENV_FILE = _BACKEND_DIR / ".env"
+_RESOLVED_ENV = _DEFAULT_ENV_FILE if _DEFAULT_ENV_FILE.exists() else Path(".env").resolve()
+ENV_FILE = os.getenv("ENV_FILE", str(_RESOLVED_ENV))
+load_dotenv(ENV_FILE, override=True)
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,7 +20,7 @@ class Settings(BaseSettings):
     debug: bool = False
     app_environment: str = Field(default="production", validation_alias=AliasChoices("app_environment", "app_env"))
     development_prediction_api_enabled: bool = False
-    development_current_term_model_name: str = "entervene_current_term_development_rf_v3"
+    development_current_term_model_name: str = "entervene_current_term_official_target_rf_candidate"
     database_url: str = Field(..., min_length=1)
     frontend_url: str = "http://localhost:5173"
     mobile_app_url: str = "http://localhost:8081"

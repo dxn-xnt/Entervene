@@ -9,8 +9,9 @@ import { buildCurrentTermDashboard, currentTermRiskSummary, toDashboardPredictio
 
 const auth = vi.hoisted(() => ({ role: "teacher" as "teacher" | "admin" }));
 const currentTerm = vi.hoisted(() => ({ load: vi.fn() }));
+const academicContext = vi.hoisted(() => ({ selectedPeriodId: 3 }));
 vi.mock("@/context/AuthContext", () => ({ useAuth: () => ({ role: auth.role, user: { role: auth.role } }) }));
-vi.mock("@/context/AcademicPeriodContext", () => ({ useAcademicPeriod: () => ({ selectedPeriodId: 3 }) }));
+vi.mock("@/context/AcademicPeriodContext", () => ({ useAcademicPeriod: () => academicContext }));
 vi.mock("@/layouts/app-layout", () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 vi.mock("@/components/ui/sidebar", () => ({ SidebarTrigger: () => null }));
 vi.mock("@/components/predictions/prediction-grade-section", () => ({
@@ -67,7 +68,7 @@ const filters = {
   terms: [{ term_number: 1, term_label: "Term 1", academic_period_id: 3 }],
 };
 
-afterEach(() => { cleanup(); vi.unstubAllEnvs(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.unstubAllEnvs(); vi.clearAllMocks(); academicContext.selectedPeriodId = 3; });
 
 describe("shared prediction page access", () => {
   it("uses one AI Predictions experience and renders V3 semantics for teachers", async () => {
@@ -78,13 +79,23 @@ describe("shared prediction page access", () => {
         <PredictionsDashboard />
       </MemoryRouter>
     );
-    await waitFor(() => expect(screen.getByText("Subject Summaries")).toBeTruthy());
+    await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
     expect(screen.getByRole("heading", { name: "AI Predictions" })).toBeTruthy();
     expect(screen.queryByText("Current-Term Development")).toBeNull();
+    const summaryButtons = screen.getAllByRole("button").filter((button) =>
+      /Moderate Risk|High Risk|On Track/.test(button.textContent || "")
+    );
+    expect(summaryButtons).toEqual([
+      screen.getByRole("button", { name: /Moderate Risk\s+0/i }),
+      screen.getByRole("button", { name: /High Risk\s+1/i }),
+      screen.getByRole("button", { name: /On Track\s+0/i }),
+    ]);
     expect(screen.getByRole("button", { name: /High Risk\s+1/i })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /High Risk/i }));
-    expect(screen.getByText("Projected Term Grade")).toBeTruthy();
+    expect(screen.getByText("Grade Level")).toBeTruthy();
+    expect(screen.getByText("Grade 9")).toBeTruthy();
+    expect(screen.getByText("Projected Grade")).toBeTruthy();
     expect(screen.getByText("Risk Level")).toBeTruthy();
     expect(screen.queryByText("Risk Score")).toBeNull();
     fireEvent.click(screen.getByText("Alex Rivera"));
@@ -135,6 +146,31 @@ describe("shared prediction page access", () => {
     expect(screen.getByText("Predicted Grade")).toBeTruthy();
     expect(screen.getByText("Risk Level")).toBeTruthy();
     expect(screen.getByText("Risk Score")).toBeTruthy();
+    expect(screen.queryByText("Grade Level")).toBeNull();
+  });
+
+  it("shows both current-term low categories as On Track without changing stored values", () => {
+    const lowRisk = toDashboardPrediction({ ...row, prediction_id: 51, intervention_level: "LOW_RISK" });
+    const monitoring = toDashboardPrediction({ ...row, prediction_id: 52, intervention_level: "NEEDS_MONITORING" });
+
+    render(<PredictionTable
+      items={[lowRisk, monitoring]}
+      total={2}
+      limit={10}
+      offset={0}
+      currentTerm
+      simplifiedTeacherRisk
+      hidePagination
+      onSort={() => undefined}
+      onPageChange={() => undefined}
+      onRowClick={() => undefined}
+    />);
+
+    expect(screen.getAllByText("On Track")).toHaveLength(2);
+    expect(screen.queryByText("Low Risk")).toBeNull();
+    expect(screen.queryByText("Needs Monitoring")).toBeNull();
+    expect(lowRisk.risk_level).toBe("LOW_RISK");
+    expect(monitoring.risk_level).toBe("NEEDS_MONITORING");
   });
 
   it("uses a neutral empty state for current-term results", () => {
@@ -151,6 +187,22 @@ describe("shared prediction page access", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
     expect(screen.getByText(/could not be loaded/i)).toBeTruthy();
     expect(screen.queryByText("No current-term projections are available for this scope.")).toBeNull();
+  });
+
+  it("closes stale prediction detail when the academic term changes", async () => {
+    auth.role = "teacher";
+    currentTerm.load.mockResolvedValue({ rows: [row], filters, assignedScopes: [] });
+    const view = render(<MemoryRouter><PredictionsDashboard /></MemoryRouter>);
+    await waitFor(() => expect(screen.queryByText(/Loading current-term projections/i)).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: /High Risk/i }));
+    fireEvent.click(screen.getByText("Alex Rivera"));
+    expect(screen.getByText("Prediction detail for Alex Rivera")).toBeTruthy();
+
+    academicContext.selectedPeriodId = 4;
+    view.rerender(<MemoryRouter><PredictionsDashboard /></MemoryRouter>);
+
+    await waitFor(() => expect(screen.queryByText("Prediction detail for Alex Rivera")).toBeNull());
+    expect(currentTerm.load).toHaveBeenLastCalledWith(4);
   });
 
   it("keeps finalized projections visible as history and out of actionable risk counts", () => {

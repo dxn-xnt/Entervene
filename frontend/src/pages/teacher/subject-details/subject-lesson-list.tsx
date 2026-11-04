@@ -86,6 +86,7 @@ type SubjectLessonListProps = {
   deliveryLoadingLessonId?: number | null;
   onConfirmDelivery?: (lesson: Lesson) => Promise<void> | void;
   onOpenCorrectionDialog?: (lesson: Lesson) => void;
+  isReadOnly?: boolean;
 };
 
 export default function SubjectLessonList({
@@ -119,6 +120,7 @@ export default function SubjectLessonList({
   deliveryLoadingLessonId = null,
   onConfirmDelivery,
   onOpenCorrectionDialog,
+  isReadOnly = false,
 }: SubjectLessonListProps) {
   const navigate = useNavigate();
   const [internalCompetencyFilter, setInternalCompetencyFilter] = useState("all");
@@ -171,6 +173,11 @@ export default function SubjectLessonList({
 
   const [lessonToArchive, setLessonToArchive] = useState<Lesson | null>(null);
   const [isArchivingLesson, setIsArchivingLesson] = useState(false);
+
+  useEffect(() => {
+    if (isReadOnly) setLessonToArchive(null);
+  }, [isReadOnly]);
+
   const quarterlyAssessments = (subjectAssignments ?? []).filter(
     (cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT",
   );
@@ -244,15 +251,15 @@ export default function SubjectLessonList({
         isLoadingClassworks={isLoadingCw}
         onOpenLessonDetail={openLessonDetail}
         onOpenClassworkDetail={openClassworkDetail}
-        onOpenClassworkForm={openClassworkForm}
-        onOpenLessonManager={openLessonManager}
-        onArchiveLesson={() => setLessonToArchive(lesson)}
+        onOpenClassworkForm={isReadOnly ? undefined : openClassworkForm}
+        onOpenLessonManager={isReadOnly ? undefined : openLessonManager}
+        onArchiveLesson={isReadOnly ? undefined : () => setLessonToArchive(lesson)}
         withShadow={false}
         delivery={delivery}
         isDelivered={isDelivered}
         isDeliveryLoading={isDeliveryLoading}
-        onConfirmDelivery={onConfirmDelivery}
-        onOpenCorrectionDialog={onOpenCorrectionDialog}
+        onConfirmDelivery={isReadOnly ? undefined : onConfirmDelivery}
+        onOpenCorrectionDialog={isReadOnly ? undefined : onOpenCorrectionDialog}
       />
     );
   };
@@ -298,12 +305,14 @@ export default function SubjectLessonList({
                 <Card
                   key={classwork.classwork_assignment_id}
                   onClick={() => openClassworkDetail(classwork)}
-                  className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 border-2 border-black bg-[#FFFDF0] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFF9D2]"
+                  className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ")
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
                       openClassworkDetail(classwork);
+                    }
                   }}
                 >
                   <div className="flex min-w-0 items-center gap-3">
@@ -312,7 +321,7 @@ export default function SubjectLessonList({
                       <p className="text-sm md:text-base font-bold text-black line-clamp-2 break-words">
                         {classwork.title}
                       </p>
-                      <p className="text-xs font-medium text-gray-700">
+                      <p className="text-sm text-muted-foreground">
                         {formatToTitleCase(classwork.classwork_type, "Exam")}
                         {classwork.due_date
                           ? ` | Due ${formatDate(classwork.due_date)}`
@@ -320,12 +329,12 @@ export default function SubjectLessonList({
                       </p>
                     </div>
                   </div>
-                  <div className="flex min-w-28 justify-center">
+                  <div className="flex justify-center">
                     {classwork.attachment_count ? (
                       <Badge
                         variant="secondary"
                         size="sm"
-                        className="bg-[#F6E9B2] border border-black"
+                        className="border border-border"
                       >
                         File {classwork.attachment_count}
                       </Badge>
@@ -333,22 +342,13 @@ export default function SubjectLessonList({
                       <span aria-hidden="true" className="h-7 w-20" />
                     )}
                   </div>
-                  <span className="inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs font-semibold">
+                  <span className="inline-flex items-center gap-2 rounded border border-border px-2 py-1 text-sm font-medium">
                     <Eye size={14} />
                     Details
                   </span>
                 </Card>
               ))}
             </div>
-          </div>
-
-          {/* ── Separator ── */}
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-black" />
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-600">
-              Learning Competencies &amp; Lessons
-            </span>
-            <div className="h-px flex-1 bg-black" />
           </div>
         </>
       )}
@@ -489,7 +489,7 @@ export default function SubjectLessonList({
                                       onClick={(e) => e.stopPropagation()}
                                       className="border-2 border-black bg-white min-w-[180px] p-1 rounded font-semibold text-xs z-50"
                                     >
-                                      {onAddLessonToCompetency && (
+                                      {!isReadOnly && onAddLessonToCompetency && (
                                         <DropdownMenuItem
                                           onClick={() => onAddLessonToCompetency(comp.competency_id)}
                                           className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-xs rounded p-2 hover:bg-yellow-100"
@@ -557,7 +557,7 @@ export default function SubjectLessonList({
                                   No lessons assigned to this competency yet.
                                 </EmptyDescription>
                               </EmptyHeader>
-                              {onAddLessonToCompetency && (
+                              {!isReadOnly && onAddLessonToCompetency && (
                                 <EmptyContent className="mt-2">
                                   <Button
                                     type="button"
@@ -577,7 +577,7 @@ export default function SubjectLessonList({
                     </ContextMenu.Trigger>
 
                     <ContextMenu.Content className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] min-w-[160px] p-1 rounded font-semibold text-xs z-50">
-                      {onAddLessonToCompetency && (
+                      {!isReadOnly && onAddLessonToCompetency && (
                         <ContextMenu.Item
                           onClick={() => onAddLessonToCompetency(comp.competency_id)}
                           className="flex items-center gap-2 cursor-pointer px-2.5 py-2 hover:bg-yellow-100 rounded focus:bg-yellow-100 text-xs font-bold"

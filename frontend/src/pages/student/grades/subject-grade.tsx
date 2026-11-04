@@ -10,6 +10,7 @@ import { getStudentTodos, type TodoItem } from "@/lib/api";
 import { Progress } from "@/components/retroui/Progress";
 import { StudentEmptyState } from "@/components/student/student-empty-state";
 import { FileCheck2 } from "lucide-react";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 type SubjectGradeProps = {
   classId?: number;
@@ -19,36 +20,41 @@ type SubjectGradeProps = {
 };
 
 const SubjectGrade = ({
+  classId,
   subjectId,
   subject,
   onBack,
 }: SubjectGradeProps) => {
   const navigate = useNavigate();
-  const [todos, setTodos] = useState<TodoItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { selectedPeriodId } = useAcademicPeriod();
+  const requestKey = `${selectedPeriodId ?? "all"}:${classId ?? "all"}:${subjectId ?? subject.toLowerCase()}`;
+  const [result, setResult] = useState<{ key: string; todos: TodoItem[] } | null>(null);
+  const todos = result?.key === requestKey ? result.todos : [];
+  const loading = result?.key !== requestKey;
 
   useEffect(() => {
     let isMounted = true;
-    getStudentTodos()
+    getStudentTodos(selectedPeriodId ?? undefined)
       .then((data) => {
         if (!isMounted) return;
         const allTodos = data.all || [];
         const filtered = allTodos.filter(
           (t) =>
-            (subjectId && t.subject_id === subjectId) ||
-            t.subject.toLowerCase() === subject.toLowerCase(),
+            (classId == null || t.class_id === classId) &&
+            ((subjectId != null && t.subject_id === subjectId) ||
+              (subjectId == null && t.subject.toLowerCase() === subject.toLowerCase())),
         );
-        setTodos(filtered);
+        setResult({ key: requestKey, todos: filtered });
       })
-      .catch((err) => console.error("Error loading subject classworks:", err))
-      .finally(() => {
-        if (isMounted) setLoading(false);
+      .catch((err) => {
+        console.error("Error loading subject classworks:", err);
+        if (isMounted) setResult({ key: requestKey, todos: [] });
       });
 
     return () => {
       isMounted = false;
     };
-  }, [subjectId, subject]);
+  }, [classId, requestKey, selectedPeriodId, subjectId, subject]);
 
   const totalCount = todos.length;
   const completedCount = todos.filter(

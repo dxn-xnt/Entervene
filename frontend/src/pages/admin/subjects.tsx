@@ -448,7 +448,6 @@ export default function AdminSubjects() {
         await Promise.all([loadSubjects(), loadOfferings(), loadGradingTemplates()]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to complete action.");
       toast.error({ title: "Unable to complete action", description: err instanceof Error ? err.message : undefined });
     } finally {
       setPendingAction(null);
@@ -720,7 +719,7 @@ export default function AdminSubjects() {
 
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 [&_table]:min-w-[720px] sm:px-4 sm:py-4 md:px-6">
 
-              {error ? (
+              {error && activeSection !== "archived" ? (
                 <div className="flex flex-col gap-2 rounded border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000] md:flex-row md:items-center md:justify-between">
                   <div>
                     <p className="font-bold">Unable to load the latest subject data.</p>

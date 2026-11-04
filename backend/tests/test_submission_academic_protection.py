@@ -9,6 +9,7 @@ from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
+from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.intervention.InterventionReadingReview import InterventionReadingReview
@@ -96,6 +97,39 @@ def test_closed_and_future_period_submissions_are_rejected_without_writes(
     _act_as(c, "student", "student")
 
     _assert_rejected_submit_without_mutation(c, 403, detail)
+
+
+def test_future_period_teacher_grading_is_rejected_without_mutation(authz_context):
+    c = authz_context
+    _make_current_period(c)
+    future_period = AcademicPeriod(
+        period_name="Future period",
+        period_type="QUARTER",
+        period_sequence=3,
+        start_date=date(2025, 12, 1),
+        end_date=date(2026, 2, 28),
+        academic_year_id=c["period"].academic_year_id,
+        is_active=False,
+    )
+    c["db"].add(future_period)
+    c["db"].flush()
+    c["assignment"].academic_period_id = future_period.academic_period_id
+    c["db"].query(SubjectLoad).filter_by(
+        class_id=c["allowed_class"].class_id,
+        subject_id=c["subject"].subject_id,
+    ).update({"academic_period_id": future_period.academic_period_id})
+    c["db"].commit()
+
+    response = c["client"].put(
+        f"/api/v1/submissions/{c['submission'].submission_id}/grade",
+        json={"grade": 90},
+    )
+
+    assert response.status_code == 403
+    assert "not yet active" in response.json()["detail"]
+    c["db"].refresh(c["submission"])
+    assert c["submission"].grade is None
+    assert c["submission"].status == "submitted"
 
 
 @pytest.mark.parametrize(

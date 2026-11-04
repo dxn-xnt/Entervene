@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Table } from "@/components/retroui/Table";
 import { Tabs } from "@/components/retroui/Tabs";
@@ -47,6 +48,14 @@ function fmt(val: number | null | undefined, d = 1): string {
 function displayActivityScore(score: number | null | undefined, header: GradebookCategoryHeader | undefined, studentId: string): string | number {
   if (header?.recipientStudentId && header.recipientStudentId !== studentId) return "N/A";
   return score ?? "—";
+}
+
+function displayedTermGrade(student: StudentGradebookRow): number | null {
+  if (student.is_finalized && student.total != null) {
+    const officialGrade = Number(student.total);
+    if (Number.isFinite(officialGrade)) return officialGrade;
+  }
+  return student.transmuted_grade ?? null;
 }
 
 function MissingGradeItems({ items, total }: { items: GradeSendMissingItem[]; total: number }) {
@@ -172,6 +181,8 @@ const TeacherGradeView = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("name");
   const [refresh, setRefresh] = useState(0);
+  const { selectedPeriodId, selectedYearId, selectedYear, isLoading: isContextLoading } = useAcademicPeriod();
+  const fetchRequestIdRef = useRef(0);
 
   const [selectedCategory, setSelectedCategory] = useState<{
     name: string;
@@ -208,9 +219,27 @@ const TeacherGradeView = () => {
   const currentPeriod = periods.find((p) => p.academic_period_id === activePeriodId);
   const timingGate = getTimingGateInfo(currentPeriod);
   const summaryGradeLabel = periods.some((period) => period.is_active) ? "Current Grade" : "Final Grade";
+  const isViewOnly = Boolean(gradebook?.scope?.is_view_only);
+  const activePeriod = periods.find((period) => period.is_active);
+  const isFutureTerm = Boolean(
+    selectedYear?.is_active &&
+    currentPeriod &&
+    !currentPeriod.is_active &&
+    activePeriod &&
+    currentPeriod.period_sequence > activePeriod.period_sequence
+  );
+  const mutationsDisabled = isViewOnly || isFutureTerm;
+  const mutationLockMessage = isFutureTerm
+    ? "Grades cannot be changed, scored, or sent to an adviser before this term becomes active."
+    : "This academic period is view-only.";
 
   const handleSendStudentGrade = async (student: StudentGradebookRow, force = false) => {
     if (!section || !subject || !activePeriodId) return;
+
+    if (mutationsDisabled) {
+      setToastMessage({ type: "error", text: mutationLockMessage });
+      return;
+    }
 
     if (timingGate.isLocked) {
       setToastMessage({
@@ -258,6 +287,12 @@ const TeacherGradeView = () => {
 
   const handleBulkSend = async (force = false) => {
     if (!section || !subject || !activePeriodId) return;
+
+    if (mutationsDisabled) {
+      setShowBulkConfirm(false);
+      setToastMessage({ type: "error", text: mutationLockMessage });
+      return;
+    }
 
     if (timingGate.isLocked) {
       setShowBulkConfirm(false);
@@ -315,39 +350,80 @@ const TeacherGradeView = () => {
   };
 
   useEffect(() => {
-    if (section && subject) {
-      getTeacherAvailablePeriods(Number(section), Number(subject))
+    if (section && subject && !isContextLoading) {
+      getTeacherAvailablePeriods(Number(section), Number(subject), selectedYearId ?? undefined)
         .then((res) => {
-          setPeriods(res.periods as unknown as TermPeriodInfo[]);
-          if (res.default_academic_period_id) {
+          const loadedPeriods = res.periods as unknown as TermPeriodInfo[];
+          setPeriods(loadedPeriods);
+          const matchingSelectedPeriod = loadedPeriods.find((p) => p.academic_period_id === selectedPeriodId);
+          if (matchingSelectedPeriod) {
+            setActiveTab(`term-${matchingSelectedPeriod.academic_period_id}`);
+          } else if (res.default_academic_period_id) {
             setActiveTab(`term-${res.default_academic_period_id}`);
+          } else if (loadedPeriods.length > 0) {
+            setActiveTab(`term-${loadedPeriods[0].academic_period_id}`);
           } else {
             setActiveTab("summary");
           }
         })
-        .catch((err) => console.error("Error loading periods:", err));
+        .catch((err) => {
+          console.error("Error loading periods:", err);
+          setPeriods([]);
+        });
     }
-  }, [section, subject]);
+  }, [section, subject, selectedYearId, selectedPeriodId, isContextLoading]);
 
   useEffect(() => {
-    if (!section || !subject || !activeTab) return;
+    if (!section || !subject || !activeTab || isContextLoading) return;
+    const currentRequestId = ++fetchRequestIdRef.current;
     setLoading(true);
 
     if (activeTab === "summary") {
       setGradebook(null);
-      getTeacherTermSummary(Number(section), Number(subject))
-        .then((data) => setTermSummary(data))
-        .catch((err) => console.error("Error loading summary:", err))
-        .finally(() => setLoading(false));
+      getTeacherTermSummary(Number(section), Number(subject), selectedYearId ?? undefined)
+        .then((data) => {
+          if (fetchRequestIdRef.current !== currentRequestId) return;
+          setTermSummary(data);
+        })
+        .catch((err) => {
+          if (fetchRequestIdRef.current !== currentRequestId) return;
+          console.error("Error loading summary:", err);
+          setTermSummary(null);
+        })
+        .finally(() => {
+          if (fetchRequestIdRef.current === currentRequestId) {
+            setLoading(false);
+          }
+        });
     } else if (activeTab.startsWith("term-")) {
       setTermSummary(null);
       const periodId = Number(activeTab.split("-")[1]);
-      getTeacherGradebook(section, subject, periodId)
-        .then((data) => setGradebook(data))
-        .catch((err) => console.error("Error loading gradebook:", err))
-        .finally(() => setLoading(false));
+      getTeacherGradebook(section, subject, periodId, selectedYearId ?? undefined)
+        .then((data) => {
+          if (fetchRequestIdRef.current !== currentRequestId) return;
+          setGradebook(data);
+        })
+        .catch((err) => {
+          if (fetchRequestIdRef.current !== currentRequestId) return;
+          console.error("Error loading gradebook:", err);
+          setGradebook(null);
+        })
+        .finally(() => {
+          if (fetchRequestIdRef.current === currentRequestId) {
+            setLoading(false);
+          }
+        });
     }
-  }, [section, subject, activeTab, refresh]);
+  }, [section, subject, activeTab, refresh, selectedYearId, isContextLoading]);
+
+  useEffect(() => {
+    setSelectedCategory(null);
+    setAddingCategoryName(null);
+    setScoringActivity(null);
+    setShowBulkConfirm(false);
+    setConflictData(null);
+    setForceResendAll(false);
+  }, [activePeriodId, selectedYearId]);
 
   const cg = gradebook?.classwork?.[0] ?? { writtenWork: [], performanceTask: [], quarterlyAssessment: [], exams: [] };
   const examItems = cg.exams && cg.exams.length > 0 ? cg.exams : (cg.quarterlyAssessment ?? []);
@@ -380,7 +456,7 @@ const TeacherGradeView = () => {
 
     try {
       setIsExporting(true);
-      const { blob, filename } = await exportTeacherClassRecordWorkbook(section, subject);
+      const { blob, filename } = await exportTeacherClassRecordWorkbook(section, subject, selectedYearId ?? undefined);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -440,7 +516,7 @@ const TeacherGradeView = () => {
 
       try {
         setIsExporting(true);
-        const { blob, filename } = await exportTeacherClassRecord(section, subject, activePeriodId);
+        const { blob, filename } = await exportTeacherClassRecord(section, subject, activePeriodId, selectedYearId ?? undefined);
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -505,7 +581,7 @@ const TeacherGradeView = () => {
               <Table.Cell className="text-center">
                 {item.remark ? (
                   <Badge size="sm" variant={item.remark === "PASSED" ? "success" : item.remark === "FAILED" ? "destructive" : "outline"}>
-                    {item.remark}
+                    {formatToTitleCase(item.remark)}
                   </Badge>
                 ) : "—"}
               </Table.Cell>
@@ -629,15 +705,15 @@ const TeacherGradeView = () => {
               </Table.Cell>
 
               <Table.Cell className="font-medium text-center tabular-nums whitespace-nowrap">
-                {item.transmuted_grade != null ? (
-                  <span className="font-bold">{item.transmuted_grade.toFixed(1)}</span>
+                {displayedTermGrade(item) != null ? (
+                  <span className="font-bold">{displayedTermGrade(item)!.toFixed(1)}</span>
                 ) : (
                   <span className="text-xs text-muted-foreground">—</span>
                 )}
               </Table.Cell>
 
               <Table.Cell className="font-medium text-center tabular-nums whitespace-nowrap">
-                {item.transmuted_grade != null && item.performance_descriptor ? (
+                {displayedTermGrade(item) != null && item.performance_descriptor ? (
                   <span className="font-semibold text-xs text-foreground">
                     {item.performance_descriptor}
                   </span>
@@ -656,7 +732,7 @@ const TeacherGradeView = () => {
                       <CheckCircle2 className="size-3 text-emerald-950" />
                       Sent
                     </span>
-                    {!isViewOnly && (
+                    {!mutationsDisabled && (
                       <button
                         type="button"
                         title="Resend updated grade to Adviser"
@@ -673,7 +749,7 @@ const TeacherGradeView = () => {
                     size="sm"
                     variant="outline"
                     className="h-7 text-xs px-2.5 font-bold border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100"
-                    disabled={isViewOnly || sendingStudentId === item.student_id}
+                    disabled={mutationsDisabled || sendingStudentId === item.student_id}
                     onClick={() => handleSendStudentGrade(item)}
                     title={
                       timingGate.isLocked
@@ -796,20 +872,20 @@ const TeacherGradeView = () => {
                     <Tooltip key={item.id}>
                       <TooltipTrigger render={<button
                         type="button"
-                        className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                        className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${mutationsDisabled ? "cursor-default" : "hover:text-primary cursor-pointer"
                           }`}
-                        aria-label={isViewOnly ? item.title : `Enter scores for ${item.title}`}
-                        onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
+                        aria-label={mutationsDisabled ? item.title : `Enter scores for ${item.title}`}
+                        onClick={() => !mutationsDisabled && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                       >
                         <span className="truncate max-w-[90px] font-semibold">WW{originalIndex + 1}</span>
                         {item.sourceInterventionId && <span className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
                         <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                       </button>} />
-                      <TooltipContent>{isViewOnly ? item.title : `Enter scores: ${item.title}`}{item.sourceInterventionId ? " · Intervention" : ""}</TooltipContent>
+                      <TooltipContent>{mutationsDisabled ? item.title : `Enter scores: ${item.title}`}{item.sourceInterventionId ? " · Intervention" : ""}</TooltipContent>
                     </Tooltip>
                   ))}
                 </div>
-                {!isViewOnly && (
+                {!mutationsDisabled && (
                   <Tooltip>
                     <TooltipTrigger render={<button
                       type="button"
@@ -846,20 +922,20 @@ const TeacherGradeView = () => {
                     <Tooltip key={item.id}>
                       <TooltipTrigger render={<button
                         type="button"
-                        className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                        className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${mutationsDisabled ? "cursor-default" : "hover:text-primary cursor-pointer"
                           }`}
-                        aria-label={isViewOnly ? item.title : `Enter scores for ${item.title}`}
-                        onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
+                        aria-label={mutationsDisabled ? item.title : `Enter scores for ${item.title}`}
+                        onClick={() => !mutationsDisabled && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                       >
                         <span className="truncate max-w-[90px] font-semibold">PT{originalIndex + 1}</span>
                         {item.sourceInterventionId && <span className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
                         <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                       </button>} />
-                      <TooltipContent>{isViewOnly ? item.title : `Enter scores: ${item.title}`}{item.sourceInterventionId ? " · Intervention" : ""}</TooltipContent>
+                      <TooltipContent>{mutationsDisabled ? item.title : `Enter scores: ${item.title}`}{item.sourceInterventionId ? " · Intervention" : ""}</TooltipContent>
                     </Tooltip>
                   ))}
                 </div>
-                {!isViewOnly && (
+                {!mutationsDisabled && (
                   <Tooltip>
                     <TooltipTrigger render={<button
                       type="button"
@@ -901,20 +977,20 @@ const TeacherGradeView = () => {
                     <Tooltip key={item.id}>
                       <TooltipTrigger render={<button
                         type="button"
-                        className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                        className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${mutationsDisabled ? "cursor-default" : "hover:text-primary cursor-pointer"
                           }`}
-                        aria-label={isViewOnly ? item.title : `Enter scores for ${item.title}`}
-                        onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
+                        aria-label={mutationsDisabled ? item.title : `Enter scores for ${item.title}`}
+                        onClick={() => !mutationsDisabled && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                       >
                         <span className="truncate max-w-[90px] font-semibold">E{originalIndex + 1}</span>
                         {item.sourceInterventionId && <span className="rounded border border-black bg-yellow-50 px-1 font-black">I</span>}
                         <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                       </button>} />
-                      <TooltipContent>{isViewOnly ? item.title : `Enter scores: ${item.title}`}{item.sourceInterventionId ? " · Intervention" : ""}</TooltipContent>
+                      <TooltipContent>{mutationsDisabled ? item.title : `Enter scores: ${item.title}`}{item.sourceInterventionId ? " · Intervention" : ""}</TooltipContent>
                     </Tooltip>
                   ))}
                 </div>
-                {!isViewOnly && (
+                {!mutationsDisabled && (
                   <Tooltip>
                     <TooltipTrigger render={<button
                       type="button"
@@ -958,7 +1034,6 @@ const TeacherGradeView = () => {
     );
   };
 
-  const isViewOnly = Boolean(gradebook?.scope?.is_view_only);
   const isSubstitution = Boolean(gradebook?.scope?.is_substitution);
 
   return (
@@ -991,7 +1066,7 @@ const TeacherGradeView = () => {
               )} */}
 
                 <div className="grid w-full grid-cols-2 items-center gap-2 md:ml-auto md:flex md:w-auto md:flex-row">
-                  {!isViewOnly && activeTab.startsWith("term-") && (
+                  {!mutationsDisabled && activeTab.startsWith("term-") && (
                     <Tooltip>
                       <TooltipTrigger render={<span className="inline-flex min-w-0"><Button
                         size="header"
@@ -1107,14 +1182,23 @@ const TeacherGradeView = () => {
 
 
 
-              {isViewOnly && (
+              {mutationsDisabled && (
                 <div className="rounded border-2 border-black bg-amber-100 p-4 text-black flex items-center gap-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-medium">
                   <span className="text-2xl">🔒</span>
                   <div>
-                    <h4 className="font-black text-sm">Read-Only Mode (On Leave)</h4>
+                    <h4 className="font-black text-sm">
+                      {gradebook?.scope?.substitute_name
+                        ? "Read-Only Mode (On Leave)"
+                        : isFutureTerm
+                          ? "Read-Only Mode (Future Term)"
+                          : "Read-Only Mode (Historical Record)"}
+                    </h4>
                     <p className="text-xs text-gray-800">
-                      You are currently on leave for this class and subject. Records are view-only.
-                      {gradebook?.scope?.substitute_name && ` Currently covered by substitute teacher: ${gradebook.scope.substitute_name}.`}
+                      {gradebook?.scope?.substitute_name
+                        ? `You are currently on leave for this class and subject. Records are view-only. Currently covered by substitute teacher: ${gradebook.scope.substitute_name}.`
+                        : isFutureTerm
+                          ? mutationLockMessage
+                          : "This academic period is closed or historical. Records are view-only."}
                     </p>
                   </div>
                 </div>
@@ -1175,20 +1259,20 @@ const TeacherGradeView = () => {
             categoryName={selectedCategory.name}
             items={selectedCategory.items}
             studentGrades={selectedCategory.studentGrades}
-            onEnterScores={(item) => {
+            onEnterScores={!mutationsDisabled ? (item) => {
               setSelectedCategory(null);
               setScoringActivity({
                 activityId: item.id,
                 title: item.title,
                 maxScore: item.maxScore,
               });
-            }}
+            } : undefined}
           />
         )}
       </Dialog>
 
       <Dialog
-        open={addingCategoryName !== null}
+        open={!mutationsDisabled && addingCategoryName !== null}
         onOpenChange={(open) => {
           if (!open) setAddingCategoryName(null);
         }}
@@ -1205,7 +1289,7 @@ const TeacherGradeView = () => {
       </Dialog>
 
       <Dialog
-        open={scoringActivity !== null}
+        open={!mutationsDisabled && scoringActivity !== null}
         onOpenChange={(open) => {
           if (!open) setScoringActivity(null);
         }}
@@ -1224,7 +1308,7 @@ const TeacherGradeView = () => {
 
       {/* Bulk Send to Adviser Confirmation Dialog */}
       <Dialog
-        open={showBulkConfirm}
+        open={!mutationsDisabled && showBulkConfirm}
         onOpenChange={(open) => {
           if (!open) setShowBulkConfirm(false);
         }}
@@ -1495,3 +1579,4 @@ const TeacherGradeView = () => {
 
 export default TeacherGradeView;
 
+import { formatToTitleCase } from "@/lib/formatters";

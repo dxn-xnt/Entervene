@@ -41,6 +41,8 @@ import EditClassworkModal from "./forms/edit-classwork";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import AppLayout from "@/layouts/app-layout";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { academicContextState } from "@/lib/academic-context-state";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import RubricsScoreBoard from "@/components/rubrics-score-board";
 import IconContainer from "@/components/icon-container";
@@ -98,6 +100,15 @@ export default function ClassworkView({
 
   const [selected, setSelected] = useState<TeacherClasswork | null>(classwork ?? null);
   const [isClassworkLoading, setIsClassworkLoading] = useState(!classwork);
+  const { selectedPeriod, selectedYear, periods } = useAcademicPeriod();
+
+  const contextState = useMemo(
+    () => academicContextState(selectedYear, selectedPeriod, periods),
+    [periods, selectedPeriod, selectedYear],
+  );
+  const isFuturePlanning = contextState === "future";
+  const isReadOnly = Boolean(selected?.is_archived || contextState === "historical");
+  const blocksLiveActions = isReadOnly || isFuturePlanning;
   const [classworkFetchError, setClassworkFetchError] = useState("");
   const [tracking, setTracking] = useState<AssignmentTracking | null>(null);
   const [isTrackingLoading, setIsTrackingLoading] = useState(false);
@@ -133,6 +144,18 @@ export default function ClassworkView({
   const [gradeDraft, setGradeDraft] = useState("");
   const [feedbackDraft, setFeedbackDraft] = useState("");
   const [isPostingGrade, setIsPostingGrade] = useState(false);
+
+  useEffect(() => {
+    if (contextState === "historical") {
+      setShowEditModal(false);
+      setShowArchiveConfirm(false);
+    }
+    if (blocksLiveActions) {
+      setSelectedGradingSubmissionId(null);
+      setSelectedSubmissionDetail(null);
+      setSelectedStudent(null);
+    }
+  }, [blocksLiveActions, contextState]);
 
   // Sync internal selected state when prop changes or fetch if standalone
   useEffect(() => {
@@ -245,7 +268,7 @@ export default function ClassworkView({
   }, [loadTrackingAndAnalysis]);
 
   const archiveSelectedClasswork = async () => {
-    if (!selected) return;
+    if (!selected || isReadOnly) return;
 
     setIsArchiving(true);
     setDetailError("");
@@ -278,7 +301,7 @@ export default function ClassworkView({
   const openStudentSubmission = async (student: TrackingStudent) => {
     // For quizzes, open the specialized Quiz Question Grading Modal directly
     if (selected && isQuizType(selected.classwork_type)) {
-      if (student.submission_id) {
+      if (student.submission_id && !blocksLiveActions) {
         setSelectedGradingSubmissionId(student.submission_id);
       }
       return;
@@ -337,7 +360,7 @@ export default function ClassworkView({
   };
 
   const postGrade = async () => {
-    if (!selectedSubmissionDetail || !selected) return;
+    if (blocksLiveActions || !selectedSubmissionDetail || !selected) return;
     const grade = Number(gradeDraft);
     if (!Number.isFinite(grade) || grade < 0) {
       setGradeError("Enter a valid score.");
@@ -586,6 +609,7 @@ export default function ClassworkView({
         feedbackDraft={feedbackDraft}
         gradeError={gradeError}
         isPostingGrade={isPostingGrade}
+        isReadOnly={blocksLiveActions}
         onClose={closeStudentSubmission}
         onGradeChange={(value) => {
           setGradeDraft(value);
@@ -596,9 +620,9 @@ export default function ClassworkView({
           setGradeError("");
         }}
         onPostGrade={postGrade}
-        onOpenQuizGrading={(submissionId) =>
-          setSelectedGradingSubmissionId(submissionId)
-        }
+        onOpenQuizGrading={(submissionId) => {
+          if (!blocksLiveActions) setSelectedGradingSubmissionId(submissionId);
+        }}
       />
     );
 
@@ -705,29 +729,43 @@ export default function ClassworkView({
             </div>
 
             <div className="flex items-center gap-2 flex-col lg:flex-row lg:flex-nowrap">
-              <Button
-                type="button"
-                size="header"
-                variant="outline"
-                onClick={() => setShowEditModal(true)}
-                disabled={isArchiving}
-                className="whitespace-nowrap gap-2"
-              >
-                <Pencil size={16} />
-                Edit Classwork
-              </Button>
+              <Tooltip>
+                <TooltipTrigger render={
+                  <span className="inline-flex">
+                    <Button
+                      type="button"
+                      size="header"
+                      variant="outline"
+                      onClick={() => setShowEditModal(true)}
+                      disabled={isArchiving || isReadOnly}
+                      className="whitespace-nowrap gap-2"
+                    >
+                      <Pencil size={16} />
+                      Edit Classwork
+                    </Button>
+                  </span>
+                } />
+                {isReadOnly && <TooltipContent>Historical records are read-only</TooltipContent>}
+              </Tooltip>
 
-              <Button
-                type="button"
-                size="header"
-                variant="outline"
-                onClick={() => setShowArchiveConfirm(true)}
-                disabled={isArchiving}
-                className="whitespace-nowrap gap-2 bg-primary"
-              >
-                <Archive size={16} />
-                Archive Classwork
-              </Button>
+              <Tooltip>
+                <TooltipTrigger render={
+                  <span className="inline-flex">
+                    <Button
+                      type="button"
+                      size="header"
+                      variant="outline"
+                      onClick={() => setShowArchiveConfirm(true)}
+                      disabled={isArchiving || isReadOnly}
+                      className="whitespace-nowrap gap-2 bg-primary"
+                    >
+                      <Archive size={16} />
+                      Archive Classwork
+                    </Button>
+                  </span>
+                } />
+                {isReadOnly && <TooltipContent>Historical records are read-only</TooltipContent>}
+              </Tooltip>
             </div>
           </header>
 
@@ -736,17 +774,24 @@ export default function ClassworkView({
               <Card className="w-full border-0! p-0 shadow-none">
                 <Card.Content className="flex flex-col gap-1">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <Card.Title className="flex flex-row items-center gap-3 mb-0 text-3xl font-bold">
-                      <IconContainer variant="primary" size="xl">
+                    <Card.Title className="flex min-w-0 w-full flex-row items-center gap-3 mb-0 text-3xl font-bold">
+                      <IconContainer variant="primary" size="xl" className="shrink-0">
                         <ClassworkTypeIcon type={selected.classwork_type} size={48} />
                       </IconContainer>
 
-                      <div className="flex flex-col gap-1">
-                        <div className="flex flex-row items-center gap-2">
-                          <span>{selected.title}</span>
-                          <Badge variant="secondary" size="sm" className="h-fit ml-1">
+                      <div className="flex min-w-0 flex-1 flex-col gap-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="min-w-0 flex-1 break-words">{selected.title}</span>
+                          <Badge variant="secondary" size="sm" className="shrink-0">
                             {formatToTitleCase(selected.classwork_type)}
                           </Badge>
+                          {!isReadingType(selected.classwork_type) && selected.classwork_category && (
+                            <Badge variant="outline" size="sm" className="shrink-0 whitespace-nowrap">{formatToTitleCase(selected.classwork_category)}</Badge>
+                          )}
+                          <Badge variant={selected.is_published ? "solid" : "default"} size="sm" className="shrink-0 whitespace-nowrap">
+                            {selected.is_published ? "Published" : "Draft"}
+                          </Badge>
+                          {selected.is_locked && <Badge variant="destructive" size="sm" className="shrink-0 whitespace-nowrap">Locked</Badge>}
                         </div>
 
                         <div className="gap-3">
@@ -798,26 +843,6 @@ export default function ClassworkView({
                       </div>
 
                     </Card.Title>
-                    <div className="flex flex-row items-center gap-2 px-2 whitespace-nowrap">
-                      {!isReadingType(selected.classwork_type) && selected.classwork_category && (
-                        <Badge
-                          variant="outline"
-                          size="md"
-                          className="w-fit whitespace-nowrap"
-                        >
-                          {formatToTitleCase(selected.classwork_category)}
-                        </Badge>
-                      )}
-
-                      <Badge variant="solid" size="md" className="whitespace-nowrap">
-                        {selected.is_published ? "Published" : "Draft"}
-                      </Badge>
-                      {selected.is_locked && (
-                        <Badge variant="outline" size="sm" className="bg-white whitespace-nowrap">
-                          Locked
-                        </Badge>
-                      )}
-                    </div>
                   </div>
                 </Card.Content>
               </Card>
@@ -853,11 +878,7 @@ export default function ClassworkView({
                         }
                       />
                     ) : (
-                      <Card className="py-4 w-full text-center shadow-none!">
-                        <p className="text-sm text-muted-foreground">
-                          No files attached.
-                        </p>
-                      </Card>
+                      <TeacherEmptyState compact className="rounded! bg-card shadow-none hover:shadow-none" icon={<FileText />} title="No files attached" description="This classwork has no attached files." />
                     )}
                   </Card.Content>
                 </Card>
@@ -892,7 +913,7 @@ export default function ClassworkView({
                 </Card>
               )}
               <ConfirmDialog
-                open={showArchiveConfirm}
+                open={showArchiveConfirm && !isReadOnly}
                 onOpenChange={setShowArchiveConfirm}
                 title="Archive Classwork"
                 confirmationTitle={`Are you sure you want to archive "${selected.title}"?`}
@@ -1118,7 +1139,9 @@ export default function ClassworkView({
                   isQuizAnalysisLoading={isQuizAnalysisLoading}
                   quizAnalysisError={quizAnalysisError}
                   selected={selected}
-                  setSelectedGradingSubmissionId={setSelectedGradingSubmissionId}
+                  setSelectedGradingSubmissionId={(submissionId) => {
+                    if (!blocksLiveActions) setSelectedGradingSubmissionId(submissionId);
+                  }}
                 />
               ) : (
                 <>
@@ -1319,8 +1342,9 @@ export default function ClassworkView({
 
       {/* Edit Classwork Modal */}
       <EditClassworkModal
+        draftOnly={isFuturePlanning}
         classwork={selected}
-        isOpen={showEditModal}
+        isOpen={showEditModal && !isReadOnly}
         onClose={() => setShowEditModal(false)}
         onSuccess={(updated) => {
           setSelected(updated);
@@ -1328,7 +1352,7 @@ export default function ClassworkView({
         }}
       />
 
-      {selectedGradingSubmissionId && (
+      {selectedGradingSubmissionId && !blocksLiveActions && (
         <QuizGradingModal
           submissionId={selectedGradingSubmissionId}
           isOpen={Boolean(selectedGradingSubmissionId)}

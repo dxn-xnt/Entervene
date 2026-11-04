@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Calendar, AlertCircle, ArrowUpRight, BookOpen, CheckCircle } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/To
 import { Select } from "@/components/retroui/Select";
 import { Progress } from "@/components/retroui/Progress";
 import { OverviewCard } from "@/components/overview-cards";
-import { Empty } from "@/components/retroui/Empty";
+import { Skeleton } from "@/components/retroui/Skeleton";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
@@ -31,7 +31,6 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
 } from "recharts";
-import IconContainer from "@/components/icon-container";
 
 // Dashboard metrics stay unavailable until loaded; later-phase detail widgets retain their mockups.
 const defaultTeacherCards: OverviewCardData[] = [
@@ -149,12 +148,21 @@ function DashboardQueueSkeleton({ label }: { label: string }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { selectedPeriodId, isLoading: isPeriodLoading } = useAcademicPeriod();
+  const {
+    selectedPeriodId,
+    selectedYearId,
+    selectedYear,
+    selectedPeriod,
+    periods,
+    isLoading: isPeriodLoading,
+  } = useAcademicPeriod();
 
   const [data, setData] = useState<TeacherDashboardHealthResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const requestedPeriodId = useRef(selectedPeriodId);
+  const requestedYearId = useRef(selectedYearId);
+  const requestIdRef = useRef(0);
   const [dashboardClass, setDashboardClass] = useState("all");
   const [dashboardSubject, setDashboardSubject] = useState("all");
   const [dashboardFilters, setDashboardFilters] = useState<TeacherDashboardHealthFilter[]>([]);
@@ -181,14 +189,20 @@ export default function Dashboard() {
   // Section health display limit state
   const [showAllSectionHealth, setShowAllSectionHealth] = useState<boolean>(false);
 
+  const hasNoPeriods = !isPeriodLoading && selectedYearId != null && periods.length === 0;
+
   useEffect(() => {
     let cancelled = false;
 
     async function fetchDashboard() {
       setIsLoading(true);
       setError(null);
-      if (requestedPeriodId.current !== selectedPeriodId) {
+      if (
+        requestedPeriodId.current !== selectedPeriodId ||
+        requestedYearId.current !== selectedYearId
+      ) {
         requestedPeriodId.current = selectedPeriodId;
+        requestedYearId.current = selectedYearId;
         setData(null);
         setDashboardFilters([]);
         setDashboardClass("all");
@@ -199,7 +213,20 @@ export default function Dashboard() {
           return;
         }
       }
-      if (isPeriodLoading) return;
+
+      if (hasNoPeriods) {
+        setData(null);
+        setIsLoading(false);
+        setError(null);
+        return;
+      }
+
+      if (isPeriodLoading || (selectedYearId != null && periods.length > 0 && selectedPeriodId == null)) {
+        return;
+      }
+
+      const currentRequestId = ++requestIdRef.current;
+
       try {
         let classId: number | undefined;
         let subjectId: number | undefined;
@@ -213,6 +240,7 @@ export default function Dashboard() {
         }
 
         const res = await getTeacherDashboardHealth({
+          academic_year_id: selectedYearId ?? undefined,
           academic_period_id: selectedPeriodId ?? undefined,
           class_id: classId,
           subject_id: subjectId,
@@ -220,7 +248,7 @@ export default function Dashboard() {
           ...(dashboardSubject !== "all" ? { dashboard_subject_id: Number(dashboardSubject) } : {}),
         });
 
-        if (!cancelled) {
+        if (!cancelled && currentRequestId === requestIdRef.current) {
           setData(res);
           setDashboardFilters(res.dashboard_filters ?? res.trend_chart.available_filters);
           if (!selectedFilterKey && res.trend_chart.available_filters.length > 0) {
@@ -229,7 +257,7 @@ export default function Dashboard() {
           }
         }
       } catch (err: unknown) {
-        if (!cancelled) {
+        if (!cancelled && currentRequestId === requestIdRef.current) {
           console.error("Failed to load teacher dashboard health:", err);
           setError(
             err instanceof Error
@@ -238,7 +266,9 @@ export default function Dashboard() {
           );
         }
       } finally {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled && currentRequestId === requestIdRef.current) {
+          setIsLoading(false);
+        }
       }
     }
 
@@ -246,11 +276,34 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [selectedPeriodId, selectedFilterKey, isPeriodLoading, dashboardClass, dashboardSubject]);
+  }, [
+    selectedPeriodId,
+    selectedYearId,
+    selectedFilterKey,
+    isPeriodLoading,
+    dashboardClass,
+    dashboardSubject,
+    hasNoPeriods,
+    periods.length,
+  ]);
+
+  const isHistorical = Boolean(
+    (selectedYear && !selectedYear.is_active) ||
+    (selectedPeriod && !selectedPeriod.is_active) ||
+    (data?.term_info && data.term_info.is_active === false)
+  );
+
+  const isDataMatchingPeriod =
+    data != null &&
+    !isLoading &&
+    !isPeriodLoading &&
+    !error &&
+    (selectedPeriodId == null || data.term_info?.period_id === selectedPeriodId) &&
+    (selectedYearId == null || data.term_info?.academic_year_id == null || data.term_info.academic_year_id === selectedYearId);
 
   // Derived 8 Stat Cards
   const statCards = useMemo<OverviewCardData[]>(() => {
-    if (!data || isLoading || isPeriodLoading || error) return defaultTeacherCards;
+    if (!data || isLoading || isPeriodLoading || error || !isDataMatchingPeriod) return defaultTeacherCards;
 
     const phaseOneCards: OverviewCardData[] = [
       {
@@ -364,10 +417,9 @@ export default function Dashboard() {
       }
       return card;
     });
-  }, [data, isLoading, isPeriodLoading, error]);
+  }, [data, isLoading, isPeriodLoading, error, isDataMatchingPeriod]);
 
-  const lessonPerformance = isLoading || isPeriodLoading || error ||
-    (selectedPeriodId != null && data?.term_info.period_id !== selectedPeriodId)
+  const lessonPerformance = !isDataMatchingPeriod
     ? undefined : data?.details?.lesson_performance;
   const subjects = useMemo(() => lessonPerformance?.subjects ?? [], [lessonPerformance]);
   const lessonSubject = subjects.find((subject) => String(subject.subject_id) === subjectFilter) ?? subjects[0];
@@ -382,19 +434,22 @@ export default function Dashboard() {
       setSubjectFilter(subjects.length ? String(subjects[0].subject_id) : "");
   }, [subjects, subjectFilter, lessonPerformance]);
 
-  const visibleGradeData = isLoading || isPeriodLoading || error ? undefined : data?.details;
+  const visibleGradeData = !isDataMatchingPeriod ? undefined : data?.details;
   const support = visibleGradeData?.students_to_check_in_with;
   const gradeDetails = visibleGradeData?.grade_details;
   const topPerformers = gradeDetails ? visibleGradeData?.top_performers ?? [] : [];
-  const trendPoints = isLoading || isPeriodLoading || error ? [] : data?.trend_chart.points ?? [];
-  const visiblePhaseTwo = isLoading || isPeriodLoading || error ? undefined : data?.phase_two;
-  const visibleEngagement = isLoading || isPeriodLoading || error ? undefined : data?.engagement;
+  const trendPoints = !isDataMatchingPeriod ? [] : data?.trend_chart.points ?? [];
+  const visiblePhaseTwo = !isDataMatchingPeriod ? undefined : data?.phase_two;
+  const visibleEngagement = !isDataMatchingPeriod ? undefined : data?.engagement;
   const reviewWarnings = visibleEngagement?.warnings.filter((warning) => warning.code === "ambiguous_submission_attempts") ?? [];
   const submissionsWeekday = weekdayLabels.map((day, dayIndex) => ({
     day,
     count: visiblePhaseTwo?.weekdays.days.find((item) => item.day_index === dayIndex)?.count ?? null,
   }));
-  const pendingGrading = useMemo(() => isLoading || isPeriodLoading || error ? [] : data?.action_queue?.pending_grading ?? [], [data, isLoading, isPeriodLoading, error]);
+  const pendingGrading = useMemo(
+    () => !isDataMatchingPeriod ? [] : data?.action_queue?.pending_grading ?? [],
+    [data, isDataMatchingPeriod]
+  );
   const classworkUngradedCounts = useMemo(() => {
     const counts = new Map<number | string, number>();
     for (const item of pendingGrading) {
@@ -411,12 +466,12 @@ export default function Dashboard() {
       ...item,
       title: item.classwork_title,
       section: [item.student_name, item.section_name].filter(Boolean).join(" · "),
-      badge: `${count} ungraded`,
-      variant: "destructive",
+      badge: isHistorical ? `${count} historical` : `${count} ungraded`,
+      variant: isHistorical ? "default" : "destructive",
     };
   });
   const gradeDistribution = gradeDetails ? visibleGradeData?.grade_distribution ?? [] : [];
-  const attendanceSections = isLoading || isPeriodLoading || error ? [] : data?.details?.attendance_by_section ?? [];
+  const attendanceSections = !isDataMatchingPeriod ? [] : data?.details?.attendance_by_section ?? [];
 
   const maxWeekdayCount = Math.max(
     ...submissionsWeekday.map((item) => item.count ?? 0),
@@ -436,6 +491,11 @@ export default function Dashboard() {
         gradeDetails.available_grade_count === 0 ? "No Current grades available." :
           "Current-grade details are unavailable.",
   );
+  const dashboardEmptyState = (title: string, description: string, icon: ReactNode) => {
+    if (isLoading || isPeriodLoading) return <Skeleton className="h-36 w-full" />;
+    if (error) return <p className="py-6 text-sm text-muted-foreground">Dashboard data is unavailable.</p>;
+    return <TeacherEmptyState compact className="rounded! bg-card shadow-none hover:shadow-none" icon={icon} title={title} description={description} />;
+  };
   const gradeCoverage = () => gradeDetails && (
     <Card.Description className="mt-3 text-[11px] text-muted-foreground">
       {gradeDetails.available_grade_count} of {gradeDetails.total_grade_count} student-subject grades available.
@@ -455,10 +515,15 @@ export default function Dashboard() {
             <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
-                <div>
+                <div className="flex items-center gap-2.5">
                   <h1 className="text-xl font-bold sm:text-2xl md:text-4xl font-head">
                     Dashboard
                   </h1>
+                  {isHistorical && (
+                    <Badge variant="surface" size="sm" className="font-semibold">
+                      Historical · Read-Only
+                    </Badge>
+                  )}
                 </div>
               </div>
               <Button
@@ -473,7 +538,15 @@ export default function Dashboard() {
             </header>
 
             <main className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-3 md:gap-6 md:px-6">
-              <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:max-w-2xl" aria-label="Dashboard filters">
+              {hasNoPeriods ? (
+                <TeacherEmptyState
+                  icon={<BookOpen />}
+                  title="No academic periods available"
+                  description="There are no academic periods configured for this academic year."
+                />
+              ) : (
+                <>
+                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:max-w-2xl" aria-label="Dashboard filters">
                 <div className="flex min-w-0 flex-col gap-2">
                   <label htmlFor="dashboard-class" className="text-sm font-medium">Class</label>
                   <Select name="dashboard-class" value={dashboardClass} onValueChange={(value) => changeDashboardScope(value,
@@ -551,11 +624,9 @@ export default function Dashboard() {
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
                         {!support?.items.length && (
-                          <Card.Description className="text-[11px] text-muted-foreground">
-                            {emptyMessage(support?.warnings.length
+                          dashboardEmptyState("No students to check in with", support?.warnings.length
                               ? "No confirmed check-in indicators in the available data."
-                              : "No students meet the check-in criteria.")}
-                          </Card.Description>
+                              : "No students meet the check-in criteria.", <CheckCircle />)
                         )}
                         {support?.items.map((s) => {
                           const depthReason = getMostDepthReason(s.reasons);
@@ -624,20 +695,13 @@ export default function Dashboard() {
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
                         {reviewSubmissions.length === 0 && (
-                          <Empty className="border-none bg-transparent shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground">
-                            <Empty.Content>
-                              <Empty.Icon>
-                                {reviewWarnings.length ? (
-                                  <AlertCircle className="size-6 text-muted-foreground" />
-                                ) : (
-                                  <CheckCircle className="size-6 text-muted-foreground" />
-                                )}
-                              </Empty.Icon>
-                              <Empty.Title>
-                                {emptyMessage(reviewWarnings.length ? "Review queue incomplete." : "No submissions need grading.")}
-                              </Empty.Title>
-                            </Empty.Content>
-                          </Empty>
+                          reviewWarnings.length ? (
+                            <p className="py-6 text-sm text-muted-foreground" role="status">Review queue incomplete.</p>
+                          ) : dashboardEmptyState(
+                            isHistorical ? "No historical submissions to review" : "No submissions need grading",
+                            isHistorical ? "There are no submissions awaiting review for this period." : "You're all caught up with grading.",
+                            <CheckCircle />,
+                          )
                         )}
                         {reviewSubmissions.map((item) => (
                           <Card
@@ -734,7 +798,8 @@ export default function Dashboard() {
                     </Card.Header>
 
                     {/* Line Chart Body */}
-                    <Card.Content className="h-52 w-full p-0 pb-4">
+                    <Card.Content className={trendPoints.length ? "h-52 w-full p-0 pb-4" : "w-full p-0"}>
+                      {trendPoints.length ? <>
                       <ResponsiveContainer width="100%" height="100%" className="-mx-2 text-foreground!">
                         <LineChart
                           data={trendPoints}
@@ -825,6 +890,7 @@ export default function Dashboard() {
                           <span key={`${warning.code}-${warning.assignment_id}-${index}`}> {warning.message}</span>
                         ))}
                       </Card.Description>
+                      </> : dashboardEmptyState("No classwork performance yet", "Published classwork results will appear here for the selected class and subject.", <BookOpen />)}
                     </Card.Content>
                   </Card>
 
@@ -884,20 +950,11 @@ export default function Dashboard() {
                       <Card.Content className="flex flex-col justify-between gap-2.5 p-0 justify-between h-full">
                         <div className="flex flex-col gap-2.5 ">
                           {!lessonSubject?.items.length && (
-                            <Empty className="rounded! bg-retro shadow-none hover:shadow-none py-6 [&_p]:text-xs sm:[&_p]:text-sm [&_p]:font-medium [&_p]:text-muted-foreground">
-                              <Empty.Content>
-                                <Empty.Icon>
-                                  <IconContainer className="bg-primary rounded-none">
-                                    <BookOpen className="size-6 text-foreground" />
-                                  </IconContainer>
-                                </Empty.Icon>
-                                <Empty.Title className="text-base! font-medium">{emptyMessage(!lessonSubject
+                            dashboardEmptyState("No lesson performance yet", !lessonSubject
                                   ? "No subjects assigned for this academic period."
                                   : lessonSubject.coverage.scored_mapped_response_count === 0
                                     ? "No scored quiz answers linked to lessons for this subject."
-                                    : `Not enough evidence yet. Each lesson needs scores from at least ${lessonPerformance?.policy.min_learners ?? 3} learners across ${lessonPerformance?.policy.min_questions ?? 3} questions.`)}</Empty.Title>
-                              </Empty.Content>
-                            </Empty>
+                                    : `Not enough evidence yet. Each lesson needs scores from at least ${lessonPerformance?.policy.min_learners ?? 3} learners across ${lessonPerformance?.policy.min_questions ?? 3} questions.`, <BookOpen />)
                           )}
                           {lessonSubject?.items.slice(0, 5).map((item) => (
                             <div
@@ -981,15 +1038,13 @@ export default function Dashboard() {
 
                     <Card.Content className="mt-1 flex flex-col gap-3 p-0">
                       {(() => {
-                        const sections = data?.section_matrix ?? [];
+                        const sections = isDataMatchingPeriod ? (data?.section_matrix ?? []) : [];
                         const displayed = showAllSectionHealth ? sections : sections.slice(0, 2);
 
                         return (
                           <>
                             {sections.length === 0 && (
-                              <Card.Description className="text-xs text-muted-foreground">
-                                {emptyMessage("No classes for this academic period.")}
-                              </Card.Description>
+                              dashboardEmptyState("No classes for this period", "Assigned classes will appear here for the selected academic period.", <BookOpen />)
                             )}
                             {displayed.map((sec, idx: number) => (
                               <Card
@@ -1174,9 +1229,7 @@ export default function Dashboard() {
 
                       <Card.Content className="mt-1 flex flex-col gap-2.5 p-0">
                         {topPerformers.length === 0 && (
-                          <Card.Description className="text-xs text-muted-foreground">
-                            {gradeEmptyMessage(Array.isArray(visibleGradeData?.top_performers))}
-                          </Card.Description>
+                          dashboardEmptyState("No top performers yet", gradeEmptyMessage(Array.isArray(visibleGradeData?.top_performers)), <CheckCircle />)
                         )}
                         {topPerformers.map((p) => (
                           <Card
@@ -1218,9 +1271,7 @@ export default function Dashboard() {
 
                       <Card.Content className="mt-4 flex flex-col justify-between gap-2.5 p-0">
                         {(!gradeDetails || gradeDetails.available_grade_count === 0 || gradeDistribution.length === 0) && (
-                          <Card.Description className="text-xs text-muted-foreground">
-                            {gradeEmptyMessage(Array.isArray(visibleGradeData?.grade_distribution))}
-                          </Card.Description>
+                          dashboardEmptyState("No grade distribution yet", gradeEmptyMessage(Array.isArray(visibleGradeData?.grade_distribution)), <BookOpen />)
                         )}
                         {gradeDetails && gradeDetails.available_grade_count > 0 && gradeDistribution.map((item) => (
                           <div
@@ -1288,6 +1339,8 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
+              </>
+              )}
             </main>
           </div>
         </div>

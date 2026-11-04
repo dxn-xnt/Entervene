@@ -49,6 +49,7 @@ function scaleRubricToMaxPoints(levels: ActivityRubricLevel[], targetPoints: num
 }
 
 interface CreateClassworkModalProps {
+  draftOnly?: boolean;
   selectedType: ClassworkKind;
   subjects: Array<{ id: number; name: string }>;
   loads: TeacherClassLoad[];
@@ -71,6 +72,7 @@ interface CreateClassworkModalProps {
 }
 
 export default function CreateClassworkModal({
+  draftOnly = false,
   selectedType,
   subjects,
   loads,
@@ -120,7 +122,7 @@ export default function CreateClassworkModal({
       ...emptyClassworkDraft,
       title: initialTitle || "",
       instructions: initialInstructions || "",
-      is_published: remediationDraft ? false : emptyClassworkDraft.is_published,
+      is_published: remediationDraft || draftOnly ? false : emptyClassworkDraft.is_published,
       classwork_category: remediationDraft ? (remediationGradeTreatment === "PRACTICE_ONLY" ? "" : remediationGradeTreatment === "EXAMINATION" ? "QUARTERLY_ASSESSMENT" : remediationGradeTreatment || "") : categoryFromFocus(null),
       exam_subtype: remediationOriginalExam?.subtype ?? "",
       total_points: targetPoints,
@@ -132,6 +134,11 @@ export default function CreateClassworkModal({
       setDraft((current) => current.subject_id ? current : { ...current, subject_id: String(initialSubjectId) });
     }
   }, [initialSubjectId, subjects]);
+  useEffect(() => {
+    if (draftOnly) {
+      setDraft((current) => ({ ...current, is_published: false }));
+    }
+  }, [draftOnly]);
   const [materials, setMaterials] = useState<File[]>([]);
   const [selectedClassIds, setSelectedClassIds] = useState<number[]>(() => {
     if (remediationTarget) return [remediationTarget.class_id];
@@ -407,7 +414,7 @@ export default function CreateClassworkModal({
         formData.append("rubric_payload", JSON.stringify(rubricLevels));
       }
       formData.append("subject_id", String(draft.subject_id));
-      formData.append("is_published", String(draft.is_published));
+      formData.append("is_published", String(draftOnly ? false : draft.is_published));
       formData.append("show_scores", String(draft.show_scores));
       formData.append("class_ids", JSON.stringify(selectedClassIds));
       if (remediationTarget) {
@@ -878,7 +885,7 @@ export default function CreateClassworkModal({
                         is_published: val === "published",
                       }))
                     }
-                    disabled={isCreating}
+                    disabled={isCreating || draftOnly}
                   >
                     <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md">
                       <Select.Value />
@@ -892,6 +899,11 @@ export default function CreateClassworkModal({
                       </Select.Group>
                     </Select.Content>
                   </Select>
+                  {draftOnly && (
+                    <p className="mt-2 text-xs font-semibold text-muted-foreground">
+                      Future-term planning is saved as an unpublished draft.
+                    </p>
+                  )}
                 </Field>
               </div>
 

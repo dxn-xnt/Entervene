@@ -71,4 +71,17 @@ def authorize_teacher_content(
                 substitute = SubstitutionService.get_active_substitution(db, load.subject_load_id)
                 if substitute and substitute.substitute_staff_id == staff_id:
                     return
+                if not owner_only:
+                    from app.models.academic.TeacherSubstitution import TeacherSubstitution
+                    past_sub = (
+                        db.query(TeacherSubstitution.substitution_id)
+                        .filter(
+                            TeacherSubstitution.subject_load_id == load.subject_load_id,
+                            TeacherSubstitution.substitute_staff_id == staff_id,
+                            TeacherSubstitution.status.in_(["active", "completed"]),
+                        )
+                        .first()
+                    )
+                    if past_sub is not None:
+                        return
     raise HTTPException(status_code=404, detail=detail)

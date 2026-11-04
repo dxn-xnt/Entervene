@@ -287,11 +287,12 @@ const StudentQuizTake = () => {
                 autoIcon={false}
                 key={q.quiz_question_id}
                 onClick={() => setCurrentIndex(i)}
-                className={`size-8 border-2 border-black text-sm font-semibold transition-colors cursor-pointer relative ${isCurrent
-                  ? "bg-[#F6E9B2] shadow-sm"
+                variant="outline"
+                className={`size-8 border-2 border-black text-sm font-semibold cursor-pointer relative hover:translate-y-0 active:translate-y-0 active:translate-x-0 ${isCurrent
+                  ? "bg-[#F6E9B2] hover:bg-[#F6E9B2] active:bg-[#F6E9B2] shadow-sm"
                   : isAnswered
-                    ? "bg-emerald-100"
-                    : "bg-white hover:bg-black/5"
+                    ? "bg-emerald-100 hover:bg-emerald-100 active:bg-emerald-100"
+                    : "bg-white hover:bg-white active:bg-white"
                   }`}
               >
                 {i + 1}
@@ -339,7 +340,7 @@ const StudentQuizTake = () => {
 
       {/* Question card */}
       <div className="px-12 md:px-24">
-        <Card className="bg-[#F6E9B2] flex flex-col justify-center items-center p-6 text-center">
+        <Card className="bg-white flex flex-col justify-center items-center p-6 text-center shadow-none hover:shadow-none">
           <p className="text-sm text-black/50 mb-1">
             Question {currentIndex + 1} of {totalQuestions}
             {currentQuestion.points > 0 && (

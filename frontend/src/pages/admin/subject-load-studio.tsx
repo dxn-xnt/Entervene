@@ -371,6 +371,7 @@ export default function AdminSubjectLoadStudio() {
   const toast = useToast();
   const [selectedGradeId, setSelectedGradeId] = useState<string>("all");
   const [selectedSectionId, setSelectedSectionId] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [studioData, setStudioData] = useState<SubjectLoadStudioData | null>(null);
   const { getSetting } = useSettings();
@@ -395,6 +396,18 @@ export default function AdminSubjectLoadStudio() {
   const [teacherModalTarget, setTeacherModalTarget] = useState<TeacherModalTarget | null>(null);
   const lockedSectionIds = useMemo(() => getLockedSectionIds(studioData), [studioData]);
   const isSectionLocked = (classId: number) => lockedSectionIds.has(classId);
+
+  const gradeOptions = useMemo(() => {
+    if (!studioData?.academic_levels) return [{ id: "all", label: "All" }];
+    const sorted = [...studioData.academic_levels].sort((a, b) => a.grade_level - b.grade_level);
+    return [
+      { id: "all", label: "All" },
+      ...sorted.map((lvl) => ({
+        id: String(lvl.academic_level_id),
+        label: lvl.level_name,
+      })),
+    ];
+  }, [studioData?.academic_levels]);
 
   // Fetch period templates directly on mount
   useEffect(() => {
@@ -1538,6 +1551,28 @@ export default function AdminSubjectLoadStudio() {
       if (selectedSectionId !== "all" && String(cls.class_id) !== selectedSectionId) {
         return false;
       }
+      if (statusFilter !== "all") {
+        const isPublished = lockedSectionIds.has(cls.class_id);
+        const hasPendingDraft = Boolean(
+          studioData.has_pending_draft_by_class?.[cls.class_id] ||
+          studioData.has_pending_draft_by_class?.[String(cls.class_id)]
+        );
+        const norm = statusFilter.toLowerCase();
+        if (norm === "published") {
+          if (!isPublished || hasPendingDraft) return false;
+        } else if (norm === "draft") {
+          if (isPublished && !hasPendingDraft) return false;
+        } else if (norm === "conflicts") {
+          const hasConflicts = conflicts.some(
+            (c) => c.severity === "error" && (c.class_id === cls.class_id || (c.affected_key && c.affected_key.startsWith(`${cls.class_id}_`)))
+          );
+          if (!hasConflicts) return false;
+        } else if (norm === "active") {
+          return true;
+        } else if (norm === "archived") {
+          return false;
+        }
+      }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchName = (cls.section_name || "").toLowerCase().includes(q);
@@ -1547,7 +1582,7 @@ export default function AdminSubjectLoadStudio() {
       }
       return true;
     });
-  }, [studioData, selectedGradeId, selectedSectionId, searchQuery]);
+  }, [studioData, selectedGradeId, selectedSectionId, statusFilter, searchQuery, lockedSectionIds, conflicts]);
 
   // Compute teacher availability helper
   const getTeacherAvailabilityStatus = (staffId: string, classId: number, subjectId: number) => {
@@ -1610,7 +1645,7 @@ export default function AdminSubjectLoadStudio() {
     if (carouselActiveIdx >= filteredClasses.length) {
       setCarouselActiveIdx(0);
     }
-  }, [selectedSectionId, selectedGradeId, searchQuery, filteredClasses.length]);
+  }, [selectedSectionId, selectedGradeId, statusFilter, searchQuery, filteredClasses.length]);
 
   // Active section currently displayed on the interface/table
   const activeDisplayedClass = filteredClasses[carouselActiveIdx] || filteredClasses[0] || null;
@@ -1838,23 +1873,18 @@ export default function AdminSubjectLoadStudio() {
 
                       <div className="w-48 shrink-0">
                         <Select
-                          value={selectedGradeId}
-                          onValueChange={(val) => {
-                            setSelectedGradeId(val);
-                            setSelectedSectionId("all");
-                          }}
+                          value={statusFilter}
+                          onValueChange={(val) => setStatusFilter(val)}
                         >
                           <Select.Trigger className="w-full whitespace-nowrap">
-                            <Select.Value placeholder="All Grade Levels" />
+                            <Select.Value placeholder="All Statuses" />
                           </Select.Trigger>
                           <Select.Content>
                             <Select.Group>
-                              <Select.Item value="all" className="whitespace-nowrap">All Grade Levels</Select.Item>
-                              {studioData?.academic_levels.map((lvl) => (
-                                <Select.Item key={lvl.academic_level_id} value={String(lvl.academic_level_id)} className="whitespace-nowrap">
-                                  {lvl.level_name}
-                                </Select.Item>
-                              ))}
+                              <Select.Item value="all" className="whitespace-nowrap">All Statuses</Select.Item>
+                              <Select.Item value="published" className="whitespace-nowrap">Published</Select.Item>
+                              <Select.Item value="draft" className="whitespace-nowrap">Draft</Select.Item>
+                              <Select.Item value="conflicts" className="whitespace-nowrap">With Conflicts</Select.Item>
                             </Select.Group>
                           </Select.Content>
                         </Select>
@@ -1881,26 +1911,6 @@ export default function AdminSubjectLoadStudio() {
                         </Select>
                       </div>
                     </div>
-
-                    {/* <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                      <span className="shrink-0 text-sm font-regular text-muted-foreground">
-                        Grade:
-                      </span>
-                      {gradeOptions.map((grade) => (
-                        <Button
-                          key={grade.id}
-                          variant={selectedGradeId === grade.id ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => {
-                            setSelectedGradeId(grade.id);
-                            setSelectedSectionId("all");
-                          }}
-                          className="shrink-0 border-black shadow-none"
-                        >
-                          {grade.label}
-                        </Button>
-                      ))}
-                    </div> */}
 
                     <div className="flex flex-wrap items-center gap-2 justify-between">
                       <div className="flex flex-wrap items-center gap-2 font-bold">
@@ -1948,6 +1958,7 @@ export default function AdminSubjectLoadStudio() {
                           </Tooltip>
                         )}
                       </div>
+                      
                       {/* Auto-Generate All */}
                       <Button
                         size="sm"
@@ -1958,6 +1969,27 @@ export default function AdminSubjectLoadStudio() {
                         <Sparkles className="size-3" />
                         <span>Auto-Generate</span>
                       </Button>
+                    </div>
+
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                      <span className="shrink-0 text-sm font-regular text-muted-foreground">
+                        Grade:
+                      </span>
+                      {gradeOptions.map((grade) => (
+                        <Button
+                          key={grade.id}
+                          autoIcon={false}
+                          variant={selectedGradeId === grade.id ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => {
+                            setSelectedGradeId(grade.id);
+                            setSelectedSectionId("all");
+                          }}
+                          className="shrink-0 border-black shadow-none"
+                        >
+                          {grade.label}
+                        </Button>
+                      ))}
                     </div>
                   </section>
 
@@ -1979,8 +2011,8 @@ export default function AdminSubjectLoadStudio() {
                         <EmptyTitle>{searchQuery.trim() ? "No classes match your search" : studioData?.classes.length ? "No class sections match these filters" : "No class sections yet"}</EmptyTitle>
                         <EmptyDescription>{searchQuery.trim() ? "Try a different class name or clear the search." : studioData?.classes.length ? "Choose another grade level or section to see class schedules." : "Create a class in the Admin Classes page to start assigning subjects."}</EmptyDescription>
                       </EmptyHeader>
-                      {(searchQuery.trim() || selectedGradeId !== "all" || selectedSectionId !== "all") && (
-                        <Button size="sm" onClick={() => { setSearchQuery(""); setSelectedGradeId("all"); setSelectedSectionId("all"); }}>Clear filters</Button>
+                      {(searchQuery.trim() || selectedGradeId !== "all" || selectedSectionId !== "all" || statusFilter !== "all") && (
+                        <Button size="sm" onClick={() => { setSearchQuery(""); setSelectedGradeId("all"); setSelectedSectionId("all"); setStatusFilter("all"); }}>Clear filters</Button>
                       )}
                     </Empty>
                   ) : (() => {
@@ -2320,7 +2352,7 @@ export default function AdminSubjectLoadStudio() {
                                 </div> */}
 
                                 {classSubjects.length === 0 ? (
-                                  <Empty className="my-2 transition-shadow hover:shadow-none">
+                                  <Empty className="my-2 shadow-none hover:shadow-none">
                                     <EmptyHeader>
                                       <EmptyMedia><div className="flex size-10 items-center justify-center border-2 border-black bg-primary text-black" aria-hidden="true"><Search className="size-5" /></div></EmptyMedia>
                                       <EmptyTitle>No eligible subject offerings</EmptyTitle>
@@ -2495,14 +2527,14 @@ export default function AdminSubjectLoadStudio() {
                                   </Table>
                                 ) : (
                                   <Table
-                                    className="min-w-[760px] shadow-none mt-2"
+                                    className="min-w-[960px] table-fixed shadow-none"
                                     wrapperClassName="h-auto max-w-full overflow-x-auto overscroll-x-contain shadow-none [scrollbar-width:thin]"
                                   >
                                     <Table.Header className="">
                                       <Table.Row>
-                                        <Table.Head className="font-bold text-black">Subject</Table.Head>
-                                        <Table.Head className="font-bold text-black ">Schedule</Table.Head>
-                                        <Table.Head className="font-bold text-black">Assigned Teacher</Table.Head>
+                                        <Table.Head className="w-[40%] bg-primary font-bold text-primary-foreground">Subject</Table.Head>
+                                        <Table.Head className="w-[36%] bg-primary font-bold text-primary-foreground">Schedule</Table.Head>
+                                        <Table.Head className="w-[24%] bg-primary font-bold text-primary-foreground">Assigned Teacher</Table.Head>
                                       </Table.Row>
                                     </Table.Header>
                                     <Table.Body>
@@ -2542,9 +2574,9 @@ export default function AdminSubjectLoadStudio() {
                                           >
                                             {/* Subject Column */}
                                             <Table.Cell className="py-2.5 px-3 align-middle">
-                                              <div className="flex flex-col gap-1">
-                                                <div className="flex items-center gap-1.5">
-                                                  <span className="font-bold text-base text-black">
+                                              <div className="flex min-w-0 flex-col gap-1">
+                                                <div className="flex min-w-0 flex-col items-start gap-1.5">
+                                                  <span className="w-full truncate font-bold text-base text-black" title={sub.subject_name}>
                                                     {sub.subject_name}
                                                   </span>
                                                   {!isOfferingEligible && (
@@ -2553,7 +2585,7 @@ export default function AdminSubjectLoadStudio() {
                                                     </Badge>
                                                   )}
                                                   {conflict && (
-                                                    <span className="rounded border border-black bg-red-100 px-1.5 py-0.5 text-[11px] font-bold" title={conflict.message}>
+                                                    <span className="max-w-full whitespace-normal break-words rounded border border-black bg-red-100 px-1.5 py-0.5 text-[11px] font-bold" title={conflict.message}>
                                                       {conflict.severity === "error" ? "Conflict" : "Warning"}: {conflict.message}
                                                     </span>
                                                   )}
@@ -2863,14 +2895,12 @@ export default function AdminSubjectLoadStudio() {
       />
 
       {/* Copy Schedule Modal */}
-      {
-        isCopyModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="w-full max-w-md rounded border-2 border-border bg-background p-6 text-foreground shadow-[4px_4px_0_#000]">
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                <Copy className="size-5" /> Copy Schedule from Term
-              </h2>
-              <div className="space-y-4">
+      <Dialog open={isCopyModalOpen} onOpenChange={setIsCopyModalOpen}>
+            <Dialog.Content className="w-[calc(100%-2rem)] max-w-xl">
+              <Dialog.Header>
+                <Dialog.Title className="font-sans text-xl font-bold">Copy Schedule from Term</Dialog.Title>
+              </Dialog.Header>
+              <section className="space-y-4 p-5">
                 <div>
                   <label className="block text-sm font-bold mb-1">Source Term</label>
                   <Select
@@ -2909,9 +2939,9 @@ export default function AdminSubjectLoadStudio() {
                     Warning: This will overwrite any existing unsaved drafts or published schedules for the selected scope in the current term. Teacher assignments will be pre-filled and mapped to the current bell schedule.
                   </p>
                 </div>
-              </div>
+              </section>
 
-              <div className="flex justify-end gap-3 mt-6">
+              <Dialog.Footer>
                 <Button variant="outline" onClick={() => setIsCopyModalOpen(false)}>
                   Cancel
                 </Button>
@@ -2922,11 +2952,9 @@ export default function AdminSubjectLoadStudio() {
                 >
                   {isCopying ? "Copying..." : "Yes, Overwrite & Copy"}
                 </Button>
-              </div>
-            </div>
-          </div>
-        )
-      }
+              </Dialog.Footer>
+            </Dialog.Content>
+      </Dialog>
 
       {/* Discard Draft Confirmation Dialog */}
       <ConfirmDialog

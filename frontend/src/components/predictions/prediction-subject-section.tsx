@@ -6,12 +6,29 @@ import { Button } from "@/components/retroui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/retroui/Tooltip";
 import { SubjectSectionCard } from "./subject-section-card";
 import type { DashboardSubjectGroupSummary } from "./current-term-dashboard-adapter";
+import { getTeacherRiskDisplaySummary, getTeacherRiskPercentage } from "./teacher-risk-display";
 
 interface PredictionSubjectSectionProps {
   group: DashboardSubjectGroupSummary;
 }
 
 export function PredictionSubjectSection({ group }: PredictionSubjectSectionProps) {
+  const displaySummary = getTeacherRiskDisplaySummary({
+    HIGH_RISK: group.high_risk_count,
+    MODERATE_RISK: group.moderate_risk_count,
+    NEEDS_MONITORING: group.needs_monitoring_count,
+    LOW_RISK: group.low_risk_count,
+    INSUFFICIENT_DATA: Math.max(
+      0,
+      group.total_predictions
+        - group.high_risk_count
+        - group.moderate_risk_count
+        - group.needs_monitoring_count
+        - group.low_risk_count,
+    ),
+    total: group.total_predictions,
+  });
+
   return (
     <Card className="flex flex-col bg-primary">
       <div className="flex items-center justify-between">
@@ -19,21 +36,15 @@ export function PredictionSubjectSection({ group }: PredictionSubjectSectionProp
           <h2 className="text-xl font-bold">{group.display_name}</h2>
         </div>
         <div className="flex flex-row flex-wrap gap-2 items-center">
-          {group.high_risk_count > 0 && (
-            <Badge size="sm" variant="destructive" className="">
-              {group.high_risk_count} {group.high_risk_count === 1 ? "High Risk" : "High Risks"}
-            </Badge>
-          )}
-          {group.moderate_risk_count > 0 && (
-            <Badge size="sm" variant="solid" className="">
-              {group.moderate_risk_count} Moderate Risk
-            </Badge>
-          )}
-          {group.needs_monitoring_count > 0 && (
-            <Badge size="sm" variant="outline" className="">
-              {group.needs_monitoring_count} Monitoring
-            </Badge>
-          )}
+          <Badge size="sm" variant="solid">
+            {displaySummary.MODERATE_RISK} Moderate Risk ({Math.round(getTeacherRiskPercentage(displaySummary.MODERATE_RISK, displaySummary.assessedTotal))}%)
+          </Badge>
+          <Badge size="sm" variant="destructive">
+            {displaySummary.HIGH_RISK} High Risk ({Math.round(getTeacherRiskPercentage(displaySummary.HIGH_RISK, displaySummary.assessedTotal))}%)
+          </Badge>
+          <Badge size="sm" variant="outline">
+            {displaySummary.ON_TRACK} On Track ({Math.round(getTeacherRiskPercentage(displaySummary.ON_TRACK, displaySummary.assessedTotal))}%)
+          </Badge>
           <Tooltip>
             <TooltipTrigger render={
               <Button

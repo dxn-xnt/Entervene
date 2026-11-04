@@ -55,6 +55,7 @@ import { categoryFromFocus, focusGuidance } from "@/lib/remediation-authoring";
 import { RemediationTeacherGuidanceBanner } from "./remediation-teacher-guidance-banner";
 
 interface CreateClassworkQuizModalProps {
+    draftOnly?: boolean;
     selectedType: ClassworkKind;
     subjects: Array<{ id: number; name: string }>;
     loads: TeacherClassLoad[];
@@ -77,6 +78,7 @@ interface CreateClassworkQuizModalProps {
 }
 
 export default function CreateClassworkQuizModal({
+    draftOnly = false,
     selectedType,
     subjects,
     loads,
@@ -143,7 +145,7 @@ export default function CreateClassworkQuizModal({
             ...emptyClassworkDraft,
             title: initialTitle || "",
             instructions: initialInstructions || "",
-            is_published: remediationDraft ? false : emptyClassworkDraft.is_published,
+            is_published: remediationDraft || draftOnly ? false : emptyClassworkDraft.is_published,
             classwork_category: remediationDraft ? (remediationGradeTreatment === "PRACTICE_ONLY" ? "" : remediationGradeTreatment === "EXAMINATION" ? "QUARTERLY_ASSESSMENT" : remediationGradeTreatment || "") : categoryFromFocus(null),
             exam_subtype: remediationOriginalExam?.subtype ?? "",
             total_points: defaultTotalPoints,
@@ -156,6 +158,11 @@ export default function CreateClassworkQuizModal({
             setDraft((current) => current.subject_id ? current : { ...current, subject_id: String(initialSubjectId) });
         }
     }, [initialSubjectId, subjects]);
+    useEffect(() => {
+        if (draftOnly) {
+            setDraft((current) => ({ ...current, is_published: false }));
+        }
+    }, [draftOnly]);
 
     const [quizQuestions, setQuizQuestions] = useState<QuizQuestionDraft[]>([
         createEmptyQuizQuestion(1),
@@ -762,7 +769,7 @@ export default function CreateClassworkQuizModal({
                 formData.append("exam_subtype", draft.exam_subtype);
             }
             formData.append("total_points", String(Number(draft.total_points)));
-            formData.append("is_published", String(draft.is_published));
+            formData.append("is_published", String(draftOnly ? false : draft.is_published));
             formData.append("subject_id", String(draft.subject_id));
             formData.append("show_scores", String(draft.show_scores));
             formData.append("class_ids", JSON.stringify(selectedClassIds));
@@ -1234,21 +1241,21 @@ export default function CreateClassworkQuizModal({
                                     </div>
                                 )}
 
-                                <div className="rounded border-2 border-black bg-[#F8F6ED] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                                <Card className="block w-full rounded! p-4 shadow-none hover:shadow-none">
                                     <div className="flex flex-wrap items-start justify-between gap-3">
                                         <div>
                                             <h3 className="text-lg font-bold">Quiz question builder</h3>
-                                            <p className="text-xs font-medium text-gray-600">
+                                            <p className="text-sm text-muted-foreground">
                                                 Review, edit, and organize questions for "{draft.title || "Quiz"}".
                                             </p>
                                         </div>
-                                        <span className="rounded-full border-2 border-black bg-white px-3 py-1 text-xs font-bold shadow-sm">
+                                        <Badge size="sm" variant="outline">
                                             {quizPointTotal}/{draft.total_points || 0} pts
-                                        </span>
+                                        </Badge>
                                     </div>
 
 
-                                </div>
+                                </Card>
 
                                 <div className="space-y-4">
                                     {quizImportWarnings.length > 0 && (
@@ -1266,9 +1273,9 @@ export default function CreateClassworkQuizModal({
                                     {quizQuestions.map((question, questionIndex) => {
                                         const unkeyed = isUnkeyed(question);
                                         return (
-                                            <div
+                                            <Card
                                                 key={question.id}
-                                                className={`rounded border-2 ${unkeyed ? "border-amber-500 bg-amber-50/20" : "border-black bg-white"} p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]`}
+                                                className="block w-full min-w-0 rounded! p-4 shadow-none hover:shadow-none"
                                             >
                                                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                                                     <div className="flex items-center gap-2">
@@ -1287,7 +1294,7 @@ export default function CreateClassworkQuizModal({
                                                         size="sm"
                                                         onClick={() => removeQuizQuestion(question.id)}
                                                         disabled={isCreating || quizQuestions.length === 1}
-                                                        className="border-red-400 text-red-600 font-bold hover:bg-red-50"
+                                                        className="gap-2 text-destructive"
                                                     >
                                                         Remove
                                                     </Button>
@@ -1305,7 +1312,7 @@ export default function CreateClassworkQuizModal({
                                                                 }
                                                                 disabled={isCreating}
                                                                 placeholder="Which of the following is the primary function of a CPU?"
-                                                                className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-none transition focus:outline-hidden focus:shadow-none min-h-20 text-sm"
+                                                                className="px-4 py-2 w-full rounded! border-2 border-border bg-background shadow-none transition focus:outline-hidden focus:shadow-none min-h-20 text-sm"
                                                             />
                                                         </Field>
                                                     </div>
@@ -1330,7 +1337,7 @@ export default function CreateClassworkQuizModal({
                                                                 <Select.Trigger className="w-full shadow-none">
                                                                     <Select.Value />
                                                                 </Select.Trigger>
-                                                                <Select.Content className="border-2 border-black rounded bg-white">
+                                                                <Select.Content className="border-2 border-border rounded! bg-background">
                                                                     <Select.Group>
                                                                         <Select.Item value="MULTIPLE_CHOICE">
                                                                             Multiple Choice
@@ -1360,7 +1367,7 @@ export default function CreateClassworkQuizModal({
                                                                     })
                                                                 }
                                                                 disabled={isCreating}
-                                                                className="w-full bg-white border-2 border-black rounded shadow-none"
+                                                                className="w-full bg-background border-2 border-border rounded! shadow-none"
                                                             />
                                                         </Field>
                                                     </div>
@@ -1369,7 +1376,7 @@ export default function CreateClassworkQuizModal({
                                                 {question.question_type === "MULTIPLE_CHOICE" ? (
                                                     <div className="mt-4 space-y-2">
                                                         <div className="flex items-center justify-between">
-                                                            <p className="text-xs font-bold text-gray-700">Choices</p>
+                                                            <p className="text-sm font-medium text-foreground">Choices</p>
                                                             {unkeyed && (
                                                                 <span className="text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-400 rounded px-2 py-0.5">
                                                                     Select the correct choice below
@@ -1381,14 +1388,13 @@ export default function CreateClassworkQuizModal({
                                                                 key={`${question.id}-${option.option_order}`}
                                                                 className="flex items-center gap-2"
                                                             >
-                                                                <input
-                                                                    type="radio"
+                                                                <Checkbox
                                                                     checked={option.is_correct}
-                                                                    onChange={() =>
-                                                                        markCorrectOption(question.id, optionIndex)
-                                                                    }
+                                                                    onCheckedChange={(checked) => {
+                                                                        if (checked === true) markCorrectOption(question.id, optionIndex);
+                                                                    }}
                                                                     disabled={isCreating}
-                                                                    className="h-4 w-4 cursor-pointer"
+                                                                    className="shrink-0 cursor-pointer border-border"
                                                                     aria-label={`Mark choice ${optionIndex + 1} correct`}
                                                                 />
                                                                 <Input
@@ -1402,7 +1408,7 @@ export default function CreateClassworkQuizModal({
                                                                     }
                                                                     disabled={isCreating}
                                                                     placeholder={`Choice ${optionIndex + 1}`}
-                                                                    className="flex-1 bg-white border-2 border-black rounded shadow-md"
+                                                                    className="min-w-0 flex-1 bg-background border-2 border-border rounded! shadow-none"
                                                                 />
                                                                 <Tooltip>
                                                                     <TooltipTrigger render={<span className="inline-flex"><button
@@ -1413,7 +1419,7 @@ export default function CreateClassworkQuizModal({
                                                                         disabled={
                                                                             isCreating || question.options.length <= 2
                                                                         }
-                                                                        className="rounded border-2 border-black p-2 text-xs font-bold bg-white cursor-pointer hover:bg-gray-100 disabled:opacity-40 transition"
+                                                                        className="rounded! border-2 border-border p-2 text-xs font-bold bg-white cursor-pointer hover:bg-gray-100 disabled:opacity-40 transition"
                                                                         aria-label={`Remove choice ${optionIndex + 1}`}
                                                                     >
                                                                         <X size={14} />
@@ -1424,11 +1430,11 @@ export default function CreateClassworkQuizModal({
                                                         ))}
                                                         <Button
                                                             type="button"
-                                                            variant="outline"
+                                                            variant="default"
                                                             size="sm"
                                                             onClick={() => addQuizOption(question.id)}
                                                             disabled={isCreating}
-                                                            className="bg-[#F6E9B2] border-black border-2 rounded hover:bg-[#ebd88d]"
+                                                            className="gap-2"
                                                         >
                                                             Add choice
                                                         </Button>
@@ -1454,7 +1460,7 @@ export default function CreateClassworkQuizModal({
                                                                 key={`${question.id}-${option.option_order}`}
                                                                 className="flex items-center gap-2"
                                                             >
-                                                                <div className="flex h-8 w-8 items-center justify-center rounded border-2 border-black bg-[#8BCB88] text-xs font-black text-black shrink-0">
+                                                                <div className="flex h-8 w-8 items-center justify-center rounded! border-2 border-border bg-primary text-xs font-black text-black shrink-0">
                                                                     ✓
                                                                 </div>
                                                                 <Input
@@ -1472,7 +1478,7 @@ export default function CreateClassworkQuizModal({
                                                                             ? "e.g. Isaac Newton (primary correct answer)"
                                                                             : `Alternative spelling / synonym ${optionIndex + 1}`
                                                                     }
-                                                                    className="flex-1 bg-white border-2 border-black rounded shadow-md"
+                                                                    className="min-w-0 flex-1 bg-background border-2 border-border rounded! shadow-none"
                                                                 />
                                                                 <Tooltip>
                                                                     <TooltipTrigger render={<span className="inline-flex"><button
@@ -1481,7 +1487,7 @@ export default function CreateClassworkQuizModal({
                                                                             removeQuizOption(question.id, optionIndex)
                                                                         }
                                                                         disabled={isCreating || question.options.length <= 1}
-                                                                        className="rounded border-2 border-black p-2 text-xs font-bold bg-white cursor-pointer hover:bg-gray-100 disabled:opacity-40 transition"
+                                                                        className="rounded! border-2 border-border p-2 text-xs font-bold bg-white cursor-pointer hover:bg-gray-100 disabled:opacity-40 transition"
                                                                         aria-label="Remove alternative answer"
                                                                     >
                                                                         <X size={14} />
@@ -1498,7 +1504,7 @@ export default function CreateClassworkQuizModal({
                                                                 size="sm"
                                                                 onClick={() => addQuizOption(question.id, true)}
                                                                 disabled={isCreating}
-                                                                className="bg-[#8BCB88]/25 border-black border-2 rounded hover:bg-[#8BCB88]/40 text-xs font-bold"
+                                                                className="gap-2"
                                                             >
                                                                 + Add alternate answer / spelling
                                                             </Button>
@@ -1526,7 +1532,7 @@ export default function CreateClassworkQuizModal({
                                                                 }
                                                                 disabled={isCreating}
                                                                 placeholder="Optional sample answer, scoring criteria, or rubric for grading student responses..."
-                                                                className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-none transition focus:outline-hidden focus:shadow-none min-h-20 text-sm"
+                                                                className="px-4 py-2 w-full rounded! border-2 border-border bg-background shadow-none transition focus:outline-hidden focus:shadow-none min-h-20 text-sm"
                                                             />
                                                         </Field>
                                                     </div>
@@ -1544,12 +1550,12 @@ export default function CreateClassworkQuizModal({
                                                                 }
                                                                 disabled={isCreating}
                                                                 placeholder="Optional guidance for review or grading"
-                                                                className="px-4 py-2 w-full rounded border-2 border-black bg-white shadow-none transition focus:outline-hidden focus:shadow-none min-h-16 text-sm"
+                                                                className="px-4 py-2 w-full rounded! border-2 border-border bg-background shadow-none transition focus:outline-hidden focus:shadow-none min-h-16 text-sm"
                                                             />
                                                         </Field>
                                                     </div>
                                                 )}
-                                            </div>
+                                            </Card>
                                         );
                                     })}
                                 </div>
@@ -1559,7 +1565,7 @@ export default function CreateClassworkQuizModal({
                                         type="button"
                                         onClick={() => addQuizQuestion("MULTIPLE_CHOICE")}
                                         disabled={isCreating}
-                                        className="bg-[#7ABA78] hover:bg-[#6ab368]"
+                                        className="gap-2"
                                     >
                                         Add multiple choice
                                     </Button>
@@ -1567,7 +1573,7 @@ export default function CreateClassworkQuizModal({
                                         type="button"
                                         onClick={() => addQuizQuestion("IDENTIFICATION")}
                                         disabled={isCreating}
-                                        className="bg-[#F6E9B2] hover:bg-[#ebd88d] border-black border-2 text-black font-bold"
+                                        className="gap-2"
                                     >
                                         Add identification
                                     </Button>
@@ -1575,7 +1581,8 @@ export default function CreateClassworkQuizModal({
                                         type="button"
                                         onClick={() => addQuizQuestion("SHORT_ANSWER")}
                                         disabled={isCreating}
-                                        className="bg-white hover:bg-gray-50 border-black border-2"
+                                        variant="outline"
+                                        className="gap-2"
                                     >
                                         Add short answer (essay)
                                     </Button>
@@ -1838,7 +1845,7 @@ export default function CreateClassworkQuizModal({
                                                     is_published: val === "published",
                                                 }))
                                             }
-                                            disabled={isCreating}
+                                            disabled={isCreating || draftOnly}
                                         >
                                             <Select.Trigger className="w-full">
                                                 <Select.Value />
@@ -1852,6 +1859,11 @@ export default function CreateClassworkQuizModal({
                                                 </Select.Group>
                                             </Select.Content>
                                         </Select>
+                                        {draftOnly && (
+                                            <p className="mt-2 text-xs font-semibold text-muted-foreground">
+                                                Future-term planning is saved as an unpublished draft.
+                                            </p>
+                                        )}
                                         {draft.is_published && unkeyedIdCount > 0 && (
                                             <div className="mt-2 rounded border-2 border-amber-500 bg-amber-50 p-2.5 text-xs text-amber-900 font-semibold shadow-xs">
                                                 ⚠️ <strong>Cannot publish:</strong> {unkeyedIdCount} Identification question(s) have no answer key. Add at least one answer key or select &quot;Keep hidden from students&quot; to save as draft.

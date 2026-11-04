@@ -14,7 +14,11 @@ from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.models.intervention.Intervention import Intervention
 from app.services.grading.PassingThresholdReader import require_subject_passing_threshold
-from app.services.intervention.InterventionCandidateService import OPEN_STATUSES, sync_intervention_for_persisted_prediction
+from app.services.intervention.InterventionCandidateService import (
+    AUTOMATIC_CANDIDATE_LEVEL,
+    OPEN_STATUSES,
+    sync_intervention_for_persisted_prediction,
+)
 from app.services.prediction.CurrentPeriodFeatureBuilderService import build_current_period_features_from_records
 from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME
 from app.services.prediction.DevelopmentCurrentTermPredictionService import canonicalize_v3_features, resolve_v3_scope
@@ -66,6 +70,8 @@ def reconcile_existing_candidate(db: Session, prediction_id: int, *, apply: bool
     readiness = snapshot.get("readiness")
     if not isinstance(readiness, dict) or readiness.get("status") != "READY":
         return "not_ready"
+    if row.intervention_level != AUTOMATIC_CANDIDATE_LEVEL:
+        return "not_moderate_risk"
     raw = snapshot.get("projected_final_term_grade_raw")
     try:
         grade = float(raw) if not isinstance(raw, bool) else math.nan

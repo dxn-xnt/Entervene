@@ -519,8 +519,8 @@ export default function AddUserModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }} >
-      <Dialog.Content size="md" data-admin-user-import={step === "import" ? "" : undefined} className="w-[calc(100vw-1.5rem)] max-w-lg rounded font-sans lg:max-w-[40%]">
-        <Dialog.Header asChild className="bg-primary text-black font-sans flex items-center justify-between">
+      <Dialog.Content size="md" data-admin-user-import={step === "import" ? "" : undefined} className="w-[calc(100vw-1.5rem)] max-w-lg rounded-none font-sans lg:max-w-[40%]">
+        <Dialog.Header className="bg-primary text-black font-sans flex items-center justify-between">
           <div>
             <span className="text-xl font-bold normal-case">
               {step === "choose" && "Add New Users"}
@@ -535,12 +535,14 @@ export default function AddUserModal({
           <>
             <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 sm:gap-4 sm:p-5">
               <DialogueSelect
+                className="shadow-none hover:shadow-none active:shadow-none"
                 icon={FileSpreadsheet}
                 title="Import file"
                 description="Upload a CSV file to add multiple users at once."
                 onClick={() => setStep("import")}
               />
               <DialogueSelect
+                className="shadow-none hover:shadow-none active:shadow-none"
                 icon={UserPlus}
                 title="Create manual"
                 description="Add individual user accounts one at a time."

@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.v1.routes.Auth import ACCESS_COOKIE_NAME
@@ -117,10 +117,37 @@ async def create_classwork_with_assignments(
 @router.get("/my-classworks", response_model=List[ClassworkResponse])
 def get_my_classworks(
     academic_period_id: Optional[int] = Query(None),
+    academic_year_id: Optional[int] = Query(None),
     staff_id: str = Depends(get_staff_id),
+    current_user: dict = Depends(require_role("teacher", "admin")),
     db: Session = Depends(get_db),
 ):
-    return teacher_classworks(staff_id, db, academic_period_id)
+    from app.models.academic.AcademicPeriod import AcademicPeriod
+    from app.services.academic.AcademicYearService import is_academic_year_authorized
+
+    if academic_year_id is not None:
+        if current_user.get("role") != "admin" and not is_academic_year_authorized(
+            db, academic_year_id, current_user, role="teacher", staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
+    if academic_period_id is not None:
+        period = db.get(AcademicPeriod, academic_period_id)
+        if not period:
+            raise HTTPException(status_code=404, detail="Academic period not found")
+        if academic_year_id is not None and period.academic_year_id != academic_year_id:
+            raise HTTPException(status_code=400, detail="Academic period does not belong to specified academic year")
+        if current_user.get("role") != "admin" and not is_academic_year_authorized(
+            db, period.academic_year_id, current_user, role="teacher", staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
+    return teacher_classworks(
+        staff_id=staff_id,
+        db=db,
+        academic_period_id=academic_period_id,
+        academic_year_id=academic_year_id,
+    )
 
 
 @router.get("/classwork/{classwork_id}", response_model=ClassworkResponse)
@@ -231,20 +258,68 @@ def get_cw_assignment(
 @router.get("/teacher/classes")
 def get_teacher_classes(
     staff_id: str = Depends(get_staff_id),
-    academic_period_id: int | None = None,
-    db: Session = Depends(get_db)
+    academic_period_id: int | None = Query(None),
+    academic_year_id: int | None = Query(None),
+    current_user: dict = Depends(require_role("teacher", "admin")),
+    db: Session = Depends(get_db),
 ):
-    return teacher_classes(staff_id, db, academic_period_id)
+    from app.models.academic.AcademicPeriod import AcademicPeriod
+    from app.services.academic.AcademicYearService import is_academic_year_authorized
+
+    if academic_year_id is not None:
+        if current_user.get("role") != "admin" and not is_academic_year_authorized(
+            db, academic_year_id, current_user, role="teacher", staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
+    if academic_period_id is not None:
+        period = db.get(AcademicPeriod, academic_period_id)
+        if not period:
+            raise HTTPException(status_code=404, detail="Academic period not found")
+        if academic_year_id is not None and period.academic_year_id != academic_year_id:
+            raise HTTPException(status_code=400, detail="Academic period does not belong to specified academic year")
+        if current_user.get("role") != "admin" and not is_academic_year_authorized(
+            db, period.academic_year_id, current_user, role="teacher", staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
+    return teacher_classes(
+        staff_id=staff_id,
+        db=db,
+        academic_period_id=academic_period_id,
+        academic_year_id=academic_year_id,
+    )
 
 
 @router.get("/teacher/class/{class_id}/subject/{subject_id}/assignments", response_model=List[ClassworkAssignmentResponse])
 def get_teacher_assignments_for_class_subject(
     class_id: int,
     subject_id: int,
+    academic_period_id: int | None = Query(None),
     staff_id: str = Depends(get_staff_id),
+    current_user: dict = Depends(require_role("teacher", "admin")),
     db: Session = Depends(get_db),
 ):
-    return teacher_assignments_for_class_subject_service(class_id, subject_id, staff_id, db)
+    from app.models.academic.AcademicPeriod import AcademicPeriod
+    from app.models.academic.Class_ import Class
+    from app.services.academic.AcademicYearService import is_academic_year_authorized
+
+    class_obj = db.get(Class, class_id)
+    if not class_obj:
+        raise HTTPException(status_code=404, detail="Class not found")
+    if current_user.get("role") != "admin" and not is_academic_year_authorized(
+        db, class_obj.academic_year_id, current_user, role="teacher", staff_id=staff_id
+    ):
+        raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
+    if academic_period_id is not None:
+        period = db.get(AcademicPeriod, academic_period_id)
+        if not period:
+            raise HTTPException(status_code=404, detail="Academic period not found")
+        if period.academic_year_id != class_obj.academic_year_id:
+            raise HTTPException(status_code=400, detail="Academic period does not belong to specified class academic year")
+
+    return teacher_assignments_for_class_subject_service(class_id, subject_id, staff_id, db, academic_period_id=academic_period_id)
 
 
 @router.get("/my-assignments")

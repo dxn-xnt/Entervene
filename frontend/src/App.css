@@ -599,7 +599,6 @@ textarea::placeholder,
 }
 
 /* The Admin user import dialog uses rounded content and upload surfaces. */
-[data-admin-user-import],
 [data-admin-user-import] [data-import-surface] {
   border-radius: var(--radius) !important;
 }

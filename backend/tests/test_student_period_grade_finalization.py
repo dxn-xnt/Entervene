@@ -108,6 +108,7 @@ def finalization_context():
         start_date=date(2025, 6, 1),
         end_date=date(2025, 8, 31),
         academic_year_id=year.academic_year_id,
+        is_active=False,
     )
     target_period = AcademicPeriod(
         period_name="Quarter 2",
@@ -118,6 +119,7 @@ def finalization_context():
         start_date=date(2025, 9, 1),
         end_date=date(2025, 11, 30),
         academic_year_id=year.academic_year_id,
+        is_active=True,
     )
     class_ = Class(
         section_name="Einstein",
@@ -234,7 +236,7 @@ def test_finalizes_existing_period_grade_with_payload_grade(finalization_context
         json={"final_period_grade": 86.5, "passing_grade": 75},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     body = response.json()
     assert body["period_grade_id"] == period_grade.period_grade_id
     assert body["final_period_grade"] == 86.5
@@ -344,6 +346,25 @@ def test_students_cannot_finalize_period_grades(finalization_context):
 
     assert response.status_code == 403
     assert finalization_context["db"].get(StudentPeriodGrade, period_grade.period_grade_id).is_finalized is False
+
+
+def test_future_period_grade_cannot_be_finalized(finalization_context):
+    context = finalization_context
+    context["source_period"].is_active = True
+    context["target_period"].is_active = False
+    context["db"].commit()
+    period_grade = add_period_grade(context)
+
+    response = context["client"].post(
+        finalize_url(period_grade.period_grade_id),
+        json={"final_period_grade": 86.5},
+    )
+
+    assert response.status_code == 403
+    assert "not yet active" in response.json()["detail"]
+    context["db"].refresh(period_grade)
+    assert period_grade.is_finalized is False
+    assert period_grade.final_period_grade is None
 
 
 def test_missing_period_grade_returns_404(finalization_context):

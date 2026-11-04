@@ -84,6 +84,8 @@ export type OfficialSectionOption = {
   has_class: boolean;
   class_id?: number | null;
   class_status?: string | null;
+  adviser_staff_id?: string | null;
+  adviser_name?: string | null;
 };
 
 export type ClassListAdviser = AdviserOption;
@@ -193,6 +195,7 @@ export type TeacherAdvisoryClassListItem = {
   section_name: string;
   academic_level: string;
   academic_year: string;
+  academic_year_id?: number | null;
   class_status: string;
   is_archived: boolean;
   student_count: number;
@@ -225,6 +228,7 @@ export type TeacherAdvisoryClassDetailResponse = {
   section_name: string;
   academic_level: string;
   academic_year: string;
+  academic_year_id?: number | null;
   class_status: string;
   is_archived: boolean;
   created_at: string | null;

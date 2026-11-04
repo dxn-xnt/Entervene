@@ -22,7 +22,6 @@ import AddPathwayModal from "./forms/add-pathway";
 import ConfirmGeneralAverageModal, {
   type GeneralAverageAction,
 } from "./forms/confirm-general-average-modal";
-import OfficialSectionsSettings from "./official-sections-settings";
 
 import {
   getAllSettings,
@@ -750,15 +749,6 @@ export default function AdminSystemSettings() {
                               : "Loading passing grade status..."}
                       </p>
 
-                      {!averagePolicy?.configured && averagePolicy ? (
-                        <Button
-                          variant="outline"
-                          disabled={isSavingThresholds}
-                          onClick={() => setIsAveragePolicyModalOpen(true)}
-                        >
-                          Configure Passing Grade
-                        </Button>
-                      ) : null}
                     </div>
 
                     <div className="flex flex-col gap-4 col-span-3">
@@ -775,6 +765,16 @@ export default function AdminSystemSettings() {
                         </label>
                       </div>
                     </div>
+                    {!averagePolicy?.configured && averagePolicy ? (
+                      <Button
+                        variant="outline"
+                        className="col-span-full w-full"
+                        disabled={isSavingThresholds}
+                        onClick={() => setIsAveragePolicyModalOpen(true)}
+                      >
+                        Configure Passing Grade
+                      </Button>
+                    ) : null}
                   </div>
 
                   <Dialog
@@ -1281,15 +1281,6 @@ export default function AdminSystemSettings() {
                   </Table>
                 </Card.Content>
               </Card>
-              {scopeConfigYearId && !isLoadingScopes && (
-                <OfficialSectionsSettings
-                  key={scopeConfigYearId}
-                  academicYearId={Number(scopeConfigYearId)}
-                  levels={academicLevels}
-                  pathways={pathways}
-                  pathwayScopes={pathwayScopes}
-                />
-              )}
 
               {/* Teacher Workload Caps */}
               <Card className="@container/card w-full">
@@ -1408,7 +1399,7 @@ export default function AdminSystemSettings() {
                         <div className="flex items-center gap-2 mb-1">
                           <Badge
                             variant="secondary"
-                            className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-yellow-300 border-1 border-black p-0 text-xs font-bold"
+                            className="inline-flex items-center justify-center h-6 w-6 rounded-full border-1 border-border p-0 text-xs font-bold"
                           >
                             {s.n}
                           </Badge>

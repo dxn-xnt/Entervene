@@ -186,7 +186,7 @@ export default function AddClassModal({
 
   if (mode === "choice") {
     return (
-      <Dialog.Content size="lg">
+      <Dialog.Content size="2xl">
         <Dialog.Header asChild>
           <div className="flex items-center justify-between w-full">
             <Text as="h5" className="font-sans text-xl font-bold">Add New Classes</Text>
@@ -196,6 +196,7 @@ export default function AddClassModal({
         <section className={`grid gap-4 p-4 ${canSetupFromPreviousYear ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
           {canSetupFromPreviousYear && (
             <DialogueSelect
+              className="shadow-none hover:shadow-none active:shadow-none"
               icon={CalendarSync}
               title="Set Up from Previous Year"
               description="Reuse section names and optionally carry forward classes or advisers from another academic year."
@@ -203,6 +204,7 @@ export default function AddClassModal({
             />
           )}
           <DialogueSelect
+            className="shadow-none hover:shadow-none active:shadow-none"
             icon={Download}
             title="Import from File"
             description="Import multiple class sections and optional student assignments for one selected grade level using a CSV file."
@@ -210,6 +212,7 @@ export default function AddClassModal({
           />
 
           <DialogueSelect
+            className="shadow-none hover:shadow-none active:shadow-none"
             icon={UserPlus}
             title="Create Manually"
             description="Add individual class sections, assign advisers, and manage students step by step."
@@ -233,10 +236,10 @@ export default function AddClassModal({
     : mode === "setup_year"
       ? (setupYearStep === "confirm" ? "Confirm Academic-Year Setup" : "Set Up from Previous Year")
       : manualStep === "details"
-      ? mode === "manual" ? "Add Class Details" : "Import Class Details"
-      : manualStep === "assignment"
-        ? "Assign Students"
-        : "Review Class Setup";
+        ? mode === "manual" ? "Add Class Details" : "Import Class Details"
+        : manualStep === "assignment"
+          ? "Assign Students"
+          : "Review Class Setup";
 
   const stepCountText = (saveSuccess || (mode === "setup_year" && setupYearStep === "success"))
     ? null
@@ -245,7 +248,7 @@ export default function AddClassModal({
       : `Step ${stepIndex} of 3`;
 
   return (
-    <Dialog.Content size="lg">
+    <Dialog.Content size="xl">
       <Dialog.Header asChild>
         <div className="flex items-center justify-between w-full">
           <Text as="h5" className="font-sans text-xl font-bold">{dialogTitle}</Text>
@@ -255,7 +258,7 @@ export default function AddClassModal({
         </div>
       </Dialog.Header>
 
-      <section className="flex flex-col gap-4 p-4">
+      <section className={mode === "setup_year" ? "contents" : "flex flex-col gap-4 p-4"}>
         {saveSuccess ? (
           <ManualSaveSuccess
             result={saveSuccess}
@@ -432,22 +435,22 @@ function ManualReview({ setup, assignmentState, skippedStudents, onSaved, onBack
             pathway_id: null,
             pathway: section.pathway && section.pathway !== "general"
               ? {
-                  id: 0,
-                  code: section.pathway,
-                  name: section.pathway,
-                  is_enabled: true,
-                  sort_order: 1,
-                }
+                id: 0,
+                code: section.pathway,
+                name: section.pathway,
+                is_enabled: true,
+                sort_order: 1,
+              }
               : null,
             adviser: section.adviserName
               ? {
-                  staff_id: section.adviserStaffId,
-                  first_name: section.adviserName,
-                  middle_name: null,
-                  last_name: "",
-                  suffix: null,
-                  avatar: null,
-                }
+                staff_id: section.adviserStaffId,
+                first_name: section.adviserName,
+                middle_name: null,
+                last_name: "",
+                suffix: null,
+                avatar: null,
+              }
               : null,
             student_count: students.length,
             female_count: femaleCount,

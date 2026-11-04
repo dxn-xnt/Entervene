@@ -20,6 +20,7 @@ import type {
   UnassignedClassStudentsResponse,
   ValidateClassImportResponse,
 } from "@/types/adminClasses";
+import type { TeacherClasswork } from "@/types/classwork";
 import { startProgress, doneProgress } from "@/hooks/use-navigation-progress";
 
 export const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
@@ -688,26 +689,61 @@ export async function getMySubjects(academicPeriodId?: number): Promise<StudentS
   return (await response.json()) as StudentSubjectItem[];
 }
 
+import type { ActiveClassworkInfo } from "@/components/subject-card";
+
 export type TeacherClassItem = {
-  subject_load_id?: number;
+  subject_load_id: number;
   class_id: number;
   subject_id: number;
   section_name: string;
   subject_name: string;
+  subject_codename?: string | null;
   grade_level?: string;
   student_count?: number;
   academic_period_id?: number;
+  academic_year_id?: number;
+  total_classworks?: number;
+  progress?: number;
+  active_classwork?: ActiveClassworkInfo | null;
+  active_classworks?: ActiveClassworkInfo[];
 };
 
-export async function getTeacherClasses(academicPeriodId?: number): Promise<TeacherClassItem[]> {
-  const query = academicPeriodId ? `?academic_period_id=${academicPeriodId}` : "";
+export async function getTeacherClasses(
+  academicPeriodId?: number | null,
+  academicYearId?: number | null,
+): Promise<TeacherClassItem[]> {
+  const params = new URLSearchParams();
+  if (academicPeriodId) params.set("academic_period_id", String(academicPeriodId));
+  if (academicYearId) params.set("academic_year_id", String(academicYearId));
+  const query = params.toString() ? `?${params.toString()}` : "";
   const response = await apiFetch(`/api/v1/classwork-assignments/teacher/classes${query}`);
 
   if (!response.ok) {
-    throw new Error("Unable to load teacher classes. Please try again.");
+    const data: unknown = await response.json().catch(() => null);
+    const detail = (data as { detail?: string })?.detail;
+    throw new Error(detail || "Unable to load teacher classes. Please try again.");
   }
 
   return (await response.json()) as TeacherClassItem[];
+}
+
+export async function getTeacherClassworks(
+  academicPeriodId?: number | null,
+  academicYearId?: number | null,
+): Promise<TeacherClasswork[]> {
+  const params = new URLSearchParams();
+  if (academicPeriodId) params.set("academic_period_id", String(academicPeriodId));
+  if (academicYearId) params.set("academic_year_id", String(academicYearId));
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await apiFetch(`/api/v1/classwork-assignments/my-classworks${query}`);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    const detail = (data as { detail?: string })?.detail;
+    throw new Error(detail || "Unable to load your classworks.");
+  }
+
+  return (await response.json()) as TeacherClasswork[];
 }
 
 export type GradebookCategoryHeader = {
@@ -920,10 +956,21 @@ export async function bulkSendGradesToAdviser(
   return (await response.json()) as BulkSendGradesToAdviserResponse;
 }
 
-export async function getTeacherGradebook(classId: number | string, subjectId: number | string, academicPeriodId?: number): Promise<StudentGradebookResponse> {
-  const url = academicPeriodId
-    ? `/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/gradebook?academic_period_id=${academicPeriodId}`
-    : `/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/gradebook`;
+export async function getTeacherGradebook(
+  classId: number | string,
+  subjectId: number | string,
+  academicPeriodId?: number,
+  academicYearId?: number
+): Promise<StudentGradebookResponse> {
+  const params = new URLSearchParams();
+  if (academicPeriodId) {
+    params.set("academic_period_id", String(academicPeriodId));
+  }
+  if (academicYearId) {
+    params.set("academic_year_id", String(academicYearId));
+  }
+  const queryString = params.toString() ? `?${params.toString()}` : "";
+  const url = `/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/gradebook${queryString}`;
   const response = await apiFetch(url);
 
   if (!response.ok) {
@@ -937,9 +984,15 @@ export async function getTeacherGradebook(classId: number | string, subjectId: n
 export async function exportTeacherClassRecord(
   classId: number | string,
   subjectId: number | string,
-  academicPeriodId: number
+  academicPeriodId: number,
+  academicYearId?: number
 ): Promise<{ blob: Blob; filename: string }> {
-  const url = `/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/export-class-record?academic_period_id=${academicPeriodId}`;
+  const params = new URLSearchParams();
+  params.set("academic_period_id", String(academicPeriodId));
+  if (academicYearId) {
+    params.set("academic_year_id", String(academicYearId));
+  }
+  const url = `/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/export-class-record?${params.toString()}`;
   const response = await apiFetch(url);
 
   if (!response.ok) {
@@ -989,9 +1042,16 @@ export async function exportTeacherClassRecordWorkbook(
 
 export async function getTeacherAvailablePeriods(
   classId: number,
-  subjectId: number
+  subjectId: number,
+  academicYearId?: number
 ): Promise<StudentRecordPeriodOptionsResponse> {
-  const response = await apiFetch(`/api/v1/student-records/teacher/periods?class_id=${encodeURIComponent(String(classId))}&subject_id=${encodeURIComponent(String(subjectId))}`);
+  const params = new URLSearchParams();
+  params.set("class_id", String(classId));
+  params.set("subject_id", String(subjectId));
+  if (academicYearId) {
+    params.set("academic_year_id", String(academicYearId));
+  }
+  const response = await apiFetch(`/api/v1/student-records/teacher/periods?${params.toString()}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch available periods: ${response.statusText}`);
   }
@@ -1000,9 +1060,15 @@ export async function getTeacherAvailablePeriods(
 
 export async function getTeacherTermSummary(
   classId: number,
-  subjectId: number
+  subjectId: number,
+  academicYearId?: number
 ): Promise<TermGradeSummaryResponse> {
-  const response = await apiFetch(`/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/term-summary`);
+  const params = new URLSearchParams();
+  if (academicYearId) {
+    params.set("academic_year_id", String(academicYearId));
+  }
+  const queryString = params.toString() ? `?${params.toString()}` : "";
+  const response = await apiFetch(`/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/term-summary${queryString}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch term summary: ${response.statusText}`);
   }
@@ -1567,13 +1633,20 @@ export async function getClassStudents(
   return (await response.json()) as ClassStudentListResponse;
 }
 
-export async function getTeacherAdvisoryClasses(academicPeriodId?: number): Promise<TeacherAdvisoryClassListItem[]> {
-  const query = academicPeriodId ? `?academic_period_id=${academicPeriodId}` : "";
+export async function getTeacherAdvisoryClasses(
+  academicPeriodId?: number | null,
+  academicYearId?: number | null,
+): Promise<TeacherAdvisoryClassListItem[]> {
+  const params = new URLSearchParams();
+  if (academicPeriodId) params.set("academic_period_id", String(academicPeriodId));
+  if (academicYearId) params.set("academic_year_id", String(academicYearId));
+  const query = params.toString() ? `?${params.toString()}` : "";
   const response = await apiFetch(`/api/v1/classes/teacher/advisory${query}`);
 
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null);
-    throw new Error(teacherAdvisoryClassErrorMessage(data, response.status, "Unable to load advisory classes."));
+    const detail = (data as { detail?: string })?.detail;
+    throw new Error(teacherAdvisoryClassErrorMessage(data, response.status, detail || "Unable to load advisory classes."));
   }
 
   return (await response.json()) as TeacherAdvisoryClassListItem[];
@@ -1911,6 +1984,12 @@ export async function updateOfficialSection(id: number, payload: { is_active?: b
   const response = await apiFetch(`/api/v1/classes/official-sections/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   if (!response.ok) throw new Error(apiErrorMessage(await response.json().catch(() => null), "Unable to update official section."));
   return (await response.json()) as OfficialSectionOption;
+}
+
+export async function deleteOfficialSection(id: number): Promise<{ action: string; message: string }> {
+  const response = await apiFetch(`/api/v1/classes/official-sections/${id}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(apiErrorMessage(await response.json().catch(() => null), "Unable to delete official section."));
+  return (await response.json()) as { action: string; message: string };
 }
 
 export type AcademicYearSetupMode =
@@ -2746,6 +2825,7 @@ export type OverviewResponse = {
     period_id: number | null;
     period_name: string;
     academic_year: string;
+    academic_year_id?: number | null;
     is_active: boolean;
   };
   cards: OverviewCardData[];
@@ -3107,6 +3187,7 @@ export interface TeacherDashboardHealthResponse {
     period_id: number | null;
     period_name: string;
     academic_year: string;
+    academic_year_id?: number | null;
     is_active: boolean;
   };
   cards?: OverviewCardData[];
@@ -3146,6 +3227,7 @@ export interface TeacherDashboardHealthResponse {
 }
 
 export async function getTeacherDashboardHealth(params: {
+  academic_year_id?: number;
   academic_period_id?: number;
   class_id?: number;
   subject_id?: number;
@@ -3153,6 +3235,7 @@ export async function getTeacherDashboardHealth(params: {
   dashboard_subject_id?: number;
 } = {}): Promise<TeacherDashboardHealthResponse> {
   const query = new URLSearchParams();
+  if (params.academic_year_id) query.set("academic_year_id", String(params.academic_year_id));
   if (params.academic_period_id) query.set("academic_period_id", String(params.academic_period_id));
   if (params.class_id) query.set("class_id", String(params.class_id));
   if (params.subject_id) query.set("subject_id", String(params.subject_id));

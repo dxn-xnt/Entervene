@@ -1,3 +1,6 @@
+from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.Class_ import Class
+from app.services.academic.AcademicYearService import is_academic_year_authorized
 from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -47,7 +50,12 @@ from app.services.classes.ExistingClassDistributionService import preview_existi
 from app.schemas.OfficialSection import OfficialSectionCreate, OfficialSectionUpdate, OfficialSectionRead, OfficialSectionList
 from app.schemas.ClassSetup import AcademicYearSetupRequest, AcademicYearSetupResponse
 from app.services.classes.ClassSetupService import setup_academic_year
-from app.services.classes.OfficialSectionService import list_official_sections, create_official_section, update_official_section
+from app.services.classes.OfficialSectionService import (
+    list_official_sections,
+    create_official_section,
+    update_official_section,
+    delete_official_section,
+)
 
 # CLASS MANAGEMENT FLOW
 # 1. The admin frontend sends a request to one of the endpoints in this file.
@@ -98,6 +106,15 @@ def edit_official_section(
     db: Session = Depends(get_db),
 ):
     return update_official_section(db, section_id, payload)
+
+
+@router.delete("/official-sections/{section_id}")
+def remove_official_section(
+    section_id: int,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return delete_official_section(db, section_id)
 
 
 @router.get("", response_model=ClassListResponse)
@@ -267,28 +284,69 @@ def get_class_students(
 @router.get("/teacher/advisory", response_model=list[TeacherAdvisoryClassListItem])
 def list_teacher_advisory_classes(
     staff_id: str = Depends(get_staff_id),
-    academic_period_id: int | None = None,
+    academic_period_id: int | None = Query(None),
+    academic_year_id: int | None = Query(None),
+    current_user: dict = Depends(require_role("teacher", "admin")),
     db: Session = Depends(get_db),
 ):
-    return list_teacher_advisory_classes_data(db=db, staff_id=staff_id, academic_period_id=academic_period_id)
+    if academic_year_id is not None:
+        if current_user.get("role") != "admin" and not is_academic_year_authorized(
+            db, academic_year_id, current_user, role="teacher", staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
+    if academic_period_id is not None:
+        period = db.get(AcademicPeriod, academic_period_id)
+        if not period:
+            raise HTTPException(status_code=404, detail="Academic period not found")
+        if academic_year_id is not None and period.academic_year_id != academic_year_id:
+            raise HTTPException(status_code=400, detail="Academic period does not belong to specified academic year")
+        if current_user.get("role") != "admin" and not is_academic_year_authorized(
+            db, period.academic_year_id, current_user, role="teacher", staff_id=staff_id
+        ):
+            raise HTTPException(status_code=403, detail="Not authorized to access this academic year")
+
+    return list_teacher_advisory_classes_data(
+        db=db,
+        staff_id=staff_id,
+        academic_period_id=academic_period_id,
+        academic_year_id=academic_year_id,
+    )
 
 
 @router.get("/teacher/advisory/{class_id}", response_model=TeacherAdvisoryClassDetailResponse)
 def get_teacher_advisory_class_detail(
     class_id: int,
     staff_id: str = Depends(get_staff_id),
+    current_user: dict = Depends(require_role("teacher", "admin")),
     db: Session = Depends(get_db),
 ):
-    return get_teacher_advisory_class_detail_data(db=db, class_id=class_id, staff_id=staff_id)
+    return get_teacher_advisory_class_detail_data(
+        db=db,
+        class_id=class_id,
+        staff_id=staff_id,
+        current_user=current_user,
+    )
 
 
 @router.get("/teacher/advisory/{class_id}/grades", response_model=TeacherAdvisoryClassGradesResponse)
 def get_teacher_advisory_class_grades(
     class_id: int,
-    academic_period_id: int | None = None,
+    academic_period_id: int | None = Query(None),
+    academic_year_id: int | None = Query(None),
     staff_id: str = Depends(get_staff_id),
+    current_user: dict = Depends(require_role("teacher", "admin")),
     db: Session = Depends(get_db),
 ):
+    if current_user.get("role") != "admin":
+        class_obj = db.get(Class, class_id)
+        if class_obj and not is_academic_year_authorized(
+            db, class_obj.academic_year_id, current_user, role="teacher", staff_id=staff_id
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to view advisory grades for this class.",
+            )
     return get_teacher_advisory_class_grades_data(
         db=db,
         class_id=class_id,

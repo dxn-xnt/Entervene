@@ -145,7 +145,7 @@ def test_historical_and_archived_scopes_are_read_only(authz_context):
     assert archived_create.value.status_code == 403
 
 
-def test_future_period_planning_in_active_year_remains_allowed(authz_context):
+def test_future_period_live_activity_writes_are_rejected(authz_context):
     context = authz_context
     db = context["db"]
     current = context["period"]
@@ -173,12 +173,31 @@ def test_future_period_planning_in_active_year_remains_allowed(authz_context):
     ))
     db.commit()
 
-    created = activity.create_activity(
-        db,
-        context["owner"].staff_id,
-        _create_payload(context, period_id=future.academic_period_id, title="Planned Q2 activity"),
-    )
-    assert created["classwork_id"]
+    with pytest.raises(HTTPException) as create_error:
+        activity.create_activity(
+            db,
+            context["owner"].staff_id,
+            _create_payload(context, period_id=future.academic_period_id, title="Future Q2 activity"),
+        )
+    assert create_error.value.status_code == 403
+    assert "not yet active" in create_error.value.detail
+
+    context["assignment"].academic_period_id = future.academic_period_id
+    db.commit()
+    with pytest.raises(HTTPException) as score_error:
+        activity.bulk_update_activity_scores(
+            db,
+            context["owner"].staff_id,
+            context["classwork"].classwork_id,
+            _score_payload(context, context["student"]),
+        )
+    assert score_error.value.status_code == 403
+    assert "not yet active" in score_error.value.detail
+
+    with pytest.raises(HTTPException) as delete_error:
+        activity.delete_activity(db, context["owner"].staff_id, context["classwork"].classwork_id)
+    assert delete_error.value.status_code == 403
+    assert "not yet active" in delete_error.value.detail
 
 
 def test_future_academic_year_activity_creation_is_read_only(authz_context):

@@ -26,6 +26,8 @@ class OfficialSectionRead(BaseModel):
     has_class: bool = False
     class_id: int | None = None
     class_status: str | None = None
+    adviser_staff_id: str | None = None
+    adviser_name: str | None = None
 
 
 class OfficialSectionList(BaseModel):

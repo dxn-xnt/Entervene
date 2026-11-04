@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { ChevronLeft, FileEdit, Clock, HelpCircle, Award, AlertCircle, RotateCcw } from "lucide-react";
+import { Clock, HelpCircle, Award, AlertCircle, RotateCcw } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
@@ -95,15 +95,6 @@ const StudentQuizView = () => {
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => navigate(origin.path)}
-                        className="text-black/70 hover:text-black cursor-pointer p-1"
-                        aria-label="Go back"
-                      >
-                        <ChevronLeft size={22} />
-                      </button>
-                      <FileEdit size={20} />
-                      <h1 className="text-xl md:text-2xl font-bold">{quiz.title}</h1>
                       {isCompleted && (
                         <Badge variant="surface" className="ml-2 bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold">
                           Completed
@@ -129,6 +120,7 @@ const StudentQuizView = () => {
 
                       {quiz.can_submit ? (
                         <Button
+                          autoIcon={false}
                           onClick={() => navigate(quizPathWithContext(routes.student.quizTake.replace(":assignmentId", String(aid)), location.search))}
                           className="hover:shadow-none transition-all cursor-pointer font-bold"
                         >
@@ -153,7 +145,7 @@ const StudentQuizView = () => {
 
                     {/* Stats Overview Grid */}
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
-                      <Card className="bg-[#F6E9B2] flex flex-col items-center justify-center p-6 text-center">
+                      <Card className="bg-white flex flex-col items-center justify-center p-6 text-center">
                         <HelpCircle className="w-6 h-6 mb-2 text-black/70" />
                         <span className="text-3xl font-extrabold">{quiz.questions.length}</span>
                         <span className="text-xs font-semibold text-black/70 uppercase tracking-wider mt-1">
@@ -161,7 +153,7 @@ const StudentQuizView = () => {
                         </span>
                       </Card>
 
-                      <Card className="bg-[#F6E9B2] flex flex-col items-center justify-center p-6 text-center">
+                      <Card className="bg-white flex flex-col items-center justify-center p-6 text-center">
                         <Clock className="w-6 h-6 mb-2 text-black/70" />
                         <span className="text-3xl font-extrabold">
                           {quiz.duration_minutes ? `${quiz.duration_minutes}m` : "∞"}
@@ -171,7 +163,7 @@ const StudentQuizView = () => {
                         </span>
                       </Card>
 
-                      <Card className="bg-[#F6E9B2] flex flex-col items-center justify-center p-6 text-center">
+                      <Card className="bg-white flex flex-col items-center justify-center p-6 text-center">
                         <Award className="w-6 h-6 mb-2 text-black/70" />
                         <span className="text-3xl font-extrabold">
                           {quiz.total_points != null ? quiz.total_points : quiz.questions.reduce((sum, q) => sum + (q.points || 1), 0)}
@@ -181,7 +173,7 @@ const StudentQuizView = () => {
                         </span>
                       </Card>
 
-                      <Card className="bg-[#F6E9B2] flex flex-col items-center justify-center p-6 text-center">
+                      <Card className="bg-white flex flex-col items-center justify-center p-6 text-center">
                         <RotateCcw className="w-6 h-6 mb-2 text-black/70" />
                         <span className="text-3xl font-extrabold">
                           {quiz.attempt_count} / {quiz.max_attempts}

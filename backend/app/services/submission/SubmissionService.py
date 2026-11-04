@@ -823,6 +823,12 @@ def grade_student_submission(
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     assignment = teacher_owns_assignment(submission.classwork_assignment_id, staff_id, db, write_required=True)
+    SubjectLoadAuthorizationService.assert_context_writable(
+        db,
+        class_id=assignment.class_id,
+        academic_period_id=assignment.academic_period_id,
+        block_future_period_in_current_year=True,
+    )
     if not assignment_allows_student(assignment, submission.student_id):
         raise HTTPException(status_code=403, detail="Student is not assigned to this activity")
     ensure_remedial_period_open(db, assignment, submission.student_id)

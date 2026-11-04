@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, Link, useSearchParams, Navigate } from "react-router-dom";
-import { BookOpen } from "lucide-react";
+import { BookOpen, TrendingUp } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
@@ -11,6 +11,7 @@ import IconContainer from "@/components/icon-container";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
+import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import {
   useTeacherActiveInterventionShortcut,
   useTeacherCandidateShortcut,
@@ -553,8 +554,7 @@ function TeacherCurrentTermSectionPredictions() {
     if (!lessonPerformance?.subjects.length) return undefined;
     const targetId = routeSubjectId ?? assignedScopes[0]?.subject_id;
     if (targetId != null) {
-      const match = lessonPerformance.subjects.find((s) => s.subject_id === targetId);
-      if (match) return match;
+      return lessonPerformance.subjects.find((s) => s.subject_id === targetId);
     }
     return lessonPerformance.subjects[0];
   }, [lessonPerformance, routeSubjectId, assignedScopes]);
@@ -717,6 +717,7 @@ function TeacherCurrentTermSectionPredictions() {
               hideGradeFilter
               hideSubjectFilter
               hidePeriodFilter
+              simplifiedTeacherRisk
               riskSummary={data.risk_summary}
               onSubjectChange={() => undefined}
               onRiskChange={setRiskLevel}
@@ -754,14 +755,11 @@ function TeacherCurrentTermSectionPredictions() {
                     </Button>
                   </div>
                 ) : rows.length === 0 ? (
-                  <Card className="flex flex-col items-center justify-center gap-2 p-8 text-center border-2 border-black bg-white">
-                    <p className="text-lg font-bold text-gray-900">
-                      No predictions available for {subjectDisplayName} in {sectionName}.
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1 max-w-md mx-auto">
-                      There are currently no generated predictions for this subject and section in the selected term.
-                    </p>
-                  </Card>
+                  <TeacherEmptyState
+                    icon={<TrendingUp />}
+                    title={`No predictions available for ${subjectDisplayName} in ${sectionName}`}
+                    description="There are currently no generated predictions for this subject and section in the selected term."
+                  />
                 ) : (
                   <PredictionTable
                     items={data.items}
@@ -772,6 +770,7 @@ function TeacherCurrentTermSectionPredictions() {
                     hideSubject
                     hidePagination
                     currentTerm
+                    simplifiedTeacherRisk
                     onSort={() => undefined}
                     onPageChange={() => undefined}
                     onRowClick={(predictionId) =>
@@ -803,7 +802,9 @@ function TeacherCurrentTermSectionPredictions() {
                             </Empty.Icon>
                             <Empty.Title className="text-base! font-medium">
                               {emptyLessonMessage(!lessonSubject
-                                ? "No subjects assigned for this academic period."
+                                ? matchingScope
+                                  ? "No lesson performance data is available for this assigned subject yet."
+                                  : "No subjects assigned for this academic period."
                                 : lessonSubject.coverage.scored_mapped_response_count === 0
                                   ? "No scored quiz answers linked to lessons for this subject."
                                   : `Not enough evidence yet. Each lesson needs scores from at least ${lessonPerformance?.policy.min_learners ?? 3} learners across ${lessonPerformance?.policy.min_questions ?? 3} questions.`)}

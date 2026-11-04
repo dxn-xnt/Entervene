@@ -8,18 +8,36 @@ from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.OfficialSection import OfficialSection
+from app.models.people.AcademicStaff import AcademicStaff
 from app.services.classes.ClassShared import normalized_text, readable_text
 from app.services.pathways.PathwayScopeService import resolve_pathway_scope
 from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 
 
 def section_read(db: Session, section: OfficialSection) -> dict:
-    existing_class = db.query(Class.class_id, Class.class_status).filter(
-        Class.academic_year_id == section.academic_year_id,
-        Class.academic_level_id == section.academic_level_id,
-        func.lower(Class.section_name) == section.normalized_name,
-    ).first()
+    existing_class = (
+        db.query(
+            Class.class_id,
+            Class.class_status,
+            Class.adviser_staff_id,
+            AcademicStaff.first_name,
+            AcademicStaff.middle_name,
+            AcademicStaff.last_name,
+            AcademicStaff.suffix,
+        )
+        .outerjoin(AcademicStaff, Class.adviser_staff_id == AcademicStaff.staff_id)
+        .filter(
+            Class.academic_year_id == section.academic_year_id,
+            Class.academic_level_id == section.academic_level_id,
+            func.lower(Class.section_name) == section.normalized_name,
+        )
+        .first()
+    )
     has_class = existing_class is not None
+    adviser_name = None
+    if existing_class and existing_class[2]:
+        name_parts = [existing_class[3], existing_class[4], existing_class[5], existing_class[6]]
+        adviser_name = " ".join(part for part in name_parts if part)
     return {
         "id": section.id,
         "academic_year_id": section.academic_year_id,
@@ -32,6 +50,8 @@ def section_read(db: Session, section: OfficialSection) -> dict:
         "has_class": has_class,
         "class_id": existing_class[0] if existing_class else None,
         "class_status": existing_class[1] if existing_class else None,
+        "adviser_staff_id": existing_class[2] if existing_class else None,
+        "adviser_name": adviser_name,
     }
 
 
@@ -147,3 +167,95 @@ def selected_official_section(db: Session, year_id: int, level_id: int, name: st
         raise HTTPException(status_code=422, detail="Select an active official section for this grade and academic year.")
     _validate_pathway(db, year_id, level_id, section.pathway_id)
     return section
+
+
+def get_or_create_official_section(db: Session, year_id: int, level_id: int, name: str, pathway_id: int | None = None) -> OfficialSection:
+    read_name = readable_text(name)
+    if not read_name:
+        raise HTTPException(status_code=422, detail="Section name is required.")
+    norm_name = normalized_text(read_name)
+    section = db.query(OfficialSection).filter(
+        OfficialSection.academic_year_id == year_id,
+        OfficialSection.academic_level_id == level_id,
+        OfficialSection.normalized_name == norm_name,
+    ).first()
+    if section is None:
+        _validate_pathway(db, year_id, level_id, pathway_id)
+        section = OfficialSection(
+            academic_year_id=year_id,
+            academic_level_id=level_id,
+            section_name=read_name,
+            normalized_name=norm_name,
+            pathway_id=pathway_id,
+            is_active=True,
+        )
+        db.add(section)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            section = db.query(OfficialSection).filter(
+                OfficialSection.academic_year_id == year_id,
+                OfficialSection.academic_level_id == level_id,
+                OfficialSection.normalized_name == norm_name,
+            ).first()
+            if section is None:
+                raise
+    else:
+        if not section.is_active:
+            section.is_active = True
+        if pathway_id is not None and section.pathway_id != pathway_id:
+            _validate_pathway(db, year_id, level_id, pathway_id)
+            section.pathway_id = pathway_id
+    _validate_pathway(db, year_id, level_id, section.pathway_id)
+    return section
+
+
+def delete_official_section(db: Session, section_id: int) -> dict:
+    section = db.get(OfficialSection, section_id)
+    if section is None:
+        raise HTTPException(status_code=404, detail="Official section not found.")
+    SubjectLoadAuthorizationService.assert_context_configurable(
+        db, academic_year_id=section.academic_year_id
+    )
+
+    class_ = db.query(Class).filter(
+        Class.academic_year_id == section.academic_year_id,
+        Class.academic_level_id == section.academic_level_id,
+        func.lower(Class.section_name) == section.normalized_name,
+    ).first()
+
+    if class_ is not None:
+        from app.models.academic.StudentClass import StudentClass
+        from app.models.academic.StudentGrade import StudentGrade
+        from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+        from app.models.academic.SubjectLoad import SubjectLoad
+
+        has_grades = db.query(StudentGrade.grade_id).filter(StudentGrade.class_id == class_.class_id).first() is not None
+        has_assignments = db.query(ClassworkAssignment.classwork_assignment_id).filter(ClassworkAssignment.class_id == class_.class_id).first() is not None
+
+        if has_grades or has_assignments:
+            class_.class_status = "archived"
+            section.is_active = False
+            db.commit()
+            return {
+                "action": "archived",
+                "message": f"Section '{section.section_name}' has active academic records and was safely archived.",
+            }
+        else:
+            db.query(StudentClass).filter(StudentClass.class_id == class_.class_id).delete(synchronize_session=False)
+            db.query(SubjectLoad).filter(SubjectLoad.class_id == class_.class_id).delete(synchronize_session=False)
+            db.delete(class_)
+            db.delete(section)
+            db.commit()
+            return {
+                "action": "deleted",
+                "message": f"Section '{section.section_name}' was successfully deleted.",
+            }
+    else:
+        db.delete(section)
+        db.commit()
+        return {
+            "action": "deleted",
+            "message": f"Section '{section.section_name}' was successfully deleted.",
+        }

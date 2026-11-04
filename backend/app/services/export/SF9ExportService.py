@@ -28,6 +28,7 @@ from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.settings.Setting import Setting
 from app.services.academic.SubstitutionService import _staff_full_name
+from app.services.academic.AcademicYearService import is_academic_year_authorized
 from app.services.classes.ClassQueryService import _student_full_name
 from app.services.student_record.StudentRecordService import get_performance_descriptor
 
@@ -94,6 +95,53 @@ def _get_school_settings(db: Session) -> dict[str, str]:
         "district": settings_rows.get("school_district") or settings_rows.get("district", "Medellin"),
         "principal_name": settings_rows.get("principal_name") or settings_rows.get("school_head", "Principal / School Head"),
     }
+
+
+def _require_enrolled_student(db: Session, class_obj: Class, student_id: uuid.UUID) -> Student:
+    student = db.get(Student, student_id)
+    enrollment = (
+        db.query(StudentClass.student_class_id)
+        .filter(
+            StudentClass.student_id == student_id,
+            StudentClass.class_id == class_obj.class_id,
+            StudentClass.academic_year_id == class_obj.academic_year_id,
+            func.lower(func.coalesce(StudentClass.enrollment_status, "enrolled")) == "enrolled",
+        )
+        .first()
+    )
+    if student is None or enrollment is None:
+        raise HTTPException(status_code=404, detail="Student not found in this advisory class.")
+    return student
+
+
+def _require_advisory_class(db: Session, class_id: int, staff_id: str) -> Class:
+    class_obj = db.get(Class, class_id)
+    if class_obj is None:
+        raise HTTPException(status_code=404, detail="Class section not found.")
+    if class_obj.adviser_staff_id != staff_id:
+        raise HTTPException(status_code=403, detail="You are not authorized as the adviser of this section.")
+    if not is_academic_year_authorized(
+        db, class_obj.academic_year_id, role="teacher", staff_id=staff_id
+    ):
+        raise HTTPException(status_code=403, detail="Not authorized to access this academic year.")
+    return class_obj
+
+
+def _student_attendance_records(
+    db: Session,
+    student: Student,
+    class_obj: Class,
+    academic_year: AcademicYear,
+) -> list[AttendanceRecord]:
+    query = db.query(AttendanceRecord).filter(
+        AttendanceRecord.student_id == student.student_id,
+        AttendanceRecord.class_id == class_obj.class_id,
+    )
+    if academic_year.start_date is not None:
+        query = query.filter(AttendanceRecord.date >= academic_year.start_date)
+    if academic_year.end_date is not None:
+        query = query.filter(AttendanceRecord.date <= academic_year.end_date)
+    return query.all()
 
 
 def _render_sf9_worksheet(
@@ -501,14 +549,7 @@ def _render_sf9_worksheet(
     ws.cell(current_row, 1).alignment = ALIGN_LEFT
 
     # Query attendance records for this student and class
-    att_records = (
-        db.query(AttendanceRecord)
-        .filter(
-            AttendanceRecord.student_id == student.student_id,
-            AttendanceRecord.class_id == class_obj.class_id,
-        )
-        .all()
-    )
+    att_records = _student_attendance_records(db, student, class_obj, academic_year)
 
     # Group attendance by month
     att_by_month: dict[int, dict[str, int]] = {}
@@ -623,15 +664,9 @@ def export_student_sf9(
     staff_id: str,
 ) -> io.BytesIO:
     """Generate official SF9 report card workbook for a single student."""
-    class_obj = db.get(Class, class_id)
-    if not class_obj:
-        raise HTTPException(status_code=404, detail="Class section not found.")
-    if class_obj.adviser_staff_id != staff_id:
-        raise HTTPException(status_code=403, detail="You are not authorized as the adviser of this section.")
+    class_obj = _require_advisory_class(db, class_id, staff_id)
 
-    student = db.get(Student, student_id)
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found.")
+    student = _require_enrolled_student(db, class_obj, student_id)
 
     academic_year = db.get(AcademicYear, class_obj.academic_year_id)
     if not academic_year:
@@ -697,11 +732,7 @@ def export_advisory_class_sf9(
     staff_id: str,
 ) -> io.BytesIO:
     """Generate official SF9 report card workbook for the entire advisory class roster."""
-    class_obj = db.get(Class, class_id)
-    if not class_obj:
-        raise HTTPException(status_code=404, detail="Class section not found.")
-    if class_obj.adviser_staff_id != staff_id:
-        raise HTTPException(status_code=403, detail="You are not authorized as the adviser of this section.")
+    class_obj = _require_advisory_class(db, class_id, staff_id)
 
     academic_year = db.get(AcademicYear, class_obj.academic_year_id)
     if not academic_year:
@@ -790,20 +821,14 @@ def gather_student_sf9_data(
     staff_id: str,
 ) -> dict[str, Any]:
     """Compile structured JSON data for a student's DepEd SF9 report card."""
-    class_obj = db.get(Class, class_id)
-    if not class_obj:
-        raise HTTPException(status_code=404, detail="Class section not found.")
-    if class_obj.adviser_staff_id != staff_id:
-        raise HTTPException(status_code=403, detail="You are not authorized as the adviser of this section.")
+    class_obj = _require_advisory_class(db, class_id, staff_id)
 
     try:
         student_uuid = uuid.UUID(student_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid student ID format.")
 
-    student = db.get(Student, student_uuid)
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found.")
+    student = _require_enrolled_student(db, class_obj, student_uuid)
 
     academic_year = db.get(AcademicYear, class_obj.academic_year_id)
     if not academic_year:
@@ -910,14 +935,7 @@ def gather_student_sf9_data(
         gwa_remarks = "Passed" if gwa >= 75.0 else "Failed"
 
     # Attendance
-    att_records = (
-        db.query(AttendanceRecord)
-        .filter(
-            AttendanceRecord.student_id == student.student_id,
-            AttendanceRecord.class_id == class_obj.class_id,
-        )
-        .all()
-    )
+    att_records = _student_attendance_records(db, student, class_obj, academic_year)
     att_by_month: dict[int, dict[str, int]] = {}
     for r in att_records:
         m = r.date.month
@@ -1016,11 +1034,7 @@ def gather_advisory_class_sf9_batch_data(
     staff_id: str,
 ) -> list[dict[str, Any]]:
     """Compile structured JSON data for all enrolled students in the advisory class."""
-    class_obj = db.get(Class, class_id)
-    if not class_obj:
-        raise HTTPException(status_code=404, detail="Class section not found.")
-    if class_obj.adviser_staff_id != staff_id:
-        raise HTTPException(status_code=403, detail="You are not authorized as the adviser of this section.")
+    class_obj = _require_advisory_class(db, class_id, staff_id)
 
     student_rows = (
         db.query(Student)

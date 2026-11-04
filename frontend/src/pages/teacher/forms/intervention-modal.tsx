@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/retroui/Skeleton";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/teacher/button";
 import { FormMessage } from "@/components/retroui/FormMessage";
+import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
 import { Accordion } from "@/components/retroui/Accordion";
 import { Avatar } from "@/components/retroui/Avatar";
@@ -13,6 +14,7 @@ import InterventionSupportMaterials, {
   type InterventionSupportMaterialsHandle,
 } from "./intervention-support-materials";
 import ClassworkItemLine from "@/components/item-line/classwork";
+import { candidateActivationExplanation } from "@/lib/teacher-interventions-api";
 import type {
   DiagnosisSnapshot,
   TeacherInterventionDetail,
@@ -198,6 +200,7 @@ export default function InterventionModal({
   }, [isOpen, interventionId]);
 
   const isActive = selectedKind === "active" && detail?.status === "ACTIVE";
+  const activationExplanation = detail ? candidateActivationExplanation(detail) : null;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -466,17 +469,24 @@ export default function InterventionModal({
                       </div>
                     </Card>
 
-                    <Card className="w-full space-y-2 border-2 border-primary/40 bg-primary/10">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="surface" size="sm">Action</Badge>
-                        <span className="font-semibold text-sm">Confirmation Required</span>
-                      </div>
-                      <p className="text-sm">
-                        Approve an Intervention for <strong>{detail.student_name}</strong> in{" "}
-                        <strong>{detail.subject_name}</strong>? Current prediction
-                        evidence and teaching scope will be checked again.
-                      </p>
-                    </Card>
+                    {activationExplanation ? (
+                      <Alert status="warning">
+                        <Alert.Title>Candidate retained for review</Alert.Title>
+                        <Alert.Description>{activationExplanation}</Alert.Description>
+                      </Alert>
+                    ) : (
+                      <Card className="w-full space-y-2 border-2 border-primary/40 bg-primary/10">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="surface" size="sm">Action</Badge>
+                          <span className="font-semibold text-sm">Confirmation Required</span>
+                        </div>
+                        <p className="text-sm">
+                          Approve an Intervention for <strong>{detail.student_name}</strong> in{" "}
+                          <strong>{detail.subject_name}</strong>? Current prediction
+                          evidence and teaching scope will be checked again.
+                        </p>
+                      </Card>
+                    )}
 
                     <div className="flex flex-col gap-1">
                       <h3 className="font-black">Academic Diagnosis</h3>
@@ -741,7 +751,7 @@ export default function InterventionModal({
           )}
           {selectedKind === "candidate" && detail?.status === "CANDIDATE" && (
             <Button
-              disabled={activating || reviewStale}
+              disabled={activating || reviewStale || detail.candidate_activation_eligible === false}
               onClick={() => void onActivate()}
             >
               {activating

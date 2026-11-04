@@ -17,10 +17,18 @@ from tests.test_intervention_candidate_sync import _setup
 
 
 def _enroll(ctx):
-    ctx["db"].add(StudentClass(
-        student_id=ctx["student"].student_id, class_id=ctx["class"].class_id,
-        academic_year_id=ctx["class"].academic_year_id, enrollment_status="enrolled",
-    ))
+    existing = ctx["db"].query(StudentClass).filter_by(
+        student_id=ctx["student"].student_id,
+        academic_year_id=ctx["class"].academic_year_id,
+    ).one_or_none()
+    if existing is None:
+        ctx["db"].add(StudentClass(
+            student_id=ctx["student"].student_id, class_id=ctx["class"].class_id,
+            academic_year_id=ctx["class"].academic_year_id, enrollment_status="enrolled",
+        ))
+    else:
+        existing.class_id = ctx["class"].class_id
+        existing.enrollment_status = "enrolled"
     ctx["db"].commit()
 
 
@@ -77,12 +85,12 @@ def test_unchanged_reused_high_prediction_resolves_open_candidate(current_period
     assert intervention.status == "RESOLVED" and intervention.resolution_reason == "IMPROVED_PREDICTION"
 
 
-def test_high_grade_without_open_intervention_is_skipped(current_period_context, monkeypatch):
+def test_non_moderate_prediction_without_open_intervention_is_skipped(current_period_context, monkeypatch):
     ctx = current_period_context
     _enroll(ctx)
     model_id = _setup(ctx, monkeypatch, [88])
     result = _run(ctx, model_id)
-    assert reconcile_existing_candidate(ctx["db"], result["prediction_id"], apply=True) == "not_candidate_grade"
+    assert reconcile_existing_candidate(ctx["db"], result["prediction_id"], apply=True) == "not_moderate_risk"
     assert ctx["db"].query(Intervention).count() == 0
 
 
@@ -95,7 +103,7 @@ def test_stale_low_revision_is_skipped(current_period_context, monkeypatch):
     latest = _run(ctx, model_id)
     _remove_candidate(ctx)
     assert reconcile_existing_candidate(ctx["db"], first["prediction_id"], apply=True) == "stale_revision"
-    assert reconcile_existing_candidate(ctx["db"], latest["prediction_id"]) == "would_create"
+    assert reconcile_existing_candidate(ctx["db"], latest["prediction_id"]) == "not_moderate_risk"
     assert ctx["db"].query(Intervention).count() == 0
 
 

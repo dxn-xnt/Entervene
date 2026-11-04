@@ -73,6 +73,7 @@ const SubjectItemLine = ({
                         <div className="flex flex-row items-center gap-2">
                             {statusLabel ? (
                                 <Badge
+                                    size="sm"
                                     variant={archived ? "outline" : statusLabel === "active" ? "surface" : "outline"}
                                     className="capitalize"
                                 >
@@ -100,7 +101,7 @@ const SubjectItemLine = ({
                                 <Button
                                     size="sm"
                                     variant="secondary"
-                                    className="p-2 shadow-none"
+                                    className="p-1 shadow-none"
                                     aria-label="Subject actions"
                                 >
                                     <EllipsisIcon className="size-4" />
@@ -109,7 +110,7 @@ const SubjectItemLine = ({
                         </span>} />
                         <TooltipContent>Subject actions</TooltipContent>
                     </Tooltip>
-                    <DropdownMenuContent align="end" className="border-2">
+                    <DropdownMenuContent align="end" className="rounded border-2 border-border">
                         {onEdit ? (
                             <DropdownMenuItem onClick={onEdit} className="gap-2">
                                 <PenIcon className="size-4" /> Edit

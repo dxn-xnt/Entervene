@@ -43,6 +43,8 @@ import { mergeAnalytics } from "../../mocks/userAnalytics";
 import {
   Archive,
   BookOpen,
+  ChartNoAxesCombined,
+  ClipboardList,
   Clock,
   GraduationCap,
   Layers,
@@ -374,9 +376,7 @@ export default function AdminUserDetail() {
 
             <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
               {!loading && error && (
-                <Alert status="error">
-                  <Alert.Description>{error}</Alert.Description>
-                </Alert>
+                <AdminValidationAlert message={error} />
               )}
 
               {!loading && notice && (
@@ -391,7 +391,6 @@ export default function AdminUserDetail() {
                 user.email_status === "failed" && (
                   <Alert
                     status="error"
-                    className="border-2 border-red-500 bg-red-50 text-red-900"
                   >
                     <Alert.Description className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <span>
@@ -401,8 +400,8 @@ export default function AdminUserDetail() {
                       </span>
                       <Button
                         size="sm"
-                        variant="default"
-                        className="bg-red-600 hover:bg-red-700 text-white shrink-0 shadow-none"
+                        variant="destructive"
+                        className="shrink-0 shadow-none"
                         onClick={handleResendInvitation}
                         disabled={resending}
                       >
@@ -939,9 +938,7 @@ function SubjectBars({
 }) {
   if (!rows || rows.length === 0) {
     return (
-      <p className="py-4 text-center text-xs text-muted-foreground">
-        No subject performance records available.
-      </p>
+      <EmptyStateCard compact icon={<BookOpen />} title="No subject performance yet" description="Subject performance records will appear when results are available." />
     );
   }
   return (
@@ -975,9 +972,7 @@ function SmallLineChart({
 }) {
   if (!data || data.length === 0) {
     return (
-      <div className="flex h-36 items-center justify-center text-xs text-muted-foreground">
-        No period performance data recorded yet.
-      </div>
+      <EmptyStateCard compact icon={<ChartNoAxesCombined />} title="No score trend yet" description="Period performance data will appear here once recorded." />
     );
   }
   return (
@@ -1450,14 +1445,14 @@ function StudentAnalytics({
       <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr]">
         <Panel title="Subject Mastery">
           <SubjectBars rows={data.subject_mastery} />
-          <div className="mt-4 text-[10px]">
+          {data.subject_mastery.length > 0 && <div className="mt-4 text-[10px]">
             Weak Subjects:{" "}
             <span className="font-bold">
               {weakSubjects.length
                 ? weakSubjects.join(", ")
                 : "No weak subject data available"}
             </span>
-          </div>
+          </div>}
         </Panel>
         <Panel title="Score Trend">
           <SmallLineChart data={data.score_trend} xKey="month" />
@@ -1633,9 +1628,9 @@ function ClassworkTable({
             <Table.Row>
               <Table.Cell
                 colSpan={5}
-                className="py-6 text-center text-xs text-muted-foreground"
+                className="p-0"
               >
-                No classwork records are available yet.
+                <EmptyStateCard compact icon={<ClipboardList />} title="No classwork records yet" description="Classwork records will appear here when available." />
               </Table.Cell>
             </Table.Row>
           )}
