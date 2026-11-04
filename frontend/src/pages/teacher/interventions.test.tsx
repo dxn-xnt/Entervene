@@ -22,7 +22,9 @@ const candidate = {
   intervention_id: 12, student_id: "s1", student_name: "Alex Rivera", student_lrn: "123", grade_level: 9, level_name: "Grade 9", class_id: 7,
   class_name: "Archimedes", subject_id: 5, subject_name: "Mathematics", academic_period_id: 3,
   academic_period_name: "Term 1", status: "CANDIDATE", source_prediction_id: 41,
-  source_prediction_revision: 2, triggering_predicted_grade: 74, triggering_intervention_level: "HIGH_RISK",
+  source_prediction_revision: 2, triggering_predicted_grade: 84, triggering_intervention_level: "MODERATE_RISK",
+  current_prediction_revision: 2, current_predicted_grade: 84, current_intervention_level: "MODERATE_RISK",
+  candidate_activation_eligible: true, candidate_activation_reason: null,
   created_at: "2026-09-25T00:00:00Z", diagnosis_summary: { weakest_supported_components: ["WRITTEN_WORK"] },
 };
 const detail = { ...candidate, activated_at: null, resolved_at: null, resolution_reason: null, diagnosis_snapshot: {
@@ -96,7 +98,8 @@ it("identifies a later active intervention as a new cycle after resolved history
 
 describe("teacher candidate review", () => {
   it("lists teacher candidates and prioritizes the backend high-risk label", async () => {
-    api.list.mockResolvedValue({ items: [{ ...candidate, intervention_id: 13, student_name: "Morgan", triggering_intervention_level: "MODERATE_RISK" }, candidate], total: 2 });
+    const historicalHigh = { ...candidate, triggering_intervention_level: "HIGH_RISK" };
+    api.list.mockResolvedValue({ items: [{ ...candidate, intervention_id: 13, student_name: "Morgan" }, historicalHigh], total: 2 });
     mount();
     await screen.findByText("Alex Rivera");
     expect(screen.getAllByText("Weakest supported: Written Work")).toHaveLength(2);
@@ -153,6 +156,28 @@ describe("teacher candidate review", () => {
     await waitFor(() => expect(api.activeList).toHaveBeenCalledTimes(2));
     const dialog = await screen.findByRole("dialog");
     expect(await within(dialog).findByRole("heading", { name: "Active Intervention" })).toBeTruthy();
+  });
+  it("identifies a preserved ineligible candidate and disables approval", async () => {
+    const ineligible = {
+      ...candidate,
+      current_prediction_revision: 3,
+      current_predicted_grade: 74,
+      current_intervention_level: "HIGH_RISK",
+      candidate_activation_eligible: false,
+      candidate_activation_reason: "CURRENT_RISK_NOT_MODERATE",
+    };
+    api.list.mockResolvedValue({ items: [ineligible], total: 1 });
+    api.detail.mockResolvedValue({ ...detail, ...ineligible });
+    mount("/teacher/interventions?candidate=12");
+
+    expect(await screen.findByText("Review only")).toBeTruthy();
+    expect(screen.getByText("Current: High Risk")).toBeTruthy();
+    const sheet = await screen.findByRole("dialog");
+    expect(within(sheet).getByText("Candidate retained for review")).toBeTruthy();
+    expect(within(sheet).getByText(/cannot be approved under the Moderate Risk policy/i)).toBeTruthy();
+    expect((within(sheet).getByRole("button", { name: "Approve Intervention" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(within(sheet).getByRole("button", { name: "Approve Intervention" }));
+    expect(api.activate).not.toHaveBeenCalled();
   });
   it.each([
     ["Current prediction improved to at least 85", /current prediction improved/i],

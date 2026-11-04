@@ -23,6 +23,11 @@ class TeacherInterventionSummary(BaseModel):
     source_prediction_revision: int
     triggering_predicted_grade: float
     triggering_intervention_level: str
+    current_prediction_revision: int
+    current_predicted_grade: float | None = None
+    current_intervention_level: str | None = None
+    candidate_activation_eligible: bool | None = None
+    candidate_activation_reason: str | None = None
     created_at: datetime
     activated_at: datetime | None = None
     resolved_at: datetime | None = None

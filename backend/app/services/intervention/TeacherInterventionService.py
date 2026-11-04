@@ -20,7 +20,10 @@ from app.schemas.TeacherIntervention import (
 )
 from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
 from app.services.academic.SubstitutionService import SubstitutionService
-from app.services.intervention.InterventionCandidateService import sync_intervention_for_persisted_prediction
+from app.services.intervention.InterventionCandidateService import (
+    AUTOMATIC_CANDIDATE_LEVEL,
+    sync_intervention_for_persisted_prediction,
+)
 from app.services.intervention.InterventionHistoryService import resolution_projection, sent_reviewer, targeted_activities
 from app.services.prediction.DevelopmentCurrentTermModelSelection import CORRECTED_MODEL_NAME
 from app.services.prediction.DevelopmentCurrentTermPredictionPersistenceService import generate_and_persist_development_current_term
@@ -55,6 +58,43 @@ def _source(db: Session, row: Intervention) -> DevelopmentCurrentTermPrediction:
     return source
 
 
+def _current_candidate_status(
+    db: Session,
+    row: Intervention,
+    source: DevelopmentCurrentTermPrediction,
+    passing_threshold: float | None,
+) -> tuple[DevelopmentCurrentTermPrediction, float | None, bool | None, str | None]:
+    latest = db.query(DevelopmentCurrentTermPrediction).filter_by(
+        student_id=row.student_id,
+        class_id=row.class_id,
+        subject_id=row.subject_id,
+        source_period_id=row.academic_period_id,
+        target_period_id=row.academic_period_id,
+        model_version_id=source.model_version_id,
+    ).order_by(DevelopmentCurrentTermPrediction.revision.desc()).first() or source
+    snapshot = latest.evidence_snapshot if isinstance(latest.evidence_snapshot, dict) else {}
+    raw_grade = snapshot.get("projected_final_term_grade_raw")
+    try:
+        current_grade = float(raw_grade) if not isinstance(raw_grade, bool) else math.nan
+    except (TypeError, ValueError, OverflowError):
+        current_grade = math.nan
+    current_grade_value = current_grade if math.isfinite(current_grade) else None
+    if row.status != "CANDIDATE":
+        return latest, current_grade_value, None, None
+    readiness = snapshot.get("readiness")
+    if not isinstance(readiness, dict) or readiness.get("status") != "READY":
+        return latest, current_grade_value, False, "CURRENT_PREDICTION_NOT_READY"
+    if current_grade_value is None or not 0 <= current_grade_value <= 100:
+        return latest, current_grade_value, False, "CURRENT_PREDICTION_GRADE_INVALID"
+    if passing_threshold is None:
+        return latest, current_grade_value, False, "PASSING_THRESHOLD_UNAVAILABLE"
+    if current_grade_value >= passing_threshold:
+        return latest, current_grade_value, False, "PASSING_THRESHOLD_REACHED"
+    if latest.intervention_level != AUTOMATIC_CANDIDATE_LEVEL:
+        return latest, current_grade_value, False, "CURRENT_RISK_NOT_MODERATE"
+    return latest, current_grade_value, True, None
+
+
 def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
     source = _source(db, row)
     diagnosis = row.diagnosis_snapshot if isinstance(row.diagnosis_snapshot, dict) else {}
@@ -78,6 +118,9 @@ def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
         academic_level = row.class_.academic_level
     grade_level_val = academic_level.grade_level if academic_level else None
     level_name_val = academic_level.level_name if academic_level else (f"Grade {grade_level_val}" if grade_level_val is not None else None)
+    latest, current_grade, activation_eligible, activation_reason = _current_candidate_status(
+        db, row, source, threshold_val,
+    )
 
     return TeacherInterventionSummary(
         grade_level=grade_level_val,
@@ -93,6 +136,11 @@ def _summary(db: Session, row: Intervention) -> TeacherInterventionSummary:
         source_prediction_id=source.prediction_id, source_prediction_revision=source.revision,
         triggering_predicted_grade=float(grade if grade is not None else source.predicted_period_grade),
         triggering_intervention_level=source.intervention_level,
+        current_prediction_revision=latest.revision,
+        current_predicted_grade=current_grade,
+        current_intervention_level=latest.intervention_level,
+        candidate_activation_eligible=activation_eligible,
+        candidate_activation_reason=activation_reason,
         created_at=row.created_at,
         activated_at=row.activated_at,
         resolved_at=row.resolved_at, resolution_reason=row.resolution_reason,
@@ -245,6 +293,9 @@ def activate_teacher_candidate(db: Session, staff_id: str, intervention_id: int)
                 subject_id=scope[2], academic_period_id=scope[3],
             )
             outcome["error"] = f"Current prediction improved to at least {passing_threshold:g}"
+            return
+        if latest.intervention_level != AUTOMATIC_CANDIDATE_LEVEL:
+            outcome["error"] = "Current prediction is not Moderate Risk"
             return
         row.status = "ACTIVE"
         row.activated_at = datetime.now(timezone.utc)

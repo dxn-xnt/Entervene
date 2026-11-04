@@ -151,6 +151,7 @@ export const RISK_BADGE_VARIANTS: Record<string, RiskBadgeMeta> = {
   MODERATE_RISK: { bg: "bg-[#ff9233] text-black border-2 border-black font-bold", text: "Moderate" },
   NEEDS_MONITORING: { bg: "bg-[#ffdb33] text-black border-2 border-black font-bold", text: "Needs Monitoring" },
   LOW_RISK: { bg: "bg-[#00e65f] text-black border-2 border-black font-bold", text: "Low Risk" },
+  ON_TRACK: { bg: "bg-[#00e65f] text-black border-2 border-black font-bold", text: "On Track" },
   INSUFFICIENT_DATA: { bg: "bg-muted text-black border-2 border-black font-bold", text: "Insufficient Data" },
 };
 

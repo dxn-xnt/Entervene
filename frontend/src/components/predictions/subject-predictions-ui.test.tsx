@@ -8,7 +8,9 @@ import { PredictionSubjectSection } from "./prediction-subject-section";
 import type { DashboardSubjectGroupSummary } from "./current-term-dashboard-adapter";
 import PredictionsDashboard from "@/pages/teacher/predictions";
 import SectionPredictions from "@/pages/teacher/section-predictions";
+import SubjectPrediction from "@/pages/teacher/subject-prediction";
 import * as predictionApi from "@/lib/prediction-api";
+import * as api from "@/lib/api";
 
 // ── Context and layout mocks ──
 const authState = { role: "teacher" as "teacher" | "admin" };
@@ -68,12 +70,15 @@ describe("SubjectSectionCard", () => {
     const link = screen.getByRole("link", { name: /View Demo Archimedes predictions/i });
     expect(link.getAttribute("href")).toBe("/teacher/predictions/subject/1/section/10");
 
-    // Low Risk and Moderate Risk are top 2 rendered
-    expect(screen.getByText("Low Risk")).toBeDefined();
+    expect(screen.getByText("On Track")).toBeDefined();
     expect(screen.getByText("Moderate Risk")).toBeDefined();
+    expect(screen.getByText("High Risk")).toBeDefined();
+    expect(screen.getByText("78%")).toBeDefined();
+    expect(screen.getByText("22%")).toBeDefined();
+    expect(screen.getByText("0%")).toBeDefined();
   });
 
-  it("renders distinct Monitoring card when needsMonitoring is present", () => {
+  it("combines monitoring predictions into the On Track section category", () => {
     render(
       <MemoryRouter>
         <SubjectSectionCard
@@ -91,7 +96,8 @@ describe("SubjectSectionCard", () => {
     );
 
     expect(screen.getByText("Moderate Risk")).toBeDefined();
-    expect(screen.getByText("Monitoring")).toBeDefined();
+    expect(screen.getByText("On Track")).toBeDefined();
+    expect(screen.getAllByText("50%")).toHaveLength(2);
   });
 
   it("labels singular prediction accurately", () => {
@@ -108,7 +114,7 @@ describe("SubjectSectionCard", () => {
     );
 
     expect(screen.getByText("1 Prediction")).toBeDefined();
-    expect(screen.getByText("Low Risk")).toBeDefined();
+    expect(screen.getByText("On Track")).toBeDefined();
   });
 
   it("handles zero predictions gracefully with distinct empty banner", () => {
@@ -127,7 +133,7 @@ describe("SubjectSectionCard", () => {
     expect(screen.getByText("No Predictions Yet")).toBeDefined();
   });
 
-  it("shows 'No At-Risk Students' when predictions exist but risk counts are 0", () => {
+  it("shows assessed zero-risk categories when all predictions are On Track", () => {
     render(
       <MemoryRouter>
         <SubjectSectionCard
@@ -141,7 +147,25 @@ describe("SubjectSectionCard", () => {
     );
 
     expect(screen.getByText("5 Predictions")).toBeDefined();
-    expect(screen.getByText("Low Risk")).toBeDefined();
+    expect(screen.getByText("On Track")).toBeDefined();
+    expect(screen.getByText("100%")).toBeDefined();
+  });
+
+  it("keeps predictions without an assessed category out of percentages", () => {
+    render(
+      <MemoryRouter>
+        <SubjectSectionCard
+          subjectId={1}
+          classId={10}
+          name="Pending Section"
+          totalPredictions={3}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("3 Predictions")).toBeDefined();
+    expect(screen.getByText("No Assessed Predictions")).toBeDefined();
+    expect(screen.queryByText(/%$/)).toBeNull();
   });
 });
 
@@ -199,9 +223,9 @@ describe("PredictionSubjectSection", () => {
     expect(screen.getByRole("heading", { level: 2, name: /Mathematics 9/i })).toBeDefined();
 
     // Badges in header
-    expect(screen.getByText("1 High Risk")).toBeDefined();
-    expect(screen.getByText("2 Moderate Risk")).toBeDefined();
-    expect(screen.getByText("1 Monitoring")).toBeDefined();
+    expect(screen.getByText("2 Moderate Risk (22%)")).toBeDefined();
+    expect(screen.getByText("1 High Risk (11%)")).toBeDefined();
+    expect(screen.getByText("6 On Track (67%)")).toBeDefined();
 
     // Sections
     expect(screen.getByText("Demo Archimedes")).toBeDefined();
@@ -313,6 +337,66 @@ describe("TeacherCurrentTermDashboard (Subject-First Main Page)", () => {
     expect(screen.getByRole("heading", { level: 2, name: /Mathematics 9/i })).toBeDefined();
     expect(screen.getByText("Demo Archimedes")).toBeDefined();
   });
+
+  it("does not substitute another subject's health data on an assigned subject page", async () => {
+    vi.spyOn(api, "getTeacherDashboardHealth").mockResolvedValue({
+      term_info: {
+        period_id: 1,
+        period_name: "Term 1 Demo",
+        academic_year: "2026-2027",
+        is_active: true,
+      },
+      kpis: {
+        active_classes: 1,
+        enrolled_students: 1,
+        overall_completion_rate: null,
+        ungraded_count: null,
+      },
+      trend_chart: {
+        available_filters: [],
+        selected_class_id: null,
+        selected_subject_id: 1,
+        selected_section_name: "",
+        selected_subject_name: "Mathematics",
+        has_sufficient_data: false,
+        points: [],
+      },
+      section_matrix: [{
+        class_id: 99,
+        section_name: "Wrong Subject Section",
+        grade_level: "9",
+        subject_id: 999,
+        subject_name: "Other Subject",
+        student_count: 3,
+        published_classworks: 1,
+        avg_score_percent: 80,
+        passing_rate_percent: 80,
+        completion_rate_percent: 80,
+        attendance_rate_percent: 80,
+      }],
+      action_queue: { pending_grading: [], upcoming_deadlines: [] },
+      details: {
+        lesson_performance: {
+          policy: { min_learners: 3, min_questions: 3, limit_per_subject: 5 },
+          subjects: [],
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/teacher/predictions/subject/1"]}>
+        <Routes>
+          <Route path="/teacher/predictions/subject/:subjectId" element={<SubjectPrediction />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("No section health data available for this subject.")).toBeDefined();
+      expect(screen.getByText("No lesson performance data is available for this assigned subject yet.")).toBeDefined();
+    });
+    expect(screen.queryByText("Wrong Subject Section")).toBeNull();
+  });
 });
 
 describe("TeacherCurrentTermSectionPredictions (Section Detail & Navigation)", () => {
@@ -328,6 +412,37 @@ describe("TeacherCurrentTermSectionPredictions (Section Detail & Navigation)", (
 
     vi.spyOn(predictionApi, "fetchTeacherAcademicScope").mockResolvedValue(sectionMockFilters);
     vi.spyOn(predictionApi, "fetchDashboardFilters").mockResolvedValue(sectionMockFilters);
+    vi.spyOn(api, "getTeacherDashboardHealth").mockResolvedValue({
+      term_info: {
+        period_id: 1,
+        period_name: "Term 1 Demo",
+        academic_year: "2026-2027",
+        is_active: true,
+      },
+      kpis: {
+        active_classes: 1,
+        enrolled_students: 1,
+        overall_completion_rate: null,
+        ungraded_count: null,
+      },
+      trend_chart: {
+        available_filters: [],
+        selected_class_id: 1,
+        selected_subject_id: 1,
+        selected_section_name: "Demo Archimedes",
+        selected_subject_name: "Mathematics",
+        has_sufficient_data: false,
+        points: [],
+      },
+      section_matrix: [],
+      action_queue: { pending_grading: [], upcoming_deadlines: [] },
+      details: {
+        lesson_performance: {
+          policy: { min_learners: 3, min_questions: 3, limit_per_subject: 5 },
+          subjects: [],
+        },
+      },
+    });
 
     vi.spyOn(predictionApi, "fetchCurrentTermPredictions").mockResolvedValue({
       items: [
@@ -402,6 +517,81 @@ describe("TeacherCurrentTermSectionPredictions (Section Detail & Navigation)", (
 
     // Student prediction row is visible
     expect(screen.getByText("Blake Student")).toBeDefined();
+  });
+
+  it("reports missing lesson evidence for an assigned subject without showing another subject", async () => {
+    vi.mocked(api.getTeacherDashboardHealth).mockResolvedValueOnce({
+      term_info: {
+        period_id: 1,
+        period_name: "Term 1 Demo",
+        academic_year: "2026-2027",
+        is_active: true,
+      },
+      kpis: {
+        active_classes: 1,
+        enrolled_students: 1,
+        overall_completion_rate: null,
+        ungraded_count: null,
+      },
+      trend_chart: {
+        available_filters: [],
+        selected_class_id: 1,
+        selected_subject_id: 1,
+        selected_section_name: "Demo Archimedes",
+        selected_subject_name: "Mathematics",
+        has_sufficient_data: false,
+        points: [],
+      },
+      section_matrix: [],
+      action_queue: { pending_grading: [], upcoming_deadlines: [] },
+      details: {
+        lesson_performance: {
+          policy: { min_learners: 3, min_questions: 3, limit_per_subject: 5 },
+          subjects: [{
+            subject_id: 999,
+            subject_name: "Other Subject",
+            class_ids: [1],
+            items: [{
+              lesson_id: 91,
+              title: "Wrong Subject Lesson",
+              performance_percent: 80,
+              awarded_points: 8,
+              possible_points: 10,
+              scored_response_count: 3,
+              learner_count: 3,
+              question_count: 3,
+            }],
+            coverage: {
+              scored_mapped_response_count: 3,
+              unmapped_response_count: 0,
+              ungraded_response_count: 0,
+              invalid_response_count: 0,
+              insufficient_lesson_count: 0,
+              omitted_lesson_count: 0,
+              excluded_manual_assignment_count: 0,
+            },
+            warnings: [],
+          }],
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/teacher/predictions/subject/1/section/1"]}>
+        <Routes>
+          <Route
+            path="/teacher/predictions/subject/:subjectId/section/:classId"
+            element={<SectionPredictions />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("No lesson performance data is available for this assigned subject yet.")).toBeDefined();
+    });
+    expect(screen.queryByText("Wrong Subject Lesson")).toBeNull();
+    expect(screen.queryByText("No subjects assigned for this academic period.")).toBeNull();
   });
 
   it("handles unauthorized subject ID without silent fallback", async () => {

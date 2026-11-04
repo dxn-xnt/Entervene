@@ -41,6 +41,7 @@ import {
   type AssignedSubjectSectionScope,
 } from "@/components/predictions/current-term-dashboard-adapter";
 import { PredictionSubjectSection } from "@/components/predictions/prediction-subject-section";
+import { getTeacherRiskDisplaySummary } from "@/components/predictions/teacher-risk-display";
 
 const EMPTY_SUMMARY: RiskSummary = {
   HIGH_RISK: 0,
@@ -76,6 +77,24 @@ const RISK_CARDS = [
     key: "INSUFFICIENT_DATA" as const,
     label: "Insufficient Data",
     activeClass: "bg-gray-200 ring-2 ring-black",
+  },
+];
+
+const TEACHER_RISK_CARDS = [
+  {
+    key: "MODERATE_RISK" as const,
+    label: "Moderate Risk",
+    activeClass: "bg-amber-200 ring-2 ring-black",
+  },
+  {
+    key: "HIGH_RISK" as const,
+    label: "High Risk",
+    activeClass: "bg-red-200 ring-2 ring-black",
+  },
+  {
+    key: "ON_TRACK" as const,
+    label: "On Track",
+    activeClass: "bg-emerald-200 ring-2 ring-black",
   },
 ];
 
@@ -470,6 +489,7 @@ function TeacherCurrentTermDashboard() {
     limit: Math.max(10, scopedRows.length),
   });
   const summary = currentTermRiskSummary(scopedRows);
+  const displaySummary = getTeacherRiskDisplaySummary(summary);
   const subjectSummaries = buildCurrentTermSubjectSummaries(rows, assignedScopes);
   const filtered =
     gradeLevel !== undefined ||
@@ -487,8 +507,8 @@ function TeacherCurrentTermDashboard() {
         </header>
 
         <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
-            {RISK_CARDS.filter((card) => card.key !== "INSUFFICIENT_DATA").map((card) => (
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-4">
+            {TEACHER_RISK_CARDS.map((card) => (
               <button
                 key={card.key}
                 type="button"
@@ -497,7 +517,7 @@ function TeacherCurrentTermDashboard() {
               >
                 <OverviewCard
                   title={card.label}
-                  count={String(summary[card.key])}
+                  count={String(displaySummary[card.key])}
                   className={cn(
                     "w-full border-2 border-black shadow-[4px_4px_0px_#000]",
                     riskLevel === card.key && card.activeClass
@@ -517,6 +537,7 @@ function TeacherCurrentTermDashboard() {
               riskLevel={riskLevel}
               search={search}
               hidePeriodFilter
+              simplifiedTeacherRisk
               riskSummary={summary}
               onGradeChange={setGradeLevel}
               onClassChange={setClassId}
@@ -550,6 +571,8 @@ function TeacherCurrentTermDashboard() {
                 limit={Math.max(10, data.total)}
                 offset={0}
                 currentTerm
+                simplifiedTeacherRisk
+                showGradeLevel
                 hidePagination
                 onSort={() => undefined}
                 onPageChange={() => undefined}

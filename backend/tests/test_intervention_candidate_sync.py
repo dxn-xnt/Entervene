@@ -44,8 +44,11 @@ def _interventions(ctx):
     return ctx["db"].query(Intervention).order_by(Intervention.intervention_id).all()
 
 
-@pytest.mark.parametrize("grade,expected", [(84.65, 1), (85.44, 1), (86.999, 1), (87.0, 0), (88.84, 0)])
-def test_boundary_creates_candidate_only_below_passing_threshold(current_period_context, monkeypatch, grade, expected):
+@pytest.mark.parametrize(
+    "grade,expected",
+    [(74.0, 0), (84.65, 1), (85.44, 0), (86.999, 0), (87.0, 0), (88.84, 0), (92.0, 0)],
+)
+def test_candidate_requires_moderate_risk_below_passing_threshold(current_period_context, monkeypatch, grade, expected):
     ctx = current_period_context
     model_id = _setup(ctx, monkeypatch, [grade])
     result = _run(ctx, model_id)
@@ -59,6 +62,25 @@ def test_boundary_creates_candidate_only_below_passing_threshold(current_period_
             ctx["student"].student_id, ctx["class"].class_id,
             ctx["subject"].subject_id, ctx["period"].academic_period_id,
         )
+
+
+@pytest.mark.parametrize("grade,expected", [(84.999, 1), (85.0, 0)])
+def test_unrounded_grade_controls_exact_passing_threshold_boundary(
+    current_period_context, monkeypatch, grade, expected,
+):
+    ctx = current_period_context
+    ctx["template"].passing_threshold = Decimal("85.00")
+    ctx["db"].commit()
+    model_id = _setup(ctx, monkeypatch, [grade])
+
+    result = _run(ctx, model_id)
+    rows = _interventions(ctx)
+
+    assert len(rows) == expected
+    if expected:
+        prediction = ctx["db"].get(DevelopmentCurrentTermPrediction, result["prediction_id"])
+        assert float(prediction.predicted_period_grade) == 85.0
+        assert prediction.evidence_snapshot["projected_final_term_grade_raw"] == grade
 
 
 def test_later_improvement_resolves_without_rewriting_trigger(current_period_context, monkeypatch):
@@ -77,7 +99,7 @@ def test_later_improvement_resolves_without_rewriting_trigger(current_period_con
     assert rows[0].resolved_at is not None
 
 
-def test_active_intervention_resolves_and_later_low_revision_gets_new_candidate(current_period_context, monkeypatch):
+def test_active_intervention_resolves_and_later_high_risk_revision_does_not_create_candidate(current_period_context, monkeypatch):
     ctx = current_period_context
     model_id = _setup(ctx, monkeypatch, [84, 88, 74])
     first = _run(ctx, model_id)
@@ -93,9 +115,9 @@ def test_active_intervention_resolves_and_later_low_revision_gets_new_candidate(
     add_activity(ctx, "WRITTEN_WORK", 6, 10)
     third = _run(ctx, model_id)
     rows = _interventions(ctx)
-    assert [row.status for row in rows] == ["RESOLVED", "CANDIDATE"]
+    assert [row.status for row in rows] == ["RESOLVED"]
     assert rows[0].source_prediction_id == first["prediction_id"]
-    assert rows[1].source_prediction_id == third["prediction_id"]
+    assert rows[0].source_prediction_id != third["prediction_id"]
 
 
 def test_low_revision_and_unchanged_evidence_do_not_duplicate(current_period_context, monkeypatch):
@@ -115,7 +137,7 @@ def test_low_revision_and_unchanged_evidence_do_not_duplicate(current_period_con
 
 def test_separate_subjects_have_separate_candidates(current_period_context, monkeypatch):
     ctx = current_period_context
-    model_id = _setup(ctx, monkeypatch, [84, 74])
+    model_id = _setup(ctx, monkeypatch, [84, 83])
     first_subject_id = ctx["subject"].subject_id
     first = _run(ctx, model_id)
     second_subject = Subject(
@@ -190,6 +212,21 @@ def test_ungrading_to_insufficient_does_not_resolve_or_duplicate(current_period_
     assert rows[0].source_prediction_id == first["prediction_id"]
 
 
+def test_initial_unassessed_prediction_does_not_create_candidate(current_period_context, monkeypatch):
+    ctx = current_period_context
+    model_id = _setup(ctx, monkeypatch, [84])
+    for submission in ctx["db"].query(StudentSubmission).all()[1:]:
+        submission.grade = None
+    ctx["db"].commit()
+
+    result = _run(ctx, model_id)
+
+    assert result["persisted"] is False
+    assert result["intervention_level"] == "INTERVENTION_NOT_ASSESSED"
+    assert ctx["db"].query(DevelopmentCurrentTermPrediction).count() == 0
+    assert _interventions(ctx) == []
+
+
 def test_prediction_failure_and_sync_failure_leave_no_half_transaction(current_period_context, monkeypatch):
     ctx = current_period_context
     model_id = _setup(ctx, monkeypatch, [84])
@@ -221,7 +258,7 @@ def test_task_4_8d_2_passing_policy_consistency_across_students_and_scenarios(cu
 
     1. Subject with passing threshold 87.0 (Mathematics 9 policy):
        - 84.65: below 87.0 -> candidate created, fails passing
-       - 85.44: below 87.0 -> candidate created, fails passing (reveals old hardcoded 85 bug)
+       - 85.44: below 87.0 but NEEDS_MONITORING -> no new candidate
        - 87.0: reaches 87.0 -> passing, no candidate created
        - 88.84: reaches 87.0 -> passing, no candidate created
     2. Multi-student consistency in the same subject/year:
@@ -260,7 +297,7 @@ def test_task_4_8d_2_passing_policy_consistency_across_students_and_scenarios(cu
     assert len(rows) == 1
     assert rows[0].status == "CANDIDATE"
 
-    # 3. If student A improves to 85.44, threshold 87.0 is NOT met -> intervention stays open
+    # 3. A revised NEEDS_MONITORING prediction does not destroy the existing candidate.
     monkeypatch.setattr(scorer, "score_development_current_term", lambda *_args, **_kwargs: 85.44)
     add_activity(ctx, "PERFORMANCE_TASK", 18, 20)
     _run(ctx, model_id)
@@ -277,7 +314,7 @@ def test_task_4_8d_2_passing_policy_consistency_across_students_and_scenarios(cu
     assert rows[0].status == "RESOLVED"
     assert rows[0].resolution_reason == "IMPROVED_PREDICTION"
 
-    # 5. Student B (different student in same subject/year) at 85.44 -> creates candidate
+    # 5. Student B at 85.44 is below threshold but not MODERATE_RISK -> no candidate.
     student_b = Student(
         student_id=uuid4(), student_lrn="100000000099", first_name="Student", last_name="B",
         academic_level_id=ctx["level"].academic_level_id,
@@ -301,8 +338,7 @@ def test_task_4_8d_2_passing_policy_consistency_across_students_and_scenarios(cu
     res_b = _run(ctx, model_id)
     assert res_b["persisted"] is True, f"res_b failed: {res_b}"
     rows_b = ctx["db"].query(Intervention).filter_by(student_id=student_b.student_id).all()
-    assert len(rows_b) == 1
-    assert rows_b[0].status == "CANDIDATE"
+    assert rows_b == []
 
     # 6. Student C at 88.84 -> reaches threshold 87.0, no candidate created
     student_c = Student(

@@ -390,6 +390,7 @@ function TeacherCurrentTermGradePredictions() {
                 search={search}
                 hideGradeFilter
                 hidePeriodFilter
+                simplifiedTeacherRisk
                 riskSummary={data.risk_summary}
                 onClassChange={setClassId}
                 onSubjectChange={setSubjectId}
@@ -420,6 +421,7 @@ function TeacherCurrentTermGradePredictions() {
                   limit={Math.max(10, data.total)}
                   offset={0}
                   currentTerm
+                  simplifiedTeacherRisk
                   hidePagination
                   onSort={() => undefined}
                   onPageChange={() => undefined}

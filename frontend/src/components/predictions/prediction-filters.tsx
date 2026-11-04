@@ -4,6 +4,11 @@ import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { Button } from "@/components/teacher/button";
 import { Search, X } from "lucide-react";
+import {
+  getTeacherRiskDisplay,
+  getTeacherRiskFilterCount,
+  TEACHER_RISK_FILTER_OPTIONS,
+} from "./teacher-risk-display";
 
 interface PredictionFiltersProps {
   filters: DashboardFilters | null;
@@ -20,6 +25,7 @@ interface PredictionFiltersProps {
   hidePeriodFilter?: boolean;
   showClearButton?: boolean;
   riskSummary?: RiskSummary | null;
+  simplifiedTeacherRisk?: boolean;
   onGradeChange?: (value: number | undefined) => void;
   onClassChange?: (value: number | undefined) => void;
   onSubjectChange: (value: number | undefined) => void;
@@ -53,6 +59,7 @@ export default function PredictionFilters({
   hidePeriodFilter = false,
   showClearButton = true,
   riskSummary,
+  simplifiedTeacherRisk = false,
   onGradeChange,
   onClassChange,
   onSubjectChange,
@@ -62,6 +69,7 @@ export default function PredictionFilters({
   onSearchChange,
   onClearAll,
 }: PredictionFiltersProps) {
+  const riskOptions = simplifiedTeacherRisk ? TEACHER_RISK_FILTER_OPTIONS : RISK_OPTIONS;
   // Cascaded classes: if gradeLevel is chosen, only show sections belonging to that grade level
   const filteredClasses =
     gradeLevel !== undefined && filters?.classes
@@ -203,15 +211,22 @@ export default function PredictionFilters({
         >
           <Select.Trigger className="w-full sm:w-48">
             <Select.Value placeholder="All Risk Levels">
-              {riskLevel ? (RISK_OPTIONS.find((r) => r.value === riskLevel)?.label ?? riskLevel) : "All Risk Levels"}
+              {riskLevel
+                ? (riskOptions.find((r) => r.value === riskLevel)?.label
+                  ?? (simplifiedTeacherRisk ? getTeacherRiskDisplay(riskLevel).label : riskLevel))
+                : "All Risk Levels"}
             </Select.Value>
           </Select.Trigger>
           <Select.Content>
             <Select.Item value="all">
               All Risk Levels{riskSummary ? ` (${riskSummary.total})` : ""}
             </Select.Item>
-            {RISK_OPTIONS.map((r) => {
-              const count = riskSummary ? riskSummary[r.value as keyof RiskSummary] : undefined;
+            {riskOptions.map((r) => {
+              const count = riskSummary
+                ? (simplifiedTeacherRisk
+                  ? getTeacherRiskFilterCount(riskSummary, r.value)
+                  : riskSummary[r.value as keyof RiskSummary])
+                : undefined;
               return (
                 <Select.Item key={r.value} value={r.value}>
                   {r.label}{count !== undefined ? ` (${count})` : ""}

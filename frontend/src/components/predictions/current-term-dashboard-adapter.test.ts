@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildCurrentTermDashboard,
   buildCurrentTermGradeSummaries,
   buildCurrentTermSubjectSummaries,
   currentTermRiskSummary,
@@ -80,6 +81,21 @@ describe("formatSubjectDisplayName", () => {
   it("handles empty subject name safely", () => {
     expect(formatSubjectDisplayName("", 9)).toBe("Subject 9");
     expect(formatSubjectDisplayName("", null)).toBe("Subject");
+  });
+});
+
+describe("buildCurrentTermDashboard risk display filters", () => {
+  it("returns both stored classifications for the On Track display filter", () => {
+    const rows = [
+      createMockRow({ prediction_id: 1, intervention_level: "LOW_RISK" }),
+      createMockRow({ prediction_id: 2, intervention_level: "NEEDS_MONITORING" }),
+      createMockRow({ prediction_id: 3, intervention_level: "MODERATE_RISK" }),
+    ];
+
+    const result = buildCurrentTermDashboard(rows, { interventionLevel: "ON_TRACK" });
+
+    expect(result.items.map((item) => item.prediction_id)).toEqual([1, 2]);
+    expect(result.items.map((item) => item.risk_level)).toEqual(["LOW_RISK", "NEEDS_MONITORING"]);
   });
 });
 

@@ -164,10 +164,9 @@ export default function SubjectPrediction() {
   const sections: SectionHealthItem[] = useMemo(() => {
     if (healthData?.section_matrix && healthData.section_matrix.length > 0) {
       if (routeSubjectId) {
-        const forSubject = healthData.section_matrix.filter(
+        return healthData.section_matrix.filter(
           (sec) => Number(sec.subject_id) === Number(routeSubjectId),
         );
-        if (forSubject.length > 0) return forSubject;
       }
       return healthData.section_matrix;
     }
@@ -178,8 +177,7 @@ export default function SubjectPrediction() {
   const lessonSubject = useMemo(() => {
     if (!lessonPerformance?.subjects.length) return undefined;
     if (routeSubjectId != null) {
-      const match = lessonPerformance.subjects.find((s) => s.subject_id === routeSubjectId);
-      if (match) return match;
+      return lessonPerformance.subjects.find((s) => s.subject_id === routeSubjectId);
     }
     return lessonPerformance.subjects[0];
   }, [lessonPerformance, routeSubjectId]);
@@ -257,6 +255,7 @@ export default function SubjectPrediction() {
               hideGradeFilter
               hideSubjectFilter
               hidePeriodFilter
+              simplifiedTeacherRisk
               riskSummary={data.risk_summary}
               onClassChange={setSelectedClassId}
               onSubjectChange={() => undefined}
@@ -310,6 +309,7 @@ export default function SubjectPrediction() {
                     hideSubject
                     hidePagination
                     currentTerm
+                    simplifiedTeacherRisk
                     onSort={() => undefined}
                     onPageChange={() => undefined}
                     onRowClick={(predictionId) =>
@@ -492,7 +492,9 @@ export default function SubjectPrediction() {
                             </Empty.Icon>
                             <Empty.Title className="text-base! font-medium">
                               {emptyLessonMessage(!lessonSubject
-                                ? "No subjects assigned for this academic period."
+                                ? matchingScope
+                                  ? "No lesson performance data is available for this assigned subject yet."
+                                  : "No subjects assigned for this academic period."
                                 : lessonSubject.coverage.scored_mapped_response_count === 0
                                   ? "No scored quiz answers linked to lessons for this subject."
                                   : `Not enough evidence yet. Each lesson needs scores from at least ${lessonPerformance?.policy.min_learners ?? 3} learners across ${lessonPerformance?.policy.min_questions ?? 3} questions.`)}

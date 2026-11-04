@@ -19,6 +19,11 @@ export interface TeacherInterventionSummary {
   source_prediction_revision: number;
   triggering_predicted_grade: number;
   triggering_intervention_level: string;
+  current_prediction_revision: number;
+  current_predicted_grade?: number | null;
+  current_intervention_level?: string | null;
+  candidate_activation_eligible?: boolean | null;
+  candidate_activation_reason?: string | null;
   created_at: string;
   activated_at?: string | null;
   resolved_at?: string | null;
@@ -61,6 +66,27 @@ export interface TeacherResolvedInterventionDetail extends TeacherInterventionDe
 export class InterventionApiError extends Error {
   status: number;
   constructor(status: number, message: string) { super(message); this.status = status; }
+}
+
+export function candidateActivationExplanation(candidate: TeacherInterventionSummary): string | null {
+  if (candidate.candidate_activation_eligible !== false) return null;
+  const currentLevel = candidate.current_intervention_level
+    ? candidate.current_intervention_level.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())
+    : "Not Assessed";
+  switch (candidate.candidate_activation_reason) {
+    case "CURRENT_RISK_NOT_MODERATE":
+      return `Latest saved prediction is ${currentLevel}. This preserved candidate is review-only and cannot be approved under the Moderate Risk policy.`;
+    case "PASSING_THRESHOLD_REACHED":
+      return "The latest saved projection has reached the subject passing threshold. This candidate cannot be approved.";
+    case "CURRENT_PREDICTION_NOT_READY":
+      return "The latest prediction is not ready for intervention approval.";
+    case "CURRENT_PREDICTION_GRADE_INVALID":
+      return "The latest prediction grade is unavailable or invalid, so this candidate cannot be approved.";
+    case "PASSING_THRESHOLD_UNAVAILABLE":
+      return "The subject passing threshold is unavailable, so this candidate cannot be approved.";
+    default:
+      return "This preserved candidate is not currently eligible for approval.";
+  }
 }
 
 async function read<T>(path: string, method = "GET", body?: unknown): Promise<T> {
@@ -314,10 +340,7 @@ export function matchingCandidate(prediction: DevelopmentCurrentTermListItem, ca
     && candidate.class_id === prediction.class_id
     && candidate.subject_id === prediction.subject_id
     && candidate.academic_period_id === prediction.academic_period_id
-    && candidate.source_prediction_revision <= prediction.revision
-    && prediction.readiness_status === "READY"
-    && prediction.projected_final_term_grade !== null
-    && prediction.projected_final_term_grade < (candidate.passing_threshold ?? 85));
+    && candidate.source_prediction_revision <= prediction.revision);
 }
 
 export function matchingActiveIntervention(prediction: DevelopmentCurrentTermListItem, activeInterventions: TeacherInterventionSummary[]): TeacherInterventionSummary | undefined {

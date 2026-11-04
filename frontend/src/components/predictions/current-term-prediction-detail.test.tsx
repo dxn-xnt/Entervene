@@ -132,7 +132,8 @@ describe("current-term prediction detail", () => {
     render(<PredictionDetailSheet predictionId={41} currentTermPrediction={prediction} open onOpenChange={() => undefined} />);
 
     expect(screen.getByText("Projected Final Term Grade")).toBeTruthy();
-    expect(screen.getByText("Needs Monitoring")).toBeTruthy();
+    expect(screen.getByText("Risk Level")).toBeTruthy();
+    expect(screen.getByText("On Track")).toBeTruthy();
     expect(screen.getByText("Academic Evidence at Prediction Time")).toBeTruthy();
     expect(screen.getByText("Additional Classroom Context")).toBeTruthy();
     expect(screen.getByText(/not inputs to the current grade-projection model/i)).toBeTruthy();
@@ -140,6 +141,8 @@ describe("current-term prediction detail", () => {
     expect(screen.queryByText("STANDARD_READY")).toBeNull();
     expect(screen.queryByText("DEVELOPMENT")).toBeNull();
     expect(screen.queryByText(/probability|confidence|risk score/i)).toBeNull();
+    expect(screen.queryByText("Intervention Level")).toBeNull();
+    expect(screen.getByText(/intervention eligibility remains separate/i)).toBeTruthy();
   });
 
   it("shows an actual final grade separately from the earlier projection", () => {
