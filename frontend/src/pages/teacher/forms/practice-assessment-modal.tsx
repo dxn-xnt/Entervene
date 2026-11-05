@@ -86,7 +86,7 @@ export default function PracticeAssessmentModal({
   hasUnsavedReadingChanges = false,
   onAssessmentUpdated,
 }: PracticeAssessmentModalProps) {
-  const { toast } = useToast();
+  const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const effectiveApprovedReadings = savedReadingIds !== undefined ? savedReadingIds : selectedReadingIds;
