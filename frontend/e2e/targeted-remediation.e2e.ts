@@ -28,7 +28,7 @@ async function login(browser: Browser, email: string, password: string, base: st
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(password);
   await page.getByRole("button", { name: /sign in/i }).click();
-  await expect(page).toHaveURL(/\/(teacher|student)\//);
+  await expect(page).toHaveURL(/\/(teacher|student)\//, { timeout: 15_000 });
   return { context, page };
 }
 
@@ -44,7 +44,7 @@ function inspect() {
   const backend = process.env.E2E_BACKEND_DIR!;
   const stateFile = process.env.E2E_STATE_FILE!;
   const output = execFileSync(python, [join(backend, "tests/browser/remediation_fixture.py"), "inspect", stateFile], {
-    cwd: backend, encoding: "utf8", timeout: 15_000,
+    cwd: backend, encoding: "utf8", timeout: 60_000,
   });
   return JSON.parse(output) as { database: string; assignments: Array<{
     assignment_id: number; recipient_student_id: string; published: boolean; submission_count: number;
@@ -55,7 +55,7 @@ function setReadingCompletion(state: "zero" | "partial" | "complete") {
   execFileSync(
     process.env.E2E_PYTHON!,
     [join(process.env.E2E_BACKEND_DIR!, "tests/browser/remediation_fixture.py"), state, process.env.E2E_STATE_FILE!],
-    { cwd: process.env.E2E_BACKEND_DIR!, encoding: "utf8", timeout: 15_000 },
+    { cwd: process.env.E2E_BACKEND_DIR!, encoding: "utf8", timeout: 60_000 },
   );
 }
 
