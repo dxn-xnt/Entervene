@@ -21,6 +21,13 @@ import { Activity, BookOpen, Plus, Sparkles, Pencil, Lock } from "lucide-react";
 import AiRemediationDraftModal, {
   type DraftValidationResult,
 } from "./ai-remediation-draft-modal";
+import PracticeAssessmentModal from "./practice-assessment-modal";
+import {
+  type PracticeAssessmentDetail,
+  type PracticeAttemptSummary,
+  getTeacherPracticeAssessment,
+  listTeacherPracticeAttempts,
+} from "@/lib/practice-assessment-api";
 import { TeacherEmptyState } from "@/components/teacher/teacher-empty-state";
 import {
   createSupportMaterial,
@@ -363,6 +370,10 @@ const InterventionSupportMaterials = forwardRef<
   const [working, setWorking] = useState(false);
   const [isCreatingReading, setIsCreatingReading] = useState(false);
   const [teacherLoads, setTeacherLoads] = useState<TeacherClassLoad[]>([]);
+  const [practiceAssessment, setPracticeAssessment] = useState<PracticeAssessmentDetail | null>(null);
+  const [practiceAttempts, setPracticeAttempts] = useState<PracticeAttemptSummary[]>([]);
+  const [isPracticeModalOpen, setIsPracticeModalOpen] = useState(false);
+  const [savedReadingIds, setSavedReadingIds] = useState<number[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -372,7 +383,7 @@ const InterventionSupportMaterials = forwardRef<
           setTeacherLoads(data as unknown as TeacherClassLoad[]);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       active = false;
     };
@@ -416,8 +427,8 @@ const InterventionSupportMaterials = forwardRef<
         : (createdObj?.title
           ? updatedWorkspace.resources.find((r) => r.kind === "CLASSWORK" && r.title === createdObj.title)
           : updatedWorkspace.resources.find(
-              (r) => !resources.some((existing) => existing.kind === r.kind && existing.id === r.id)
-            ));
+            (r) => !resources.some((existing) => existing.kind === r.kind && existing.id === r.id)
+          ));
 
       if (newResource) {
         setPlan((current) => {
@@ -539,6 +550,10 @@ const InterventionSupportMaterials = forwardRef<
         ...loadedPlan,
         original_exam_assignment_id: loadedPlan.original_exam_assignment_id ?? loadedTargets[0] ?? null,
       }, loadedTargets, String(loadedCap), workspace.resources));
+      const initialSavedReadings = (loadedPlan.selected_resources || [])
+        .filter((r) => r.kind === "CLASSWORK")
+        .map((r) => r.id);
+      setSavedReadingIds(initialSavedReadings);
 
       setAdvisoryError(
         loadedPlan.ai_suggestion && !initialRecommendation
@@ -554,6 +569,20 @@ const InterventionSupportMaterials = forwardRef<
       setReviewerDraft(
         existingReviewer ? (existingReviewer.current_content as ReviewerDraft) : null
       );
+
+      try {
+        const practiceData = await getTeacherPracticeAssessment(interventionId);
+        setPracticeAssessment(practiceData);
+        if (practiceData) {
+          const attemptData = await listTeacherPracticeAttempts(interventionId);
+          setPracticeAttempts(attemptData ?? []);
+        } else {
+          setPracticeAttempts([]);
+        }
+      } catch {
+        setPracticeAssessment(null);
+        setPracticeAttempts([]);
+      }
     } catch (cause) {
       toast.error({
         title: "Unable to load support workspace",
@@ -562,6 +591,20 @@ const InterventionSupportMaterials = forwardRef<
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePracticeAssessmentUpdated = async (updated: PracticeAssessmentDetail | null) => {
+    setPracticeAssessment(updated);
+    if (updated) {
+      try {
+        const atts = await listTeacherPracticeAttempts(interventionId);
+        setPracticeAttempts(atts ?? []);
+      } catch {
+        // non-blocking
+      }
+    } else {
+      setPracticeAttempts([]);
     }
   };
 
@@ -651,6 +694,16 @@ const InterventionSupportMaterials = forwardRef<
     },
     [resources, selected]
   );
+  const selectedReadingIds = useMemo(() => {
+    return selectedResources
+      .filter((r) => r.kind === "CLASSWORK" && (r.classwork_type === "READING" || !r.classwork_type))
+      .map((r) => r.id);
+  }, [selectedResources]);
+  const hasUnsavedReadingChanges = useMemo(() => {
+    if (selectedReadingIds.length !== savedReadingIds.length) return true;
+    const savedSet = new Set(savedReadingIds);
+    return selectedReadingIds.some((id) => !savedSet.has(id));
+  }, [selectedReadingIds, savedReadingIds]);
   const NO_LESSON = "__NO_LESSON__";
   const lessonKey = (item: RemediationResource) => item.lesson?.trim() || NO_LESSON;
   const materialPool = useMemo(() => {
@@ -1197,6 +1250,10 @@ const InterventionSupportMaterials = forwardRef<
       setSavedPlanValues(planValues(result.plan,
         result.plan.target_assignment_ids ?? selectedActivityIds,
         String(result.plan.score_adjustment_cap ?? capInput), result.resources));
+      const updatedSavedReadings = (result.plan.selected_resources || [])
+        .filter((r) => r.kind === "CLASSWORK")
+        .map((r) => r.id);
+      setSavedReadingIds(updatedSavedReadings);
       setResources(result.resources);
       if (result.plan.target_assignment_ids !== undefined) {
         setSelectedActivityIds(result.plan.target_assignment_ids);
@@ -1884,6 +1941,70 @@ const InterventionSupportMaterials = forwardRef<
 
                   </Card>
 
+                  {/* Practice Assessment Overview Card */}
+                  {practiceAssessment && (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-base">Practice Assessment</h4>
+                          <Badge
+                            variant={
+                              practiceAssessment.status === "PUBLISHED"
+                                ? "solid"
+                                : practiceAssessment.status === "ARCHIVED"
+                                  ? "outline"
+                                  : "surface"
+                            }
+                            size="sm"
+                          >
+                            {practiceAssessment.status}
+                          </Badge>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setIsPracticeModalOpen(true)}
+                        >
+                          View Details
+                        </Button>
+                      </div>
+                      <Card className="flex flex-col gap-2 p-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-semibold text-foreground">{practiceAssessment.title}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {practiceAssessment.questions.length} questions · {practiceAssessment.passing_percentage}% passing mark
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground pt-2 border-t border-border">
+                          <span>
+                            Prerequisite Policy:{" "}
+                            <strong>
+                              {practiceAssessment.gatekeeper_policy === "REQUIRE_PASS"
+                                ? "Require Passing Score"
+                                : practiceAssessment.gatekeeper_policy === "REQUIRE_ATTEMPT"
+                                  ? "Allow Progress Below Passing"
+                                  : "Optional Practice"}
+                            </strong>
+                          </span>
+                          <span>·</span>
+                          <span>
+                            Attempts: <strong>{practiceAttempts.length}</strong>
+                          </span>
+                          {practiceAttempts.length > 0 && (
+                            <>
+                              <span>·</span>
+                              <span className={practiceAttempts.some((a) => a.is_passed) ? "text-emerald-600 font-semibold" : "text-amber-600 font-semibold"}>
+                                {practiceAttempts.some((a) => a.is_passed)
+                                  ? "Passed"
+                                  : "Pending passing score"}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </Card>
+                    </div>
+                  )}
+
                   {/* Current Support */}
                   {assigned.length > 0 ? (
                     <div className="flex flex-col gap-2">
@@ -2459,12 +2580,12 @@ const InterventionSupportMaterials = forwardRef<
                     initialLessonId={
                       lessonFilter !== "ALL"
                         ? focus?.lessons.find((l) => l.title === lessonFilter)?.id ??
-                          resources.find(
-                            (r) =>
-                              r.kind === "LESSON" &&
-                              (r.title === lessonFilter || r.lesson === lessonFilter)
-                          )?.id ??
-                          undefined
+                        resources.find(
+                          (r) =>
+                            r.kind === "LESSON" &&
+                            (r.title === lessonFilter || r.lesson === lessonFilter)
+                        )?.id ??
+                        undefined
                         : undefined
                     }
                     onClose={() => setIsCreatingReading(false)}
@@ -2817,6 +2938,155 @@ const InterventionSupportMaterials = forwardRef<
                 onUpdateClassworkRubricLevel={handleUpdateClassworkRubricLevel}
                 onUpdateClassworkTeacherGuide={handleUpdateClassworkTeacherGuide}
               />
+
+              {/* Practice Assessment Section */}
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-black">Practice Assessment</h3>
+                    <Badge variant="outline" size="sm">Independent & Ungraded</Badge>
+                  </div>
+                  {practiceAssessment ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsPracticeModalOpen(true)}
+                    >
+                      <Sparkles className="size-3.5 mr-1.5" />
+                      Manage Practice
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => setIsPracticeModalOpen(true)}
+                    >
+                      <Plus className="size-3.5 mr-1.5" />
+                      Add Practice Assessment
+                    </Button>
+                  )}
+                </div>
+
+                <Card className="flex flex-col gap-3 p-4">
+                  {practiceAssessment ? (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-base">{practiceAssessment.title}</h4>
+                            <Badge
+                              variant={
+                                practiceAssessment.status === "PUBLISHED"
+                                  ? "solid"
+                                  : practiceAssessment.status === "ARCHIVED"
+                                    ? "outline"
+                                    : "surface"
+                              }
+                              size="sm"
+                            >
+                              {practiceAssessment.status}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {practiceAssessment.questions.length} questions · {practiceAssessment.passing_percentage}% passing score
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="surface" size="sm">
+                            {practiceAssessment.gatekeeper_policy === "REQUIRE_PASS"
+                              ? "Require Passing Score"
+                              : practiceAssessment.gatekeeper_policy === "REQUIRE_ATTEMPT"
+                                ? "Allow Progress Below Passing"
+                                : "Optional Practice"}
+                          </Badge>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => setIsPracticeModalOpen(true)}
+                          >
+                            Edit / Configure
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Attempts Summary */}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span className="font-semibold text-foreground">
+                            Student Attempts ({practiceAttempts.length})
+                          </span>
+                          {practiceAttempts.length > 0 && (
+                            <span>
+                              {practiceAttempts.some((a) => a.is_passed)
+                                ? "Requirement met (Passed)"
+                                : practiceAssessment.gatekeeper_policy === "REQUIRE_ATTEMPT" &&
+                                  practiceAttempts.some((a) => a.status === "SUBMITTED")
+                                  ? "Requirement met (Attempted)"
+                                  : "Requirement pending"}
+                            </span>
+                          )}
+                        </div>
+
+                        {practiceAttempts.length === 0 ? (
+                          <p className="text-xs text-muted-foreground italic">
+                            No student attempts yet. Once published, the student can attempt this practice assessment.
+                          </p>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {practiceAttempts.slice(0, 5).map((att) => (
+                              <div
+                                key={att.attempt_id}
+                                className="flex items-center gap-2 p-2 border border-border rounded bg-muted/20 text-xs"
+                              >
+                                <span className="font-medium">Attempt #{att.attempt_number}:</span>
+                                <span className="font-bold">
+                                  {att.total_score}/{att.max_score} ({att.score_percentage != null ? `${att.score_percentage}%` : "In progress"})
+                                </span>
+                                <Badge
+                                  variant={att.is_passed ? "solid" : att.status === "SUBMITTED" ? "default" : "outline"}
+                                  size="sm"
+                                >
+                                  {att.is_passed ? "Passed" : att.status === "SUBMITTED" ? "Below Passing" : att.status}
+                                </Badge>
+                              </div>
+                            ))}
+                            {practiceAttempts.length > 5 && (
+                              <Button
+                                size="sm"
+                                variant="link"
+                                className="text-xs p-0 h-auto"
+                                onClick={() => setIsPracticeModalOpen(true)}
+                              >
+                                +{practiceAttempts.length - 5} more
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 py-1">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">
+                          Independent practice to prepare the student for remediation
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Author questions manually, import a quiz file, or generate with AI grounded in selected readings.
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => setIsPracticeModalOpen(true)}
+                        className="shrink-0"
+                      >
+                        <Plus className="size-3.5 mr-1.5" />
+                        Configure Practice
+                      </Button>
+                    </div>
+                  )}
+                </Card>
+              </div>
 
               <div className="flex flex-col gap-1">
                 <h3 className="font-black">Remediation Activity</h3>
@@ -3370,6 +3640,17 @@ const InterventionSupportMaterials = forwardRef<
           )}
         </>
       )}
+
+      <PracticeAssessmentModal
+        isOpen={isPracticeModalOpen}
+        onClose={() => setIsPracticeModalOpen(false)}
+        interventionId={interventionId}
+        studentName={detail.student_name}
+        selectedReadingIds={selectedReadingIds}
+        savedReadingIds={savedReadingIds}
+        hasUnsavedReadingChanges={hasUnsavedReadingChanges}
+        onAssessmentUpdated={handlePracticeAssessmentUpdated}
+      />
     </section>
   );
 });
