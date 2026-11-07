@@ -76,3 +76,5 @@ mobile-app/dist/
 # Generated TOS / Quiz export documents and previews
 scripts/*.pdf
 scripts/*.png
+test_state*.json
+study-support.*
