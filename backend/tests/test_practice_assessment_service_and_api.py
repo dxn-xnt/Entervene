@@ -1089,3 +1089,230 @@ class TestGradebookIsolation:
 
         link_count = db.query(RemediationAssignmentLink).count()
         assert link_count == 0, f"Expected 0 remediation_assignment_links, found {link_count}"
+
+
+# ---------------------------------------------------------------------------
+# 6. Save & Resume Draft Persistence
+# ---------------------------------------------------------------------------
+
+class TestSaveAndResumeDraft:
+    def _setup_published_assessment(self, db_env):
+        db = db_env["db"]
+        staff_id = db_env["staff"].staff_id
+        intervention_id = db_env["intervention"].intervention_id
+
+        PracticeAssessmentService.get_or_create_assessment(db, staff_id, intervention_id)
+        q = PracticeAssessmentService.add_question(
+            db, staff_id, intervention_id,
+            PracticeQuestionCreate(
+                question_text="Draft test question 1",
+                points=Decimal("1.00"),
+                options=[
+                    PracticeOptionIn(option_text="Option A", is_correct=True, option_order=1),
+                    PracticeOptionIn(option_text="Option B", is_correct=False, option_order=2),
+                ],
+            ),
+        )
+        PracticeAssessmentService.publish_assessment(db, staff_id, intervention_id)
+        return q
+
+    def test_save_draft_persists_answers_without_grading(self, db_env):
+        self._setup_published_assessment(db_env)
+        db = db_env["db"]
+        student_id = db_env["student"].student_id
+        intervention_id = db_env["intervention"].intervention_id
+
+        # 1. Start attempt
+        started = PracticeAssessmentService.start_or_resume_attempt(db, student_id, intervention_id)
+        assert started.status == "STARTED"
+        assert started.saved_answers == []
+
+        q1 = started.questions[0]
+        selected_opt = q1.options[0].option_id
+
+        # 2. Save draft answers
+        draft_payload = PracticeAttemptSubmitRequest(
+            answers=[
+                PracticeAttemptAnswerSubmission(
+                    practice_question_id=q1.practice_question_id,
+                    selected_option_id=selected_opt,
+                )
+            ]
+        )
+        save_res = PracticeAssessmentService.save_attempt_draft(
+            db, student_id, intervention_id, started.attempt_id, draft_payload
+        )
+        assert save_res.status == "STARTED"
+        assert save_res.saved_answers_count == 1
+
+        # Verify attempt remains STARTED in database
+        attempt = db.query(PracticeAttempt).filter(PracticeAttempt.attempt_id == started.attempt_id).first()
+        assert attempt.status == "STARTED"
+        assert attempt.completed_at is None
+        assert attempt.total_score == Decimal("0.00")
+        assert attempt.score_percentage == Decimal("0.00")
+        assert attempt.is_passed is False
+
+        # 3. Resume attempt and verify saved_answers are returned
+        resumed = PracticeAssessmentService.start_or_resume_attempt(db, student_id, intervention_id)
+        assert resumed.attempt_id == started.attempt_id
+        assert len(resumed.saved_answers) == 1
+        assert resumed.saved_answers[0].practice_question_id == q1.practice_question_id
+        assert resumed.saved_answers[0].selected_option_id == selected_opt
+
+    def test_save_draft_mcq_true_false_identification_all_persist_and_restore(self, db_env):
+        """Check 1 & Check 3: Verify MCQ, True/False, and Identification answers all persist
+
+        in actual PostgreSQL records and restore on resume without triggering submission or unlocking remediation.
+        """
+        db = db_env["db"]
+        staff_id = db_env["staff"].staff_id
+        student_id = db_env["student"].student_id
+        intervention_id = db_env["intervention"].intervention_id
+
+        # Setup assessment with REQUIRE_PASS policy
+        PracticeAssessmentService.get_or_create_assessment(db, staff_id, intervention_id)
+        PracticeAssessmentService.update_assessment_config(
+            db, staff_id, intervention_id,
+            PracticeAssessmentUpdate(gatekeeper_policy="REQUIRE_PASS", passing_percentage=75),
+        )
+
+        # 1. Add MCQ
+        q_mcq = PracticeAssessmentService.add_question(
+            db, staff_id, intervention_id,
+            PracticeQuestionCreate(
+                question_text="What is the capital of the Philippines?",
+                question_type="MULTIPLE_CHOICE",
+                points=Decimal("1.00"),
+                options=[
+                    PracticeOptionIn(option_text="Manila", is_correct=True, option_order=1),
+                    PracticeOptionIn(option_text="Cebu", is_correct=False, option_order=2),
+                ],
+            ),
+        )
+        # 2. Add True/False
+        q_tf = PracticeAssessmentService.add_question(
+            db, staff_id, intervention_id,
+            PracticeQuestionCreate(
+                question_text="The earth revolves around the sun.",
+                question_type="TRUE_FALSE",
+                points=Decimal("1.00"),
+                options=[
+                    PracticeOptionIn(option_text="True", is_correct=True, option_order=1),
+                    PracticeOptionIn(option_text="False", is_correct=False, option_order=2),
+                ],
+            ),
+        )
+        # 3. Add Identification
+        q_id = PracticeAssessmentService.add_question(
+            db, staff_id, intervention_id,
+            PracticeQuestionCreate(
+                question_text="Identify the powerhouse of the cell.",
+                question_type="IDENTIFICATION",
+                points=Decimal("2.00"),
+                options=[
+                    PracticeOptionIn(option_text="Mitochondria", is_correct=True, option_order=1),
+                ],
+            ),
+        )
+        PracticeAssessmentService.publish_assessment(db, staff_id, intervention_id)
+
+        # 4. Student starts attempt
+        started = PracticeAssessmentService.start_or_resume_attempt(db, student_id, intervention_id)
+        assert started.status == "STARTED"
+        assert len(started.saved_answers) == 0
+
+        mcq_opt = q_mcq.options[0].option_id
+        tf_opt = q_tf.options[0].option_id
+        ident_text = "Mitochondria"
+
+        # 5. Save draft answers for all 3 types
+        draft_payload = PracticeAttemptSubmitRequest(
+            answers=[
+                PracticeAttemptAnswerSubmission(
+                    practice_question_id=q_mcq.practice_question_id,
+                    selected_option_id=mcq_opt,
+                ),
+                PracticeAttemptAnswerSubmission(
+                    practice_question_id=q_tf.practice_question_id,
+                    selected_option_id=tf_opt,
+                ),
+                PracticeAttemptAnswerSubmission(
+                    practice_question_id=q_id.practice_question_id,
+                    student_answer_text=ident_text,
+                ),
+            ]
+        )
+        save_res = PracticeAssessmentService.save_attempt_draft(
+            db, student_id, intervention_id, started.attempt_id, draft_payload
+        )
+        assert save_res.status == "STARTED"
+        assert save_res.saved_answers_count == 3
+
+        # 6. Verify directly in PostgreSQL row
+        db.expire_all()
+        attempt_record = db.query(PracticeAttempt).filter_by(attempt_id=started.attempt_id).first()
+        assert attempt_record is not None
+        assert attempt_record.status == "STARTED"
+        assert attempt_record.completed_at is None
+        assert attempt_record.total_score == Decimal("0.00")
+        assert attempt_record.score_percentage == Decimal("0.00")
+        assert attempt_record.is_passed is False
+
+        persisted_drafts = attempt_record.attempt_snapshot.get("draft_answers", [])
+        assert len(persisted_drafts) == 3
+
+        draft_by_qid = {d["practice_question_id"]: d for d in persisted_drafts}
+        assert draft_by_qid[q_mcq.practice_question_id]["selected_option_id"] == mcq_opt
+        assert draft_by_qid[q_tf.practice_question_id]["selected_option_id"] == tf_opt
+        assert draft_by_qid[q_id.practice_question_id]["student_answer_text"] == ident_text
+
+        # 7. Check 3 verification: evaluate_practice_progression never unlocks remediation
+        progression = PracticeAssessmentService.evaluate_practice_progression(db, intervention_id, student_id)
+        assert progression.attempts_count == 0
+        assert progression.practice_completed is False
+        assert progression.practice_passed is False
+        assert progression.eligible_for_remediation is False  # REQUIRE_PASS policy strictly blocks access
+
+        # 8. Resume attempt and verify all 3 types restored
+        resumed = PracticeAssessmentService.start_or_resume_attempt(db, student_id, intervention_id)
+        assert resumed.attempt_id == started.attempt_id
+        assert len(resumed.saved_answers) == 3
+
+        resumed_by_qid = {sa.practice_question_id: sa for sa in resumed.saved_answers}
+        assert resumed_by_qid[q_mcq.practice_question_id].selected_option_id == mcq_opt
+        assert resumed_by_qid[q_tf.practice_question_id].selected_option_id == tf_opt
+        assert resumed_by_qid[q_id.practice_question_id].student_answer_text == ident_text
+
+    def test_diagnostic_feedback_forbidden_on_started_attempt(self, db_env):
+        self._setup_published_assessment(db_env)
+        db = db_env["db"]
+        student_id = db_env["student"].student_id
+        intervention_id = db_env["intervention"].intervention_id
+
+        started = PracticeAssessmentService.start_or_resume_attempt(db, student_id, intervention_id)
+        with pytest.raises(HTTPException) as exc_info:
+            PracticeAssessmentService.get_attempt_feedback(db, student_id, intervention_id, started.attempt_id)
+        assert exc_info.value.status_code == 400
+        assert "unsubmitted" in exc_info.value.detail.lower()
+
+    def test_cannot_save_draft_on_submitted_attempt(self, db_env):
+        self._setup_published_assessment(db_env)
+        db = db_env["db"]
+        student_id = db_env["student"].student_id
+        intervention_id = db_env["intervention"].intervention_id
+
+        started = PracticeAssessmentService.start_or_resume_attempt(db, student_id, intervention_id)
+        # Submit attempt
+        PracticeAssessmentService.submit_attempt(
+            db, student_id, intervention_id, started.attempt_id,
+            PracticeAttemptSubmitRequest(answers=[])
+        )
+
+        # Attempt to save draft on SUBMITTED attempt should fail with 409 Conflict
+        draft_payload = PracticeAttemptSubmitRequest(answers=[])
+        with pytest.raises(HTTPException) as exc_info:
+            PracticeAssessmentService.save_attempt_draft(
+                db, student_id, intervention_id, started.attempt_id, draft_payload
+            )
+        assert exc_info.value.status_code == 409

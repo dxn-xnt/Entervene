@@ -77,7 +77,14 @@ async def generate_practice_questions_ai(
                 ClassworkAssignment,
                 RemediationReadingPrerequisite.remediation_assignment_id == ClassworkAssignment.classwork_assignment_id,
             )
-            .filter(ClassworkAssignment.source_intervention_id == intervention.intervention_id)
+            .join(
+                Classwork,
+                RemediationReadingPrerequisite.reading_classwork_id == Classwork.classwork_id,
+            )
+            .filter(
+                ClassworkAssignment.source_intervention_id == intervention.intervention_id,
+                Classwork.is_locked.is_(False),
+            )
             .distinct()
             .all()
         )

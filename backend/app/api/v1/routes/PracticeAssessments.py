@@ -26,6 +26,7 @@ from app.schemas.PracticeAssessment import (
     PracticeAssessmentRead,
     PracticeAssessmentUpdate,
     PracticeAttemptFeedbackResponse,
+    PracticeAttemptDraftSaveResponse,
     PracticeAttemptStartResponse,
     PracticeAttemptSubmitRequest,
     PracticeAttemptSummary,
@@ -38,6 +39,7 @@ from app.schemas.PracticeAssessment import (
     PracticeQuestionsReorderRequest,
     PracticeQuestionUpdate,
 )
+from app.services.ai.UsageGuard import actor
 from app.services.intervention.PracticeAssessmentAIService import (
     generate_practice_questions_ai,
 )
@@ -59,6 +61,7 @@ from app.services.intervention.PracticeAssessmentService import (
     list_teacher_attempts,
     publish_assessment,
     reorder_questions,
+    save_attempt_draft,
     start_or_resume_attempt,
     submit_attempt,
     update_assessment_config,
@@ -216,7 +219,11 @@ async def generate_questions_ai(
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    return await generate_practice_questions_ai(db, staff_id, intervention_id, payload)
+    token = actor.set(staff_id)
+    try:
+        return await generate_practice_questions_ai(db, staff_id, intervention_id, payload)
+    finally:
+        actor.reset(token)
 
 
 @teacher_practice_router.post("/import", response_model=PracticeQuestionsImportPreviewResponse)
@@ -291,6 +298,17 @@ def start_practice_attempt(
     db: Session = Depends(get_db),
 ):
     return start_or_resume_attempt(db, student.student_id, intervention_id)
+
+
+@student_practice_router.put("/attempts/{attempt_id}/draft", response_model=PracticeAttemptDraftSaveResponse)
+def save_practice_attempt_draft_endpoint(
+    intervention_id: int,
+    attempt_id: int,
+    payload: PracticeAttemptSubmitRequest,
+    student: Student = Depends(get_student_record),
+    db: Session = Depends(get_db),
+):
+    return save_attempt_draft(db, student.student_id, intervention_id, attempt_id, payload)
 
 
 @student_practice_router.post("/attempts/{attempt_id}/submit", response_model=PracticeAttemptFeedbackResponse)
