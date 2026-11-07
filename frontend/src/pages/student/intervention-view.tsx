@@ -478,11 +478,17 @@ export default function StudentInterventionView() {
                                 onClick={
                                   !isHistorical
                                     ? () =>
-                                      navigate(
-                                        `/student/classworks/${reading.assignment_id}?from=${encodeURIComponent(
-                                          window.location.pathname + window.location.search
-                                        )}&support_title=${encodeURIComponent(title)}`
-                                      )
+                                      {
+                                      const activeIntId = intervention?.intervention_id || interventionId;
+                                      const query = new URLSearchParams({
+                                        from: window.location.pathname + window.location.search,
+                                        support_title: title,
+                                      });
+                                      if (activeIntId) {
+                                        query.set("intervention_id", String(activeIntId));
+                                      }
+                                      navigate(`/student/classworks/${reading.assignment_id}?${query.toString()}`);
+                                    }
                                     : undefined
                                 }
                                 showPublicationStatus={false}

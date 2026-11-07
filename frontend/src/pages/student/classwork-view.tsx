@@ -97,7 +97,16 @@ export default function StudentClassworkView() {
   const contextState = academicContextState(selectedYear, selectedPeriod, periods);
   const { assignmentId: rawId } = useParams<{ assignmentId: string }>();
   const [searchParams] = useSearchParams();
-  const rawInterventionId = searchParams.get("intervention_id");
+  const fromParam = searchParams.get("from");
+  const fromInterventionId =
+    fromParam && fromParam.includes("?")
+      ? new URLSearchParams(fromParam.split("?")[1]).get("intervention") ||
+        new URLSearchParams(fromParam.split("?")[1]).get("intervention_id")
+      : null;
+  const rawInterventionId =
+    searchParams.get("intervention_id") ||
+    searchParams.get("intervention") ||
+    fromInterventionId;
   const interventionId =
     rawInterventionId && /^\d+$/.test(rawInterventionId)
       ? Number(rawInterventionId)

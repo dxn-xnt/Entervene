@@ -41,6 +41,8 @@ __pycache__/
 .pytest_cache/
 backend/test_temp/
 backend/pytest_temp_dir/
+pytest_temp_dir/
+**/pytest_temp_dir/
 backend/.pytest-*/
 backend/.demo-fixtures/
 

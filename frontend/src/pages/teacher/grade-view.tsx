@@ -226,7 +226,7 @@ const TeacherGradeView = () => {
     currentPeriod &&
     !currentPeriod.is_active &&
     activePeriod &&
-    currentPeriod.period_sequence > activePeriod.period_sequence
+    (currentPeriod.period_sequence ?? 0) > (activePeriod.period_sequence ?? 0)
   );
   const mutationsDisabled = isViewOnly || isFutureTerm;
   const mutationLockMessage = isFutureTerm

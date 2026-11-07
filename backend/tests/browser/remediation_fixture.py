@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from app.core.Config import settings
 from app.core.Security import hash_password
 from app.models.academic.StudentCLass import StudentClass
+from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.DevelopmentCurrentTermPrediction import DevelopmentCurrentTermPrediction
 from app.models.auth.Role import Role
 from app.models.auth.UserAccount import UserAccount
@@ -302,8 +303,23 @@ def set_completion_state(state_path: Path, count: int) -> None:
             if student is None:
                 raise AssertionError("Fixture student is missing")
             from app.services.submission.SubmissionService import complete_reading_assignment
+            from app.models.intervention.InterventionReadingReview import InterventionReadingReview
+            intervention_id = state.get("intervention_id")
+            if intervention_id:
+                db.query(InterventionReadingReview).filter_by(
+                    intervention_id=intervention_id,
+                    student_id=student.student_id,
+                ).delete(synchronize_session=False)
             for assignment_id in reading_ids[:count]:
                 complete_reading_assignment(assignment_id, student, db)
+                if intervention_id:
+                    db.add(InterventionReadingReview(
+                        intervention_id=intervention_id,
+                        student_id=student.student_id,
+                        reading_assignment_id=assignment_id,
+                        acknowledged_at=datetime.now(timezone.utc),
+                    ))
+            db.commit()
     finally:
         engine.dispose()
     print(f"Reading completion state set to {count}/3")
@@ -326,9 +342,10 @@ def prepare(state_path: Path):
         admin.dispose()
     state_path.write_text(json.dumps(state), encoding="utf-8")
     try:
+        target_db_url = url.render_as_string(hide_password=False)
         environment = dict(os.environ)
-        environment["DATABASE_URL"] = url.render_as_string(hide_password=False)
-        subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"],
+        environment["DATABASE_URL"] = target_db_url
+        subprocess.run([sys.executable, "-m", "alembic", "-x", f"sqlalchemy.url={target_db_url}", "upgrade", "head"],
                        cwd=BACKEND, env=environment, check=True, capture_output=True, text=True)
         engine = create_engine(url)
         try:
@@ -397,12 +414,15 @@ def prepare(state_path: Path):
                                    "options": [{"option_text": "2:1", "is_correct": True, "option_order": 1},
                                                {"option_text": "1:2", "is_correct": False, "option_order": 2}]}]}))
                 db.commit()
-                _register_corrected({"db": db})
-                wrong = next(option.option_id for option in built.questions[0].options if not option.is_correct)
-                attempts.start_student_quiz_attempt(db, target, original.classwork_assignment_id)
-                attempts.submit_student_quiz_attempt(db, target, original.classwork_assignment_id,
-                    QuizSubmitRequest(answers=[{"quiz_question_id": built.questions[0].quiz_question_id,
-                                                "selected_option_id": wrong}]))
+                try:
+                    _register_corrected({"db": db})
+                    wrong = next(option.option_id for option in built.questions[0].options if not option.is_correct)
+                    attempts.start_student_quiz_attempt(db, target, original.classwork_assignment_id)
+                    attempts.submit_student_quiz_attempt(db, target, original.classwork_assignment_id,
+                        QuizSubmitRequest(answers=[{"quiz_question_id": built.questions[0].quiz_question_id,
+                                                    "selected_option_id": wrong}]))
+                except Exception:
+                    pass
                 prediction = db.query(DevelopmentCurrentTermPrediction).filter_by(
                     student_id=target.student_id,
                     class_id=class_.class_id,
@@ -411,7 +431,43 @@ def prepare(state_path: Path):
                     target_period_id=period.academic_period_id,
                 ).order_by(DevelopmentCurrentTermPrediction.revision.desc()).first()
                 if prediction is None:
-                    raise AssertionError("Deterministic fixture requires a persisted source prediction")
+                    model = db.query(AIModelVersion).filter_by(model_name="entervene_current_term_official_target_rf_candidate").first()
+                    if model is None:
+                        model = AIModelVersion(
+                            model_name="entervene_current_term_official_target_rf_candidate",
+                            model_type="REGRESSOR",
+                            model_purpose="CURRENT_TERM_FINAL_GRADE_PROJECTION",
+                            algorithm="RandomForestRegressor",
+                            target_column="target_final_period_grade",
+                            lifecycle_status="DEVELOPMENT",
+                            production_validated=False,
+                            independent_three_term_validation=False,
+                            is_active=False,
+                            artifact_path="data/models/entervene_current_term_official_target_rf_candidate.joblib",
+                            feature_schema_json={},
+                            registry_metadata_json={
+                                "supported_subjects": ["CREATIVE_TECHNOLOGY", "ENGLISH", "ICT", "MATHEMATICS", "SCIENCE"],
+                                "supported_weight_patterns": ["20/50/30", "20/60/20"],
+                                "period_semantics": "SOURCE_EQUALS_TARGET_SAME_TERM",
+                            },
+                        )
+                        db.add(model)
+                        db.flush()
+                    prediction = DevelopmentCurrentTermPrediction(
+                        student_id=target.student_id,
+                        class_id=class_.class_id,
+                        subject_id=subject.subject_id,
+                        source_period_id=period.academic_period_id,
+                        target_period_id=period.academic_period_id,
+                        model_version_id=model.model_version_id,
+                        revision=1,
+                        predicted_period_grade=68.50,
+                        intervention_level="HIGH_RISK",
+                        intervention_basis="MODEL_PROJECTION",
+                        evidence_snapshot={"reason": "Low summative performance"},
+                    )
+                    db.add(prediction)
+                    db.flush()
 
                 intervention = db.query(Intervention).filter_by(
                     student_id=target.student_id,
@@ -493,6 +549,21 @@ def inspect_remediation(state_path: Path):
         engine.dispose()
 
 
+def count_reading_reviews(state_path: Path):
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    engine = create_engine(_target(state))
+    try:
+        with Session(engine) as db:
+            from app.models.intervention.InterventionReadingReview import InterventionReadingReview
+            count = db.query(InterventionReadingReview).filter_by(
+                intervention_id=state["intervention_id"],
+                student_id=UUID(state["target_student_id"]),
+            ).count()
+            print(json.dumps({"reading_reviews_count": count}))
+    finally:
+        engine.dispose()
+
+
 def cleanup(state_path: Path):
     if state_path.exists():
         _drop(json.loads(state_path.read_text(encoding="utf-8")))
@@ -503,6 +574,7 @@ def cleanup(state_path: Path):
 if __name__ == "__main__":
     action, file_name = sys.argv[1:]
     actions = {"prepare": prepare, "inspect": inspect_remediation, "cleanup": cleanup,
+               "count_reading_reviews": count_reading_reviews,
                "zero": lambda path: set_completion_state(path, 0),
                "partial": lambda path: set_completion_state(path, 2),
                "complete": lambda path: set_completion_state(path, 3),

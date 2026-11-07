@@ -298,9 +298,10 @@ export default function PracticeAssessmentModal({
       const preview = await importPracticeQuestionsPreview(interventionId, file);
       if (preview.questions.length > 0) {
         setQuestions((prev) => [...prev, ...preview.questions]);
-        toast.success({
+        toast({
           title: "Questions Imported",
           description: `Imported ${preview.questions.length} questions from ${file.name}. Review and save draft.`,
+          variant: "success",
         });
       }
       if (preview.warnings && preview.warnings.length > 0) {
@@ -362,9 +363,10 @@ export default function PracticeAssessmentModal({
         setQuestions((prev) => [...prev, ...generated]);
         setShowAiDrawer(false);
         setAiGuidance("");
-        toast.success({
+        toast({
           title: "AI Questions Generated",
           description: `Generated ${generated.length} multiple-choice questions grounded in selected readings.`,
+          variant: "success",
         });
       }
     } catch (err) {
@@ -437,9 +439,10 @@ export default function PracticeAssessmentModal({
       setAssessment(currentAssessment);
       if (onAssessmentUpdated) onAssessmentUpdated(currentAssessment);
 
-      toast.success({
+      toast({
         title: "Draft Saved",
         description: "Practice Assessment configuration and questions saved.",
+        variant: "success",
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to save practice assessment draft.";
@@ -460,32 +463,35 @@ export default function PracticeAssessmentModal({
     setIsPublishing(true);
     setErrorMessage(null);
     try {
-      // 1. Save questions first if unlocked
+      // 1. Ensure or update assessment record
+      if (!assessment) {
+        await initializeTeacherPracticeAssessment(interventionId, {
+          title: title.trim() || "Practice Assessment",
+          passing_percentage: passingPercentage,
+          gatekeeper_policy: gatekeeperPolicy,
+        });
+      } else {
+        await updateTeacherPracticeAssessment(interventionId, {
+          title: title.trim() || "Practice Assessment",
+          passing_percentage: passingPercentage,
+          gatekeeper_policy: gatekeeperPolicy,
+        });
+      }
+
+      // 2. Batch save questions only if not locked
       if (!isLocked) {
-        if (!assessment) {
-          await initializeTeacherPracticeAssessment(interventionId, {
-            title: title.trim() || "Practice Assessment",
-            passing_percentage: passingPercentage,
-            gatekeeper_policy: gatekeeperPolicy,
-          });
-        } else {
-          await updateTeacherPracticeAssessment(interventionId, {
-            title: title.trim() || "Practice Assessment",
-            passing_percentage: passingPercentage,
-            gatekeeper_policy: gatekeeperPolicy,
-          });
-        }
         await batchSavePracticeQuestions(interventionId, questions);
       }
 
-      // 2. Publish
+      // 3. Publish
       const published = await publishTeacherPracticeAssessment(interventionId);
       setAssessment(published);
       if (onAssessmentUpdated) onAssessmentUpdated(published);
 
-      toast.success({
+      toast({
         title: "Practice Assessment Published",
         description: "Practice assessment is now published and active for this intervention.",
+        variant: "success",
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to publish practice assessment.";
@@ -635,8 +641,8 @@ export default function PracticeAssessmentModal({
                           key={policy.value}
                           onClick={() => setGatekeeperPolicy(policy.value)}
                           className={`cursor-pointer rounded border-2 p-3 transition-colors ${isSelected
-                              ? "border-primary bg-primary/10"
-                              : "border-border hover:bg-muted/40"
+                            ? "border-primary bg-primary/10"
+                            : "border-border hover:bg-muted/40"
                             }`}
                         >
                           <div className="flex items-center justify-between">
@@ -657,8 +663,8 @@ export default function PracticeAssessmentModal({
                   type="button"
                   onClick={() => setActiveTab("questions")}
                   className={`pb-2 px-3 font-bold text-sm border-b-2 transition-colors ${activeTab === "questions"
-                      ? "border-primary text-primary"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
                     }`}
                 >
                   Questions ({questions.length})
@@ -667,8 +673,8 @@ export default function PracticeAssessmentModal({
                   type="button"
                   onClick={() => setActiveTab("attempts")}
                   className={`pb-2 px-3 font-bold text-sm border-b-2 transition-colors ${activeTab === "attempts"
-                      ? "border-primary text-primary"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
                     }`}
                 >
                   Student Attempts ({attempts.length})
@@ -982,8 +988,8 @@ export default function PracticeAssessmentModal({
                                     key={optIdx}
                                     onClick={() => !isLocked && handleSetCorrectOption(qIdx, optIdx)}
                                     className={`flex items-center justify-between p-2.5 rounded border-2 cursor-pointer transition-colors ${opt.is_correct
-                                        ? "border-primary bg-primary/10 font-bold"
-                                        : "border-border hover:bg-muted/40"
+                                      ? "border-primary bg-primary/10 font-bold"
+                                      : "border-border hover:bg-muted/40"
                                       }`}
                                   >
                                     <span className="text-sm">{opt.option_text}</span>
