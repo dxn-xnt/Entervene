@@ -4,9 +4,9 @@ import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";
-import { Input } from "@/components/retroui/Input";
 import { Progress } from "@/components/retroui/Progress";
 import { useToast } from "@/components/retroui/Toast";
+import { QuizTextAnswerInput } from "@/components/quiz/student-quiz-answer";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -16,6 +16,7 @@ import {
   Lightbulb,
   Loader2,
   RotateCcw,
+  Save,
   Send,
   XCircle,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import {
   getStudentPracticeAssessment,
   getStudentPracticeAttemptFeedback,
   listStudentPracticeAttempts,
+  saveStudentPracticeAttemptDraft,
   startStudentPracticeAttempt,
   submitStudentPracticeAttempt,
 } from "@/lib/practice-assessment-api";
@@ -74,6 +76,9 @@ export default function StudentPracticeAssessmentModal({
   >({});
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Feedback State
   const [feedback, setFeedback] = useState<PracticeAttemptFeedbackResponse | null>(null);
@@ -84,7 +89,9 @@ export default function StudentPracticeAssessmentModal({
     if (!isOpen) {
       // Reset transient taking state when modal closes
       setShowConfirmSubmit(false);
+      setShowCloseConfirm(false);
       setErrorMessage(null);
+      setHasUnsavedChanges(false);
       return;
     }
 
@@ -102,9 +109,11 @@ export default function StudentPracticeAssessmentModal({
         setMetadata(meta);
         setAllAttempts(attempts);
 
-        if (initialMode === "feedback" && attempts.length > 0) {
+        const completedAttempts = attempts.filter((a) => a.status === "SUBMITTED");
+
+        if (initialMode === "feedback" && completedAttempts.length > 0) {
           // Open directly into feedback for latest completed attempt
-          const latestAttempt = attempts[0];
+          const latestAttempt = completedAttempts[0];
           setSelectedAttemptId(latestAttempt.attempt_id);
           setViewMode("feedback");
           const fb = await getStudentPracticeAttemptFeedback(interventionId, latestAttempt.attempt_id);
@@ -116,7 +125,22 @@ export default function StudentPracticeAssessmentModal({
           if (isMounted) {
             setActiveAttempt(startRes);
             setCurrentQuestionIndex(0);
-            setAnswers({});
+
+            // Restore saved draft answers if resuming!
+            const restoredAnswers: Record<
+              number,
+              { selected_option_id?: number | null; student_answer_text?: string | null }
+            > = {};
+            if (startRes.saved_answers && Array.isArray(startRes.saved_answers)) {
+              for (const sa of startRes.saved_answers) {
+                restoredAnswers[sa.practice_question_id] = {
+                  selected_option_id: sa.selected_option_id ?? null,
+                  student_answer_text: sa.student_answer_text ?? null,
+                };
+              }
+            }
+            setAnswers(restoredAnswers);
+            setHasUnsavedChanges(false);
           }
         }
       } catch (err) {
@@ -144,6 +168,7 @@ export default function StudentPracticeAssessmentModal({
         student_answer_text: null,
       },
     }));
+    setHasUnsavedChanges(true);
   };
 
   const handleIdentificationInput = (questionId: number, text: string) => {
@@ -154,6 +179,57 @@ export default function StudentPracticeAssessmentModal({
         student_answer_text: text,
       },
     }));
+    setHasUnsavedChanges(true);
+  };
+
+  // Save Draft & Exit handler (without finalizing or scoring)
+  const handleSaveDraftAndExit = async () => {
+    if (!activeAttempt) return;
+    setIsSavingDraft(true);
+    setErrorMessage(null);
+
+    const formattedAnswers = activeAttempt.questions.map((q) => {
+      const recorded = answers[q.practice_question_id];
+      return {
+        practice_question_id: q.practice_question_id,
+        selected_option_id: recorded?.selected_option_id ?? null,
+        student_answer_text: recorded?.student_answer_text?.trim() || null,
+      };
+    });
+
+    try {
+      await saveStudentPracticeAttemptDraft(
+        interventionId,
+        activeAttempt.attempt_id,
+        formattedAnswers
+      );
+      setHasUnsavedChanges(false);
+      setShowCloseConfirm(false);
+      toast.success({
+        title: "Draft Saved",
+        description: "Your practice answers have been saved. You can resume at any time.",
+      });
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to save draft answers.";
+      setErrorMessage(msg);
+      toast.error({
+        title: "Save Failed",
+        description: msg,
+      });
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
+  // Safe closing handler
+  const handleCloseRequest = () => {
+    if (viewMode === "taking" && hasUnsavedChanges) {
+      setShowCloseConfirm(true);
+    } else {
+      setShowCloseConfirm(false);
+      onClose();
+    }
   };
 
   // Submit attempt
@@ -181,6 +257,8 @@ export default function StudentPracticeAssessmentModal({
       setFeedback(response);
       setViewMode("feedback");
       setShowConfirmSubmit(false);
+      setHasUnsavedChanges(false);
+      setShowCloseConfirm(false);
 
       // Refresh attempts history & metadata
       const [updatedAttempts, updatedMeta] = await Promise.all([
@@ -235,6 +313,8 @@ export default function StudentPracticeAssessmentModal({
   const handleTryAgain = async () => {
     setIsLoading(true);
     setErrorMessage(null);
+    setHasUnsavedChanges(false);
+    setShowCloseConfirm(false);
     try {
       const newAttempt = await startStudentPracticeAttempt(interventionId);
       setActiveAttempt(newAttempt);
@@ -266,8 +346,11 @@ export default function StudentPracticeAssessmentModal({
   const unansweredCount = Math.max(0, questions.length - answeredCount);
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content size="2xl" className="max-h-[90vh] flex flex-col p-0 overflow-hidden">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleCloseRequest()}>
+      <Dialog.Content
+        size="screen"
+        className="w-[calc(100vw-1.5rem)] sm:w-[calc(100vw-2.5rem)] max-w-[1700px] h-[calc(100dvh-1.5rem)] max-h-[calc(100dvh-2rem)] flex flex-col p-0 overflow-hidden border-2 border-black bg-background shadow-[6px_6px_0_#000]"
+      >
         {/* Modal Header */}
         <Dialog.Header className="px-5 py-4 border-b-2 border-border bg-card">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -323,8 +406,62 @@ export default function StudentPracticeAssessmentModal({
             /* VIEW MODE: TAKING ACTIVE ATTEMPT                            */
             /* ============================================================ */
             <div className="space-y-5">
+              {/* Unsaved Changes Confirmation Prompt */}
+              {showCloseConfirm && (
+                <Alert status="warning" className="border-2 border-amber-600 bg-amber-50 p-4 space-y-3 shadow-xs">
+                  <div className="flex items-start gap-2">
+                    <HelpCircle className="size-5 shrink-0 mt-0.5 text-amber-800" />
+                    <div className="space-y-1">
+                      <Alert.Title className="font-bold text-sm text-amber-950">
+                        Unsaved Practice Answers
+                      </Alert.Title>
+                      <Alert.Description className="text-xs text-amber-900 leading-relaxed">
+                        You have answers that have not been saved yet. Would you like to save your draft to resume later, discard your changes, or continue answering?
+                      </Alert.Description>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowCloseConfirm(false)}
+                    >
+                      Continue Answering
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive border-destructive hover:bg-destructive/10"
+                      onClick={() => {
+                        setHasUnsavedChanges(false);
+                        setShowCloseConfirm(false);
+                        onClose();
+                      }}
+                    >
+                      Discard & Exit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      disabled={isSavingDraft}
+                      onClick={handleSaveDraftAndExit}
+                    >
+                      {isSavingDraft ? (
+                        <>
+                          <Loader2 className="size-3.5 mr-1.5 animate-spin" /> Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="size-3.5 mr-1.5" /> Save Draft & Exit
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </Alert>
+              )}
+
               {/* Top Progress & Question Navigator */}
-              <div className="space-y-2 bg-muted/30 p-3 rounded border-2 border-border">
+              <div className="space-y-2.5 bg-muted/30 p-3 sm:p-4 rounded border-2 border-border">
                 <div className="flex flex-wrap items-center justify-between text-xs font-semibold text-muted-foreground">
                   <span>
                     Question {currentQuestionIndex + 1} of {questions.length}
@@ -340,7 +477,7 @@ export default function StudentPracticeAssessmentModal({
                 />
 
                 {/* Question Bubbles Navigator */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-1 max-h-28 overflow-y-auto p-1">
                   {questions.map((q, idx) => {
                     const ans = answers[q.practice_question_id];
                     const isAnswered =
@@ -350,33 +487,39 @@ export default function StudentPracticeAssessmentModal({
                     const isCurrent = idx === currentQuestionIndex;
 
                     return (
-                      <button
+                      <Button
+                        autoIcon={false}
                         key={q.practice_question_id}
                         type="button"
                         onClick={() => setCurrentQuestionIndex(idx)}
-                        className={`size-8 rounded font-mono text-xs font-bold transition-all border-2 ${
-                          isCurrent
-                            ? "border-primary bg-primary text-primary-foreground shadow-sm scale-105"
-                            : isAnswered
-                              ? "border-foreground/40 bg-foreground/15 text-foreground hover:bg-foreground/25"
-                              : "border-border bg-background text-muted-foreground hover:border-foreground/50"
-                        }`}
+                        variant="outline"
                         aria-label={`Jump to Question ${idx + 1}`}
+                        className={`size-8 border-2 border-black text-sm font-semibold cursor-pointer relative hover:translate-y-0 active:translate-y-0 active:translate-x-0 transition-all ${isCurrent
+                            ? "bg-[#F6E9B2] hover:bg-[#F6E9B2] active:bg-[#F6E9B2] shadow-sm scale-105"
+                            : isAnswered
+                              ? "bg-emerald-100 hover:bg-emerald-100 active:bg-emerald-100"
+                              : "bg-white hover:bg-white active:bg-white"
+                          }`}
                       >
                         {idx + 1}
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
               </div>
 
               {/* Active Question Display */}
-              <Card className="border-2 border-border p-4 sm:p-5 space-y-4 shadow-none">
-                <div className="flex items-center justify-between gap-2 border-b-2 border-border pb-2.5">
-                  <span className="font-mono text-xs font-bold text-muted-foreground">
-                    QUESTION #{currentQuestion.display_order} • {Number(currentQuestion.points)} POINT(S)
+              <Card className="bg-white flex flex-col justify-center items-center p-6 text-center shadow-none hover:shadow-none border-2 border-black space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-black/60 font-mono">
+                    QUESTION #{currentQuestion.display_order || currentQuestionIndex + 1}
                   </span>
-                  <Badge variant="surface" size="sm">
+                  {Number(currentQuestion.points) > 0 && (
+                    <span className="text-sm font-bold text-black/60 font-mono">
+                      • ({Number(currentQuestion.points)} {Number(currentQuestion.points) === 1 ? "pt" : "pts"})
+                    </span>
+                  )}
+                  <Badge variant="surface" size="sm" className="ml-2">
                     {currentQuestion.question_type === "MULTIPLE_CHOICE"
                       ? "Multiple Choice"
                       : currentQuestion.question_type === "TRUE_FALSE"
@@ -385,77 +528,73 @@ export default function StudentPracticeAssessmentModal({
                   </Badge>
                 </div>
 
-                <h3 className="text-base sm:text-lg font-bold leading-relaxed whitespace-pre-wrap">
+                <h3 className="text-center text-lg sm:text-xl font-bold whitespace-normal break-words [overflow-wrap:anywhere] max-w-full leading-relaxed text-foreground">
                   {currentQuestion.question_text}
                 </h3>
-
-                {/* Question Inputs */}
-                {currentQuestion.question_type === "MULTIPLE_CHOICE" ? (
-                  <div className="space-y-2 pt-1">
-                    {currentQuestion.options.map((opt) => {
-                      const isSelected =
-                        answers[currentQuestion.practice_question_id]?.selected_option_id === opt.option_id;
-
-                      return (
-                        <div
-                          key={opt.option_id}
-                          onClick={() => handleSelectOption(currentQuestion.practice_question_id, opt.option_id)}
-                          className={`flex items-center gap-3 p-3 rounded border-2 cursor-pointer transition-all ${
-                            isSelected
-                              ? "border-primary bg-primary/10 shadow-sm"
-                              : "border-border hover:bg-muted/40"
-                          }`}
-                        >
-                          <div
-                            className={`size-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                              isSelected ? "border-primary bg-primary" : "border-muted-foreground"
-                            }`}
-                          >
-                            {isSelected && <div className="size-1.5 rounded-full bg-primary-foreground" />}
-                          </div>
-                          <span className="text-sm font-medium">{opt.option_text}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : currentQuestion.question_type === "TRUE_FALSE" ? (
-                  <div className="grid grid-cols-2 gap-3 pt-2">
-                    {currentQuestion.options.map((opt) => {
-                      const isSelected =
-                        answers[currentQuestion.practice_question_id]?.selected_option_id === opt.option_id;
-
-                      return (
-                        <Button
-                          key={opt.option_id}
-                          type="button"
-                          variant={isSelected ? "default" : "outline"}
-                          className={`h-14 font-bold text-base border-2 ${
-                            isSelected ? "border-primary shadow-sm" : ""
-                          }`}
-                          onClick={() => handleSelectOption(currentQuestion.practice_question_id, opt.option_id)}
-                        >
-                          {opt.option_text}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  /* IDENTIFICATION */
-                  <div className="space-y-2 pt-2">
-                    <label className="text-xs font-semibold text-muted-foreground">
-                      Type your answer below:
-                    </label>
-                    <Input
-                      value={answers[currentQuestion.practice_question_id]?.student_answer_text ?? ""}
-                      onChange={(e) =>
-                        handleIdentificationInput(currentQuestion.practice_question_id, e.target.value)
-                      }
-                      placeholder="Enter exact answer..."
-                      className="border-2 text-base py-2.5 font-medium"
-                    />
-                  </div>
-                )}
               </Card>
+
+              {/* Question Inputs */}
+              {currentQuestion.question_type === "MULTIPLE_CHOICE" ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-1">
+                  {currentQuestion.options.map((opt) => {
+                    const isSelected =
+                      answers[currentQuestion.practice_question_id]?.selected_option_id === opt.option_id;
+
+                    return (
+                      <Button
+                        autoIcon={false}
+                        key={opt.option_id}
+                        type="button"
+                        onClick={() => handleSelectOption(currentQuestion.practice_question_id, opt.option_id)}
+                        className={`w-full min-w-0 h-full min-h-[4.5rem] cursor-pointer flex items-center justify-center p-4 sm:p-5 text-center text-base font-semibold transition-all hover:shadow-none whitespace-normal break-words [overflow-wrap:anywhere] border-2 border-black ${isSelected
+                            ? "bg-primary text-primary-foreground border-black"
+                            : "bg-white text-black hover:bg-black/5"
+                          }`}
+                      >
+                        <span className="w-full max-w-full min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] text-center leading-relaxed">
+                          {opt.option_text}
+                        </span>
+                      </Button>
+                    );
+                  })}
+                </div>
+              ) : currentQuestion.question_type === "TRUE_FALSE" ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-1">
+                  {currentQuestion.options.map((opt) => {
+                    const isSelected =
+                      answers[currentQuestion.practice_question_id]?.selected_option_id === opt.option_id;
+
+                    return (
+                      <Button
+                        autoIcon={false}
+                        key={opt.option_id}
+                        type="button"
+                        onClick={() => handleSelectOption(currentQuestion.practice_question_id, opt.option_id)}
+                        className={`w-full min-w-0 h-full min-h-[4.5rem] cursor-pointer flex items-center justify-center p-4 sm:p-5 text-center text-base font-bold transition-all hover:shadow-none whitespace-normal break-words [overflow-wrap:anywhere] border-2 border-black ${isSelected
+                            ? "bg-primary text-primary-foreground border-black"
+                            : "bg-white text-black hover:bg-black/5"
+                          }`}
+                      >
+                        <span className="w-full max-w-full min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] text-center leading-relaxed">
+                          {opt.option_text}
+                        </span>
+                      </Button>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* IDENTIFICATION */
+                <div className="pt-1">
+                  <QuizTextAnswerInput
+                    question={currentQuestion}
+                    value={answers[currentQuestion.practice_question_id]?.student_answer_text ?? ""}
+                    onChange={(text) =>
+                      handleIdentificationInput(currentQuestion.practice_question_id, text)
+                    }
+                    placeholder="Enter exact answer..."
+                  />
+                </div>
+              )}
 
               {/* Confirm Submission Dialog/Notice */}
               {showConfirmSubmit && (
@@ -515,11 +654,10 @@ export default function StudentPracticeAssessmentModal({
             <div className="space-y-6">
               {/* Top Score & Result Banner */}
               <Card
-                className={`border-2 p-5 space-y-3 ${
-                  feedback.is_passed
+                className={`border-2 p-5 space-y-3 ${feedback.is_passed
                     ? "border-success/40 bg-success/10"
                     : "border-destructive/40 bg-destructive/10"
-                }`}
+                  }`}
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
@@ -576,30 +714,31 @@ export default function StudentPracticeAssessmentModal({
               </Card>
 
               {/* Historical Attempt Selector */}
-              {allAttempts.length > 1 && (
+              {allAttempts.filter((a) => a.status === "SUBMITTED").length > 1 && (
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-muted-foreground">
                     Review Previous Attempt Feedback:
                   </label>
                   <div className="flex flex-wrap items-center gap-2">
-                    {allAttempts.map((att) => {
-                      const isSelected = (selectedAttemptId ?? feedback.attempt_id) === att.attempt_id;
-                      return (
-                        <button
-                          key={att.attempt_id}
-                          type="button"
-                          onClick={() => handleSelectHistoricalAttempt(att.attempt_id)}
-                          className={`px-3 py-1.5 rounded font-mono text-xs font-bold border-2 transition-all ${
-                            isSelected
-                              ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                              : "border-border bg-card text-foreground hover:bg-muted/40"
-                          }`}
-                        >
-                          Attempt #{att.attempt_number} ({Number(att.score_percentage).toFixed(0)}%)
-                          {att.is_passed ? " ✓" : ""}
-                        </button>
-                      );
-                    })}
+                    {allAttempts
+                      .filter((a) => a.status === "SUBMITTED")
+                      .map((att) => {
+                        const isSelected = (selectedAttemptId ?? feedback.attempt_id) === att.attempt_id;
+                        return (
+                          <button
+                            key={att.attempt_id}
+                            type="button"
+                            onClick={() => handleSelectHistoricalAttempt(att.attempt_id)}
+                            className={`px-3 py-1.5 rounded font-mono text-xs font-bold border-2 transition-all ${isSelected
+                                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                                : "border-border bg-card text-foreground hover:bg-muted/40"
+                              }`}
+                          >
+                            Attempt #{att.attempt_number} ({Number(att.score_percentage).toFixed(0)}%)
+                            {att.is_passed ? " ✓" : ""}
+                          </button>
+                        );
+                      })}
                   </div>
                 </div>
               )}
@@ -625,9 +764,8 @@ export default function StudentPracticeAssessmentModal({
                     return (
                       <Card
                         key={item.practice_question_id ?? idx}
-                        className={`border-2 p-4 space-y-3.5 ${
-                          isCorrect ? "border-success/30 bg-card" : "border-destructive/30 bg-card"
-                        }`}
+                        className={`border-2 p-4 space-y-3.5 ${isCorrect ? "border-success/30 bg-card" : "border-destructive/30 bg-card"
+                          }`}
                       >
                         {/* Question Header */}
                         <div className="flex items-center justify-between gap-2">
@@ -709,11 +847,10 @@ export default function StudentPracticeAssessmentModal({
                           {(!item.options || item.options.length === 0) && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                               <div
-                                className={`p-2.5 rounded border-2 ${
-                                  isCorrect
+                                className={`p-2.5 rounded border-2 ${isCorrect
                                     ? "border-success/50 bg-success/10"
                                     : "border-destructive/50 bg-destructive/10"
-                                }`}
+                                  }`}
                               >
                                 <span className="text-xs font-bold block text-muted-foreground">
                                   Your Answer:
@@ -785,15 +922,23 @@ export default function StudentPracticeAssessmentModal({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={onClose}
-                  disabled={isSubmitting}
+                  onClick={handleSaveDraftAndExit}
+                  disabled={isSubmitting || isSavingDraft}
                 >
-                  Save & Exit
+                  {isSavingDraft ? (
+                    <>
+                      <Loader2 className="size-3.5 mr-1.5 animate-spin" /> Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="size-3.5 mr-1.5" /> Save Draft & Exit
+                    </>
+                  )}
                 </Button>
                 <Button
                   size="sm"
                   variant="default"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isSavingDraft}
                   onClick={() => setShowConfirmSubmit(true)}
                 >
                   <Send className="size-3.5 mr-1.5" /> Submit Practice

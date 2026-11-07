@@ -19,17 +19,18 @@ type TextAnswerInputProps = {
   value: string;
   onChange: (text: string) => void;
   disabled?: boolean;
+  placeholder?: string;
 };
 
 /** IDENTIFICATION: single-line input. SHORT_ANSWER: textarea. */
-export function QuizTextAnswerInput({ question, value, onChange, disabled }: TextAnswerInputProps) {
+export function QuizTextAnswerInput({ question, value, onChange, disabled, placeholder }: TextAnswerInputProps) {
   if (getEffectiveQuestionType(question) === "IDENTIFICATION") {
     return (
       <Input
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={IDENTIFICATION_PLACEHOLDER}
+        placeholder={placeholder ?? IDENTIFICATION_PLACEHOLDER}
         disabled={disabled}
         className="w-full border-2 border-black bg-white p-4 text-base"
       />
@@ -39,7 +40,7 @@ export function QuizTextAnswerInput({ question, value, onChange, disabled }: Tex
     <textarea
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      placeholder={SHORT_ANSWER_PLACEHOLDER}
+      placeholder={placeholder ?? SHORT_ANSWER_PLACEHOLDER}
       disabled={disabled}
       rows={4}
       className="w-full border-2 border-black bg-white p-4 text-sm resize-none"
